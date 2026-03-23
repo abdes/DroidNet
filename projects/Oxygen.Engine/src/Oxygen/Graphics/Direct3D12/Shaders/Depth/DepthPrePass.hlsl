@@ -64,8 +64,8 @@ struct VirtualShadowRasterPassConstants
     uint atlas_tiles_per_axis;
     uint draw_page_ranges_srv_index;
     uint draw_page_indices_srv_index;
+    uint virtual_directional_shadow_metadata_srv_index;
     uint _pad0;
-    uint _pad1;
 };
 
 struct VirtualShadowResolvedScheduleEntry
@@ -157,17 +157,13 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID)
         return output;
     }
 
-    const ViewFrameBindings view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    const ShadowFrameBindings shadow_bindings =
-        LoadShadowFrameBindings(view_bindings.shadow_frame_slot);
-    if (shadow_bindings.virtual_directional_shadow_metadata_slot
+    if (pass_constants.virtual_directional_shadow_metadata_srv_index
         == K_INVALID_BINDLESS_INDEX) {
         return output;
     }
 
     StructuredBuffer<DirectionalVirtualShadowMetadata> metadata_buffer =
-        ResourceDescriptorHeap[shadow_bindings.virtual_directional_shadow_metadata_slot];
+        ResourceDescriptorHeap[pass_constants.virtual_directional_shadow_metadata_srv_index];
     const DirectionalVirtualShadowMetadata metadata = metadata_buffer[0];
     if (metadata.clip_level_count == 0u || metadata.pages_per_axis == 0u) {
         return output;

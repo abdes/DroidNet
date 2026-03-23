@@ -54,9 +54,9 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
@@ -81,6 +81,7 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
+#include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
@@ -112,7 +113,6 @@
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
-
 
 namespace {
 constexpr std::string_view kCVarRendererTextureDumpTopN
@@ -286,6 +286,88 @@ auto HashPreparedShadowCasterContent(
   hash = HashBytes(
     draw_hashes.data(), draw_hashes.size() * sizeof(draw_hashes.front()), hash);
   return hash;
+}
+
+struct AlphaTestShadowCasterMaterialStateSignature {
+  std::uint64_t hash { 0U };
+  std::uint32_t alpha_test_material_count { 0U };
+  std::uint32_t pending_alpha_test_material_count { 0U };
+  std::uint32_t alpha_test_domain_mismatch_count { 0U };
+};
+
+auto HashShadowCasterMaterialState(
+  const std::span<const oxygen::engine::sceneprep::RenderItemData> items,
+  const oxygen::renderer::resources::IResourceBinder* texture_binder)
+  -> AlphaTestShadowCasterMaterialStateSignature
+{
+  AlphaTestShadowCasterMaterialStateSignature signature {};
+  if (texture_binder == nullptr || items.empty()) {
+    return signature;
+  }
+
+  std::vector<std::uint64_t> material_hashes {};
+  material_hashes.reserve(items.size());
+  for (const auto& item : items) {
+    if (!item.cast_shadows || !item.material.IsValid()
+      || item.material.resolved_asset == nullptr
+      || item.world_bounding_sphere.w <= 0.0F) {
+      continue;
+    }
+
+    const auto& material = *item.material.resolved_asset;
+    const auto material_flags = material.GetFlags();
+    const bool alpha_test_enabled
+      = (material_flags & oxygen::data::pak::render::kMaterialFlag_AlphaTest)
+      != 0U;
+    if (!alpha_test_enabled) {
+      continue;
+    }
+
+    const auto no_texture_sampling
+      = (material_flags
+          & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling)
+      != 0U;
+
+    ++signature.alpha_test_material_count;
+    if (material.GetMaterialDomain() != oxygen::data::MaterialDomain::kMasked) {
+      ++signature.alpha_test_domain_mismatch_count;
+    }
+
+    const auto base_color_key = material.GetBaseColorTextureKey();
+    const auto base_color_key_value = base_color_key.get();
+    const bool is_ready = base_color_key_value == 0U
+      || texture_binder->IsResourceReady(base_color_key);
+    if (!is_ready) {
+      ++signature.pending_alpha_test_material_count;
+    }
+
+    auto material_hash
+      = HashBytes(&base_color_key_value, sizeof(base_color_key_value));
+    material_hash = HashBytes(&is_ready, sizeof(is_ready), material_hash);
+    const auto alpha_cutoff = material.GetAlphaCutoff();
+    material_hash
+      = HashBytes(&alpha_cutoff, sizeof(alpha_cutoff), material_hash);
+    const auto base_color = material.GetBaseColor();
+    const auto base_alpha = base_color[3];
+    material_hash = HashBytes(&base_alpha, sizeof(base_alpha), material_hash);
+    material_hash = HashBytes(
+      &no_texture_sampling, sizeof(no_texture_sampling), material_hash);
+    material_hashes.push_back(material_hash);
+  }
+
+  if (material_hashes.empty()) {
+    return signature;
+  }
+
+  std::ranges::sort(material_hashes);
+  std::uint64_t hash = kFnvOffsetBasis;
+  const auto hashed_materials
+    = static_cast<std::uint32_t>(material_hashes.size());
+  hash = HashBytes(&hashed_materials, sizeof(hashed_materials), hash);
+  hash = HashBytes(material_hashes.data(),
+    material_hashes.size() * sizeof(material_hashes.front()), hash);
+  signature.hash = hash;
+  return signature;
 }
 
 auto FormatRendererLastFrameStats(
@@ -1467,6 +1549,10 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
   DLOG_F(
     1, "UnregisterViewRenderGraph: pending_cleanup_count={}", pending_size);
 
+  if (shadow_manager_) {
+    shadow_manager_->RetireView(view_id);
+  }
+
   {
     std::unique_lock state_lock(view_state_mutex_);
     view_ready_states_.erase(view_id);
@@ -2462,6 +2548,17 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
       view_bindings.lighting_frame_slot
         = lighting_frame_bindings_publisher_->Publish(
           view_id, lighting_bindings);
+      LOG_F(INFO,
+        "Renderer: frame={} view={} lighting publication dir_slot={} pos_slot={} "
+        "lighting_frame_slot={} sun_enabled={} sun_illuminance={:.3f} "
+        "sun_dir=({:.6f}, {:.6f}, {:.6f})",
+        render_context.frame_sequence.get(), nostd::to_string(view_id), directional_lights_slot,
+        positional_lights_slot, view_bindings.lighting_frame_slot,
+        lighting_bindings.sun.enabled,
+        lighting_bindings.sun.direction_ws_illuminance.w,
+        lighting_bindings.sun.direction_ws_illuminance.x,
+        lighting_bindings.sun.direction_ws_illuminance.y,
+        lighting_bindings.sun.direction_ws_illuminance.z);
     }
 
     if (!can_reuse_cached_view_bindings && shadow_frame_bindings_publisher_
@@ -2490,8 +2587,27 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           = BuildSyntheticSunShadowInput(render_context, runtime_state.sun,
             directional_shadow_bias_state_.synthetic_constant_bias,
             directional_shadow_bias_state_.synthetic_normal_bias);
-        const auto shadow_caster_content_hash
+        auto shadow_caster_content_hash
           = HashPreparedShadowCasterContent(prepared);
+        const auto alpha_test_material_state
+          = HashShadowCasterMaterialState(scene_prep_state_ != nullptr
+              ? scene_prep_state_->CollectedItems()
+              : std::span<const sceneprep::RenderItemData> {},
+            texture_binder_.get());
+        if (alpha_test_material_state.hash != 0U) {
+          shadow_caster_content_hash = HashBytes(
+            &alpha_test_material_state.hash,
+            sizeof(alpha_test_material_state.hash), shadow_caster_content_hash);
+        }
+        LOG_F(INFO,
+          "Renderer: view={} shadow content hash={} "
+          "alpha_test_shadow_materials={} "
+          "pending_alpha_test_shadow_materials={} "
+          "alpha_test_domain_mismatches={}",
+          view_id.get(), shadow_caster_content_hash,
+          alpha_test_material_state.alpha_test_material_count,
+          alpha_test_material_state.pending_alpha_test_material_count,
+          alpha_test_material_state.alpha_test_domain_mismatch_count);
         const auto shadow_view
           = shadow_manager_->PublishForView(view_id, view_constants,
             *light_manager, std::max(1.0F, resolved.Viewport().width),
@@ -2517,6 +2633,53 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
         virtual_shadow_physical_page_lists_slot
           = shadow_view.virtual_shadow_physical_page_lists_srv;
         sun_shadow_index = shadow_view.sun_shadow_index;
+
+        const auto* shadow_instance = shadow_manager_ != nullptr
+          ? shadow_manager_->TryGetShadowInstanceMetadata(view_id)
+          : nullptr;
+        const bool virtual_shadow_impl_active = shadow_instance != nullptr
+          && shadow_instance->domain
+            == static_cast<std::uint32_t>(engine::ShadowDomain::kDirectional)
+          && shadow_instance->implementation_kind
+            == static_cast<std::uint32_t>(
+              engine::ShadowImplementationKind::kVirtual);
+        const bool live_virtual_shadow_bindings
+          = virtual_shadow_page_table_slot.IsValid()
+          && virtual_shadow_page_flags_slot.IsValid()
+          && virtual_shadow_physical_pool_slot.IsValid()
+          && virtual_shadow_physical_page_metadata_slot.IsValid()
+          && virtual_shadow_physical_page_lists_slot.IsValid();
+
+        if (virtual_shadow_impl_active && !live_virtual_shadow_bindings) {
+          LOG_F(INFO,
+            "Renderer: frame={} view={} suppressing virtual shadow consume "
+            "while bindings are non-live shadow_meta_srv={} sun_shadow_index={} "
+            "vsm_table={} vsm_flags={} vsm_pool={} vsm_phys_meta={} "
+            "vsm_phys_lists={}",
+            render_context.frame_sequence.get(), view_id.get(),
+            shadow_instance_metadata_slot.get(), sun_shadow_index,
+            virtual_shadow_page_table_slot.get(),
+            virtual_shadow_page_flags_slot.get(),
+            virtual_shadow_physical_pool_slot.get(),
+            virtual_shadow_physical_page_metadata_slot.get(),
+            virtual_shadow_physical_page_lists_slot.get());
+          shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
+          sun_shadow_index = 0xFFFFFFFFU;
+        }
+
+        CHECK_F(!virtual_shadow_impl_active || live_virtual_shadow_bindings
+            || (shadow_instance_metadata_slot == kInvalidShaderVisibleIndex
+              && sun_shadow_index == 0xFFFFFFFFU),
+          "Renderer: illegal virtual shadow consume publication frame={} "
+          "view={} shadow_meta_srv={} sun_shadow_index={} vsm_table={} "
+          "vsm_flags={} vsm_pool={} vsm_phys_meta={} vsm_phys_lists={}",
+          render_context.frame_sequence.get(), view_id.get(),
+          shadow_instance_metadata_slot.get(), sun_shadow_index,
+          virtual_shadow_page_table_slot.get(),
+          virtual_shadow_page_flags_slot.get(),
+          virtual_shadow_physical_pool_slot.get(),
+          virtual_shadow_physical_page_metadata_slot.get(),
+          virtual_shadow_physical_page_lists_slot.get());
 
         const ShadowFrameBindings shadow_bindings {
           .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
@@ -2548,6 +2711,79 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           virtual_shadow_physical_pool_slot.get(),
           virtual_shadow_physical_page_metadata_slot.get(),
           virtual_shadow_physical_page_lists_slot.get(), sun_shadow_index);
+        if (shadow_manager_ != nullptr) {
+          if (shadow_instance != nullptr) {
+            LOG_F(INFO,
+              "Renderer: frame={} view={} shadow instance detail "
+              "shadow_meta_srv={} sun_shadow_index={} light_index={} "
+              "payload_index={} domain={} implementation={} flags=0x{:08x}",
+              render_context.frame_sequence.get(), view_id.get(),
+              shadow_instance_metadata_slot.get(), sun_shadow_index,
+              shadow_instance->light_index, shadow_instance->payload_index,
+              shadow_instance->domain, shadow_instance->implementation_kind,
+              shadow_instance->flags);
+          } else {
+            LOG_F(INFO,
+              "Renderer: frame={} view={} shadow instance detail unavailable "
+              "shadow_meta_srv={} sun_shadow_index={}",
+              render_context.frame_sequence.get(), view_id.get(),
+              shadow_instance_metadata_slot.get(), sun_shadow_index);
+          }
+        }
+        if (shadow_manager_ != nullptr
+          && virtual_directional_shadow_metadata_slot.IsValid()) {
+          const auto* vsm_packet
+            = shadow_manager_->TryGetVirtualFramePacket(view_id);
+          if (const auto* vsm_metadata
+              = shadow_manager_->TryGetVirtualDirectionalMetadata(view_id);
+            vsm_metadata != nullptr) {
+            const auto page_state
+              = shadow_manager_->TryGetVirtualPageManagementStateSnapshot(
+                view_id);
+            LOG_F(INFO,
+              "Renderer: frame={} view={} vsm publication detail "
+              "packet_source_frame={} cache_epoch={} view_generation={} "
+              "packet_meta_srv={} packet_schedule_srv={} "
+              "shadow_instance={} clip_levels={} pages_per_axis={} "
+              "page_size={} page_table_offset={} coarse_clip_mask={} "
+              "clip0_origin=({}, {}) clip0_page_world={} "
+              "selection_origin=({}, {}, {}) receiver_origin=({}, {}, {}) "
+              "light_view_t=({}, {}, {}) reset_page_management={} "
+              "global_dirty={}",
+              render_context.frame_sequence.get(), view_id.get(),
+              vsm_packet != nullptr ? vsm_packet->source_frame_sequence.get()
+                                    : 0U,
+              vsm_packet != nullptr ? vsm_packet->cache_epoch : 0U,
+              vsm_packet != nullptr ? vsm_packet->view_generation : 0U,
+              vsm_packet != nullptr
+                ? vsm_packet->virtual_directional_shadow_metadata_srv.get()
+                : kInvalidShaderVisibleIndex.get(),
+              vsm_packet != nullptr && vsm_packet->has_gpu_raster_inputs
+                ? vsm_packet->gpu_raster_inputs.schedule_srv.get()
+                : kInvalidShaderVisibleIndex.get(),
+              vsm_metadata->shadow_instance_index,
+              vsm_metadata->clip_level_count, vsm_metadata->pages_per_axis,
+              vsm_metadata->page_size_texels, vsm_metadata->page_table_offset,
+              vsm_metadata->coarse_clip_mask,
+              vsm_metadata->clip_metadata[0].origin_page_scale.x,
+              vsm_metadata->clip_metadata[0].origin_page_scale.y,
+              vsm_metadata->clip_metadata[0].origin_page_scale.z,
+              vsm_metadata->clipmap_selection_world_origin_lod_bias.x,
+              vsm_metadata->clipmap_selection_world_origin_lod_bias.y,
+              vsm_metadata->clipmap_selection_world_origin_lod_bias.z,
+              vsm_metadata->clipmap_receiver_origin_lod_bias.x,
+              vsm_metadata->clipmap_receiver_origin_lod_bias.y,
+              vsm_metadata->clipmap_receiver_origin_lod_bias.z,
+              vsm_metadata->light_view[3][0], vsm_metadata->light_view[3][1],
+              vsm_metadata->light_view[3][2],
+              page_state.has_value()
+                ? page_state->reset_page_management_state
+                : 0U,
+              page_state.has_value()
+                ? page_state->global_dirty_resident_contents
+                : 0U);
+          }
+        }
         view_bindings.shadow_frame_slot
           = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
       } else {
@@ -2672,16 +2908,16 @@ auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
   }
 
   auto register_new_srv = [&]() -> ShaderVisibleIndex {
-    auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle
+      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
       return kInvalidShaderVisibleIndex;
     }
-    runtime_state.scene_depth_srv
-      = allocator.GetShaderVisibleIndex(srv_handle);
-    auto native_view = registry.RegisterView(
-      const_cast<graphics::Texture&>(depth_texture), std::move(srv_handle),
-      srv_desc);
+    runtime_state.scene_depth_srv = allocator.GetShaderVisibleIndex(srv_handle);
+    auto native_view
+      = registry.RegisterView(const_cast<graphics::Texture&>(depth_texture),
+        std::move(srv_handle), srv_desc);
     if (!native_view->IsValid()) {
       runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
       runtime_state.scene_depth_texture_owner = nullptr;
@@ -2698,9 +2934,9 @@ auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
     return register_new_srv();
   }
 
-  const auto updated = registry.UpdateView(
-    const_cast<graphics::Texture&>(depth_texture),
-    bindless::HeapIndex { runtime_state.scene_depth_srv.get() }, srv_desc);
+  const auto updated
+    = registry.UpdateView(const_cast<graphics::Texture&>(depth_texture),
+      bindless::HeapIndex { runtime_state.scene_depth_srv.get() }, srv_desc);
   if (!updated) {
     runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
     runtime_state.scene_depth_texture_owner = nullptr;
@@ -2803,6 +3039,15 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   }
 
   exposure *= exposure_key;
+  LOG_F(INFO,
+    "Renderer: view={} exposure update mode={} exposure_enabled={} "
+    "camera_ev={} manual_ev={} compensation_ev={:.6f} raw_key={:.6f} "
+    "seed_exposure={:.6f} sun_enabled={} sun_cos_zenith={:.6f}",
+    view_id.get(), static_cast<std::uint32_t>(exposure_mode), exposure_enabled,
+    camera_ev.has_value() ? camera_ev.value() : -9999.0F,
+    manual_ev_read.has_value() ? manual_ev_read.value() : -9999.0F,
+    compensation_ev, raw_exposure_key, exposure, sun_state.enabled,
+    sun_state.cos_zenith);
   return exposure;
 }
 
@@ -2988,11 +3233,32 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
       if (light_mgr) {
         const auto dir_lights = light_mgr->GetDirectionalLights();
         runtime_state.sun = internal::ResolveSunForView(scene, dir_lights);
+        LOG_F(INFO,
+          "Renderer: frame={} view={} lighting resolve dir_count={} "
+          "sun_enabled={} sun_dir=({:.6f}, {:.6f}, {:.6f}) "
+          "sun_illuminance={:.3f} sun_color=({:.6f}, {:.6f}, {:.6f})",
+          frame_seq, nostd::to_string(view_id), dir_lights.size(),
+          runtime_state.sun.enabled,
+          runtime_state.sun.direction_ws_illuminance.x,
+          runtime_state.sun.direction_ws_illuminance.y,
+          runtime_state.sun.direction_ws_illuminance.z,
+          runtime_state.sun.direction_ws_illuminance.w,
+          runtime_state.sun.color_rgb_intensity.x,
+          runtime_state.sun.color_rgb_intensity.y,
+          runtime_state.sun.color_rgb_intensity.z);
 
         std::size_t sun_tagged_count = 0;
         std::size_t env_contrib_count = 0;
+        std::size_t shadowed_dir_count = 0;
+        std::size_t shadowed_sun_count = 0;
+        std::uint32_t first_dir_shadow_index = 0xFFFFFFFFU;
+        std::uint32_t first_dir_flags = 0U;
         for (const auto& dl : dir_lights) {
           const auto flags = static_cast<DirectionalLightFlags>(dl.flags);
+          if (first_dir_shadow_index == 0xFFFFFFFFU) {
+            first_dir_shadow_index = dl.shadow_index;
+            first_dir_flags = dl.flags;
+          }
           if ((flags & DirectionalLightFlags::kSunLight)
             != DirectionalLightFlags::kNone) {
             ++sun_tagged_count;
@@ -3001,6 +3267,57 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
             != DirectionalLightFlags::kNone) {
             ++env_contrib_count;
           }
+          if (dl.shadow_index != 0xFFFFFFFFU) {
+            ++shadowed_dir_count;
+            if ((flags & DirectionalLightFlags::kSunLight)
+              != DirectionalLightFlags::kNone) {
+              ++shadowed_sun_count;
+            }
+          }
+        }
+        LOG_F(INFO,
+          "Renderer: frame={} view={} directional light summary total={} "
+          "sun_tagged={} env_contrib={} shadowed_total={} shadowed_sun={} "
+          "first_shadow_index={} first_flags=0x{:08x}",
+          frame_seq, nostd::to_string(view_id), dir_lights.size(),
+          sun_tagged_count, env_contrib_count, shadowed_dir_count,
+          shadowed_sun_count, first_dir_shadow_index, first_dir_flags);
+
+        if (const auto sun_tagged_light
+              = internal::FindSunTaggedDirectionalLight(dir_lights);
+          runtime_state.sun.enabled != 0U && sun_tagged_light.has_value()) {
+          const float light_dir_len_sq
+            = glm::dot(sun_tagged_light->direction_ws,
+              sun_tagged_light->direction_ws);
+          const glm::vec3 resolved_direction = runtime_state.sun.GetDirection();
+          const glm::vec3 expected_direction_to_sun
+            = light_dir_len_sq > 0.0F
+            ? -glm::normalize(sun_tagged_light->direction_ws)
+            : glm::vec3(0.0F);
+          const float resolved_illuminance = runtime_state.sun.GetIlluminance();
+          const float expected_illuminance = sun_tagged_light->intensity_lux;
+          LOG_F(INFO,
+            "Renderer: frame={} view={} sun contract resolved_dir=({:.6f}, "
+            "{:.6f}, {:.6f}) expected_dir=({:.6f}, {:.6f}, {:.6f}) "
+            "resolved_illuminance={:.3f} expected_illuminance={:.3f}",
+            frame_seq, nostd::to_string(view_id), resolved_direction.x,
+            resolved_direction.y, resolved_direction.z,
+            expected_direction_to_sun.x, expected_direction_to_sun.y,
+            expected_direction_to_sun.z, resolved_illuminance,
+            expected_illuminance);
+          CHECK_F(internal::ResolvedSunMatchesDirectionalLight(
+                    runtime_state.sun, *sun_tagged_light),
+            "Resolved sun payload diverged from sun-tagged directional "
+            "light frame={} view={} resolved_dir=({:.6f}, {:.6f}, {:.6f}) "
+            "expected_dir=({:.6f}, {:.6f}, {:.6f}) "
+            "resolved_illuminance={:.3f} expected_illuminance={:.3f} "
+            "light_flags=0x{:08x} shadow_index={}",
+            frame_seq, nostd::to_string(view_id), resolved_direction.x,
+            resolved_direction.y, resolved_direction.z,
+            expected_direction_to_sun.x, expected_direction_to_sun.y,
+            expected_direction_to_sun.z, resolved_illuminance,
+            expected_illuminance, sun_tagged_light->flags,
+            sun_tagged_light->shadow_index);
         }
 
         if (runtime_state.sun.enabled == 0U
@@ -3016,6 +3333,9 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
 
       prepared_frame.exposure
         = UpdateViewExposure(view_id, scene, runtime_state.sun);
+      LOG_F(INFO,
+        "Renderer: frame={} view={} exposure={:.6f}",
+        frame_seq, nostd::to_string(view_id), prepared_frame.exposure);
 
       // Populate SkyAtmosphere per-view context. Defaults stay conservative
       // until LUT precompute is wired; analytic fallback stays enabled.
@@ -3286,6 +3606,18 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   // Store frame lifecycle state for RenderContext propagation
   frame_slot_ = frame_slot;
   frame_seq_num = frame_sequence;
+
+  const auto current_scene = context->GetScene().get();
+  if (current_scene != last_scene_identity_) {
+    LOG_F(INFO,
+      "Renderer: scene identity changed (old={} new={}); resetting shadow "
+      "cache state",
+      fmt::ptr(last_scene_identity_), fmt::ptr(current_scene));
+    last_scene_identity_ = current_scene;
+    if (shadow_manager_) {
+      shadow_manager_->ResetCachedState();
+    }
+  }
 
   if (gpu_timeline_profiler_) {
     gpu_timeline_profiler_->OnFrameStart(frame_sequence);

@@ -58,6 +58,18 @@ constexpr std::uint32_t kInvalidShadowIndex = 0xFFFFFFFF;
   return glm::normalize(dir);
 }
 
+[[nodiscard]] auto ComputeBasisUpWs(
+  const oxygen::scene::detail::TransformComponent& transform) -> glm::vec3
+{
+  const auto rot = transform.GetWorldRotation();
+  const glm::vec3 up = rot * oxygen::space::move::Up;
+  const float len_sq = glm::dot(up, up);
+  if (len_sq <= oxygen::math::EpsilonDirection) {
+    return oxygen::space::move::Up;
+  }
+  return glm::normalize(up);
+}
+
 [[nodiscard]] auto PackDirectionalFlags(
   const oxygen::scene::CommonLightProperties& common,
   const bool effective_casts_shadows, const bool environment_contribution,
@@ -223,6 +235,15 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.flags = PackDirectionalFlags(common, effective_casts_shadows,
       light.GetEnvironmentContribution(), light.IsSunLight());
 
+    LOG_F(INFO,
+      "LightManager: directional node='{}' affects_world={} common_casts={} "
+      "node_casts={} effective_casts={} shadow_index={} flags=0x{:08x} "
+      "sun_light={} env_contrib={} mobility={}",
+      node.GetName(), common.affects_world, common.casts_shadows,
+      IsNodeShadowEligible(node), effective_casts_shadows, out.shadow_index,
+      out.flags, light.IsSunLight(), light.GetEnvironmentContribution(),
+      static_cast<std::uint32_t>(common.mobility));
+
     dir_basic_.push_back(out);
 
     if (effective_casts_shadows) {
@@ -234,6 +255,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
           .resolution_hint
           = static_cast<std::uint32_t>(common.shadow.resolution_hint),
           .direction_ws = out.direction_ws,
+          .basis_up_ws = ComputeBasisUpWs(transform),
           .bias = common.shadow.bias,
           .normal_bias = common.shadow.normal_bias,
           .cascade_count = csm.cascade_count,

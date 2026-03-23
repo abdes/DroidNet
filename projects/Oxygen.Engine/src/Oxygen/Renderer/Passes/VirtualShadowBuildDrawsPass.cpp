@@ -8,6 +8,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -27,7 +28,8 @@ namespace oxygen::engine {
 
 VirtualShadowBuildDrawsPass::VirtualShadowBuildDrawsPass(
   const observer_ptr<Graphics> gfx, std::shared_ptr<Config> config)
-  : ComputeRenderPass(config ? config->debug_name : "VirtualShadowBuildDrawsPass")
+  : ComputeRenderPass(
+      config ? config->debug_name : "VirtualShadowBuildDrawsPass")
   , gfx_(gfx)
   , config_(std::move(config))
 {
@@ -35,8 +37,8 @@ VirtualShadowBuildDrawsPass::VirtualShadowBuildDrawsPass(
 
 VirtualShadowBuildDrawsPass::~VirtualShadowBuildDrawsPass() = default;
 
-auto VirtualShadowBuildDrawsPass::DoPrepareResources(
-  graphics::CommandRecorder&) -> co::Co<>
+auto VirtualShadowBuildDrawsPass::DoPrepareResources(graphics::CommandRecorder&)
+  -> co::Co<>
 {
   active_dispatch_ = false;
   active_view_id_ = {};
@@ -55,8 +57,9 @@ auto VirtualShadowBuildDrawsPass::DoPrepareResources(
   }
 
   const auto* schedule_pass = Context().GetPass<VirtualShadowSchedulePass>();
-  const auto* resources
-    = schedule_pass != nullptr ? schedule_pass->GetScheduleResources() : nullptr;
+  const auto* resources = schedule_pass != nullptr
+    ? schedule_pass->GetScheduleResources()
+    : nullptr;
   if (schedule_pass == nullptr || !schedule_pass->HasActiveDispatch()
     || resources == nullptr || !resources->schedule_uav.IsValid()
     || !resources->schedule_lookup_uav.IsValid()
@@ -68,18 +71,41 @@ auto VirtualShadowBuildDrawsPass::DoPrepareResources(
   }
 
   shadow_manager->ResolveVirtualCurrentFrame(Context().current_view.view_id);
-  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+  const auto* packet = shadow_manager->TryGetVirtualFramePacket(
     Context().current_view.view_id);
-  const auto* page_management_bindings
-    = shadow_manager->TryGetVirtualPageManagementBindings(
-      Context().current_view.view_id);
-  if (metadata == nullptr || page_management_bindings == nullptr
-    || metadata->clip_level_count == 0U || metadata->pages_per_axis == 0U) {
+  if (packet == nullptr || !packet->has_directional_metadata
+    || !packet->has_page_management_bindings
+    || packet->directional_metadata.clip_level_count == 0U
+    || packet->directional_metadata.pages_per_axis == 0U) {
     co_return;
   }
+  if (packet->has_page_management_state
+    && packet->page_management_state.reset_request_pending != 0U) {
+    LOG_F(INFO,
+      "VirtualShadowBuildDrawsPass: frame={} view={} skipped because reset "
+      "barrier is active source_frame={} cache_epoch={} view_generation={}",
+      Context().frame_sequence.get(), Context().current_view.view_id.get(),
+      packet->source_frame_sequence.get(), packet->cache_epoch,
+      packet->view_generation);
+    co_return;
+  }
+  const auto& metadata = packet->directional_metadata;
+  const auto& page_management_bindings = packet->page_management_bindings;
 
-  pass_constants_.Ensure(
-    *gfx_, "VirtualShadowBuildDrawsPass.Constants",
+  LOG_F(INFO,
+    "VirtualShadowBuildDrawsPass: frame={} view={} packet source_frame={} "
+    "cache_epoch={} view_generation={} meta_srv={} schedule_uav={} "
+    "schedule_count_uav={} draw_args_uav={} draw_page_ranges_uav={} "
+    "draw_page_indices_uav={} clip_levels={} pages_per_axis={} draw_count={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    packet->source_frame_sequence.get(), packet->cache_epoch,
+    packet->view_generation, packet->virtual_directional_shadow_metadata_srv.get(),
+    resources->schedule_uav.get(), resources->count_uav.get(),
+    resources->draw_args_uav.get(), resources->draw_page_ranges_uav.get(),
+    resources->draw_page_indices_uav.get(), metadata.clip_level_count,
+    metadata.pages_per_axis, schedule_pass->GetActiveDrawCount());
+
+  pass_constants_.Ensure(*gfx_, "VirtualShadowBuildDrawsPass.Constants",
     detail::kVirtualShadowPassConstantsStride);
   const auto slot = static_cast<std::size_t>(Context().frame_slot.get());
   const auto pass_constants_index = pass_constants_.Index(slot);
@@ -92,19 +118,20 @@ auto VirtualShadowBuildDrawsPass::DoPrepareResources(
     .draw_page_ranges_uav_index = resources->draw_page_ranges_uav,
     .draw_page_indices_uav_index = resources->draw_page_indices_uav,
     .draw_page_counter_uav_index = resources->draw_page_counter_uav,
-    .pages_per_axis = metadata->pages_per_axis,
-    .clip_level_count = metadata->clip_level_count,
-    .pages_per_level = metadata->pages_per_axis * metadata->pages_per_axis,
+    .pages_per_axis = metadata.pages_per_axis,
+    .clip_level_count = metadata.clip_level_count,
+    .pages_per_level = metadata.pages_per_axis * metadata.pages_per_axis,
     .draw_count = schedule_pass->GetActiveDrawCount(),
     .draw_page_list_capacity = resources->draw_page_index_capacity,
   };
   auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
-    + static_cast<std::ptrdiff_t>(slot * detail::kVirtualShadowPassConstantsStride);
+    + static_cast<std::ptrdiff_t>(
+      slot * detail::kVirtualShadowPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
   SetPassConstantsIndex(pass_constants_index);
 
   active_view_id_ = Context().current_view.view_id;
-  active_page_management_bindings_ = *page_management_bindings;
+  active_page_management_bindings_ = page_management_bindings;
   active_schedule_resources_ = resources;
   active_draw_count_ = schedule_pass->GetActiveDrawCount();
   active_dispatch_group_count_
@@ -127,28 +154,30 @@ auto VirtualShadowBuildDrawsPass::DoExecute(graphics::CommandRecorder& recorder)
 
   recorder.RequireResourceState(*active_schedule_resources_->schedule_buffer,
     graphics::ResourceStates::kUnorderedAccess);
-  recorder.RequireResourceState(*active_schedule_resources_->schedule_lookup_buffer,
+  recorder.RequireResourceState(
+    *active_schedule_resources_->schedule_lookup_buffer,
     graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(*active_schedule_resources_->count_buffer,
     graphics::ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(*active_schedule_resources_->draw_args_buffer,
     graphics::ResourceStates::kUnorderedAccess);
-  recorder.RequireResourceState(*active_schedule_resources_->draw_page_ranges_buffer,
+  recorder.RequireResourceState(
+    *active_schedule_resources_->draw_page_ranges_buffer,
     graphics::ResourceStates::kUnorderedAccess);
-  recorder.RequireResourceState(*active_schedule_resources_->draw_page_indices_buffer,
+  recorder.RequireResourceState(
+    *active_schedule_resources_->draw_page_indices_buffer,
     graphics::ResourceStates::kUnorderedAccess);
-  recorder.RequireResourceState(*active_schedule_resources_->draw_page_counter_buffer,
+  recorder.RequireResourceState(
+    *active_schedule_resources_->draw_page_counter_buffer,
     graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
   recorder.Dispatch(active_dispatch_group_count_, 1U, 1U);
 
   shadow_manager->FinalizeVirtualPageManagementOutputs(
     active_view_id_, recorder);
-  recorder.RequireResourceState(
-    *active_schedule_resources_->schedule_buffer,
+  recorder.RequireResourceState(*active_schedule_resources_->schedule_buffer,
     graphics::ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *active_schedule_resources_->count_buffer,
+  recorder.RequireResourceState(*active_schedule_resources_->count_buffer,
     graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
     *active_schedule_resources_->draw_page_ranges_buffer,
@@ -156,11 +185,9 @@ auto VirtualShadowBuildDrawsPass::DoExecute(graphics::CommandRecorder& recorder)
   recorder.RequireResourceState(
     *active_schedule_resources_->draw_page_indices_buffer,
     graphics::ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *active_schedule_resources_->clear_args_buffer,
+  recorder.RequireResourceState(*active_schedule_resources_->clear_args_buffer,
     graphics::ResourceStates::kIndirectArgument);
-  recorder.RequireResourceState(
-    *active_schedule_resources_->draw_args_buffer,
+  recorder.RequireResourceState(*active_schedule_resources_->draw_args_buffer,
     graphics::ResourceStates::kIndirectArgument);
   recorder.FlushBarriers();
 
@@ -177,14 +204,24 @@ auto VirtualShadowBuildDrawsPass::DoExecute(graphics::CommandRecorder& recorder)
       = active_schedule_resources_->draw_page_indices_buffer,
       .draw_page_indices_srv
       = active_schedule_resources_->draw_page_indices_srv,
+      .draw_page_counter_buffer
+      = active_schedule_resources_->draw_page_counter_buffer,
       .clear_indirect_args_buffer
       = active_schedule_resources_->clear_args_buffer,
       .draw_indirect_args_buffer = active_schedule_resources_->draw_args_buffer,
       .source_frame_sequence = Context().frame_sequence,
       .draw_count = active_draw_count_,
-      .pending_raster_page_count
-      = active_page_management_bindings_.pending_raster_page_count,
     });
+  LOG_F(INFO,
+    "VirtualShadowBuildDrawsPass: frame={} view={} published gpu raster inputs "
+    "source_frame={} dispatch_groups={} draw_count={} schedule_srv={} "
+    "schedule_count_srv={} draw_ranges_srv={} draw_indices_srv={}",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    Context().frame_sequence.get(), active_dispatch_group_count_,
+    active_draw_count_, active_schedule_resources_->schedule_srv.get(),
+    active_schedule_resources_->count_srv.get(),
+    active_schedule_resources_->draw_page_ranges_srv.get(),
+    active_schedule_resources_->draw_page_indices_srv.get());
 
   co_return;
 }

@@ -18,8 +18,8 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/ShadowBackendCommon.h>
 #include <Oxygen/Renderer/Passes/Detail/VirtualShadowPassConstants.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/Passes/VirtualShadowPageUpdatePass.h>
+#include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
@@ -39,8 +39,8 @@ VirtualShadowPageUpdatePass::VirtualShadowPageUpdatePass(
 
 VirtualShadowPageUpdatePass::~VirtualShadowPageUpdatePass() = default;
 
-auto VirtualShadowPageUpdatePass::DoPrepareResources(
-  graphics::CommandRecorder&) -> co::Co<>
+auto VirtualShadowPageUpdatePass::DoPrepareResources(graphics::CommandRecorder&)
+  -> co::Co<>
 {
   active_dispatch_ = false;
   active_view_id_ = {};
@@ -99,19 +99,26 @@ auto VirtualShadowPageUpdatePass::DoPrepareResources(
       = ResolveDirectionalVirtualClipGridOriginY(*metadata, clip_index);
   }
 
-  pass_constants_.Ensure(
-    *gfx_, "VirtualShadowPageUpdatePass.Constants",
+  pass_constants_.Ensure(*gfx_, "VirtualShadowPageUpdatePass.Constants",
     detail::kVirtualShadowPassConstantsStride);
   const auto slot = static_cast<std::size_t>(Context().frame_slot.get());
   const auto pass_constants_index = pass_constants_.Index(slot);
 
+  const bool has_active_request_dispatch
+    = request_pass != nullptr && request_pass->HasActiveDispatch();
+  const auto request_word_count = has_active_request_dispatch
+    ? request_pass->GetActiveRequestWordCount()
+    : 0U;
+  const auto page_mark_flags_srv = has_active_request_dispatch
+    ? request_pass->GetPageMarkFlagsSrv()
+    : kInvalidShaderVisibleIndex;
+
   const detail::VirtualShadowPassConstants constants {
-    .page_mark_flags_srv_index
-    = request_pass != nullptr ? request_pass->GetPageMarkFlagsSrv()
-                              : kInvalidShaderVisibleIndex,
+    .page_mark_flags_srv_index = page_mark_flags_srv,
     .page_table_uav_index = page_management_bindings->page_table_uav,
     .page_flags_uav_index = page_management_bindings->page_flags_uav,
-    .dirty_page_flags_uav_index = page_management_bindings->dirty_page_flags_uav,
+    .dirty_page_flags_uav_index
+    = page_management_bindings->dirty_page_flags_uav,
     .physical_page_metadata_srv_index
     = page_management_bindings->physical_page_metadata_srv,
     .physical_page_metadata_uav_index
@@ -119,6 +126,7 @@ auto VirtualShadowPageUpdatePass::DoPrepareResources(
     .physical_page_lists_uav_index
     = page_management_bindings->physical_page_lists_uav,
     .resolve_stats_uav_index = page_management_bindings->resolve_stats_uav,
+    .request_word_count = request_word_count,
     .total_page_count = total_page_count,
     .pages_per_axis = metadata->pages_per_axis,
     .clip_level_count = metadata->clip_level_count,
@@ -130,23 +138,33 @@ auto VirtualShadowPageUpdatePass::DoPrepareResources(
   };
 
   auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
-    + static_cast<std::ptrdiff_t>(slot * detail::kVirtualShadowPassConstantsStride);
+    + static_cast<std::ptrdiff_t>(
+      slot * detail::kVirtualShadowPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
   SetPassConstantsIndex(pass_constants_index);
 
   active_dispatch_ = true;
   active_view_id_ = Context().current_view.view_id;
   active_dispatch_group_count_
-    = (page_management_bindings->physical_page_capacity + kDispatchGroupSize - 1U)
+    = (page_management_bindings->physical_page_capacity + kDispatchGroupSize
+        - 1U)
     / kDispatchGroupSize;
   active_page_management_bindings_ = *page_management_bindings;
-  active_page_mark_flags_srv_
-    = request_pass != nullptr ? request_pass->GetPageMarkFlagsSrv()
-                              : kInvalidShaderVisibleIndex;
+  active_page_mark_flags_srv_ = page_mark_flags_srv;
   active_total_page_count_ = total_page_count;
   active_pages_per_axis_ = metadata->pages_per_axis;
   active_clip_level_count_ = metadata->clip_level_count;
   active_pages_per_level_ = metadata->pages_per_axis * metadata->pages_per_axis;
+
+  LOG_F(INFO,
+    "VirtualShadowPageUpdatePass: frame={} view={} page_mark_flags_srv={} "
+    "dispatch_groups={} total_pages={} physical_capacity={} clip_levels={} "
+    "pages_per_axis={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    active_page_mark_flags_srv_.get(), active_dispatch_group_count_,
+    active_total_page_count_,
+    active_page_management_bindings_.physical_page_capacity,
+    active_clip_level_count_, active_pages_per_axis_);
 
   co_return;
 }
@@ -165,6 +183,18 @@ auto VirtualShadowPageUpdatePass::DoExecute(graphics::CommandRecorder& recorder)
 
   detail::DispatchVirtualPageManagementPass(
     *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
+  LOG_F(INFO,
+    "VirtualShadowPageUpdatePass: frame={} view={} dispatched groups={} "
+    "page_table_uav={} page_flags_uav={} dirty_flags_uav={} "
+    "phys_meta_srv={} phys_lists_uav={} resolve_stats_uav={}",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    active_dispatch_group_count_,
+    active_page_management_bindings_.page_table_uav.get(),
+    active_page_management_bindings_.page_flags_uav.get(),
+    active_page_management_bindings_.dirty_page_flags_uav.get(),
+    active_page_management_bindings_.physical_page_metadata_srv.get(),
+    active_page_management_bindings_.physical_page_lists_uav.get(),
+    active_page_management_bindings_.resolve_stats_uav.get());
 
   co_return;
 }

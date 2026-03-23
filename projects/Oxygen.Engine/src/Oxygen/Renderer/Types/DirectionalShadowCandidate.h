@@ -26,6 +26,7 @@ struct DirectionalShadowCandidate {
   std::uint32_t mobility { 0U };
   std::uint32_t resolution_hint { 0U };
   glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };
+  glm::vec3 basis_up_ws { 0.0F, 0.0F, 1.0F };
   float bias { 0.0F };
   float normal_bias { 0.0F };
   std::uint32_t cascade_count { scene::kMaxShadowCascades };

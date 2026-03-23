@@ -400,6 +400,20 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
       }
     }
   }
+  {
+    const auto view_id = Context().current_view.view_id;
+    const float prepared_exposure
+      = Context().current_view.prepared_frame != nullptr
+      ? Context().current_view.prepared_frame->exposure
+      : -1.0F;
+    LOG_F(INFO,
+      "ToneMapPass: view={} exposure_mode={} manual_exposure={:.6f} "
+      "resolved_exposure={:.6f} exposure_buffer_index={} debug_flags=0x{:x} "
+      "prepared_exposure={:.6f}",
+      view_id.get(), static_cast<std::uint32_t>(config_->exposure_mode),
+      config_->manual_exposure, exposure, exposure_buffer_index.get(),
+      debug_flags, prepared_exposure);
+  }
   const ToneMapPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0u,

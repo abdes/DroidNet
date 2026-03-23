@@ -78,12 +78,15 @@ float4 PS(VSOutput input) : SV_Target0 {
     }
 #endif
 
+    const float3 shadow_normal = ComputeShadowSurfaceNormal(
+        input.world_pos, input.world_normal, input.is_front_face);
+
+#if 1
     //=== Normal PBR Path ===
     MaterialSurface surf = EvaluateMaterialSurface(input.world_pos, input.world_normal, input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex, input.is_front_face);
     const float3 base_rgb = surf.base_rgb * input.color;
     const float3 N = surf.N;
-    const float3 shadow_N = ComputeShadowSurfaceNormal(
-        input.world_pos, input.world_normal, input.is_front_face);
+    const float3 shadow_N = shadow_normal;
     const float3 V = surf.V;
     const float NdotV = saturate(dot(N, V));
     float3 F0 = lerp(float3(0.04, 0.04, 0.04), base_rgb, surf.metalness);
@@ -170,5 +173,6 @@ float4 PS(VSOutput input) : SV_Target0 {
 #else
     final_color *= GetExposure();
     return float4(LinearToSrgb(final_color), surf.base_a);
+#endif
 #endif
 }

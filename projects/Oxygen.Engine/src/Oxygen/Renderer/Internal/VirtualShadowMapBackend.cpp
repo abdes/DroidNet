@@ -20,6 +20,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -414,6 +415,30 @@ struct CanonicalShadowCasterInput {
   return result;
 }
 
+[[nodiscard]] auto BuildClipmapCacheKey(
+  const oxygen::engine::DirectionalVirtualShadowMetadata& metadata)
+  -> oxygen::renderer::VirtualShadowClipmapCacheKey
+{
+  return {
+    .directional_address_space_hash = oxygen::renderer::internal::
+      shadow_detail::HashDirectionalVirtualFeedbackAddressSpace(metadata),
+    .clip_level_count = metadata.clip_level_count,
+    .pages_per_axis = metadata.pages_per_axis,
+    .page_size_texels = metadata.page_size_texels,
+  };
+}
+
+[[nodiscard]] auto AreClipmapCacheKeysEqual(
+  const oxygen::renderer::VirtualShadowClipmapCacheKey& lhs,
+  const oxygen::renderer::VirtualShadowClipmapCacheKey& rhs) -> bool
+{
+  return lhs.directional_address_space_hash
+    == rhs.directional_address_space_hash
+    && lhs.clip_level_count == rhs.clip_level_count
+    && lhs.pages_per_axis == rhs.pages_per_axis
+    && lhs.page_size_texels == rhs.page_size_texels;
+}
+
 } // namespace
 
 namespace oxygen::renderer::internal {
@@ -463,9 +488,108 @@ auto VirtualShadowMapBackend::OnFrameStart(RendererTag /*tag*/,
 {
   frame_sequence_ = sequence;
   frame_slot_ = slot;
+  for (auto& [view_id, state] : view_cache_) {
+    (void)view_id;
+    RollExtractedCacheFrames(state);
+  }
   shadow_instance_buffer_.OnFrameStart(sequence, slot);
   directional_virtual_metadata_buffer_.OnFrameStart(sequence, slot);
   shadow_caster_bounds_buffer_.OnFrameStart(sequence, slot);
+}
+
+auto VirtualShadowMapBackend::ResetCachedState() -> void
+{
+  std::vector<ViewId> retired_view_ids;
+  retired_view_ids.reserve(view_cache_.size()
+    + view_page_management_page_table_resources_.size()
+    + view_page_management_page_flags_resources_.size()
+    + view_resolve_resources_.size());
+  const auto record_retired_view = [&retired_view_ids](const ViewId view_id) {
+    if (std::find(retired_view_ids.begin(), retired_view_ids.end(), view_id)
+      == retired_view_ids.end()) {
+      retired_view_ids.push_back(view_id);
+    }
+  };
+  for (const auto& [view_id, _] : view_cache_) {
+    record_retired_view(view_id);
+  }
+  for (const auto& [view_id, _] : view_page_management_page_table_resources_) {
+    record_retired_view(view_id);
+  }
+  for (const auto& [view_id, _] : view_page_management_page_flags_resources_) {
+    record_retired_view(view_id);
+  }
+  for (const auto& [view_id, _] : view_resolve_resources_) {
+    record_retired_view(view_id);
+  }
+
+  const auto previous_epoch = cache_epoch_;
+  for (auto& [view_id, state] : view_cache_) {
+    SetLifecycleState(view_id, state, CacheLifecycleState::kRetired,
+      "scene_reset_retire");
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: frame={} view={} retiring cache instance "
+      "cache_epoch={} view_generation={} publication_invalidated=true "
+      "page_table={} page_flags={} physical_pool={} physical_meta={} "
+      "physical_lists={}",
+      frame_sequence_.get(), view_id.get(), state.cache_epoch,
+      state.view_generation,
+      state.frame_publication.virtual_shadow_page_table_srv.get(),
+      state.frame_publication.virtual_shadow_page_flags_srv.get(),
+      state.frame_publication.virtual_shadow_physical_pool_srv.get(),
+      state.frame_publication.virtual_shadow_physical_page_metadata_srv.get(),
+      state.frame_publication.virtual_shadow_physical_page_lists_srv.get());
+  }
+  ++cache_epoch_;
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: reset cached state cache_epoch {} -> {} "
+    "(retired_views={} table_resources={} flag_resources={} resolve_resources={})",
+    previous_epoch, cache_epoch_, retired_view_ids.size(),
+    view_page_management_page_table_resources_.size(),
+    view_page_management_page_flags_resources_.size(),
+    view_resolve_resources_.size());
+  ReleasePhysicalPool();
+  view_cache_.clear();
+  view_page_management_page_table_resources_.clear();
+  view_page_management_page_flags_resources_.clear();
+  view_resolve_resources_.clear();
+  for (const auto view_id : retired_view_ids) {
+    const auto previous_generation = GetOrCreateViewGeneration(view_id);
+    ++view_generations_[view_id];
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: retired view={} generation {} -> {} "
+      "during cache reset",
+      view_id.get(), previous_generation, view_generations_[view_id]);
+  }
+}
+
+auto VirtualShadowMapBackend::RetireView(const ViewId view_id) -> void
+{
+  if (const auto it = view_cache_.find(view_id); it != view_cache_.end()) {
+    SetLifecycleState(view_id, it->second, CacheLifecycleState::kRetired,
+      "view_retired");
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: frame={} view={} retiring cache instance "
+      "cache_epoch={} view_generation={} publication_invalidated=true "
+      "page_table={} page_flags={} physical_pool={} physical_meta={} "
+      "physical_lists={}",
+      frame_sequence_.get(), view_id.get(), it->second.cache_epoch,
+      it->second.view_generation,
+      it->second.frame_publication.virtual_shadow_page_table_srv.get(),
+      it->second.frame_publication.virtual_shadow_page_flags_srv.get(),
+      it->second.frame_publication.virtual_shadow_physical_pool_srv.get(),
+      it->second.frame_publication.virtual_shadow_physical_page_metadata_srv.get(),
+      it->second.frame_publication.virtual_shadow_physical_page_lists_srv.get());
+  }
+  view_cache_.erase(view_id);
+  view_page_management_page_table_resources_.erase(view_id);
+  view_page_management_page_flags_resources_.erase(view_id);
+  view_resolve_resources_.erase(view_id);
+  const auto previous_generation = GetOrCreateViewGeneration(view_id);
+  ++view_generations_[view_id];
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: retired view={} generation {} -> {}",
+    view_id.get(), previous_generation, view_generations_[view_id]);
 }
 
 auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
@@ -475,7 +599,7 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
-  const std::chrono::milliseconds gpu_budget,
+  const std::chrono::milliseconds gpu_budget, const std::uint64_t view_generation,
   const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   if (directional_candidates.size() != 1U) {
@@ -501,16 +625,29 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
 
   ViewCacheEntry state {};
   state.shadow_caster_content_hash = shadow_caster_content_hash;
+  state.cache_epoch = cache_epoch_;
+  SyncViewGeneration(view_id, view_generation);
+  state.view_generation = view_generation;
 
   const auto pool_config
     = BuildPhysicalPoolConfig(directional_candidates.front(), gpu_budget,
       canonical_shadow_caster_bounds_span.size());
   EnsurePhysicalPool(pool_config);
   const auto previous_it = view_cache_.find(view_id);
-  BuildDirectionalVirtualViewState(view_constants, camera_viewport_width,
-    directional_candidates.front(), canonical_shadow_caster_bounds_span,
-    visible_receiver_bounds,
-    previous_it != view_cache_.end() ? &previous_it->second : nullptr, state);
+  const auto* previous_state
+    = previous_it != view_cache_.end() ? &previous_it->second : nullptr;
+  BuildDirectionalVirtualViewState(view_id, view_constants,
+    camera_viewport_width, directional_candidates.front(),
+    canonical_shadow_caster_bounds_span, visible_receiver_bounds,
+    previous_state, state);
+
+  if (previous_state != nullptr
+    && previous_state->cache_epoch != state.cache_epoch) {
+    CHECK_F(false,
+      "VirtualShadowMapBackend: stale previous state crossed cache epoch "
+      "boundary in PublishView view={} previous_epoch={} current_epoch={}",
+      view_id.get(), previous_state->cache_epoch, state.cache_epoch);
+  }
 
   const auto published_shadow_instances
     = std::span<const engine::ShadowInstanceMetadata> {
@@ -558,34 +695,6 @@ auto VirtualShadowMapBackend::PublishView(const ViewId view_id,
   return it->second.frame_publication;
 }
 
-auto VirtualShadowMapBackend::MarkRendered(
-  const ViewId view_id, const bool rendered_page_work) -> void
-{
-  const auto it = view_cache_.find(view_id);
-  if (it == view_cache_.end()) {
-    return;
-  }
-
-  // A zero-page frame must not bootstrap cache history. On first-scene startup
-  // that would turn seed-only page-management buffers into "reusable" history
-  // and expose garbage outside the real scene bounds on the next frame.
-  //
-  // The caller must derive this only from authoritative resolve/raster page
-  // work. CPU draw metadata, partition counts, or indirect-record counts are
-  // not sufficient because they can be nonzero before any current VSM page
-  // mapping exists.
-  if (!rendered_page_work && !it->second.has_rendered_cache_history) {
-    RefreshViewExports(view_id, it->second);
-    return;
-  }
-
-  // Live residency is GPU-owned now. Once a view has genuinely rasterized at
-  // least one page, later zero-work steady-state frames may preserve that
-  // cache history without forcing another bootstrap/reset.
-  it->second.has_rendered_cache_history = true;
-  RefreshViewExports(view_id, it->second);
-}
-
 auto VirtualShadowMapBackend::ResolveCurrentFrame(const ViewId view_id) -> void
 {
   const auto it = view_cache_.find(view_id);
@@ -608,9 +717,340 @@ auto VirtualShadowMapBackend::ResolveCurrentFrame(const ViewId view_id) -> void
       // A reset only zeroes persistent GPU page-management state. Do not
       // rebuild or upload a CPU-authored residency snapshot here.
       resources->physical_page_state_reset_pending = true;
+      state.current_frame.has_authoritative_page_management_state = false;
+      SetLifecycleState(
+        view_id, state, CacheLifecycleState::kClearing, "resolve_reset");
     }
+  } else if (state.lifecycle_state == CacheLifecycleState::kResetPending
+    || state.lifecycle_state == CacheLifecycleState::kInvalidated) {
+    SetLifecycleState(view_id, state, CacheLifecycleState::kWarmupRasterPending,
+      "resolve_without_reset");
   }
   RefreshViewExports(view_id, state);
+}
+
+auto VirtualShadowMapBackend::ApplyExtractedScheduleResult(const ViewId view_id,
+  const frame::SequenceNumber source_sequence, const std::uint64_t cache_epoch,
+  const std::uint64_t view_generation,
+  const std::uint32_t scheduled_page_count) -> void
+{
+  const auto it = view_cache_.find(view_id);
+  if (it == view_cache_.end()) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: dropped schedule feedback for missing view={} "
+      "source_frame={}",
+      view_id.get(), source_sequence.get());
+    return;
+  }
+  if (it->second.cache_epoch != cache_epoch
+    || it->second.view_generation != view_generation) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: dropped stale schedule feedback view={} "
+      "source_frame={} feedback_epoch={} cache_epoch={} "
+      "feedback_view_generation={} cache_view_generation={}",
+      view_id.get(), source_sequence.get(), cache_epoch, it->second.cache_epoch,
+      view_generation, it->second.view_generation);
+    return;
+  }
+
+  auto& prev_frame = it->second.prev_frame;
+  prev_frame.scheduled_frame_number = scheduled_page_count > 0U
+    ? static_cast<std::int64_t>(source_sequence.get())
+    : -1;
+  auto& extracted_feedback = it->second.extracted_feedback;
+  extracted_feedback.scheduled_source_sequence = source_sequence;
+  extracted_feedback.scheduled_page_count = scheduled_page_count;
+  extracted_feedback.has_schedule_feedback = true;
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: accepted schedule feedback view={} "
+    "source_frame={} cache_epoch={} view_generation={} scheduled_pages={} "
+    "prev_rendered_frame={} lifecycle={}",
+    view_id.get(), source_sequence.get(), it->second.cache_epoch,
+    it->second.view_generation, scheduled_page_count,
+    it->second.prev_frame.rendered_frame_number,
+    CacheLifecycleStateName(it->second.lifecycle_state));
+}
+
+auto VirtualShadowMapBackend::ApplyExtractedResolveStatsResult(
+  const ViewId view_id, const frame::SequenceNumber source_sequence,
+  const std::uint64_t cache_epoch, const std::uint64_t view_generation,
+  const renderer::VirtualShadowResolveStats& resolve_stats) -> void
+{
+  const auto it = view_cache_.find(view_id);
+  if (it == view_cache_.end()) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: dropped resolve feedback for missing view={} "
+      "source_frame={}",
+      view_id.get(), source_sequence.get());
+    return;
+  }
+  if (it->second.cache_epoch != cache_epoch
+    || it->second.view_generation != view_generation) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: dropped stale resolve feedback view={} "
+      "source_frame={} feedback_epoch={} cache_epoch={} "
+      "feedback_view_generation={} cache_view_generation={}",
+      view_id.get(), source_sequence.get(), cache_epoch, it->second.cache_epoch,
+      view_generation, it->second.view_generation);
+    return;
+  }
+
+  auto& prev_frame = it->second.prev_frame;
+  auto& extracted_feedback = it->second.extracted_feedback;
+  extracted_feedback.resolve_stats_source_sequence = source_sequence;
+  extracted_feedback.resolve_stats = resolve_stats;
+  extracted_feedback.has_resolve_stats_feedback = true;
+
+  const auto scheduled_raster_page_count
+    = resolve_stats.scheduled_raster_page_count;
+  const auto rasterized_page_count = resolve_stats.rasterized_page_count;
+  const auto requested_page_count = resolve_stats.requested_page_count;
+  const auto pages_requiring_schedule_count
+    = resolve_stats.pages_requiring_schedule_count;
+  const bool has_unsatisfied_schedule_work
+    = scheduled_raster_page_count == 0U && pages_requiring_schedule_count > 0U;
+  const bool has_rendered_page_management_provenance
+    = prev_frame.rendered_frame_number >= 0;
+  const bool raster_work_converged
+    = rasterized_page_count == scheduled_raster_page_count;
+  const bool warmup_validation_required
+    = it->second.stable_validation_pending
+    || it->second.bootstrap_feedback_complete
+    || it->second.lifecycle_state == CacheLifecycleState::kResetPending
+    || it->second.lifecycle_state == CacheLifecycleState::kClearing
+    || it->second.lifecycle_state == CacheLifecycleState::kCleared
+    || it->second.lifecycle_state == CacheLifecycleState::kWarmupRasterPending
+    || it->second.lifecycle_state == CacheLifecycleState::kWarmupFeedbackPending;
+  const bool requires_stable_validation_after_raster
+    = warmup_validation_required
+    && (it->second.cache_epoch > 1U || it->second.view_generation > 1U);
+  const bool zero_work_validation_frame = scheduled_raster_page_count == 0U
+    && prev_frame.page_management_finalized
+    && has_rendered_page_management_provenance;
+  const bool stable_validation_frame
+    = raster_work_converged && zero_work_validation_frame
+    && !has_unsatisfied_schedule_work;
+  const bool was_live_before_feedback
+    = IsPublicationLiveState(it->second.lifecycle_state);
+  const bool requires_post_reset_validation_barrier
+    = it->second.current_frame_requested_reset
+    && (it->second.cache_epoch > 1U || it->second.view_generation > 1U);
+  const auto current_frame_matches_prev_rendered_basis = [&]() {
+    if (prev_frame.directional_metadata.size() != 1U
+      || it->second.current_frame.directional_metadata.size() != 1U) {
+      return false;
+    }
+    const auto& previous_metadata = prev_frame.directional_metadata.front();
+    const auto& current_metadata
+      = it->second.current_frame.directional_metadata.front();
+    if (!IsDirectionalVirtualAddressSpaceCompatible(
+          previous_metadata, current_metadata)) {
+      return false;
+    }
+    for (std::uint32_t clip_index = 0U;
+      clip_index < current_metadata.clip_level_count; ++clip_index) {
+      if (!IsDirectionalVirtualClipContentReusable(
+            previous_metadata, current_metadata, clip_index)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const auto preserve_validated_directional_basis = [&]() {
+    it->second.directional_virtual_metadata = prev_frame.directional_metadata;
+    it->second.current_frame.directional_metadata
+      = prev_frame.directional_metadata;
+    it->second.current_frame.clipmap_cache_key = prev_frame.clipmap_cache_key;
+    it->second.current_frame.cached_clip_grid_origin_x
+      = prev_frame.cached_clip_grid_origin_x;
+    it->second.current_frame.cached_clip_grid_origin_y
+      = prev_frame.cached_clip_grid_origin_y;
+    it->second.current_frame.has_cached_clip_grid_origins
+      = prev_frame.has_cached_clip_grid_origins;
+  };
+  const auto snapshot_current_rendered_basis = [&]() {
+    if (it->second.current_frame.directional_metadata.empty()) {
+      return;
+    }
+    prev_frame.directional_metadata = it->second.current_frame.directional_metadata;
+    prev_frame.clipmap_cache_key = it->second.current_frame.clipmap_cache_key;
+    prev_frame.shadow_caster_content_hash
+      = it->second.current_frame.shadow_caster_content_hash;
+    prev_frame.cached_clip_grid_origin_x
+      = it->second.current_frame.cached_clip_grid_origin_x;
+    prev_frame.cached_clip_grid_origin_y
+      = it->second.current_frame.cached_clip_grid_origin_y;
+    prev_frame.has_cached_clip_grid_origins
+      = it->second.current_frame.has_cached_clip_grid_origins;
+    prev_frame.is_uncached = it->second.current_frame.is_uncached;
+  };
+  if (scheduled_raster_page_count > 0U && raster_work_converged
+    && requires_stable_validation_after_raster) {
+    snapshot_current_rendered_basis();
+    it->second.preserve_rendered_basis_until_next_raster = false;
+    prev_frame.has_authoritative_page_management_state = false;
+    prev_frame.rendered_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    prev_frame.scheduled_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.current_frame.has_authoritative_page_management_state = false;
+    it->second.current_frame.rendered_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.current_frame.scheduled_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.bootstrap_feedback_complete = true;
+    it->second.stable_validation_pending = true;
+    SetLifecycleState(view_id, it->second,
+      CacheLifecycleState::kWarmupFeedbackPending,
+      "accepted_raster_feedback_requires_stable_validation");
+  } else if (scheduled_raster_page_count > 0U && raster_work_converged) {
+    snapshot_current_rendered_basis();
+    it->second.preserve_rendered_basis_until_next_raster = false;
+    prev_frame.has_authoritative_page_management_state = true;
+    prev_frame.rendered_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    prev_frame.scheduled_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.current_frame.has_authoritative_page_management_state = true;
+    it->second.current_frame.rendered_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.current_frame.scheduled_frame_number
+      = static_cast<std::int64_t>(source_sequence.get());
+    it->second.bootstrap_feedback_complete = false;
+    it->second.stable_validation_pending = false;
+    SetLifecycleState(
+      view_id, it->second, CacheLifecycleState::kValid, "accepted_feedback");
+  } else if (has_unsatisfied_schedule_work) {
+    if (was_live_before_feedback) {
+      preserve_validated_directional_basis();
+      it->second.preserve_rendered_basis_until_next_raster = false;
+      prev_frame.has_authoritative_page_management_state = true;
+      it->second.current_frame.has_authoritative_page_management_state = true;
+      it->second.current_frame.rendered_frame_number
+        = prev_frame.rendered_frame_number;
+      it->second.current_frame.scheduled_frame_number
+        = prev_frame.scheduled_frame_number;
+      it->second.bootstrap_feedback_complete = false;
+      it->second.stable_validation_pending = true;
+      SetLifecycleState(view_id, it->second, CacheLifecycleState::kDirty,
+        "zero_schedule_with_unsatisfied_work_dirty");
+    } else {
+      preserve_validated_directional_basis();
+      it->second.preserve_rendered_basis_until_next_raster = false;
+      prev_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.rendered_frame_number
+        = prev_frame.rendered_frame_number;
+      it->second.current_frame.scheduled_frame_number
+        = prev_frame.scheduled_frame_number;
+      it->second.bootstrap_feedback_complete = true;
+      it->second.stable_validation_pending = true;
+      SetLifecycleState(view_id, it->second,
+        CacheLifecycleState::kWarmupFeedbackPending,
+        "zero_schedule_with_unsatisfied_work");
+    }
+  } else if (stable_validation_frame) {
+    preserve_validated_directional_basis();
+    if (!current_frame_matches_prev_rendered_basis()) {
+      it->second.preserve_rendered_basis_until_next_raster = true;
+      prev_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.rendered_frame_number
+        = prev_frame.rendered_frame_number;
+      it->second.current_frame.scheduled_frame_number
+        = prev_frame.scheduled_frame_number;
+      it->second.bootstrap_feedback_complete = true;
+      it->second.stable_validation_pending = true;
+      SetLifecycleState(view_id, it->second,
+        CacheLifecycleState::kWarmupFeedbackPending,
+        "accepted_feedback_requires_same_basis_provenance");
+    } else if (requires_post_reset_validation_barrier) {
+      it->second.preserve_rendered_basis_until_next_raster = true;
+      prev_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.has_authoritative_page_management_state = false;
+      it->second.current_frame.rendered_frame_number
+        = prev_frame.rendered_frame_number;
+      it->second.current_frame.scheduled_frame_number
+        = prev_frame.scheduled_frame_number;
+      it->second.bootstrap_feedback_complete = true;
+      it->second.stable_validation_pending = true;
+      SetLifecycleState(view_id, it->second,
+        CacheLifecycleState::kWarmupFeedbackPending,
+        "accepted_feedback_requires_post_reset_barrier");
+    } else {
+      it->second.preserve_rendered_basis_until_next_raster = true;
+      prev_frame.has_authoritative_page_management_state = true;
+      it->second.current_frame.has_authoritative_page_management_state = true;
+      it->second.current_frame.rendered_frame_number
+        = prev_frame.rendered_frame_number;
+      it->second.current_frame.scheduled_frame_number
+        = prev_frame.scheduled_frame_number;
+      it->second.bootstrap_feedback_complete = false;
+      it->second.stable_validation_pending = false;
+      SetLifecycleState(
+        view_id, it->second, CacheLifecycleState::kValid, "accepted_feedback");
+    }
+  } else if (scheduled_raster_page_count > 0U
+    && rasterized_page_count != scheduled_raster_page_count) {
+    it->second.preserve_rendered_basis_until_next_raster = false;
+    prev_frame.has_authoritative_page_management_state = false;
+    prev_frame.rendered_frame_number = -1;
+    it->second.current_frame.has_authoritative_page_management_state = false;
+    it->second.current_frame.rendered_frame_number = -1;
+    it->second.bootstrap_feedback_complete = !was_live_before_feedback;
+    it->second.stable_validation_pending = true;
+    SetLifecycleState(view_id, it->second,
+      was_live_before_feedback ? CacheLifecycleState::kDirty
+                               : CacheLifecycleState::kWarmupFeedbackPending,
+      was_live_before_feedback ? "incomplete_raster_feedback"
+                               : "incomplete_raster_feedback_warmup");
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: view={} source_frame={} incomplete raster "
+      "completion stats scheduled_raster_pages={} rasterized_pages={} "
+      "cached_transitions={}",
+      view_id.get(), source_sequence.get(), scheduled_raster_page_count,
+      rasterized_page_count, resolve_stats.cached_page_transition_count);
+  }
+
+  if (extracted_feedback.has_schedule_feedback
+    && extracted_feedback.scheduled_source_sequence == source_sequence
+    && extracted_feedback.scheduled_page_count != scheduled_raster_page_count) {
+    LOG_F(ERROR,
+      "VirtualShadowMapBackend: view={} source_frame={} schedule mismatch "
+      "schedule_readback_pages={} resolve_scheduled_raster_pages={}",
+      view_id.get(), source_sequence.get(),
+      extracted_feedback.scheduled_page_count, scheduled_raster_page_count);
+  }
+  if (extracted_feedback.has_schedule_feedback
+    && extracted_feedback.scheduled_source_sequence == source_sequence
+    && extracted_feedback.scheduled_page_count == scheduled_raster_page_count) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: view={} source_frame={} schedule/resolve "
+      "matched lifecycle={} scheduled_pages={} rasterized_pages={} "
+      "requested_pages={} requires_schedule_pages={}",
+      view_id.get(), source_sequence.get(),
+      CacheLifecycleStateName(it->second.lifecycle_state),
+      scheduled_raster_page_count, rasterized_page_count,
+      requested_page_count, pages_requiring_schedule_count);
+  }
+
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: view={} source_frame={} extracted feedback "
+    "schedule_readback_pages={} scheduled_raster_pages={} "
+    "rasterized_pages={} cached_transitions={} allocated={} requested={} "
+    "requires_schedule={} resident_dirty={} resident_clean={} available={}",
+    view_id.get(), source_sequence.get(),
+    extracted_feedback.has_schedule_feedback
+      ? extracted_feedback.scheduled_page_count
+      : 0U,
+    resolve_stats.scheduled_raster_page_count,
+    resolve_stats.rasterized_page_count,
+    resolve_stats.cached_page_transition_count,
+    resolve_stats.allocated_page_count, resolve_stats.requested_page_count,
+    resolve_stats.pages_requiring_schedule_count,
+    resolve_stats.resident_dirty_page_count,
+    resolve_stats.resident_clean_page_count,
+    resolve_stats.available_page_list_count);
 }
 
 auto VirtualShadowMapBackend::PreparePageTableResources(
@@ -628,14 +1068,19 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
   const bool has_page_management_table_resources
     = page_management_table_resources_it
       != view_page_management_page_table_resources_.end()
+    && ResourceOwnershipMatches(
+      page_management_table_resources_it->second, state_it->second)
     && page_management_table_resources_it->second.gpu_buffer;
   const bool has_page_management_flags_resources
     = page_management_flags_resources_it
       != view_page_management_page_flags_resources_.end()
+    && ResourceOwnershipMatches(
+      page_management_flags_resources_it->second, state_it->second)
     && page_management_flags_resources_it->second.gpu_buffer;
   const auto resolve_resources_it = view_resolve_resources_.find(view_id);
   const bool has_resolve_resources
-    = resolve_resources_it != view_resolve_resources_.end();
+    = resolve_resources_it != view_resolve_resources_.end()
+    && ResourceOwnershipMatches(resolve_resources_it->second, state_it->second);
   if (!has_page_management_table_resources
     && !has_page_management_flags_resources && !has_resolve_resources) {
     return;
@@ -714,6 +1159,10 @@ auto VirtualShadowMapBackend::PreparePageTableResources(
 auto VirtualShadowMapBackend::PreparePageManagementOutputsForGpuWrite(
   const ViewId view_id, graphics::CommandRecorder& recorder) -> void
 {
+  const auto state_it = view_cache_.find(view_id);
+  if (state_it == view_cache_.end()) {
+    return;
+  }
   const auto page_table_resources_it
     = view_page_management_page_table_resources_.find(view_id);
   const auto page_flags_resources_it
@@ -722,6 +1171,8 @@ auto VirtualShadowMapBackend::PreparePageManagementOutputsForGpuWrite(
       == view_page_management_page_table_resources_.end()
     || page_flags_resources_it
       == view_page_management_page_flags_resources_.end()
+    || !ResourceOwnershipMatches(page_table_resources_it->second, state_it->second)
+    || !ResourceOwnershipMatches(page_flags_resources_it->second, state_it->second)
     || !page_table_resources_it->second.gpu_buffer
     || !page_flags_resources_it->second.gpu_buffer) {
     return;
@@ -813,6 +1264,10 @@ auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
       == view_page_management_page_table_resources_.end()
     || page_management_flags_resources_it
       == view_page_management_page_flags_resources_.end()
+    || !ResourceOwnershipMatches(
+      page_management_table_resources_it->second, state_it->second)
+    || !ResourceOwnershipMatches(
+      page_management_flags_resources_it->second, state_it->second)
     || !page_management_table_resources_it->second.gpu_buffer
     || !page_management_flags_resources_it->second.gpu_buffer) {
     return;
@@ -830,7 +1285,14 @@ auto VirtualShadowMapBackend::FinalizePageManagementOutputs(
     graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(*page_management_flags_resources.gpu_buffer,
     graphics::ResourceStates::kShaderResource);
-  if (resolve_resources_it != view_resolve_resources_.end()) {
+  state.current_frame.page_management_finalized = true;
+  if (resolve_resources_it != view_resolve_resources_.end()
+    && ResourceOwnershipMatches(resolve_resources_it->second, state_it->second)) {
+    if (resolve_resources_it->second.physical_page_state_reset_pending
+      && state.lifecycle_state == CacheLifecycleState::kClearing) {
+      SetLifecycleState(
+        view_id, state, CacheLifecycleState::kCleared, "clear_finalize");
+    }
     resolve_resources_it->second.physical_page_state_reset_pending = false;
   }
   RefreshViewExports(view_id, state);
@@ -869,6 +1331,25 @@ auto VirtualShadowMapBackend::TryGetPageManagementBindings(
                                  : nullptr;
 }
 
+auto VirtualShadowMapBackend::TryGetPageManagementStateSnapshot(
+  const ViewId view_id) const noexcept
+  -> std::optional<renderer::VirtualShadowPageManagementStateSnapshot>
+{
+  const auto state_it = view_cache_.find(view_id);
+  const auto* bindings = TryGetPageManagementBindings(view_id);
+  if (bindings == nullptr || state_it == view_cache_.end()) {
+    return std::nullopt;
+  }
+
+  return renderer::VirtualShadowPageManagementStateSnapshot {
+    .reset_page_management_state = bindings->reset_page_management_state,
+    .reset_request_pending
+    = state_it->second.current_frame_requested_reset ? 1U : 0U,
+    .global_dirty_resident_contents
+    = bindings->global_dirty_resident_contents,
+  };
+}
+
 auto VirtualShadowMapBackend::TryGetDirectionalVirtualMetadata(
   const ViewId view_id) const noexcept
   -> const engine::DirectionalVirtualShadowMetadata*
@@ -877,6 +1358,42 @@ auto VirtualShadowMapBackend::TryGetDirectionalVirtualMetadata(
   return it != view_cache_.end()
       && !it->second.directional_virtual_metadata.empty()
     ? &it->second.directional_virtual_metadata.front()
+    : nullptr;
+}
+
+auto VirtualShadowMapBackend::TryGetShadowInstanceMetadata(
+  const ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*
+{
+  const auto it = view_cache_.find(view_id);
+  return it != view_cache_.end() && !it->second.shadow_instances.empty()
+    ? &it->second.shadow_instances.front()
+    : nullptr;
+}
+
+auto VirtualShadowMapBackend::TryGetPageFlagsBuffer(
+  const ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>
+{
+  const auto it = view_page_management_page_flags_resources_.find(view_id);
+  return it != view_page_management_page_flags_resources_.end()
+    ? it->second.gpu_buffer
+    : nullptr;
+}
+
+auto VirtualShadowMapBackend::TryGetPhysicalPageMetadataBuffer(
+  const ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>
+{
+  const auto it = view_resolve_resources_.find(view_id);
+  return it != view_resolve_resources_.end()
+    ? it->second.physical_page_metadata_gpu_buffer
+    : nullptr;
+}
+
+auto VirtualShadowMapBackend::TryGetResolveStatsBuffer(
+  const ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>
+{
+  const auto it = view_resolve_resources_.find(view_id);
+  return it != view_resolve_resources_.end()
+    ? it->second.stats_gpu_buffer
     : nullptr;
 }
 
@@ -896,24 +1413,336 @@ auto VirtualShadowMapBackend::InitializeDirectionalViewStateFromClipmapSetup(
     shadow_caster_bounds.begin(), shadow_caster_bounds.end());
 }
 
-auto VirtualShadowMapBackend::BuildDirectionalPreviousStateContext(
-  const ViewCacheEntry* previous_state) const -> DirectionalPreviousStateContext
+auto VirtualShadowMapBackend::RollExtractedCacheFrames(
+  ViewCacheEntry& state) noexcept -> void
 {
-  DirectionalPreviousStateContext context {};
+  const auto old_previous = state.prev_frame;
+  const auto old_current = state.current_frame;
+  const bool preserve_last_rendered_basis = !old_current.directional_metadata.empty()
+    && old_current.page_management_finalized
+    && old_previous.rendered_frame_number >= 0
+    && old_current.rendered_frame_number == old_previous.rendered_frame_number
+    && old_current.scheduled_frame_number == old_previous.scheduled_frame_number;
+
+  state.prev_frame
+    = old_current.directional_metadata.empty() ? old_previous : old_current;
+  if (preserve_last_rendered_basis) {
+    // A zero-raster validation frame can validate the previously rendered page
+    // management state, but it must not replace the rendered shadow basis.
+    state.prev_frame.directional_metadata = old_previous.directional_metadata;
+    state.prev_frame.clipmap_cache_key = old_previous.clipmap_cache_key;
+    state.prev_frame.shadow_caster_content_hash
+      = old_previous.shadow_caster_content_hash;
+    state.prev_frame.cached_clip_grid_origin_x
+      = old_previous.cached_clip_grid_origin_x;
+    state.prev_frame.cached_clip_grid_origin_y
+      = old_previous.cached_clip_grid_origin_y;
+    state.prev_frame.has_cached_clip_grid_origins
+      = old_previous.has_cached_clip_grid_origins;
+    state.prev_frame.is_uncached = old_previous.is_uncached;
+  }
+  if (!old_current.directional_metadata.empty()) {
+    if (old_current.page_management_finalized) {
+      // A finalized frame only carries reusable authority forward once matching
+      // resolve feedback validated that exact frame. Finalization alone is not
+      // enough to preserve authority from an older frame through a new one.
+      state.prev_frame.has_authoritative_page_management_state
+        = old_current.has_authoritative_page_management_state;
+      state.prev_frame.rendered_frame_number
+        = old_current.rendered_frame_number;
+      state.prev_frame.scheduled_frame_number
+        = old_current.scheduled_frame_number;
+    } else {
+      state.prev_frame.has_authoritative_page_management_state = false;
+      state.prev_frame.rendered_frame_number = -1;
+      state.prev_frame.scheduled_frame_number = -1;
+    }
+  }
+
+  state.current_frame = {};
+}
+
+auto VirtualShadowMapBackend::AssessDirectionalCacheReuse(
+  const DirectionalVirtualClipmapSetup& setup,
+  const ViewCacheEntry* previous_state, const ViewCacheEntry& state) const
+  -> DirectionalCacheReuseAssessment
+{
+  DirectionalCacheReuseAssessment assessment {};
+  const bool has_reusable_rendered_cache
+    = HasReusableRenderedCache(previous_state);
+  assessment.has_reusable_rendered_cache = has_reusable_rendered_cache;
+  assessment.current_view_is_uncached = !has_reusable_rendered_cache;
+
+  if (!has_reusable_rendered_cache || previous_state == nullptr) {
+    assessment.invalidate_rendered_cache_history = false;
+    const bool previous_reset_already_applied = previous_state != nullptr
+      && (previous_state->lifecycle_state == CacheLifecycleState::kClearing
+        || previous_state->lifecycle_state == CacheLifecycleState::kCleared
+        || previous_state->lifecycle_state
+          == CacheLifecycleState::kWarmupRasterPending
+        || previous_state->lifecycle_state
+          == CacheLifecycleState::kWarmupFeedbackPending
+        || previous_state->lifecycle_state == CacheLifecycleState::kValid
+        || previous_state->lifecycle_state == CacheLifecycleState::kDirty);
+    if (previous_reset_already_applied) {
+      // After a reset-generation cache has cleared its persistent GPU state,
+      // subsequent frames must continue warmup instead of re-requesting a full
+      // reset on every publish.
+      assessment.reset_page_management_state = false;
+      assessment.invalidate_rendered_cache_history = false;
+    }
+    return assessment;
+  }
+
+  assessment.previous_shadow_caster_bounds
+    = &previous_state->shadow_caster_bounds;
+  if (previous_state->prev_frame.directional_metadata.size() == 1U) {
+    assessment.previous_metadata
+      = &previous_state->prev_frame.directional_metadata.front();
+  }
+
+  const auto current_clipmap_cache_key = BuildClipmapCacheKey(setup.metadata);
+  const bool clipmap_key_matches = AreClipmapCacheKeysEqual(
+    previous_state->prev_frame.clipmap_cache_key, current_clipmap_cache_key);
+  assessment.clipmap_key_matches = clipmap_key_matches;
+  const bool address_space_compatible = assessment.previous_metadata != nullptr
+    && clipmap_key_matches
+    && IsDirectionalViewCacheCompatible(setup, previous_state);
+  assessment.address_space_compatible = address_space_compatible;
+  bool content_compatible = address_space_compatible;
+  if (content_compatible) {
+    const auto& previous_metadata = *assessment.previous_metadata;
+    const auto clip_count = std::min(
+      previous_metadata.clip_level_count, setup.metadata.clip_level_count);
+    for (std::uint32_t clip_index = 0U; clip_index < clip_count; ++clip_index) {
+      if (!IsDirectionalVirtualClipContentReusable(
+            previous_metadata, setup.metadata, clip_index)) {
+        assessment.first_content_mismatch_clip_index
+          = static_cast<std::int32_t>(clip_index);
+        content_compatible = false;
+        break;
+      }
+    }
+  }
+  assessment.content_compatible = content_compatible;
+
+  const bool requires_cache_reset
+    = !address_space_compatible || !content_compatible;
+  assessment.reset_page_management_state = requires_cache_reset;
+  assessment.invalidate_rendered_cache_history = requires_cache_reset;
+
+  const bool shadow_content_changed
+    = previous_state->prev_frame.shadow_caster_content_hash
+    != state.shadow_caster_content_hash;
+  assessment.shadow_content_changed = shadow_content_changed;
+  assessment.shadow_bounds_count_match
+    = assessment.previous_shadow_caster_bounds != nullptr
+    && assessment.previous_shadow_caster_bounds->size()
+      == state.shadow_caster_bounds.size();
+  assessment.compare_shadow_caster_bounds_on_gpu = content_compatible
+    && !shadow_content_changed
+    && assessment.previous_shadow_caster_bounds != nullptr
+    && assessment.shadow_bounds_count_match
+    && !state.shadow_caster_bounds.empty();
+  assessment.global_dirty_resident_contents = address_space_compatible
+    && content_compatible && !assessment.compare_shadow_caster_bounds_on_gpu;
+
+  return assessment;
+}
+
+auto VirtualShadowMapBackend::HasReusableRenderedCache(
+  const ViewCacheEntry* previous_state) const noexcept -> bool
+{
+  return previous_state != nullptr
+    && IsPublicationLiveState(previous_state->lifecycle_state)
+    && !previous_state->bootstrap_feedback_complete
+    && !previous_state->stable_validation_pending
+    && previous_state->prev_frame.has_authoritative_page_management_state
+    && previous_state->prev_frame.rendered_frame_number >= 0;
+}
+
+auto VirtualShadowMapBackend::RollForwardCacheHistory(
+  const ViewCacheEntry* previous_state, ViewCacheEntry& state) const noexcept
+  -> void
+{
+  state.prev_frame = {};
+  state.current_frame = {};
+  state.current_frame.shadow_caster_content_hash
+    = state.shadow_caster_content_hash;
+  state.lifecycle_state = CacheLifecycleState::kUninitialized;
+  state.bootstrap_feedback_complete = false;
+  state.stable_validation_pending = false;
+  state.preserve_rendered_basis_until_next_raster = false;
+  state.current_frame_requested_reset = false;
+
   if (previous_state == nullptr) {
-    return context;
+    return;
   }
 
-  if (!previous_state->has_rendered_cache_history) {
-    return context;
+  CHECK_F(previous_state->cache_epoch == state.cache_epoch,
+    "VirtualShadowMapBackend: RollForwardCacheHistory crossed cache epoch "
+    "boundary previous_epoch={} current_epoch={}",
+    previous_state->cache_epoch, state.cache_epoch);
+
+  state.prev_frame = previous_state->prev_frame;
+  state.lifecycle_state = previous_state->lifecycle_state;
+  state.bootstrap_feedback_complete
+    = previous_state->bootstrap_feedback_complete;
+  state.stable_validation_pending = previous_state->stable_validation_pending;
+  state.preserve_rendered_basis_until_next_raster
+    = previous_state->preserve_rendered_basis_until_next_raster;
+}
+
+auto VirtualShadowMapBackend::InvalidateRenderedCacheHistory(
+  ViewCacheEntry& state) noexcept -> void
+{
+  state.prev_frame.has_authoritative_page_management_state = false;
+  state.current_frame.has_authoritative_page_management_state = false;
+  state.prev_frame.rendered_frame_number = -1;
+  state.current_frame.rendered_frame_number = -1;
+  state.prev_frame.scheduled_frame_number = -1;
+  state.current_frame.scheduled_frame_number = -1;
+  state.preserve_rendered_basis_until_next_raster = false;
+}
+
+auto VirtualShadowMapBackend::IsPublicationLiveState(
+  const CacheLifecycleState state) noexcept -> bool
+{
+  return state == CacheLifecycleState::kValid
+    || state == CacheLifecycleState::kDirty;
+}
+
+namespace {
+
+[[nodiscard]] auto IsAllowedLifecycleTransition(
+  const oxygen::renderer::internal::VirtualShadowMapBackend::CacheLifecycleState
+    current,
+  const oxygen::renderer::internal::VirtualShadowMapBackend::CacheLifecycleState
+    next) noexcept -> bool
+{
+  using State
+    = oxygen::renderer::internal::VirtualShadowMapBackend::CacheLifecycleState;
+  switch (current) {
+  case State::kUninitialized:
+    return next == State::kInvalidated || next == State::kResetPending
+      || next == State::kRetired;
+  case State::kResetPending:
+    return next == State::kClearing || next == State::kRetired;
+  case State::kClearing:
+    return next == State::kCleared || next == State::kRetired;
+  case State::kCleared:
+    return next == State::kWarmupRasterPending
+      || next == State::kWarmupFeedbackPending || next == State::kValid
+      || next == State::kRetired;
+  case State::kWarmupRasterPending:
+    return next == State::kWarmupFeedbackPending || next == State::kValid
+      || next == State::kRetired;
+  case State::kWarmupFeedbackPending:
+    return next == State::kWarmupRasterPending || next == State::kValid
+      || next == State::kRetired;
+  case State::kValid:
+    return next == State::kDirty || next == State::kInvalidated
+      || next == State::kRetired;
+  case State::kDirty:
+    return next == State::kValid || next == State::kInvalidated
+      || next == State::kRetired;
+  case State::kInvalidated:
+    return next == State::kResetPending || next == State::kRetired;
+  case State::kRetired:
+    return false;
+  }
+  return false;
+}
+
+} // namespace
+
+auto VirtualShadowMapBackend::CacheLifecycleStateName(
+  const CacheLifecycleState state) noexcept -> const char*
+{
+  switch (state) {
+  case CacheLifecycleState::kUninitialized:
+    return "Uninitialized";
+  case CacheLifecycleState::kResetPending:
+    return "ResetPending";
+  case CacheLifecycleState::kClearing:
+    return "Clearing";
+  case CacheLifecycleState::kCleared:
+    return "Cleared";
+  case CacheLifecycleState::kWarmupRasterPending:
+    return "WarmupRasterPending";
+  case CacheLifecycleState::kWarmupFeedbackPending:
+    return "WarmupFeedbackPending";
+  case CacheLifecycleState::kValid:
+    return "Valid";
+  case CacheLifecycleState::kDirty:
+    return "Dirty";
+  case CacheLifecycleState::kInvalidated:
+    return "Invalidated";
+  case CacheLifecycleState::kRetired:
+    return "Retired";
+  }
+  return "Unknown";
+}
+
+auto VirtualShadowMapBackend::SetLifecycleState(const ViewId view_id,
+  ViewCacheEntry& state, const CacheLifecycleState next_state,
+  const char* reason) const -> void
+{
+  if (state.lifecycle_state == next_state) {
+    return;
   }
 
-  context.previous_shadow_caster_bounds = &previous_state->shadow_caster_bounds;
-  if (previous_state->directional_virtual_metadata.size() == 1U) {
-    context.previous_metadata
-      = &previous_state->directional_virtual_metadata.front();
+  CHECK_F(IsAllowedLifecycleTransition(state.lifecycle_state, next_state),
+    "VirtualShadowMapBackend: illegal lifecycle transition frame={} view={} "
+    "{} -> {} reason={}",
+    frame_sequence_.get(), view_id.get(),
+    CacheLifecycleStateName(state.lifecycle_state),
+    CacheLifecycleStateName(next_state), reason);
+
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: frame={} view={} lifecycle {} -> {} reason={}",
+    frame_sequence_.get(), view_id.get(),
+    CacheLifecycleStateName(state.lifecycle_state),
+    CacheLifecycleStateName(next_state), reason);
+  state.lifecycle_state = next_state;
+}
+
+auto VirtualShadowMapBackend::GetOrCreateViewGeneration(const ViewId view_id)
+  -> std::uint64_t
+{
+  auto [it, inserted] = view_generations_.try_emplace(view_id, 1U);
+  if (inserted && it->second == 0U) {
+    it->second = 1U;
   }
-  return context;
+  return it->second;
+}
+
+auto VirtualShadowMapBackend::SyncViewGeneration(const ViewId view_id,
+  const std::uint64_t view_generation) -> void
+{
+  auto& current_generation = view_generations_[view_id];
+  if (current_generation != 0U && current_generation != view_generation) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: synced view={} generation {} -> {}",
+      view_id.get(), current_generation, view_generation);
+  }
+  current_generation = std::max<std::uint64_t>(1U, view_generation);
+}
+
+auto VirtualShadowMapBackend::ResourceOwnershipMatches(
+  const ViewStructuredWordBufferResources& resources,
+  const ViewCacheEntry& state) const noexcept -> bool
+{
+  return resources.cache_epoch == state.cache_epoch
+    && resources.view_generation == state.view_generation;
+}
+
+auto VirtualShadowMapBackend::ResourceOwnershipMatches(
+  const ViewResolveResources& resources, const ViewCacheEntry& state) const
+  noexcept -> bool
+{
+  return resources.cache_epoch == state.cache_epoch
+    && resources.view_generation == state.view_generation;
 }
 
 auto VirtualShadowMapBackend::CanApplyPendingResolveToLiveBindings(
@@ -931,99 +1760,149 @@ auto VirtualShadowMapBackend::RefreshViewExports(
   const auto page_management_flags_resources_it
     = view_page_management_page_flags_resources_.find(view_id);
   const auto resolve_resources_it = view_resolve_resources_.find(view_id);
+  const bool has_owned_page_table_resources
+    = page_management_table_resources_it
+      != view_page_management_page_table_resources_.end()
+    && ResourceOwnershipMatches(page_management_table_resources_it->second, state);
+  const bool has_owned_page_flags_resources
+    = page_management_flags_resources_it
+      != view_page_management_page_flags_resources_.end()
+    && ResourceOwnershipMatches(page_management_flags_resources_it->second, state);
+  const bool has_owned_resolve_resources
+    = resolve_resources_it != view_resolve_resources_.end()
+    && ResourceOwnershipMatches(resolve_resources_it->second, state);
 
   DCHECK_F(!state.pending_residency_resolve.has_fresh_pending_resolve_inputs
       || state.pending_residency_resolve.valid,
     "VirtualShadowMapBackend: fresh pending resolve inputs require a valid "
     "pending resolve packet");
 
-  state.page_management_bindings.page_table_srv
-    = page_management_table_resources_it
-      != view_page_management_page_table_resources_.end()
+  renderer::VirtualShadowPageManagementBindings bindings {};
+  bindings.page_table_srv = has_owned_page_table_resources
     ? page_management_table_resources_it->second.srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.page_table_uav
-    = page_management_table_resources_it
-      != view_page_management_page_table_resources_.end()
+  bindings.page_table_uav = has_owned_page_table_resources
     ? page_management_table_resources_it->second.uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.page_flags_srv
-    = page_management_flags_resources_it
-      != view_page_management_page_flags_resources_.end()
+  bindings.page_flags_srv = has_owned_page_flags_resources
     ? page_management_flags_resources_it->second.srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.page_flags_uav
-    = page_management_flags_resources_it
-      != view_page_management_page_flags_resources_.end()
+  bindings.page_flags_uav = has_owned_page_flags_resources
     ? page_management_flags_resources_it->second.uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.dirty_page_flags_uav
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.dirty_page_flags_uav = has_owned_resolve_resources
     ? resolve_resources_it->second.dirty_page_flags_uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.previous_shadow_caster_bounds_srv
+  bindings.previous_shadow_caster_bounds_srv
     = state.pending_residency_resolve.valid
     ? state.pending_residency_resolve.previous_shadow_caster_bounds_srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.current_shadow_caster_bounds_srv
+  bindings.current_shadow_caster_bounds_srv
     = state.pending_residency_resolve.valid
     ? state.pending_residency_resolve.current_shadow_caster_bounds_srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.physical_page_metadata_srv
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.physical_page_metadata_srv = has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_metadata_srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.physical_page_metadata_uav
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.physical_page_metadata_uav = has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_metadata_uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.physical_page_lists_srv
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.physical_page_lists_srv = has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_lists_srv
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.physical_page_lists_uav
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.physical_page_lists_uav = has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_lists_uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.resolve_stats_uav
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.resolve_stats_uav = has_owned_resolve_resources
     ? resolve_resources_it->second.stats_uav
     : kInvalidShaderVisibleIndex;
-  state.page_management_bindings.previous_light_view
+  bindings.previous_light_view
     = state.pending_residency_resolve.valid
     ? state.pending_residency_resolve.previous_light_view
     : glm::mat4 { 1.0F };
-  state.page_management_bindings.shadow_caster_bound_count
+  bindings.shadow_caster_bound_count
     = state.pending_residency_resolve.valid
     ? state.pending_residency_resolve.shadow_caster_bound_count
     : 0U;
-  state.page_management_bindings.physical_page_capacity
-    = resolve_resources_it != view_resolve_resources_.end()
+  bindings.physical_page_capacity = has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_metadata_capacity
     : 0U;
-  state.page_management_bindings.atlas_tiles_per_axis
-    = physical_pool_config_.atlas_tiles_per_axis;
-  state.page_management_bindings.pending_raster_page_count = 0U;
-  state.page_management_bindings.reset_page_management_state
-    = resolve_resources_it != view_resolve_resources_.end()
-    && resolve_resources_it->second.physical_page_state_reset_pending;
-  state.page_management_bindings.global_dirty_resident_contents
-    = state.pending_residency_resolve.valid
-    && state.pending_residency_resolve.global_dirty_resident_contents;
+  bindings.atlas_tiles_per_axis = physical_pool_config_.atlas_tiles_per_axis;
+  bindings.reset_page_management_state
+    = ((state.pending_residency_resolve.valid
+          && state.pending_residency_resolve.reset_page_management_state)
+        || (resolve_resources_it != view_resolve_resources_.end()
+          && has_owned_resolve_resources
+          && resolve_resources_it->second.physical_page_state_reset_pending))
+    ? 1U
+    : 0U;
+  bindings.global_dirty_resident_contents
+    = (state.pending_residency_resolve.valid
+        && state.pending_residency_resolve.global_dirty_resident_contents)
+    ? 1U
+    : 0U;
+  state.page_management_bindings = bindings;
 
-  state.frame_publication.virtual_shadow_page_table_srv
-    = state.page_management_bindings.page_table_srv;
-  state.frame_publication.virtual_shadow_page_flags_srv
-    = state.page_management_bindings.page_flags_srv;
+  const bool has_authoritative_page_management_cache
+    = (state.prev_frame.has_authoritative_page_management_state
+        || state.current_frame.has_authoritative_page_management_state)
+    && IsPublicationLiveState(state.lifecycle_state);
+  const bool virtual_shadow_bindings_live
+    = bindings.reset_page_management_state == 0U
+    && has_authoritative_page_management_cache;
 
-  state.frame_publication.virtual_shadow_physical_page_metadata_srv
-    = resolve_resources_it != view_resolve_resources_.end()
+  CHECK_F(!virtual_shadow_bindings_live
+      || IsPublicationLiveState(state.lifecycle_state),
+    "VirtualShadowMapBackend: illegal live publication frame={} view={} "
+    "lifecycle={} reset_page_management={} authoritative_prev={} "
+    "authoritative_current={}",
+    frame_sequence_.get(), view_id.get(),
+    CacheLifecycleStateName(state.lifecycle_state),
+    bindings.reset_page_management_state,
+    state.prev_frame.has_authoritative_page_management_state,
+    state.current_frame.has_authoritative_page_management_state);
+
+  auto publication = state.frame_publication;
+  publication.virtual_shadow_page_table_srv
+    = virtual_shadow_bindings_live
+    ? bindings.page_table_srv
+    : kInvalidShaderVisibleIndex;
+  publication.virtual_shadow_page_flags_srv
+    = virtual_shadow_bindings_live
+    ? bindings.page_flags_srv
+    : kInvalidShaderVisibleIndex;
+
+  publication.virtual_shadow_physical_page_metadata_srv
+    = virtual_shadow_bindings_live
+      && has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_metadata_srv
     : kInvalidShaderVisibleIndex;
-  state.frame_publication.virtual_shadow_physical_page_lists_srv
-    = resolve_resources_it != view_resolve_resources_.end()
+  publication.virtual_shadow_physical_page_lists_srv
+    = virtual_shadow_bindings_live
+      && has_owned_resolve_resources
     ? resolve_resources_it->second.physical_page_lists_srv
     : kInvalidShaderVisibleIndex;
+  publication.virtual_shadow_physical_pool_srv
+    = virtual_shadow_bindings_live ? physical_pool_srv_
+                                   : kInvalidShaderVisibleIndex;
+  state.frame_publication = publication;
+  if (!virtual_shadow_bindings_live) {
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: frame={} view={} publication invalid "
+      "cache_epoch={} view_generation={} lifecycle={} reset_page_management={} "
+      "has_authoritative_cache={} bootstrap_feedback_complete={} "
+      "stable_validation_pending={} preserve_until_next_raster={} "
+      "owned_table={} owned_flags={} "
+      "owned_resolve={}",
+      frame_sequence_.get(), view_id.get(), state.cache_epoch,
+      state.view_generation, CacheLifecycleStateName(state.lifecycle_state),
+      bindings.reset_page_management_state,
+      has_authoritative_page_management_cache, state.bootstrap_feedback_complete,
+      state.stable_validation_pending,
+      state.preserve_rendered_basis_until_next_raster,
+      has_owned_page_table_resources,
+      has_owned_page_flags_resources, has_owned_resolve_resources);
+  }
 }
 
 auto VirtualShadowMapBackend::BuildPhysicalPoolConfig(
@@ -1274,11 +2153,14 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   const glm::vec3 light_dir_to_surface
     = NormalizeOrFallback(candidate.direction_ws, glm::vec3(0.0F, -1.0F, 0.0F));
   const glm::vec3 light_dir_to_light = -light_dir_to_surface;
-  const glm::vec3 world_up
-    = std::abs(glm::dot(light_dir_to_light, glm::vec3(0.0F, 0.0F, 1.0F)))
-      > 0.95F
-    ? glm::vec3(1.0F, 0.0F, 0.0F)
-    : glm::vec3(0.0F, 0.0F, 1.0F);
+  glm::vec3 world_up = NormalizeOrFallback(candidate.basis_up_ws,
+    glm::vec3(0.0F, 0.0F, 1.0F));
+  if (std::abs(glm::dot(light_dir_to_light, world_up)) > 0.95F) {
+    world_up = std::abs(glm::dot(light_dir_to_light, glm::vec3(0.0F, 0.0F, 1.0F)))
+        > 0.95F
+      ? glm::vec3(1.0F, 0.0F, 0.0F)
+      : glm::vec3(0.0F, 0.0F, 1.0F);
+  }
 
   const glm::vec3 camera_position = camera_view_constants.camera_position;
   const float authored_first_clip_end = ResolveClipEndDepth(
@@ -1308,10 +2190,18 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   const glm::vec3 cam_rot_ls
     = glm::vec3(rot_view * glm::vec4(camera_position, 1.0F));
 
+  // Basis stabilization is allowed to reuse the last validated rendered basis
+  // even while warmup keeps page-management bindings non-live. Reusable
+  // shading authority stays separately gated by
+  // has_authoritative_page_management_state.
+  const bool has_previous_rendered_provenance = previous_state != nullptr
+    && previous_state->prev_frame.page_management_finalized
+    && previous_state->prev_frame.rendered_frame_number >= 0;
   const engine::DirectionalVirtualShadowMetadata* previous_metadata = nullptr;
-  if (previous_state != nullptr && previous_state->has_rendered_cache_history
-    && previous_state->directional_virtual_metadata.size() == 1U) {
-    previous_metadata = &previous_state->directional_virtual_metadata.front();
+  if (has_previous_rendered_provenance
+    && previous_state->prev_frame.directional_metadata.size() == 1U) {
+    previous_metadata
+      = &previous_state->prev_frame.directional_metadata.front();
   }
 
   const float snap_size = setup.clip_page_world[setup.clip_level_count - 1U];
@@ -1344,28 +2234,49 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   const bool previous_state_exists = previous_state != nullptr;
   const bool previous_metadata_exists = previous_metadata != nullptr;
   const bool previous_rendered_cache_exists = previous_metadata_exists
-    && previous_state_exists && previous_state->has_rendered_cache_history;
-  auto depth_guardband_candidate = previous_rendered_cache_exists
+    && previous_state_exists && has_previous_rendered_provenance;
+  bool force_previous_depth_basis_for_warmup = previous_rendered_cache_exists
+    && previous_state != nullptr
+    && (previous_state->preserve_rendered_basis_until_next_raster
+      || previous_state->bootstrap_feedback_complete
+      || previous_state->stable_validation_pending
+      || previous_state->lifecycle_state
+        == CacheLifecycleState::kWarmupRasterPending
+      || previous_state->lifecycle_state
+        == CacheLifecycleState::kWarmupFeedbackPending);
+  auto depth_guardband_candidate = !force_previous_depth_basis_for_warmup
+    && previous_rendered_cache_exists
     && EvaluateDirectionalDepthGuardband(*previous_metadata,
       std::span<const glm::vec3> {
         full_frustum_world_points.data(), full_frustum_world_points.size() },
       shadow_caster_bounds, largest_half_extent, largest_half_extent);
 
-  if (depth_guardband_candidate) {
+  if (force_previous_depth_basis_for_warmup || depth_guardband_candidate) {
     const auto previous_depth_range
       = shadow_detail::RecoverDirectionalVirtualDepthRange(*previous_metadata);
     if (previous_depth_range.valid) {
       const glm::vec3 previous_eye_ws
         = ExtractDirectionalLightEyeWs(previous_metadata->light_view);
-      const glm::vec3 previous_eye_ls
-        = glm::vec3(rot_view * glm::vec4(previous_eye_ws, 1.0F));
-      light_eye_ls.z = previous_eye_ls.z;
-      setup.light_eye = glm::vec3(inv_rot_view * glm::vec4(light_eye_ls, 1.0F));
-      setup.light_view = glm::lookAtRH(
-        setup.light_eye, setup.light_eye + light_dir_to_surface, world_up);
+      if (force_previous_depth_basis_for_warmup) {
+        // A warmup/validation preservation path is required to keep the exact
+        // last rasterized depth basis alive until a new raster replaces it.
+        // Reconstructing a fresh look-at matrix from recovered parameters
+        // reintroduces float jitter and defeats content reuse immediately.
+        setup.light_eye = previous_eye_ws;
+        setup.light_view = previous_metadata->light_view;
+      } else {
+        const glm::vec3 previous_eye_ls
+          = glm::vec3(rot_view * glm::vec4(previous_eye_ws, 1.0F));
+        light_eye_ls.z = previous_eye_ls.z;
+        setup.light_eye
+          = glm::vec3(inv_rot_view * glm::vec4(light_eye_ls, 1.0F));
+        setup.light_view = glm::lookAtRH(
+          setup.light_eye, setup.light_eye + light_dir_to_surface, world_up);
+      }
       setup.near_plane = previous_depth_range.near_plane;
       setup.far_plane = previous_depth_range.far_plane;
     } else {
+      force_previous_depth_basis_for_warmup = false;
       depth_guardband_candidate = false;
     }
   }
@@ -1464,14 +2375,13 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
   // PopulateDirectionalPendingResolve uses to decide whether to reset page
   // management state.
   const bool have_previous_grid_origins = [&]() {
-    if (previous_state == nullptr
-      || !previous_state->has_cached_clip_grid_origins
-      || !previous_state->has_rendered_cache_history
-      || previous_state->directional_virtual_metadata.size() != 1U) {
+    if (previous_state == nullptr || !has_previous_rendered_provenance
+      || !previous_state->prev_frame.has_cached_clip_grid_origins
+      || previous_state->prev_frame.directional_metadata.size() != 1U) {
       return false;
     }
     const auto& prev_meta
-      = previous_state->directional_virtual_metadata.front();
+      = previous_state->prev_frame.directional_metadata.front();
     // Check structural compatibility: level count, pages_per_axis,
     // page_size_texels, light view XY, and per-clip page_world.
     // setup.metadata already has these fields populated (lines above).
@@ -1507,8 +2417,10 @@ auto VirtualShadowMapBackend::PrepareDirectionalVirtualClipmapSetup(
       // When exactly at a page boundary, floor() can toggle between N and
       // N-1 due to floating-point rounding; sticking to the cached value
       // in that regime absorbs the jitter.
-      const auto prev_x = previous_state->cached_clip_grid_origin_x[clip_index];
-      const auto prev_y = previous_state->cached_clip_grid_origin_y[clip_index];
+      const auto prev_x
+        = previous_state->prev_frame.cached_clip_grid_origin_x[clip_index];
+      const auto prev_y
+        = previous_state->prev_frame.cached_clip_grid_origin_y[clip_index];
 
       // Continuous grid coordinate (before floor).  The fractional part
       // tells us how far the camera is past the snap boundary.
@@ -1604,56 +2516,36 @@ auto VirtualShadowMapBackend::IsDirectionalViewCacheCompatible(
 {
   using namespace shadow_detail;
 
-  if (previous_state == nullptr || !previous_state->has_rendered_cache_history
-    || previous_state->directional_virtual_metadata.size() != 1U) {
+  if (!HasReusableRenderedCache(previous_state)
+    || previous_state->prev_frame.directional_metadata.size() != 1U) {
     return false;
   }
 
   const auto& previous_metadata
-    = previous_state->directional_virtual_metadata.front();
-  return previous_state->page_management_bindings.page_table_srv.IsValid()
-    && previous_state->page_management_bindings.page_flags_srv.IsValid()
-    && previous_state->page_management_bindings.physical_page_metadata_srv
-         .IsValid()
-    && previous_state->page_management_bindings.physical_page_lists_srv
-         .IsValid()
+    = previous_state->prev_frame.directional_metadata.front();
+  const auto current_clipmap_cache_key = BuildClipmapCacheKey(setup.metadata);
+  return AreClipmapCacheKeysEqual(previous_state->prev_frame.clipmap_cache_key,
+           current_clipmap_cache_key)
     && IsDirectionalVirtualAddressSpaceCompatible(
       previous_metadata, setup.metadata);
 }
 
 auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
-  const DirectionalVirtualClipmapSetup& setup,
-  const ViewCacheEntry* previous_state,
-  const DirectionalPreviousStateContext& previous_context,
+  const DirectionalCacheReuseAssessment& assessment,
   const engine::ViewConstants& view_constants, ViewCacheEntry& state) -> void
 {
   state.pending_residency_resolve = {};
   auto& pending_resolve = state.pending_residency_resolve;
   pending_resolve.valid = true;
   pending_resolve.has_fresh_pending_resolve_inputs = true;
-  const bool address_space_compatible
-    = previous_context.previous_metadata != nullptr
-    && IsDirectionalViewCacheCompatible(setup, previous_state);
-  pending_resolve.reset_page_management_state = !address_space_compatible;
+  pending_resolve.reset_page_management_state
+    = assessment.reset_page_management_state;
   pending_resolve.view_constants = view_constants;
   pending_resolve.previous_light_view = glm::mat4 { 1.0F };
-  pending_resolve.global_dirty_resident_contents = false;
-  const bool shadow_content_changed = previous_state != nullptr
-    && previous_state->has_rendered_cache_history
-    && previous_state->shadow_caster_content_hash
-      != state.shadow_caster_content_hash;
-  const bool compare_shadow_caster_bounds_on_gpu = address_space_compatible
-    && !shadow_content_changed
-    && previous_context.previous_shadow_caster_bounds != nullptr
-    && previous_context.previous_shadow_caster_bounds->size()
-      == state.shadow_caster_bounds.size()
-    && !state.shadow_caster_bounds.empty();
+  pending_resolve.global_dirty_resident_contents
+    = assessment.global_dirty_resident_contents;
 
-  if (address_space_compatible && !compare_shadow_caster_bounds_on_gpu) {
-    pending_resolve.global_dirty_resident_contents = true;
-  }
-
-  if (compare_shadow_caster_bounds_on_gpu) {
+  if (assessment.compare_shadow_caster_bounds_on_gpu) {
     const auto bound_count
       = static_cast<std::uint32_t>(state.shadow_caster_bounds.size());
     auto previous_bounds_allocation
@@ -1664,9 +2556,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
       && previous_bounds_allocation->mapped_ptr != nullptr
       && current_bounds_allocation->mapped_ptr != nullptr) {
       std::memcpy(previous_bounds_allocation->mapped_ptr,
-        previous_context.previous_shadow_caster_bounds->data(),
-        previous_context.previous_shadow_caster_bounds->size()
-          * sizeof(glm::vec4));
+        assessment.previous_shadow_caster_bounds->data(),
+        assessment.previous_shadow_caster_bounds->size() * sizeof(glm::vec4));
       std::memcpy(current_bounds_allocation->mapped_ptr,
         state.shadow_caster_bounds.data(),
         state.shadow_caster_bounds.size() * sizeof(glm::vec4));
@@ -1676,8 +2567,8 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
         = current_bounds_allocation->srv;
       pending_resolve.shadow_caster_bound_count = bound_count;
       pending_resolve.previous_light_view
-        = previous_context.previous_metadata != nullptr
-        ? previous_context.previous_metadata->light_view
+        = assessment.previous_metadata != nullptr
+        ? assessment.previous_metadata->light_view
         : glm::mat4 { 1.0F };
     } else {
       pending_resolve.global_dirty_resident_contents = true;
@@ -1690,13 +2581,15 @@ auto VirtualShadowMapBackend::PopulateDirectionalPendingResolve(
 }
 
 auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
-  const engine::ViewConstants& view_constants,
+  const ViewId view_id, const engine::ViewConstants& view_constants,
   const float camera_viewport_width,
   const engine::DirectionalShadowCandidate& candidate,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const ViewCacheEntry* previous_state, ViewCacheEntry& state) -> void
 {
+  RollForwardCacheHistory(previous_state, state);
+
   const auto clipmap_setup = PrepareDirectionalVirtualClipmapSetup(
     view_constants, camera_viewport_width, candidate, shadow_caster_bounds,
     visible_receiver_bounds, previous_state);
@@ -1707,16 +2600,197 @@ auto VirtualShadowMapBackend::BuildDirectionalVirtualViewState(
   const auto& setup = *clipmap_setup;
   InitializeDirectionalViewStateFromClipmapSetup(
     setup, shadow_caster_bounds, state);
-  const auto previous_context
-    = BuildDirectionalPreviousStateContext(previous_state);
-  PopulateDirectionalPendingResolve(
-    setup, previous_state, previous_context, view_constants, state);
+  const auto reuse_assessment
+    = AssessDirectionalCacheReuse(setup, previous_state, state);
+  const auto prev_frame_before_invalidation = state.prev_frame;
+  if (reuse_assessment.invalidate_rendered_cache_history) {
+    InvalidateRenderedCacheHistory(state);
+    SetLifecycleState(
+      view_id, state, CacheLifecycleState::kInvalidated, "reuse_invalidated");
+    state.bootstrap_feedback_complete = false;
+    state.stable_validation_pending = false;
+    state.preserve_rendered_basis_until_next_raster = false;
+  }
+  state.current_frame.is_uncached = reuse_assessment.current_view_is_uncached;
+  PopulateDirectionalPendingResolve(reuse_assessment, view_constants, state);
+  state.current_frame_requested_reset
+    = state.pending_residency_resolve.reset_page_management_state;
   state.directional_virtual_metadata.push_back(setup.metadata);
+  state.current_frame.has_authoritative_page_management_state = false;
+  state.current_frame.clipmap_cache_key = BuildClipmapCacheKey(setup.metadata);
+  state.current_frame.shadow_caster_content_hash
+    = state.shadow_caster_content_hash;
+  if (reuse_assessment.has_reusable_rendered_cache) {
+    state.current_frame.rendered_frame_number
+      = state.prev_frame.rendered_frame_number;
+    state.current_frame.scheduled_frame_number
+      = state.prev_frame.scheduled_frame_number;
+  }
+  state.current_frame.directional_metadata = state.directional_virtual_metadata;
+  state.current_frame.cached_clip_grid_origin_x = setup.clip_grid_origin_x;
+  state.current_frame.cached_clip_grid_origin_y = setup.clip_grid_origin_y;
+  state.current_frame.has_cached_clip_grid_origins = true;
+  const bool requires_rendered_basis_provenance_for_warmup
+    = !state.current_frame_requested_reset
+    && state.prev_frame.rendered_frame_number >= 0
+    && (state.bootstrap_feedback_complete || state.stable_validation_pending
+      || state.lifecycle_state == CacheLifecycleState::kWarmupRasterPending
+      || state.lifecycle_state == CacheLifecycleState::kWarmupFeedbackPending);
+  const bool preserve_previous_rendered_basis_for_immediate_reuse
+    = !state.current_frame_requested_reset && previous_state != nullptr
+    && previous_state->preserve_rendered_basis_until_next_raster
+    && state.prev_frame.rendered_frame_number >= 0;
+  CHECK_F(!requires_rendered_basis_provenance_for_warmup
+      || (state.prev_frame.directional_metadata.size() == 1U
+        && state.prev_frame.has_cached_clip_grid_origins),
+    "VirtualShadowMapBackend: warmup validation is missing rendered basis "
+    "provenance frame={} view={} lifecycle={} prev_rendered_frame={} "
+    "cache_epoch={} view_generation={} metadata_count={} has_clip_origins={}",
+    frame_sequence_.get(), view_id.get(),
+    CacheLifecycleStateName(state.lifecycle_state),
+    state.prev_frame.rendered_frame_number, state.cache_epoch,
+    state.view_generation, state.prev_frame.directional_metadata.size(),
+    state.prev_frame.has_cached_clip_grid_origins);
+  const bool preserve_previous_rendered_basis_for_warmup
+    = requires_rendered_basis_provenance_for_warmup
+    && state.prev_frame.directional_metadata.size() == 1U;
+  const bool preserve_previous_rendered_basis_for_publish
+    = (preserve_previous_rendered_basis_for_warmup
+        || preserve_previous_rendered_basis_for_immediate_reuse)
+    && state.prev_frame.directional_metadata.size() == 1U;
+  if (preserve_previous_rendered_basis_for_publish) {
+    state.directional_virtual_metadata = state.prev_frame.directional_metadata;
+    state.current_frame.directional_metadata = state.prev_frame.directional_metadata;
+    state.current_frame.clipmap_cache_key = state.prev_frame.clipmap_cache_key;
+    state.current_frame.cached_clip_grid_origin_x
+      = state.prev_frame.cached_clip_grid_origin_x;
+    state.current_frame.cached_clip_grid_origin_y
+      = state.prev_frame.cached_clip_grid_origin_y;
+    state.current_frame.has_cached_clip_grid_origins
+      = state.prev_frame.has_cached_clip_grid_origins;
+    LOG_F(INFO,
+      "VirtualShadowMapBackend: frame={} view={} preserved rendered basis for "
+      "{} prev_rendered_frame={} lifecycle={} cache_epoch={} "
+      "view_generation={} preserve_until_next_raster={}",
+      frame_sequence_.get(), view_id.get(), state.prev_frame.rendered_frame_number,
+      preserve_previous_rendered_basis_for_immediate_reuse ? "immediate_reuse"
+                                                           : "warmup",
+      CacheLifecycleStateName(state.lifecycle_state), state.cache_epoch,
+      state.view_generation, state.preserve_rendered_basis_until_next_raster);
+  }
+  CHECK_F(!preserve_previous_rendered_basis_for_publish
+      || (state.current_frame.directional_metadata.size() == 1U
+        && AreClipmapCacheKeysEqual(state.current_frame.clipmap_cache_key,
+          state.prev_frame.clipmap_cache_key)),
+    "VirtualShadowMapBackend: warmup publication failed to preserve rendered "
+    "basis frame={} view={} prev_rendered_frame={} lifecycle={} "
+    "cache_epoch={} view_generation={}",
+    frame_sequence_.get(), view_id.get(), state.prev_frame.rendered_frame_number,
+    CacheLifecycleStateName(state.lifecycle_state), state.cache_epoch,
+    state.view_generation);
+  if (state.current_frame_requested_reset) {
+    SetLifecycleState(
+      view_id, state, CacheLifecycleState::kResetPending, "publish_needs_reset");
+    state.bootstrap_feedback_complete = false;
+    state.stable_validation_pending = false;
+    state.preserve_rendered_basis_until_next_raster = false;
+  } else if (state.lifecycle_state == CacheLifecycleState::kCleared) {
+    state.current_frame.rendered_frame_number
+      = state.prev_frame.rendered_frame_number;
+    state.current_frame.scheduled_frame_number
+      = state.prev_frame.scheduled_frame_number;
+    SetLifecycleState(view_id, state, CacheLifecycleState::kWarmupRasterPending,
+      "publish_after_clear");
+  } else if (state.bootstrap_feedback_complete) {
+    state.current_frame.rendered_frame_number
+      = state.prev_frame.rendered_frame_number;
+    state.current_frame.scheduled_frame_number
+      = state.prev_frame.scheduled_frame_number;
+    SetLifecycleState(view_id, state, CacheLifecycleState::kWarmupRasterPending,
+      "publish_after_reset_barrier");
+  } else if (reuse_assessment.has_reusable_rendered_cache) {
+    SetLifecycleState(view_id, state,
+      reuse_assessment.global_dirty_resident_contents
+          || reuse_assessment.compare_shadow_caster_bounds_on_gpu
+        ? CacheLifecycleState::kDirty
+        : CacheLifecycleState::kValid,
+      reuse_assessment.global_dirty_resident_contents
+          || reuse_assessment.compare_shadow_caster_bounds_on_gpu
+        ? "publish_reuse_dirty"
+        : "publish_reuse_valid");
+  } else if (state.lifecycle_state == CacheLifecycleState::kRetired) {
+    SetLifecycleState(
+      view_id, state, CacheLifecycleState::kResetPending, "publish_from_retired");
+  }
 
-  // Commit the snapped grid origins so the next frame can apply hysteresis.
-  state.cached_clip_grid_origin_x = setup.clip_grid_origin_x;
-  state.cached_clip_grid_origin_y = setup.clip_grid_origin_y;
-  state.has_cached_clip_grid_origins = true;
+  const auto& extracted_feedback = state.extracted_feedback;
+  LOG_F(INFO,
+    "VirtualShadowMapBackend: frame={} view={} reuse prev_cache_valid={} "
+    "prev_uncached={} prev_rendered_frame={} prev_scheduled_frame={} "
+    "current_uncached={} reset_page_management={} invalidate_history={} "
+    "bootstrap_feedback_complete={} stable_validation_pending={} "
+    "preserve_until_next_raster={} "
+    "compare_bounds={} global_dirty={} reusable_rendered_cache={} "
+    "prev_metadata={} clipmap_key_match={} address_space_compatible={} "
+    "content_compatible={} content_mismatch_clip={} "
+    "shadow_content_changed={} bounds_count_match={} "
+    "extracted_schedule_frame={} "
+    "extracted_schedule_pages={} extracted_stats_frame={} "
+    "scheduled_raster_pages={} rasterized_pages={} cached_transitions={} "
+    "allocated={} requested={} requires_schedule={} resident_dirty={} "
+    "resident_clean={} available={}",
+    frame_sequence_.get(), view_id.get(),
+    prev_frame_before_invalidation.has_authoritative_page_management_state,
+    prev_frame_before_invalidation.is_uncached,
+    prev_frame_before_invalidation.rendered_frame_number,
+    prev_frame_before_invalidation.scheduled_frame_number,
+    reuse_assessment.current_view_is_uncached,
+    reuse_assessment.reset_page_management_state,
+    reuse_assessment.invalidate_rendered_cache_history,
+    state.bootstrap_feedback_complete, state.stable_validation_pending,
+    state.preserve_rendered_basis_until_next_raster,
+    reuse_assessment.compare_shadow_caster_bounds_on_gpu,
+    reuse_assessment.global_dirty_resident_contents,
+    reuse_assessment.has_reusable_rendered_cache,
+    reuse_assessment.previous_metadata != nullptr,
+    reuse_assessment.clipmap_key_matches,
+    reuse_assessment.address_space_compatible,
+    reuse_assessment.content_compatible,
+    reuse_assessment.first_content_mismatch_clip_index,
+    reuse_assessment.shadow_content_changed,
+    reuse_assessment.shadow_bounds_count_match,
+    extracted_feedback.scheduled_source_sequence.get(),
+    extracted_feedback.has_schedule_feedback
+      ? extracted_feedback.scheduled_page_count
+      : 0U,
+    extracted_feedback.resolve_stats_source_sequence.get(),
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.scheduled_raster_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.rasterized_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.cached_page_transition_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.allocated_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.requested_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.pages_requiring_schedule_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.resident_dirty_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.resident_clean_page_count
+      : 0U,
+    extracted_feedback.has_resolve_stats_feedback
+      ? extracted_feedback.resolve_stats.available_page_list_count
+      : 0U);
 }
 
 auto VirtualShadowMapBackend::PublishShadowInstances(
@@ -1782,9 +2856,17 @@ auto VirtualShadowMapBackend::EnsureViewPageManagementPageTableResources(
   auto [it, _]
     = view_page_management_page_table_resources_.try_emplace(view_id);
   auto& resources = it->second;
+  const auto view_generation = GetOrCreateViewGeneration(view_id);
+  const bool ownership_matches = resources.cache_epoch == cache_epoch_
+    && resources.view_generation == view_generation;
   if (resources.gpu_buffer
-    && required_entry_count <= resources.entry_capacity) {
+    && required_entry_count <= resources.entry_capacity && ownership_matches) {
+    resources.cache_epoch = cache_epoch_;
+    resources.view_generation = view_generation;
     return &resources;
+  }
+  if (!ownership_matches) {
+    resources = {};
   }
 
   if (required_entry_count > kMaxPersistentPageTableEntries) {
@@ -1857,6 +2939,8 @@ auto VirtualShadowMapBackend::EnsureViewPageManagementPageTableResources(
   registry.RegisterView(*resources.gpu_buffer, std::move(uav_handle), uav_desc);
 
   resources.entry_capacity = kMaxPersistentPageTableEntries;
+  resources.cache_epoch = cache_epoch_;
+  resources.view_generation = view_generation;
   return &resources;
 }
 
@@ -1871,9 +2955,17 @@ auto VirtualShadowMapBackend::EnsureViewPageManagementPageFlagResources(
   auto [it, _]
     = view_page_management_page_flags_resources_.try_emplace(view_id);
   auto& resources = it->second;
+  const auto view_generation = GetOrCreateViewGeneration(view_id);
+  const bool ownership_matches = resources.cache_epoch == cache_epoch_
+    && resources.view_generation == view_generation;
   if (resources.gpu_buffer
-    && required_entry_count <= resources.entry_capacity) {
+    && required_entry_count <= resources.entry_capacity && ownership_matches) {
+    resources.cache_epoch = cache_epoch_;
+    resources.view_generation = view_generation;
     return &resources;
+  }
+  if (!ownership_matches) {
+    resources = {};
   }
 
   if (required_entry_count > kMaxPersistentPageTableEntries) {
@@ -1945,6 +3037,8 @@ auto VirtualShadowMapBackend::EnsureViewPageManagementPageFlagResources(
   registry.RegisterView(*resources.gpu_buffer, std::move(uav_handle), uav_desc);
 
   resources.entry_capacity = kMaxPersistentPageTableEntries;
+  resources.cache_epoch = cache_epoch_;
+  resources.view_generation = view_generation;
   return &resources;
 }
 
@@ -1956,14 +3050,23 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
 
   auto [it, _] = view_resolve_resources_.try_emplace(view_id);
   auto& resources = it->second;
+  const auto view_generation = GetOrCreateViewGeneration(view_id);
+  const bool ownership_matches = resources.cache_epoch == cache_epoch_
+    && resources.view_generation == view_generation;
   if (resources.stats_gpu_buffer && resources.physical_page_metadata_gpu_buffer
     && resources.dirty_page_flags_gpu_buffer
     && resources.physical_page_lists_gpu_buffer
     && physical_pool_config_.physical_tile_capacity
       <= resources.physical_page_metadata_capacity
     && required_physical_list_capacity
-      <= resources.physical_page_lists_capacity) {
+      <= resources.physical_page_lists_capacity
+    && ownership_matches) {
+    resources.cache_epoch = cache_epoch_;
+    resources.view_generation = view_generation;
     return &resources;
+  }
+  if (!ownership_matches) {
+    resources = {};
   }
 
   auto& registry = gfx_->GetResourceRegistry();
@@ -2195,6 +3298,8 @@ auto VirtualShadowMapBackend::EnsureViewResolveResources(const ViewId view_id)
     = static_cast<std::uint32_t>(dirty_page_flags_capacity);
   resources.physical_page_lists_capacity = physical_page_lists_capacity;
   resources.physical_page_state_reset_pending = true;
+  resources.cache_epoch = cache_epoch_;
+  resources.view_generation = view_generation;
   return &resources;
 }
 

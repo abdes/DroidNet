@@ -53,7 +53,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if ((packed_entry & OXYGEN_VSM_PAGE_TABLE_CURRENT_LOD_VALID_BIT) != 0u
         && (published_flags & uncached_flags) != 0u) {
         uint output_index = 0u;
-        InterlockedAdd(resolve_stats[0].pending_raster_page_count, 1u, output_index);
+        InterlockedAdd(resolve_stats[0].scheduled_raster_page_count, 1u, output_index);
         InterlockedAdd(schedule_count[0], 1u, output_index);
         if (output_index < pass_constants.schedule_capacity) {
             const uint tile_x = packed_entry & OXYGEN_VSM_PAGE_TABLE_TILE_COORD_MASK;

@@ -27,10 +27,10 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
@@ -50,6 +50,7 @@
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/api_export.h>
+
 
 namespace oxygen {
 class Graphics;
@@ -624,6 +625,7 @@ private:
   std::unordered_map<ViewId, std::uint64_t> last_atmo_generation_;
   std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
   bool sky_capture_requested_ { false };
+  const scene::Scene* last_scene_identity_ { nullptr };
   DirectionalShadowBiasState directional_shadow_bias_state_ {};
 
   // ScenePrep instrumentation.

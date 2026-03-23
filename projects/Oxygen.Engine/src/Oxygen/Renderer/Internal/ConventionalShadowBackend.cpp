@@ -307,17 +307,20 @@ auto ConventionalShadowBackend::OnFrameStart(RendererTag /*tag*/,
   view_cache_.clear();
 }
 
+auto ConventionalShadowBackend::ResetCachedState() -> void
+{
+  view_cache_.clear();
+}
+
 auto ConventionalShadowBackend::PublishView(const ViewId view_id,
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
-  const std::uint64_t shadow_caster_content_hash)
-  -> ShadowFramePublication
+  const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
-  const auto key = BuildPublicationKey(
-    view_constants, directional_candidates, shadow_caster_bounds,
-    shadow_caster_content_hash);
+  const auto key = BuildPublicationKey(view_constants, directional_candidates,
+    shadow_caster_bounds, shadow_caster_content_hash);
   if (const auto it = view_cache_.find(view_id);
     it != view_cache_.end() && it->second.key == key) {
     return it->second.frame_publication;
@@ -389,6 +392,15 @@ auto ConventionalShadowBackend::TryGetFramePublication(
 {
   const auto it = view_cache_.find(view_id);
   return it != view_cache_.end() ? &it->second.frame_publication : nullptr;
+}
+
+auto ConventionalShadowBackend::TryGetShadowInstanceMetadata(
+  const ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*
+{
+  const auto it = view_cache_.find(view_id);
+  return it != view_cache_.end() && !it->second.shadow_instances.empty()
+    ? &it->second.shadow_instances.front()
+    : nullptr;
 }
 
 auto ConventionalShadowBackend::TryGetRasterRenderPlan(

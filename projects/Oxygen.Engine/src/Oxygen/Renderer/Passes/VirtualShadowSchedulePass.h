@@ -25,6 +25,7 @@
 
 namespace oxygen::graphics {
 class CommandRecorder;
+class Buffer;
 }
 
 namespace oxygen {
@@ -72,6 +73,13 @@ public:
     return it != view_schedule_resources_.end() ? &it->second : nullptr;
   }
 
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetMutableScheduleResources() noexcept
+    -> detail::VirtualShadowScheduleResources*
+  {
+    const auto it = view_schedule_resources_.find(active_view_id_);
+    return it != view_schedule_resources_.end() ? &it->second : nullptr;
+  }
+
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
@@ -100,12 +108,15 @@ private:
 
   ViewId active_view_id_ {};
   ShaderVisibleIndex active_draw_bounds_srv_ { kInvalidShaderVisibleIndex };
-  renderer::VirtualShadowPageManagementBindings active_page_management_bindings_ {};
+  renderer::VirtualShadowPageManagementBindings
+    active_page_management_bindings_ {};
   std::uint32_t active_total_page_count_ { 0U };
   std::uint32_t active_dispatch_group_count_ { 0U };
   std::uint32_t active_draw_count_ { 0U };
   bool active_dispatch_ { false };
   OXGN_RNDR_API auto EnsureClearCountUploadBuffer() -> void;
+  OXGN_RNDR_API static auto UnMapScheduleReadback(
+    detail::VirtualShadowScheduleResources& resources) noexcept -> void;
   OXGN_RNDR_API auto EnsureViewScheduleResources(ViewId view_id,
     std::uint32_t required_entry_capacity, std::uint32_t required_draw_count)
     -> detail::VirtualShadowScheduleResources*;

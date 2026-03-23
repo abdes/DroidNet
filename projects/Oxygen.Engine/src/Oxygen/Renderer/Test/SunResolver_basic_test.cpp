@@ -231,4 +231,48 @@ NOLINT_TEST_F(SunResolverTest, DeadReferenceResolvesToNoSun)
   EXPECT_FALSE(resolved.enabled);
 }
 
+//! Exposes the first sun-tagged directional light for renderer-side contracts.
+NOLINT_TEST_F(SunResolverTest, FindSunTaggedDirectionalLightReturnsFirstTagged)
+{
+  const auto lights = std::array {
+    MakeDirectionalLight(
+      { 1.0F, 0.0F, 0.0F }, { 0.2F, 0.2F, 0.2F }, 10.0F, false),
+    MakeDirectionalLight(
+      { 0.0F, -1.0F, 0.0F }, { 1.0F, 0.9F, 0.8F }, 20.0F, true),
+    MakeDirectionalLight(
+      { 0.0F, 0.0F, -1.0F }, { 0.9F, 0.8F, 0.7F }, 30.0F, true),
+  };
+
+  const auto sun_light
+    = FindSunTaggedDirectionalLight(std::span<const DirectionalLightBasic>(lights));
+
+  ASSERT_TRUE(sun_light.has_value());
+  EXPECT_NEAR(sun_light->direction_ws.x, 0.0F, kEpsilon);
+  EXPECT_NEAR(sun_light->direction_ws.y, -1.0F, kEpsilon);
+  EXPECT_NEAR(sun_light->direction_ws.z, 0.0F, kEpsilon);
+  EXPECT_NEAR(sun_light->intensity_lux, 20.0F, kEpsilon);
+}
+
+//! Matching resolved-sun and directional-light payloads satisfy the contract.
+NOLINT_TEST_F(SunResolverTest, ResolvedSunMatchesDirectionalLightAcceptsMatch)
+{
+  const auto light = MakeDirectionalLight(
+    { 0.0F, -1.0F, 0.0F }, { 1.0F, 0.9F, 0.8F }, 5.0F, true);
+  const auto resolved = SyntheticSunData::FromDirectionAndLight(
+    { 0.0F, 1.0F, 0.0F }, { 1.0F, 0.9F, 0.8F }, 5.0F, true);
+
+  EXPECT_TRUE(ResolvedSunMatchesDirectionalLight(resolved, light));
+}
+
+//! Direction/illuminance mismatch is observable before shaders consume it.
+NOLINT_TEST_F(SunResolverTest, ResolvedSunMatchesDirectionalLightRejectsMismatch)
+{
+  const auto light = MakeDirectionalLight(
+    { 0.0F, -1.0F, 0.0F }, { 1.0F, 0.9F, 0.8F }, 5.0F, true);
+  const auto resolved = SyntheticSunData::FromDirectionAndLight(
+    { 0.0F, 0.0F, 1.0F }, { 1.0F, 0.9F, 0.8F }, 7.0F, true);
+
+  EXPECT_FALSE(ResolvedSunMatchesDirectionalLight(resolved, light));
+}
+
 } // namespace oxygen::engine::internal::testing

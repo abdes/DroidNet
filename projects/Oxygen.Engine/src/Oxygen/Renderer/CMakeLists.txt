@@ -133,11 +133,11 @@ set(
   "Types/ShaderDebugMode.h"
   "Types/SyntheticSunData.h"
   "Types/ViewColorData.h"
+  "Types/VirtualShadowCacheFrameData.h"
   "Types/ViewFrameBindings.h"
   "Types/VirtualShadowPageFlags.h"
   "Types/VirtualShadowPageTableEntry.h"
   "Types/VirtualShadowPhysicalPageMetadata.h"
-  "Types/VirtualShadowResolvedRasterSchedule.h"
   "Types/VirtualShadowRenderPlan.h"
   "Upload/Errors.h"
 )

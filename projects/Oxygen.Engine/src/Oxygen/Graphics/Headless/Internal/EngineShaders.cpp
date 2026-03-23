@@ -52,7 +52,7 @@ EngineShaders::EngineShaders()
   LOG_F(INFO, "Headless EngineShaders pre-warming engine shaders");
 
   try {
-    static const std::array<ShaderRequest, 5> kEngineShaderRequests = {
+    static const std::array<ShaderRequest, 6> kEngineShaderRequests = {
       ShaderRequest {
         .stage = oxygen::ShaderType::kVertex,
         .source_path = "Forward/ForwardMesh_VS.hlsl",
@@ -76,6 +76,11 @@ EngineShaders::EngineShaders()
       ShaderRequest {
         .stage = oxygen::ShaderType::kCompute,
         .source_path = "Lighting/LightCulling.hlsl",
+        .entry_point = "CS",
+      },
+      ShaderRequest {
+        .stage = oxygen::ShaderType::kCompute,
+        .source_path = "Lighting/VirtualShadowPageFinalize.hlsl",
         .entry_point = "CS",
       },
     };

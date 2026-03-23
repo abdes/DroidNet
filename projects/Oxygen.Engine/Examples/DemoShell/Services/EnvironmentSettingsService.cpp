@@ -32,6 +32,7 @@
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneFlags.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -45,6 +46,8 @@ namespace {
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
   constexpr float kMetersToKm = 0.001F;
   constexpr float kKmToMeters = 1000.0F;
+  constexpr float kSyntheticSunShadowBias = 0.0F;
+  constexpr float kSyntheticSunShadowNormalBias = 0.02F;
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -1658,15 +1661,25 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       if (synthetic_sun_light_node_.IsAlive()) {
         if (auto light
           = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+          const bool casts_shadows = sun->CastsShadows();
           light->get().SetIsSunLight(sun_enabled_);
           light->get().SetEnvironmentContribution(true);
 
           auto& common = light->get().Common();
           common.affects_world = sun_enabled_;
+          common.casts_shadows = casts_shadows;
+          common.shadow.bias = kSyntheticSunShadowBias;
+          common.shadow.normal_bias = kSyntheticSunShadowNormalBias;
+          common.shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
           light->get().SetIntensityLux(sun_illuminance_lx_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
+
+          if (auto flags = synthetic_sun_light_node_.GetFlags()) {
+            flags->get().SetFlag(scene::SceneNodeFlags::kCastsShadows,
+              scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+          }
 
           const auto sun_dir = DirectionFromAzimuthElevation(
             sun_azimuth_deg_, sun_elevation_deg_);

@@ -126,7 +126,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         pass_constants.request_word_count > 0u
         && BX_IN_GLOBAL_SRV(pass_constants.request_words_srv_index);
     const bool has_page_mark_flags =
-        BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
+        pass_constants.request_word_count > 0u
+        && BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
     bool requested_this_frame = false;
     if (has_request_words) {
         StructuredBuffer<uint> request_words =
@@ -254,7 +255,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         true);
     page_flags[thread_index] = published_flags;
     uint requested_list_index = 0u;
-    InterlockedAdd(resolve_stats[0].requested_page_list_count, 1u, requested_list_index);
+    InterlockedAdd(resolve_stats[0].requested_page_count, 1u, requested_list_index);
+    uint ignored = 0u;
+    InterlockedAdd(resolve_stats[0].pages_requiring_schedule_count, 1u, ignored);
     if (requested_list_index < pass_constants.physical_page_capacity) {
         const uint requested_list_start =
             PhysicalPageListStart(

@@ -23,14 +23,18 @@ struct VirtualShadowPhysicalPageListEntry
 
 struct VirtualShadowResolveStats
 {
-    uint pending_raster_page_count;
+    uint scheduled_raster_page_count;
     uint allocated_page_count;
-    uint requested_page_list_count;
-    uint dirty_page_list_count;
-    uint clean_page_list_count;
+    uint requested_page_count;
+    uint resident_dirty_page_count;
+    uint resident_clean_page_count;
+    uint pages_requiring_schedule_count;
     uint available_page_list_count;
-    uint reserved0;
-    uint reserved1;
+    uint rasterized_page_count;
+    uint cached_page_transition_count;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 static const uint kPhysicalPageListRequested = 0u;

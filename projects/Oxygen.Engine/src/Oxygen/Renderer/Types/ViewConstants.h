@@ -143,7 +143,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ViewConstants)
 
   // Application setters (chainable) — modern return type
-  auto SetViewMatrix(const glm::mat4& m) noexcept -> ViewConstants&;
+  OXGN_RNDR_API auto SetViewMatrix(const glm::mat4& m) noexcept
+    -> ViewConstants&;
 
   OXGN_RNDR_API auto SetProjectionMatrix(const glm::mat4& m) noexcept
     -> ViewConstants&;

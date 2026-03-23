@@ -2,7 +2,37 @@
 
 Living roadmap for achieving feature completeness of the Oxygen Renderer.
 
-**Last Updated**: March 10, 2026
+**Last Updated**: March 22, 2026
+
+March 22, 2026 note: directional shadow caches are now explicitly discarded
+when the renderer's active scene identity changes. This closes the startup
+fallback-scene to loaded-scene leak where directional VSM history and extracted
+feedback could survive a scene swap and incorrectly reuse pages authored for
+the prior scene.
+
+March 22, 2026 note: directional shadow content signatures now include
+alpha-test shadow material readiness, not just `MaterialDomain::kMasked`.
+Latest log analysis showed two coupled issues: alpha-tested casters authored
+outside the masked domain could bypass the new freshness diagnostic, and
+scene-swap resets could briefly republish virtual shadow bindings before fresh
+page-management state was authoritative. The renderer now tracks alpha-test
+domain mismatches in logs, routes alpha-tested opaque-domain casters through
+the masked shadow path, and suppresses live virtual shadow publication until
+reset/resolve state becomes valid for the new scene.
+
+March 22, 2026 note: internal directional VSM passes now route through an
+authoritative `VirtualShadowFramePacket` owned by `ShadowManager` instead of
+rediscovering metadata through published shadow-frame bindings. This removes a
+second VSM metadata authority path between request/schedule/raster and final
+lighting consume, which was the wrong architectural shape for scene-swap
+stability.
+
+March 23, 2026 note: reload divergence was traced to internal VSM passes still
+allowing request/schedule/build/raster work while a new-frame reset request was
+active. The contract is now stricter: the authoritative packet carries
+`reset_request_pending`, and internal VSM work skips only on that bit. The
+older `reset_page_management_state` bit can remain true while the clear is
+draining and must not block the healthy first-load warmup path.
 
 Cross‑References: [bindless_conventions.md](bindless_conventions.md) |
 [scene_prep.md](scene_prep.md) | [shader-system.md](shader-system.md) |
@@ -2151,6 +2181,94 @@ Continuous improvements, not milestones:
   compute the current reinforcement band against that source region, not the
   previous publication. Status remains `in_progress` until that baseline fix is
   implemented and revalidated.
+- **March 12, 2026**: Runtime log forensics on `bad.log` narrowed the startup
+  artifact window but did not yet expose the causal VSM state. Frames `13-89`
+  already have stable prepared shadow bounds (`405` casters, `114` visible
+  receivers) while the bad shadows continue to build, which rules out
+  changing caster/receiver membership as the driver. The repeated
+  `shadow_meta` / `vsm_meta` churn in those frames is descriptor rotation, not
+  evidence of a cache reset, because the core VSM bindings (`vsm_table`,
+  `vsm_flags`, `vsm_pool`, `vsm_phys_meta`, `vsm_phys_lists`) stay fixed.
+  The remaining missing evidence is backend-internal: uncached/cached
+  transition state, reset/invalidation decisions, extracted schedule/render
+  counts, and GPU resolve-page statistics. To close that gap, the engine now
+  logs per-view directional reuse decisions and extracts `VirtualShadowResolveStats`
+  alongside the existing schedule/render counters. Validation evidence is not
+  complete yet: no build or runtime replay has been run after this
+  instrumentation change. Status remains `in_progress` until a new
+  `RenderScene` capture proves what the warmup protocol is actually doing.
+- **March 22, 2026**: Replaced the directional VSM warmup guesswork with a
+  fully GPU-owned completion contract. `VirtualShadowPageUpdate.hlsl` now
+  carries forward uncached residency bits from persistent physical-page
+  metadata instead of rebuilding them only from the transient dirty buffers,
+  and `VirtualShadowPageFinalize.hlsl` clears those uncached bits only for the
+  pages the GPU actually rasterized that frame. The old raster readback based
+  on `draw_page_counter` was removed because it measured draw/page overlap
+  work, not page completion. Resolve diagnostics now expose
+  `scheduled_raster_pages`, `rasterized_pages`, and `cached_transitions`, and
+  cache readiness only advances when the rasterized-page count matches the
+  scheduled-page count for the same source frame. Status remains
+  `in_progress` until compile/test/runtime evidence is collected for this
+  contract fix.
+- **March 22, 2026**: Runtime reload logs exposed a second contract violation:
+  the directional clipmap builder was treating any previous rendered frame as
+  valid stabilization history, even when that frame was only a warmup/bootstrap
+  frame with no authoritative page-management state. That allowed post-reset
+  warmup metadata to seed grid-origin hysteresis and depth-guardband reuse,
+  which changed the published light-space basis for the same static scene after
+  reload. The corrected contract is stricter: only authoritative previous
+  frames may participate in clipmap-basis stabilization. Validation evidence is
+  pending until the renderer test target is rebuilt and the user confirms the
+  live `RenderScene` reload behavior.
+- **March 22, 2026**: The latest `RenderScene` log proved a third contract bug:
+  zero-raster validation frames were allowed to roll a freshly rebuilt
+  directional metadata basis into `prev_frame`, even though no pages were
+  rasterized for that basis. That made a static scene alternate between two
+  depth mappings on successive frames and immediately invalidate reuse with
+  `content_mismatch_clip=0`. The corrected contract is that zero-raster
+  validation may preserve page-management authority, but it must preserve the
+  last rasterized directional basis until a later frame actually rasterizes the
+  new basis. Validation evidence remains pending until the renderer tests are
+  rebuilt and a fresh `RenderScene` log shows live VSM publication.
+- **March 22, 2026**: The regenerated runtime log exposed the remaining hole in
+  that fix: preserving the rolled `prev_frame` basis was not sufficient,
+  because a zero-raster validation frame could still make the current frame
+  live while its publication kept freshly rebuilt, unrasterized metadata. The
+  corrected contract is stronger: zero-raster validation must overwrite the
+  current live frame's directional metadata, clip-grid origins, and clipmap key
+  with the last rasterized authoritative basis before live publication is
+  re-enabled. Validation evidence remains `in_progress` until renderer tests
+  pass and a fresh `RenderScene` log confirms stable post-reload lighting.
+- **March 23, 2026**: A fresh first-load `RenderScene` trace exposed the next
+  provenance hole: reset warmup preserved the rendered frame number but did not
+  snapshot the rasterized directional basis itself when warmup feedback was
+  accepted. That let the next validation publish rebuild unrasterized metadata
+  and loop forever in `requested > 0, scheduled = 0, rasterized = 0`. The
+  corrected contract is that every accepted rasterized warmup frame must
+  snapshot its directional metadata, clip-grid origins, and clipmap cache key
+  as the last rendered basis immediately, and all later warmup validation
+  publishes must reuse that basis until another frame actually rasterizes a new
+  one.
+- **March 23, 2026**: The next runtime log showed the remaining classification
+  bug: `requested_page_list_count` was being treated as “work still needing
+  schedule”, but the GPU page-management path uses that counter for any page
+  requested or simply reused this frame. Static scenes can therefore report
+  `requested > 0` while legitimately requiring zero new schedule work. The
+  corrected scope is to rename those counters to their real meanings and add a
+  dedicated `pages_requiring_schedule_count` field authored by page-update/page-
+  alloc. Warmup validation and abort logic must key off that new counter, not
+  off raw requested visibility.
+- **March 23, 2026**: Manual-exposure scene-swap logs proved the remaining
+  post-reload dark-frame bug was not light loss and not auto exposure. The
+  second post-swap frame still carried a valid scene directional light, but the
+  renderer published `ShadowInstanceMetadata(implementation=Virtual)` to
+  shading while the shader-facing VSM bindings were still invalid during
+  `ResetPending/Clearing`. The corrected contract is that renderer publication
+  must suppress virtual shadow consume routing until the live VSM page table,
+  flags, physical pool, and physical-page metadata/list bindings are all valid.
+  Until then, shader-facing `shadow_instance_metadata_slot` and
+  `sun_shadow_index` must be invalid even though internal VSM warmup/render
+  planning continues.
 - **March 11, 2026**: Runtime troubleshooting still shows partially rendered
   or misplaced directional shadows after the cache/request optimization even
   when allocator churn is reduced. The newly identified scope gap is cached
@@ -2230,6 +2348,28 @@ Continuous improvements, not milestones:
 - **March 8, 2026**: Added required shadow runtime diagnostics to the shadow
   design so publication, resource allocation/reuse, binding publication, and
   shadow-pass draw emission are observable without a GPU capture.
+- **March 23, 2026**: Fixed a second reset-stability hole in directional VSM
+  basis preservation. Zero-work validation was restoring the last rendered
+  basis only in `current_frame`, while `PublishView()` still sourced the next
+  metadata SRV from freshly rebuilt `directional_virtual_metadata`. That let
+  tiny depth-basis jitter re-enter publication and retrigger
+  `Valid -> Invalidated -> ResetPending` churn before the cache stabilized.
+  Published directional metadata is now restored together with cache history,
+  and cache-history coverage was extended so the first live publish does not
+  immediately request another reset on the next frame.
+- **March 23, 2026**: Fixed a third reset-stability hole in directional VSM
+  basis preservation. After zero-work stable validation the cache could become
+  `Valid`, but the next live publish no longer carried any explicit contract
+  saying the authoritative basis was still the last rasterized one. The backend
+  now preserves the last rasterized basis until another rasterized frame
+  replaces it or reset invalidates it, preventing immediate
+  `Valid -> Invalidated -> ResetPending` collapse on the first live reuse frame.
+- **March 23, 2026**: Tightened the renderer-side sun contract after removing
+  split direct-light ownership from the forward shader. The renderer now
+  validates that the resolved sun payload agrees with the sun-tagged
+  directional-light buffer entry on direction and illuminance before publishing
+  frame lighting state, and `SunResolver` exposes unit-tested helpers for that
+  contract.
 - **March 8, 2026**: Expanded the shadow design and execution plan to support
   multiple runtime implementation families under one shared shadow-product
   contract, including virtual shadow maps as a first-class target.
