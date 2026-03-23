@@ -19,7 +19,7 @@
 namespace {
 
 using namespace std::chrono_literals;
-using oxygen::engine::upload::SizeBytes;
+using oxygen::SizeBytes;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadError;

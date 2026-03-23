@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -249,6 +250,8 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider,
   const QueueKey& queue_key) -> std::expected<UploadTicket, UploadError>
 {
+  using oxygen::SizeBytes;
+
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
   const auto size = desc.size_bytes;
   if (!desc.dst || size == 0) {
@@ -333,6 +336,8 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
   -> std::expected<UploadTicket, UploadError>
 {
+  using oxygen::SizeBytes;
+
   // Use the planner to compute regions and total bytes.
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
   auto exp_plan = UploadPlanner::PlanTexture2D(tdesc, req.subresources, policy);
@@ -441,6 +446,8 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider)
   -> std::expected<UploadTicket, UploadError>
 {
+  using oxygen::SizeBytes;
+
   const auto& tdesc = std::get<UploadTextureDesc>(req.desc);
   auto exp_plan = UploadPlanner::PlanTexture3D(tdesc, req.subresources, policy);
   if (!exp_plan.has_value()) {
