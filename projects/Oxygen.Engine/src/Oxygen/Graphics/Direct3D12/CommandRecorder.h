@@ -137,6 +137,13 @@ public:
     const graphics::Buffer& src, std::span<const TextureUploadRegion> regions,
     Texture& dst) -> void override;
 
+  auto CopyTextureToBuffer(
+    // ReSharper disable once CppRedundantQualifier
+    graphics::Buffer& dst,
+    // ReSharper disable once CppRedundantQualifier
+    const graphics::Texture& src, const TextureBufferCopyRegion& region)
+    -> void override;
+
   auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
     const TextureSubResourceSet& src_subresources, Texture& dst,
     const TextureSlice& dst_slice,

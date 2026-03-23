@@ -30,17 +30,6 @@ inline auto AlignUp(uint64_t v, uint64_t a) -> uint64_t
   return (v + (a - 1ULL)) & ~(a - 1ULL);
 }
 
-// Helper to compute per-2D-slice footprint for a given region size
-auto ComputeSlice(const FormatInfo& info, uint32_t region_w, uint32_t region_h,
-  uint64_t row_align)
-{
-  const auto blocks_x = (region_w + info.block_size - 1U) / info.block_size;
-  const auto blocks_y = (region_h + info.block_size - 1U) / info.block_size;
-  const auto row_pitch = AlignUp(blocks_x * info.bytes_per_block, row_align);
-  const auto slice_pitch = row_pitch * blocks_y;
-  return std::pair<uint64_t, uint64_t> { row_pitch, slice_pitch };
-};
-
 using oxygen::engine::upload::UploadItem;
 using oxygen::graphics::BufferUploadRegion;
 
@@ -314,8 +303,14 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
     const uint32_t region_w = dst_desc.width;
     const uint32_t region_h = dst_desc.height;
 
-    const auto [row_pitch, slice_pitch]
-      = ComputeSlice(info, region_w, region_h, row_align);
+    const auto footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = region_w,
+          .height = region_h,
+          .depth = 1U,
+        },
+        oxygen::SizeBytes { row_align });
     const uint64_t offset = AlignUp(0U, place_align);
 
     std::vector<TextureUploadRegion> regions;
@@ -325,8 +320,8 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
 
     regions.emplace_back(oxygen::graphics::TextureUploadRegion {
       .buffer_offset = offset,
-      .buffer_row_pitch = row_pitch,
-      .buffer_slice_pitch = slice_pitch,
+      .buffer_row_pitch = footprint.row_pitch.get(),
+      .buffer_slice_pitch = footprint.slice_pitch.get(),
       .dst_slice = oxygen::graphics::TextureSlice {
         .x = 0,
         .y = 0,
@@ -346,8 +341,8 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
     });
     source_indices.emplace_back(0U);
 
-    return MakeTexturePlanOrError(
-      offset + slice_pitch, std::move(regions), std::move(source_indices));
+    return MakeTexturePlanOrError(offset + footprint.slice_pitch.get(),
+      std::move(regions), std::move(source_indices));
   }
 
   struct Planned {
@@ -415,14 +410,20 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
       }
     }
 
-    const auto [row_pitch, slice_pitch]
-      = ComputeSlice(info, region_w, region_h, row_align);
+    const auto footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = region_w,
+          .height = region_h,
+          .depth = 1U,
+        },
+        oxygen::SizeBytes { row_align });
     planned.push_back({
       .sr = sr,
       .region_w = region_w,
       .region_h = region_h,
-      .row_pitch = row_pitch,
-      .slice_pitch = slice_pitch,
+      .row_pitch = footprint.row_pitch.get(),
+      .slice_pitch = footprint.slice_pitch.get(),
       .source_index = idx,
     });
   }
@@ -521,8 +522,14 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
     const uint32_t region_h = dst_desc.height;
     const uint32_t region_d = dst_desc.depth;
 
-    const auto [row_pitch, slice_pitch]
-      = ComputeSlice(info, region_w, region_h, row_align);
+    const auto footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = region_w,
+          .height = region_h,
+          .depth = 1U,
+        },
+        oxygen::SizeBytes { row_align });
     const uint64_t offset = AlignUp(0U, place_align);
 
     std::vector<TextureUploadRegion> regions;
@@ -532,8 +539,8 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
 
     regions.emplace_back(oxygen::graphics::TextureUploadRegion {
       .buffer_offset = offset,
-      .buffer_row_pitch = row_pitch,
-      .buffer_slice_pitch = slice_pitch,
+      .buffer_row_pitch = footprint.row_pitch.get(),
+      .buffer_slice_pitch = footprint.slice_pitch.get(),
       .dst_slice = oxygen::graphics::TextureSlice {
         .x = 0,
         .y = 0,
@@ -553,8 +560,9 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
     });
     source_indices.emplace_back(0U);
 
-    return MakeTexturePlanOrError(offset + (slice_pitch * region_d),
-      std::move(regions), std::move(source_indices));
+    return MakeTexturePlanOrError(
+      offset + (footprint.slice_pitch.get() * region_d), std::move(regions),
+      std::move(source_indices));
   }
 
   struct Planned3D {
@@ -636,15 +644,21 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
       }
     }
 
-    const auto [row_pitch, slice_pitch]
-      = ComputeSlice(info, region_w, region_h, row_align);
+    const auto footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = region_w,
+          .height = region_h,
+          .depth = 1U,
+        },
+        oxygen::SizeBytes { row_align });
     planned.push_back({
       .sr = sr,
       .region_w = region_w,
       .region_h = region_h,
       .region_d = region_d,
-      .row_pitch = row_pitch,
-      .slice_pitch = slice_pitch,
+      .row_pitch = footprint.row_pitch.get(),
+      .slice_pitch = footprint.slice_pitch.get(),
       .source_index = idx,
     });
   }

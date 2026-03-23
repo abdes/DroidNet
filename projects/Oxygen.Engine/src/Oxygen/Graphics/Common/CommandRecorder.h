@@ -216,7 +216,8 @@ public:
   */
   virtual auto ExecuteIndirect(const Buffer& argument_buffer,
     uint64_t argument_buffer_offset, uint32_t command_count,
-    IndirectCommandLayout layout) -> void = 0;
+    IndirectCommandLayout layout) -> void
+    = 0;
 
   virtual auto SetVertexBuffers(uint32_t num,
     const std::shared_ptr<Buffer>* vertex_buffers,
@@ -306,6 +307,12 @@ public:
 
   virtual auto CopyBufferToTexture(const Buffer& src,
     std::span<const TextureUploadRegion> regions, Texture& dst) -> void
+    = 0;
+
+  // Copies from a texture region into a linear buffer. The region describes a
+  // source texture slice and the destination buffer offset / pitches.
+  virtual auto CopyTextureToBuffer(Buffer& dst, const Texture& src,
+    const TextureBufferCopyRegion& region) -> void
     = 0;
 
   //! Copies a region from one texture to another.

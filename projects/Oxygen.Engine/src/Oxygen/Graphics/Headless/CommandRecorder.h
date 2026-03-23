@@ -87,6 +87,10 @@ public:
     std::span<const TextureUploadRegion> regions, Texture& dst)
     -> void override;
 
+  OXGN_HDLS_API auto CopyTextureToBuffer(graphics::Buffer& dst,
+    const graphics::Texture& src, const TextureBufferCopyRegion& region)
+    -> void override;
+
   OXGN_HDLS_API auto CopyTexture(const Texture& src,
     const TextureSlice& src_slice,
     const TextureSubResourceSet& src_subresources, Texture& dst,

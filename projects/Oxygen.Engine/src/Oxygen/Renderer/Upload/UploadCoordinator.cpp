@@ -79,29 +79,9 @@ auto UsageToTargetState(BufferUsage usage) -> ResourceStates
   return ResourceStates::kCommon;
 }
 
-inline auto BlocksX(const oxygen::graphics::detail::FormatInfo& info,
-  const uint32_t width_texels) -> uint32_t
-{
-  return (width_texels + info.block_size - 1U) / info.block_size;
-}
-
-inline auto BlocksY(const oxygen::graphics::detail::FormatInfo& info,
-  const uint32_t height_texels) -> uint32_t
-{
-  return (height_texels + info.block_size - 1U) / info.block_size;
-}
-
-inline auto RowCopyBytes(const oxygen::graphics::detail::FormatInfo& info,
-  const uint32_t width_texels) -> uint64_t
-{
-  return static_cast<uint64_t>(BlocksX(info, width_texels))
-    * static_cast<uint64_t>(info.bytes_per_block);
-}
-
 auto PackTexture2DToStaging(const UploadPolicy& policy,
-  const oxygen::graphics::detail::FormatInfo& info,
-  const TextureUploadPlan& plan, const UploadTextureSourceView& src,
-  std::byte* dst_staging) -> bool
+  const oxygen::graphics::TextureDesc& dst_desc, const TextureUploadPlan& plan,
+  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
 {
   const auto& fp = policy.filler;
   if (fp.enable_default_fill) {
@@ -126,8 +106,15 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
 
     const auto width = region.dst_slice.width;
     const auto height = region.dst_slice.height;
-    const auto copy_bytes_per_row = RowCopyBytes(info, width);
-    const auto rows = BlocksY(info, height);
+    const auto tight_footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = width,
+          .height = height,
+          .depth = 1U,
+        });
+    const auto copy_bytes_per_row = tight_footprint.row_pitch.get();
+    const auto rows = tight_footprint.row_count;
 
     const uint64_t required_src_bytes = (rows == 0U)
       ? 0ULL
@@ -165,9 +152,8 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
 }
 
 auto PackTexture3DToStaging(const UploadPolicy& policy,
-  const oxygen::graphics::detail::FormatInfo& info,
-  const TextureUploadPlan& plan, const UploadTextureSourceView& src,
-  std::byte* dst_staging) -> bool
+  const oxygen::graphics::TextureDesc& dst_desc, const TextureUploadPlan& plan,
+  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
 {
   const auto& fp = policy.filler;
   if (fp.enable_default_fill) {
@@ -193,8 +179,15 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
     const auto width = region.dst_slice.width;
     const auto height = region.dst_slice.height;
     const auto depth = region.dst_slice.depth;
-    const auto copy_bytes_per_row = RowCopyBytes(info, width);
-    const auto rows = BlocksY(info, height);
+    const auto tight_footprint
+      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
+        oxygen::graphics::LinearTextureExtent {
+          .width = width,
+          .height = height,
+          .depth = depth,
+        });
+    const auto copy_bytes_per_row = tight_footprint.row_pitch.get();
+    const auto rows = tight_footprint.row_count;
 
     if (s.row_pitch < copy_bytes_per_row) {
       return false;
@@ -368,8 +361,8 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
     const auto& src_view = std::get<UploadTextureSourceView>(req.data);
-    if (!PackTexture2DToStaging(policy, info, plan, src_view,
-          reinterpret_cast<std::byte*>(staging.Ptr()))) {
+    if (!PackTexture2DToStaging(policy, tdesc.dst->GetDescriptor(), plan,
+          src_view, reinterpret_cast<std::byte*>(staging.Ptr()))) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
@@ -475,8 +468,8 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
     const auto& src_view = std::get<UploadTextureSourceView>(req.data);
-    if (!PackTexture3DToStaging(policy, info, plan, src_view,
-          reinterpret_cast<std::byte*>(staging.Ptr()))) {
+    if (!PackTexture3DToStaging(policy, tdesc.dst->GetDescriptor(), plan,
+          src_view, reinterpret_cast<std::byte*>(staging.Ptr()))) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {

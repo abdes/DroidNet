@@ -272,6 +272,10 @@ public:
     texture_log_->dst = &dst;
     texture_log_->regions.assign(regions.begin(), regions.end());
   }
+  auto CopyTextureToBuffer(Buffer& /*dst*/, const Texture& /*src*/,
+    const graphics::TextureBufferCopyRegion& /*region*/) -> void override
+  {
+  }
 
   // No-op copy texture for tests (satisfies abstract interface)
   auto CopyTexture(const Texture& /*src*/,
@@ -629,7 +633,8 @@ public:
       queues_[spec.key] = std::make_shared<FakeCommandQueue>(name, spec.role);
     }
   }
-  auto QueueKeyFor(const graphics::QueueRole role) const -> graphics::QueueKey override
+  auto QueueKeyFor(const graphics::QueueRole role) const
+    -> graphics::QueueKey override
   {
     return queue_strategy_ ? queue_strategy_->KeyFor(role) : QueueKey {};
   }

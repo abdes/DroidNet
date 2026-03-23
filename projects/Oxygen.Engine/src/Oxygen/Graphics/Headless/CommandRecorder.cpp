@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <stdexcept>
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
@@ -100,6 +101,19 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   for (const auto& r : regions) {
     QueueCommand(std::make_shared<BufferToTextureCommand>(&src, r, &dst));
   }
+}
+
+auto CommandRecorder::CopyTextureToBuffer(graphics::Buffer& dst,
+  const graphics::Texture& src, const TextureBufferCopyRegion& region) -> void
+{
+  LOG_F(ERROR,
+    "CopyTextureToBuffer is not implemented for Headless yet; T05 owns the "
+    "backend copy behavior");
+  static_cast<void>(dst);
+  static_cast<void>(src);
+  static_cast<void>(region);
+  throw std::runtime_error(
+    "Headless CommandRecorder::CopyTextureToBuffer is not implemented yet");
 }
 
 auto CommandRecorder::CopyTexture(const Texture& src,
