@@ -131,7 +131,7 @@ public:
   {
   }
 
-  auto Allocate(oxygen::engine::upload::SizeBytes, std::string_view)
+  auto Allocate(oxygen::SizeBytes, std::string_view)
     -> std::expected<Allocation, UploadError> override
   {
     return std::unexpected(UploadError::kStagingAllocFailed);
