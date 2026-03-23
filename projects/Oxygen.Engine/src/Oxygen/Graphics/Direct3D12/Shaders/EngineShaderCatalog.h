@@ -157,118 +157,17 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_METALNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_VSM_COMPARE with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_COMPARE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_RESOLVE with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_RESOLVE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_STORED_DEPTH with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_STORED_DEPTH", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_RECEIVER_DEPTH with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_RECEIVER_DEPTH", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_REQUESTED_CLIP with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_REQUESTED_CLIP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_RESOLVED_CLIP with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_RESOLVED_CLIP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_CLIP_DELTA with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_CLIP_DELTA", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Forward pass pixel shader: DEBUG_VSM_DEPTH_DELTA with ALPHA_TEST permutation
-  ShaderFileSpec {
-    .path="Forward/ForwardDebug_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_VSM_DEPTH_DELTA", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
-  },
-  // Depth pre-pass: VS and PS with alpha-test and virtual-shadow raster permutations
+  // Depth pre-pass: VS and PS with alpha-test permutation
   ShaderFileSpec {
     .path="Depth/DepthPrePass.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } },
-    .permutations=std::array<std::string_view, 2> { "ALPHA_TEST", "OXYGEN_VIRTUAL_SHADOW_RASTER" }
-  },
-  ShaderFileSpec {
-    .path="Depth/VirtualShadowPageClear.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } }
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Light culling compute shader (tile-based or clustered mode)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } },
     .permutations=std::array<std::string_view, 1> { "CLUSTERED" }
-  },
-  // Virtual shadow request feedback compute shader
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowRequest.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowClear.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowInvalidation.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowPageUpdate.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowPageAlloc.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowHierarchy.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowSchedule.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowBuildClearArgs.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowBuildDraws.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Lighting/VirtualShadowPageFinalize.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
@@ -378,9 +277,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
 // - ForwardMesh_PS DEBUG_*: 8 each (debug define x ALPHA_TEST x
 // OXYGEN_HDR_OUTPUT)
-// - DepthPrePass: 8 (2 entries x 4 permutations)
+// - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
-// - VirtualShadowRequest: 1 entry
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - MultiScatLut_CS: 1 entry
@@ -397,6 +295,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 1 entry
 // - AutoExposure_Average_CS: 1 entry
-// Total: 138
+// Total: 111
 
 } // namespace oxygen::graphics::d3d12

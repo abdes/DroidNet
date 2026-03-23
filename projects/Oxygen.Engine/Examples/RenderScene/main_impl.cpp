@@ -192,16 +192,9 @@ auto ParseDirectionalShadowPolicy(std::string value)
   if (value == "conventional" || value == "conventional-only") {
     return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
   }
-  if (value == "prefer-virtual" || value == "virtual") {
-    return oxygen::DirectionalShadowImplementationPolicy::kPreferVirtual;
-  }
-  if (value == "virtual-only") {
-    return oxygen::DirectionalShadowImplementationPolicy::kVirtualOnly;
-  }
 
-  throw std::runtime_error(
-    "Invalid value for --directional-shadows. "
-    "Expected one of: conventional, prefer-virtual, virtual-only");
+  throw std::runtime_error("Invalid value for --directional-shadows. "
+                           "Expected one of: conventional");
 }
 
 } // namespace
@@ -278,9 +271,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .StoreTo(&hot_reload)
         .Build());
     default_command.WithOption(Option::WithKey("directional-shadows")
-        .About("Directional shadow backend policy: conventional, "
-               "prefer-virtual, or virtual-only. The current VSM slice is "
-               "opt-in and not the default for large scenes.")
+        .About("Directional shadow backend policy: conventional.")
         .Long("directional-shadows")
         .WithValue<std::string>()
         .DefaultValue(std::string("conventional"))

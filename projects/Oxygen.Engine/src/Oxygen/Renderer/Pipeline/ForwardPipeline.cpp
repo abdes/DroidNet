@@ -37,16 +37,6 @@
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowBuildClearArgsPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowBuildDrawsPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowClearPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowHierarchyPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowInvalidationPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowPageAllocPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowPageRasterPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowPageUpdatePass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowRequestPass.h>
-#include <Oxygen/Renderer/Passes/VirtualShadowSchedulePass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
@@ -195,26 +185,6 @@ private:
   std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config;
   std::shared_ptr<engine::ConventionalShadowRasterPass::Config>
     shadow_raster_pass_config;
-  std::shared_ptr<engine::VirtualShadowPageRasterPass::Config>
-    virtual_shadow_raster_pass_config;
-  std::shared_ptr<engine::VirtualShadowRequestPass::Config>
-    virtual_shadow_request_pass_config;
-  std::shared_ptr<engine::VirtualShadowClearPass::Config>
-    virtual_shadow_clear_pass_config;
-  std::shared_ptr<engine::VirtualShadowInvalidationPass::Config>
-    virtual_shadow_invalidation_pass_config;
-  std::shared_ptr<engine::VirtualShadowPageUpdatePass::Config>
-    virtual_shadow_page_update_pass_config;
-  std::shared_ptr<engine::VirtualShadowPageAllocPass::Config>
-    virtual_shadow_page_alloc_pass_config;
-  std::shared_ptr<engine::VirtualShadowHierarchyPass::Config>
-    virtual_shadow_hierarchy_pass_config;
-  std::shared_ptr<engine::VirtualShadowSchedulePass::Config>
-    virtual_shadow_schedule_pass_config;
-  std::shared_ptr<engine::VirtualShadowBuildClearArgsPass::Config>
-    virtual_shadow_build_clear_args_pass_config;
-  std::shared_ptr<engine::VirtualShadowBuildDrawsPass::Config>
-    virtual_shadow_build_draws_pass_config;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config;
   std::shared_ptr<engine::WireframePassConfig> wireframe_pass_config;
   std::shared_ptr<engine::SkyPassConfig> sky_pass_config;
@@ -227,24 +197,6 @@ private:
   // Pass instances
   std::shared_ptr<engine::DepthPrePass> depth_pass;
   std::shared_ptr<engine::ConventionalShadowRasterPass> shadow_raster_pass;
-  std::shared_ptr<engine::VirtualShadowPageRasterPass>
-    virtual_shadow_raster_pass;
-  std::shared_ptr<engine::VirtualShadowRequestPass> virtual_shadow_request_pass;
-  std::shared_ptr<engine::VirtualShadowClearPass> virtual_shadow_clear_pass;
-  std::shared_ptr<engine::VirtualShadowInvalidationPass>
-    virtual_shadow_invalidation_pass;
-  std::shared_ptr<engine::VirtualShadowPageUpdatePass>
-    virtual_shadow_page_update_pass;
-  std::shared_ptr<engine::VirtualShadowPageAllocPass>
-    virtual_shadow_page_alloc_pass;
-  std::shared_ptr<engine::VirtualShadowHierarchyPass>
-    virtual_shadow_hierarchy_pass;
-  std::shared_ptr<engine::VirtualShadowSchedulePass>
-    virtual_shadow_schedule_pass;
-  std::shared_ptr<engine::VirtualShadowBuildClearArgsPass>
-    virtual_shadow_build_clear_args_pass;
-  std::shared_ptr<engine::VirtualShadowBuildDrawsPass>
-    virtual_shadow_build_draws_pass;
   std::shared_ptr<engine::ShaderPass> shader_pass;
   std::shared_ptr<engine::WireframePass> wireframe_pass;
   std::shared_ptr<engine::SkyPass> sky_pass;
@@ -287,14 +239,6 @@ namespace {
       case kWorldNormals:
       case kRoughness:
       case kMetalness:
-      case kVsmCompare:
-      case kVsmResolve:
-      case kVsmStoredDepth:
-      case kVsmReceiverDepth:
-      case kVsmRequestedClip:
-      case kVsmResolvedClip:
-      case kVsmClipDelta:
-      case kVsmDepthDelta:
         return true;
       case kIblSpecular:
       case kIblRawSky:
@@ -556,85 +500,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await depth_pass->PrepareResources(rc, rec);
     co_await depth_pass->Execute(rc, rec);
     rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
-
-    if (virtual_shadow_request_pass) {
-      co_await virtual_shadow_request_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_request_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowRequestPass>(
-        virtual_shadow_request_pass.get());
-    }
-
-    if (virtual_shadow_clear_pass) {
-      co_await virtual_shadow_clear_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_clear_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowClearPass>(
-        virtual_shadow_clear_pass.get());
-    }
-
-    if (virtual_shadow_invalidation_pass) {
-      co_await virtual_shadow_invalidation_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_invalidation_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowInvalidationPass>(
-        virtual_shadow_invalidation_pass.get());
-    }
-
-    if (virtual_shadow_page_update_pass) {
-      co_await virtual_shadow_page_update_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_page_update_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowPageUpdatePass>(
-        virtual_shadow_page_update_pass.get());
-    }
-
-    if (virtual_shadow_page_alloc_pass) {
-      co_await virtual_shadow_page_alloc_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_page_alloc_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowPageAllocPass>(
-        virtual_shadow_page_alloc_pass.get());
-    }
-
-    if (virtual_shadow_hierarchy_pass) {
-      co_await virtual_shadow_hierarchy_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_hierarchy_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowHierarchyPass>(
-        virtual_shadow_hierarchy_pass.get());
-    }
-
-    if (virtual_shadow_schedule_pass) {
-      co_await virtual_shadow_schedule_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_schedule_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowSchedulePass>(
-        virtual_shadow_schedule_pass.get());
-    }
-
-    if (virtual_shadow_build_clear_args_pass) {
-      co_await virtual_shadow_build_clear_args_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_build_clear_args_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowBuildClearArgsPass>(
-        virtual_shadow_build_clear_args_pass.get());
-    }
-
-    if (virtual_shadow_build_draws_pass) {
-      co_await virtual_shadow_build_draws_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_build_draws_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowBuildDrawsPass>(
-        virtual_shadow_build_draws_pass.get());
-    }
-
-    if (virtual_shadow_raster_pass && virtual_shadow_raster_pass_config) {
-      if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
-        virtual_shadow_raster_pass_config->depth_texture
-          = shadow_manager->GetVirtualShadowDepthTexture();
-      }
-    }
-
-    if (virtual_shadow_raster_pass && virtual_shadow_raster_pass_config
-      && virtual_shadow_raster_pass_config->depth_texture) {
-      co_await virtual_shadow_raster_pass->PrepareResources(rc, rec);
-      co_await virtual_shadow_raster_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::VirtualShadowPageRasterPass>(
-        virtual_shadow_raster_pass.get());
-    }
-
   }
 
   // Sky must run after DepthPrePass so it can depth-test against the
@@ -857,8 +722,8 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
         LOG_F(INFO,
           "ForwardPipeline: auto exposure skipped want_auto={} has_pass={} "
           "view_id={}",
-          frame_plan_builder->WantAutoExposure(),
-          auto_exposure_pass != nullptr, ctx.view->GetPublishedViewId().get());
+          frame_plan_builder->WantAutoExposure(), auto_exposure_pass != nullptr,
+          ctx.view->GetPublishedViewId().get());
       }
 
       if (ground_grid_pass && grid_pass_config && grid_pass_config->enabled) {
@@ -959,26 +824,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   depth_pass_config = std::make_shared<p::DepthPrePassConfig>();
   shadow_raster_pass_config
     = std::make_shared<p::ConventionalShadowRasterPass::Config>();
-  virtual_shadow_raster_pass_config
-    = std::make_shared<p::VirtualShadowPageRasterPass::Config>();
-  virtual_shadow_request_pass_config
-    = std::make_shared<p::VirtualShadowRequestPass::Config>();
-  virtual_shadow_clear_pass_config
-    = std::make_shared<p::VirtualShadowClearPass::Config>();
-  virtual_shadow_invalidation_pass_config
-    = std::make_shared<p::VirtualShadowInvalidationPass::Config>();
-  virtual_shadow_page_update_pass_config
-    = std::make_shared<p::VirtualShadowPageUpdatePass::Config>();
-  virtual_shadow_page_alloc_pass_config
-    = std::make_shared<p::VirtualShadowPageAllocPass::Config>();
-  virtual_shadow_hierarchy_pass_config
-    = std::make_shared<p::VirtualShadowHierarchyPass::Config>();
-  virtual_shadow_schedule_pass_config
-    = std::make_shared<p::VirtualShadowSchedulePass::Config>();
-  virtual_shadow_build_clear_args_pass_config
-    = std::make_shared<p::VirtualShadowBuildClearArgsPass::Config>();
-  virtual_shadow_build_draws_pass_config
-    = std::make_shared<p::VirtualShadowBuildDrawsPass::Config>();
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
   wireframe_pass_config = std::make_shared<p::WireframePassConfig>();
   sky_pass_config = std::make_shared<p::SkyPassConfig>();
@@ -991,8 +836,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   depth_pass = std::make_shared<p::DepthPrePass>(depth_pass_config);
   shadow_raster_pass = std::make_shared<p::ConventionalShadowRasterPass>(
     shadow_raster_pass_config);
-  virtual_shadow_raster_pass = std::make_shared<p::VirtualShadowPageRasterPass>(
-    virtual_shadow_raster_pass_config);
   shader_pass = std::make_shared<p::ShaderPass>(shader_pass_config);
   wireframe_pass = std::make_shared<p::WireframePass>(wireframe_pass_config);
   sky_pass = std::make_shared<p::SkyPass>(sky_pass_config);
@@ -1001,31 +844,6 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
 
   auto gfx = engine->GetGraphics().lock();
   auto gfx_ptr = observer_ptr { gfx.get() };
-  virtual_shadow_request_pass = std::make_shared<p::VirtualShadowRequestPass>(
-    gfx_ptr, virtual_shadow_request_pass_config);
-  virtual_shadow_clear_pass = std::make_shared<p::VirtualShadowClearPass>(
-    gfx_ptr, virtual_shadow_clear_pass_config);
-  virtual_shadow_invalidation_pass
-    = std::make_shared<p::VirtualShadowInvalidationPass>(
-      gfx_ptr, virtual_shadow_invalidation_pass_config);
-  virtual_shadow_page_update_pass
-    = std::make_shared<p::VirtualShadowPageUpdatePass>(
-      gfx_ptr, virtual_shadow_page_update_pass_config);
-  virtual_shadow_page_alloc_pass
-    = std::make_shared<p::VirtualShadowPageAllocPass>(
-      gfx_ptr, virtual_shadow_page_alloc_pass_config);
-  virtual_shadow_hierarchy_pass
-    = std::make_shared<p::VirtualShadowHierarchyPass>(
-      gfx_ptr, virtual_shadow_hierarchy_pass_config);
-  virtual_shadow_schedule_pass
-    = std::make_shared<p::VirtualShadowSchedulePass>(
-      gfx_ptr, virtual_shadow_schedule_pass_config);
-  virtual_shadow_build_clear_args_pass
-    = std::make_shared<p::VirtualShadowBuildClearArgsPass>(
-      gfx_ptr, virtual_shadow_build_clear_args_pass_config);
-  virtual_shadow_build_draws_pass
-    = std::make_shared<p::VirtualShadowBuildDrawsPass>(
-      gfx_ptr, virtual_shadow_build_draws_pass_config);
   light_culling_pass
     = std::make_shared<p::LightCullingPass>(gfx_ptr, light_culling_pass_config);
   tone_map_pass = std::make_shared<p::ToneMapPass>(tone_map_pass_config);

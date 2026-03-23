@@ -38,7 +38,6 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/DebugFrameBindings.h>
-#include <Oxygen/Renderer/Types/DirectionalVirtualBiasSettings.h>
 #include <Oxygen/Renderer/Types/DrawFrameBindings.h>
 #include <Oxygen/Renderer/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Renderer/Types/EnvironmentViewData.h>
@@ -50,7 +49,6 @@
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/api_export.h>
-
 
 namespace oxygen {
 class Graphics;
@@ -412,13 +410,6 @@ private:
   struct DirectionalShadowBiasState {
     float synthetic_constant_bias { 0.0F };
     float synthetic_normal_bias { 0.02F };
-    renderer::DirectionalVirtualBiasSettings virtual_directional {
-      .receiver_normal_bias_scale = 0.5F,
-      .receiver_constant_bias_scale = 0.0F,
-      .receiver_slope_bias_scale = 1.0F,
-      .raster_constant_bias_scale = 0.0F,
-      .raster_slope_bias_scale = 0.0F,
-    };
   };
 
   //! Build frame data for a specific view (scene prep, culling, draw list).
