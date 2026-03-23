@@ -842,9 +842,23 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
         }
 
         auto_exposure_config->source_texture = effective_view.GetHdrTexture();
+        LOG_F(INFO,
+          "ForwardPipeline: auto exposure executing want_auto=true "
+          "reset_ev={} source_texture_valid={} view_id={}",
+          frame_plan_builder->AutoExposureReset().has_value()
+            ? *frame_plan_builder->AutoExposureReset()
+            : -9999.0F,
+          auto_exposure_config->source_texture != nullptr,
+          ctx.view->GetPublishedViewId().get());
         co_await auto_exposure_pass->PrepareResources(rc, rec);
         co_await auto_exposure_pass->Execute(rc, rec);
         rc.RegisterPass<engine::AutoExposurePass>(auto_exposure_pass.get());
+      } else {
+        LOG_F(INFO,
+          "ForwardPipeline: auto exposure skipped want_auto={} has_pass={} "
+          "view_id={}",
+          frame_plan_builder->WantAutoExposure(),
+          auto_exposure_pass != nullptr, ctx.view->GetPublishedViewId().get());
       }
 
       if (ground_grid_pass && grid_pass_config && grid_pass_config->enabled) {

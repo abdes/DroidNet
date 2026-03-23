@@ -177,6 +177,13 @@ m_gtest_program(
     "LightManager_basic_test.cpp"
 )
 
+m_gtest_program(
+  ShadowManager
+  SOURCES
+    "Fakes/Graphics.h"
+    "ShadowManager_virtual_cache_history_test.cpp"
+)
+
 # GeometryUploader unit tests
 m_gtest_program(
   GeometryUploader

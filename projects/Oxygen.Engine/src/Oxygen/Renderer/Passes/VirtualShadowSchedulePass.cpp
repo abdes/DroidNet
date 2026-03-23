@@ -10,6 +10,7 @@
 #include <cstring>
 #include <stdexcept>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -41,6 +42,10 @@ VirtualShadowSchedulePass::~VirtualShadowSchedulePass()
   if (clear_count_upload_buffer_ && clear_count_upload_mapped_ptr_ != nullptr) {
     clear_count_upload_buffer_->UnMap();
     clear_count_upload_mapped_ptr_ = nullptr;
+  }
+  for (auto& [view_id, resources] : view_schedule_resources_) {
+    (void)view_id;
+    UnMapScheduleReadback(resources);
   }
 }
 
@@ -77,29 +82,57 @@ auto VirtualShadowSchedulePass::DoPrepareResources(
   shadow_manager->PrepareVirtualPageTableResources(
     Context().current_view.view_id, recorder);
 
-  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+  const auto* packet = shadow_manager->TryGetVirtualFramePacket(
     Context().current_view.view_id);
-  const auto* page_management_bindings
-    = shadow_manager->TryGetVirtualPageManagementBindings(
-      Context().current_view.view_id);
-  if (metadata == nullptr || page_management_bindings == nullptr
-    || !page_management_bindings->page_table_uav.IsValid()
-    || !page_management_bindings->page_flags_uav.IsValid()
-    || !page_management_bindings->resolve_stats_uav.IsValid()
-    || metadata->clip_level_count == 0U || metadata->pages_per_axis == 0U) {
+  if (packet == nullptr || !packet->has_directional_metadata
+    || !packet->has_page_management_bindings
+    || !packet->page_management_bindings.page_table_uav.IsValid()
+    || !packet->page_management_bindings.page_flags_uav.IsValid()
+    || !packet->page_management_bindings.resolve_stats_uav.IsValid()
+    || packet->directional_metadata.clip_level_count == 0U
+    || packet->directional_metadata.pages_per_axis == 0U) {
     co_return;
   }
+  if (packet->has_page_management_state
+    && packet->page_management_state.reset_request_pending != 0U) {
+    LOG_F(INFO,
+      "VirtualShadowSchedulePass: frame={} view={} skipped because reset "
+      "barrier is active source_frame={} cache_epoch={} view_generation={}",
+      Context().frame_sequence.get(), Context().current_view.view_id.get(),
+      packet->source_frame_sequence.get(), packet->cache_epoch,
+      packet->view_generation);
+    co_return;
+  }
+  const auto& metadata = packet->directional_metadata;
+  const auto& page_management_bindings = packet->page_management_bindings;
 
-  const auto total_page_count = metadata->clip_level_count
-    * metadata->pages_per_axis * metadata->pages_per_axis;
+  const auto total_page_count = metadata.clip_level_count
+    * metadata.pages_per_axis * metadata.pages_per_axis;
   if (total_page_count == 0U) {
     co_return;
   }
 
+  LOG_F(INFO,
+    "VirtualShadowSchedulePass: frame={} view={} packet source_frame={} "
+    "cache_epoch={} view_generation={} meta_srv={} page_table_uav={} "
+    "page_flags_uav={} resolve_stats_uav={} request_dispatch={} "
+    "request_words_srv={} total_pages={} draw_count={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    packet->source_frame_sequence.get(), packet->cache_epoch,
+    packet->view_generation, packet->virtual_directional_shadow_metadata_srv.get(),
+    packet->page_management_bindings.page_table_uav.get(),
+    packet->page_management_bindings.page_flags_uav.get(),
+    packet->page_management_bindings.resolve_stats_uav.get(),
+    request_pass != nullptr && request_pass->HasActiveDispatch(),
+    request_pass != nullptr ? request_pass->GetRequestWordsSrv().get()
+                            : kInvalidShaderVisibleIndex.get(),
+    total_page_count,
+    static_cast<std::uint32_t>(
+      prepared_frame->draw_metadata_bytes.size() / sizeof(DrawMetadata)));
+
   const auto draw_count = static_cast<std::uint32_t>(
     prepared_frame->draw_metadata_bytes.size() / sizeof(DrawMetadata));
-  pass_constants_.Ensure(
-    *gfx_, "VirtualShadowSchedulePass.Constants",
+  pass_constants_.Ensure(*gfx_, "VirtualShadowSchedulePass.Constants",
     detail::kVirtualShadowPassConstantsStride);
   EnsureClearCountUploadBuffer();
 
@@ -126,7 +159,7 @@ auto VirtualShadowSchedulePass::DoPrepareResources(
   active_dispatch_ = true;
   active_view_id_ = Context().current_view.view_id;
   active_draw_bounds_srv_ = prepared_frame->bindless_draw_bounds_slot;
-  active_page_management_bindings_ = *page_management_bindings;
+  active_page_management_bindings_ = page_management_bindings;
   active_total_page_count_ = total_page_count;
   active_dispatch_group_count_
     = (total_page_count + kDispatchGroupSize - 1U) / kDispatchGroupSize;
@@ -221,14 +254,15 @@ auto VirtualShadowSchedulePass::DoPrepareResources(
     .schedule_uav_index = resources->schedule_uav,
     .schedule_lookup_uav_index = resources->schedule_lookup_uav,
     .schedule_count_uav_index = resources->count_uav,
-    .page_table_uav_index = page_management_bindings->page_table_uav,
-    .page_flags_uav_index = page_management_bindings->page_flags_uav,
-    .resolve_stats_uav_index = page_management_bindings->resolve_stats_uav,
+    .page_table_uav_index = page_management_bindings.page_table_uav,
+    .page_flags_uav_index = page_management_bindings.page_flags_uav,
+    .resolve_stats_uav_index = page_management_bindings.resolve_stats_uav,
     .total_page_count = total_page_count,
     .schedule_capacity = resources->entry_capacity,
   };
   auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
-    + static_cast<std::ptrdiff_t>(slot * detail::kVirtualShadowPassConstantsStride);
+    + static_cast<std::ptrdiff_t>(
+      slot * detail::kVirtualShadowPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
   SetPassConstantsIndex(pass_constants_index);
 
@@ -246,9 +280,15 @@ auto VirtualShadowSchedulePass::DoPrepareResources(
       .draw_indirect_args_buffer = resources->draw_args_buffer,
       .source_frame_sequence = Context().frame_sequence,
       .draw_count = active_draw_count_,
-      .pending_raster_page_count
-      = page_management_bindings->pending_raster_page_count,
     });
+  LOG_F(INFO,
+    "VirtualShadowSchedulePass: frame={} view={} prepared gpu raster inputs "
+    "source_frame={} dispatch_groups={} draw_count={} schedule_srv={} "
+    "schedule_count_srv={} draw_ranges_srv={} draw_indices_srv={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    Context().frame_sequence.get(), active_dispatch_group_count_,
+    active_draw_count_, resources->schedule_srv.get(), resources->count_srv.get(),
+    resources->draw_page_ranges_srv.get(), resources->draw_page_indices_srv.get());
 
   co_return;
 }
@@ -260,7 +300,7 @@ auto VirtualShadowSchedulePass::DoExecute(graphics::CommandRecorder& recorder)
     co_return;
   }
 
-  const auto* resources = GetScheduleResources();
+  auto* resources = GetMutableScheduleResources();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (resources == nullptr || shadow_manager == nullptr) {
     co_return;
@@ -275,6 +315,40 @@ auto VirtualShadowSchedulePass::DoExecute(graphics::CommandRecorder& recorder)
   recorder.FlushBarriers();
   detail::DispatchVirtualPageManagementPass(
     *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
+  LOG_F(INFO,
+    "VirtualShadowSchedulePass: frame={} view={} dispatched schedule groups={} "
+    "draw_count={} total_pages={} schedule_uav={} count_uav={}",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    active_dispatch_group_count_, active_draw_count_, active_total_page_count_,
+    resources->schedule_uav.get(), resources->count_uav.get());
+
+  const auto slot_index = static_cast<std::size_t>(Context().frame_slot.get());
+  auto& count_readback_buffer = resources->count_readback_buffers[slot_index];
+  auto* count_readback_mapped_ptr
+    = resources->count_readback_mapped_ptrs[slot_index];
+  if (count_readback_buffer != nullptr) {
+    recorder.RequireResourceState(
+      *resources->count_buffer, graphics::ResourceStates::kCopySource);
+    if (!recorder.IsResourceTracked(*count_readback_buffer)) {
+      recorder.BeginTrackingResourceState(
+        *count_readback_buffer, graphics::ResourceStates::kCopyDest, false);
+    }
+    recorder.RequireResourceState(
+      *count_readback_buffer, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    recorder.CopyBuffer(*count_readback_buffer, 0U, *resources->count_buffer,
+      0U, sizeof(std::uint32_t));
+    shadow_manager->RegisterVirtualScheduleExtraction(active_view_id_,
+      count_readback_buffer, count_readback_mapped_ptr,
+      Context().frame_sequence, Context().frame_slot);
+    LOG_F(INFO,
+      "VirtualShadowSchedulePass: frame={} view={} registered schedule "
+      "readback source_frame={} slot={} readback_buffer={} mapped={}",
+      Context().frame_sequence.get(), active_view_id_.get(),
+      Context().frame_sequence.get(), Context().frame_slot.get(),
+      static_cast<const void*>(count_readback_buffer.get()),
+      static_cast<const void*>(count_readback_mapped_ptr));
+  }
 
   co_return;
 }
@@ -336,6 +410,19 @@ auto VirtualShadowSchedulePass::EnsureClearCountUploadBuffer() -> void
   std::memset(clear_count_upload_mapped_ptr_, 0, desc.size_bytes);
 }
 
+auto VirtualShadowSchedulePass::UnMapScheduleReadback(
+  detail::VirtualShadowScheduleResources& resources) noexcept -> void
+{
+  for (std::size_t slot_index = 0U;
+    slot_index < resources.count_readback_buffers.size(); ++slot_index) {
+    if (resources.count_readback_buffers[slot_index] != nullptr
+      && resources.count_readback_mapped_ptrs[slot_index] != nullptr) {
+      resources.count_readback_buffers[slot_index]->UnMap();
+      resources.count_readback_mapped_ptrs[slot_index] = nullptr;
+    }
+  }
+}
+
 auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
   const ViewId view_id, const std::uint32_t required_entry_capacity,
   const std::uint32_t required_draw_count)
@@ -348,8 +435,7 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
   auto [it, _] = view_schedule_resources_.try_emplace(view_id);
   auto& resources = it->second;
   const bool schedule_ready = resources.schedule_buffer
-    && resources.schedule_lookup_buffer
-    && resources.count_buffer
+    && resources.schedule_lookup_buffer && resources.count_buffer
     && required_entry_capacity <= resources.entry_capacity;
   const auto draw_arg_capacity = std::max(required_draw_count, 1U);
   const auto draw_page_index_capacity
@@ -451,7 +537,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
       = graphics::ResourceViewType::kStructuredBuffer_UAV;
     lookup_uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     lookup_uav_desc.range = { 0U,
-      static_cast<std::uint64_t>(required_entry_capacity) * sizeof(std::uint32_t) };
+      static_cast<std::uint64_t>(required_entry_capacity)
+        * sizeof(std::uint32_t) };
     lookup_uav_desc.stride = sizeof(std::uint32_t);
     registry.RegisterView(*resources.schedule_lookup_buffer,
       std::move(lookup_uav_handle), lookup_uav_desc);
@@ -503,7 +590,34 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     registry.RegisterView(
       *resources.count_buffer, std::move(count_uav_handle), count_uav_desc);
 
+    const auto slot_index
+      = static_cast<std::size_t>(Context().frame_slot.get());
     resources.entry_capacity = required_entry_capacity;
+  }
+
+  const auto slot_index = static_cast<std::size_t>(Context().frame_slot.get());
+  if (resources.count_readback_buffers[slot_index] == nullptr) {
+    const graphics::BufferDesc count_readback_desc {
+      .size_bytes = sizeof(std::uint32_t),
+      .usage = graphics::BufferUsage::kNone,
+      .memory = graphics::BufferMemory::kReadBack,
+      .debug_name = "VirtualShadowSchedulePass.ScheduleCountReadback",
+    };
+    resources.count_readback_buffers[slot_index]
+      = gfx_->CreateBuffer(count_readback_desc);
+    if (!resources.count_readback_buffers[slot_index]) {
+      throw std::runtime_error("VirtualShadowSchedulePass: failed to create "
+                               "schedule count readback buffer");
+    }
+    resources.count_readback_mapped_ptrs[slot_index]
+      = static_cast<std::uint32_t*>(
+        resources.count_readback_buffers[slot_index]->Map(
+          0U, count_readback_desc.size_bytes));
+    if (resources.count_readback_mapped_ptrs[slot_index] == nullptr) {
+      throw std::runtime_error("VirtualShadowSchedulePass: failed to map "
+                               "schedule count readback buffer");
+    }
+    *resources.count_readback_mapped_ptrs[slot_index] = 0U;
   }
 
   if (!draw_args_ready) {
@@ -519,8 +633,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     };
     resources.clear_args_buffer = gfx_->CreateBuffer(clear_args_desc);
     if (!resources.clear_args_buffer) {
-      throw std::runtime_error(
-        "VirtualShadowSchedulePass: failed to create clear indirect args buffer");
+      throw std::runtime_error("VirtualShadowSchedulePass: failed to create "
+                               "clear indirect args buffer");
     }
     registry.Register(resources.clear_args_buffer);
 
@@ -528,8 +642,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
       = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_UAV,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!clear_args_uav_handle.IsValid()) {
-      throw std::runtime_error(
-        "VirtualShadowSchedulePass: failed to allocate clear indirect args UAV");
+      throw std::runtime_error("VirtualShadowSchedulePass: failed to allocate "
+                               "clear indirect args UAV");
     }
     resources.clear_args_uav
       = allocator.GetShaderVisibleIndex(clear_args_uav_handle);
@@ -544,7 +658,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
       std::move(clear_args_uav_handle), clear_args_uav_desc);
 
     const graphics::BufferDesc draw_args_desc {
-      .size_bytes = static_cast<std::uint64_t>(draw_arg_capacity) * draw_arg_stride,
+      .size_bytes
+      = static_cast<std::uint64_t>(draw_arg_capacity) * draw_arg_stride,
       .usage
       = graphics::BufferUsage::kStorage | graphics::BufferUsage::kIndirect,
       .memory = graphics::BufferMemory::kDeviceLocal,
@@ -552,8 +667,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     };
     resources.draw_args_buffer = gfx_->CreateBuffer(draw_args_desc);
     if (!resources.draw_args_buffer) {
-      throw std::runtime_error(
-        "VirtualShadowSchedulePass: failed to create draw indirect args buffer");
+      throw std::runtime_error("VirtualShadowSchedulePass: failed to create "
+                               "draw indirect args buffer");
     }
     registry.Register(resources.draw_args_buffer);
 
@@ -585,7 +700,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     const auto index_stride = sizeof(std::uint32_t);
 
     const graphics::BufferDesc ranges_desc {
-      .size_bytes = static_cast<std::uint64_t>(draw_arg_capacity) * range_stride,
+      .size_bytes
+      = static_cast<std::uint64_t>(draw_arg_capacity) * range_stride,
       .usage = graphics::BufferUsage::kStorage,
       .memory = graphics::BufferMemory::kDeviceLocal,
       .debug_name = "VirtualShadowSchedulePass.DrawPageRanges",
@@ -661,7 +777,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     graphics::BufferViewDescription indices_srv_desc;
     indices_srv_desc.view_type
       = graphics::ResourceViewType::kStructuredBuffer_SRV;
-    indices_srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    indices_srv_desc.visibility
+      = graphics::DescriptorVisibility::kShaderVisible;
     indices_srv_desc.range = { 0U,
       static_cast<std::uint64_t>(draw_page_index_capacity) * index_stride };
     indices_srv_desc.stride = index_stride;
@@ -680,7 +797,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     graphics::BufferViewDescription indices_uav_desc;
     indices_uav_desc.view_type
       = graphics::ResourceViewType::kStructuredBuffer_UAV;
-    indices_uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    indices_uav_desc.visibility
+      = graphics::DescriptorVisibility::kShaderVisible;
     indices_uav_desc.range = { 0U,
       static_cast<std::uint64_t>(draw_page_index_capacity) * index_stride };
     indices_uav_desc.stride = index_stride;
@@ -712,7 +830,8 @@ auto VirtualShadowSchedulePass::EnsureViewScheduleResources(
     graphics::BufferViewDescription counter_uav_desc;
     counter_uav_desc.view_type
       = graphics::ResourceViewType::kStructuredBuffer_UAV;
-    counter_uav_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
+    counter_uav_desc.visibility
+      = graphics::DescriptorVisibility::kShaderVisible;
     counter_uav_desc.range = { 0U, sizeof(std::uint32_t) };
     counter_uav_desc.stride = sizeof(std::uint32_t);
     registry.RegisterView(*resources.draw_page_counter_buffer,

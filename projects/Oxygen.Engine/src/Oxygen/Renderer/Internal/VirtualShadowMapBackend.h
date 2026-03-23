@@ -32,6 +32,7 @@
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/Types/VirtualShadowCacheFrameData.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageFlags.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPageTableEntry.h>
 #include <Oxygen/Renderer/Types/VirtualShadowPhysicalPageMetadata.h>
@@ -51,6 +52,19 @@ namespace oxygen::renderer::internal {
 
 class VirtualShadowMapBackend {
 public:
+  enum class CacheLifecycleState : std::uint8_t {
+    kUninitialized = 0U,
+    kResetPending = 1U,
+    kClearing = 2U,
+    kCleared = 3U,
+    kWarmupRasterPending = 4U,
+    kWarmupFeedbackPending = 5U,
+    kValid = 6U,
+    kDirty = 7U,
+    kInvalidated = 8U,
+    kRetired = 9U,
+  };
+
   OXGN_RNDR_API VirtualShadowMapBackend(::oxygen::Graphics* gfx,
     ::oxygen::engine::upload::StagingProvider* provider,
     ::oxygen::engine::upload::InlineTransfersCoordinator* inline_transfers,
@@ -63,18 +77,24 @@ public:
 
   OXGN_RNDR_API auto OnFrameStart(
     RendererTag tag, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  OXGN_RNDR_API auto ResetCachedState() -> void;
+  OXGN_RNDR_API auto RetireView(ViewId view_id) -> void;
 
   OXGN_RNDR_API auto PublishView(ViewId view_id,
-    const engine::ViewConstants& view_constants,
-    float camera_viewport_width,
+    const engine::ViewConstants& view_constants, float camera_viewport_width,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
-    std::chrono::milliseconds gpu_budget,
+    std::chrono::milliseconds gpu_budget, std::uint64_t view_generation,
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto ResolveCurrentFrame(ViewId view_id) -> void;
-  OXGN_RNDR_API auto MarkRendered(ViewId view_id, bool rendered_page_work)
-    -> void;
+  OXGN_RNDR_API auto ApplyExtractedScheduleResult(ViewId view_id,
+    frame::SequenceNumber source_sequence, std::uint64_t cache_epoch,
+    std::uint64_t view_generation, std::uint32_t scheduled_page_count) -> void;
+  OXGN_RNDR_API auto ApplyExtractedResolveStatsResult(ViewId view_id,
+    frame::SequenceNumber source_sequence,
+    std::uint64_t cache_epoch, std::uint64_t view_generation,
+    const renderer::VirtualShadowResolveStats& resolve_stats) -> void;
   OXGN_RNDR_API auto PreparePageTableResources(
     ViewId view_id, graphics::CommandRecorder& recorder) -> void;
   OXGN_RNDR_API auto PreparePageManagementOutputsForGpuWrite(
@@ -91,9 +111,20 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageManagementBindings(
     ViewId view_id) const noexcept
     -> const renderer::VirtualShadowPageManagementBindings*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageManagementStateSnapshot(
+    ViewId view_id) const noexcept
+    -> std::optional<renderer::VirtualShadowPageManagementStateSnapshot>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalVirtualMetadata(
     ViewId view_id) const noexcept
     -> const engine::DirectionalVirtualShadowMetadata*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetShadowInstanceMetadata(
+    ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPageFlagsBuffer(
+    ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPhysicalPageMetadataBuffer(
+    ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetResolveStatsBuffer(
+    ViewId view_id) const noexcept -> std::shared_ptr<graphics::Buffer>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetPhysicalPoolTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
 
@@ -132,6 +163,15 @@ private:
   };
 
   struct ViewCacheEntry {
+    struct ExtractedFeedbackDiagnostics {
+      frame::SequenceNumber scheduled_source_sequence { 0U };
+      frame::SequenceNumber resolve_stats_source_sequence { 0U };
+      std::uint32_t scheduled_page_count { 0U };
+      renderer::VirtualShadowResolveStats resolve_stats {};
+      bool has_schedule_feedback { false };
+      bool has_resolve_stats_feedback { false };
+    };
+
     struct PendingResidencyResolve {
       bool valid { false };
       // This is the freshness latch for the live export path. A pending
@@ -156,26 +196,38 @@ private:
       directional_virtual_metadata;
     std::vector<glm::vec4> shadow_caster_bounds;
     std::uint64_t shadow_caster_content_hash { 0U };
-    bool has_rendered_cache_history { false };
+    renderer::VirtualShadowCacheFrameData prev_frame {};
+    renderer::VirtualShadowCacheFrameData current_frame {};
+    ExtractedFeedbackDiagnostics extracted_feedback {};
     PendingResidencyResolve pending_residency_resolve {};
     ShadowFramePublication frame_publication {};
     renderer::VirtualShadowPageManagementBindings page_management_bindings {};
-
-    //! Cached integer grid origins from the last stable snap, per clip level.
-    //! Used for origin-snap hysteresis to prevent page-boundary jitter when
-    //! the camera is stationary or moving sub-page distances.
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      cached_clip_grid_origin_x {};
-    std::array<std::int32_t, engine::kMaxVirtualDirectionalClipLevels>
-      cached_clip_grid_origin_y {};
-    bool has_cached_clip_grid_origins { false };
+    CacheLifecycleState lifecycle_state { CacheLifecycleState::kUninitialized };
+    std::uint64_t cache_epoch { 0U };
+    std::uint64_t view_generation { 0U };
+    bool bootstrap_feedback_complete { false };
+    bool stable_validation_pending { false };
+    bool preserve_rendered_basis_until_next_raster { false };
+    bool current_frame_requested_reset { false };
   };
 
-  struct DirectionalPreviousStateContext {
+  struct DirectionalCacheReuseAssessment {
     const engine::DirectionalVirtualShadowMetadata* previous_metadata {
       nullptr
     };
     const std::vector<glm::vec4>* previous_shadow_caster_bounds { nullptr };
+    std::int32_t first_content_mismatch_clip_index { -1 };
+    bool compare_shadow_caster_bounds_on_gpu { false };
+    bool reset_page_management_state { true };
+    bool global_dirty_resident_contents { false };
+    bool invalidate_rendered_cache_history { true };
+    bool current_view_is_uncached { true };
+    bool has_reusable_rendered_cache { false };
+    bool clipmap_key_matches { false };
+    bool address_space_compatible { false };
+    bool content_compatible { false };
+    bool shadow_content_changed { false };
+    bool shadow_bounds_count_match { false };
   };
 
   ::oxygen::Graphics* gfx_ { nullptr };
@@ -202,6 +254,8 @@ private:
     ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex uav { kInvalidShaderVisibleIndex };
     std::uint32_t entry_capacity { 0U };
+    std::uint64_t cache_epoch { 0U };
+    std::uint64_t view_generation { 0U };
   };
 
   struct ViewResolveResources {
@@ -226,12 +280,16 @@ private:
     ShaderVisibleIndex physical_page_lists_uav { kInvalidShaderVisibleIndex };
     std::uint32_t physical_page_lists_capacity { 0U };
     bool physical_page_state_reset_pending { true };
+    std::uint64_t cache_epoch { 0U };
+    std::uint64_t view_generation { 0U };
   };
 
   std::shared_ptr<graphics::Texture> physical_pool_texture_;
   graphics::NativeView physical_pool_srv_view_ {};
   ShaderVisibleIndex physical_pool_srv_ { kInvalidShaderVisibleIndex };
   PhysicalPoolConfig physical_pool_config_ {};
+  std::uint64_t cache_epoch_ { 1U };
+  std::unordered_map<ViewId, std::uint64_t> view_generations_;
 
   std::unordered_map<ViewId, ViewCacheEntry> view_cache_;
   std::unordered_map<ViewId, ViewStructuredWordBufferResources>
@@ -243,9 +301,35 @@ private:
     const DirectionalVirtualClipmapSetup& setup,
     std::span<const glm::vec4> shadow_caster_bounds,
     ViewCacheEntry& state) const -> void;
-  [[nodiscard]] OXGN_RNDR_NDAPI auto BuildDirectionalPreviousStateContext(
-    const ViewCacheEntry* previous_state) const
-    -> DirectionalPreviousStateContext;
+  OXGN_RNDR_API static auto RollExtractedCacheFrames(
+    ViewCacheEntry& state) noexcept -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto AssessDirectionalCacheReuse(
+    const DirectionalVirtualClipmapSetup& setup,
+    const ViewCacheEntry* previous_state, const ViewCacheEntry& state) const
+    -> DirectionalCacheReuseAssessment;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto HasReusableRenderedCache(
+    const ViewCacheEntry* previous_state) const noexcept -> bool;
+  OXGN_RNDR_API auto RollForwardCacheHistory(
+    const ViewCacheEntry* previous_state, ViewCacheEntry& state) const noexcept
+    -> void;
+  OXGN_RNDR_API static auto InvalidateRenderedCacheHistory(
+    ViewCacheEntry& state) noexcept -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI static auto IsPublicationLiveState(
+    CacheLifecycleState state) noexcept -> bool;
+  [[nodiscard]] OXGN_RNDR_NDAPI static auto CacheLifecycleStateName(
+    CacheLifecycleState state) noexcept -> const char*;
+  OXGN_RNDR_API auto SetLifecycleState(ViewId view_id, ViewCacheEntry& state,
+    CacheLifecycleState next_state, const char* reason) const -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetOrCreateViewGeneration(ViewId view_id)
+    -> std::uint64_t;
+  auto SyncViewGeneration(ViewId view_id, std::uint64_t view_generation)
+    -> void;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto ResourceOwnershipMatches(
+    const ViewStructuredWordBufferResources& resources,
+    const ViewCacheEntry& state) const noexcept -> bool;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto ResourceOwnershipMatches(
+    const ViewResolveResources& resources,
+    const ViewCacheEntry& state) const noexcept -> bool;
   [[nodiscard]] OXGN_RNDR_NDAPI static auto
   CanApplyPendingResolveToLiveBindings(const ViewCacheEntry& state) noexcept
     -> bool;
@@ -253,9 +337,7 @@ private:
     const DirectionalVirtualClipmapSetup& setup,
     const ViewCacheEntry* previous_state) const -> bool;
   OXGN_RNDR_API auto PopulateDirectionalPendingResolve(
-    const DirectionalVirtualClipmapSetup& setup,
-    const ViewCacheEntry* previous_state,
-    const DirectionalPreviousStateContext& previous_context,
+    const DirectionalCacheReuseAssessment& assessment,
     const engine::ViewConstants& view_constants, ViewCacheEntry& state) -> void;
   OXGN_RNDR_API auto RefreshViewExports(
     ViewId view_id, ViewCacheEntry& state) const -> void;
@@ -267,16 +349,14 @@ private:
     -> void;
   OXGN_RNDR_API auto ReleasePhysicalPool() -> void;
   [[nodiscard]] OXGN_RNDR_NDAPI auto PrepareDirectionalVirtualClipmapSetup(
-    const engine::ViewConstants& view_constants,
-    float camera_viewport_width,
+    const engine::ViewConstants& view_constants, float camera_viewport_width,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,
     const ViewCacheEntry* previous_state) const
     -> std::optional<DirectionalVirtualClipmapSetup>;
-  OXGN_RNDR_API auto BuildDirectionalVirtualViewState(
-    const engine::ViewConstants& view_constants,
-    float camera_viewport_width,
+  OXGN_RNDR_API auto BuildDirectionalVirtualViewState(ViewId view_id,
+    const engine::ViewConstants& view_constants, float camera_viewport_width,
     const engine::DirectionalShadowCandidate& candidate,
     std::span<const glm::vec4> shadow_caster_bounds,
     std::span<const glm::vec4> visible_receiver_bounds,

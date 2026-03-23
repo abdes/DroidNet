@@ -5,12 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string_view>
 #include <vector>
 
-#include <glm/glm.hpp>
 #include <glm/ext/matrix_clip_space.hpp>
+#include <glm/glm.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -19,6 +20,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
@@ -77,9 +79,8 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     return true;
   }
 
-  const glm::vec4 center_ws(
-    world_bounding_sphere.x, world_bounding_sphere.y, world_bounding_sphere.z,
-    1.0F);
+  const glm::vec4 center_ws(world_bounding_sphere.x, world_bounding_sphere.y,
+    world_bounding_sphere.z, 1.0F);
   const glm::vec4 center_ls = page.view_matrix * center_ws;
   const glm::vec4 center_clip = page.projection_matrix * center_ls;
   const float radius = world_bounding_sphere.w;
@@ -164,6 +165,34 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     .lod_index = 0U,
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
+}
+
+[[nodiscard]] auto MakeAlphaTestMaterial(
+  const oxygen::data::MaterialDomain domain
+  = oxygen::data::MaterialDomain::kOpaque)
+  -> std::shared_ptr<const oxygen::data::MaterialAsset>
+{
+  oxygen::data::pak::render::MaterialAssetDesc desc {};
+  constexpr const char* kName = "AlphaTest";
+  std::memcpy(desc.header.name, kName, std::strlen(kName));
+  desc.header.name[std::strlen(kName)] = '\0';
+  desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
+  desc.material_domain = static_cast<std::uint8_t>(domain);
+  desc.flags = oxygen::data::pak::render::kMaterialFlag_AlphaTest;
+  desc.base_color[0] = 1.0F;
+  desc.base_color[1] = 1.0F;
+  desc.base_color[2] = 1.0F;
+  desc.base_color[3] = 1.0F;
+  desc.alpha_cutoff = oxygen::data::Unorm16 { 0.5F };
+  desc.base_color_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.normal_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.metallic_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.roughness_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.ambient_occlusion_texture
+    = oxygen::data::pak::core::kFallbackResourceIndex;
+
+  return std::make_shared<const oxygen::data::MaterialAsset>(
+    oxygen::data::AssetKey {}, desc);
 }
 
 class DrawMetadataEmitterTest : public testing::Test {
@@ -406,6 +435,78 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 }
 
 NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_AlphaTestFlagRoutesOpaqueDomainMaterialThroughMaskedShadowPath)
+{
+  namespace d = oxygen::data;
+
+  std::vector<d::Vertex> vertices(3);
+  vertices[0].position = { -1.0F, 0.0F, 0.0F };
+  vertices[1].position = { 1.0F, 0.0F, 0.0F };
+  vertices[2].position = { 0.0F, 1.0F, 0.0F };
+
+  const std::vector<std::uint32_t> indices { 0U, 1U, 2U };
+  const auto material = MakeAlphaTestMaterial(d::MaterialDomain::kOpaque);
+
+  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.AlphaTestRouting")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("default", material)
+                .WithMeshView({ .first_index = 0U,
+                  .index_count = 3U,
+                  .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .EndSubMesh()
+                .Build();
+
+  const auto geometry = oxygen::engine::sceneprep::GeometryRef {
+    .asset_key = oxygen::data::AssetKey {},
+    .lod_index = 0U,
+    .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
+  };
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices_srv = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices_srv.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices_srv.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item {};
+  item.geometry = geometry;
+  item.submesh_index = 0U;
+  item.material = oxygen::engine::sceneprep::MaterialRef {
+    .source_asset_key = material->GetAssetKey(),
+    .resolved_asset_key = material->GetAssetKey(),
+    .resolved_asset = material,
+  };
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 41U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item.cast_shadows = true;
+
+  Emitter().EmitDrawMetadata(item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kMasked));
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 1U);
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kMasked));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
   SortAndPartition_ReordersBoundingSpheresWithShadowCasterDrawOrder)
 {
   const auto geometry
@@ -438,8 +539,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
         oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
       };
   shadow_only_item.main_view_visible = false;
-  shadow_only_item.world_bounding_sphere
-    = glm::vec4(-20.0F, 1.0F, 0.0F, 2.0F);
+  shadow_only_item.world_bounding_sphere = glm::vec4(-20.0F, 1.0F, 0.0F, 2.0F);
 
   Emitter().EmitDrawMetadata(main_view_item);
   Emitter().EmitDrawMetadata(shadow_only_item);
@@ -510,7 +610,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   EXPECT_GT(merged.w, 0.0F);
   for (const auto source :
     { item_a.world_bounding_sphere, item_b.world_bounding_sphere }) {
-    const auto center_delta = glm::distance(glm::vec3(merged), glm::vec3(source));
+    const auto center_delta
+      = glm::distance(glm::vec3(merged), glm::vec3(source));
     EXPECT_LE(center_delta + source.w, merged.w + 1.0e-4F);
   }
 }

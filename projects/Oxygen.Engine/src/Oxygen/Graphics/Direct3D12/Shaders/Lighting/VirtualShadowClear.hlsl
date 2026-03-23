@@ -56,13 +56,17 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             packed_tile_coords;
     }
     if (thread_index == 0u) {
-        resolve_stats[0].pending_raster_page_count = 0u;
-        resolve_stats[0].requested_page_list_count = 0u;
-        resolve_stats[0].dirty_page_list_count = 0u;
-        resolve_stats[0].clean_page_list_count = 0u;
-        resolve_stats[0].available_page_list_count = 0u;
+        resolve_stats[0].scheduled_raster_page_count = 0u;
         resolve_stats[0].allocated_page_count = 0u;
-        resolve_stats[0].reserved0 = 0u;
-        resolve_stats[0].reserved1 = 0u;
+        resolve_stats[0].requested_page_count = 0u;
+        resolve_stats[0].resident_dirty_page_count = 0u;
+        resolve_stats[0].resident_clean_page_count = 0u;
+        resolve_stats[0].pages_requiring_schedule_count = 0u;
+        resolve_stats[0].available_page_list_count = 0u;
+        resolve_stats[0].rasterized_page_count = 0u;
+        resolve_stats[0].cached_page_transition_count = 0u;
+        resolve_stats[0]._pad0 = 0u;
+        resolve_stats[0]._pad1 = 0u;
+        resolve_stats[0]._pad2 = 0u;
     }
 }

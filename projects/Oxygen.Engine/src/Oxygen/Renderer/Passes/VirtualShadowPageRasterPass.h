@@ -10,8 +10,10 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Types/VirtualShadowRenderPlan.h>
@@ -19,6 +21,19 @@
 namespace oxygen::engine {
 
 struct DrawMetadata;
+
+namespace detail {
+  struct VirtualShadowRasterExtractionSlotResources {
+    std::shared_ptr<graphics::Buffer> resolve_stats_readback_buffer {};
+    renderer::VirtualShadowResolveStats* mapped_resolve_stats_ptr { nullptr };
+  };
+
+  struct VirtualShadowRasterExtractionResources {
+    std::array<VirtualShadowRasterExtractionSlotResources,
+      frame::kFramesInFlight.get()>
+      slots {};
+  };
+}
 
 //! Virtual shadow-map page raster pass.
 /*!
@@ -63,18 +78,37 @@ private:
     std::uint32_t atlas_tiles_per_axis { 0U };
     std::uint32_t draw_page_ranges_srv_index { 0xFFFFFFFFU };
     std::uint32_t draw_page_indices_srv_index { 0xFFFFFFFFU };
+    std::uint32_t virtual_directional_shadow_metadata_srv_index { 0xFFFFFFFFU };
     std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
   };
   static_assert(sizeof(RasterPassConstants) % 16U == 0U);
+
+  struct alignas(16) RasterFinalizePassConstants {
+    std::uint32_t schedule_srv_index { 0xFFFFFFFFU };
+    std::uint32_t schedule_count_srv_index { 0xFFFFFFFFU };
+    std::uint32_t page_flags_uav_index { 0xFFFFFFFFU };
+    std::uint32_t physical_page_metadata_uav_index { 0xFFFFFFFFU };
+    std::uint32_t resolve_stats_uav_index { 0xFFFFFFFFU };
+    std::uint32_t atlas_tiles_per_axis { 0U };
+    std::uint32_t schedule_capacity { 0U };
+    std::uint32_t _pad0 { 0U };
+  };
+  static_assert(sizeof(RasterFinalizePassConstants) % 16U == 0U);
 
   auto PrepareFullAtlasDepthStencilView(graphics::Texture& depth_texture) const
     -> graphics::NativeView;
   auto EnsureClearPipelineState() -> void;
+  auto EnsureFinalizePipelineState() -> void;
   auto EnsurePassConstantsCapacity() -> void;
+  auto EnsureFinalizePassConstantsCapacity() -> void;
   auto HasLiveGpuRasterInputs(
     const renderer::VirtualShadowGpuRasterInputs& gpu_inputs) const -> bool;
   auto UploadRasterPassConstants() -> void;
+  auto UploadFinalizePassConstants() -> void;
+  auto EnsureRasterExtractionResources(ViewId view_id, frame::Slot frame_slot)
+    -> detail::VirtualShadowRasterExtractionSlotResources*;
+  static auto UnMapRasterExtractionResources(
+    detail::VirtualShadowRasterExtractionResources& resources) noexcept -> void;
   auto EmitIndirectResolvedPageDrawRange(graphics::CommandRecorder& recorder,
     const graphics::Buffer& draw_args_buffer, const DrawMetadata* records,
     std::uint32_t draw_count, std::uint32_t begin, std::uint32_t end,
@@ -86,11 +120,20 @@ private:
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   void* pass_constants_mapped_ptr_ { nullptr };
+  std::shared_ptr<graphics::Buffer> finalize_pass_constants_buffer_;
+  void* finalize_pass_constants_mapped_ptr_ { nullptr };
+  std::unordered_map<ViewId, detail::VirtualShadowRasterExtractionResources>
+    raster_extraction_resources_;
   std::array<graphics::NativeView, frame::kFramesInFlight.get()>
     pass_constants_cbvs_ {};
+  std::array<graphics::NativeView, frame::kFramesInFlight.get()>
+    finalize_pass_constants_cbvs_ {};
   std::array<ShaderVisibleIndex, frame::kFramesInFlight.get()>
     pass_constants_indices_ {};
+  std::array<ShaderVisibleIndex, frame::kFramesInFlight.get()>
+    finalize_pass_constants_indices_ {};
   std::optional<graphics::GraphicsPipelineDesc> clear_pso_ {};
+  std::optional<graphics::ComputePipelineDesc> finalize_pso_ {};
 };
 
 } // namespace oxygen::engine

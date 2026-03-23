@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -66,13 +67,12 @@ namespace {
     std::uint32_t _pad_stride1 { 0U };
     // Depth texture dimensions used for bounds checks and NDC reconstruction.
     glm::uvec2 screen_dimensions { 0U, 0U };
-    // Padding to keep the matrix field 16-byte aligned in the constant buffer.
-    std::uint32_t _pad1 { 0U };
-    // Padding to keep the matrix field 16-byte aligned in the constant buffer.
-    std::uint32_t _pad2 { 0U };
+    // Current camera jitter expressed in NDC so the shader can reconstruct
+    // receiver positions in the stable screen basis.
+    glm::vec2 pixel_jitter_ndc { 0.0F, 0.0F };
 
-    // Inverse view-projection matrix used to reconstruct receiver world
-    // positions.
+    // Stable inverse view-projection matrix used to reconstruct receiver world
+    // positions after removing current-frame jitter from the sampled pixel.
     glm::mat4 inv_view_projection_matrix { 1.0F };
   };
   static_assert(sizeof(VirtualShadowRequestPassConstants)
@@ -145,19 +145,65 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     co_return;
   }
 
-  const auto* metadata = shadow_manager->TryGetVirtualDirectionalMetadata(
+  const auto* packet = shadow_manager->TryGetVirtualFramePacket(
     Context().current_view.view_id);
-  const auto* publication
-    = shadow_manager->TryGetFramePublication(Context().current_view.view_id);
-  if (metadata == nullptr) {
+  if (packet == nullptr || !packet->has_directional_metadata) {
     co_return;
   }
+  if (packet->has_page_management_state
+    && packet->page_management_state.reset_request_pending != 0U) {
+    LOG_F(INFO,
+      "VirtualShadowRequestPass: frame={} view={} skipped because reset "
+      "barrier is active source_frame={} cache_epoch={} view_generation={}",
+      Context().frame_sequence.get(), Context().current_view.view_id.get(),
+      packet->source_frame_sequence.get(), packet->cache_epoch,
+      packet->view_generation);
+    // Clear stale GPU buffers so downstream passes (PageUpdate, PageAlloc)
+    // do not read old mark/request data from a previous scene.  Without
+    // this, the persistent page_mark_flags_buffer_ retains
+    // OXYGEN_VSM_PAGE_FLAG_USED_THIS_FRAME bits from the destroyed scene
+    // and PageAllocPass spuriously allocates physical pages, corrupting the
+    // new scene's page table during the clearing phase.
+    if (request_words_buffer_ && clear_upload_buffer_
+      && page_mark_flags_buffer_ && page_mark_flags_clear_upload_buffer_) {
+      if (!recorder.IsResourceTracked(*clear_upload_buffer_)) {
+        recorder.BeginTrackingResourceState(
+          *clear_upload_buffer_, graphics::ResourceStates::kCopySource, false);
+      }
+      if (!recorder.IsResourceTracked(*request_words_buffer_)) {
+        recorder.BeginTrackingResourceState(
+          *request_words_buffer_, graphics::ResourceStates::kCommon, true);
+      }
+      if (!recorder.IsResourceTracked(*page_mark_flags_buffer_)) {
+        recorder.BeginTrackingResourceState(
+          *page_mark_flags_buffer_, graphics::ResourceStates::kCommon, true);
+      }
+      recorder.RequireResourceState(
+        *request_words_buffer_, graphics::ResourceStates::kCopyDest);
+      recorder.RequireResourceState(
+        *page_mark_flags_buffer_, graphics::ResourceStates::kCopyDest);
+      recorder.FlushBarriers();
+      recorder.CopyBuffer(*request_words_buffer_, 0U, *clear_upload_buffer_,
+        0U,
+        static_cast<std::size_t>(kMaxRequestWordCount * sizeof(std::uint32_t)));
+      recorder.CopyBuffer(*page_mark_flags_buffer_, 0U,
+        *page_mark_flags_clear_upload_buffer_, 0U,
+        static_cast<std::size_t>(
+          kMaxSupportedPageCount * sizeof(std::uint32_t)));
+      recorder.RequireResourceState(
+        *request_words_buffer_, graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(
+        *page_mark_flags_buffer_, graphics::ResourceStates::kShaderResource);
+      recorder.FlushBarriers();
+    }
+    co_return;
+  }
+  const auto& metadata = packet->directional_metadata;
 
-  if (metadata->clip_level_count == 0U || metadata->pages_per_axis == 0U) {
+  if (metadata.clip_level_count == 0U || metadata.pages_per_axis == 0U) {
     co_return;
   }
-  if (publication == nullptr
-    || !publication->virtual_directional_shadow_metadata_srv.IsValid()) {
+  if (!packet->virtual_directional_shadow_metadata_srv.IsValid()) {
     LOG_F(ERROR,
       "VirtualShadowRequestPass: missing current virtual directional metadata "
       "publication for view {}",
@@ -165,8 +211,8 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     co_return;
   }
 
-  const auto total_pages = metadata->clip_level_count * metadata->pages_per_axis
-    * metadata->pages_per_axis;
+  const auto total_pages
+    = metadata.clip_level_count * metadata.pages_per_axis * metadata.pages_per_axis;
   const auto request_word_count = (std::max(1U, total_pages) + 31U) / 32U;
   if (request_word_count > kMaxRequestWordCount) {
     LOG_F(WARNING,
@@ -181,6 +227,17 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   EnsureRequestBuffers();
   EnsurePassConstantsBuffer();
 
+  LOG_F(INFO,
+    "VirtualShadowRequestPass: frame={} view={} packet source_frame={} "
+    "cache_epoch={} view_generation={} meta_srv={} clip_levels={} "
+    "pages_per_axis={} total_pages={} request_words_uav={} "
+    "page_mark_flags_uav={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    packet->source_frame_sequence.get(), packet->cache_epoch,
+    packet->view_generation, packet->virtual_directional_shadow_metadata_srv.get(),
+    metadata.clip_level_count, metadata.pages_per_axis, total_pages,
+    request_words_uav_.get(), page_mark_flags_uav_.get());
+
   const auto depth_texture_srv = EnsureDepthTextureSrv(depth_texture);
   if (depth_texture_srv == kInvalidShaderVisibleIndex) {
     LOG_F(ERROR,
@@ -192,7 +249,7 @@ auto VirtualShadowRequestPass::DoPrepareResources(
   const VirtualShadowRequestPassConstants pass_constants {
     .depth_texture_index = depth_texture_srv,
     .virtual_directional_shadow_metadata_index
-    = publication->virtual_directional_shadow_metadata_srv,
+    = packet->virtual_directional_shadow_metadata_srv,
     .request_words_uav_index = request_words_uav_,
     .page_mark_flags_uav_index = page_mark_flags_uav_,
     .request_word_count = request_word_count,
@@ -201,8 +258,12 @@ auto VirtualShadowRequestPass::DoPrepareResources(
     .pixel_stride = glm::uvec2(active_pixel_stride_, active_pixel_stride_),
     .screen_dimensions = glm::uvec2(depth_texture.GetDescriptor().width,
       depth_texture.GetDescriptor().height),
-    .inv_view_projection_matrix
-    = Context().current_view.resolved_view->InverseViewProjection(),
+    .pixel_jitter_ndc
+    = PixelJitterToNdc(Context().current_view.resolved_view->PixelJitter(),
+      Context().current_view.resolved_view->Viewport()),
+    .inv_view_projection_matrix = glm::inverse(
+      Context().current_view.resolved_view->StableProjectionMatrix()
+      * Context().current_view.resolved_view->ViewMatrix()),
   };
   std::memcpy(
     pass_constants_mapped_ptr_, &pass_constants, sizeof(pass_constants));
@@ -268,6 +329,11 @@ auto VirtualShadowRequestPass::DoExecute(graphics::CommandRecorder& recorder)
   const auto group_count_y = (height + pixel_stride * kDispatchGroupSize - 1U)
     / (pixel_stride * kDispatchGroupSize);
   recorder.Dispatch(group_count_x, group_count_y, 1U);
+  LOG_F(INFO,
+    "VirtualShadowRequestPass: frame={} view={} dispatched groups=({}, {}, 1) "
+    "pixel_stride={} request_word_count={} screen=({}, {})",
+    Context().frame_sequence.get(), active_view_id_.get(), group_count_x,
+    group_count_y, pixel_stride, active_request_word_count_, width, height);
 
   co_return;
 }

@@ -266,6 +266,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Lighting/VirtualShadowBuildDraws.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Lighting/VirtualShadowPageFinalize.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
     .path="Atmosphere/TransmittanceLut_CS.hlsl",

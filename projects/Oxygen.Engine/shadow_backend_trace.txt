@@ -1,0 +1,18 @@
+ResolveCurrentFrame(9): enter
+ResolveCurrentFrame(9): reset path
+EnsureViewResolveResources(9): enter
+EnsureViewResolveResources(9): allocating resources
+EnsureViewResolveResources(9): allocation complete
+ResolveCurrentFrame(9): resolve resources ensured
+ResolveCurrentFrame(9): reset state updated
+ResolveCurrentFrame(9): before refresh exports
+ResolveCurrentFrame(9): after refresh exports
+ResolveCurrentFrame(11): enter
+ResolveCurrentFrame(11): reset path
+EnsureViewResolveResources(11): enter
+EnsureViewResolveResources(11): allocating resources
+EnsureViewResolveResources(11): allocation complete
+ResolveCurrentFrame(11): resolve resources ensured
+ResolveCurrentFrame(11): reset state updated
+ResolveCurrentFrame(11): before refresh exports
+ResolveCurrentFrame(11): after refresh exports

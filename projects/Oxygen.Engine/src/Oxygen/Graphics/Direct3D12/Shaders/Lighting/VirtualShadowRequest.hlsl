@@ -33,8 +33,7 @@ struct VirtualShadowRequestPassConstants
     uint _pad_stride0;
     uint _pad_stride1;
     uint2 screen_dimensions;
-    uint _pad1;
-    uint _pad2;
+    float2 pixel_jitter_ndc;
     float4x4 inv_view_projection_matrix;
 };
 
@@ -236,6 +235,7 @@ static float3 ReconstructWorldPosition(
         / max(float2(pass_constants.screen_dimensions), float2(1.0, 1.0));
     float2 ndc = pixel_center * 2.0 - 1.0;
     ndc.y = -ndc.y;
+    ndc -= pass_constants.pixel_jitter_ndc;
 
     const float4 world_pos_h = mul(
         pass_constants.inv_view_projection_matrix,

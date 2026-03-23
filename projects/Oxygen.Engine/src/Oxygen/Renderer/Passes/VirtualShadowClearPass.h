@@ -66,7 +66,8 @@ private:
     pass_constants_;
 
   ViewId active_view_id_ {};
-  renderer::VirtualShadowPageManagementBindings active_page_management_bindings_ {};
+  renderer::VirtualShadowPageManagementBindings
+    active_page_management_bindings_ {};
   std::uint32_t active_total_page_count_ { 0U };
   std::uint32_t active_dispatch_group_count_ { 0U };
   bool active_dispatch_ { false };

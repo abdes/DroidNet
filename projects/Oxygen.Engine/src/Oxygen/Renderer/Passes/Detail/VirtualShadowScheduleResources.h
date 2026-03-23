@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 
 namespace oxygen::engine::detail {
@@ -25,6 +27,10 @@ struct VirtualShadowScheduleResources {
   std::shared_ptr<graphics::Buffer> count_buffer;
   ShaderVisibleIndex count_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex count_uav { kInvalidShaderVisibleIndex };
+  std::array<std::shared_ptr<graphics::Buffer>, frame::kFramesInFlight.get()>
+    count_readback_buffers {};
+  std::array<std::uint32_t*, frame::kFramesInFlight.get()>
+    count_readback_mapped_ptrs {};
 
   std::uint32_t entry_capacity { 0U };
 

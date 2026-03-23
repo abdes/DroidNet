@@ -108,14 +108,17 @@ auto VirtualShadowPageAllocPass::DoPrepareResources(
       = metadata->clip_metadata[clip_index].origin_page_scale.z;
   }
 
-  const auto request_word_count
-    = request_pass != nullptr ? request_pass->GetActiveRequestWordCount() : 0U;
-  const auto request_words_srv
-    = request_pass != nullptr ? request_pass->GetRequestWordsSrv()
-                              : kInvalidShaderVisibleIndex;
-  const auto page_mark_flags_srv
-    = request_pass != nullptr ? request_pass->GetPageMarkFlagsSrv()
-                              : kInvalidShaderVisibleIndex;
+  const bool has_active_request_dispatch
+    = request_pass != nullptr && request_pass->HasActiveDispatch();
+  const auto request_word_count = has_active_request_dispatch
+    ? request_pass->GetActiveRequestWordCount()
+    : 0U;
+  const auto request_words_srv = has_active_request_dispatch
+    ? request_pass->GetRequestWordsSrv()
+    : kInvalidShaderVisibleIndex;
+  const auto page_mark_flags_srv = has_active_request_dispatch
+    ? request_pass->GetPageMarkFlagsSrv()
+    : kInvalidShaderVisibleIndex;
 
   pass_constants_.Ensure(
     *gfx_, "VirtualShadowPageAllocPass.Constants",
@@ -179,6 +182,16 @@ auto VirtualShadowPageAllocPass::DoPrepareResources(
   active_clip_level_count_ = metadata->clip_level_count;
   active_pages_per_level_ = metadata->pages_per_axis * metadata->pages_per_axis;
 
+  LOG_F(INFO,
+    "VirtualShadowPageAllocPass: frame={} view={} request_words_srv={} "
+    "page_mark_flags_srv={} request_word_count={} dispatch_groups={} "
+    "total_pages={} physical_capacity={} clip_levels={} pages_per_axis={}",
+    Context().frame_sequence.get(), Context().current_view.view_id.get(),
+    active_request_words_srv_.get(), active_page_mark_flags_srv_.get(),
+    active_request_word_count_, active_dispatch_group_count_,
+    active_total_page_count_, active_page_management_bindings_.physical_page_capacity,
+    active_clip_level_count_, active_pages_per_axis_);
+
   co_return;
 }
 
@@ -199,10 +212,28 @@ auto VirtualShadowPageAllocPass::DoExecute(graphics::CommandRecorder& recorder)
   SetPassConstantsIndex(pass_constants_.Index(base_slot));
   detail::DispatchVirtualPageManagementPass(
     *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
+  LOG_F(INFO,
+    "VirtualShadowPageAllocPass: frame={} view={} dispatched alloc phase=0 "
+    "groups={} page_table_uav={} page_flags_uav={} phys_meta_uav={} "
+    "phys_lists_srv={} phys_lists_uav={} resolve_stats_uav={}",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    active_dispatch_group_count_,
+    active_page_management_bindings_.page_table_uav.get(),
+    active_page_management_bindings_.page_flags_uav.get(),
+    active_page_management_bindings_.physical_page_metadata_uav.get(),
+    active_page_management_bindings_.physical_page_lists_srv.get(),
+    active_page_management_bindings_.physical_page_lists_uav.get(),
+    active_page_management_bindings_.resolve_stats_uav.get());
 
   SetPassConstantsIndex(pass_constants_.Index(base_slot + 1U));
   detail::DispatchVirtualPageManagementPass(
     *shadow_manager, active_view_id_, recorder, active_dispatch_group_count_);
+  LOG_F(INFO,
+    "VirtualShadowPageAllocPass: frame={} view={} dispatched alloc phase=1 "
+    "groups={} request_words_srv={} page_mark_flags_srv={}",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    active_dispatch_group_count_, active_request_words_srv_.get(),
+    active_page_mark_flags_srv_.get());
 
   co_return;
 }

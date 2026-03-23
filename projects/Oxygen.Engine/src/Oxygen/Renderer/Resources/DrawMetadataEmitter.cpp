@@ -89,6 +89,14 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
     break;
   }
 
+  const bool alpha_test_enabled
+    = (mat->GetFlags() & oxygen::data::pak::render::kMaterialFlag_AlphaTest)
+    != 0U;
+  if (alpha_test_enabled && !mask.IsSet(e::PassMaskBit::kTransparent)) {
+    mask.Unset(e::PassMaskBit::kOpaque);
+    mask.Set(e::PassMaskBit::kMasked);
+  }
+
   // Double-sided is explicit and data-driven via the PAK material flag.
   // Render passes use it to pick appropriate cull mode.
   if (mat->IsDoubleSided()) {
@@ -703,9 +711,8 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
           merged_radius = (std::max)(merged_radius,
             glm::distance(merged_center, glm::vec3(sphere)) + sphere.w);
         }
-        merged_bound
-          = glm::vec4(merged_center.x, merged_center.y, merged_center.z,
-            merged_radius);
+        merged_bound = glm::vec4(
+          merged_center.x, merged_center.y, merged_center.z, merged_radius);
       } else {
         merged_bound = draw_bounding_spheres_[indices[0]];
       }

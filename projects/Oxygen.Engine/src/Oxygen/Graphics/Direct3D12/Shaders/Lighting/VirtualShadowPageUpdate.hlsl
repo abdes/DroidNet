@@ -42,7 +42,8 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     RWStructuredBuffer<VirtualShadowResolveStats> resolve_stats =
         ResourceDescriptorHeap[pass_constants.resolve_stats_uav_index];
     const bool has_page_mark_flags =
-        BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
+        pass_constants.request_word_count > 0u
+        && BX_IN_GLOBAL_SRV(pass_constants.page_mark_flags_srv_index);
 
     const uint thread_index = dispatch_thread_id.x;
     if (thread_index >= pass_constants.physical_page_capacity) {
@@ -133,9 +134,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         mark_flags = page_mark_flags[global_page_index];
     }
     const bool dynamic_uncached =
-        dirty_page_flags[thread_index + pass_constants.physical_page_capacity] != 0u;
+        VirtualShadowPageHasFlag(
+            metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_DYNAMIC_UNCACHED)
+        || dirty_page_flags[thread_index + pass_constants.physical_page_capacity] != 0u;
     const bool static_uncached =
-        dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] != 0u;
+        VirtualShadowPageHasFlag(
+            metadata.page_flags, OXYGEN_VSM_PAGE_FLAG_STATIC_UNCACHED)
+        || dirty_page_flags[thread_index + 2u * pass_constants.physical_page_capacity] != 0u;
     const bool detail_geometry =
         VirtualShadowPageHasFlag(mark_flags, OXYGEN_VSM_PAGE_FLAG_DETAIL_GEOMETRY);
     const bool used_this_frame =
@@ -160,13 +165,17 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     uint list_index = 0u;
     uint list_start = clean_list_start;
     if (used_this_frame) {
-        InterlockedAdd(resolve_stats[0].requested_page_list_count, 1u, list_index);
+        InterlockedAdd(resolve_stats[0].requested_page_count, 1u, list_index);
+        if (dynamic_uncached || static_uncached) {
+            uint ignored = 0u;
+            InterlockedAdd(resolve_stats[0].pages_requiring_schedule_count, 1u, ignored);
+        }
         list_start = requested_list_start;
     } else if (dynamic_uncached || static_uncached) {
-        InterlockedAdd(resolve_stats[0].dirty_page_list_count, 1u, list_index);
+        InterlockedAdd(resolve_stats[0].resident_dirty_page_count, 1u, list_index);
         list_start = dirty_list_start;
     } else {
-        InterlockedAdd(resolve_stats[0].clean_page_list_count, 1u, list_index);
+        InterlockedAdd(resolve_stats[0].resident_clean_page_count, 1u, list_index);
         list_start = clean_list_start;
     }
     if (list_index < pass_constants.physical_page_capacity) {

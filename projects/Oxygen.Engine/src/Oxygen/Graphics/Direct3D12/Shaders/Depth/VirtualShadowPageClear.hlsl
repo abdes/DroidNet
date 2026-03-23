@@ -18,8 +18,8 @@ struct VirtualShadowRasterPassConstants
     uint atlas_tiles_per_axis;
     uint draw_page_ranges_srv_index;
     uint draw_page_indices_srv_index;
+    uint virtual_directional_shadow_metadata_srv_index;
     uint _pad0;
-    uint _pad1;
 };
 
 struct VS_OUTPUT

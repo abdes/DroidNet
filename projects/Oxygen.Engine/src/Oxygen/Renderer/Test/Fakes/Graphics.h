@@ -617,12 +617,21 @@ public:
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
   {
-    const auto copy_key = queue_strategy.KeyFor(QueueRole::kTransfer);
-    const auto gfx_key = queue_strategy.KeyFor(QueueRole::kGraphics);
-    queues_[copy_key]
-      = std::make_shared<FakeCommandQueue>("CopyQ", QueueRole::kTransfer);
-    queues_[gfx_key]
-      = std::make_shared<FakeCommandQueue>("GfxQ", QueueRole::kGraphics);
+    queue_strategy_ = queue_strategy.Clone();
+    queues_.clear();
+
+    for (const auto& spec : queue_strategy.Specifications()) {
+      if (queues_.contains(spec.key)) {
+        continue;
+      }
+
+      const auto name = spec.role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
+      queues_[spec.key] = std::make_shared<FakeCommandQueue>(name, spec.role);
+    }
+  }
+  auto QueueKeyFor(const graphics::QueueRole role) const -> graphics::QueueKey override
+  {
+    return queue_strategy_ ? queue_strategy_->KeyFor(role) : QueueKey {};
   }
   auto GetCommandQueue(const QueueKey& key) const
     -> observer_ptr<CommandQueue> override
@@ -636,6 +645,13 @@ public:
   auto GetCommandQueue(const QueueRole role) const
     -> observer_ptr<CommandQueue> override
   {
+    if (queue_strategy_) {
+      if (const auto it = queues_.find(queue_strategy_->KeyFor(role));
+        it != queues_.end()) {
+        return oxygen::observer_ptr<CommandQueue>(it->second.get());
+      }
+    }
+
     for (const auto& v : queues_ | std::views::values) {
       if (v->GetQueueRole() == role) {
         return oxygen::observer_ptr<CommandQueue>(v.get());
@@ -660,6 +676,7 @@ public:
   TextureCommandLog texture_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
+  std::unique_ptr<graphics::QueuesStrategy> queue_strategy_ {};
   mutable MiniDescriptorAllocator descriptor_allocator_;
   // Test injection flags (mutable to allow const CreateBuffer)
   mutable bool fail_map_ { false };

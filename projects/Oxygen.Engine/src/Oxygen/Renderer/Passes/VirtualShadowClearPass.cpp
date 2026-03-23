@@ -21,6 +21,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::engine {
 
@@ -34,8 +35,8 @@ VirtualShadowClearPass::VirtualShadowClearPass(
 
 VirtualShadowClearPass::~VirtualShadowClearPass() = default;
 
-auto VirtualShadowClearPass::DoPrepareResources(
-  graphics::CommandRecorder&) -> co::Co<>
+auto VirtualShadowClearPass::DoPrepareResources(graphics::CommandRecorder&)
+  -> co::Co<>
 {
   active_dispatch_ = false;
   active_view_id_ = {};
@@ -75,8 +76,7 @@ auto VirtualShadowClearPass::DoPrepareResources(
     co_return;
   }
 
-  pass_constants_.Ensure(
-    *gfx_, "VirtualShadowClearPass.Constants",
+  pass_constants_.Ensure(*gfx_, "VirtualShadowClearPass.Constants",
     detail::kVirtualShadowPassConstantsStride);
   const auto slot = static_cast<std::size_t>(Context().frame_slot.get());
   const auto pass_constants_index = pass_constants_.Index(slot);
@@ -84,7 +84,8 @@ auto VirtualShadowClearPass::DoPrepareResources(
   const detail::VirtualShadowPassConstants constants {
     .page_table_uav_index = page_management_bindings->page_table_uav,
     .page_flags_uav_index = page_management_bindings->page_flags_uav,
-    .dirty_page_flags_uav_index = page_management_bindings->dirty_page_flags_uav,
+    .dirty_page_flags_uav_index
+    = page_management_bindings->dirty_page_flags_uav,
     .physical_page_metadata_uav_index
     = page_management_bindings->physical_page_metadata_uav,
     .resolve_stats_uav_index = page_management_bindings->resolve_stats_uav,
@@ -96,7 +97,8 @@ auto VirtualShadowClearPass::DoPrepareResources(
   };
 
   auto* slot_ptr = static_cast<std::byte*>(pass_constants_.MappedPtr())
-    + static_cast<std::ptrdiff_t>(slot * detail::kVirtualShadowPassConstantsStride);
+    + static_cast<std::ptrdiff_t>(
+      slot * detail::kVirtualShadowPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
   SetPassConstantsIndex(pass_constants_index);
 
@@ -104,11 +106,34 @@ auto VirtualShadowClearPass::DoPrepareResources(
   active_view_id_ = Context().current_view.view_id;
   active_page_management_bindings_ = *page_management_bindings;
   active_total_page_count_ = total_page_count;
-  active_dispatch_group_count_ = (std::max(
-                                    total_page_count,
-                                    page_management_bindings->physical_page_capacity * 3U)
-                                  + kDispatchGroupSize - 1U)
+  active_dispatch_group_count_
+    = (std::max(total_page_count,
+         page_management_bindings->physical_page_capacity * 3U)
+        + kDispatchGroupSize - 1U)
     / kDispatchGroupSize;
+
+  LOG_F(INFO,
+    "VirtualShadowClearPass: frame={} view={} reset={} total_pages={} "
+    "physical_capacity={} atlas_tiles={} dispatch_groups={} "
+    "page_table_uav={} page_flags_uav={} dirty_flags_uav={} "
+    "physical_meta_uav={} resolve_stats_uav={} clip_levels={} "
+    "pages_per_axis={} page_size={} page_table_offset={} coarse_clip_mask={} "
+    "clip0_origin=({}, {}) clip0_page_world={} light_view_t=({}, {}, {})",
+    Context().frame_sequence.get(), active_view_id_.get(),
+    page_management_bindings->reset_page_management_state, total_page_count,
+    page_management_bindings->physical_page_capacity,
+    page_management_bindings->atlas_tiles_per_axis, active_dispatch_group_count_,
+    page_management_bindings->page_table_uav.get(),
+    page_management_bindings->page_flags_uav.get(),
+    page_management_bindings->dirty_page_flags_uav.get(),
+    page_management_bindings->physical_page_metadata_uav.get(),
+    page_management_bindings->resolve_stats_uav.get(),
+    metadata->clip_level_count, metadata->pages_per_axis,
+    metadata->page_size_texels, metadata->page_table_offset,
+    metadata->coarse_clip_mask, metadata->clip_metadata[0].origin_page_scale.x,
+    metadata->clip_metadata[0].origin_page_scale.y,
+    metadata->clip_metadata[0].origin_page_scale.z, metadata->light_view[3][0],
+    metadata->light_view[3][1], metadata->light_view[3][2]);
 
   co_return;
 }

@@ -53,6 +53,7 @@ public:
 
   OXGN_RNDR_API auto OnFrameStart(
     RendererTag tag, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  OXGN_RNDR_API auto ResetCachedState() -> void;
 
   OXGN_RNDR_API auto PublishView(ViewId view_id,
     const engine::ViewConstants& view_constants,
@@ -64,6 +65,8 @@ public:
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetFramePublication(
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetShadowInstanceMetadata(
+    ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto

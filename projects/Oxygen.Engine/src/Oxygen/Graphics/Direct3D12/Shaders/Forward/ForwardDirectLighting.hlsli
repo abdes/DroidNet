@@ -111,8 +111,6 @@ float3 AccumulateDirectionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const ShadowFrameBindings shadow_bindings = LoadResolvedShadowFrameBindings();
-    const uint sun_shadow_index = shadow_bindings.sun_shadow_index;
     StructuredBuffer<DirectionalLightBasic> dir_lights;
     uint dir_count = 0;
     uint dir_stride = 0;
@@ -124,47 +122,9 @@ float3 AccumulateDirectionalLights(
         dir_lights.GetDimensions(dir_count, dir_stride);
     }
 
-    // Render the Sun separately using the resolved lighting-frame data.
-    bool sun_rendered = false;
-    if (HasSunLight()) {
-        const float3 sun_dir_ws = GetSunDirectionWS();
-        const float3 sun_color = GetSunColorRGB();
-        const float  sun_illuminance = GetSunIlluminance();
-
-        const float3 L = SafeNormalize(sun_dir_ws);
-        const float  NdotL = saturate(dot(N, L));
-
-        if (NdotL > 0.0) {
-            // Compute atmospheric transmittance specifically for the sun
-            float3 sun_transmittance = ComputeSunTransmittance(world_pos, atmo, L);
-            const float shadow_visibility = ComputeShadowVisibility(
-                sun_shadow_index, world_pos, shadow_normal_ws, L);
-
-            const float3 H = SafeNormalize(V + L);
-            const float  NdotH = saturate(dot(N, H));
-            const float  VdotH = saturate(dot(V, H));
-
-            const float3 F = FresnelSchlick(VdotH, F0);
-            const float  D = DistributionGGX(NdotH, roughness);
-            const float  G = GeometrySmith(NdotV, NdotL, roughness);
-
-            const float3 numerator = D * G * F;
-            const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
-            const float3 specular = numerator / denom;
-
-            const float3 kS = F;
-            const float3 kD = (1.0 - kS) * (1.0 - metalness);
-
-            const float3 diffuse = kD * base_rgb;
-
-            const float irradiance = LuxToIrradiance(sun_illuminance);
-            const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * sun_color * sun_transmittance
-                * radiance * NdotL * shadow_visibility;
-        }
-        sun_rendered = true;
-    }
-
+    // Direct surface lighting comes only from the directional-light buffer.
+    // The resolved sun payload remains an atmosphere/sky input, not a second
+    // authoritative source of direct surface illumination.
     if (has_directional_buffer) {
         const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
         for (uint i = 0; i < dir_limit; ++i) {
@@ -172,18 +132,7 @@ float3 AccumulateDirectionalLights(
             if ((dl.flags & DIRECTIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
                 continue;
             }
-
-            // If this light is tagged as a sun light, and we've already rendered the sun
-            // via the resolved data, skip it to avoid double lighting.
             const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
-            if (is_sun && sun_rendered) {
-                continue;
-            }
-
-            // Note: If we have multiple sun lights and HasSunLight() is false (e.g. synthetic sun disabled,
-            // but scene lights exist?), then we shouldn't skip them.
-            // But HasSunLight() reflects the resolved state. If resolved state says enabled,
-            // we render it once efficiently above and skip here.
 
             const float3 light_dir_ws = -dl.direction_ws;
             const float3 light_color = dl.color_rgb;

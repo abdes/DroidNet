@@ -106,6 +106,51 @@ namespace {
 
 } // namespace
 
+auto FindSunTaggedDirectionalLight(
+  std::span<const DirectionalLightBasic> directional_lights)
+  -> std::optional<DirectionalLightBasic>
+{
+  for (const auto& light : directional_lights) {
+    const auto flags = static_cast<DirectionalLightFlags>(light.flags);
+    if ((flags & DirectionalLightFlags::kSunLight)
+      != DirectionalLightFlags::kNone) {
+      return light;
+    }
+  }
+  return std::nullopt;
+}
+
+auto ResolvedSunMatchesDirectionalLight(const SyntheticSunData& resolved_sun,
+  const DirectionalLightBasic& light, const float direction_epsilon,
+  const float illuminance_relative_epsilon) noexcept -> bool
+{
+  if (resolved_sun.enabled == 0U) {
+    return false;
+  }
+
+  const float light_dir_len_sq = glm::dot(light.direction_ws, light.direction_ws);
+  if (light_dir_len_sq <= oxygen::math::EpsilonDirection) {
+    return false;
+  }
+
+  const glm::vec3 resolved_direction = glm::normalize(resolved_sun.GetDirection());
+  const glm::vec3 expected_direction_to_sun = -glm::normalize(light.direction_ws);
+  const bool direction_matches
+    = glm::length(resolved_direction - expected_direction_to_sun)
+    <= direction_epsilon;
+
+  const float expected_illuminance = light.intensity_lux;
+  const float resolved_illuminance = resolved_sun.GetIlluminance();
+  const float illuminance_tolerance
+    = (std::max)(1.0F,
+      std::abs(expected_illuminance) * illuminance_relative_epsilon);
+  const bool illuminance_matches
+    = std::abs(resolved_illuminance - expected_illuminance)
+    <= illuminance_tolerance;
+
+  return direction_matches && illuminance_matches;
+}
+
 auto ResolveSunForView(scene::Scene& scene,
   std::span<const DirectionalLightBasic> directional_lights) -> SyntheticSunData
 {

@@ -517,6 +517,10 @@ The required remediation work is:
    - Directional payload lookup may remain one backend path internally, but it
      must be reached through the shared product contract so later techniques do
      not require a lighting-contract rewrite.
+   - Direct surface directional lighting must come from one authoritative
+     directional-light path. The resolved sun payload is an atmosphere/sky
+     input and must not act as a second direct-light source that suppresses the
+     real sun-tagged directional light buffer entry.
 
 5. Strengthen invalidation and caching contracts.
    - Caching keyed only by `ViewId` is not sufficient for the final system.
@@ -524,6 +528,91 @@ The required remediation work is:
      changes, including light candidates, synthetic-sun inputs, quality tier,
      backend selection, and backend-owned residency/allocation state.
    - The invalidation contract must be explicit and testable.
+   - Directional VSM cache identity must include a generation-based key, not
+     just `ViewId`. The minimum runtime key is
+     `{ scene/cache epoch, view generation, shadow source identity,
+     clipmap address-space compatibility }`.
+   - For directional lights, cache compatibility must be keyed by the full
+     light basis used to build the light view, not just the light direction.
+     A roll change around the light direction changes the page-space XY basis
+     and must invalidate the cache just like any other basis change.
+   - Persistent per-view VSM buffers may survive scene swaps for allocation
+     reuse, but they are not authoritative until their ownership generation
+     matches the live cache instance and the cache lifecycle reaches `Valid`.
+   - Cross-frame cache authority must be carried only by a finalized page-
+     management frame. Publishing a reusable cache candidate is not sufficient:
+     if the frame does not reach the page-management finalize point, the next
+     frame must conservatively drop authority instead of silently carrying
+     forward the previous valid cache.
+   - Scene swap or explicit view retirement must move the cache instance
+     through:
+     `Uninitialized -> ResetPending -> Clearing -> Cleared ->
+     WarmupRasterPending -> WarmupFeedbackPending -> Valid`.
+     `Dirty`, `Invalidated`, and `Retired` are side states that suppress or
+     constrain publication as needed.
+   - A reset-generation cache instance is not allowed to publish live VSM
+     bindings to shading on the first completed raster feedback. It must first
+     complete reset/bootstrap work, then complete one stable validation frame
+     in the same generation before shading-facing page-table/flags/pool
+     bindings become live again.
+   - During reset/clearing/warmup, the renderer must also suppress shader-
+     facing virtual shadow consume routing. If `ShadowInstanceMetadata`
+     reports the virtual directional implementation but the shader-facing VSM
+     page-table/flags/pool/list bindings are not live yet, the published
+     `shadow_instance_metadata_slot` and `sun_shadow_index` must be masked
+     invalid for shading until the live VSM bindings exist.
+     `Cleared` is still part of warmup. The first converged rasterized
+     feedback frame after `Cleared` must transition to
+     `WarmupFeedbackPending`, not `Valid`.
+   - `requested_page_count` is an informational visibility/use counter. It is
+     not a pending-work counter and must not keep warmup alive by itself.
+     Liveness decisions must use `pages_requiring_schedule_count`, which is the
+     explicit count of requested pages that still need scheduling work in the
+     current frame.
+   - When zero-work validation preserves the last rendered directional basis,
+     that preservation must update both the cache history and the metadata that
+     will actually be published for the next frame. Restoring only
+     `current_frame` is insufficient if the published directional metadata
+     buffer is still sourced from freshly rebuilt jittered metadata.
+   - A zero-work validation frame does not create a new directional basis. The
+     backend must explicitly preserve the last rasterized basis for subsequent
+     live publishes until another rasterized frame replaces it or reset
+     invalidates it.
+   - Readback/extraction packets and GPU raster inputs must carry the same
+     generation identity as the cache instance that produced them. Stale
+     feedback from an older scene/view generation must be discarded instead of
+     mutating the live cache.
+  - Internal VSM passes must not rediscover metadata through published
+    `ViewFrameBindings` / `ShadowFrameBindings`. Request, schedule, build,
+    raster, and finalize must consume one authoritative per-view
+    `VirtualShadowFramePacket` owned by `ShadowManager`, and lighting
+    publication must be derived from that same packet instead of acting as a
+    second source of truth.
+  - The authoritative packet distinguishes a new-frame reset request from the
+    in-flight page-management clear. Internal request, schedule, build-draws,
+    and raster must skip only while `reset_request_pending` is set; the later
+    `reset_page_management_state` bit can stay live while clear completion is
+    draining and must not block the healthy first-load warmup path.
+   - Zero-raster feedback only preserves prior cache authority when it applies
+     to a frame that completed page-management finalization. A zero-work packet
+     from an unfinalized frame must not bless that frame as authoritative.
+     Likewise, a frame that finalized page-management outputs but never
+     produced matching resolve feedback is still unvalidated and must drop
+     reusable authority on the next frame.
+  - Warmup frames are not allowed to seed directional clipmap stabilization.
+    Grid-origin hysteresis, depth-guardband reuse, and any other
+    previous-metadata stabilization path may only consume a previous frame
+    after that frame reached authoritative `Valid`/`Dirty` reuse state for the
+    same cache instance. A rendered-but-unvalidated warmup frame must be
+    treated as if no previous basis exists.
+  - A zero-raster validation frame may confirm that the previously rendered
+    page-management state is still reusable, but it must keep the last
+    rasterized directional basis. It must not advance authoritative
+    `directional_metadata`, clip-grid origins, or clipmap cache key to a frame
+    that did not rasterize pages for that basis. If zero-work validation makes
+    the current frame live again, the live publication must inherit that
+    preserved prior basis instead of exposing freshly rebuilt unrasterized
+    metadata.
 
 6. Add architecture-focused coverage before new techniques land.
    - shadow-only casters survive ScenePrep and render into shadow passes
@@ -882,6 +971,10 @@ The final shadow system requires dedicated debug support.
   - whether `ShadowFrameBindings` published valid metadata/texture slots
   - whether the shadow pass executed and emitted any shadow-caster draws
   - why the shadow path skipped work for a view when it does
+- When a resolved sun payload and a sun-tagged directional light are both
+  published for the same view, they must agree on direction and illuminance.
+  Renderer publication must treat divergence as a contract violation, not a
+  best-effort fallback.
 
 Automated coverage should include:
 
