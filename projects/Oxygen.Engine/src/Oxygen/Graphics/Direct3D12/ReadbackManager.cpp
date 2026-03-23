@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/ReadbackValidation.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -61,27 +62,6 @@ using oxygen::graphics::detail::GetFormatInfo;
 namespace oxygen::graphics::d3d12 {
 
 namespace {
-
-  auto HasExactlyOneAspect(const ClearFlags aspects) -> bool
-  {
-    const auto bits = static_cast<uint8_t>(aspects);
-    return bits != 0U && (bits & (bits - 1U)) == 0U;
-  }
-
-  auto IsColorAspect(const ClearFlags aspects) -> bool
-  {
-    return aspects == ClearFlags::kColor;
-  }
-
-  auto IsDepthAspect(const ClearFlags aspects) -> bool
-  {
-    return aspects == ClearFlags::kDepth;
-  }
-
-  auto IsStencilAspect(const ClearFlags aspects) -> bool
-  {
-    return aspects == ClearFlags::kStencil;
-  }
 
   auto ResolveTextureTypeForReadback(const TextureDesc& desc) -> TextureType
   {
@@ -131,41 +111,6 @@ namespace {
       .array_slice = slice.array_slice,
       .aspects = aspects,
     };
-  }
-
-  auto ValidateTextureReadbackRequest(const TextureDesc& desc,
-    const TextureReadbackRequest& request) -> std::expected<void, ReadbackError>
-  {
-    if (desc.format == oxygen::Format::kUnknown || desc.is_typeless) {
-      return std::unexpected(ReadbackError::kUnsupportedFormat);
-    }
-    if (!HasExactlyOneAspect(request.aspects)) {
-      return std::unexpected(ReadbackError::kInvalidArgument);
-    }
-
-    const FormatInfo& format_info = GetFormatInfo(desc.format);
-    if (IsColorAspect(request.aspects)) {
-      if (format_info.has_depth || format_info.has_stencil) {
-        return std::unexpected(ReadbackError::kInvalidArgument);
-      }
-    } else if (IsDepthAspect(request.aspects)) {
-      if (!format_info.has_depth) {
-        return std::unexpected(ReadbackError::kInvalidArgument);
-      }
-      return std::unexpected(ReadbackError::kUnsupportedResource);
-    } else if (IsStencilAspect(request.aspects)) {
-      if (!format_info.has_stencil) {
-        return std::unexpected(ReadbackError::kInvalidArgument);
-      }
-      return std::unexpected(ReadbackError::kUnsupportedResource);
-    }
-
-    if (desc.sample_count > 1
-      && request.msaa_mode == MsaaReadbackMode::kDisallow) {
-      return std::unexpected(ReadbackError::kUnsupportedResource);
-    }
-
-    return {};
   }
 
   auto ResolveTextureReadbackRegion(const TextureDesc& desc,
@@ -219,6 +164,7 @@ namespace {
   auto ValidateResolvedSlice(const TextureDesc& desc, const TextureSlice& slice)
     -> void
   {
+    static_cast<void>(desc);
     const auto mip_width = (std::max)(1u, desc.width >> slice.mip_level);
     const auto mip_height = (std::max)(1u, desc.height >> slice.mip_level);
     const auto mip_depth = desc.texture_type == TextureType::kTexture3D
