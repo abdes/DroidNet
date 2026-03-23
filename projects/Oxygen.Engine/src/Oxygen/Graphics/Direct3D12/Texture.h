@@ -64,6 +64,16 @@ namespace d3d12 {
       return readback_surface_layout_;
     }
 
+    [[nodiscard]] auto IsReadbackSurfaceMapped() const noexcept -> bool
+    {
+      return is_readback_surface_mapped_;
+    }
+
+    auto SetReadbackSurfaceMapped(const bool mapped) noexcept -> void
+    {
+      is_readback_surface_mapped_ = mapped;
+    }
+
     [[nodiscard]] auto GetPlaneCount() const noexcept -> uint8_t
     {
       return plane_count_;
@@ -115,6 +125,7 @@ namespace d3d12 {
     TextureDesc desc_;
     D3D12_RESOURCE_DESC resource_desc_;
     bool is_readback_surface_ { false };
+    bool is_readback_surface_mapped_ { false };
     detail::ReadbackSurfaceLayout readback_surface_layout_ {};
     uint8_t plane_count_ = 1;
   };

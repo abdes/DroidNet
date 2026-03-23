@@ -186,8 +186,13 @@ Texture::~Texture() { DLOG_F(1, "destroying texture: {}", Base::GetName()); }
 // ReSharper disable CppClangTidyBugproneUseAfterMove
 Texture::Texture(Texture&& other) noexcept
   : Base(std::move(other))
+  , gfx_(std::exchange(other.gfx_, nullptr))
   , desc_(std::move(other.desc_))
   , resource_desc_(std::exchange(other.resource_desc_, {})) // Reset to default
+  , is_readback_surface_(std::exchange(other.is_readback_surface_, false))
+  , is_readback_surface_mapped_(
+      std::exchange(other.is_readback_surface_mapped_, false))
+  , readback_surface_layout_(std::move(other.readback_surface_layout_))
   , plane_count_(std::exchange(other.plane_count_, 1)) // Reset to default
 {
 }
@@ -196,9 +201,14 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
 {
   if (this != &other) {
     Base::operator=(std::move(other));
+    gfx_ = std::exchange(other.gfx_, nullptr);
     desc_ = std::move(other.desc_);
     resource_desc_
       = std::exchange(other.resource_desc_, {}); // Reset to default
+    is_readback_surface_ = std::exchange(other.is_readback_surface_, false);
+    is_readback_surface_mapped_
+      = std::exchange(other.is_readback_surface_mapped_, false);
+    readback_surface_layout_ = std::move(other.readback_surface_layout_);
     plane_count_ = std::exchange(other.plane_count_, 1); // Reset to default
   }
   return *this;
