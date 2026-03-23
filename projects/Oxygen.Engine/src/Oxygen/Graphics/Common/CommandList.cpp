@@ -34,11 +34,36 @@ void CommandList::SetName(const std::string_view name) noexcept
   GetComponent<ObjectMetadata>().SetName(name);
 }
 
+auto CommandList::QueueSubmitSignal(const uint64_t value) -> void
+{
+  submit_queue_actions_.push_back(
+    { .kind = SubmitQueueActionKind::kSignal, .value = value });
+}
+
+auto CommandList::QueueSubmitWait(const uint64_t value) -> void
+{
+  submit_queue_actions_.push_back(
+    { .kind = SubmitQueueActionKind::kWait, .value = value });
+}
+
+auto CommandList::HasSubmitQueueActions() const noexcept -> bool
+{
+  return !submit_queue_actions_.empty();
+}
+
+auto CommandList::TakeSubmitQueueActions() -> std::vector<SubmitQueueAction>
+{
+  auto actions = std::move(submit_queue_actions_);
+  submit_queue_actions_.clear();
+  return actions;
+}
+
 void CommandList::OnBeginRecording()
 {
   if (state_ != State::kFree) {
     throw std::runtime_error("CommandList is not in a Free state");
   }
+  submit_queue_actions_.clear();
   state_ = State::kRecording;
 }
 
@@ -69,6 +94,7 @@ void CommandList::OnExecuted()
 
 void CommandList::OnFailed() noexcept
 {
+  submit_queue_actions_.clear();
   state_ = State::kFree;
   DLOG_F(WARNING, "'{}' errored, and its state will be force reset to 'Free'",
     GetName());

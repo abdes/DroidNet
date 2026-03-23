@@ -69,3 +69,15 @@ m_gtest_program(
     "TextureReadbackIntegration_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
+m_gtest_program(
+  BufferReadbackIntegration
+  SOURCES
+    "BufferReadbackIntegration_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
+m_gtest_program(
+  SubmitOrderedQueueActions
+  SOURCES
+    "SubmitOrderedQueueActions_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)

@@ -97,18 +97,6 @@ public:
     const TextureSlice& dst_slice,
     const TextureSubResourceSet& dst_subresources) -> void override;
 
-  // Record a GPU-side queue signal into the command stream. When the
-  // recorded command executes in OnSubmitted(), it will call
-  // `target_queue->QueueSignalCommand(value)` and thus advance the queue's
-  // completed value at the point of execution (GPU-like semantics).
-  OXGN_HDLS_API auto RecordQueueSignal(uint64_t value) -> void override;
-
-  // Record a GPU-side queue wait into the command stream. When executed in
-  // OnSubmitted(), the recorded command will call
-  // `target_queue->QueueWaitCommand(value)` so the wait occurs at the recorded
-  // point in the stream (GPU-like semantics).
-  OXGN_HDLS_API auto RecordQueueWait(uint64_t value) -> void override;
-
 protected:
   OXGN_HDLS_API auto ExecuteBarriers(
     std::span<const detail::Barrier> /*barriers*/) -> void override;

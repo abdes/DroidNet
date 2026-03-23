@@ -44,6 +44,7 @@ void CommandQueue::Flush() const
   }
 
   Signal(next);
+  SignalImmediate(next);
   // Wait for the value we just signaled to ensure GPU caught up.
   Wait(next);
   DLOG_F(1, "CommandQueue[{}] fence current value: {}", GetName(),

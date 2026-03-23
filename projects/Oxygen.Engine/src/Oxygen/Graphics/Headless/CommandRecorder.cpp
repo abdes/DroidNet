@@ -21,8 +21,6 @@
 #include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearFramebufferCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
-#include <Oxygen/Graphics/Headless/Commands/QueueSignalCommand.h>
-#include <Oxygen/Graphics/Headless/Commands/QueueWaitCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ResourceBarrierCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/TextureToBufferCommand.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
@@ -138,20 +136,6 @@ auto CommandRecorder::PerformCopy(graphics::Buffer& dst, size_t dst_offset,
   std::vector<std::uint8_t> temp(size);
   src_h->ReadBacking(temp.data(), src_offset, size);
   dst_h->WriteBacking(temp.data(), dst_offset, size);
-}
-
-auto CommandRecorder::RecordQueueSignal(uint64_t value) -> void
-{
-  auto queue = GetTargetQueue();
-  DCHECK_NOTNULL_F(queue);
-  QueueCommand(std::make_shared<QueueSignalCommand>(queue, value));
-}
-
-auto CommandRecorder::RecordQueueWait(uint64_t value) -> void
-{
-  auto queue = GetTargetQueue();
-  DCHECK_NOTNULL_F(queue);
-  QueueCommand(std::make_shared<QueueWaitCommand>(queue, value));
 }
 
 } // namespace oxygen::graphics::headless

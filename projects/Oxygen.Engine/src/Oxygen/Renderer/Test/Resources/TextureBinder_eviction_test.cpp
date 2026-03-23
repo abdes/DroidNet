@@ -75,7 +75,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionRepointsToFallback)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
 
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
@@ -119,7 +119,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->QueueSignalCommand(0);
+  q->Signal(0);
   TexBinder().OnFrameStart();
 
   const auto creations_after_submit
@@ -133,7 +133,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
     = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
   ASSERT_GT(creations_after_eviction, creations_after_submit);
 
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
   TexBinder().OnFrameStart();
@@ -168,7 +168,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
@@ -185,7 +185,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
 
   (void)TexBinder().GetOrAllocate(key);
 
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 3 });
@@ -218,7 +218,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
 
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });

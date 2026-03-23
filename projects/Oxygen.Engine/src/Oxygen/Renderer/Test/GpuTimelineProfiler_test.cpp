@@ -151,11 +151,6 @@ public:
 
   auto Wait(uint64_t, std::chrono::milliseconds) const -> void override { }
   auto Wait(uint64_t) const -> void override { }
-  auto QueueSignalCommand(uint64_t value) -> void override
-  {
-    completed_ = value;
-  }
-  auto QueueWaitCommand(uint64_t) const -> void override { }
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
   {
     return completed_;
@@ -179,6 +174,12 @@ public:
   }
 
 private:
+  auto SignalImmediate(uint64_t value) const -> void override
+  {
+    current_ = value;
+    completed_ = value;
+  }
+
   mutable uint64_t current_ { 0U };
   mutable uint64_t completed_ { 0U };
   uint64_t frequency_hz_ { 1'000'000U };

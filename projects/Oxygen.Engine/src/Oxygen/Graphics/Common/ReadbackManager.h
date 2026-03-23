@@ -25,6 +25,7 @@ class Texture;
 
 class OXGN_GFX_API GpuBufferReadback {
 public:
+  GpuBufferReadback() = default;
   virtual ~GpuBufferReadback() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(GpuBufferReadback)
@@ -53,6 +54,7 @@ public:
 
 class OXGN_GFX_API GpuTextureReadback {
 public:
+  GpuTextureReadback() = default;
   virtual ~GpuTextureReadback() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(GpuTextureReadback)

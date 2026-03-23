@@ -38,7 +38,7 @@ CommandExecutor::~CommandExecutor()
 }
 
 auto CommandExecutor::ExecuteAsync(CommandQueue* queue,
-  std::deque<std::shared_ptr<Command>> stolen_commands) -> uint64_t
+  std::vector<SubmissionChunk> submission_chunks) -> uint64_t
 {
   // Assign a submission id. Initialize next_submission_id_ on first use so
   // that ids correspond to queue fence values but are unique across
@@ -50,7 +50,7 @@ auto CommandExecutor::ExecuteAsync(CommandQueue* queue,
   const uint64_t submission_id = next_submission_id_.fetch_add(1);
 
   auto wrapper
-    = [stolen = std::move(stolen_commands), queue, submission_id]() mutable {
+    = [chunks = std::move(submission_chunks), queue, submission_id]() mutable {
         try {
           LOG_F(INFO, "Executing submission id={} on executor", submission_id);
           CommandContext ctx;
@@ -59,19 +59,41 @@ auto CommandExecutor::ExecuteAsync(CommandQueue* queue,
           ctx.queue = observer_ptr<CommandQueue>(queue);
           ctx.submission_id = submission_id;
 
-          for (auto& cmd : stolen) {
-            if (cmd) {
-              // Log command type/description if available via Serialize.
-              std::ostringstream ss;
-              cmd->Serialize(ss);
-              LOG_F(INFO, "submission={} executing command: {}", submission_id,
-                ss.str());
-              cmd->Execute(ctx);
+          for (auto& chunk : chunks) {
+            for (const auto& action : chunk.submit_actions) {
+              if (action.kind
+                == graphics::CommandList::SubmitQueueActionKind::kWait) {
+                DCHECK_NOTNULL_F(queue);
+                queue->QueueWaitImmediate(action.value);
+              }
+            }
+
+            for (auto& cmd : chunk.commands) {
+              if (cmd) {
+                std::ostringstream ss;
+                cmd->Serialize(ss);
+                LOG_F(INFO, "submission={} executing command: {}",
+                  submission_id, ss.str());
+                cmd->Execute(ctx);
+              }
+            }
+
+            for (const auto& action : chunk.submit_actions) {
+              if (action.kind
+                == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+                DCHECK_NOTNULL_F(queue);
+                queue->SignalImmediate(action.value);
+              }
             }
           }
+          DCHECK_NOTNULL_F(queue);
+          queue->CompleteSubmission();
           LOG_F(INFO, "Completed submission id={}", submission_id);
         } catch (const std::exception& e) {
           LOG_F(ERROR, "Error executing submission: {}", e.what());
+          if (queue != nullptr) {
+            queue->CompleteSubmission();
+          }
         }
       };
   auto fut = executor_.Enqueue(std::move(wrapper));

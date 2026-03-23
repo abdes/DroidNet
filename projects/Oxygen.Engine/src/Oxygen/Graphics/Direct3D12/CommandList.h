@@ -52,4 +52,4 @@ private:
   ID3D12CommandAllocator* command_allocator_ {};
 };
 
-}
+} // namespace oxygen::graphics::d3d12

@@ -182,9 +182,10 @@ protected:
   auto WaitForQueueIdle(const graphics::QueueRole role
     = graphics::QueueRole::kGraphics) const -> graphics::FenceValue
   {
-    const auto value = SignalQueue(role);
-    WaitForQueue(value, role);
-    return value;
+    auto queue = GetQueue(role);
+    CHECK_NOTNULL_F(queue.get());
+    queue->Flush();
+    return graphics::FenceValue { queue->GetCompletedValue() };
   }
 
   auto FlushBackend() -> void { Backend().Flush(); }
