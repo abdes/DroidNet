@@ -5,32 +5,189 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
+#include <memory>
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 
+using oxygen::OffsetBytes;
 using oxygen::SizeBytes;
+using oxygen::TextureType;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
+using oxygen::graphics::ClearFlags;
 using oxygen::graphics::GpuBufferReadback;
+using oxygen::graphics::GpuTextureReadback;
 using oxygen::graphics::MappedBufferReadback;
+using oxygen::graphics::MappedTextureReadback;
+using oxygen::graphics::MsaaReadbackMode;
+using oxygen::graphics::QueueRole;
 using oxygen::graphics::ReadbackError;
 using oxygen::graphics::ReadbackResult;
 using oxygen::graphics::ReadbackState;
 using oxygen::graphics::ReadbackTicket;
 using oxygen::graphics::ResourceStates;
+using oxygen::graphics::TextureBufferCopyRegion;
+using oxygen::graphics::TextureDesc;
+using oxygen::graphics::TextureReadbackLayout;
+using oxygen::graphics::TextureReadbackRequest;
+using oxygen::graphics::TextureSlice;
 using oxygen::graphics::d3d12::D3D12ReadbackManager;
+using oxygen::graphics::d3d12::detail::ComputeTextureToBufferCopyInfo;
+using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
+using oxygen::graphics::detail::FormatInfo;
+using oxygen::graphics::detail::GetFormatInfo;
 
 namespace oxygen::graphics::d3d12 {
+
+namespace {
+
+  auto HasExactlyOneAspect(const ClearFlags aspects) -> bool
+  {
+    const auto bits = static_cast<uint8_t>(aspects);
+    return bits != 0U && (bits & (bits - 1U)) == 0U;
+  }
+
+  auto IsColorAspect(const ClearFlags aspects) -> bool
+  {
+    return aspects == ClearFlags::kColor;
+  }
+
+  auto IsDepthAspect(const ClearFlags aspects) -> bool
+  {
+    return aspects == ClearFlags::kDepth;
+  }
+
+  auto IsStencilAspect(const ClearFlags aspects) -> bool
+  {
+    return aspects == ClearFlags::kStencil;
+  }
+
+  auto ResolveTextureTypeForReadback(const TextureDesc& desc) -> TextureType
+  {
+    switch (desc.texture_type) {
+    case TextureType::kTexture2DMultiSample:
+      return TextureType::kTexture2D;
+    case TextureType::kTexture2DMultiSampleArray:
+      return TextureType::kTexture2DArray;
+    default:
+      return desc.texture_type;
+    }
+  }
+
+  auto MakeResolvedTextureDesc(const TextureDesc& source_desc) -> TextureDesc
+  {
+    auto desc = source_desc;
+    desc.sample_count = 1;
+    desc.sample_quality = 0;
+    desc.texture_type = ResolveTextureTypeForReadback(source_desc);
+    desc.is_shader_resource = false;
+    desc.is_render_target = false;
+    desc.is_uav = false;
+    desc.initial_state = ResourceStates::kResolveDest;
+    desc.debug_name = source_desc.debug_name + "-resolve";
+    return desc;
+  }
+
+  auto ComputeSubresourceIndex(
+    const TextureDesc& desc, const TextureSlice& slice) -> UINT
+  {
+    return slice.mip_level + (slice.array_slice * desc.mip_levels);
+  }
+
+  auto BuildTextureReadbackLayout(const TextureDesc& desc,
+    const TextureSlice& slice, const TextureBufferCopyRegion& region,
+    const ClearFlags aspects) -> TextureReadbackLayout
+  {
+    return TextureReadbackLayout {
+      .format = desc.format,
+      .texture_type = ResolveTextureTypeForReadback(desc),
+      .width = slice.width,
+      .height = slice.height,
+      .depth = slice.depth,
+      .row_pitch = region.buffer_row_pitch,
+      .slice_pitch = region.buffer_slice_pitch,
+      .mip_level = slice.mip_level,
+      .array_slice = slice.array_slice,
+      .aspects = aspects,
+    };
+  }
+
+  auto ValidateTextureReadbackRequest(const TextureDesc& desc,
+    const TextureReadbackRequest& request) -> std::expected<void, ReadbackError>
+  {
+    if (desc.format == oxygen::Format::kUnknown || desc.is_typeless) {
+      return std::unexpected(ReadbackError::kUnsupportedFormat);
+    }
+    if (!HasExactlyOneAspect(request.aspects)) {
+      return std::unexpected(ReadbackError::kInvalidArgument);
+    }
+
+    const FormatInfo& format_info = GetFormatInfo(desc.format);
+    if (IsColorAspect(request.aspects)) {
+      if (format_info.has_depth || format_info.has_stencil) {
+        return std::unexpected(ReadbackError::kInvalidArgument);
+      }
+    } else if (IsDepthAspect(request.aspects)) {
+      if (!format_info.has_depth) {
+        return std::unexpected(ReadbackError::kInvalidArgument);
+      }
+      return std::unexpected(ReadbackError::kUnsupportedResource);
+    } else if (IsStencilAspect(request.aspects)) {
+      if (!format_info.has_stencil) {
+        return std::unexpected(ReadbackError::kInvalidArgument);
+      }
+      return std::unexpected(ReadbackError::kUnsupportedResource);
+    }
+
+    if (desc.sample_count > 1
+      && request.msaa_mode == MsaaReadbackMode::kDisallow) {
+      return std::unexpected(ReadbackError::kUnsupportedResource);
+    }
+
+    return {};
+  }
+
+  auto ResolveTextureReadbackRegion(const TextureDesc& desc,
+    const TextureSlice& slice) -> TextureBufferCopyRegion
+  {
+    TextureBufferCopyRegion region {};
+    region.buffer_offset = OffsetBytes { 0 };
+    region.texture_slice = slice;
+    return region;
+  }
+
+  auto MatchesResolveTextureDesc(const TextureDesc& lhs, const TextureDesc& rhs)
+    -> bool
+  {
+    return lhs.width == rhs.width && lhs.height == rhs.height
+      && lhs.depth == rhs.depth && lhs.array_size == rhs.array_size
+      && lhs.mip_levels == rhs.mip_levels
+      && lhs.sample_count == rhs.sample_count
+      && lhs.sample_quality == rhs.sample_quality && lhs.format == rhs.format
+      && lhs.texture_type == rhs.texture_type
+      && lhs.is_shader_resource == rhs.is_shader_resource
+      && lhs.is_render_target == rhs.is_render_target
+      && lhs.is_uav == rhs.is_uav && lhs.is_typeless == rhs.is_typeless
+      && lhs.initial_state == rhs.initial_state;
+  }
+
+} // namespace
 
 class D3D12BufferReadback final
   : public GpuBufferReadback,
@@ -104,6 +261,8 @@ auto D3D12BufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
     .debug_name = debug_name_ + "-staging",
   });
   if (readback_buffer_ == nullptr) {
+    LOG_F(ERROR, "Failed to allocate readback buffer `{}` ({} bytes)",
+      debug_name_, size_bytes);
     return false;
   }
 
@@ -167,6 +326,8 @@ auto D3D12BufferReadback::EnqueueCopy(
   if (!EnsureReadbackBuffer(resolved.size_bytes)) {
     return std::unexpected(ReadbackError::kBackendFailure);
   }
+  CHECK_NOTNULL_F(readback_buffer_.get(),
+    "Readback buffer must exist after successful allocation");
   if (!recorder.IsResourceTracked(source)) {
     return std::unexpected(ReadbackError::kInvalidArgument);
   }
@@ -191,7 +352,11 @@ auto D3D12BufferReadback::EnqueueCopy(
   resolved_range_ = resolved;
   ticket_ = manager_.tracker_.Register(
     *fence, SizeBytes { resolved.size_bytes }, debug_name_);
-  manager_.TrackOwner(ticket_->id, weak_from_this());
+  manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
+    if (const auto locked = weak.lock()) {
+      locked->OnManagerCancelled();
+    }
+  });
   state_ = ReadbackState::kPending;
   last_error_.reset();
   return *ticket_;
@@ -255,6 +420,7 @@ auto D3D12BufferReadback::TryMap()
 
   auto* mapped = static_cast<const std::byte*>(
     readback_buffer_->Map(0, resolved_range_.size_bytes));
+  CHECK_NOTNULL_F(mapped, "Readback buffer map returned null");
   state_ = ReadbackState::kMapped;
   auto guard = std::shared_ptr<void>(nullptr,
     [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
@@ -308,11 +474,412 @@ auto D3D12BufferReadback::Reset() -> void
 {
   ReleaseMapping();
   if (ticket_.has_value()) {
-    manager_.UntrackOwner(ticket_->id);
+    manager_.UntrackCancellationHandler(ticket_->id);
   }
   ticket_.reset();
   last_error_.reset();
   resolved_range_ = {};
+  state_ = ReadbackState::kIdle;
+}
+
+class D3D12TextureReadback final
+  : public GpuTextureReadback,
+    public std::enable_shared_from_this<D3D12TextureReadback> {
+public:
+  D3D12TextureReadback(
+    D3D12ReadbackManager& manager, std::string_view debug_name)
+    : manager_(manager)
+    , debug_name_(debug_name)
+  {
+  }
+
+  auto EnqueueCopy(oxygen::graphics::CommandRecorder& recorder,
+    const oxygen::graphics::Texture& source,
+    TextureReadbackRequest request = {})
+    -> std::expected<ReadbackTicket, ReadbackError> override;
+
+  [[nodiscard]] auto GetState() const noexcept -> ReadbackState override
+  {
+    return state_;
+  }
+
+  [[nodiscard]] auto Ticket() const noexcept
+    -> std::optional<ReadbackTicket> override
+  {
+    return ticket_;
+  }
+
+  [[nodiscard]] auto IsReady() const
+    -> std::expected<bool, ReadbackError> override;
+
+  auto TryMap() -> std::expected<MappedTextureReadback, ReadbackError> override;
+  auto MapNow() -> std::expected<MappedTextureReadback, ReadbackError> override;
+
+  auto Cancel() -> std::expected<bool, ReadbackError> override;
+  auto Reset() -> void override;
+
+  auto OnManagerCancelled() -> void
+  {
+    if (state_ == ReadbackState::kPending) {
+      last_error_ = ReadbackError::kCancelled;
+      state_ = ReadbackState::kCancelled;
+    }
+  }
+
+private:
+  auto EnsureReadbackBuffer(SizeBytes size_bytes) -> bool;
+  auto EnsureResolveTexture(const TextureDesc& source_desc)
+    -> std::expected<void, ReadbackError>;
+  auto RefreshStateFromTracker() const -> std::expected<void, ReadbackError>;
+  auto ReleaseMapping() -> void;
+
+  D3D12ReadbackManager& manager_;
+  std::string debug_name_;
+  std::shared_ptr<Buffer> readback_buffer_ {};
+  std::shared_ptr<oxygen::graphics::Texture> resolve_texture_ {};
+  TextureDesc resolve_texture_desc_ {};
+  mutable std::optional<ReadbackTicket> ticket_ {};
+  mutable std::optional<ReadbackError> last_error_ {};
+  mutable ReadbackState state_ { ReadbackState::kIdle };
+  TextureReadbackLayout layout_ {};
+  SizeBytes mapped_size_ {};
+};
+
+auto D3D12TextureReadback::EnsureReadbackBuffer(const SizeBytes size_bytes)
+  -> bool
+{
+  if (readback_buffer_ != nullptr
+    && readback_buffer_->GetSize() >= size_bytes.get()) {
+    return true;
+  }
+
+  readback_buffer_ = manager_.graphics_.CreateBuffer(BufferDesc {
+    .size_bytes = size_bytes.get(),
+    .usage = BufferUsage::kNone,
+    .memory = BufferMemory::kReadBack,
+    .debug_name = debug_name_ + "-texture-staging",
+  });
+  if (readback_buffer_ == nullptr) {
+    LOG_F(ERROR, "Failed to allocate texture readback buffer `{}` ({} bytes)",
+      debug_name_, size_bytes.get());
+    return false;
+  }
+
+  auto& registry = manager_.graphics_.GetResourceRegistry();
+  if (!registry.Contains(*readback_buffer_)) {
+    registry.Register(readback_buffer_);
+  }
+  return true;
+}
+
+auto D3D12TextureReadback::EnsureResolveTexture(const TextureDesc& source_desc)
+  -> std::expected<void, ReadbackError>
+{
+  const auto expected_desc = MakeResolvedTextureDesc(source_desc);
+  if (resolve_texture_ != nullptr
+    && MatchesResolveTextureDesc(resolve_texture_desc_, expected_desc)) {
+    return {};
+  }
+
+  resolve_texture_ = manager_.graphics_.CreateTexture(expected_desc);
+  if (resolve_texture_ == nullptr) {
+    LOG_F(ERROR, "Failed to allocate resolve texture `{}` for readback",
+      expected_desc.debug_name);
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+
+  auto& registry = manager_.graphics_.GetResourceRegistry();
+  if (!registry.Contains(*resolve_texture_)) {
+    registry.Register(resolve_texture_);
+  }
+
+  resolve_texture_desc_ = expected_desc;
+  return {};
+}
+
+auto D3D12TextureReadback::RefreshStateFromTracker() const
+  -> std::expected<void, ReadbackError>
+{
+  if (state_ != ReadbackState::kPending || !ticket_.has_value()) {
+    return {};
+  }
+
+  manager_.PumpCompletions();
+  const auto result = manager_.TryGetResult(ticket_->id);
+  if (!result.has_value()) {
+    return {};
+  }
+
+  if (result->error.has_value()) {
+    last_error_ = result->error;
+    state_ = result->error == ReadbackError::kCancelled
+      ? ReadbackState::kCancelled
+      : ReadbackState::kFailed;
+    return std::unexpected(*result->error);
+  }
+
+  state_ = ReadbackState::kReady;
+  last_error_.reset();
+  return {};
+}
+
+auto D3D12TextureReadback::EnqueueCopy(
+  oxygen::graphics::CommandRecorder& recorder,
+  const oxygen::graphics::Texture& source, TextureReadbackRequest request)
+  -> std::expected<ReadbackTicket, ReadbackError>
+{
+  if (state_ == ReadbackState::kMapped) {
+    return std::unexpected(ReadbackError::kAlreadyMapped);
+  }
+  if (state_ != ReadbackState::kIdle) {
+    return std::unexpected(ReadbackError::kAlreadyPending);
+  }
+
+  const auto target_queue = recorder.GetTargetQueue();
+  if (target_queue == nullptr) {
+    return std::unexpected(ReadbackError::kQueueUnavailable);
+  }
+  if (const auto queue_result = manager_.EnsureTrackedQueue(target_queue);
+    !queue_result.has_value()) {
+    return std::unexpected(queue_result.error());
+  }
+
+  const auto& source_desc = source.GetDescriptor();
+  if (const auto validation
+    = ValidateTextureReadbackRequest(source_desc, request);
+    !validation.has_value()) {
+    return std::unexpected(validation.error());
+  }
+
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& source_texture = static_cast<const d3d12::Texture&>(source);
+  auto& d3d12_recorder = static_cast<d3d12::CommandRecorder&>(recorder);
+  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
+  if (source_texture.IsReadbackSurface()) {
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+
+  auto resolved_slice = request.src_slice.Resolve(source_desc);
+  auto copy_source = observer_ptr<const oxygen::graphics::Texture> { &source };
+  auto copy_desc = source_desc;
+  auto plane_count = source_texture.GetPlaneCount();
+
+  if (source_desc.sample_count > 1) {
+    if (target_queue->GetQueueRole() != QueueRole::kGraphics) {
+      return std::unexpected(ReadbackError::kQueueUnavailable);
+    }
+    if (const auto resolve_result = EnsureResolveTexture(source_desc);
+      !resolve_result.has_value()) {
+      return std::unexpected(resolve_result.error());
+    }
+    CHECK_NOTNULL_F(resolve_texture_.get(),
+      "Resolve texture must exist after successful allocation");
+    if (!recorder.IsResourceTracked(source)) {
+      return std::unexpected(ReadbackError::kInvalidArgument);
+    }
+    if (!recorder.IsResourceTracked(*resolve_texture_)) {
+      recorder.BeginTrackingResourceState(
+        *resolve_texture_, ResourceStates::kResolveDest);
+    }
+
+    recorder.RequireResourceState(source, ResourceStates::kResolveSource);
+    recorder.RequireResourceState(
+      *resolve_texture_, ResourceStates::kResolveDest);
+    recorder.FlushBarriers();
+
+    auto* command_list = d3d12_recorder.GetD3D12CommandList();
+    auto* src_resource
+      = source_texture.GetNativeResource()->AsPointer<ID3D12Resource>();
+    auto* resolve_resource
+      = resolve_texture_->GetNativeResource()->AsPointer<ID3D12Resource>();
+    CHECK_NOTNULL_F(
+      command_list, "D3D12 command list must exist for texture resolve");
+    CHECK_NOTNULL_F(src_resource,
+      "D3D12 source texture resource must exist for readback resolve");
+    CHECK_NOTNULL_F(resolve_resource,
+      "D3D12 resolve texture resource must exist for readback resolve");
+
+    const auto subresource_index
+      = ComputeSubresourceIndex(source_desc, resolved_slice);
+    command_list->ResolveSubresource(resolve_resource, subresource_index,
+      src_resource, subresource_index,
+      GetDxgiFormatMapping(source_desc.format).rtv_format);
+
+    copy_source = observer_ptr<const oxygen::graphics::Texture> {
+      resolve_texture_.get()
+    };
+    copy_desc = resolve_texture_desc_;
+    plane_count = 1U;
+  } else if (!recorder.IsResourceTracked(source)) {
+    return std::unexpected(ReadbackError::kInvalidArgument);
+  }
+
+  const auto copy_region
+    = ResolveTextureReadbackRegion(copy_desc, resolved_slice);
+  auto* copy_resource = const_cast<ID3D12Resource*>(
+    copy_source->GetNativeResource()->AsPointer<ID3D12Resource>());
+  CHECK_NOTNULL_F(
+    copy_resource, "D3D12 texture resource must exist for readback copy");
+  detail::TextureToBufferCopyInfo copy_info {};
+  try {
+    copy_info = ComputeTextureToBufferCopyInfo(
+      copy_desc, copy_resource->GetDesc().Format, plane_count, copy_region);
+  } catch (const std::exception&) {
+    LOG_F(ERROR,
+      "Failed to compute texture readback layout for `{}` (planes={})",
+      debug_name_, plane_count);
+    return std::unexpected(ReadbackError::kUnsupportedResource);
+  }
+
+  if (!EnsureReadbackBuffer(SizeBytes { copy_info.bytes_written })) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+  CHECK_NOTNULL_F(readback_buffer_.get(),
+    "Texture readback buffer must exist after successful allocation");
+  if (!recorder.IsResourceTracked(*readback_buffer_)) {
+    recorder.BeginTrackingResourceState(
+      *readback_buffer_, ResourceStates::kCopyDest);
+  }
+
+  recorder.RequireResourceState(*copy_source, ResourceStates::kCopySource);
+  recorder.RequireResourceState(*readback_buffer_, ResourceStates::kCopyDest);
+  recorder.FlushBarriers();
+  recorder.CopyTextureToBuffer(*readback_buffer_, *copy_source, copy_region);
+
+  const auto fence = manager_.AllocateFence(target_queue);
+  if (!fence.has_value()) {
+    return std::unexpected(fence.error());
+  }
+  recorder.RecordQueueSignal(fence->get());
+
+  layout_ = BuildTextureReadbackLayout(
+    copy_desc, resolved_slice, copy_info.resolved_region, request.aspects);
+  mapped_size_ = SizeBytes { copy_info.bytes_written };
+  ticket_ = manager_.tracker_.Register(*fence, mapped_size_, debug_name_);
+  manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
+    if (const auto locked = weak.lock()) {
+      locked->OnManagerCancelled();
+    }
+  });
+  state_ = ReadbackState::kPending;
+  last_error_.reset();
+  return *ticket_;
+}
+
+auto D3D12TextureReadback::IsReady() const -> std::expected<bool, ReadbackError>
+{
+  if (state_ == ReadbackState::kMapped || state_ == ReadbackState::kReady) {
+    return true;
+  }
+  if (state_ == ReadbackState::kCancelled) {
+    return std::unexpected(ReadbackError::kCancelled);
+  }
+  if (state_ == ReadbackState::kFailed) {
+    return std::unexpected(
+      last_error_.value_or(ReadbackError::kBackendFailure));
+  }
+  if (state_ == ReadbackState::kIdle) {
+    return false;
+  }
+
+  if (const auto refresh = RefreshStateFromTracker(); !refresh.has_value()) {
+    return std::unexpected(refresh.error());
+  }
+  return state_ == ReadbackState::kReady;
+}
+
+auto D3D12TextureReadback::ReleaseMapping() -> void
+{
+  if (state_ == ReadbackState::kMapped && readback_buffer_ != nullptr
+    && readback_buffer_->IsMapped()) {
+    readback_buffer_->UnMap();
+    state_ = ReadbackState::kReady;
+  }
+}
+
+auto D3D12TextureReadback::TryMap()
+  -> std::expected<MappedTextureReadback, ReadbackError>
+{
+  if (const auto refresh = RefreshStateFromTracker();
+    !refresh.has_value() && refresh.error() != ReadbackError::kCancelled) {
+    return std::unexpected(refresh.error());
+  }
+
+  if (state_ == ReadbackState::kPending || state_ == ReadbackState::kIdle) {
+    return std::unexpected(ReadbackError::kNotReady);
+  }
+  if (state_ == ReadbackState::kCancelled) {
+    return std::unexpected(ReadbackError::kCancelled);
+  }
+  if (state_ == ReadbackState::kFailed) {
+    return std::unexpected(
+      last_error_.value_or(ReadbackError::kBackendFailure));
+  }
+  if (state_ == ReadbackState::kMapped) {
+    return std::unexpected(ReadbackError::kAlreadyMapped);
+  }
+  if (readback_buffer_ == nullptr) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
+
+  auto* mapped = static_cast<const std::byte*>(
+    readback_buffer_->Map(0, mapped_size_.get()));
+  CHECK_NOTNULL_F(mapped, "Texture readback buffer map returned null");
+  state_ = ReadbackState::kMapped;
+  auto guard = std::shared_ptr<void>(nullptr,
+    [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
+  return MappedTextureReadback { std::move(guard), mapped, layout_ };
+}
+
+auto D3D12TextureReadback::MapNow()
+  -> std::expected<MappedTextureReadback, ReadbackError>
+{
+  if (!ticket_.has_value()) {
+    return std::unexpected(ReadbackError::kNotReady);
+  }
+  if (state_ == ReadbackState::kPending) {
+    const auto result = manager_.Await(*ticket_);
+    if (!result.has_value()) {
+      return std::unexpected(result.error());
+    }
+    if (result->error.has_value()) {
+      last_error_ = result->error;
+      state_ = result->error == ReadbackError::kCancelled
+        ? ReadbackState::kCancelled
+        : ReadbackState::kFailed;
+      return std::unexpected(*result->error);
+    }
+    state_ = ReadbackState::kReady;
+  }
+  return TryMap();
+}
+
+auto D3D12TextureReadback::Cancel() -> std::expected<bool, ReadbackError>
+{
+  if (!ticket_.has_value()) {
+    return false;
+  }
+  const auto cancelled = manager_.Cancel(*ticket_);
+  if (!cancelled.has_value()) {
+    return std::unexpected(cancelled.error());
+  }
+  if (*cancelled) {
+    state_ = ReadbackState::kCancelled;
+    last_error_ = ReadbackError::kCancelled;
+  }
+  return *cancelled;
+}
+
+auto D3D12TextureReadback::Reset() -> void
+{
+  ReleaseMapping();
+  if (ticket_.has_value()) {
+    manager_.UntrackCancellationHandler(ticket_->id);
+  }
+  ticket_.reset();
+  last_error_.reset();
+  layout_ = {};
+  mapped_size_ = {};
   state_ = ReadbackState::kIdle;
 }
 
@@ -330,9 +897,9 @@ auto D3D12ReadbackManager::CreateBufferReadback(
 }
 
 auto D3D12ReadbackManager::CreateTextureReadback(
-  std::string_view /*debug_name*/) -> std::shared_ptr<GpuTextureReadback>
+  const std::string_view debug_name) -> std::shared_ptr<GpuTextureReadback>
 {
-  return {};
+  return std::make_shared<D3D12TextureReadback>(*this, debug_name);
 }
 
 auto D3D12ReadbackManager::EnsureTrackedQueue(
@@ -393,17 +960,18 @@ auto D3D12ReadbackManager::TryGetResult(const ReadbackTicketId id) const
   return tracker_.TryGetResult(id);
 }
 
-auto D3D12ReadbackManager::TrackOwner(const ReadbackTicketId id,
-  const std::weak_ptr<D3D12BufferReadback>& owner) -> void
+auto D3D12ReadbackManager::TrackCancellationHandler(
+  const ReadbackTicketId id, std::function<void()> handler) -> void
 {
   std::lock_guard lock(mutex_);
-  buffer_owners_[id] = owner;
+  cancellation_handlers_[id] = std::move(handler);
 }
 
-auto D3D12ReadbackManager::UntrackOwner(const ReadbackTicketId id) -> void
+auto D3D12ReadbackManager::UntrackCancellationHandler(const ReadbackTicketId id)
+  -> void
 {
   std::lock_guard lock(mutex_);
-  buffer_owners_.erase(id);
+  cancellation_handlers_.erase(id);
 }
 
 auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)
@@ -420,6 +988,8 @@ auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)
     try {
       queue->Wait(ticket.fence.get());
     } catch (...) {
+      LOG_F(ERROR, "Readback await failed for ticket {} at fence {}",
+        ticket.id.get(), ticket.fence.get());
       return std::unexpected(ReadbackError::kBackendFailure);
     }
     tracker_.MarkFenceCompleted(ticket.fence);
@@ -438,22 +1008,23 @@ auto D3D12ReadbackManager::AwaitAsync(const ReadbackTicket ticket)
 auto D3D12ReadbackManager::Cancel(const ReadbackTicket ticket)
   -> std::expected<bool, ReadbackError>
 {
+  PumpCompletions();
   const auto cancelled = tracker_.Cancel(ticket.id);
   if (!cancelled.has_value()) {
     return std::unexpected(cancelled.error());
   }
 
   if (*cancelled) {
-    std::weak_ptr<D3D12BufferReadback> owner;
+    std::function<void()> handler;
     {
       std::lock_guard lock(mutex_);
-      if (const auto it = buffer_owners_.find(ticket.id);
-        it != buffer_owners_.end()) {
-        owner = it->second;
+      if (const auto it = cancellation_handlers_.find(ticket.id);
+        it != cancellation_handlers_.end()) {
+        handler = it->second;
       }
     }
-    if (const auto locked = owner.lock()) {
-      locked->OnManagerCancelled();
+    if (handler) {
+      handler();
     }
   }
   return *cancelled;
@@ -465,7 +1036,8 @@ auto D3D12ReadbackManager::ReadBufferNow(const Buffer& /*source*/,
   return std::unexpected(ReadbackError::kUnsupportedResource);
 }
 
-auto D3D12ReadbackManager::ReadTextureNow(const Texture& /*source*/,
+auto D3D12ReadbackManager::ReadTextureNow(
+  const oxygen::graphics::Texture& /*source*/,
   TextureReadbackRequest /*request*/, const bool /*tightly_pack*/)
   -> std::expected<OwnedTextureReadbackData, ReadbackError>
 {
@@ -474,20 +1046,20 @@ auto D3D12ReadbackManager::ReadTextureNow(const Texture& /*source*/,
 
 auto D3D12ReadbackManager::CreateReadbackTextureSurface(
   const TextureDesc& /*desc*/)
-  -> std::expected<std::shared_ptr<Texture>, ReadbackError>
+  -> std::expected<std::shared_ptr<oxygen::graphics::Texture>, ReadbackError>
 {
   return std::unexpected(ReadbackError::kUnsupportedResource);
 }
 
 auto D3D12ReadbackManager::MapReadbackTextureSurface(
-  Texture& /*surface*/, TextureSlice /*slice*/)
+  oxygen::graphics::Texture& /*surface*/, TextureSlice /*slice*/)
   -> std::expected<ReadbackSurfaceMapping, ReadbackError>
 {
   return std::unexpected(ReadbackError::kUnsupportedResource);
 }
 
-auto D3D12ReadbackManager::UnmapReadbackTextureSurface(Texture& /*surface*/)
-  -> void
+auto D3D12ReadbackManager::UnmapReadbackTextureSurface(
+  oxygen::graphics::Texture& /*surface*/) -> void
 {
 }
 
@@ -500,6 +1072,7 @@ auto D3D12ReadbackManager::OnFrameStart(const frame::Slot slot) -> void
 auto D3D12ReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
   -> std::expected<void, ReadbackError>
 {
+  LOG_SCOPE_FUNCTION(INFO);
   observer_ptr<graphics::CommandQueue> queue;
   FenceValue last_fence { 0 };
   {
@@ -513,6 +1086,8 @@ auto D3D12ReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
     try {
       queue->Wait(last_fence.get(), timeout);
     } catch (...) {
+      LOG_F(ERROR, "Readback shutdown wait failed at fence {} after {} ms",
+        last_fence.get(), timeout.count());
       return std::unexpected(ReadbackError::kBackendFailure);
     }
     tracker_.MarkFenceCompleted(last_fence);

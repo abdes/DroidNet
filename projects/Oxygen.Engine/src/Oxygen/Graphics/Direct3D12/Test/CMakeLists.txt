@@ -70,6 +70,12 @@ m_gtest_program(
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
+  TextureReadbackObject
+  SOURCES
+    "TextureReadbackObject_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
+m_gtest_program(
   BufferReadbackIntegration
   SOURCES
     "BufferReadbackIntegration_test.cpp"

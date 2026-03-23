@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -20,6 +21,7 @@ namespace oxygen::graphics::d3d12 {
 
 class Graphics;
 class D3D12BufferReadback;
+class D3D12TextureReadback;
 
 class D3D12ReadbackManager final : public graphics::ReadbackManager {
 public:
@@ -64,6 +66,7 @@ public:
 
 private:
   friend class D3D12BufferReadback;
+  friend class D3D12TextureReadback;
 
   auto EnsureTrackedQueue(observer_ptr<graphics::CommandQueue> queue)
     -> std::expected<void, graphics::ReadbackError>;
@@ -72,9 +75,9 @@ private:
   auto PumpCompletions() -> void;
   [[nodiscard]] auto TryGetResult(graphics::ReadbackTicketId id) const
     -> std::optional<graphics::ReadbackResult>;
-  auto TrackOwner(graphics::ReadbackTicketId id,
-    const std::weak_ptr<D3D12BufferReadback>& owner) -> void;
-  auto UntrackOwner(graphics::ReadbackTicketId id) -> void;
+  auto TrackCancellationHandler(
+    graphics::ReadbackTicketId id, std::function<void()> handler) -> void;
+  auto UntrackCancellationHandler(graphics::ReadbackTicketId id) -> void;
 
   Graphics& graphics_;
   mutable std::mutex mutex_;
@@ -82,9 +85,8 @@ private:
   graphics::FenceValue next_fence_ { 0 };
   graphics::ReadbackTracker tracker_ {};
   bool shutdown_ { false };
-  std::unordered_map<graphics::ReadbackTicketId,
-    std::weak_ptr<D3D12BufferReadback>>
-    buffer_owners_ {};
+  std::unordered_map<graphics::ReadbackTicketId, std::function<void()>>
+    cancellation_handlers_ {};
 };
 
 } // namespace oxygen::graphics::d3d12
