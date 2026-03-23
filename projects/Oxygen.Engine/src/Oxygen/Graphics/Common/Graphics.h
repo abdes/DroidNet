@@ -42,6 +42,7 @@ namespace graphics {
   struct FramebufferDesc;
   class Framebuffer;
   class IShaderByteCode;
+  class ReadbackManager;
   class QueuesStrategy;
   class ResourceRegistry;
   class Surface;
@@ -204,6 +205,9 @@ public:
 
   OXGN_GFX_NDAPI auto GetDeferredReclaimer()
     -> graphics::detail::DeferredReclaimer&;
+
+  [[nodiscard]] OXGN_GFX_API virtual auto GetReadbackManager() const
+    -> observer_ptr<graphics::ReadbackManager>;
 
   [[nodiscard]] OXGN_GFX_API virtual auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider>;

@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
 // Required for direct access to the QueueManager component in tests
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <unordered_set>
@@ -26,12 +27,14 @@
 
 namespace {
 
-using testing::_;
-using testing::Return;
+using ::testing::_;
+using ::testing::Return;
 
 using Alloc = oxygen::graphics::QueueAllocationPreference;
 using Share = oxygen::graphics::QueueSharingPreference;
 using Role = oxygen::graphics::QueueRole;
+using TestGraphics
+  = ::testing::NiceMock<::oxygen::graphics::testing::MockGraphics>;
 
 using namespace oxygen::graphics;
 using oxygen::observer_ptr;
@@ -77,36 +80,6 @@ public:
 
 private:
   QueueRole role_;
-};
-
-// A testable Graphics subclass that exposes a virtual hook we can mock.
-// Proper Google Mock partial mock for `oxygen::Graphics`.
-// We inherit and expose a mockable CreateCommandQueue while providing minimal
-// implementations for the other pure virtual methods. Tests instantiate a
-// `NiceMock<MockGraphics>` so uninteresting calls are ignored.
-// ReSharper disable once CppClassCanBeFinal - mocks cannot be final
-class MockGraphics : public oxygen::Graphics {
-public:
-  explicit MockGraphics(const std::string_view name)
-    : Graphics(name)
-  {
-  }
-
-  // clang-format off
-  // NOLINTBEGIN
-  MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue, (const QueueKey&, QueueRole), (override));
-  // Other methods we don't care about
-  MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
-  MOCK_METHOD((std::unique_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
-  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (const, override));
-  MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (const ShaderRequest&), (const, override));
-  MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
-  MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeResource&), (const, override));
-  MOCK_METHOD((std::shared_ptr<Buffer>), CreateBuffer, (const BufferDesc&), (const, override));
-  MOCK_METHOD((std::unique_ptr<CommandList>), CreateCommandListImpl, (QueueRole, std::string_view), (override));
-  MOCK_METHOD((std::unique_ptr<CommandRecorder>), CreateCommandRecorder, (std::shared_ptr<CommandList>, observer_ptr<CommandQueue>), (override));
-  // NOLINTEND
-  // clang-format on
 };
 
 // -----------------------------------------------------------------------------
@@ -244,7 +217,7 @@ private:
 NOLINT_TEST(
   QueuesStrategy, CreateCommandQueues_WhenSingleUniversal_AllRolesShareQueue)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // Prepare a single fake queue instance that will be returned for the
   // universal name regardless of role.
@@ -286,7 +259,7 @@ NOLINT_TEST(QueuesStrategy,
 
   const PairStrategy strat(gfx_spec, compute_spec);
 
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // Expect two CreateCommandQueue calls with matching keys and allocation
   // preference, returning distinct FakeCommandQueue instances.
@@ -315,8 +288,7 @@ NOLINT_TEST(QueuesStrategy,
 //! per unique CommandQueue
 NOLINT_TEST(QueuesStrategy, ForEachQueue_VisitsEachUniqueQueueOnce)
 {
-  using testing::NiceMock;
-  NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // Prepare three specs: two names that will map to the same created object
   // (shared by role), and one distinct queue.
@@ -397,7 +369,7 @@ NOLINT_TEST(
 
   const PairStrategy strat(a, b);
 
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // Simulate reuse: return the same fake for the single named spec creation.
   const auto shared_fake
@@ -415,7 +387,7 @@ NOLINT_TEST(
 //! only from shared candidates) while direct key lookup can prefer named.
 NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenLookupByRole_SelectsSharedQueue)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // Shared "universal" spec (can satisfy graphics role via KeyFor)
   const QueueSpecification shared_spec {
@@ -462,7 +434,7 @@ NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenLookupByRole_SelectsSharedQueue)
 //! Explicit key lookup prefers named specification over shared alternatives.
 NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenLookupByKey_PrefersNamedQueue)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification shared_spec {
     .key = QueueKey { "universal" },
@@ -502,7 +474,7 @@ NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenLookupByKey_PrefersNamedQueue)
 NOLINT_TEST(QueuesStrategy,
   GetCommandQueue_WhenDedicatedExists_PrefersDedicatedOverAllInOne)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification dedicated_spec {
     .key = QueueKey { "gfx" },
@@ -550,7 +522,7 @@ NOLINT_TEST(QueuesStrategy,
 NOLINT_TEST(
   QueuesStrategy, CreateCommandQueues_WhenBackendFails_ThrowsRuntimeError)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification a {
     .key = QueueKey { "a" },
@@ -578,7 +550,7 @@ NOLINT_TEST(
 //! Querying an unknown key must return an empty shared_ptr.
 NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenUnknownKey_ReturnsEmpty)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   const SingleQueueStrategy strat;
   const auto fake
@@ -597,7 +569,7 @@ NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenUnknownKey_ReturnsEmpty)
 //! create duplicate backend resources for the same key.
 NOLINT_TEST(QueuesStrategy, CreateCommandQueues_WhenCalledTwice_RecreatesQueues)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   const SingleQueueStrategy strat;
   const auto fake
@@ -621,7 +593,7 @@ NOLINT_TEST(QueuesStrategy, CreateCommandQueues_WhenCalledTwice_RecreatesQueues)
 NOLINT_TEST(
   QueuesStrategy, CreateCommandQueues_WhenDuplicateKeys_ThrowsInvalidArgument)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification first {
     .key = QueueKey { "dup" },
@@ -650,7 +622,7 @@ NOLINT_TEST(
 //! calls must be made and GetCommandQueue should return empty for any key.
 NOLINT_TEST(QueuesStrategy, CreateCommandQueues_WhenNoSpecifications_NoCreation)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // No CreateCommandQueue calls are expected.
   EXPECT_CALL(gfx, CreateCommandQueue(_, _)).Times(0);
@@ -668,7 +640,7 @@ NOLINT_TEST(QueuesStrategy, CreateCommandQueues_WhenNoSpecifications_NoCreation)
 NOLINT_TEST(
   QueuesStrategy, GetCommandQueue_WhenKeyForReturnsMissingKey_ReturnsEmpty)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   // One spec exists but KeyFor will point to a different key
   QueueSpecification spec {
@@ -705,7 +677,7 @@ NOLINT_TEST(
 //! key that wasn't created, role-based lookup must return empty.
 NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenKeyForInvalidRole_ReturnsEmpty)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification a {
     .key = QueueKey { "a" },
@@ -740,7 +712,7 @@ NOLINT_TEST(QueuesStrategy, GetCommandQueue_WhenKeyForInvalidRole_ReturnsEmpty)
 NOLINT_TEST(
   QueuesStrategy, CreateCommandQueues_WhenEmptyKeyProvided_LookupReturnsEmpty)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification spec {
     .key = QueueKey { "" },
@@ -780,7 +752,7 @@ NOLINT_TEST(
 //! CreateCommandQueue call and succeed.
 NOLINT_TEST(QueuesStrategy, DuplicateKey_SamePreferences_Throws)
 {
-  testing::NiceMock<MockGraphics> gfx("test-gfx");
+  TestGraphics gfx("test-gfx");
 
   QueueSpecification first {
     .key = QueueKey { "dup-same" },

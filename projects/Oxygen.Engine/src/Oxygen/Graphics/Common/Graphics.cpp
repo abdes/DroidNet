@@ -13,8 +13,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Component.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/OxCo/Co.h>
@@ -38,6 +39,7 @@ using oxygen::graphics::internal::QueueManager;
 
 namespace {
 constexpr std::string_view kCVarGraphicsVsync = "gfx.vsync";
+constexpr auto kReadbackShutdownTimeout = std::chrono::milliseconds { 3000 };
 
 class ResourceRegistryComponent : public oxygen::Component {
   OXYGEN_COMPONENT(ResourceRegistryComponent)
@@ -111,6 +113,18 @@ auto Graphics::Flush() -> void
 
 auto Graphics::Stop() -> void
 {
+  LOG_SCOPE_FUNCTION(INFO);
+
+  if (const auto readback_manager = GetReadbackManager();
+    readback_manager != nullptr) {
+    if (const auto shutdown_result
+      = readback_manager->Shutdown(kReadbackShutdownTimeout);
+      !shutdown_result.has_value()) {
+      LOG_F(WARNING, "Readback drain failed: {}",
+        make_error_code(shutdown_result.error()).message());
+    }
+  }
+
   if (!IsRunning()) {
     return;
   }
@@ -122,16 +136,23 @@ auto Graphics::Stop() -> void
 auto Graphics::BeginFrame(
   frame::SequenceNumber /*frame_number*/, frame::Slot frame_slot) -> void
 {
+  CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
+
   // Flush all command queues to ensure GPU work is submitted before releasing
   // resources
   FlushCommandQueues();
+
+  if (const auto readback_manager = GetReadbackManager();
+    readback_manager != nullptr) {
+    readback_manager->OnFrameStart(frame_slot);
+  }
 
   auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
   reclaimer.OnBeginFrame(frame_slot);
 }
 
-auto Graphics::EndFrame(
-  frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
+auto Graphics::EndFrame([[maybe_unused]] frame::SequenceNumber frame_number,
+  [[maybe_unused]] frame::Slot frame_slot) -> void
 {
   // TODO: Implement frame end logic
 }
@@ -276,6 +297,12 @@ auto Graphics::GetDeferredReclaimer() -> graphics::detail::DeferredReclaimer&
   // DeferredReclaimer interface implemented by that component.
   auto& comp = GetComponent<graphics::internal::DeferredReclaimerComponent>();
   return static_cast<graphics::detail::DeferredReclaimer&>(comp);
+}
+
+auto Graphics::GetReadbackManager() const
+  -> observer_ptr<graphics::ReadbackManager>
+{
+  return {};
 }
 
 auto Graphics::RegisterDeferredRelease(
