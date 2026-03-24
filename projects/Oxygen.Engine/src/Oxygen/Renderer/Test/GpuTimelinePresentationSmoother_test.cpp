@@ -127,15 +127,15 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest,
 
   auto second = first;
   second.frame_sequence = 2U;
-  second.scopes[0].start_ms = 0.5F;
-  second.scopes[0].end_ms = 1.5F;
+  second.scopes[0].start_ms = 0.6F;
+  second.scopes[0].end_ms = 1.6F;
   second.scopes[1].start_ms = 4.0F;
   second.scopes[1].end_ms = 5.0F;
 
   const auto presentation = smoother.Apply(second);
 
   ASSERT_EQ(presentation.scopes.size(), 2U);
-  EXPECT_LT(presentation.scopes[0].display_start_ms, 0.5F);
+  EXPECT_LT(presentation.scopes[0].display_start_ms, 0.6F);
   EXPECT_GT(presentation.scopes[0].display_start_ms, 0.0F);
   EXPECT_LT(presentation.scopes[1].display_start_ms, 4.0F);
   EXPECT_GT(presentation.scopes[1].display_start_ms, 2.0F);

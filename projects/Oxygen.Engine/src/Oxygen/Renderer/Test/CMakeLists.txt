@@ -54,12 +54,33 @@ m_gtest_program(
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
+m_gtest_program(
+  VirtualShadowContracts
+  SOURCES
+    "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
+    "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
+    "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
+    "VirtualShadow/VsmCacheManagerSeam_test.cpp"
+    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
+    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
+)
+
 if(TARGET oxygen::graphics-direct3d12)
   m_gtest_program(
     "ScreenHzb"
     SOURCES
       "ScreenHzbBuildPass_test.cpp"
       "Fixtures/RendererOffscreenGpuTestFixture.h"
+    DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    "Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests"
+    SOURCES
+      "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
     DEPS
       oxygen::graphics-direct3d12
   )
