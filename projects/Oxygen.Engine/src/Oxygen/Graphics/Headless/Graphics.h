@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
+class HeadlessReadbackManager;
 class Graphics final : public oxygen::Graphics {
 public:
   explicit Graphics(const SerializedBackendConfig& config,
@@ -24,10 +25,13 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_MAKE_NON_MOVABLE(Graphics)
 
-  ~Graphics() override = default;
+  ~Graphics() override;
 
   OXGN_HDLS_NDAPI auto GetDescriptorAllocator() const
     -> const DescriptorAllocator& override;
+
+  OXGN_HDLS_NDAPI auto GetReadbackManager() const
+    -> observer_ptr<graphics::ReadbackManager> override;
 
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override;
@@ -62,6 +66,9 @@ protected:
 
   OXGN_HDLS_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
     QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
+
+private:
+  std::unique_ptr<HeadlessReadbackManager> readback_manager_ {};
 };
 
 } // namespace oxygen::graphics::headless
