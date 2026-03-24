@@ -104,6 +104,22 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, Register_ContainsResource)
   EXPECT_TRUE(registry_->Contains(*resource1_));
 }
 
+//! Verify the registry reports the number of registered resources accurately.
+NOLINT_TEST_F(
+  ResourceRegistryBasicTest, RegisteredResourceCount_TracksResourceLifecycle)
+{
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), 2U);
+
+  registry_->UnRegisterResource(*resource1_);
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), 1U);
+
+  registry_->UnRegisterResource(*resource1_);
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), 1U);
+
+  registry_->UnRegisterResource(*resource2_);
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), 0U);
+}
+
 //! Verify UnRegisterResource is idempotent: calling it multiple times is safe.
 NOLINT_TEST_F(ResourceRegistryBasicTest, UnRegister_Idempotent)
 {
@@ -223,8 +239,42 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, UnRegisterViews_DoesNotRemoveResource)
 }
 
 /*!
+ View registration and removal must not perturb the registered-resource
+ * count;
+ only resource registration ownership affects that count.
+*/
+NOLINT_TEST_F(
+  ResourceRegistryBasicTest, RegisteredResourceCount_IgnoresViewLifecycle)
+{
+  constexpr TestViewDesc desc1 {
+    .view_type = ResourceViewType::kConstantBuffer,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .id = 41,
+  };
+  constexpr TestViewDesc desc2 {
+    .view_type = ResourceViewType::kConstantBuffer,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .id = 42,
+  };
+
+  const auto baseline_count = registry_->GetRegisteredResourceCount();
+  const auto view1 = RegisterView(*resource1_, desc1);
+  const auto view2 = RegisterView(*resource1_, desc2);
+  ASSERT_TRUE(view1->IsValid());
+  ASSERT_TRUE(view2->IsValid());
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), baseline_count);
+
+  registry_->UnRegisterView(*resource1_, view1);
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), baseline_count);
+
+  registry_->UnRegisterViews(*resource1_);
+  EXPECT_EQ(registry_->GetRegisteredResourceCount(), baseline_count);
+}
+
+/*!
  Ensure RegisterView's returned view can be found via Find() and that Find
- returns the identical native view object.
+
+ * returns the identical native view object.
 */
 NOLINT_TEST_F(
   ResourceRegistryBasicTest, RegisterView_Find_ReturnsSameNativeView)
