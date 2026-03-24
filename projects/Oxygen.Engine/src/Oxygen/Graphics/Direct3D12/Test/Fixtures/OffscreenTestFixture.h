@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -266,6 +267,7 @@ protected:
     if (!registry.Contains(*buffer)) {
       registry.Register(buffer);
     }
+    TrackBufferForCleanup(buffer);
   }
 
   auto RegisterResource(const std::shared_ptr<graphics::Texture>& texture) const
@@ -276,6 +278,7 @@ protected:
     if (!registry.Contains(*texture)) {
       registry.Register(texture);
     }
+    TrackTextureForCleanup(texture);
   }
 
   auto CreateRegisteredBuffer(const graphics::BufferDesc& desc)
@@ -313,6 +316,34 @@ protected:
   }
 
 private:
+  auto TrackBufferForCleanup(
+    const std::shared_ptr<graphics::Buffer>& buffer) const -> void
+  {
+    if (buffer == nullptr) {
+      return;
+    }
+
+    const auto already_tracked
+      = std::ranges::find(buffers_, buffer) != buffers_.end();
+    if (!already_tracked) {
+      buffers_.push_back(buffer);
+    }
+  }
+
+  auto TrackTextureForCleanup(
+    const std::shared_ptr<graphics::Texture>& texture) const -> void
+  {
+    if (texture == nullptr) {
+      return;
+    }
+
+    const auto already_tracked
+      = std::ranges::find(textures_, texture) != textures_.end();
+    if (!already_tracked) {
+      textures_.push_back(texture);
+    }
+  }
+
   auto CleanupTrackedResources() const noexcept -> void
   {
     if (graphics_ == nullptr) {
@@ -348,8 +379,8 @@ private:
 
   std::shared_ptr<oxygen::graphics::d3d12::Graphics> graphics_ {};
   std::unique_ptr<oxygen::graphics::QueuesStrategy> queue_strategy_ {};
-  std::vector<std::shared_ptr<graphics::Buffer>> buffers_ {};
-  std::vector<std::shared_ptr<graphics::Texture>> textures_ {};
+  mutable std::vector<std::shared_ptr<graphics::Buffer>> buffers_ {};
+  mutable std::vector<std::shared_ptr<graphics::Texture>> textures_ {};
   std::string backend_config_json_ {};
   std::string path_finder_config_json_ {};
 };

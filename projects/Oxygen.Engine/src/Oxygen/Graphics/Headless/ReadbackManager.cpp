@@ -251,6 +251,30 @@ namespace {
     return result;
   }
 
+  template <typename ResourceT>
+  auto TryUnregisterOwnedResource(Graphics& graphics,
+    std::shared_ptr<ResourceT>& resource, const std::string_view debug_name)
+    -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    try {
+      auto& registry = graphics.GetResourceRegistry();
+      if (registry.Contains(*resource)) {
+        registry.UnRegisterResource(*resource);
+      }
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING,
+        "Failed to unregister headless readback-owned resource `{}` for "
+        "`{}`: {}",
+        resource->GetName(), debug_name, ex.what());
+    }
+
+    resource.reset();
+  }
+
 } // namespace
 
 class HeadlessBufferReadback final
@@ -263,6 +287,8 @@ public:
     , debug_name_(debug_name)
   {
   }
+
+  ~HeadlessBufferReadback() override;
 
   auto EnqueueCopy(oxygen::graphics::CommandRecorder& recorder,
     const oxygen::graphics::Buffer& source, BufferRange range = {})
@@ -321,6 +347,8 @@ public:
   {
   }
 
+  ~HeadlessTextureReadback() override;
+
   auto EnqueueCopy(oxygen::graphics::CommandRecorder& recorder,
     const oxygen::graphics::Texture& source,
     TextureReadbackRequest request = {})
@@ -376,6 +404,9 @@ auto HeadlessBufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
     && readback_buffer_->GetSize() >= size_bytes) {
     return true;
   }
+
+  ReleaseMapping();
+  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
 
   readback_buffer_ = std::static_pointer_cast<Buffer>(
     manager_.graphics_.CreateBuffer(BufferDesc {
@@ -598,15 +629,27 @@ auto HeadlessBufferReadback::Cancel() -> std::expected<bool, ReadbackError>
 
 auto HeadlessBufferReadback::Reset() -> void
 {
+  static_cast<void>(RefreshStateFromTracker());
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+  }
+  if (state_ == ReadbackState::kPending) {
+    LOG_F(WARNING,
+      "Resetting headless buffer readback `{}` while a copy is still "
+      "pending; retaining staging buffer registration until completion",
+      debug_name_);
+  } else {
+    TryUnregisterOwnedResource(
+      manager_.graphics_, readback_buffer_, debug_name_);
   }
   ticket_.reset();
   last_error_.reset();
   resolved_range_ = {};
   state_ = ReadbackState::kIdle;
 }
+
+HeadlessBufferReadback::~HeadlessBufferReadback() { Reset(); }
 
 auto HeadlessTextureReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   -> bool
@@ -615,6 +658,9 @@ auto HeadlessTextureReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
     && readback_buffer_->GetSize() >= size_bytes) {
     return true;
   }
+
+  ReleaseMapping();
+  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
 
   readback_buffer_ = std::static_pointer_cast<Buffer>(
     manager_.graphics_.CreateBuffer(BufferDesc {
@@ -845,9 +891,19 @@ auto HeadlessTextureReadback::Cancel() -> std::expected<bool, ReadbackError>
 
 auto HeadlessTextureReadback::Reset() -> void
 {
+  static_cast<void>(RefreshStateFromTracker());
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+  }
+  if (state_ == ReadbackState::kPending) {
+    LOG_F(WARNING,
+      "Resetting headless texture readback `{}` while a copy is still "
+      "pending; retaining staging buffer registration until completion",
+      debug_name_);
+  } else {
+    TryUnregisterOwnedResource(
+      manager_.graphics_, readback_buffer_, debug_name_);
   }
   ticket_.reset();
   last_error_.reset();
@@ -855,6 +911,8 @@ auto HeadlessTextureReadback::Reset() -> void
   mapped_size_ = {};
   state_ = ReadbackState::kIdle;
 }
+
+HeadlessTextureReadback::~HeadlessTextureReadback() { Reset(); }
 
 HeadlessReadbackManager::HeadlessReadbackManager(Graphics& graphics)
   : graphics_(graphics)

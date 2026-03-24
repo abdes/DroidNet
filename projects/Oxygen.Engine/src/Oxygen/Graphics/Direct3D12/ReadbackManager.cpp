@@ -268,6 +268,29 @@ namespace {
     return result;
   }
 
+  template <typename ResourceT>
+  auto TryUnregisterOwnedResource(Graphics& graphics,
+    std::shared_ptr<ResourceT>& resource, const std::string_view debug_name)
+    -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    try {
+      auto& registry = graphics.GetResourceRegistry();
+      if (registry.Contains(*resource)) {
+        registry.UnRegisterResource(*resource);
+      }
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING,
+        "Failed to unregister readback-owned resource `{}` for `{}`: {}",
+        resource->GetName(), debug_name, ex.what());
+    }
+
+    resource.reset();
+  }
+
 } // namespace
 
 class D3D12BufferReadback final
@@ -280,6 +303,8 @@ public:
     , debug_name_(debug_name)
   {
   }
+
+  ~D3D12BufferReadback() override;
 
   auto EnqueueCopy(oxygen::graphics::CommandRecorder& recorder,
     const Buffer& source, BufferRange range = {})
@@ -334,6 +359,9 @@ auto D3D12BufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
     && readback_buffer_->GetSize() >= size_bytes) {
     return true;
   }
+
+  ReleaseMapping();
+  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
 
   readback_buffer_ = manager_.graphics_.CreateBuffer(BufferDesc {
     .size_bytes = size_bytes,
@@ -553,15 +581,27 @@ auto D3D12BufferReadback::Cancel() -> std::expected<bool, ReadbackError>
 
 auto D3D12BufferReadback::Reset() -> void
 {
+  static_cast<void>(RefreshStateFromTracker());
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+  }
+  if (state_ == ReadbackState::kPending) {
+    LOG_F(WARNING,
+      "Resetting D3D12 buffer readback `{}` while a copy is still pending; "
+      "retaining staging buffer registration until completion",
+      debug_name_);
+  } else {
+    TryUnregisterOwnedResource(
+      manager_.graphics_, readback_buffer_, debug_name_);
   }
   ticket_.reset();
   last_error_.reset();
   resolved_range_ = {};
   state_ = ReadbackState::kIdle;
 }
+
+D3D12BufferReadback::~D3D12BufferReadback() { Reset(); }
 
 class D3D12TextureReadback final
   : public GpuTextureReadback,
@@ -573,6 +613,8 @@ public:
     , debug_name_(debug_name)
   {
   }
+
+  ~D3D12TextureReadback() override;
 
   auto EnqueueCopy(oxygen::graphics::CommandRecorder& recorder,
     const oxygen::graphics::Texture& source,
@@ -634,6 +676,9 @@ auto D3D12TextureReadback::EnsureReadbackBuffer(const SizeBytes size_bytes)
     return true;
   }
 
+  ReleaseMapping();
+  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
+
   readback_buffer_ = manager_.graphics_.CreateBuffer(BufferDesc {
     .size_bytes = size_bytes.get(),
     .usage = BufferUsage::kNone,
@@ -661,6 +706,8 @@ auto D3D12TextureReadback::EnsureResolveTexture(const TextureDesc& source_desc)
     && MatchesResolveTextureDesc(resolve_texture_desc_, expected_desc)) {
     return {};
   }
+
+  TryUnregisterOwnedResource(manager_.graphics_, resolve_texture_, debug_name_);
 
   resolve_texture_ = manager_.graphics_.CreateTexture(expected_desc);
   if (resolve_texture_ == nullptr) {
@@ -953,9 +1000,21 @@ auto D3D12TextureReadback::Cancel() -> std::expected<bool, ReadbackError>
 
 auto D3D12TextureReadback::Reset() -> void
 {
+  static_cast<void>(RefreshStateFromTracker());
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+  }
+  if (state_ == ReadbackState::kPending) {
+    LOG_F(WARNING,
+      "Resetting D3D12 texture readback `{}` while a copy is still pending; "
+      "retaining staging resources until completion",
+      debug_name_);
+  } else {
+    TryUnregisterOwnedResource(
+      manager_.graphics_, readback_buffer_, debug_name_);
+    TryUnregisterOwnedResource(
+      manager_.graphics_, resolve_texture_, debug_name_);
   }
   ticket_.reset();
   last_error_.reset();
@@ -963,6 +1022,8 @@ auto D3D12TextureReadback::Reset() -> void
   mapped_size_ = {};
   state_ = ReadbackState::kIdle;
 }
+
+D3D12TextureReadback::~D3D12TextureReadback() { Reset(); }
 
 D3D12ReadbackManager::D3D12ReadbackManager(Graphics& graphics)
   : graphics_(graphics)

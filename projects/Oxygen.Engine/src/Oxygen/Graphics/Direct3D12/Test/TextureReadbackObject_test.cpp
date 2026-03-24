@@ -756,6 +756,38 @@ NOLINT_TEST_F(TextureReadbackLifecycleTest, ResetAfterCompletionReturnsIdle)
 }
 
 NOLINT_TEST_F(TextureReadbackLifecycleTest,
+  ResetAfterCompletionReleasesOwnedResolveAndStagingRegistrations)
+{
+  auto texture = CreateClearedMsaaRenderTarget(
+    Color { 0.1F, 0.2F, 0.3F, 1.0F }, "cleanup-msaa-texture");
+  auto readback = CreateTextureReadback("cleanup-msaa-readback");
+
+  auto& registry = Backend().GetResourceRegistry();
+  const auto baseline_count = registry.GetRegisteredResourceCount();
+
+  {
+    auto recorder = AcquireRecorder("texture-readback-cleanup-msaa");
+    CHECK_NOTNULL_F(recorder.get());
+    recorder->BeginTrackingResourceState(*texture, ResourceStates::kCommon);
+
+    const auto ticket = readback->EnqueueCopy(*recorder, *texture,
+      TextureReadbackRequest {
+        .msaa_mode = MsaaReadbackMode::kResolveIfNeeded,
+      });
+    ASSERT_TRUE(ticket.has_value());
+  }
+
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+
+  const auto during_readback_count = registry.GetRegisteredResourceCount();
+  EXPECT_GT(during_readback_count, baseline_count);
+
+  readback->Reset();
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
+}
+
+NOLINT_TEST_F(TextureReadbackLifecycleTest,
   ReusableTextureReadbackSupportsSequentialEnqueueMapResetCycles)
 {
   TextureDesc texture_desc {};
