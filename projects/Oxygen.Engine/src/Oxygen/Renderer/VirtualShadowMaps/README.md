@@ -18,6 +18,8 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - backend-backed working-set resource publication
   - retained unreferenced-entry continuity publication
   - scoped targeted invalidation and explicit initialization work
+  - GPU page-management execution for stages 6-8 through `VsmPageManagementPass`
+  - deterministic available-page packing so GPU fresh allocation matches CPU plan order
 - shader ABI contracts for page-table encoding, virtual page flags, shared physical metadata, and projection payloads
   - shared physical metadata uses `oxygen::Bool32` for explicit shader-ABI boolean semantics rather than raw integer flags
 - standalone Phase C request-generation contracts now exist:
@@ -26,6 +28,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmPageRequestGeneration.*` keeps the projection/request-merging policy independently testable on CPU
 - Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
+  - that dedicated bucket now covers physical-pool ABI publication, request generation, and page-management stage readback contracts
 
 ## Known Forward Gaps
 

@@ -48,11 +48,18 @@ NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
 
   const auto& frame = CommitFrame(manager);
   ASSERT_TRUE(frame.is_ready);
+  ASSERT_NE(frame.physical_page_meta_buffer, nullptr);
   ASSERT_NE(frame.page_table_buffer, nullptr);
   ASSERT_NE(frame.page_flags_buffer, nullptr);
   ASSERT_NE(frame.dirty_flags_buffer, nullptr);
   ASSERT_NE(frame.physical_page_list_buffer, nullptr);
   ASSERT_NE(frame.page_rect_bounds_buffer, nullptr);
+
+  const auto& meta_desc = frame.physical_page_meta_buffer->GetDescriptor();
+  EXPECT_EQ(meta_desc.size_bytes,
+    512ULL * sizeof(oxygen::renderer::vsm::VsmPhysicalPageMeta));
+  EXPECT_EQ(meta_desc.usage, BufferUsage::kStorage);
+  EXPECT_EQ(meta_desc.memory, BufferMemory::kDeviceLocal);
 
   const auto& page_table_desc = frame.page_table_buffer->GetDescriptor();
   EXPECT_EQ(page_table_desc.size_bytes, 2ULL * sizeof(std::uint32_t));
@@ -91,6 +98,7 @@ NOLINT_TEST_F(
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-a" });
   const auto& first = CommitFrame(manager);
   const auto first_page_table = first.page_table_buffer;
+  const auto first_meta = first.physical_page_meta_buffer;
   const auto first_page_flags = first.page_flags_buffer;
   const auto first_dirty_flags = first.dirty_flags_buffer;
   const auto first_page_list = first.physical_page_list_buffer;
@@ -101,6 +109,7 @@ NOLINT_TEST_F(
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-b" });
   const auto& second = CommitFrame(manager);
 
+  EXPECT_EQ(second.physical_page_meta_buffer, first_meta);
   EXPECT_EQ(second.page_table_buffer, first_page_table);
   EXPECT_EQ(second.page_flags_buffer, first_page_flags);
   EXPECT_EQ(second.dirty_flags_buffer, first_dirty_flags);
@@ -123,6 +132,7 @@ NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-a" });
   const auto& first = CommitFrame(manager);
   const auto first_page_table = first.page_table_buffer;
+  const auto first_meta = first.physical_page_meta_buffer;
   const auto first_page_flags = first.page_flags_buffer;
   const auto first_rect_bounds = first.page_rect_bounds_buffer;
   manager.ExtractFrameData();
@@ -131,6 +141,7 @@ NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-b" });
   const auto& second = CommitFrame(manager);
 
+  EXPECT_EQ(second.physical_page_meta_buffer, first_meta);
   EXPECT_NE(second.page_table_buffer, first_page_table);
   EXPECT_NE(second.page_flags_buffer, first_page_flags);
   EXPECT_NE(second.page_rect_bounds_buffer, first_rect_bounds);
@@ -155,6 +166,7 @@ NOLINT_TEST_F(
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-a" });
   const auto& first = CommitFrame(manager);
   const auto first_page_table = first.page_table_buffer;
+  const auto first_meta = first.physical_page_meta_buffer;
   ASSERT_NE(first_page_table, nullptr);
 
   manager.Reset();
@@ -164,6 +176,7 @@ NOLINT_TEST_F(
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-b" });
   const auto& second = CommitFrame(manager);
 
+  EXPECT_EQ(second.physical_page_meta_buffer, first_meta);
   EXPECT_NE(second.page_table_buffer, first_page_table);
 }
 
@@ -182,6 +195,7 @@ NOLINT_TEST_F(
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame" });
 
   const auto& frame = CommitFrame(manager);
+  EXPECT_EQ(frame.physical_page_meta_buffer, nullptr);
   EXPECT_EQ(frame.page_table_buffer, nullptr);
   EXPECT_EQ(frame.page_flags_buffer, nullptr);
   EXPECT_EQ(frame.dirty_flags_buffer, nullptr);

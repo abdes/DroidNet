@@ -93,6 +93,7 @@ if(TARGET oxygen::graphics-direct3d12)
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
       "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
+      "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
     DEPS

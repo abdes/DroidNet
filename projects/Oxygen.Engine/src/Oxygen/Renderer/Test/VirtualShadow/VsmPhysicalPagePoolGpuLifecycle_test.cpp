@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 
 namespace {
@@ -58,7 +59,9 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   EXPECT_TRUE(shadow_desc.is_shader_resource);
 
   const auto metadata_desc = shadow_snapshot.metadata_buffer->GetDescriptor();
-  EXPECT_EQ(metadata_desc.size_bytes, 2048ULL);
+  EXPECT_EQ(metadata_desc.size_bytes,
+    static_cast<std::uint64_t>(shadow_config.physical_tile_capacity)
+      * sizeof(oxygen::renderer::vsm::VsmPhysicalPageMeta));
   EXPECT_EQ(metadata_desc.usage, BufferUsage::kStorage);
   EXPECT_EQ(metadata_desc.memory, BufferMemory::kDeviceLocal);
 

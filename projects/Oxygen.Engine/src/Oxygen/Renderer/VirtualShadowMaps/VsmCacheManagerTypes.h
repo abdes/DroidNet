@@ -283,6 +283,7 @@ struct VsmPageAllocationSnapshot {
 struct VsmPageAllocationFrame {
   VsmPageAllocationSnapshot snapshot {};
   VsmPageAllocationPlan plan {};
+  std::shared_ptr<const graphics::Buffer> physical_page_meta_buffer {};
   std::shared_ptr<const graphics::Buffer> page_table_buffer {};
   std::shared_ptr<const graphics::Buffer> page_flags_buffer {};
   std::shared_ptr<const graphics::Buffer> dirty_flags_buffer {};

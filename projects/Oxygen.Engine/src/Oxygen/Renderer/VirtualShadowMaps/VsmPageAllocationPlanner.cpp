@@ -40,11 +40,6 @@ namespace {
     }
   };
 
-  struct ResolvedRequest {
-    RequestKey key {};
-    std::uint32_t page_table_index { 0 };
-  };
-
   struct PendingRequest {
     VsmPageAllocationDecision decision {};
     std::uint32_t page_table_index { 0 };
@@ -100,46 +95,9 @@ namespace {
     ++plan.initialized_page_count;
   }
 
-  auto ResolveRequest(const VsmVirtualAddressSpaceFrame& frame,
-    const VsmPageRequest& request) -> std::optional<ResolvedRequest>
-  {
-    for (const auto& layout : frame.local_light_layouts) {
-      if (layout.id != request.map_id) {
-        continue;
-      }
-      const auto page_table_index
-        = TryGetPageTableEntryIndex(layout, request.page);
-      if (!page_table_index.has_value()) {
-        return std::nullopt;
-      }
-      return ResolvedRequest {
-        .key = { .map_id = request.map_id, .page = request.page },
-        .page_table_index = *page_table_index,
-      };
-    }
-
-    for (const auto& layout : frame.directional_layouts) {
-      if (request.page.level >= layout.clip_level_count
-        || request.map_id != layout.first_id + request.page.level) {
-        continue;
-      }
-      const auto page_table_index
-        = TryGetPageTableEntryIndex(layout, request.page);
-      if (!page_table_index.has_value()) {
-        return std::nullopt;
-      }
-      return ResolvedRequest {
-        .key = { .map_id = request.map_id, .page = request.page },
-        .page_table_index = *page_table_index,
-      };
-    }
-
-    return std::nullopt;
-  }
-
   auto TranslatePreviousOwner(const VsmVirtualAddressSpaceFrame& current_frame,
     const VsmPhysicalPageMeta& previous_meta, const VsmVirtualRemapEntry& remap)
-    -> std::optional<ResolvedRequest>
+    -> std::optional<RequestKey>
   {
     if (remap.current_id == 0) {
       return std::nullopt;
@@ -155,16 +113,24 @@ namespace {
       return std::nullopt;
     }
 
-    return ResolveRequest(current_frame,
-      VsmPageRequest {
-        .map_id = remap.current_id,
-        .page
-        = {
-            .level = previous_meta.owner_page.level,
-            .page_x = static_cast<std::uint32_t>(translated_x),
-            .page_y = static_cast<std::uint32_t>(translated_y),
-          },
-      });
+    const auto translated_request = VsmPageRequest {
+      .map_id = remap.current_id,
+      .page
+      = {
+          .level = previous_meta.owner_page.level,
+          .page_x = static_cast<std::uint32_t>(translated_x),
+          .page_y = static_cast<std::uint32_t>(translated_y),
+        },
+    };
+    if (!detail::TryResolvePageTableEntryIndex(
+          current_frame, translated_request)
+          .has_value()) {
+      return std::nullopt;
+    }
+    return RequestKey {
+      .map_id = translated_request.map_id,
+      .page = translated_request.page,
+    };
   }
 
   auto PushEvictionDecision(VsmPageAllocationPlan& plan,
@@ -214,8 +180,9 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
       continue;
     }
 
-    const auto resolved = ResolveRequest(seam.current_frame, requests[i]);
-    if (!resolved.has_value()) {
+    const auto page_table_index
+      = detail::TryResolvePageTableEntryIndex(seam.current_frame, requests[i]);
+    if (!page_table_index.has_value()) {
       pending.decision.action = VsmAllocationAction::kReject;
       pending.decision.failure_reason
         = VsmAllocationFailureReason::kInvalidRequest;
@@ -223,8 +190,12 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
       continue;
     }
 
-    pending.page_table_index = resolved->page_table_index;
-    if (!request_index_by_key.emplace(resolved->key, i).second) {
+    pending.page_table_index = *page_table_index;
+    if (!request_index_by_key
+          .emplace(RequestKey { .map_id = requests[i].map_id,
+                     .page = requests[i].page },
+            i)
+          .second) {
       pending.decision.action = VsmAllocationAction::kReject;
       pending.decision.failure_reason
         = VsmAllocationFailureReason::kInvalidRequest;
@@ -281,7 +252,7 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         continue;
       }
 
-      const auto request_it = request_index_by_key.find(translated->key);
+      const auto request_it = request_index_by_key.find(*translated);
       if (request_it == request_index_by_key.end()) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
         available_physical_pages.push_back(physical_page);

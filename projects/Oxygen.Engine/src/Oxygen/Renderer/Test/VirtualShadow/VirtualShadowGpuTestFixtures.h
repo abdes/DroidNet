@@ -32,6 +32,7 @@
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerSeam.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpace.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualRemapBuilder.h>
 
 namespace oxygen::renderer::vsm::testing {
 
@@ -186,10 +187,10 @@ protected:
 
 class VsmCacheManagerGpuTestBase : public VirtualShadowGpuTest {
 protected:
-  [[nodiscard]] static auto MakeSeam(VsmPhysicalPagePoolManager& pool_manager,
+  [[nodiscard]] static auto MakeSinglePageLocalFrame(
     const std::uint64_t frame_generation, const std::uint32_t first_virtual_id,
     const char* frame_name = "vsm-frame",
-    const std::uint32_t local_light_count = 1U) -> VsmCacheManagerSeam
+    const std::uint32_t local_light_count = 1U) -> VsmVirtualAddressSpaceFrame
   {
     auto address_space = VsmVirtualAddressSpace {};
     address_space.BeginFrame(
@@ -206,12 +207,32 @@ protected:
       });
     }
 
+    return address_space.DescribeFrame();
+  }
+
+  [[nodiscard]] static auto MakeSeam(VsmPhysicalPagePoolManager& pool_manager,
+    const VsmVirtualAddressSpaceFrame& current_frame,
+    const VsmVirtualAddressSpaceFrame* previous_frame = nullptr)
+    -> VsmCacheManagerSeam
+  {
     return VsmCacheManagerSeam {
       .physical_pool = pool_manager.GetShadowPoolSnapshot(),
       .hzb_pool = pool_manager.GetHzbPoolSnapshot(),
-      .current_frame = address_space.DescribeFrame(),
-      .previous_to_current_remap = {},
+      .current_frame = current_frame,
+      .previous_to_current_remap = previous_frame != nullptr
+        ? BuildVirtualRemapTable(*previous_frame, current_frame)
+        : VsmVirtualRemapTable {},
     };
+  }
+
+  [[nodiscard]] static auto MakeSeam(VsmPhysicalPagePoolManager& pool_manager,
+    const std::uint64_t frame_generation, const std::uint32_t first_virtual_id,
+    const char* frame_name = "vsm-frame",
+    const std::uint32_t local_light_count = 1U) -> VsmCacheManagerSeam
+  {
+    return MakeSeam(pool_manager,
+      MakeSinglePageLocalFrame(
+        frame_generation, first_virtual_id, frame_name, local_light_count));
   }
 };
 

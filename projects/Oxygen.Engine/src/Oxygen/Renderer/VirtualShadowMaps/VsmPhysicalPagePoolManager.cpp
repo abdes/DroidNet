@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPoolCompatibility.h>
 
@@ -22,7 +23,7 @@ namespace oxygen::renderer::vsm {
 
 namespace {
 
-  constexpr auto kPhysicalPageMetadataStrideBytes = sizeof(std::uint32_t);
+  constexpr auto kPhysicalPageMetadataStrideBytes = sizeof(VsmPhysicalPageMeta);
 
   auto BuildShadowPoolTextureDebugName(const VsmPhysicalPoolConfig& config)
     -> std::string

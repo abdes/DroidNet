@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerSeam.h>
@@ -79,6 +80,28 @@ namespace oxygen::renderer::vsm::detail {
   snapshot.page_table.resize(seam.current_frame.total_page_table_entry_count);
   snapshot.physical_pages.resize(seam.physical_pool.tile_capacity);
   return snapshot;
+}
+
+[[nodiscard]] inline auto TryResolvePageTableEntryIndex(
+  const VsmVirtualAddressSpaceFrame& frame, const VsmPageRequest& request)
+  -> std::optional<std::uint32_t>
+{
+  for (const auto& layout : frame.local_light_layouts) {
+    if (layout.id != request.map_id) {
+      continue;
+    }
+    return TryGetPageTableEntryIndex(layout, request.page);
+  }
+
+  for (const auto& layout : frame.directional_layouts) {
+    if (request.page.level >= layout.clip_level_count
+      || request.map_id != layout.first_id + request.page.level) {
+      continue;
+    }
+    return TryGetPageTableEntryIndex(layout, request.page);
+  }
+
+  return std::nullopt;
 }
 
 } // namespace oxygen::renderer::vsm::detail
