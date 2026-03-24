@@ -133,6 +133,55 @@ class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
+  //! Minimal frame bootstrap for explicit off-screen pass execution.
+  struct OffscreenFrameConfig {
+    frame::Slot frame_slot { frame::Slot { 0U } };
+    frame::SequenceNumber frame_sequence { 1U };
+    float delta_time_seconds { 1.0F / 60.0F };
+    observer_ptr<const scene::Scene> scene { nullptr };
+  };
+
+  //! Scoped renderer-owned off-screen frame session.
+  /*!
+   Binds a valid RenderContext to this Renderer and starts the minimal
+
+   - per-frame services needed by renderer passes. Intended for explicit
+   - off-screen pass execution in tests and tools without exposing renderer
+   - internals through friend access.
+  */
+  class OffscreenFrameSession {
+  public:
+    OXGN_RNDR_API OffscreenFrameSession(
+      Renderer& renderer, OffscreenFrameConfig config);
+    OXGN_RNDR_API ~OffscreenFrameSession();
+
+    OXYGEN_MAKE_NON_COPYABLE(OffscreenFrameSession)
+    OXGN_RNDR_API OffscreenFrameSession(OffscreenFrameSession&& other) noexcept;
+    OXGN_RNDR_API auto operator=(OffscreenFrameSession&& other) noexcept
+      -> OffscreenFrameSession&;
+
+    OXGN_RNDR_API auto SetCurrentView(ViewId view_id,
+      const ResolvedView& resolved_view,
+      const PreparedSceneFrame& prepared_frame) -> void;
+
+    [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
+    {
+      return render_context_;
+    }
+
+    [[nodiscard]] auto GetRenderContext() const noexcept -> const RenderContext&
+    {
+      return render_context_;
+    }
+
+  private:
+    auto Release() noexcept -> void;
+
+    Renderer* renderer_ { nullptr };
+    RenderContext render_context_ {};
+    bool active_ { false };
+  };
+
   struct LastFrameStats {
     double sceneprep_ms { 0.0 };
     double view_render_ms { 0.0 };
@@ -249,6 +298,10 @@ public:
   //! Submit compositing tasks for the current frame.
   OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
+
+  //! Begins a renderer-owned off-screen frame and returns the scoped session.
+  OXGN_RNDR_NDAPI auto BeginOffscreenFrame(OffscreenFrameConfig config = {})
+    -> OffscreenFrameSession;
 
   //! Returns a point-in-time renderer stats snapshot.
   OXGN_RNDR_NDAPI auto GetStats() const noexcept -> Stats;
@@ -438,6 +491,10 @@ private:
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
+  auto EnsureOffscreenFrameServicesInitialized() -> void;
+  auto BeginFrameServices(
+    frame::Slot frame_slot, frame::SequenceNumber frame_sequence) -> void;
+  auto EndOffscreenFrame() noexcept -> void;
 
   // Helper extractions for OnRender to keep the main coroutine body concise.
   auto AcquireRecorderForView(ViewId view_id, Graphics& gfx)
@@ -637,6 +694,7 @@ private:
   std::uint64_t compositing_profile_frames_ { 0 };
   std::uint64_t compositing_profile_total_ns_ { 0 };
   std::uint64_t compositing_last_frame_ns_ { 0 };
+  bool offscreen_frame_active_ { false };
 };
 
 } // namespace oxygen::engine
