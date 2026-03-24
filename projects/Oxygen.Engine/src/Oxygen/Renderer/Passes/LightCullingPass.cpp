@@ -201,6 +201,27 @@ struct LightCullingPass::Impl {
       pass_constants_mapped_ptr = nullptr;
     }
 
+    if (gfx != nullptr) {
+      auto& registry = gfx->GetResourceRegistry();
+      const auto unregister_if_present = [&](const auto& resource) {
+        if (!resource) {
+          return;
+        }
+        try {
+          if (registry.Contains(*resource)) {
+            registry.UnRegisterResource(*resource);
+          }
+        } catch (const std::exception& ex) {
+          LOG_F(WARNING, "LightCullingPass cleanup failed for `{}`: {}",
+            resource->GetName(), ex.what());
+        }
+      };
+
+      unregister_if_present(pass_constants_buffer);
+      unregister_if_present(cluster_grid_buffer);
+      unregister_if_present(light_index_list_buffer);
+    }
+
     const auto nexus_telemetry = retire_strategy_.GetTelemetrySnapshot();
     const auto expected_zero_marker = [](const uint64_t value) -> const char* {
       return value == 0U ? " ✓" : " (expected 0) !";
