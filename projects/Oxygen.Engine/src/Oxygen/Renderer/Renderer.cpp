@@ -647,6 +647,209 @@ Renderer::~Renderer()
   scene_prep_.reset();
 }
 
+Renderer::OffscreenFrameSession::OffscreenFrameSession(
+  Renderer& renderer, const OffscreenFrameConfig config)
+  : renderer_(&renderer)
+  , active_(true)
+{
+  renderer_->WireContext(render_context_, {});
+  render_context_.scene = config.scene;
+}
+
+Renderer::OffscreenFrameSession::~OffscreenFrameSession() { Release(); }
+
+Renderer::OffscreenFrameSession::OffscreenFrameSession(
+  OffscreenFrameSession&& other) noexcept
+  : renderer_(std::exchange(other.renderer_, nullptr))
+  , render_context_(std::move(other.render_context_))
+  , active_(std::exchange(other.active_, false))
+{
+}
+
+auto Renderer::OffscreenFrameSession::operator=(
+  OffscreenFrameSession&& other) noexcept -> OffscreenFrameSession&
+{
+  if (this == &other) {
+    return *this;
+  }
+
+  Release();
+  renderer_ = std::exchange(other.renderer_, nullptr);
+  render_context_ = std::move(other.render_context_);
+  active_ = std::exchange(other.active_, false);
+  return *this;
+}
+
+auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
+  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame)
+  -> void
+{
+  CHECK_F(active_ && renderer_ != nullptr,
+    "OffscreenFrameSession::SetCurrentView called on an inactive session");
+  CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
+    "Renderer offscreen frame requires ViewConstantsManager");
+
+  render_context_.current_view = {};
+  render_context_.current_view.view_id = view_id;
+  render_context_.current_view.resolved_view.reset(&resolved_view);
+  render_context_.current_view.prepared_frame.reset(&prepared_frame);
+
+  renderer_->UpdateViewConstantsFromView(resolved_view);
+  renderer_->view_const_cpu_
+    .SetTimeSeconds(renderer_->last_frame_dt_seconds_, ViewConstants::kRenderer)
+    .SetFrameSlot(renderer_->frame_slot_, ViewConstants::kRenderer)
+    .SetFrameSequenceNumber(renderer_->frame_seq_num, ViewConstants::kRenderer)
+    .SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
+
+  const auto& snapshot = renderer_->view_const_cpu_.GetSnapshot();
+  auto buffer_info = renderer_->view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(snapshot));
+  CHECK_F(buffer_info.buffer != nullptr,
+    "Renderer offscreen frame failed to write ViewConstants for view {}",
+    view_id.get());
+
+  renderer_->WireContext(render_context_, buffer_info.buffer);
+}
+
+auto Renderer::OffscreenFrameSession::Release() noexcept -> void
+{
+  if (!active_) {
+    return;
+  }
+  if (renderer_ != nullptr) {
+    renderer_->EndOffscreenFrame();
+  }
+  renderer_ = nullptr;
+  active_ = false;
+}
+
+auto Renderer::EnsureOffscreenFrameServicesInitialized() -> void
+{
+  auto gfx = gfx_weak_.lock();
+  CHECK_F(gfx != nullptr,
+    "Renderer::BeginOffscreenFrame requires a live Graphics backend");
+  CHECK_NOTNULL_F(uploader_.get(),
+    "Renderer::BeginOffscreenFrame requires UploadCoordinator");
+  CHECK_NOTNULL_F(inline_transfers_.get(),
+    "Renderer::BeginOffscreenFrame requires InlineTransfersCoordinator");
+  CHECK_NOTNULL_F(inline_staging_provider_.get(),
+    "Renderer::BeginOffscreenFrame requires inline staging provider");
+
+  if (!scene_prep_state_) {
+    LOG_F(INFO,
+      "Renderer: initializing minimal ScenePrepState for offscreen frame use");
+    auto light_manager
+      = std::make_unique<renderer::LightManager>(observer_ptr { gfx.get() },
+        observer_ptr { inline_staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() });
+    scene_prep_state_ = std::make_unique<sceneprep::ScenePrepState>(
+      nullptr, nullptr, nullptr, nullptr, std::move(light_manager));
+  }
+
+  if (!view_const_manager_) {
+    LOG_F(INFO,
+      "Renderer: initializing ViewConstantsManager for offscreen frame use");
+    view_const_manager_ = std::make_unique<internal::ViewConstantsManager>(
+      observer_ptr { gfx.get() },
+      static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
+  }
+
+  if (!view_frame_bindings_publisher_) {
+    view_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<ViewFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "ViewFrameBindings");
+  }
+
+  if (!lighting_frame_bindings_publisher_) {
+    lighting_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<LightingFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "LightingFrameBindings");
+  }
+}
+
+auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
+  const frame::SequenceNumber frame_sequence) -> void
+{
+  CHECK_F(frame_slot != frame::kInvalidSlot,
+    "Renderer::BeginFrameServices requires a valid frame slot");
+
+  auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+  frame_slot_ = frame_slot;
+  frame_seq_num = frame_sequence;
+
+  if (gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->OnFrameStart(frame_sequence);
+  }
+
+  inline_transfers_->OnFrameStart(tag, frame_slot);
+  uploader_->OnFrameStart(tag, frame_slot);
+  if (texture_binder_) {
+    texture_binder_->OnFrameStart();
+  }
+  if (view_const_manager_) {
+    view_const_manager_->OnFrameStart(frame_slot);
+  }
+  if (view_frame_bindings_publisher_) {
+    view_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (draw_frame_bindings_publisher_) {
+    draw_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (view_color_data_publisher_) {
+    view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (debug_frame_bindings_publisher_) {
+    debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (lighting_frame_bindings_publisher_) {
+    lighting_frame_bindings_publisher_->OnFrameStart(
+      frame_sequence, frame_slot);
+  }
+  if (shadow_manager_) {
+    shadow_manager_->OnFrameStart(tag, frame_sequence, frame_slot);
+  }
+  if (shadow_frame_bindings_publisher_) {
+    shadow_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (environment_view_data_publisher_) {
+    environment_view_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (environment_frame_bindings_publisher_) {
+    environment_frame_bindings_publisher_->OnFrameStart(
+      frame_sequence, frame_slot);
+  }
+  if (env_static_manager_) {
+    env_static_manager_->OnFrameStart(tag, frame_slot);
+    env_static_manager_->SetBlueNoiseEnabled(atmosphere_blue_noise_enabled_);
+  }
+
+  if (scene_prep_state_ != nullptr) {
+    if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
+      transforms->OnFrameStart(tag, frame_sequence, frame_slot);
+    }
+    if (const auto geometry = scene_prep_state_->GetGeometryUploader()) {
+      geometry->OnFrameStart(tag, frame_slot);
+    }
+    if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
+      materials->OnFrameStart(tag, frame_slot);
+    }
+    if (const auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+      emitter->OnFrameStart(tag, frame_sequence, frame_slot);
+    }
+    if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+      light_manager->OnFrameStart(tag, frame_sequence, frame_slot);
+    }
+  }
+}
+
+auto Renderer::EndOffscreenFrame() noexcept -> void
+{
+  offscreen_frame_active_ = false;
+}
+
 auto Renderer::GetStats() const noexcept -> Stats
 {
   const double sceneprep_avg_ms = sceneprep_profile_frames_ > 0
@@ -1179,6 +1382,7 @@ auto Renderer::OnShutdown() noexcept -> void
   upload_staging_provider_.reset();
   inline_staging_provider_.reset();
   uploader_.reset();
+  offscreen_frame_active_ = false;
 
   if (auto gfx = gfx_weak_.lock()) {
     gfx->GetDeferredReclaimer().OnRendererShutdown();
@@ -1403,6 +1607,51 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
   std::lock_guard lock(composition_mutex_);
   composition_submission_ = std::move(submission);
   composition_surface_ = std::move(target_surface);
+}
+
+auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
+  -> OffscreenFrameSession
+{
+  CHECK_F(!offscreen_frame_active_,
+    "Renderer::BeginOffscreenFrame does not support nested offscreen frames");
+  CHECK_F(render_context_ == nullptr,
+    "Renderer::BeginOffscreenFrame cannot run while the main renderer frame "
+    "context is active");
+  CHECK_F(config.frame_slot != frame::kInvalidSlot,
+    "Renderer::BeginOffscreenFrame requires a valid frame slot");
+  CHECK_F(std::isfinite(config.delta_time_seconds)
+      && config.delta_time_seconds > 0.0F,
+    "Renderer::BeginOffscreenFrame requires a finite positive delta time");
+
+  EnsureOffscreenFrameServicesInitialized();
+
+  resolved_views_.clear();
+  per_view_runtime_state_.clear();
+  {
+    std::lock_guard lock(composition_mutex_);
+    composition_submission_.reset();
+    composition_surface_.reset();
+  }
+
+  last_frame_dt_seconds_ = config.delta_time_seconds;
+  frame_budget_stats_.cpu_budget = std::chrono::milliseconds(16);
+  frame_budget_stats_.gpu_budget = std::chrono::milliseconds(16);
+
+  const auto current_scene = config.scene.get();
+  if (current_scene != last_scene_identity_) {
+    LOG_F(INFO,
+      "Renderer: offscreen scene identity changed (old={} new={}); resetting "
+      "shadow cache state",
+      fmt::ptr(last_scene_identity_), fmt::ptr(current_scene));
+    last_scene_identity_ = current_scene;
+    if (shadow_manager_) {
+      shadow_manager_->ResetCachedState();
+    }
+  }
+
+  BeginFrameServices(config.frame_slot, config.frame_sequence);
+  offscreen_frame_active_ = true;
+  return OffscreenFrameSession(*this, config);
 }
 
 auto Renderer::IsViewReady(ViewId view_id) const -> bool
@@ -3294,7 +3543,6 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
     return;
   }
 
-  auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context->GetFrameSlot();
   auto frame_sequence = context->GetFrameSequenceNumber();
   frame_budget_stats_ = context->GetBudgetStats();
@@ -3304,10 +3552,6 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
   if (frame_budget_stats_.gpu_budget.count() <= 0) {
     frame_budget_stats_.gpu_budget = std::chrono::milliseconds(16);
   }
-
-  // Store frame lifecycle state for RenderContext propagation
-  frame_slot_ = frame_slot;
-  frame_seq_num = frame_sequence;
 
   const auto current_scene = context->GetScene().get();
   if (current_scene != last_scene_identity_) {
@@ -3321,45 +3565,7 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
     }
   }
 
-  if (gpu_timeline_profiler_) {
-    gpu_timeline_profiler_->OnFrameStart(frame_sequence);
-  }
-
-  // Initialize Upload Coordinator and its staging providers for the new frame
-  // slot BEFORE any uploaders start allocating from them.
-  inline_transfers_->OnFrameStart(tag, frame_slot);
-  uploader_->OnFrameStart(tag, frame_slot);
-  // then uploaders and the ViewConstants manager
-  texture_binder_->OnFrameStart();
-  view_const_manager_->OnFrameStart(frame_slot);
-  view_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  draw_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  view_color_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  lighting_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  if (shadow_manager_) {
-    shadow_manager_->OnFrameStart(tag, frame_sequence, frame_slot);
-  }
-  shadow_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  environment_view_data_publisher_->OnFrameStart(frame_sequence, frame_slot);
-  if (environment_frame_bindings_publisher_) {
-    environment_frame_bindings_publisher_->OnFrameStart(
-      frame_sequence, frame_slot);
-  }
-  if (env_static_manager_) {
-    env_static_manager_->OnFrameStart(tag, frame_slot);
-    env_static_manager_->SetBlueNoiseEnabled(atmosphere_blue_noise_enabled_);
-  }
-  scene_prep_state_->GetTransformUploader()->OnFrameStart(
-    tag, frame_sequence, frame_slot);
-  scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);
-  scene_prep_state_->GetMaterialBinder()->OnFrameStart(tag, frame_slot);
-  if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-    emitter->OnFrameStart(tag, frame_sequence, frame_slot);
-  }
-  if (auto light_manager = scene_prep_state_->GetLightManager()) {
-    light_manager->OnFrameStart(tag, frame_sequence, frame_slot);
-  }
+  BeginFrameServices(frame_slot, frame_sequence);
 }
 
 /*!
