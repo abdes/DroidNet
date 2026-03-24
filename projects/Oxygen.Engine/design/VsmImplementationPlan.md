@@ -1,0 +1,454 @@
+# Virtual Shadow Map — Remaining Implementation Plan
+
+Status: `planned`
+Audience: engineer implementing VSM rendering pipeline stages
+Scope: all work required to bring the VSM system from its current CPU-side cache/allocation engine to a fully functional shadow rendering pipeline
+
+Cross-references:
+
+- `VirtualShadowMapArchitecture.md` — authoritative architecture spec
+- `VsmCacheManagerAndPageAllocationImplementationPlan.md` — completed cache-manager/allocation plan (Phases 0–8 done)
+
+---
+
+## 1. Current State
+
+The following modules are **fully implemented and tested** (CPU-side):
+
+| Module | Architecture § | Status | Key Files |
+|--------|----------------|--------|-----------|
+| Physical Page Pool Manager | §3.1 | ✅ Complete | `VsmPhysicalPagePoolManager.h/.cpp`, `VsmPhysicalPagePoolTypes.h/.cpp`, `VsmPhysicalPageAddressing.h/.cpp`, `VsmPhysicalPoolCompatibility.h/.cpp` |
+| Virtual Address Space | §3.2 | ✅ Complete | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp` |
+| Cache Manager | §3.3 | ✅ Complete | `VsmCacheManager.h/.cpp`, `VsmCacheManagerSeam.h`, `VsmCacheManagerTypes.h/.cpp` |
+| Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
+
+Test coverage: 18 test files across CPU and GPU lifecycle suites.
+
+The remaining phases below explicitly own the current forward gaps from the
+implemented cache/allocation slice:
+
+- dedicated GPU invalidation instead of today's CPU-queued planning-copy bridge
+- current and previous-frame projection-data publication/upload
+- scene-mutation invalidation workloads
+- static-slice recache work, distinct from the fixed `slice1 -> slice0` merge
+- distant-local-light refresh budgeting
+- point-light per-face update scheduling
+- translucent-receiver transmission sampling paths
+
+### What Exists in Renderer Infrastructure (Already Usable)
+
+| Component | Class / File | Relevance |
+|-----------|-------------|-----------|
+| Shadow coordination | `ShadowManager` | Currently conventional-only; VSM extends via new policy |
+| Pipeline orchestration | `ForwardPipeline`, `RenderingPipeline` | Coroutine-based pass registration |
+| Depth input | `DepthPrePass` | Produces screen depth for page request generation |
+| Compute pass base | `ComputeRenderPass` | Base class for VSM compute passes |
+| Graphics pass base | `GraphicsRenderPass` | Base class for VSM raster passes |
+| Forward lighting shader | `ForwardDirectLighting.hlsli` | Calls `ComputeShadowVisibility()`; swap point for VSM |
+| Scene observer system | `ISceneObserver`, `SceneObserverSyncModule` | Mutation dispatch for invalidation |
+| Render graph factory | `Renderer::RegisterViewRenderGraph()` | Per-view render graph composition |
+
+---
+
+## 2. Remaining Work — Summary
+
+| Status | Phase | Deliverable | Exit Gate |
+|--------|-------|-------------|-----------|
+| ☑ | A | Cache-manager plan completion (Phase 8) | Completed in `VsmCacheManagerAndPageAllocationImplementationPlan.md` |
+| ☐ | B | VSM HLSL common types and page-table structures | Shared HLSL headers compile; CPU ↔ GPU struct parity verified |
+| ☐ | C | Page Request Generator pass | Compute pass marks visible virtual pages from depth buffer |
+| ☐ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
+| ☐ | E | Page flag propagation and initialization passes | Stages 9–11: hierarchical flags, mapped-mip propagation, selective page init |
+| ☐ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
+| ☐ | G | Static/Dynamic Merge pass | Composite static slice into dynamic slice for dirty pages |
+| ☐ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild |
+| ☐ | I | Projection and Composite pass | Screen-space shadow factor generation for directional + local lights |
+| ☐ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
+| ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
+| ☐ | L | End-to-end validation and performance tuning | Full frame renders correct shadows; profiling and budget tuning |
+
+---
+
+## 3. Phase Details
+
+### Phase A — Cache-Manager Plan Completion
+
+**Architecture ref:** wrap-up of `VsmCacheManagerAndPageAllocationImplementationPlan.md` Phase 8
+
+**Status:** completed on 2026-03-24 through the dedicated cache-manager/allocation plan.
+
+**Deliverables:**
+- [ ] Verify all existing VSM tests pass (`Oxygen.Renderer.VirtualShadows.Tests` + `GpuLifecycle.Tests`)
+- [ ] Review strategic `LOG_F` / `LOG_SCOPE_F` placements in cache manager and planner for production diagnostics
+- [ ] Document troubleshooting guide in `VirtualShadowMaps/README.md`
+- [ ] Close Phase 8 in the existing implementation plan
+
+**Exit gate:** All tests green, README updated, Phase 8 marked ☑.
+
+---
+
+### Phase B — VSM HLSL Common Types and Page-Table Structures
+
+**Architecture ref:** §4.1 (Virtual Page Table), §4.2 (Physical Page Metadata), §4.3 (Page Flags)
+
+**Deliverables:**
+- [ ] Create `Shaders/Renderer/Vsm/VsmCommon.hlsli` — shared constants (page size, max mip levels, flag bits)
+- [ ] Create `Shaders/Renderer/Vsm/VsmPageTable.hlsli` — `PageTableEntry` struct, page-table lookup functions
+- [ ] Create `Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli` — physical page metadata struct matching CPU layout
+- [ ] Create `Shaders/Renderer/Vsm/VsmPageFlags.hlsli` — virtual page flag definitions and accessors
+- [ ] Verify CPU ↔ GPU struct layout parity (same sizes, same field offsets) via static assertions or a validation test
+- [ ] Create `Shaders/Renderer/Vsm/VsmProjectionData.hlsli` — per-map projection data struct (§4.5)
+- [ ] Define the CPU ↔ GPU projection-data contract needed for both current-frame projection and retained previous-frame invalidation data
+
+**Exit gate:** HLSL headers compile within a test shader; struct sizes match CPU counterparts.
+
+---
+
+### Phase C — Page Request Generator Pass
+
+**Architecture ref:** §3.5, stage 5
+
+**Deliverables:**
+- [ ] Create `VsmPageRequestGeneratorPass` inheriting `ComputeRenderPass`
+- [ ] HLSL compute shader: `Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
+  - Sample depth buffer at each pixel
+  - Reconstruct world position
+  - For each active VSM (directional clipmap levels + local lights), compute virtual page coordinate
+  - Set `kRequired` flag in page request buffer
+  - Mark coarse pages for broad coverage
+- [ ] Input bindings: depth texture, projection data buffer, virtual address space layout
+- [ ] Output binding: page request flag buffer (one entry per virtual page table slot)
+- [ ] Light-grid pruning: skip lights not affecting visible pixels (integrate with `LightCullingPass` cluster data)
+- [ ] Unit test: validate page request output for known screen configurations
+
+**Dependencies:** Phase B (HLSL types)
+
+**Exit gate:** Compute pass produces correct page request flags for a test scene with depth and light data.
+
+---
+
+### Phase D — Physical Page Reuse and Allocation GPU Passes
+
+**Architecture ref:** §5 stages 6–8
+
+The cache manager already computes allocation decisions on the CPU. This phase uploads those decisions to the GPU and applies them.
+
+**Deliverables:**
+- [ ] GPU upload path: upload `VsmPageAllocationPlan` decisions (page table entries, physical page metadata) to GPU buffers
+- [ ] Compute pass `VsmPageReuse.hlsl` — apply reuse decisions: write page-table entries for reused pages, clear entries for evicted pages (stage 6)
+- [ ] Compute pass `VsmPackAvailablePages.hlsl` — compact empty-page list into contiguous stack (stage 7)
+- [ ] Compute pass `VsmAllocateNewPages.hlsl` — assign available physical pages to requested-but-unmapped virtual pages (stage 8)
+- [ ] Create `VsmPageManagementPass` class orchestrating these three sub-dispatches
+- [ ] Verify page-table buffer state after each stage via GPU readback test
+
+**Dependencies:** Phase B, Phase C (page requests feed allocation)
+
+**Exit gate:** Given a CPU allocation plan, GPU page-table buffer correctly reflects reuse/evict/allocate decisions.
+
+---
+
+### Phase E — Page Flag Propagation and Initialization Passes
+
+**Architecture ref:** §5 stages 9–11
+
+**Deliverables:**
+- [ ] Compute pass `VsmGenerateHierarchicalFlags.hlsl` — build mip-chain page flags from leaf flags (stage 9)
+- [ ] Compute pass `VsmPropagateMappedMips.hlsl` — propagate mapping info up the mip chain (stage 10)
+- [ ] Compute pass `VsmPageInitialization.hlsl` — selective page init (stage 11):
+  - For uncached pages with valid static slice: copy static slice → dynamic slice
+  - For uncached pages without static slice: clear to max depth
+  - Skip already-cached pages
+- [ ] Create `VsmPageFlagPropagationPass` and `VsmPageInitializationPass` classes
+- [ ] Unit tests verifying hierarchical flag correctness and selective initialization behavior
+
+**Dependencies:** Phase D (page-table must be finalized before flag propagation)
+
+**Exit gate:** Hierarchical flags correct for multi-level maps; initialization clears/copies only uncached pages.
+
+---
+
+### Phase F — Shadow Rasterizer Pass
+
+**Architecture ref:** §3.6, §12, stage 12
+
+**Deliverables:**
+- [ ] Create `VsmShadowRasterizerPass` inheriting from `GraphicsRenderPass`
+- [ ] Shadow view creation: generate per-map shadow projection from `VsmProjectionData`
+  - Directional clipmaps use per-level views
+  - Point lights publish and schedule per-face views without widening the public remap-key API
+- [ ] Instance culling compute shader `VsmInstanceCulling.hlsl`:
+  - Test mesh instance bounds against each allocated page's virtual extent
+  - Optional HZB occlusion culling using previous-frame depth (when available)
+  - Output: compact per-page draw command lists
+- [ ] Shadow depth rasterization shaders:
+  - Vertex shader: transform to shadow-page clip space
+  - Pixel shader: depth-only output to physical page in shadow texture array
+- [ ] Dirty flag update: mark rendered pages dirty in physical page metadata
+- [ ] Primitive reveal tracking: flag newly visible primitives for forced re-render
+- [ ] Static-slice recache path: render static-only content into slice 1 for pages selected by static invalidation without reversing the merge contract
+- [ ] Static invalidation feedback: record primitive-to-page overlap information needed to refine later scene invalidation
+- [ ] Render target setup: bind shadow depth texture array at correct physical page coordinates
+
+**Dependencies:** Phase E (pages must be initialized before rasterization)
+
+**Exit gate:** Shadow depth is correctly rasterized into physical pages for a test scene with known geometry, including point-light face selection and static-recache routing when enabled.
+
+---
+
+### Phase G — Static/Dynamic Merge Pass
+
+**Architecture ref:** §3.8, §10, stage 13
+
+**Deliverables:**
+- [ ] Create `VsmStaticDynamicMergePass` inheriting `ComputeRenderPass`
+- [ ] Compute shader `VsmStaticDynamicMerge.hlsl`:
+  - For each dirty page: composite static slice (slice 1) into dynamic slice (slice 0)
+  - Selection based on dirty flags and static-cache validity
+- [ ] Keep static recache separate from merge; this phase must consume static-slice results, not turn merge into a reverse refresh path
+- [ ] Support optional disable when static caching is off (single-slice mode)
+- [ ] Unit test verifying merge direction and dirty-page selection
+
+**Dependencies:** Phase F (dirty flags set during rasterization)
+
+**Exit gate:** After merge, dynamic slice contains correct composite of static + dynamic shadow content.
+
+---
+
+### Phase H — HZB Updater Pass
+
+**Architecture ref:** §3.7, §11, stage 14
+
+**Deliverables:**
+- [ ] Create `VsmHzbUpdaterPass` inheriting `ComputeRenderPass`
+- [ ] Compute shader `VsmHzbBuild.hlsl`:
+  - Select dirty/newly-allocated/forced pages for HZB rebuild
+  - Build per-page HZB mip chain from shadow depth texture
+  - Fold dirty/invalidation scratch flags into persistent physical page metadata
+- [ ] Selective rebuild: only touched pages, not entire pool
+- [ ] HZB top-level build for coarse occlusion queries
+- [ ] Integration test: verify HZB mip chain correctness after shadow rasterization
+
+**Dependencies:** Phase F (shadow depth must exist before HZB build), Phase G (merge before HZB)
+
+**Exit gate:** HZB mip chain is correct for dirty pages; previous-frame HZB is usable for next-frame culling.
+
+---
+
+### Phase I — Projection and Composite Pass
+
+**Architecture ref:** §3.9, §13, stage 15
+
+**Deliverables:**
+- [ ] Create `VsmProjectionPass` (compute or full-screen graphics pass)
+- [ ] Directional clipmap projection shader `VsmDirectionalProjection.hlsl`:
+  - Determine clipmap level from pixel distance
+  - Transform world position → virtual page space
+  - Page-table lookup → physical page
+  - Sample shadow depth, compute shadow factor
+  - Apply filtering (SMRT / PCF / penumbra estimation)
+- [ ] Local light projection — implement one of:
+  - **One-pass packed mask-bit mode** `VsmLocalLightProjectionPacked.hlsl`
+  - **Per-light mode** `VsmLocalLightProjectionPerLight.hlsl`
+  - (Start with per-light for simplicity; optimize to packed later)
+- [ ] Shadow factor composite into screen-space shadow mask texture
+- [ ] Transmission sampling path for translucent receivers using the VSM page-table lookup path
+- [ ] Create `VsmShadowHelpers.hlsli` — replacement for conventional `ShadowHelpers.hlsli` with VSM page-table sampling
+- [ ] Swap `ComputeShadowVisibility()` in `ForwardDirectLighting.hlsli` to call VSM path when VSM is active
+
+**Dependencies:** Phase F (shadow depth), Phase H (HZB for optional quality), Phase B (page-table structures)
+
+**Exit gate:** Screen-space shadow factors match expected output for test scenes with directional and local lights, and VSM transmission paths are wired for translucent receivers.
+
+---
+
+### Phase J — Scene Invalidation Integration
+
+**Architecture ref:** §7, §14.2
+
+**Deliverables:**
+- [ ] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
+  - Subscribe to `kLightChanged | kTransformChanged` mutations
+  - Map affected scene nodes to VSM remap keys
+  - Queue targeted invalidation payloads
+- [ ] GPU invalidation pass `VsmInvalidation.hlsl`:
+  - Project changed primitive bounds into previous-frame shadow space
+  - Mark invalidation bits in previous-frame physical page metadata
+  - Respect scope control (static, dynamic, or both)
+- [ ] Create `VsmInvalidationPass` class
+- [ ] Wire collector into `SceneObserverSyncModule` registration
+- [ ] Feed queued invalidations through `VsmCacheManager::InvalidateLocalLights()` / `InvalidateDirectionalClipmaps()`
+- [ ] Consume raster feedback records so static-geometry mutations can refine page-level invalidation beyond remap-key routing alone
+- [ ] Test: add/remove/move a mesh → verify only affected pages are invalidated
+
+**Dependencies:** Scene observer system (exists), cache manager invalidation APIs (exist)
+
+**Exit gate:** Scene-driven invalidation correctly marks affected pages; unaffected cached pages remain valid.
+
+---
+
+### Phase K — VSM Orchestrator and Renderer Integration
+
+**Architecture ref:** §14.1, §5 (full 17-stage pipeline)
+
+**Deliverables:**
+- [ ] Create `VsmShadowRenderer` orchestrator class coordinating the full per-frame pipeline:
+  1. `BeginFrame()` — cache manager seam capture
+  2. Virtual address space allocation
+  3. Remap construction
+  4. Current and retained previous-frame projection data upload/publication
+  5. Page request generation (Phase C pass)
+  6. Page management (Phase D passes)
+  7. Flag propagation + initialization (Phase E passes)
+  8. Shadow rasterization (Phase F pass)
+  9. Static/dynamic merge (Phase G pass)
+  10. HZB update (Phase H pass)
+  11. Projection and composite (Phase I pass)
+  12. Extract frame data
+  13. Mark cache valid
+- [ ] Extend `ShadowManager` with `DirectionalShadowImplementationPolicy::kVirtualShadowMap` enum value
+- [ ] Add VSM code path in `ShadowManager::PublishForView()` delegating to `VsmShadowRenderer`
+- [ ] Register VSM passes in `ForwardPipeline` between depth pre-pass and forward lighting
+- [ ] Wire `VsmProjectionPass` output (shadow mask) into forward lighting shader inputs
+- [ ] Implement feature toggle: conventional ↔ VSM shadow selection (config-driven, not runtime toggle initially)
+- [ ] Coroutine integration: make VSM orchestration compatible with `ForwardPipeline`'s coroutine model
+- [ ] Implement distant-local-light refresh budgeting and scheduling per architecture §9.2, including the cached-skip path for lights not selected this frame
+- [ ] Implement point-light per-face update scheduling and projection upload flow without introducing a second public cache identity model
+
+**Dependencies:** All previous phases (C–J)
+
+**Exit gate:** A scene renders end-to-end with VSM-based shadows through the forward pipeline; projection data, distant-light scheduling, and point-light face updates are wired; conventional path still works when VSM is disabled.
+
+---
+
+### Phase L — End-to-End Validation and Performance Tuning
+
+**Architecture ref:** all sections
+
+**Deliverables:**
+- [ ] Create a VSM example/demo scene (extend existing `LightBench` or `RenderScene` example)
+- [ ] Visual regression tests: compare VSM output against reference images
+- [ ] Performance profiling:
+  - Measure per-stage GPU time using existing timestamp system
+  - Profile physical page utilization vs. budget
+  - Profile page request generation cost
+  - Identify hot paths for optimization
+- [ ] Budget tuning:
+  - Physical pool size defaults
+  - Distant-light refresh budget (§9.2)
+  - Unreferenced-entry retention window
+  - HZB rebuild selectivity
+- [ ] Multi-light stress test: many local lights with varying screen footprints
+- [ ] Clipmap scrolling test: camera movement causing clipmap pan with correct reuse
+- [ ] Static-cache test: static geometry changes correctly trigger static invalidation path
+- [ ] Transmission validation: translucent receivers use the VSM transmission path without regressing opaque shadow results
+
+**Dependencies:** Phase K (full pipeline operational)
+
+**Exit gate:** VSM produces correct, performant shadows across representative scenes; no visual artifacts from caching, reuse, or invalidation.
+
+---
+
+## 4. Dependency Graph
+
+```mermaid
+flowchart TD
+    A["Phase A<br>Cache Manager Completion"] --> B["Phase B<br>HLSL Common Types"]
+    B --> C["Phase C<br>Page Request Generator"]
+    B --> D["Phase D<br>Page Reuse/Allocation GPU"]
+    C --> D
+    D --> E["Phase E<br>Flag Propagation & Init"]
+    E --> F["Phase F<br>Shadow Rasterizer"]
+    F --> G["Phase G<br>Static/Dynamic Merge"]
+    F --> H["Phase H<br>HZB Updater"]
+    G --> H
+    F --> I["Phase I<br>Projection & Composite"]
+    H --> I
+    J["Phase J<br>Scene Invalidation"] --> K
+    I --> K["Phase K<br>Orchestrator & Integration"]
+    K --> L["Phase L<br>Validation & Tuning"]
+```
+
+Phase J (scene invalidation) can proceed in parallel with Phases C–I since it targets the CPU-side observer → cache manager path, which already exists.
+
+---
+
+## 5. Build and Test Commands
+
+All commands assume repository root: `H:\projects\DroidNet\projects\Oxygen.Engine`
+
+### Existing targets (completed foundation and remaining phases)
+
+```powershell
+cmake --build out/build-ninja --config Debug --target oxygen-renderer --parallel 8
+cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadows.Tests --parallel 8
+cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests --parallel 8
+ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen.Renderer.VirtualShadows.Tests|Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests"
+```
+
+### New targets (Phases B+)
+
+New pass classes will be added to the `oxygen-renderer` target. New HLSL shaders will be added to the existing shader compilation pipeline. Test targets will be extended as new passes are added.
+
+---
+
+## 6. File Layout Guidance
+
+### HLSL shaders
+
+```
+src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/
+├── VsmCommon.hlsli
+├── VsmPageTable.hlsli
+├── VsmPhysicalPageMeta.hlsli
+├── VsmPageFlags.hlsli
+├── VsmProjectionData.hlsli
+├── VsmPageRequestGenerator.hlsl
+├── VsmPageReuse.hlsl
+├── VsmPackAvailablePages.hlsl
+├── VsmAllocateNewPages.hlsl
+├── VsmGenerateHierarchicalFlags.hlsl
+├── VsmPropagateMappedMips.hlsl
+├── VsmPageInitialization.hlsl
+├── VsmInstanceCulling.hlsl
+├── VsmShadowDepth_VS.hlsl
+├── VsmShadowDepth_PS.hlsl
+├── VsmStaticDynamicMerge.hlsl
+├── VsmHzbBuild.hlsl
+├── VsmDirectionalProjection.hlsl
+├── VsmLocalLightProjection.hlsl
+├── VsmInvalidation.hlsl
+└── VsmShadowHelpers.hlsli
+```
+
+### C++ pass classes
+
+```
+src/Oxygen/Renderer/Passes/Vsm/
+├── VsmPageRequestGeneratorPass.h/.cpp
+├── VsmPageManagementPass.h/.cpp
+├── VsmPageFlagPropagationPass.h/.cpp
+├── VsmPageInitializationPass.h/.cpp
+├── VsmShadowRasterizerPass.h/.cpp
+├── VsmStaticDynamicMergePass.h/.cpp
+├── VsmHzbUpdaterPass.h/.cpp
+├── VsmProjectionPass.h/.cpp
+└── VsmInvalidationPass.h/.cpp
+```
+
+### Orchestrator
+
+```
+src/Oxygen/Renderer/VirtualShadowMaps/
+├── VsmShadowRenderer.h/.cpp          (new — orchestrator)
+└── VsmSceneInvalidationCollector.h/.cpp  (new — scene observer)
+```
+
+---
+
+## 7. Risk Notes
+
+1. **GPU-driven culling complexity** — Phase F (shadow rasterizer) is the most complex GPU pass. Consider splitting into a sub-plan once Phase E is complete.
+2. **Shader compilation pipeline** — Verify HLSL compilation infrastructure supports compute shaders in the `Vsm/` subdirectory before Phase B work begins.
+3. **CPU ↔ GPU struct parity** — Must be enforced from Phase B onward; drifts here cause silent corruption.
+4. **Performance budget** — Physical pool size and page request generation cost are the primary tuning knobs. Phase L must establish baselines before optimization.
+5. **Conventional shadow coexistence** — The conventional shadow path must remain functional throughout; never break it while adding VSM.
