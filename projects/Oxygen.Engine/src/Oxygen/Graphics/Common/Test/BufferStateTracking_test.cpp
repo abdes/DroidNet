@@ -97,11 +97,29 @@ struct BufferStateTrackingTest : testing::Test {
 
 // --- Tracking and Error Handling ---
 
-NOLINT_TEST_F(BufferStateTrackingTest, BeginTracking_ThrowsIfAlreadyTracked)
+NOLINT_TEST_F(
+  BufferStateTrackingTest, BeginTracking_IsIdempotentForMatchingParameters)
+{
+  tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon);
+  NOLINT_EXPECT_NO_THROW(
+    tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon));
+}
+
+NOLINT_TEST_F(BufferStateTrackingTest,
+  BeginTracking_ThrowsIfReenteredWithDifferentInitialState)
 {
   tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon);
   NOLINT_EXPECT_THROW(
-    tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon),
+    tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCopyDest),
+    std::runtime_error);
+}
+
+NOLINT_TEST_F(BufferStateTrackingTest,
+  BeginTracking_ThrowsIfReenteredWithDifferentKeepInitialState)
+{
+  tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon, true);
+  NOLINT_EXPECT_THROW(
+    tracker.BeginTrackingResourceState(buffer1, ResourceStates::kCommon, false),
     std::runtime_error);
 }
 

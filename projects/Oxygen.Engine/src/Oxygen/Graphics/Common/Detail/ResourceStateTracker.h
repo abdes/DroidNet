@@ -76,12 +76,24 @@ public:
     const ResourceStates initial_state, const bool keep_initial_state = false)
     -> void
   {
-    // Calling BeginTrackingResourceState on a resource that is already being
-    // tracked will throw an exception.
     NativeResource native_object = resource.GetNativeResource();
     auto it = tracking_.find(native_object);
     if (it != tracking_.end()) {
-      throw std::runtime_error("Resource is already being tracked");
+      // Resource is already being tracked. Check for incompatibility.
+      auto& existing_info = it->second;
+      std::visit(
+        [&](const auto& info) {
+          if (info.initial_state != initial_state
+            || info.keep_initial_state != keep_initial_state) {
+            throw std::runtime_error(
+              "Cannot begin tracking resource with incompatible parameters: "
+              "already tracked with different initial_state or "
+              "keep_initial_state");
+          }
+        },
+        existing_info);
+      // Parameters match; this is idempotent, so just return
+      return;
     }
 
     if constexpr (IsBuffer<T>) {
