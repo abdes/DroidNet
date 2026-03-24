@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <stdexcept>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -25,9 +27,11 @@ using oxygen::renderer::vsm::VsmPhysicalPoolCompatibilityResult;
 using oxygen::renderer::vsm::VsmPhysicalPoolConfig;
 using oxygen::renderer::vsm::VsmPhysicalPoolConfigValidationResult;
 using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
+using oxygen::renderer::vsm::testing::VsmPhysicalPoolTestBase;
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, PhysicalPagePoolManagerConstructs)
+class VsmPhysicalPagePoolManagerTest : public VsmPhysicalPoolTestBase { };
+
+NOLINT_TEST_F(VsmPhysicalPagePoolManagerTest, PhysicalPagePoolManagerConstructs)
 {
   const auto manager = VsmPhysicalPagePoolManager(nullptr);
   EXPECT_FALSE(manager.IsShadowPoolAvailable());
@@ -35,8 +39,8 @@ NOLINT_TEST(
   EXPECT_EQ(manager.GetPoolIdentity(), 0ULL);
 }
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, PhysicalPoolEnsureProducesOwningSnapshot)
+NOLINT_TEST_F(
+  VsmPhysicalPagePoolManagerTest, PhysicalPoolEnsureProducesOwningSnapshot)
 {
   auto manager = VsmPhysicalPagePoolManager(nullptr);
 
@@ -73,7 +77,7 @@ NOLINT_TEST(
   EXPECT_STREQ(to_string(VsmPhysicalPoolChangeResult::kRecreated), "Recreated");
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPagePoolManagerTest,
   PhysicalPoolManagerReportsCompatibilityAndIdentityTransitions)
 {
   auto manager = VsmPhysicalPagePoolManager(nullptr);
@@ -113,7 +117,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(manager.GetPoolIdentity(), 0ULL);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPagePoolManagerTest,
   PhysicalPoolManagerRejectsInvalidEnsureRequestsEarly)
 {
   auto manager = VsmPhysicalPagePoolManager(nullptr);
@@ -155,7 +159,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_FALSE(manager.IsHzbPoolAvailable());
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPagePoolManagerTest,
   PhysicalPoolConfigValidationRejectsInvalidDefaultsAndSliceLayouts)
 {
   const auto default_config = VsmPhysicalPoolConfig {};
@@ -236,8 +240,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     to_string(VsmPhysicalPoolConfigValidationResult::kValid), "Valid");
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  HzbPoolConfigValidationRejectsInvalidDefaults)
+NOLINT_TEST_F(
+  VsmPhysicalPagePoolManagerTest, HzbPoolConfigValidationRejectsInvalidDefaults)
 {
   const auto default_config = VsmHzbPoolConfig {};
   EXPECT_FALSE(IsValid(default_config));
@@ -254,7 +258,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_STREQ(to_string(VsmHzbPoolConfigValidationResult::kValid), "Valid");
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPagePoolManagerTest,
   HzbPoolRequiresActiveShadowPoolAndDerivesShapeFromIt)
 {
   auto manager = VsmPhysicalPagePoolManager(nullptr);

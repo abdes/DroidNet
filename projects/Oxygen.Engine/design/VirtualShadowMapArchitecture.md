@@ -439,6 +439,12 @@ stateDiagram-v2
 | Available | Previous frame data is present and eligible for reuse checks. |
 | Invalidated | Previous data exists for diagnostics but is not eligible for reuse. |
 
+Ordinary current-frame light-count or raw page-table-count changes are not, by
+themselves, an incompatible frame. Once the cache manager publishes
+current-frame continuity products, compatibility is derived from the extracted
+snapshot and pool contract rather than strict equality with the raw captured
+seam page-table count.
+
 ### 6.2 Frame-Build State
 
 Tracks the current frame's progress through the allocation pipeline.
@@ -493,6 +499,10 @@ Cache entries for lights not referenced in the current frame can be retained for
 - The retained entry still uploads the current-frame projection/cache continuity data needed for reuse and invalidation.
 - After the retention window expires, the entry is evicted and its pages become available.
 
+Implementation note:
+
+- This reassignment is realized through cache-manager-owned current-frame publication products, not by mutating the raw `VsmCacheManagerSeam.current_frame` snapshot after capture. Any phase that has only seam capture plus previous extraction may track retained-entry bookkeeping, but it cannot truthfully claim current-frame virtual-ID reassignment until the cache manager publishes the current-frame allocation package.
+
 ---
 
 ## 7. Invalidation Architecture
@@ -519,8 +529,8 @@ flowchart LR
 - **Scope control:** each invalidation payload specifies whether it targets all virtual maps or a single specific map, and whether it affects static content, dynamic content, or both.
 - **Whole-cache invalidation:** the cache manager supports `InvalidateAll` for global state changes (e.g., lighting mode change, pool resize). This marks all previous data as non-reusable.
 - **Targeted invalidation:** public targeted invalidation uses the existing seam split and remap keys directly:
-  - `InvalidateLocalLights(...)`
-  - `InvalidateDirectionalClipmaps(...)`
+  - `InvalidateLocalLights(..., scope, reason)`
+  - `InvalidateDirectionalClipmaps(..., scope, reason)`
 
 ### 7.3 Static vs. Dynamic Invalidation
 

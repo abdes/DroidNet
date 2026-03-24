@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualClipmapHelpers.h>
@@ -16,6 +18,7 @@ using oxygen::renderer::vsm::ComputeClipmapReuse;
 using oxygen::renderer::vsm::VsmClipmapLayout;
 using oxygen::renderer::vsm::VsmClipmapReuseConfig;
 using oxygen::renderer::vsm::VsmReuseRejectionReason;
+using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
 auto MakeClipmapLayout() -> VsmClipmapLayout
 {
@@ -42,8 +45,10 @@ auto MakeReuseConfig() -> VsmClipmapReuseConfig
   };
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  StableClipmapLayoutReportsReusableZeroOffset)
+class VsmVirtualClipmapHelpersTest : public VirtualShadowTest { };
+
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, StableClipmapLayoutReportsReusableZeroOffset)
 {
   const auto layout = MakeClipmapLayout();
   const auto result = ComputeClipmapReuse(layout, layout, MakeReuseConfig());
@@ -55,7 +60,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualClipmapHelpersTest,
   PageAlignedPanInsideToleranceReportsReusableOffset)
 {
   const auto previous = MakeClipmapLayout();
@@ -71,8 +76,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  PanOutsideToleranceReportsExplicitRejection)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, PanOutsideToleranceReportsExplicitRejection)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();
@@ -87,8 +92,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     result.rejection_reason, VsmReuseRejectionReason::kPageOffsetOutOfRange);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  DepthRangeSizeMismatchReportsExplicitRejection)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, DepthRangeSizeMismatchReportsExplicitRejection)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();
@@ -101,8 +106,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     result.rejection_reason, VsmReuseRejectionReason::kDepthRangeMismatch);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  PageWorldSizeMismatchReportsExplicitRejection)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, PageWorldSizeMismatchReportsExplicitRejection)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();
@@ -115,8 +120,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     result.rejection_reason, VsmReuseRejectionReason::kPageWorldSizeMismatch);
 }
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, NonUniformPerLevelOffsetsReportReusable)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, NonUniformPerLevelOffsetsReportReusable)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();
@@ -132,8 +137,8 @@ NOLINT_TEST(
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  MalformedClipmapLayoutsReportExplicitRejection)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, MalformedClipmapLayoutsReportExplicitRejection)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();
@@ -145,8 +150,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kUnspecified);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  ChangedClipLevelCountReportsExplicitRejection)
+NOLINT_TEST_F(
+  VsmVirtualClipmapHelpersTest, ChangedClipLevelCountReportsExplicitRejection)
 {
   const auto previous = MakeClipmapLayout();
   auto current = MakeClipmapLayout();

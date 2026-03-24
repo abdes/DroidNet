@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <stdexcept>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpace.h>
@@ -18,8 +20,11 @@ using oxygen::renderer::vsm::VsmReuseRejectionReason;
 using oxygen::renderer::vsm::VsmSinglePageLightDesc;
 using oxygen::renderer::vsm::VsmVirtualAddressSpace;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
+using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+class VsmVirtualAddressSpaceIdsTest : public VirtualShadowTest { };
+
+NOLINT_TEST_F(VsmVirtualAddressSpaceIdsTest,
   VirtualAddressSpaceResetsIdAllocatorAndPublishesStableFrameSnapshots)
 {
   auto address_space = VsmVirtualAddressSpace {};
@@ -56,8 +61,8 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_STREQ(to_string(VsmReuseRejectionReason::kNone), "None");
 }
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, VirtualAddressSpaceAllocatesMonotonicIds)
+NOLINT_TEST_F(
+  VsmVirtualAddressSpaceIdsTest, VirtualAddressSpaceAllocatesMonotonicIds)
 {
   auto address_space = VsmVirtualAddressSpace {};
   address_space.BeginFrame(
@@ -78,8 +83,8 @@ NOLINT_TEST(
   EXPECT_EQ(third.id, 5U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  VirtualAddressSpaceRejectsZeroFirstVirtualId)
+NOLINT_TEST_F(
+  VsmVirtualAddressSpaceIdsTest, VirtualAddressSpaceRejectsZeroFirstVirtualId)
 {
   auto address_space = VsmVirtualAddressSpace {};
 

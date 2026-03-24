@@ -6,52 +6,26 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowGpuTestFixtures.h"
+
 #include <stdexcept>
 
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Direct3D12/Test/Fixtures/OffscreenTestFixture.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 
 namespace {
 
-using oxygen::Format;
 using oxygen::TextureType;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
-using oxygen::graphics::d3d12::testing::OffscreenTestFixture;
 using oxygen::renderer::vsm::VsmHzbPoolChangeResult;
-using oxygen::renderer::vsm::VsmHzbPoolConfig;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
-using oxygen::renderer::vsm::VsmPhysicalPoolConfig;
-using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
+using oxygen::renderer::vsm::testing::VirtualShadowGpuTest;
 
-auto MakeShadowPoolConfig() -> VsmPhysicalPoolConfig
-{
-  return VsmPhysicalPoolConfig {
-    .page_size_texels = 128,
-    .physical_tile_capacity = 512,
-    .array_slice_count = 2,
-    .depth_format = Format::kDepth32,
-    .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
-      VsmPhysicalPoolSliceRole::kStaticDepth },
-    .debug_name = "phase3-shadow-pool",
-  };
-}
-
-auto MakeHzbPoolConfig() -> VsmHzbPoolConfig
-{
-  return VsmHzbPoolConfig {
-    .mip_count = 10,
-    .format = Format::kR32Float,
-    .debug_name = "phase3-hzb-pool",
-  };
-}
-
-class VsmPhysicalPagePoolGpuLifecycleTest : public OffscreenTestFixture { };
+class VsmPhysicalPagePoolGpuLifecycleTest : public VirtualShadowGpuTest { };
 
 NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   CreatingPoolsPublishesNonNullHandlesAndExpectedDescriptors)

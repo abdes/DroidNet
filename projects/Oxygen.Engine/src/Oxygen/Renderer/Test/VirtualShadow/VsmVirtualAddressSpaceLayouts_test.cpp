@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <stdexcept>
 
 #include <glm/vec2.hpp>
@@ -25,8 +27,11 @@ using oxygen::renderer::vsm::VsmVirtualAddressSpace;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
 using oxygen::renderer::vsm::VsmVirtualMapLayout;
 using oxygen::renderer::vsm::VsmVirtualPageCoord;
+using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+class VsmVirtualAddressSpaceLayoutsTest : public VirtualShadowTest { };
+
+NOLINT_TEST_F(VsmVirtualAddressSpaceLayoutsTest,
   VirtualAddressSpaceCreatesSingleAndPagedLocalLightLayouts)
 {
   auto address_space = VsmVirtualAddressSpace {};
@@ -60,7 +65,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
       .has_value());
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualAddressSpaceLayoutsTest,
   VirtualAddressSpaceCreatesDirectionalClipmapLayouts)
 {
   auto address_space = VsmVirtualAddressSpace {};
@@ -92,7 +97,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(address_space.DescribeFrame().total_page_table_entry_count, 48U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualAddressSpaceLayoutsTest,
   VirtualAddressSpaceFrameCopiesRemainStableAcrossFutureFrames)
 {
   auto address_space = VsmVirtualAddressSpace {};
@@ -117,7 +122,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(address_space.DescribeFrame().frame_generation, 6ULL);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualAddressSpaceLayoutsTest,
   VirtualAddressSpaceRejectsMalformedPagedAndClipmapDescriptors)
 {
   auto address_space = VsmVirtualAddressSpace {};
@@ -144,7 +149,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     std::invalid_argument);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualAddressSpaceLayoutsTest,
   VirtualLayoutValueTypesPreserveConfiguredValues)
 {
   const auto expected_local_layout = VsmVirtualMapLayout {
