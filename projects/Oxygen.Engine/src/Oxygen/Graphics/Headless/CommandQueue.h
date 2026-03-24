@@ -39,10 +39,6 @@ public:
     -> void override;
   auto Wait(uint64_t value) const -> void override;
 
-  // GPU-side operations are modeled by explicit commands in the recorder.
-  // The overrides exist only to satisfy the base interface and should never
-  // be called directly in the headless backend.
-
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override;
   [[nodiscard]] auto GetCurrentValue() const -> uint64_t override;
 
@@ -60,20 +56,15 @@ public:
   }
 
 private:
-  // Prevent direct use; the recorder enqueues dedicated commands that will
-  // invoke the private methods below when executed by the queue executor.
-  auto QueueSignalCommand(uint64_t value) -> void override;
-  auto QueueWaitCommand(uint64_t value) const -> void override;
+  friend class internal::CommandExecutor;
+  auto CompleteSubmission() const -> void;
+  auto SignalImmediate(uint64_t value) const -> void override;
+  auto QueueWaitImmediate(uint64_t value) const -> void;
 
   mutable std::mutex mutex_;
   mutable std::condition_variable cv_;
   mutable uint64_t current_value_ { 0 };
   mutable uint64_t completed_value_ { 0 };
-  // Pending submissions are held until the queue is explicitly signaled.
-  // Each pending submission is represented as a simple counter of how many
-  // submissions are waiting to be completed. When Signal()/Signal(value)
-  // advances the completed value we will clear pending submissions up to
-  // the advanced value.
   mutable uint64_t pending_submissions_ { 0 };
   // Per-queue serial executor to ensure recorded submissions execute in
   // submission order and without creating orphaned threads. The executor

@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
 #include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
+#include <Oxygen/Graphics/Headless/ReadbackManager.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
@@ -61,13 +62,22 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/,
 {
   AddComponent<internal::EngineShaders>();
   AddComponent<DescriptorAllocatorComponent>();
+  readback_manager_ = std::make_unique<HeadlessReadbackManager>(*this);
 
   LOG_F(INFO, "Headless Graphics instance created");
 }
 
+Graphics::~Graphics() = default;
+
 auto Graphics::GetDescriptorAllocator() const -> const DescriptorAllocator&
 {
   return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
+}
+
+auto Graphics::GetReadbackManager() const
+  -> observer_ptr<graphics::ReadbackManager>
+{
+  return observer_ptr<graphics::ReadbackManager>(readback_manager_.get());
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const

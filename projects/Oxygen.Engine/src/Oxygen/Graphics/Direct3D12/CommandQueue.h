@@ -12,6 +12,8 @@
 
 namespace oxygen::graphics::d3d12 {
 
+class Graphics;
+
 class CommandQueue final : public graphics::CommandQueue {
   using Base = graphics::CommandQueue;
 
@@ -31,8 +33,6 @@ public:
   OXGN_D3D12_API auto Wait(
     uint64_t value, std::chrono::milliseconds timeout) const -> void override;
   OXGN_D3D12_API auto Wait(uint64_t value) const -> void override;
-  OXGN_D3D12_API auto QueueSignalCommand(uint64_t value) -> void override;
-  OXGN_D3D12_API auto QueueWaitCommand(uint64_t value) const -> void override;
   OXGN_D3D12_NDAPI auto GetCompletedValue() const -> uint64_t override;
   OXGN_D3D12_NDAPI auto GetCurrentValue() const -> uint64_t override
   {
@@ -58,6 +58,8 @@ public:
   OXGN_D3D12_NDAPI auto GetFence() const -> dx::IFence* { return fence_; }
 
 private:
+  auto SignalImmediate(uint64_t value) const -> void override;
+  auto QueueWaitImmediate(uint64_t value) const -> void;
   auto CurrentDevice() const -> dx::IDevice*;
   auto CreateCommandQueue(QueueRole role, std::string_view queue_name) -> void;
   auto CreateFence(std::string_view fence_name, uint64_t initial_value) -> void;
@@ -72,6 +74,7 @@ private:
 
   dx::IFence* fence_ { nullptr };
   mutable uint64_t current_value_ { 0 };
+  mutable uint64_t last_signaled_value_ { 0 };
   HANDLE fence_event_ { nullptr };
 };
 

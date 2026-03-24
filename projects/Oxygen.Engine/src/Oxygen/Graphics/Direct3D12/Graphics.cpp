@@ -9,8 +9,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -25,9 +25,10 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
-#include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
+#include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
@@ -239,6 +240,12 @@ auto Graphics::GetTimestampQueryProvider() const
     timestamp_query_backend_.get());
 }
 
+auto Graphics::GetReadbackManager() const
+  -> observer_ptr<graphics::ReadbackManager>
+{
+  return observer_ptr<graphics::ReadbackManager>(readback_manager_.get());
+}
+
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*
 {
   auto* device = GetComponent<DeviceManager>().Device();
@@ -308,6 +315,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
   timestamp_query_backend_ = std::make_unique<TimestampQueryBackend>(*this);
+  readback_manager_ = std::make_unique<D3D12ReadbackManager>(*this);
 }
 
 auto Graphics::SetVSyncEnabled(const bool enabled) -> void
@@ -390,7 +398,8 @@ auto Graphics::GetDrawRootConstantCommandSignature(
 {
   DCHECK_NOTNULL_F(root_signature);
 
-  if (const auto it = draw_root_constant_command_signatures_.find(root_signature);
+  if (const auto it
+    = draw_root_constant_command_signatures_.find(root_signature);
     it != draw_root_constant_command_signatures_.end()) {
     return it->second.Get();
   }
@@ -417,8 +426,8 @@ auto Graphics::GetDrawRootConstantCommandSignature(
   }
 
   auto* const raw_signature = signature.Get();
-  draw_root_constant_command_signatures_.emplace(root_signature,
-    std::move(signature));
+  draw_root_constant_command_signatures_.emplace(
+    root_signature, std::move(signature));
   return raw_signature;
 }
 

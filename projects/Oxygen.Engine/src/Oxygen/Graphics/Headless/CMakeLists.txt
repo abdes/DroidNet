@@ -53,6 +53,7 @@ set(
   "CommandQueue.h"
   "CommandRecorder.h"
   "Graphics.h"
+  "ReadbackManager.h"
   "Surface.h"
   "Texture.h"
 )
@@ -78,10 +79,10 @@ set(
   "Commands/ClearFramebufferCommand.h"
   "Commands/CopyBufferCommand.cpp"
   "Commands/CopyBufferCommand.h"
-  "Commands/QueueSignalCommand.h"
-  "Commands/QueueWaitCommand.h"
   "Commands/ResourceBarrierCommand.cpp"
   "Commands/ResourceBarrierCommand.h"
+  "Commands/TextureToBufferCommand.cpp"
+  "Commands/TextureToBufferCommand.h"
   "Graphics.cpp"
   "Internal/CommandExecutor.cpp"
   "Internal/CommandExecutor.h"
@@ -90,6 +91,7 @@ set(
   "Internal/HeadlessModule.cpp"
   "Internal/SerialExecutor.cpp"
   "Internal/SerialExecutor.h"
+  "ReadbackManager.cpp"
   "Surface.cpp"
   "Texture.cpp"
 )
@@ -101,8 +103,10 @@ target_sources(
     ${OXYGEN_HEADLESS_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_HEADLESS_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_HEADLESS_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

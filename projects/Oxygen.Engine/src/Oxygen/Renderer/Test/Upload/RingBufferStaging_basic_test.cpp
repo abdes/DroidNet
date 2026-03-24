@@ -12,7 +12,7 @@
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-using oxygen::engine::upload::SizeBytes;
+using oxygen::SizeBytes;
 using oxygen::engine::upload::StagingProvider;
 using oxygen::engine::upload::UploadError;
 using oxygen::frame::Slot;

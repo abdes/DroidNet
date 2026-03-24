@@ -22,9 +22,11 @@
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
 
 #if __has_include(<pix3.h>)
@@ -878,6 +880,52 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
       }
     }
   }
+}
+
+auto CommandRecorder::CopyTextureToBuffer(graphics::Buffer& dst,
+  const graphics::Texture& src, const TextureBufferCopyRegion& region) -> void
+{
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
+  auto& dst_buf = static_cast<Buffer&>(dst);
+  const auto& src_tex = static_cast<const Texture&>(src);
+  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
+
+  CHECK_F(!src_tex.IsReadbackSurface(),
+    "Direct3D12 readback surfaces are buffer-backed and cannot be used as "
+    "CopyTextureToBuffer sources");
+
+  auto* dst_resource = dst_buf.GetResource();
+  auto* src_resource = src_tex.GetNativeResource()->AsPointer<ID3D12Resource>();
+  DCHECK_NOTNULL_F(dst_resource);
+  DCHECK_NOTNULL_F(src_resource);
+
+  const auto copy_info
+    = detail::ComputeTextureToBufferCopyInfo(src.GetDescriptor(),
+      src_resource->GetDesc().Format, src_tex.GetPlaneCount(), region);
+  CHECK_LE_F(
+    copy_info.resolved_region.buffer_offset.get() + copy_info.bytes_written,
+    dst_buf.GetSize(),
+    "CopyTextureToBuffer exceeds destination buffer size: offset={} bytes={} "
+    "buffer_size={}",
+    copy_info.resolved_region.buffer_offset.get(), copy_info.bytes_written,
+    dst_buf.GetSize());
+
+  D3D12_TEXTURE_COPY_LOCATION src_loc {};
+  src_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+  src_loc.pResource = src_resource;
+  src_loc.SubresourceIndex = copy_info.subresource_index;
+
+  D3D12_TEXTURE_COPY_LOCATION dst_loc {};
+  dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+  dst_loc.pResource = dst_resource;
+  dst_loc.PlacedFootprint = copy_info.placed_footprint;
+
+  d3d12_command_list->CopyTextureRegion(
+    &dst_loc, 0, 0, 0, &src_loc, &copy_info.source_box);
 }
 
 auto CommandRecorder::CopyTexture(const graphics::Texture& src,

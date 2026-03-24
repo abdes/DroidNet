@@ -30,17 +30,20 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(CommandQueue)
   OXYGEN_MAKE_NON_MOVABLE(CommandQueue)
 
-  //! Set the counter to the specified value on the CPU side.
+  //! Reserve the queue timeline counter at the specified value on the CPU side.
   /*!
-    \param [in] value The value to set the counter to. Must be greater than
-    the current value. \note This method is useful in scenarios where command
-    submission is done out of order, and synchronization is required at
-    multiple discrete points in the command queue timeline.
+    \param [in] value The value to set the counter to. Must be greater
+   * than
+    the current value. This does not enqueue any GPU work. Use
+
+   * `CommandRecorder::RecordQueueSignal(...)` to emit a submit-ordered
+   * GPU-side
+    signal for recorded work.
   */
   virtual auto Signal(uint64_t value) const -> void = 0;
 
-  //! Increment the current value on the CPU side by 1.
-  //! \return The new value, to be used to wait for completion.
+  //! Reserve the next queue timeline value on the CPU side.
+  //! \return The reserved value, to be used for submit-ordered signaling.
   [[nodiscard]] virtual auto Signal() const -> uint64_t = 0;
 
   //! Wait up to a certain number of milliseconds, for the counter to reach or
@@ -58,16 +61,6 @@ public:
   //! specified value, on the CPU side.
   //! \param [in] value The awaited value.
   virtual auto Wait(uint64_t value) const -> void = 0;
-
-  //! Enqueue a command to set the counter to the specified value on the GPU
-  //! side.
-  //! \param [in] value The value to set the counter to.
-  virtual auto QueueSignalCommand(uint64_t value) -> void = 0;
-
-  //! Enqueue a command to hold the GPU for the counter to reach or exceed the
-  //! specified value.
-  //! \param [in] value The value that the GPU should be waiting for.
-  virtual auto QueueWaitCommand(uint64_t value) const -> void = 0;
 
   //! Get the last completed value of the counter.
   //! \return  The last value signaled by the GPU.
@@ -93,6 +86,18 @@ public:
 
   OXGN_GFX_NDAPI auto GetName() const noexcept -> std::string_view override;
   OXGN_GFX_API auto SetName(std::string_view name) noexcept -> void override;
+
+protected:
+  //! Emit an immediate queue-side signal for backend-owned synchronization.
+  /*!
+    This is intentionally a backend-only primitive. Application code
+   * should use
+    `Signal()` to reserve a value and
+   * `CommandRecorder::RecordQueueSignal(...)`
+    to associate that value with
+   * recorded work.
+  */
+  virtual auto SignalImmediate(uint64_t value) const -> void = 0;
 };
 
 } // namespace oxygen::graphics

@@ -11,7 +11,7 @@
 #include <Oxygen/Renderer/Test/Upload/UploadCoordinatorTest.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 
-using oxygen::engine::upload::SizeBytes;
+using oxygen::SizeBytes;
 using oxygen::engine::upload::UploadError;
 using oxygen::frame::SlotCount;
 
@@ -87,9 +87,8 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Allocation_Construct_Invalid_Deaths)
   EXPECT_DEATH(
     {
       // Create a bogus Allocation by invoking constructor with nullptr buffer
-      oxygen::engine::upload::StagingProvider::Allocation(nullptr,
-        oxygen::engine::upload::OffsetBytes { 0 },
-        oxygen::engine::upload::SizeBytes { 1 }, nullptr);
+      oxygen::engine::upload::StagingProvider::Allocation(
+        nullptr, oxygen::OffsetBytes { 0 }, oxygen::SizeBytes { 1 }, nullptr);
     },
     "");
 }

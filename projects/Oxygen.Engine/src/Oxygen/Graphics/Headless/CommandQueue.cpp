@@ -7,7 +7,10 @@
 #include <deque>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
@@ -28,68 +31,56 @@ CommandQueue::~CommandQueue()
 auto CommandQueue::Signal(uint64_t value) const -> void
 {
   std::lock_guard lk(mutex_);
-  current_value_ = value;
-  if (current_value_ > completed_value_) {
-    // Complete pending submissions up to the signaled value.
-    const uint64_t advance = current_value_ - completed_value_;
-    if (pending_submissions_ <= advance) {
-      pending_submissions_ = 0;
-    } else {
-      pending_submissions_ -= advance;
-    }
-    completed_value_ = current_value_;
-    cv_.notify_all();
+  if (value <= current_value_) {
+    throw std::invalid_argument(
+      "New value must be greater than the current value");
   }
+  current_value_ = value;
 }
 
 [[nodiscard]] auto CommandQueue::Signal() const -> uint64_t
 {
-  // Reserve a future fence value to be signaled later by a queued command.
-  // Do NOT advance completed_value_ here, and do NOT modify
-  // pending_submissions_. The queued QueueSignalCommand will call
-  // QueueSignalCommand(value) -> Signal(value) when execution reaches it,
-  // which is the correct point to advance completion.
   std::lock_guard lk(mutex_);
   ++current_value_;
   return current_value_;
+}
+
+auto CommandQueue::SignalImmediate(const uint64_t value) const -> void
+{
+  std::lock_guard lk(mutex_);
+  if (value > current_value_) {
+    current_value_ = value;
+  }
+  if (value <= completed_value_) {
+    throw std::invalid_argument(
+      "Immediate signal value must be greater than the completed value");
+  }
+  completed_value_ = value;
+  cv_.notify_all();
+}
+
+auto CommandQueue::QueueWaitImmediate(const uint64_t value) const -> void
+{
+  Wait(value);
 }
 
 auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
   -> void
 {
   std::unique_lock lk(mutex_);
-  cv_.wait_for(
-    lk, timeout, [this, value] { return completed_value_ >= value; });
+  if (!cv_.wait_for(
+        lk, timeout, [this, value] { return completed_value_ >= value; })) {
+    LOG_F(ERROR, "Headless CommandQueue[{}]::Wait({}) timed out after {} ms",
+      GetName(), value, timeout.count());
+    throw std::runtime_error(
+      fmt::format("Wait({}) timed out after {} ms", value, timeout.count()));
+  }
 }
 
 auto CommandQueue::Wait(uint64_t value) const -> void
 {
   std::unique_lock lk(mutex_);
   cv_.wait(lk, [this, value] { return completed_value_ >= value; });
-}
-
-// In headless, queue-side enqueue of signal/wait commands is modeled by
-// recording explicit commands that call GpuSignal/GpuWait during execution.
-// These methods should therefore be no-ops to avoid advancing completion
-// outside of the executor.
-auto CommandQueue::QueueSignalCommand(uint64_t value) -> void
-{
-  // Simulate GPU signaling the fence to the specified value while executing
-  // this in-stream command. Advance completed_value_ and wake waiters.
-  std::lock_guard lk(mutex_);
-  if (completed_value_ < value) {
-    completed_value_ = value;
-  }
-  if (pending_submissions_ > 0) {
-    --pending_submissions_;
-  }
-  cv_.notify_all();
-}
-
-auto CommandQueue::QueueWaitCommand(uint64_t value) const -> void
-{
-  // Simulate GPU waiting until CPU has signaled a fence value.
-  Wait(value);
 }
 
 [[nodiscard]] auto CommandQueue::GetCompletedValue() const -> uint64_t
@@ -116,65 +107,53 @@ auto CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
 auto CommandQueue::Submit(
   std::span<std::shared_ptr<graphics::CommandList>> command_lists) -> void
 {
-  // Support submission of one or more command lists. For each headless
-  // command list we will steal its recorded commands and enqueue a submission
-  // task that executes them serially on the per-queue executor. Each call to
-  // Submit increments the pending submissions counter by one and the task is
-  // responsible for signaling the queue when finished.
   {
     std::lock_guard lk(mutex_);
-    // Lazy-initialize executor to avoid ordering issues during construction in
-    // tests.
     if (!executor_) {
       executor_ = new internal::CommandExecutor();
     }
     ++pending_submissions_;
   }
 
-  // Capture copies of the pointers to avoid lifetime issues with the caller's
-  // storage. Immediately steal each headless command list's commands on the
-  // submitter thread so that when Submit() returns the lists are empty.
-  std::vector<std::deque<std::shared_ptr<Command>>> stolen_per_list;
-  stolen_per_list.reserve(command_lists.size());
+  std::vector<internal::SubmissionChunk> submission_chunks;
+  submission_chunks.reserve(command_lists.size());
   for (const auto& base_ptr : command_lists) {
     if (!base_ptr) {
-      stolen_per_list.emplace_back();
+      submission_chunks.emplace_back();
       continue;
     }
-    // Avoid dynamic_cast (RTTI may be disabled). Use queue role to verify
-    // the command list belongs to this queue's role and then static_cast.
     if (base_ptr->GetQueueRole() != queue_role_) {
       LOG_F(WARNING, "Submit: command list role mismatch, ignoring");
-      stolen_per_list.emplace_back();
+      submission_chunks.emplace_back();
       continue;
     }
 
     auto* hdls = static_cast<CommandList*>(base_ptr.get());
     try {
-      stolen_per_list.emplace_back(hdls->StealCommands());
+      submission_chunks.push_back(internal::SubmissionChunk {
+        .submit_actions = base_ptr->TakeSubmitQueueActions(),
+        .commands = hdls->StealCommands(),
+      });
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Submit: failed to steal commands: {}", e.what());
-      stolen_per_list.emplace_back();
+      submission_chunks.emplace_back();
     }
   }
 
-  // Enqueue a task that executes the stolen command deques in submission
-  // order. The executor_ has been initialized above while holding mutex_
-  // so we can call it directly.
-  // Flatten the stolen per-list deques into a single submission deque (preserve
-  // list order) and hand it off to the executor which will create a
-  // CommandContext, execute the commands, and signal the queue when done.
-  std::deque<std::shared_ptr<Command>> submission;
-  for (auto& lst : stolen_per_list) {
-    for (auto& c : lst) {
-      submission.push_back(std::move(c));
-    }
-  }
-
-  const auto returned_id = executor_->ExecuteAsync(this, std::move(submission));
+  const auto returned_id
+    = executor_->ExecuteAsync(this, std::move(submission_chunks));
   LOG_F(INFO,
     "Headless Submit(span) enqueued pending submission (role={}) -> id={}",
     nostd::to_string(queue_role_), returned_id);
+}
+
+auto CommandQueue::CompleteSubmission() const -> void
+{
+  std::lock_guard lk(mutex_);
+  if (pending_submissions_ > 0) {
+    --pending_submissions_;
+  }
+  cv_.notify_all();
 }
 
 auto CommandQueue::Flush() const -> void

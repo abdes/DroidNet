@@ -11,6 +11,7 @@
 #include <d3d12.h>
 
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -50,6 +51,32 @@ namespace d3d12 {
     OXGN_D3D12_NDAPI auto GetDescriptor() const -> const TextureDesc& override
     {
       return desc_;
+    }
+
+    [[nodiscard]] auto IsReadbackSurface() const noexcept -> bool
+    {
+      return is_readback_surface_;
+    }
+
+    [[nodiscard]] auto GetReadbackSurfaceLayout() const
+      -> const detail::ReadbackSurfaceLayout&
+    {
+      return readback_surface_layout_;
+    }
+
+    [[nodiscard]] auto IsReadbackSurfaceMapped() const noexcept -> bool
+    {
+      return is_readback_surface_mapped_;
+    }
+
+    auto SetReadbackSurfaceMapped(const bool mapped) noexcept -> void
+    {
+      is_readback_surface_mapped_ = mapped;
+    }
+
+    [[nodiscard]] auto GetPlaneCount() const noexcept -> uint8_t
+    {
+      return plane_count_;
     }
 
     OXGN_D3D12_API auto CreateShaderResourceView(
@@ -97,6 +124,9 @@ namespace d3d12 {
     const Graphics* gfx_ { nullptr };
     TextureDesc desc_;
     D3D12_RESOURCE_DESC resource_desc_;
+    bool is_readback_surface_ { false };
+    bool is_readback_surface_mapped_ { false };
+    detail::ReadbackSurfaceLayout readback_surface_layout_ {};
     uint8_t plane_count_ = 1;
   };
 

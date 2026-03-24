@@ -19,7 +19,7 @@
 namespace {
 
 using namespace std::chrono_literals;
-using oxygen::engine::upload::SizeBytes;
+using oxygen::SizeBytes;
 using oxygen::engine::upload::UploadBufferDesc;
 using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadError;
@@ -75,7 +75,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   ASSERT_NE(q, nullptr);
 
   // Clear completion to simulate work in-flight
-  q->QueueSignalCommand(0);
+  q->Signal(0);
 
   // Advance the retirable slot so the tracker will erase entries created in
   // this slot (simulate frame cleanup) — entries are now erased but the
@@ -88,7 +88,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   const auto fence = ticket.fence.get();
   std::thread completion_thread([q, fence]() {
     std::this_thread::sleep_for(20ms);
-    q->QueueSignalCommand(fence);
+    q->Signal(fence);
   });
 
   // Act: call Shutdown which should wait for the fence to be observed
@@ -129,7 +129,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_TimesOutWhenQueueStalls)
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
-  q->QueueSignalCommand(0);
+  q->Signal(0);
 
   // Try shutdown with a very small timeout so it fails deterministically
   auto res = uploader.Shutdown(std::chrono::milliseconds { 5 });

@@ -8,6 +8,8 @@
 #include <memory>
 #include <thread>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -24,7 +26,6 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
-#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 //=== External Dependencies ===-----------------------------------------------//
@@ -63,8 +64,6 @@ public:
   MOCK_METHOD(std::uint64_t, Signal, (), (const, override));
   MOCK_METHOD(void, Wait, (std::uint64_t, std::chrono::milliseconds), (const, override));
   MOCK_METHOD(void, Wait, (std::uint64_t), (const, override));
-  MOCK_METHOD(void, QueueSignalCommand, (std::uint64_t), (override));
-  MOCK_METHOD(void, QueueWaitCommand, (std::uint64_t), (const, override));
   MOCK_METHOD(std::uint64_t, GetCompletedValue, (), (const, override));
   MOCK_METHOD(std::uint64_t, GetCurrentValue, (), (const, override));
   MOCK_METHOD(void, Submit, (CommandListPtr), (override));
@@ -72,6 +71,12 @@ public:
   MOCK_METHOD(oxygen::graphics::QueueRole, GetQueueRole, (), (const, override));
   // clang-format on
   // NOLINTEND
+
+protected:
+  auto SignalImmediate(std::uint64_t value) const -> void override
+  {
+    Signal(value);
+  }
 };
 
 // Mock CommandRecorder that can simulate End() failures
@@ -114,6 +119,7 @@ public:
   MOCK_METHOD(void, CopyBuffer, (oxygen::graphics::Buffer&, std::size_t, const oxygen::graphics::Buffer&, std::size_t, std::size_t), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, const oxygen::graphics::TextureUploadRegion&, oxygen::graphics::Texture&), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, std::span<const oxygen::graphics::TextureUploadRegion>, oxygen::graphics::Texture&), (override));
+  MOCK_METHOD(void, CopyTextureToBuffer, (oxygen::graphics::Buffer&, const oxygen::graphics::Texture&, const oxygen::graphics::TextureBufferCopyRegion&), (override));
   MOCK_METHOD(void, CopyTexture, (const oxygen::graphics::Texture&, const oxygen::graphics::TextureSlice&, const oxygen::graphics::TextureSubResourceSet&, oxygen::graphics::Texture&, const oxygen::graphics::TextureSlice&, const oxygen::graphics::TextureSubResourceSet&), (override));
   MOCK_METHOD(void, ExecuteBarriers, (std::span<const oxygen::graphics::detail::Barrier>), (override));
   // clang-format on

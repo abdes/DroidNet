@@ -52,6 +52,11 @@ m_gtest_program(
 
 m_gtest_program(ShaderRequest SOURCES "ShaderRequest_test.cpp")
 m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
+m_gtest_program(ShaderManager SOURCES "ShaderManager_test.cpp")
+m_gtest_program(ReadbackContract SOURCES "ReadbackContract_test.cpp")
+m_gtest_program(ReadbackTypes SOURCES "ReadbackTypes_test.cpp")
+m_gtest_program(TextureCopyFootprint SOURCES "TextureCopyFootprint_test.cpp")
+m_gtest_program(ReadbackTracker SOURCES "ReadbackTracker_test.cpp")
 m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
 m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
 m_gtest_program(BufferStateTracking SOURCES "BufferStateTracking_test.cpp")
@@ -82,6 +87,7 @@ m_gtest_program(
     "ResourceRegistry_update_test.cpp"
 )
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
+m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
 m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")

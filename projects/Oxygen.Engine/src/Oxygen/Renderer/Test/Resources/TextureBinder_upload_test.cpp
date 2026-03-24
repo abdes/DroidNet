@@ -103,7 +103,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
     GetTextureDebugName(texture_before_completion), expected_placeholder_name);
 
   // Simulate that the transfer queue has NOT completed yet.
-  q->QueueSignalCommand(0);
+  q->Signal(0);
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
 
@@ -116,7 +116,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
 
   // Now simulate completion by advancing the queue's completed fence beyond
   // any possible registered upload fence.
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 3 });
 
@@ -166,7 +166,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
   ASSERT_GE(creations_after_allocate, 1U);
 
   // Simulate completion but do NOT call TexBinder().OnFrameStart().
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
 
@@ -246,7 +246,7 @@ NOLINT_TEST_F(
     MakePlaceholderDebugName(normal_key));
 
   // Drive completion and drain.
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
   TexBinder().OnFrameStart();
@@ -301,7 +301,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
   TexBinder().OnFrameStart();
@@ -352,7 +352,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
   TexBinder().OnFrameStart();
@@ -418,7 +418,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
   EXPECT_EQ(GetTextureDebugName(placeholder_texture_before), "FallbackTexture");
 
   // Drive completion and drain.
-  q->QueueSignalCommand((std::numeric_limits<std::uint64_t>::max)());
+  q->Signal((std::numeric_limits<std::uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
   TexBinder().OnFrameStart();
