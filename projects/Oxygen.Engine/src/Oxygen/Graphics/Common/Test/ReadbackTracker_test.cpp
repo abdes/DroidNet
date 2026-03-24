@@ -138,4 +138,77 @@ NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllPending_WaitsForCompletion)
   EXPECT_EQ(result->bytes_copied.get(), 24U);
 }
 
+NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllWaitsForRequestedTickets)
+{
+  const auto first
+    = tracker.Register(FenceValue { 40 }, SizeBytes { 8 }, "first");
+  const auto second
+    = tracker.Register(FenceValue { 41 }, SizeBytes { 12 }, "second");
+
+  auto future = std::async(std::launch::async, [&]() {
+    const std::array tickets { first, second };
+    return tracker.AwaitAll(tickets);
+  });
+
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
+    std::future_status::timeout);
+
+  tracker.MarkFenceCompleted(FenceValue { 40 });
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
+    std::future_status::timeout);
+
+  tracker.MarkFenceCompleted(FenceValue { 41 });
+
+  const auto results = future.get();
+  ASSERT_TRUE(results.has_value());
+  ASSERT_EQ(results->size(), 2U);
+  EXPECT_EQ((*results)[0].ticket.id.get(), first.id.get());
+  EXPECT_EQ((*results)[0].bytes_copied.get(), 8U);
+  EXPECT_EQ((*results)[1].ticket.id.get(), second.id.get());
+  EXPECT_EQ((*results)[1].bytes_copied.get(), 12U);
+}
+
+NOLINT_TEST_F(ReadbackTrackerTest, CancelMissingTicketReturnsNotFound)
+{
+  const auto cancelled
+    = tracker.Cancel(oxygen::graphics::ReadbackTicketId { 999 });
+  ASSERT_FALSE(cancelled.has_value());
+  EXPECT_EQ(cancelled.error(), ReadbackError::kTicketNotFound);
+}
+
+NOLINT_TEST_F(ReadbackTrackerTest, CompletedFenceTracksLatestCompletedFence)
+{
+  EXPECT_EQ(tracker.CompletedFence().get(), 0U);
+
+  tracker.MarkFenceCompleted(FenceValue { 12 });
+  EXPECT_EQ(tracker.CompletedFence().get(), 12U);
+
+  tracker.MarkFenceCompleted(FenceValue { 9 });
+  EXPECT_EQ(tracker.CompletedFence().get(), 12U);
+}
+
+NOLINT_TEST_F(
+  ReadbackTrackerTest, CompletedFenceValueTracksLatestCompletedFence)
+{
+  EXPECT_EQ(tracker.CompletedFenceValue().Get().get(), 0U);
+
+  tracker.MarkFenceCompleted(FenceValue { 17 });
+  EXPECT_EQ(tracker.CompletedFenceValue().Get().get(), 17U);
+}
+
+NOLINT_TEST_F(
+  ReadbackTrackerTest, LastRegisteredFenceTracksMostRecentRegistration)
+{
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 0U);
+
+  const auto first
+    = tracker.Register(FenceValue { 21 }, SizeBytes { 4 }, "first");
+  EXPECT_EQ(first.fence.get(), 21U);
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 21U);
+
+  const auto second
+    = tracker.RegisterFailedImmediate("failed", ReadbackError::kBackendFailure);
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), second.fence.get());
+}
+
 } // namespace
