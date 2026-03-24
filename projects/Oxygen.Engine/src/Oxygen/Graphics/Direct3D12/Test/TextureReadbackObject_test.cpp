@@ -12,10 +12,13 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
@@ -24,12 +27,17 @@
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 namespace {
 
 using oxygen::OffsetBytes;
 using oxygen::SizeBytes;
 using oxygen::TextureType;
+using oxygen::co::Co;
+using oxygen::co::Run;
+using oxygen::co::testing::TestEventLoop;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
@@ -73,6 +81,13 @@ auto ReadRowBytes(const std::byte* data, const SizeBytes row_pitch,
     bytes[index] = static_cast<uint8_t>(row[index]);
   }
   return bytes;
+}
+
+template <class Awaitable>
+auto RunWithTestEventLoop(TestEventLoop& loop, Awaitable&& awaitable)
+  -> decltype(auto)
+{
+  return oxygen::co::Run(loop, std::forward<Awaitable>(awaitable));
 }
 
 class TextureReadbackTestBase : public ReadbackTestFixture {
@@ -181,6 +196,10 @@ class TextureReadbackSubmissionTest : public TextureReadbackTestBase { };
 class TextureReadbackMappingTest : public TextureReadbackTestBase { };
 class TextureReadbackValidationTest : public TextureReadbackTestBase { };
 class TextureReadbackLifecycleTest : public TextureReadbackTestBase { };
+class TextureReadbackManagerTest : public TextureReadbackTestBase { };
+class TextureReadbackFrameLifecycleTest : public TextureReadbackTestBase { };
+class TextureReadbackCoroutineTest : public TextureReadbackTestBase { };
+class TextureReadbackShutdownTest : public TextureReadbackTestBase { };
 class TextureReadbackResolveTest : public TextureReadbackTestBase { };
 
 NOLINT_TEST_F(TextureReadbackCreationTest, NewTextureReadbackStartsIdle)
@@ -410,6 +429,120 @@ NOLINT_TEST_F(TextureReadbackMappingTest, TryMapReturnsExpectedBytesAndLayout)
     (std::vector<uint8_t> { 11U, 41U, 81U, 122U, 12U, 42U, 81U, 123U }));
   EXPECT_EQ(ReadRowBytes(mapped->Data(), layout.row_pitch, 1U, 8U),
     (std::vector<uint8_t> { 21U, 41U, 82U, 123U, 22U, 42U, 82U, 124U }));
+}
+
+NOLINT_TEST_F(TextureReadbackMappingTest, TryMapRejectsSecondActiveMap)
+{
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "active-map-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(7u * y + x), static_cast<uint8_t>(50u + x),
+          static_cast<uint8_t>(90u + y), static_cast<uint8_t>(130u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "active-map-texture");
+  auto readback = CreateTextureReadback("active-map-texture-readback");
+
+  EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = {
+        .x = 1,
+        .y = 1,
+        .z = 0,
+        .width = 2,
+        .height = 2,
+        .depth = 1,
+        .mip_level = 0,
+        .array_slice = 0,
+      },
+    },
+    "texture-readback-active-map");
+  WaitForQueueIdle();
+
+  auto first = readback->TryMap();
+  ASSERT_TRUE(first.has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kMapped);
+
+  const auto second = readback->TryMap();
+  ASSERT_FALSE(second.has_value());
+  EXPECT_EQ(second.error(), ReadbackError::kAlreadyMapped);
+
+  first = MappedTextureReadback {};
+  EXPECT_EQ(readback->GetState(), ReadbackState::kReady);
+
+  const auto third = readback->TryMap();
+  ASSERT_TRUE(third.has_value());
+}
+
+NOLINT_TEST_F(TextureReadbackMappingTest,
+  MappedViewMoveKeepsReadbackMappedUntilFinalOwnerReleases)
+{
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "moved-map-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(9u * y + x), static_cast<uint8_t>(55u + x),
+          static_cast<uint8_t>(95u + y), static_cast<uint8_t>(135u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "moved-map-texture");
+  auto readback = CreateTextureReadback("moved-map-texture-readback");
+
+  EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = {
+        .x = 1,
+        .y = 1,
+        .z = 0,
+        .width = 2,
+        .height = 2,
+        .depth = 1,
+        .mip_level = 0,
+        .array_slice = 0,
+      },
+    },
+    "texture-readback-moved-map");
+  WaitForQueueIdle();
+
+  auto mapped = readback->TryMap();
+  ASSERT_TRUE(mapped.has_value());
+
+  auto moved = std::move(*mapped);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kMapped);
+
+  const auto& layout = moved.Layout();
+  EXPECT_EQ(ReadRowBytes(moved.Data(), layout.row_pitch, 0U, 8U),
+    (std::vector<uint8_t> { 10U, 56U, 96U, 137U, 11U, 57U, 96U, 138U }));
+  EXPECT_EQ(ReadRowBytes(moved.Data(), layout.row_pitch, 1U, 8U),
+    (std::vector<uint8_t> { 19U, 56U, 97U, 138U, 20U, 57U, 97U, 139U }));
+
+  const auto second = readback->TryMap();
+  ASSERT_FALSE(second.has_value());
+  EXPECT_EQ(second.error(), ReadbackError::kAlreadyMapped);
+
+  moved = MappedTextureReadback {};
+  EXPECT_EQ(readback->GetState(), ReadbackState::kReady);
 }
 
 NOLINT_TEST_F(TextureReadbackMappingTest, MapNowReturnsExpectedBytesAndLayout)
@@ -665,6 +798,232 @@ NOLINT_TEST_F(TextureReadbackLifecycleTest,
     EXPECT_EQ(ReadRowBytes(mapped->Data(), mapped->Layout().row_pitch, 0U, 8U),
       (std::vector<uint8_t> { 21U, 22U, 23U, 24U, 21U, 22U, 23U, 24U }));
   }
+}
+
+NOLINT_TEST_F(TextureReadbackManagerTest,
+  ManagerAwaitCompletesTicketProducedByTextureReadback)
+{
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "await-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(10u * y + x), static_cast<uint8_t>(40u + x),
+          static_cast<uint8_t>(80u + y), static_cast<uint8_t>(120u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "await-texture");
+  auto readback = CreateTextureReadback("await-texture-readback");
+
+  const auto ticket = EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = { .x = 1, .y = 1, .width = 2, .height = 2 },
+    },
+    "texture-readback-await");
+
+  const auto result = AwaitReadback(ticket);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->ticket.id.get(), ticket.id.get());
+  EXPECT_EQ(result->ticket.fence.get(), ticket.fence.get());
+  EXPECT_FALSE(result->error.has_value());
+
+  const auto mapped = readback->TryMap();
+  ASSERT_TRUE(mapped.has_value());
+  const auto expected_bytes_copied = mapped->Layout().row_pitch.get()
+      * static_cast<uint64_t>(mapped->Layout().height - 1U)
+    + (static_cast<uint64_t>(mapped->Layout().width) * 4U);
+  EXPECT_EQ(result->bytes_copied.get(), expected_bytes_copied);
+  EXPECT_EQ(ReadRowBytes(mapped->Data(), mapped->Layout().row_pitch, 0U, 8U),
+    (std::vector<uint8_t> { 11U, 41U, 81U, 122U, 12U, 42U, 81U, 123U }));
+
+  const auto ready = readback->IsReady();
+  ASSERT_TRUE(ready.has_value());
+  EXPECT_TRUE(*ready);
+}
+
+NOLINT_TEST_F(TextureReadbackFrameLifecycleTest,
+  OnFrameStartRetiresCompletedTicketWhileMappedBytesStayValid)
+{
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "retire-ticket-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(30u * y + x), static_cast<uint8_t>(20u + x),
+          static_cast<uint8_t>(90u + y), static_cast<uint8_t>(110u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "retire-ticket-texture");
+  auto readback = CreateTextureReadback("retire-ticket-readback");
+
+  const auto ticket = EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = { .x = 1, .y = 1, .width = 2, .height = 2 },
+    },
+    "texture-readback-retire-ticket");
+  WaitForQueueIdle();
+
+  auto mapped = readback->TryMap();
+  ASSERT_TRUE(mapped.has_value());
+  EXPECT_EQ(ReadRowBytes(mapped->Data(), mapped->Layout().row_pitch, 0U, 8U),
+    (std::vector<uint8_t> { 31U, 21U, 91U, 112U, 32U, 22U, 91U, 113U }));
+
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  EXPECT_EQ(ReadRowBytes(mapped->Data(), mapped->Layout().row_pitch, 0U, 8U),
+    (std::vector<uint8_t> { 31U, 21U, 91U, 112U, 32U, 22U, 91U, 113U }));
+
+  const auto awaited = AwaitReadback(ticket);
+  ASSERT_FALSE(awaited.has_value());
+  EXPECT_EQ(awaited.error(), ReadbackError::kTicketNotFound);
+
+  mapped = MappedTextureReadback {};
+  EXPECT_EQ(readback->GetState(), ReadbackState::kReady);
+}
+
+NOLINT_TEST_F(TextureReadbackCoroutineTest,
+  AwaitAsyncCompletesWhenFramePumpMarksTicketComplete)
+{
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "await-async-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(15u * y + x), static_cast<uint8_t>(50u + x),
+          static_cast<uint8_t>(70u + y), static_cast<uint8_t>(100u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "await-async-texture");
+  auto readback = CreateTextureReadback("await-async-readback");
+
+  const auto ticket = EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = { .x = 1, .y = 1, .width = 2, .height = 2 },
+    },
+    "texture-readback-await-async");
+
+  TestEventLoop loop;
+  bool resumed = false;
+  std::jthread completion_pump([this, readback] {
+    WaitForQueueIdle();
+    const auto ready = readback->IsReady();
+    CHECK_F(ready.has_value() && *ready, "Readback should become ready");
+  });
+
+  RunWithTestEventLoop(loop, [&]() -> Co<> {
+    co_await GetReadbackManager()->AwaitAsync(ticket);
+    resumed = true;
+  });
+
+  completion_pump.join();
+  EXPECT_TRUE(resumed);
+  const auto ready = readback->IsReady();
+  ASSERT_TRUE(ready.has_value());
+  EXPECT_TRUE(*ready);
+}
+
+NOLINT_TEST_F(TextureReadbackCoroutineTest,
+  AwaitAsyncReturnsImmediatelyAfterCompletionWasPumped)
+{
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "await-async-complete-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  for (uint32_t y = 0; y < texture_desc.height; ++y) {
+    for (uint32_t x = 0; x < texture_desc.width; ++x) {
+      WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
+        { static_cast<uint8_t>(12u * y + x), static_cast<uint8_t>(20u + x),
+          static_cast<uint8_t>(40u + y), static_cast<uint8_t>(60u + x + y) });
+    }
+  }
+
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "await-async-complete-texture");
+  auto readback = CreateTextureReadback("await-async-complete-readback");
+
+  const auto ticket = EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = { .x = 1, .y = 1, .width = 2, .height = 2 },
+    },
+    "texture-readback-await-async-complete");
+  WaitForQueueIdle();
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 1 });
+
+  TestEventLoop loop;
+  bool resumed = false;
+  RunWithTestEventLoop(loop, [&]() -> Co<> {
+    co_await GetReadbackManager()->AwaitAsync(ticket);
+    resumed = true;
+  });
+
+  EXPECT_TRUE(resumed);
+}
+
+NOLINT_TEST_F(TextureReadbackShutdownTest,
+  ShutdownReturnsBackendFailureWhileDeferredSubmissionNeverSignals)
+{
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  TextureDesc texture_desc {};
+  texture_desc.width = 2;
+  texture_desc.height = 2;
+  texture_desc.format = oxygen::Format::kRGBA8UNorm;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "shutdown-pending-texture";
+
+  std::vector<std::byte> upload_bytes(
+    kUploadRowPitch * texture_desc.height, std::byte { 0 });
+  auto texture = CreateInitializedColorTexture(
+    texture_desc, upload_bytes, "shutdown-pending-texture");
+  auto readback = CreateTextureReadback("shutdown-pending-readback");
+
+  EnqueueReadback(readback, texture,
+    TextureReadbackRequest {
+      .src_slice = { .x = 0, .y = 0, .width = 2, .height = 2 },
+    },
+    "texture-readback-shutdown-pending", QueueRole::kGraphics, false);
+
+  const auto shutdown_result
+    = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
+  ASSERT_FALSE(shutdown_result.has_value());
+  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
+  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
 }
 
 NOLINT_TEST_F(

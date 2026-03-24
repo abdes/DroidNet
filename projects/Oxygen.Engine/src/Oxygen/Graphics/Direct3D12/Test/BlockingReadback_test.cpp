@@ -34,6 +34,7 @@ using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
+using oxygen::graphics::ClearFlags;
 using oxygen::graphics::Color;
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::MsaaReadbackMode;
@@ -317,6 +318,24 @@ NOLINT_TEST_F(BlockingTextureReadbackTest,
     (std::vector<uint8_t> { 11U, 31U, 62U, 93U, 12U, 32U, 62U, 94U }));
 }
 
+NOLINT_TEST_F(BlockingTextureReadbackTest,
+  ReadTextureNowRejectsUnsupportedDepthStencilTexture)
+{
+  TextureDesc texture_desc {};
+  texture_desc.width = 4;
+  texture_desc.height = 4;
+  texture_desc.format = oxygen::Format::kDepth24Stencil8;
+  texture_desc.texture_type = TextureType::kTexture2D;
+  texture_desc.debug_name = "blocking-depth-texture";
+
+  auto texture = CreateRegisteredTexture(texture_desc);
+  const auto readback = GetReadbackManager()->ReadTextureNow(
+    *texture, TextureReadbackRequest { .aspects = ClearFlags::kDepth });
+
+  ASSERT_FALSE(readback.has_value());
+  EXPECT_EQ(readback.error(), ReadbackError::kUnsupportedResource);
+}
+
 NOLINT_TEST_F(
   BlockingTextureReadbackTest, ReadTextureNowResolvesMsaaColorTextureWhenNeeded)
 {
@@ -340,6 +359,18 @@ NOLINT_TEST_F(
   EXPECT_EQ(
     ReadRowBytes(readback->bytes.data(), readback->layout.row_pitch, 1U, 8U),
     (std::vector<uint8_t> { 255U, 0U, 0U, 255U, 255U, 0U, 0U, 255U }));
+}
+
+NOLINT_TEST_F(BlockingTextureReadbackTest,
+  ReadTextureNowRejectsUnsupportedMsaaWhenResolveIsDisallowed)
+{
+  auto texture = CreateClearedMsaaRenderTarget(
+    Color { 1.0F, 0.0F, 0.0F, 1.0F }, "blocking-msaa-disallow-texture");
+  const auto readback = GetReadbackManager()->ReadTextureNow(*texture,
+    TextureReadbackRequest { .msaa_mode = MsaaReadbackMode::kDisallow });
+
+  ASSERT_FALSE(readback.has_value());
+  EXPECT_EQ(readback.error(), ReadbackError::kUnsupportedResource);
 }
 
 } // namespace
