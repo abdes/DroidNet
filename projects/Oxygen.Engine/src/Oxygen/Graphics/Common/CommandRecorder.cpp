@@ -85,26 +85,20 @@ void CommandRecorder::FlushBarriers()
 
 void CommandRecorder::RecordQueueSignal(uint64_t value)
 {
-  // Default common implementation: if a target queue exists, forward the
-  // signal request as a queue-side command. Backends may override this to
-  // instead record a backend-specific command into their command stream.
-  if (target_queue_) {
-    target_queue_->QueueSignalCommand(value);
-  } else {
-    LOG_F(WARNING, "RecordQueueSignal: target queue is null");
+  if (command_list_ != nullptr) {
+    command_list_->QueueSubmitSignal(value);
+    return;
   }
+  LOG_F(WARNING, "RecordQueueSignal: command list is null");
 }
 
 void CommandRecorder::RecordQueueWait(uint64_t value)
 {
-  // Default common implementation: forward to the target queue's GPU-side
-  // wait command. Backends can override to enqueue a recorded command
-  // instead, but the default is a direct forward for simplicity.
-  if (target_queue_) {
-    target_queue_->QueueWaitCommand(value);
-  } else {
-    LOG_F(WARNING, "RecordQueueWait: target queue is null");
+  if (command_list_ != nullptr) {
+    command_list_->QueueSubmitWait(value);
+    return;
   }
+  LOG_F(WARNING, "RecordQueueWait: command list is null");
 }
 
 /*!

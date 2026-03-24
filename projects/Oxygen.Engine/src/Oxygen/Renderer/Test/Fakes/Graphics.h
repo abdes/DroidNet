@@ -100,18 +100,21 @@ public:
     , role_(role)
   {
   }
-  auto Signal(const uint64_t value) const -> void override { current_ = value; }
-  [[nodiscard]] auto Signal() const -> uint64_t override { return ++current_; }
+  auto Signal(const uint64_t value) const -> void override
+  {
+    current_ = value;
+    completed_ = value;
+  }
+  [[nodiscard]] auto Signal() const -> uint64_t override
+  {
+    completed_ = ++current_;
+    return current_;
+  }
   auto Wait(uint64_t /*value*/, std::chrono::milliseconds /*timeout*/) const
     -> void override
   {
   }
   auto Wait(uint64_t /*value*/) const -> void override { }
-  auto QueueSignalCommand(const uint64_t value) -> void override
-  {
-    completed_ = value;
-  }
-  auto QueueWaitCommand(uint64_t /*value*/) const -> void override { }
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override
   {
     return completed_;
@@ -132,6 +135,12 @@ public:
   }
 
 private:
+  auto SignalImmediate(const uint64_t value) const -> void override
+  {
+    current_ = value;
+    completed_ = value;
+  }
+
   QueueRole role_ { QueueRole::kGraphics };
   mutable uint64_t current_ { 0 };
   mutable uint64_t completed_ { 0 };
@@ -271,6 +280,10 @@ public:
     texture_log_->src = &src;
     texture_log_->dst = &dst;
     texture_log_->regions.assign(regions.begin(), regions.end());
+  }
+  auto CopyTextureToBuffer(Buffer& /*dst*/, const Texture& /*src*/,
+    const graphics::TextureBufferCopyRegion& /*region*/) -> void override
+  {
   }
 
   // No-op copy texture for tests (satisfies abstract interface)
@@ -629,7 +642,8 @@ public:
       queues_[spec.key] = std::make_shared<FakeCommandQueue>(name, spec.role);
     }
   }
-  auto QueueKeyFor(const graphics::QueueRole role) const -> graphics::QueueKey override
+  auto QueueKeyFor(const graphics::QueueRole role) const
+    -> graphics::QueueKey override
   {
     return queue_strategy_ ? queue_strategy_->KeyFor(role) : QueueKey {};
   }

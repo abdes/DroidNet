@@ -14,6 +14,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
@@ -269,6 +270,59 @@ struct TextureUploadRegion {
     TextureSubResourceSet::EntireTexture()
   };
 };
+
+//! Describes a single copy region from a texture into a linear buffer.
+/*!
+ TextureBufferCopyRegion is the readback-side counterpart to
+ TextureUploadRegion. The region identifies the source texture slice and the
+ linear buffer layout that should receive the copied bytes.
+
+ Semantics:
+ - buffer_offset: byte offset from the start of the destination buffer.
+ - buffer_row_pitch: bytes between copied rows in the destination buffer. If
+   zero, the backend should use a tightly-packed row pitch for the format.
+ - buffer_slice_pitch: bytes between copied 2D slices in the destination
+   buffer. If zero, it is derived from row_count * resolved_row_pitch.
+ - texture_slice: source region in texture space. Resolve it against the source
+   texture descriptor before computing a footprint.
+*/
+struct TextureBufferCopyRegion {
+  OffsetBytes buffer_offset {};
+  SizeBytes buffer_row_pitch {};
+  SizeBytes buffer_slice_pitch {};
+  TextureSlice texture_slice {};
+};
+
+//! Simple explicit extent used by linear texture copy footprint helpers.
+struct LinearTextureExtent {
+  uint32_t width = 0;
+  uint32_t height = 0;
+  uint32_t depth = 0;
+};
+
+//! Linear footprint for a texture-to-buffer copy.
+struct LinearTextureCopyFootprint {
+  SizeBytes row_pitch {};
+  SizeBytes slice_pitch {};
+  SizeBytes total_bytes {};
+  uint32_t row_count = 0;
+  uint32_t slice_count = 0;
+};
+
+//! Computes a linear footprint for the given format and explicit extent.
+OXGN_GFX_NDAPI auto ComputeLinearTextureCopyFootprint(Format format,
+  const LinearTextureExtent& extent,
+  SizeBytes row_pitch_alignment = SizeBytes { 1 })
+  -> LinearTextureCopyFootprint;
+
+//! Computes a tightly-packed linear footprint for a resolved texture slice.
+OXGN_GFX_NDAPI auto ComputeLinearTextureCopyFootprint(const TextureDesc& desc,
+  const TextureSlice& slice, SizeBytes row_pitch_alignment = SizeBytes { 1 })
+  -> LinearTextureCopyFootprint;
+
+//! Resolves implicit pitches in a texture-to-buffer copy region.
+OXGN_GFX_NDAPI auto ResolveTextureBufferCopyRegion(const TextureDesc& desc,
+  const TextureBufferCopyRegion& region) -> TextureBufferCopyRegion;
 
 } // namespace oxygen::graphics
 

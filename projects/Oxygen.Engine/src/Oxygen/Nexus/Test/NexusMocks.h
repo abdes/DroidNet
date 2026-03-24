@@ -181,12 +181,6 @@ struct FakeCommandQueue : oxygen::graphics::CommandQueue {
   }
   auto Wait(uint64_t /*value*/) const -> void override { }
 
-  auto QueueSignalCommand(uint64_t value) -> void override
-  {
-    completed.store(value);
-  }
-  auto QueueWaitCommand(uint64_t /*value*/) const -> void override { }
-
   auto GetCompletedValue() const -> uint64_t override
   {
     return completed.load();
@@ -206,6 +200,13 @@ struct FakeCommandQueue : oxygen::graphics::CommandQueue {
   auto GetQueueRole() const -> oxygen::graphics::QueueRole override
   {
     return oxygen::graphics::QueueRole::kGraphics;
+  }
+
+private:
+  auto SignalImmediate(uint64_t value) const -> void override
+  {
+    completed.store(value);
+    current.store(value);
   }
 };
 

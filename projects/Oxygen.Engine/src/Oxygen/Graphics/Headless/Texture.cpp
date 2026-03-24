@@ -20,6 +20,8 @@ Texture::Texture(const TextureDesc& desc)
   : graphics::Texture("HeadlessTexture")
   , desc_(desc)
 {
+  is_readback_surface_ = desc_.cpu_access == ResourceAccessMode::kReadBack;
+
   // Determine backing size using the layout strategy so that all mip/data
   // ranges computed by the strategy are addressable via Read/WriteBacking.
   struct ContiguousLayout : TextureLayoutStrategy {
@@ -41,6 +43,7 @@ Texture::Texture(const TextureDesc& desc)
       const auto finfo = detail::GetFormatInfo(desc.format);
       const uint32_t w = MipDim(desc.width, mip);
       const uint32_t h = MipDim(desc.height, mip);
+      const uint32_t d = MipDim(desc.depth, mip);
       if (finfo.block_size > 1) {
         const uint32_t blocks_x = (w + finfo.block_size - 1) / finfo.block_size;
         const uint32_t blocks_y = (h + finfo.block_size - 1) / finfo.block_size;
@@ -48,11 +51,12 @@ Texture::Texture(const TextureDesc& desc)
         // realistic textures used in tests. Use 64-bit temporaries to avoid
         // UB, then clamp to uint32_t.
         const uint64_t v = static_cast<uint64_t>(blocks_x)
-          * static_cast<uint64_t>(blocks_y) * finfo.bytes_per_block;
+          * static_cast<uint64_t>(blocks_y) * static_cast<uint64_t>(d)
+          * finfo.bytes_per_block;
         return static_cast<uint32_t>(v);
       }
       const uint64_t v = static_cast<uint64_t>(w) * static_cast<uint64_t>(h)
-        * finfo.bytes_per_block;
+        * static_cast<uint64_t>(d) * finfo.bytes_per_block;
       return static_cast<uint32_t>(v);
     }
 

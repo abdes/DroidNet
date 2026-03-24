@@ -196,10 +196,8 @@ NOLINT_TEST_F(
   constexpr auto kDescriptorByteCount = size_t { 19U };
 
   const auto source_root = Path("single_asset_source");
-  const auto descriptor_path = source_root / "asset.desc";
   const auto descriptor = std::vector<std::byte>(
     kDescriptorByteCount, std::byte { static_cast<uint8_t>(0xABU) });
-  ASSERT_TRUE(paktest::WriteFileBytes(descriptor_path, descriptor));
 
   const auto asset = paktest::AssetSpec {
     .key = paktest::MakeAssetKey(kAssetSeed),
@@ -208,6 +206,7 @@ NOLINT_TEST_F(
     .virtual_path = "/Game/Materials/SingleAsset.mat",
     .descriptor_size = static_cast<uint64_t>(descriptor.size()),
     .descriptor_sha = {},
+    .descriptor_payload = descriptor,
   };
   const auto assets = std::array { asset };
   ASSERT_TRUE(paktest::WriteLooseIndex(source_root,

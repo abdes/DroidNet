@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -23,70 +24,15 @@ using oxygen::graphics::TextureDesc;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::Graphics;
 using oxygen::graphics::d3d12::Texture;
+using oxygen::graphics::d3d12::detail::ComputeReadbackSurfaceLayout;
 using oxygen::graphics::d3d12::detail::ConvertResourceStates;
+using oxygen::graphics::d3d12::detail::GetD3D12SubresourceCount;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
+using oxygen::graphics::d3d12::detail::MakeTextureResourceDesc;
 using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;
 
 namespace {
-
-auto ConvertTextureDesc(const TextureDesc& d) -> D3D12_RESOURCE_DESC
-{
-  using oxygen::TextureType;
-
-  const auto& format_mapping = GetDxgiFormatMapping(d.format);
-  const FormatInfo& format_info = GetFormatInfo(d.format);
-
-  D3D12_RESOURCE_DESC desc = {};
-  desc.Width = d.width;
-  desc.Height = d.height;
-  desc.MipLevels = static_cast<UINT16>(d.mip_levels);
-  desc.Format = d.is_typeless ? format_mapping.resource_format
-                              : format_mapping.rtv_format;
-  desc.SampleDesc.Count = d.sample_count;
-  desc.SampleDesc.Quality = d.sample_quality;
-
-  switch (d.texture_type) {
-  case TextureType::kTexture1D:
-  case TextureType::kTexture1DArray:
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
-    desc.DepthOrArraySize = static_cast<UINT16>(d.array_size);
-    break;
-  case TextureType::kTexture2D:
-  case TextureType::kTexture2DArray:
-  case TextureType::kTextureCube:
-  case TextureType::kTextureCubeArray:
-  case TextureType::kTexture2DMultiSample:
-  case TextureType::kTexture2DMultiSampleArray:
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.DepthOrArraySize = static_cast<UINT16>(d.array_size);
-    break;
-  case TextureType::kTexture3D:
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-    desc.DepthOrArraySize = static_cast<UINT16>(d.depth);
-    break;
-  case TextureType::kUnknown:
-    ABORT_F("Invalid texture dimension: {}", nostd::to_string(d.texture_type));
-  }
-
-  if (!d.is_shader_resource) {
-    desc.Flags |= D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
-  }
-
-  if (d.is_render_target) {
-    if (format_info.has_depth || format_info.has_stencil) {
-      desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-    } else {
-      desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
-    }
-  }
-
-  if (d.is_uav) {
-    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-  }
-
-  return desc;
-}
 
 auto ConvertTextureClearValue(const TextureDesc& d) -> D3D12_CLEAR_VALUE
 {
@@ -113,7 +59,7 @@ auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
 {
   DCHECK_NOTNULL_F(gfx, "Graphics pointer cannot be null");
 
-  const D3D12_RESOURCE_DESC rd = ConvertTextureDesc(desc);
+  const D3D12_RESOURCE_DESC rd = MakeTextureResourceDesc(desc);
   const D3D12_CLEAR_VALUE clear_value = ConvertTextureClearValue(desc);
 
   constexpr D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
@@ -159,12 +105,59 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
 
-  auto [resource, d3dmaAllocation] = CreateTextureResource(desc_, gfx_);
+  plane_count_
+    = gfx_->GetFormatPlaneCount(MakeTextureResourceDesc(desc_).Format);
+
+  ID3D12Resource* resource { nullptr };
+  D3D12MA::Allocation* d3dmaAllocation { nullptr };
+  if (desc_.cpu_access == ResourceAccessMode::kReadBack) {
+    CHECK_F(
+      !desc_.is_shader_resource && !desc_.is_render_target && !desc_.is_uav,
+      "D3D12 readback textures are linear staging surfaces and cannot expose "
+      "SRV/RTV/UAV flags");
+    CHECK_EQ_F(desc_.sample_count, 1u,
+      "D3D12 readback textures do not support multisampled layouts at T06");
+
+    const auto texture_resource_desc = MakeTextureResourceDesc(desc_);
+    readback_surface_layout_ = ComputeReadbackSurfaceLayout(
+      *gfx_->GetCurrentDevice(), texture_resource_desc,
+      GetD3D12SubresourceCount(desc_, plane_count_), plane_count_);
+
+    D3D12MA::ALLOCATION_DESC alloc_desc {};
+    alloc_desc.HeapType = D3D12_HEAP_TYPE_READBACK;
+    alloc_desc.ExtraHeapFlags = D3D12_HEAP_FLAG_NONE;
+    alloc_desc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
+
+    D3D12_RESOURCE_DESC readback_desc {};
+    readback_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    readback_desc.Alignment = 0;
+    readback_desc.Width = readback_surface_layout_.total_bytes;
+    readback_desc.Height = 1;
+    readback_desc.DepthOrArraySize = 1;
+    readback_desc.MipLevels = 1;
+    readback_desc.Format = DXGI_FORMAT_UNKNOWN;
+    readback_desc.SampleDesc = { .Count = 1, .Quality = 0 };
+    readback_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    readback_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    const HRESULT hr = gfx_->GetAllocator()->CreateResource(&alloc_desc,
+      &readback_desc, D3D12_RESOURCE_STATE_COPY_DEST, nullptr, &d3dmaAllocation,
+      IID_PPV_ARGS(&resource));
+    if (FAILED(hr)) {
+      LOG_F(ERROR, "Failed to create readback surface `{}` with error {:#010X}",
+        desc_.debug_name, hr);
+      throw std::runtime_error("Failed to create readback surface resource");
+    }
+    is_readback_surface_ = true;
+  } else {
+    auto allocation = CreateTextureResource(desc_, gfx_);
+    resource = allocation.first;
+    d3dmaAllocation = allocation.second;
+  }
 
   AddComponent<GraphicResource>(desc_.debug_name, resource, d3dmaAllocation);
 
   resource_desc_ = resource->GetDesc();
-  plane_count_ = gfx_->GetFormatPlaneCount(resource_desc_.Format);
 }
 
 Texture::Texture(
@@ -184,7 +177,8 @@ Texture::Texture(
   );
 
   resource_desc_ = resource->GetDesc();
-  plane_count_ = gfx_->GetFormatPlaneCount(resource_desc_.Format);
+  plane_count_
+    = gfx_->GetFormatPlaneCount(MakeTextureResourceDesc(desc_).Format);
 }
 
 Texture::~Texture() { DLOG_F(1, "destroying texture: {}", Base::GetName()); }
@@ -192,8 +186,13 @@ Texture::~Texture() { DLOG_F(1, "destroying texture: {}", Base::GetName()); }
 // ReSharper disable CppClangTidyBugproneUseAfterMove
 Texture::Texture(Texture&& other) noexcept
   : Base(std::move(other))
+  , gfx_(std::exchange(other.gfx_, nullptr))
   , desc_(std::move(other.desc_))
   , resource_desc_(std::exchange(other.resource_desc_, {})) // Reset to default
+  , is_readback_surface_(std::exchange(other.is_readback_surface_, false))
+  , is_readback_surface_mapped_(
+      std::exchange(other.is_readback_surface_mapped_, false))
+  , readback_surface_layout_(std::move(other.readback_surface_layout_))
   , plane_count_(std::exchange(other.plane_count_, 1)) // Reset to default
 {
 }
@@ -202,9 +201,14 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
 {
   if (this != &other) {
     Base::operator=(std::move(other));
+    gfx_ = std::exchange(other.gfx_, nullptr);
     desc_ = std::move(other.desc_);
     resource_desc_
       = std::exchange(other.resource_desc_, {}); // Reset to default
+    is_readback_surface_ = std::exchange(other.is_readback_surface_, false);
+    is_readback_surface_mapped_
+      = std::exchange(other.is_readback_surface_mapped_, false);
+    readback_surface_layout_ = std::move(other.readback_surface_layout_);
     plane_count_ = std::exchange(other.plane_count_, 1); // Reset to default
   }
   return *this;
@@ -231,6 +235,10 @@ auto Texture::CreateShaderResourceView(const DescriptorHandle& view_handle,
   const Format format, const TextureType dimension,
   const TextureSubResourceSet sub_resources) const -> NativeView
 {
+  if (is_readback_surface_) {
+    throw std::runtime_error(
+      "D3D12 readback surfaces cannot create shader resource views");
+  }
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
   }
@@ -246,6 +254,10 @@ auto Texture::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
   const Format format, const TextureType dimension,
   const TextureSubResourceSet sub_resources) const -> NativeView
 {
+  if (is_readback_surface_) {
+    throw std::runtime_error(
+      "D3D12 readback surfaces cannot create unordered access views");
+  }
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
   }
@@ -261,6 +273,10 @@ auto Texture::CreateRenderTargetView(const DescriptorHandle& view_handle,
   const Format format, const TextureSubResourceSet sub_resources) const
   -> NativeView
 {
+  if (is_readback_surface_) {
+    throw std::runtime_error(
+      "D3D12 readback surfaces cannot create render target views");
+  }
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
   }
@@ -275,6 +291,10 @@ auto Texture::CreateDepthStencilView(const DescriptorHandle& view_handle,
   const Format format, const TextureSubResourceSet sub_resources,
   const bool is_read_only) const -> NativeView
 {
+  if (is_readback_surface_) {
+    throw std::runtime_error(
+      "D3D12 readback surfaces cannot create depth stencil views");
+  }
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
   }

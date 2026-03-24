@@ -78,6 +78,11 @@ set(
   "PipelineState.h"
   "ProfileScope.h"
   "Queues.h"
+  "ReadbackErrors.h"
+  "ReadbackManager.h"
+  "ReadbackTracker.h"
+  "ReadbackTypes.h"
+  "ReadbackValidation.h"
   "ResourceRegistry.h"
   "Sampler.h"
   "ShaderByteCode.h"
@@ -124,6 +129,9 @@ set(
   "Internal/ToStringConverters.cpp"
   "PipelineState.cpp"
   "ProfileScope.cpp"
+  "ReadbackManager.cpp"
+  "ReadbackTracker.cpp"
+  "ReadbackValidation.cpp"
   "ResourceRegistry.cpp"
   "ShaderManager.cpp"
   "Shaders.cpp"
@@ -139,8 +147,10 @@ target_sources(
     ${OXYGEN_GFX_COMMON_HEADERS}
   PUBLIC
     FILE_SET HEADERS
-    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_GFX_COMMON_HEADERS}
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_GFX_COMMON_HEADERS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})

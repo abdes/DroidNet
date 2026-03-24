@@ -391,8 +391,10 @@ auto ShaderManager::Load() -> void
   Clear();
 
   if (!std::filesystem::exists(archive_path_)) {
-    throw std::runtime_error(
-      "Shader library does not exist: " + archive_path_.string());
+    LOG_F(WARNING,
+      "Shader library not found at `{}`; continuing with an empty shader cache",
+      archive_path_.string());
+    return;
   }
 
   try {

@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
 
 // Forward declarations for pipeline management
@@ -53,6 +54,9 @@ public:
 
   [[nodiscard]] OXGN_D3D12_NDAPI auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider> override;
+
+  OXGN_D3D12_NDAPI auto GetReadbackManager() const
+    -> observer_ptr<graphics::ReadbackManager> override;
 
   //! Get the V-Sync setting.
   [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool
@@ -143,6 +147,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D12CommandSignature>>
     draw_root_constant_command_signatures_ {};
   std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_ {};
+  std::unique_ptr<D3D12ReadbackManager> readback_manager_ {};
 };
 
 }

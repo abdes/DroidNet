@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
@@ -169,9 +170,28 @@ public:
   [[nodiscard]] auto GetNativeResource() const -> NativeResource override;
   OXGN_HDLS_NDAPI auto GetLayoutStrategy() const
     -> const TextureLayoutStrategy&;
+  [[nodiscard]] auto IsReadbackSurface() const noexcept -> bool
+  {
+    return is_readback_surface_;
+  }
+  [[nodiscard]] auto IsReadbackSurfaceMapped() const noexcept -> bool
+  {
+    return is_readback_surface_mapped_;
+  }
+  auto SetReadbackSurfaceMapped(const bool mapped) noexcept -> void
+  {
+    is_readback_surface_mapped_ = mapped;
+  }
+  [[nodiscard]] auto GetBackingData() const noexcept -> const std::byte*
+  {
+    return data_.empty() ? nullptr
+                         : reinterpret_cast<const std::byte*>(data_.data());
+  }
 
 private:
   TextureDesc desc_ {};
+  bool is_readback_surface_ { false };
+  bool is_readback_surface_mapped_ { false };
 
   // CPU-side backing storage for texture data. Conservatively sized using a
   // 4 bytes-per-pixel estimate when format is unknown.

@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
@@ -44,32 +45,6 @@ namespace oxygen::engine::upload {
  - kResized: Existing buffer replaced with a larger one.
 */
 enum class EnsureBufferResult { kUnchanged, kCreated, kResized };
-
-using SizeBytes = NamedType<uint64_t, struct BytesTag,
-  // clang-format off
-  DefaultInitialized,
-  Arithmetic>; // clang-format on
-
-inline auto to_string(SizeBytes const& b)
-{
-  return std::to_string(b.get()) + " bytes";
-}
-
-using OffsetBytes = NamedType<uint64_t, struct OffsetBytesTag,
-  // clang-format off
-  DefaultInitialized,
-  Arithmetic>; // clang-format on
-
-inline auto to_string(OffsetBytes const& b)
-{
-  return std::to_string(b.get()) + " bytes";
-}
-
-using Alignment = NamedType<uint32_t, struct AlignmentTag,
-  // clang-format off
-  DefaultInitialized,
-  Comparable,
-  Printable>; // clang-format on
 
 using TicketId = NamedType<uint64_t, struct TicketIdTag,
   // clang-format off
