@@ -99,6 +99,10 @@ public:
   OXGN_RNDR_NDAPI auto GetPositionalLightsSrvIndex() const
     -> ShaderVisibleIndex;
 
+  //! Backing GPU buffer for the current frame positional-light upload.
+  OXGN_RNDR_NDAPI auto GetPositionalLightsBuffer() const noexcept
+    -> const graphics::Buffer*;
+
   //! Read-only access to collected directional light hot data.
   OXGN_RNDR_NDAPI auto GetDirectionalLights() const noexcept
     -> std::span<const engine::DirectionalLightBasic>;

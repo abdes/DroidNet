@@ -420,6 +420,12 @@ auto LightManager::GetPositionalLightsSrvIndex() const -> ShaderVisibleIndex
   return positional_srv_;
 }
 
+auto LightManager::GetPositionalLightsBuffer() const noexcept
+  -> const graphics::Buffer*
+{
+  return positional_buffer_.GetActiveBuffer();
+}
+
 auto LightManager::GetDirectionalLights() const noexcept
   -> std::span<const engine::DirectionalLightBasic>
 {
