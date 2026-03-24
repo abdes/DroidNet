@@ -125,6 +125,7 @@ struct LightCullingPass::Impl {
 
   // Cached light data from LightManager
   ShaderVisibleIndex positional_lights_srv { kInvalidShaderVisibleIndex };
+  const graphics::Buffer* positional_lights_buffer { nullptr };
   uint32_t num_positional_lights { 0 };
 
   // Pass constants CBV
@@ -628,10 +629,13 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   if (const auto light_manager = renderer.GetLightManager()) {
     light_manager->EnsureFrameResources();
     impl_->positional_lights_srv = light_manager->GetPositionalLightsSrvIndex();
+    impl_->positional_lights_buffer
+      = light_manager->GetPositionalLightsBuffer();
     impl_->num_positional_lights
       = static_cast<uint32_t>(light_manager->GetPositionalLights().size());
   } else {
     impl_->positional_lights_srv = kInvalidShaderVisibleIndex;
+    impl_->positional_lights_buffer = nullptr;
     impl_->num_positional_lights = 0;
   }
 
@@ -642,9 +646,22 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     *impl_->cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *impl_->light_index_list_buffer, graphics::ResourceStates::kCommon, true);
+  recorder.BeginTrackingResourceState(
+    depth_tex, graphics::ResourceStates::kCommon, true);
+  if (impl_->num_positional_lights > 0) {
+    CHECK_NOTNULL_F(impl_->positional_lights_buffer,
+      "LightCullingPass expected positional light buffer for {} lights",
+      impl_->num_positional_lights);
+    recorder.BeginTrackingResourceState(*impl_->positional_lights_buffer,
+      graphics::ResourceStates::kGenericRead, true);
+  }
 
   recorder.RequireResourceState(
     depth_tex, graphics::ResourceStates::kShaderResource);
+  if (impl_->num_positional_lights > 0) {
+    recorder.RequireResourceState(
+      *impl_->positional_lights_buffer, graphics::ResourceStates::kGenericRead);
+  }
 
   recorder.RequireResourceState(
     *impl_->cluster_grid_buffer, graphics::ResourceStates::kUnorderedAccess);
@@ -771,6 +788,18 @@ auto LightCullingPass::GetLightIndexListSrvIndex() const noexcept
   -> ShaderVisibleIndex
 {
   return impl_->light_index_list_srv;
+}
+
+auto LightCullingPass::GetClusterGridBuffer() const noexcept
+  -> std::shared_ptr<const graphics::Buffer>
+{
+  return impl_->cluster_grid_buffer;
+}
+
+auto LightCullingPass::GetLightIndexListBuffer() const noexcept
+  -> std::shared_ptr<const graphics::Buffer>
+{
+  return impl_->light_index_list_buffer;
 }
 
 auto LightCullingPass::GetClusterConfig() const noexcept

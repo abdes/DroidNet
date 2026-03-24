@@ -164,6 +164,14 @@ public:
   OXGN_RNDR_NDAPI auto GetLightIndexListSrvIndex() const noexcept
     -> ShaderVisibleIndex;
 
+  //! Underlying cluster grid buffer consumed by downstream passes.
+  OXGN_RNDR_NDAPI auto GetClusterGridBuffer() const noexcept
+    -> std::shared_ptr<const graphics::Buffer>;
+
+  //! Underlying light index list buffer consumed by downstream passes.
+  OXGN_RNDR_NDAPI auto GetLightIndexListBuffer() const noexcept
+    -> std::shared_ptr<const graphics::Buffer>;
+
   //! Get the current cluster configuration.
   OXGN_RNDR_NDAPI auto GetClusterConfig() const noexcept
     -> const LightCullingConfig&;
