@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Renderer/ViewConstants.hlsli"
 #include "Renderer/Vsm/VsmCommon.hlsli"
 #include "Renderer/Vsm/VsmPageTable.hlsli"
 #include "Renderer/Vsm/VsmPageFlags.hlsli"
@@ -16,7 +17,10 @@
 // one coherent unit during shader bake. It is not a renderer pass and should
 // not grow real VSM logic. Keep it tiny and policy-free.
 
-RWByteAddressBuffer g_contract_output : register(u0);
+cbuffer RootConstants : register(b2, space0) {
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
+}
 
 [numthreads(1, 1, 1)]
 void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -31,7 +35,9 @@ void main(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const uint flag_mask = VsmHasAnyPageFlag(flags, VSM_PAGE_FLAG_ALLOCATED)
         ? flags.bits
         : 0u;
-
-    g_contract_output.Store(0u, mapped_page + flag_mask + VSM_MAX_MIP_LEVELS
-        + VSM_PAGE_SIZE_TEXELS);
+    const uint abi_signature = mapped_page + flag_mask + VSM_MAX_MIP_LEVELS
+        + VSM_PAGE_SIZE_TEXELS + g_DrawIndex + g_PassConstantsIndex;
+    if (abi_signature == 0xffffffffu) {
+        return;
+    }
 }

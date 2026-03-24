@@ -20,7 +20,8 @@ CPU-GPU ABI Guidelines
 
 ## 1. Current State
 
-The following modules are **fully implemented and tested** (CPU-side):
+The following modules are implemented; statuses below reflect their current
+validation state:
 
 | Module | Architecture § | Status | Key Files |
 |--------|----------------|--------|-----------|
@@ -28,9 +29,9 @@ The following modules are **fully implemented and tested** (CPU-side):
 | Virtual Address Space | §3.2 | ✅ Complete | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp` |
 | Cache Manager | §3.3 | ✅ Complete | `VsmCacheManager.h/.cpp`, `VsmCacheManagerSeam.h`, `VsmCacheManagerTypes.h/.cpp` |
 | Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
-| Shader ABI Contracts | §4.1–§4.5 | ✅ Complete | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
+| Shader ABI Contracts | §4.1–§4.5 | ◐ Partial | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
 
-Test coverage: 19 test files across CPU and GPU lifecycle suites.
+Test coverage: 20 test files across CPU and GPU lifecycle suites.
 
 The remaining phases below explicitly own the current forward gaps from the
 implemented cache/allocation slice:
@@ -63,8 +64,8 @@ implemented cache/allocation slice:
 | Status | Phase | Deliverable | Exit Gate |
 |--------|-------|-------------|-----------|
 | ☑ | A | Cache-manager plan completion (Phase 8) | Completed in `VsmCacheManagerAndPageAllocationImplementationPlan.md` |
-| ☑ | B | VSM HLSL common types and page-table structures | Shared HLSL headers compile; CPU ↔ GPU struct parity verified |
-| ☐ | C | Page Request Generator pass | Compute pass marks visible virtual pages from depth buffer |
+| ◐ | B | VSM HLSL common types and page-table structures | ABI types exist and CPU ↔ GPU parity is verified; dedicated aggregate HLSL compile validation is still pending |
+| ☑ | C | Page Request Generator pass | Compute pass produces correct page request flags for test scenes with depth and clustered-light inputs |
 | ☐ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
 | ☐ | E | Page flag propagation and initialization passes | Stages 9–11: hierarchical flags, mapped-mip propagation, selective page init |
 | ☐ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
@@ -86,10 +87,10 @@ implemented cache/allocation slice:
 **Status:** completed on 2026-03-24 through the dedicated cache-manager/allocation plan.
 
 **Deliverables:**
-- [ ] Verify all existing VSM tests pass (`Oxygen.Renderer.VirtualShadows.Tests` + `GpuLifecycle.Tests`)
-- [ ] Review strategic `LOG_F` / `LOG_SCOPE_F` placements in cache manager and planner for production diagnostics
-- [ ] Document troubleshooting guide in `VirtualShadowMaps/README.md`
-- [ ] Close Phase 8 in the existing implementation plan
+- [x] Verify all existing VSM tests pass (`Oxygen.Renderer.VirtualShadows.Tests` + `GpuLifecycle.Tests`)
+- [x] Review strategic `LOG_F` / `LOG_SCOPE_F` placements in cache manager and planner for production diagnostics
+- [x] Document troubleshooting guide in `VirtualShadowMaps/README.md`
+- [x] Close Phase 8 in the existing implementation plan
 
 **Exit gate:** All tests green, README updated, Phase 8 marked ☑.
 
@@ -99,18 +100,18 @@ implemented cache/allocation slice:
 
 **Architecture ref:** §4.1 (Virtual Page Table), §4.2 (Physical Page Metadata), §4.3 (Page Flags)
 
-**Status:** completed on 2026-03-24.
+**Status:** `in_progress`
 
 **Deliverables:**
-- [ ] Create `Shaders/Renderer/Vsm/VsmCommon.hlsli` — shared constants (page size, max mip levels, flag bits)
-- [ ] Create `Shaders/Renderer/Vsm/VsmPageTable.hlsli` — `PageTableEntry` struct, page-table lookup functions
-- [ ] Create `Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli` — physical page metadata struct matching CPU layout
-- [ ] Create `Shaders/Renderer/Vsm/VsmPageFlags.hlsli` — virtual page flag definitions and accessors
-- [ ] Verify CPU ↔ GPU struct layout parity (same sizes, same field offsets) via static assertions or a validation test
-- [ ] Create `Shaders/Renderer/Vsm/VsmProjectionData.hlsli` — per-map projection data struct (§4.5)
-- [ ] Define the CPU ↔ GPU projection-data contract needed for both current-frame projection and retained previous-frame invalidation data
+- [x] Create `Shaders/Renderer/Vsm/VsmCommon.hlsli` — shared constants (page size, max mip levels, flag bits)
+- [x] Create `Shaders/Renderer/Vsm/VsmPageTable.hlsli` — `PageTableEntry` struct, page-table lookup functions
+- [x] Create `Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli` — physical page metadata struct matching CPU layout
+- [x] Create `Shaders/Renderer/Vsm/VsmPageFlags.hlsli` — virtual page flag definitions and accessors
+- [x] Verify CPU ↔ GPU struct layout parity (same sizes, same field offsets) via static assertions or a validation test
+- [x] Create `Shaders/Renderer/Vsm/VsmProjectionData.hlsli` — per-map projection data struct (§4.5)
+- [x] Define the CPU ↔ GPU projection-data contract needed for both current-frame projection and retained previous-frame invalidation data
 
-**Exit gate:** HLSL headers compile within a test shader; struct sizes match CPU counterparts.
+**Exit gate:** HLSL headers compile within a dedicated validation shader; struct sizes match CPU counterparts.
 
 Validation evidence on 2026-03-24:
 
@@ -120,10 +121,15 @@ Validation evidence on 2026-03-24:
 - added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageFlags.hlsli`
 - added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli`
 - added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmProjectionData.hlsli`
-- added compile-only contract shader `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmContracts_CS.hlsl`
+- added aggregate contract shader `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmContracts_CS.hlsl`
+- kept the contract shader out of the runtime engine shader catalog because it is not a renderer pass
 - added fixture-based parity coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShaderTypes_test.cpp`
 - built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
+
+Remaining validation delta:
+
+- `VsmContracts_CS.hlsl` is not yet wired into a dedicated compile-validation target, so the aggregate HLSL-header compile gate is not closed yet
 
 ---
 
@@ -131,22 +137,36 @@ Validation evidence on 2026-03-24:
 
 **Architecture ref:** §3.5, stage 5
 
+**Status:** completed on 2026-03-24.
+
 **Deliverables:**
-- [ ] Create `VsmPageRequestGeneratorPass` inheriting `ComputeRenderPass`
-- [ ] HLSL compute shader: `Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
+- [x] Create `VsmPageRequestGeneratorPass` inheriting `ComputeRenderPass`
+- [x] HLSL compute shader: `Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
   - Sample depth buffer at each pixel
   - Reconstruct world position
   - For each active VSM (directional clipmap levels + local lights), compute virtual page coordinate
   - Set `kRequired` flag in page request buffer
   - Mark coarse pages for broad coverage
-- [ ] Input bindings: depth texture, projection data buffer, virtual address space layout
-- [ ] Output binding: page request flag buffer (one entry per virtual page table slot)
-- [ ] Light-grid pruning: skip lights not affecting visible pixels (integrate with `LightCullingPass` cluster data)
-- [ ] Unit test: validate page request output for known screen configurations
+- [x] Input bindings: depth texture, projection data buffer, virtual address space layout
+- [x] Output binding: page request flag buffer (one entry per virtual page table slot)
+- [x] Light-grid pruning: skip lights not affecting visible pixels (integrate with `LightCullingPass` cluster data)
+- [x] Unit test: validate page request output for known screen configurations
 
 **Dependencies:** Phase B (HLSL types)
 
 **Exit gate:** Compute pass produces correct page request flags for a test scene with depth and light data.
+
+Validation evidence on 2026-03-24:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
+- wired the shader through `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+- added CPU-side request math coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneration_test.cpp`
+- added GPU/live-render-context execution coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneratorPass_test.cpp`
+- the GPU pass tests now execute against a renderer-owned off-screen frame session via `Renderer::BeginOffscreenFrame(...)`, so Phase C no longer relies on friend-based test-only seams
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
+- ran focused high-verbosity GPU validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageRequestGeneratorGpuTest.*`
 
 ---
 

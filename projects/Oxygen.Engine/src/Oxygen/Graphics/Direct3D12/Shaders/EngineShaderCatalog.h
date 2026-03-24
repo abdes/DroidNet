@@ -320,6 +320,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
   },
+  // VSM runtime page-request generation shader
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPageRequestGenerator.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     .path="Ui/ImGui.hlsl",
