@@ -88,6 +88,30 @@ static_assert(sizeof(VsmShaderPageFlags) == 4U);
   return (flags.bits & static_cast<std::uint32_t>(bits)) != 0U;
 }
 
+enum class VsmShaderPageRequestFlagBits : std::uint32_t {
+  kNone = 0U,
+  kRequired = OXYGEN_FLAG(0),
+  kCoarse = OXYGEN_FLAG(1),
+  kStaticOnly = OXYGEN_FLAG(2),
+};
+
+OXYGEN_DEFINE_FLAGS_OPERATORS(VsmShaderPageRequestFlagBits)
+
+struct VsmShaderPageRequestFlags {
+  std::uint32_t bits { 0U };
+
+  auto operator==(const VsmShaderPageRequestFlags&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderPageRequestFlags>);
+static_assert(sizeof(VsmShaderPageRequestFlags) == 4U);
+
+[[nodiscard]] constexpr auto HasAnyRequestFlag(
+  const VsmShaderPageRequestFlags flags,
+  const VsmShaderPageRequestFlagBits bits) noexcept -> bool
+{
+  return (flags.bits & static_cast<std::uint32_t>(bits)) != 0U;
+}
+
 enum class VsmProjectionLightType : std::uint32_t {
   kLocal = 0U,
   kDirectional = 1U,
@@ -112,5 +136,37 @@ static_assert(offsetof(VsmProjectionData, view_origin_ws_pad) == 128U);
 static_assert(offsetof(VsmProjectionData, clipmap_corner_offset) == 144U);
 static_assert(offsetof(VsmProjectionData, clipmap_level) == 152U);
 static_assert(offsetof(VsmProjectionData, light_type) == 156U);
+
+inline constexpr std::uint32_t kVsmInvalidLightIndex = 0xffffffffU;
+
+// Shader-facing routing record for page-request generation.
+//
+// The generator needs more than the compact projection payload alone: it also
+// needs the target virtual map id, the page-grid dimensions, the page-table
+// base slot, and the clustered-light index used to prune local-light demand.
+struct VsmPageRequestProjection {
+  VsmProjectionData projection {};
+  VsmVirtualShadowMapId map_id { 0U };
+  std::uint32_t first_page_table_entry { 0U };
+  std::uint32_t pages_x { 0U };
+  std::uint32_t pages_y { 0U };
+  std::uint32_t level_count { 1U };
+  std::uint32_t coarse_level { 0U };
+  std::uint32_t light_index { kVsmInvalidLightIndex };
+  std::uint32_t _pad0 { 0U };
+
+  auto operator==(const VsmPageRequestProjection&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmPageRequestProjection>);
+static_assert(sizeof(VsmPageRequestProjection) == 192U);
+static_assert(offsetof(VsmPageRequestProjection, projection) == 0U);
+static_assert(offsetof(VsmPageRequestProjection, map_id) == 160U);
+static_assert(
+  offsetof(VsmPageRequestProjection, first_page_table_entry) == 164U);
+static_assert(offsetof(VsmPageRequestProjection, pages_x) == 168U);
+static_assert(offsetof(VsmPageRequestProjection, pages_y) == 172U);
+static_assert(offsetof(VsmPageRequestProjection, level_count) == 176U);
+static_assert(offsetof(VsmPageRequestProjection, coarse_level) == 180U);
+static_assert(offsetof(VsmPageRequestProjection, light_index) == 184U);
 
 } // namespace oxygen::renderer::vsm

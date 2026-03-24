@@ -118,6 +118,14 @@ protected:
     return *graphics_;
   }
 
+  [[nodiscard]] auto GetGraphicsShared() const
+    -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>
+  {
+    CHECK_NOTNULL_F(
+      graphics_.get(), "D3D12 backend fixture is not initialized");
+    return graphics_;
+  }
+
   [[nodiscard]] auto TryGetQueue(const graphics::QueueRole role) const
     -> observer_ptr<graphics::CommandQueue>
   {

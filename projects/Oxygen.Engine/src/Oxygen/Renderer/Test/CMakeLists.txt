@@ -54,7 +54,7 @@ m_gtest_program(
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
-gtest_program(
+m_gtest_program(
   "Oxygen.Renderer.VirtualShadows.Tests"
   SOURCES
     "VirtualShadow/VirtualShadowTestFixtures.h"
@@ -68,32 +68,7 @@ gtest_program(
     "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
     "VirtualShadow/VsmCacheManagerSeam_test.cpp"
     "VirtualShadow/VsmShaderTypes_test.cpp"
-    "VirtualShadow/VsmCacheManagerState_test.cpp"
-    "VirtualShadow/VsmCacheManagerTypes_test.cpp"
-    "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
-    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
-    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
-    "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
-    "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
-  DEPS
-    oxygen::renderer
-    oxygen::testing
-)
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  PREFIX VirtualShadows
-  FILES
-    "VirtualShadow/VirtualShadowTestFixtures.h"
-    "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
-    "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
-    "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
-    "VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp"
-    "VirtualShadow/VsmCacheManagerInvalidation_test.cpp"
-    "VirtualShadow/VsmCacheManagerOrchestration_test.cpp"
-    "VirtualShadow/VsmCacheManagerRetention_test.cpp"
-    "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
-    "VirtualShadow/VsmCacheManagerSeam_test.cpp"
-    "VirtualShadow/VsmShaderTypes_test.cpp"
+    "VirtualShadow/VsmPageRequestGeneration_test.cpp"
     "VirtualShadow/VsmCacheManagerState_test.cpp"
     "VirtualShadow/VsmCacheManagerTypes_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
@@ -118,6 +93,7 @@ if(TARGET oxygen::graphics-direct3d12)
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
       "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
+      "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
     DEPS
       oxygen::graphics-direct3d12
