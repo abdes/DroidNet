@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <algorithm>
 
 #include <glm/vec2.hpp>
@@ -22,6 +24,7 @@ using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame;
 using oxygen::renderer::vsm::VsmVirtualMapLayout;
 using oxygen::renderer::vsm::VsmVirtualRemapEntry;
+using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
 auto MakeConfig() -> VsmVirtualAddressSpaceConfig
 {
@@ -47,8 +50,10 @@ auto FindEntry(const std::vector<VsmVirtualRemapEntry>& entries,
   return it == entries.end() ? nullptr : &*it;
 }
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, RemapTableMapsRetainedEntriesExactlyOnce)
+class VsmVirtualRemapBuilderTest : public VirtualShadowTest { };
+
+NOLINT_TEST_F(
+  VsmVirtualRemapBuilderTest, RemapTableMapsRetainedEntriesExactlyOnce)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {
     .frame_generation = 1,
@@ -150,8 +155,8 @@ NOLINT_TEST(
   EXPECT_EQ(sun1->rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  RemapMatchingUsesStableKeysNotAllocationOrder)
+NOLINT_TEST_F(
+  VsmVirtualRemapBuilderTest, RemapMatchingUsesStableKeysNotAllocationOrder)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {
     .frame_generation = 1,
@@ -209,7 +214,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(local_b->current_id, 60U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
   FreshIdsForRetainedEntriesStillPermitRemapBookkeeping)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {
@@ -249,7 +254,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(table.entries[0].rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
   DuplicateCurrentLocalLightRemapKeysReportExplicitRejection)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {
@@ -298,7 +303,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     VsmReuseRejectionReason::kDuplicateRemapKey);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
   MissingRemapKeysAndLayoutMismatchReportExplicitRejection)
 {
   const auto missing_key_previous = VsmVirtualAddressSpaceFrame {
@@ -358,7 +363,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
     VsmReuseRejectionReason::kLocalLightLayoutMismatch);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
   DuplicateCurrentClipmapKeysAndMalformedCurrentLayoutsReportExplicitRejection)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {
@@ -439,7 +444,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(malformed_table.entries[1].current_id, 101U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
   MalformedCurrentLocalLightLayoutsReportExplicitRejection)
 {
   const auto previous_frame = VsmVirtualAddressSpaceFrame {

@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 
 namespace {
@@ -15,9 +17,12 @@ using oxygen::renderer::vsm::TryConvertToCoord;
 using oxygen::renderer::vsm::TryConvertToIndex;
 using oxygen::renderer::vsm::VsmPhysicalPageCoord;
 using oxygen::renderer::vsm::VsmPhysicalPageIndex;
+using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
-NOLINT_TEST(
-  VirtualShadowContractsScaffoldTest, PhysicalPoolAddressingHeaderCompiles)
+class VsmPhysicalPoolAddressingTest : public VirtualShadowTest { };
+
+NOLINT_TEST_F(
+  VsmPhysicalPoolAddressingTest, PhysicalPoolAddressingHeaderCompiles)
 {
   const auto index = VsmPhysicalPageIndex {};
   const auto coord = VsmPhysicalPageCoord {};
@@ -25,7 +30,7 @@ NOLINT_TEST(
   EXPECT_EQ(coord.slice, 0U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPoolAddressingTest,
   PhysicalPoolAddressingConvertsBetweenLinearAndTiledCoordinates)
 {
   constexpr auto tile_capacity = 512U;
@@ -47,7 +52,7 @@ NOLINT_TEST(VirtualShadowContractsScaffoldTest,
   EXPECT_EQ(roundtrip->value, 273U);
 }
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPoolAddressingTest,
   PhysicalPoolAddressingRejectsInvalidLayoutsAndCoordinates)
 {
   EXPECT_EQ(ComputeTilesPerAxis(500U, 2U), 0U);

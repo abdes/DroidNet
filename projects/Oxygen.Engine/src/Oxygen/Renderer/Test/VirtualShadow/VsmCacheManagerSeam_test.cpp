@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <type_traits>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -26,27 +28,18 @@ using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
 using oxygen::renderer::vsm::VsmSinglePageLightDesc;
 using oxygen::renderer::vsm::VsmVirtualAddressSpace;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
+using oxygen::renderer::vsm::testing::VsmPhysicalPoolTestBase;
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
-  CacheManagerSeamExposesStablePoolAndFrameContracts)
+class VsmCacheManagerSeamTest : public VsmPhysicalPoolTestBase { };
+
+NOLINT_TEST_F(
+  VsmCacheManagerSeamTest, CacheManagerSeamExposesStablePoolAndFrameContracts)
 {
   static_assert(std::is_copy_constructible_v<VsmCacheManagerSeam>);
 
   auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  const auto pool_config = VsmPhysicalPoolConfig {
-    .page_size_texels = 128,
-    .physical_tile_capacity = 512,
-    .array_slice_count = 2,
-    .depth_format = Format::kDepth32,
-    .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
-      VsmPhysicalPoolSliceRole::kStaticDepth },
-    .debug_name = "phase6-shadow-pool",
-  };
-  const auto hzb_config = VsmHzbPoolConfig {
-    .mip_count = 10,
-    .format = Format::kR32Float,
-    .debug_name = "phase6-hzb-pool",
-  };
+  const auto pool_config = MakeShadowPoolConfig("phase6-shadow-pool");
+  const auto hzb_config = MakeHzbPoolConfig("phase6-hzb-pool");
   ASSERT_TRUE(pool_manager.IsCompatible(pool_config)
     || !pool_manager.IsShadowPoolAvailable());
   ASSERT_EQ(pool_manager.EnsureShadowPool(pool_config),

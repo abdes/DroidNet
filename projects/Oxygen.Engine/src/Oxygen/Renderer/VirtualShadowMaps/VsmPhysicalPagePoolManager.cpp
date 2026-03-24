@@ -343,6 +343,7 @@ auto VsmPhysicalPagePoolManager::GetShadowPoolSnapshot() const noexcept
     .tile_capacity = shadow_state_.config.physical_tile_capacity,
     .tiles_per_axis = shadow_state_.tiles_per_axis,
     .slice_count = shadow_state_.config.array_slice_count,
+    .depth_format = shadow_state_.config.depth_format,
     .slice_roles = shadow_state_.config.slice_roles,
     .shadow_texture = shadow_resources_.shadow_texture,
     .metadata_buffer = shadow_resources_.metadata_buffer,

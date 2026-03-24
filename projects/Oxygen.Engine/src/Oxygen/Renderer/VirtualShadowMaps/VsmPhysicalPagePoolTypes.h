@@ -127,6 +127,7 @@ struct VsmPhysicalPoolSnapshot {
   std::uint32_t tile_capacity { 0 };
   std::uint32_t tiles_per_axis { 0 };
   std::uint32_t slice_count { 0 };
+  Format depth_format { Format::kUnknown };
   VsmPhysicalPoolSliceRoleList slice_roles {};
   std::shared_ptr<const graphics::Texture> shadow_texture {};
   std::shared_ptr<const graphics::Buffer> metadata_buffer {};

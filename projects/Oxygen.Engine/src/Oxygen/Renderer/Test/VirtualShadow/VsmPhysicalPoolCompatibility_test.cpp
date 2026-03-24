@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include "VirtualShadowTestFixtures.h"
+
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPoolCompatibility.h>
 
@@ -15,26 +17,15 @@ using oxygen::Format;
 using oxygen::renderer::vsm::ComputePhysicalPoolCompatibility;
 using oxygen::renderer::vsm::to_string;
 using oxygen::renderer::vsm::VsmPhysicalPoolCompatibilityResult;
-using oxygen::renderer::vsm::VsmPhysicalPoolConfig;
 using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
+using oxygen::renderer::vsm::testing::VsmPhysicalPoolTestBase;
 
-auto MakeShadowConfig() -> VsmPhysicalPoolConfig
-{
-  return {
-    .page_size_texels = 128,
-    .physical_tile_capacity = 512,
-    .array_slice_count = 2,
-    .depth_format = Format::kDepth32,
-    .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
-      VsmPhysicalPoolSliceRole::kStaticDepth },
-    .debug_name = "compatibility-test",
-  };
-}
+class VsmPhysicalPoolCompatibilityTest : public VsmPhysicalPoolTestBase { };
 
-NOLINT_TEST(VirtualShadowContractsScaffoldTest,
+NOLINT_TEST_F(VsmPhysicalPoolCompatibilityTest,
   PhysicalPoolCompatibilityReportsExactMismatchReasons)
 {
-  const auto base = MakeShadowConfig();
+  auto base = MakeShadowPoolConfig("compatibility-test");
   EXPECT_EQ(ComputePhysicalPoolCompatibility(base, base),
     VsmPhysicalPoolCompatibilityResult::kCompatible);
 
