@@ -205,6 +205,22 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   // Should have returned earlier after successful allocation.
 }
 
+auto TransientStructuredBuffer::GetActiveBuffer() const noexcept
+  -> const graphics::Buffer*
+{
+  const auto* slot = ActiveSlot();
+  if (slot == nullptr || slot->allocs.empty()) {
+    return nullptr;
+  }
+
+  const auto& latest = slot->allocs.back();
+  if (!latest.allocation.has_value()) {
+    return nullptr;
+  }
+
+  return &latest.allocation->Buffer();
+}
+
 auto TransientStructuredBuffer::Reset() -> void
 {
   for (std::uint32_t i = 0; i < slots_.size(); ++i) {
