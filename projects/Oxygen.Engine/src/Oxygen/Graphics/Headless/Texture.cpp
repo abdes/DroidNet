@@ -20,6 +20,8 @@ Texture::Texture(const TextureDesc& desc)
   : graphics::Texture("HeadlessTexture")
   , desc_(desc)
 {
+  is_readback_surface_ = desc_.cpu_access == ResourceAccessMode::kReadBack;
+
   // Determine backing size using the layout strategy so that all mip/data
   // ranges computed by the strategy are addressable via Read/WriteBacking.
   struct ContiguousLayout : TextureLayoutStrategy {

@@ -34,3 +34,4 @@ m_gtest_program(
     "CommandExecution_test.cpp"
     "CopyTextureToBufferExecution_test.cpp"
 )
+m_gtest_program(ReadbackManager SOURCES "ReadbackManager_test.cpp")

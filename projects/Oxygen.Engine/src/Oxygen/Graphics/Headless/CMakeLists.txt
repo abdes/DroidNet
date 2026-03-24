@@ -53,6 +53,7 @@ set(
   "CommandQueue.h"
   "CommandRecorder.h"
   "Graphics.h"
+  "ReadbackManager.h"
   "Surface.h"
   "Texture.h"
 )
@@ -90,6 +91,7 @@ set(
   "Internal/HeadlessModule.cpp"
   "Internal/SerialExecutor.cpp"
   "Internal/SerialExecutor.h"
+  "ReadbackManager.cpp"
   "Surface.cpp"
   "Texture.cpp"
 )

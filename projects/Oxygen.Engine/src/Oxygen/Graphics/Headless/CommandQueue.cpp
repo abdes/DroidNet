@@ -10,6 +10,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
 
@@ -66,8 +68,13 @@ auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
   -> void
 {
   std::unique_lock lk(mutex_);
-  cv_.wait_for(
-    lk, timeout, [this, value] { return completed_value_ >= value; });
+  if (!cv_.wait_for(
+        lk, timeout, [this, value] { return completed_value_ >= value; })) {
+    LOG_F(ERROR, "Headless CommandQueue[{}]::Wait({}) timed out after {} ms",
+      GetName(), value, timeout.count());
+    throw std::runtime_error(
+      fmt::format("Wait({}) timed out after {} ms", value, timeout.count()));
+  }
 }
 
 auto CommandQueue::Wait(uint64_t value) const -> void
