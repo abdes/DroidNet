@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -39,7 +38,6 @@ using oxygen::engine::DepthPrePass;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Color;
 using oxygen::graphics::CommandRecorder;
-using oxygen::graphics::Framebuffer;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
@@ -127,14 +125,11 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
   clear_color_.emplace(color);
 }
 
-auto DepthPrePass::GetFramebuffer() const -> const Framebuffer*
-{
-  return Context().pass_target.get();
-}
-
 /*!
  The base implementation of this method ensures that the `depth_texture`
+
  (specified in `Config`) is transitioned to a state suitable for depth-stencil
+
  attachment (e.g., `ResourceStates::kDepthWrite`) using the provided
  `CommandRecorder`. It then flushes any pending resource barriers.
 
@@ -269,29 +264,12 @@ auto DepthPrePass::BuildRasterizerStateDesc(
 
 auto DepthPrePass::GetDepthTexture() const -> const Texture&
 {
-  const Texture* depth_texture { nullptr };
   if (config_ && config_->depth_texture) {
-    depth_texture = config_->depth_texture.get();
-  }
-  const auto* fb
-    = UsesFramebufferDepthAttachment() ? GetFramebuffer() : nullptr;
-  if (fb && fb->GetDescriptor().depth_attachment.IsValid()) {
-    const auto* fb_depth_texture
-      = fb->GetDescriptor().depth_attachment.texture.get();
-    // Ensure if both are present, then both are the same
-    if (depth_texture && depth_texture != fb_depth_texture) {
-      throw std::runtime_error(
-        "DepthPrePass: Config depth_texture and framebuffer depth attachment "
-        "texture must match when both are provided.");
-    }
-    return *fb_depth_texture;
+    return *config_->depth_texture;
   }
 
-  if (depth_texture) {
-    return *depth_texture;
-  }
-
-  throw std::runtime_error("ShaderPass: No valid depth texture found.");
+  throw std::runtime_error(
+    "DepthPrePass requires an explicit config depth_texture.");
 }
 
 /*!
