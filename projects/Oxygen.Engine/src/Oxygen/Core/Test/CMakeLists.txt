@@ -52,6 +52,7 @@ m_gtest_program(
 )
 m_gtest_program(AnyCacheBudget SOURCES "AnyCache_Budget_test.cpp")
 m_gtest_program(BindlessHandle SOURCES "BindlessHandle_test.cpp")
+m_gtest_program(Bool32 SOURCES "Bool32_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
 m_gtest_program(ScriptCompileMode SOURCES "ScriptCompileMode_test.cpp")
 m_gtest_program(

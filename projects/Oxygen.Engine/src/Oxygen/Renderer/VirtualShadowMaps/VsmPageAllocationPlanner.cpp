@@ -63,9 +63,10 @@ namespace {
     const VsmPageRequest& request) noexcept -> bool
   {
     if (IsDynamicRequest(request.flags)) {
-      return meta.dynamic_invalidated || meta.static_invalidated;
+      return static_cast<bool>(meta.dynamic_invalidated)
+        || static_cast<bool>(meta.static_invalidated);
     }
-    return meta.static_invalidated;
+    return static_cast<bool>(meta.static_invalidated);
   }
 
   auto HasStaticSlice(const VsmPhysicalPoolSnapshot& pool) noexcept -> bool
