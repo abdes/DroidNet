@@ -9,6 +9,13 @@ Cross-references:
 - `VirtualShadowMapArchitecture.md` — authoritative architecture spec
 - `VsmCacheManagerAndPageAllocationImplementationPlan.md` — completed cache-manager/allocation plan (Phases 0–8 done)
 
+CPU-GPU ABI Guidelines
+
+- keep rich CPU cache/state in CPU-only structs/classes,
+- expose page tables/flags as packed scalar GPU buffers,
+- use dedicated shader payload structs for projection data,
+- only share a struct across CPU/GPU when it is already a small, ABI-stable POD record
+
 ---
 
 ## 1. Current State
@@ -21,8 +28,9 @@ The following modules are **fully implemented and tested** (CPU-side):
 | Virtual Address Space | §3.2 | ✅ Complete | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp` |
 | Cache Manager | §3.3 | ✅ Complete | `VsmCacheManager.h/.cpp`, `VsmCacheManagerSeam.h`, `VsmCacheManagerTypes.h/.cpp` |
 | Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
+| Shader ABI Contracts | §4.1–§4.5 | ✅ Complete | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
 
-Test coverage: 18 test files across CPU and GPU lifecycle suites.
+Test coverage: 19 test files across CPU and GPU lifecycle suites.
 
 The remaining phases below explicitly own the current forward gaps from the
 implemented cache/allocation slice:
@@ -55,7 +63,7 @@ implemented cache/allocation slice:
 | Status | Phase | Deliverable | Exit Gate |
 |--------|-------|-------------|-----------|
 | ☑ | A | Cache-manager plan completion (Phase 8) | Completed in `VsmCacheManagerAndPageAllocationImplementationPlan.md` |
-| ☐ | B | VSM HLSL common types and page-table structures | Shared HLSL headers compile; CPU ↔ GPU struct parity verified |
+| ☑ | B | VSM HLSL common types and page-table structures | Shared HLSL headers compile; CPU ↔ GPU struct parity verified |
 | ☐ | C | Page Request Generator pass | Compute pass marks visible virtual pages from depth buffer |
 | ☐ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
 | ☐ | E | Page flag propagation and initialization passes | Stages 9–11: hierarchical flags, mapped-mip propagation, selective page init |
@@ -91,6 +99,8 @@ implemented cache/allocation slice:
 
 **Architecture ref:** §4.1 (Virtual Page Table), §4.2 (Physical Page Metadata), §4.3 (Page Flags)
 
+**Status:** completed on 2026-03-24.
+
 **Deliverables:**
 - [ ] Create `Shaders/Renderer/Vsm/VsmCommon.hlsli` — shared constants (page size, max mip levels, flag bits)
 - [ ] Create `Shaders/Renderer/Vsm/VsmPageTable.hlsli` — `PageTableEntry` struct, page-table lookup functions
@@ -101,6 +111,19 @@ implemented cache/allocation slice:
 - [ ] Define the CPU ↔ GPU projection-data contract needed for both current-frame projection and retained previous-frame invalidation data
 
 **Exit gate:** HLSL headers compile within a test shader; struct sizes match CPU counterparts.
+
+Validation evidence on 2026-03-24:
+
+- added `src/Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h`
+- added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmCommon.hlsli`
+- added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageTable.hlsli`
+- added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageFlags.hlsli`
+- added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli`
+- added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmProjectionData.hlsli`
+- added compile-only contract shader `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmContracts_CS.hlsl`
+- added fixture-based parity coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShaderTypes_test.cpp`
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
 

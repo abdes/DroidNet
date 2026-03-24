@@ -127,6 +127,7 @@ set(
   "VirtualShadowMaps/VsmCacheManagerTypes.h"
   "VirtualShadowMaps/VsmPageAllocationSnapshotHelpers.h"
   "VirtualShadowMaps/VsmPageAllocationPlanner.h"
+  "VirtualShadowMaps/VsmShaderTypes.h"
   "VirtualShadowMaps/VsmPhysicalPoolCompatibility.h"
   "VirtualShadowMaps/VsmVirtualClipmapHelpers.h"
   "VirtualShadowMaps/VsmVirtualRemapBuilder.h"

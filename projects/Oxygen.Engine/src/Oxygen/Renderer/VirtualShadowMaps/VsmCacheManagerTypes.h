@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/Bool32.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
@@ -165,13 +167,19 @@ struct VsmPageTableEntry {
   auto operator==(const VsmPageTableEntry&) const -> bool = default;
 };
 
+// Shared CPU/GPU metadata record for one physical page.
+//
+// Unlike the richer cache snapshots, this leaf record is intentionally ABI-safe
+// so it can be uploaded directly to a StructuredBuffer without a second mirror
+// type. The 32-bit flag-like fields stay scalar on purpose to match HLSL bool
+// semantics and avoid layout drift.
 struct VsmPhysicalPageMeta {
-  bool is_allocated { false };
-  bool is_dirty { false };
-  bool used_this_frame { false };
-  bool view_uncached { false };
-  bool static_invalidated { false };
-  bool dynamic_invalidated { false };
+  Bool32 is_allocated { false };
+  Bool32 is_dirty { false };
+  Bool32 used_this_frame { false };
+  Bool32 view_uncached { false };
+  Bool32 static_invalidated { false };
+  Bool32 dynamic_invalidated { false };
   std::uint32_t age { 0 };
   VsmVirtualShadowMapId owner_id { 0 };
   std::uint32_t owner_mip_level { 0 };
@@ -180,6 +188,14 @@ struct VsmPhysicalPageMeta {
 
   auto operator==(const VsmPhysicalPageMeta&) const -> bool = default;
 };
+static_assert(std::is_standard_layout_v<VsmPhysicalPageMeta>);
+static_assert(sizeof(VsmPhysicalPageMeta) == 56U);
+static_assert(offsetof(VsmPhysicalPageMeta, is_allocated) == 0U);
+static_assert(offsetof(VsmPhysicalPageMeta, age) == 24U);
+static_assert(offsetof(VsmPhysicalPageMeta, owner_id) == 28U);
+static_assert(offsetof(VsmPhysicalPageMeta, owner_mip_level) == 32U);
+static_assert(offsetof(VsmPhysicalPageMeta, owner_page) == 36U);
+static_assert(offsetof(VsmPhysicalPageMeta, last_touched_frame) == 48U);
 
 enum class VsmAllocationAction : std::uint8_t {
   kReuseExisting = 0,

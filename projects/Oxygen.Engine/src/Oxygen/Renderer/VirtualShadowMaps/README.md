@@ -18,13 +18,15 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - backend-backed working-set resource publication
   - retained unreferenced-entry continuity publication
   - scoped targeted invalidation and explicit initialization work
+- shader ABI contracts for page-table encoding, virtual page flags, shared physical metadata, and projection payloads
+  - shared physical metadata uses `oxygen::Bool32` for explicit shader-ABI boolean semantics rather than raw integer flags
 - Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
 
 ## Known Forward Gaps
 
 - Targeted invalidation currently queues CPU-side invalidation records and applies them to a planning copy of the previous extracted snapshot. This is intentionally shaped to stay compatible with the later dedicated GPU invalidation stage, but that GPU stage is not implemented yet.
-- Projection-data publication is still missing. The full architecture expects cache-manager-owned projection products for current and retained previous-frame continuity; those renderer-integration products remain future work.
+- Projection-data publication is still missing. The ABI contract now exists, but the full architecture still needs cache-manager-owned current and retained previous-frame projection products plus upload/publication plumbing.
 - Scene-mutation invalidation workloads are not implemented yet. Current invalidation is remap-key targeted only.
 
 ## Helper Policy
