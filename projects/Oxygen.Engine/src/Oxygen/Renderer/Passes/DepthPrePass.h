@@ -26,7 +26,6 @@ namespace oxygen::graphics {
 class ResourceRegistry;
 class ResourceStateTracker;
 class CommandRecorder;
-class Framebuffer;
 class PipelineState;
 class Texture;
 class Buffer;
@@ -40,9 +39,9 @@ struct RenderItem;
 
 //! Configuration for a depth pre-pass.
 /*!
- Specifies the essential setup for a depth pre-pass, including the geometry to
- be rendered, the mandatory target depth texture, and an optional framebuffer
- object that can provide a broader rendering context.
+ Specifies the essential setup for a depth pre-pass, including the mandatory
+
+ target depth texture that receives the pass output.
 */
 struct DepthPrePassConfig {
 
@@ -81,9 +80,11 @@ struct DepthPrePassConfig {
  determine which lights affect different parts of the scene.
 
  The DepthPrePass is configured via `DepthPrePassConfig`, which specifies the
- draw list (crucial for light culling in Forward+), the depth buffer to use, and
- an optional framebuffer. As a subclass of `RenderPass`, it integrates into the
+
+ depth buffer to use. As a subclass of `RenderPass`, it integrates into the
+
  engine's coroutine-based render pipeline, allowing for asynchronous resource
+
  preparation and execution.
 */
 class DepthPrePass : public GraphicsRenderPass {
@@ -107,7 +108,7 @@ public:
   OXGN_RNDR_API explicit DepthPrePass(std::shared_ptr<Config> config);
 
   //! Destructor.
-  ~DepthPrePass() override;
+  OXGN_RNDR_API ~DepthPrePass() override;
 
   OXYGEN_DEFAULT_COPYABLE(DepthPrePass)
   OXYGEN_DEFAULT_MOVABLE(DepthPrePass)
@@ -178,10 +179,6 @@ private:
    be rendered in the main shading pass. Consistent geometry and transformations
    between this pass and the main shading pass are crucial.
   */
-
-  //! Provides const access to the framebuffer specified in the configuration,
-  //! if any.
-  [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
 
   // Draw submission uses base RenderPass::IssueDrawCalls (SoA path).
   // NOTE: DepthPrePass supplies a predicate excluding
