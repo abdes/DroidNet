@@ -325,6 +325,19 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmPageRequestGenerator.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  // VSM runtime page-management shaders (stage 6-8)
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPageReuse.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPackAvailablePages.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmAllocateNewPages.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     .path="Ui/ImGui.hlsl",

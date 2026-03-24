@@ -392,6 +392,8 @@ auto VsmCacheManager::CommitPageAllocationFrame()
   runtime_state_.current_frame = VsmPageAllocationFrame {
     .snapshot = std::move(snapshot),
     .plan = runtime_state_.current_plan,
+    .physical_page_meta_buffer
+    = runtime_state_.captured_seam->physical_pool.metadata_buffer,
     .page_table_buffer = resources.page_table_buffer,
     .page_flags_buffer = resources.page_flags_buffer,
     .dirty_flags_buffer = resources.dirty_flags_buffer,

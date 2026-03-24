@@ -31,7 +31,7 @@ validation state:
 | Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
 | Shader ABI Contracts | §4.1–§4.5 | ◐ Partial | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
 
-Test coverage: 20 test files across CPU and GPU lifecycle suites.
+Test coverage: 22 test files across CPU and GPU lifecycle suites.
 
 The remaining phases below explicitly own the current forward gaps from the
 implemented cache/allocation slice:
@@ -66,7 +66,7 @@ implemented cache/allocation slice:
 | ☑ | A | Cache-manager plan completion (Phase 8) | Completed in `VsmCacheManagerAndPageAllocationImplementationPlan.md` |
 | ◐ | B | VSM HLSL common types and page-table structures | ABI types exist and CPU ↔ GPU parity is verified; dedicated aggregate HLSL compile validation is still pending |
 | ☑ | C | Page Request Generator pass | Compute pass produces correct page request flags for test scenes with depth and clustered-light inputs |
-| ☐ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
+| ☑ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
 | ☐ | E | Page flag propagation and initialization passes | Stages 9–11: hierarchical flags, mapped-mip propagation, selective page init |
 | ☐ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
 | ☐ | G | Static/Dynamic Merge pass | Composite static slice into dynamic slice for dirty pages |
@@ -174,19 +174,39 @@ Validation evidence on 2026-03-24:
 
 **Architecture ref:** §5 stages 6–8
 
+**Status:** completed on 2026-03-24.
+
 The cache manager already computes allocation decisions on the CPU. This phase uploads those decisions to the GPU and applies them.
 
 **Deliverables:**
-- [ ] GPU upload path: upload `VsmPageAllocationPlan` decisions (page table entries, physical page metadata) to GPU buffers
-- [ ] Compute pass `VsmPageReuse.hlsl` — apply reuse decisions: write page-table entries for reused pages, clear entries for evicted pages (stage 6)
-- [ ] Compute pass `VsmPackAvailablePages.hlsl` — compact empty-page list into contiguous stack (stage 7)
-- [ ] Compute pass `VsmAllocateNewPages.hlsl` — assign available physical pages to requested-but-unmapped virtual pages (stage 8)
-- [ ] Create `VsmPageManagementPass` class orchestrating these three sub-dispatches
-- [ ] Verify page-table buffer state after each stage via GPU readback test
+- [x] GPU upload path: upload `VsmPageAllocationPlan` decisions (page table entries, physical page metadata) to GPU buffers
+- [x] Compute pass `VsmPageReuse.hlsl` — apply reuse decisions: write page-table entries for reused pages, clear entries for evicted pages (stage 6)
+- [x] Compute pass `VsmPackAvailablePages.hlsl` — compact empty-page list into contiguous stack (stage 7)
+- [x] Compute pass `VsmAllocateNewPages.hlsl` — assign available physical pages to requested-but-unmapped virtual pages (stage 8)
+- [x] Create `VsmPageManagementPass` class orchestrating these three sub-dispatches
+- [x] Verify page-table buffer state after each stage via GPU readback test
 
 **Dependencies:** Phase B, Phase C (page requests feed allocation)
 
 **Exit gate:** Given a CPU allocation plan, GPU page-table buffer correctly reflects reuse/evict/allocate decisions.
+
+Validation evidence on 2026-03-24:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmPageManagementPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageReuse.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPackAvailablePages.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmAllocateNewPages.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageManagementDecisions.hlsli`
+- extended `VsmPageAllocationFrame` publication with the shared physical-page metadata buffer so stages 6–8 consume the committed cache-manager products directly
+- stage 7 now packs available pages in ascending physical-page order so GPU allocation consumes the same deterministic order chosen by the CPU planner
+- added GPU readback coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageManagementPass_test.cpp`
+- tightened GPU publication coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp` and `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheManagerGpuResources_test.cpp`
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused high-verbosity validation:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageReuseStageGpuTest.ReuseStagePublishesCurrentFrameMappingForReusablePages`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPackAvailablePagesGpuTest.PackStageCompactsUnallocatedPagesIntoAscendingStack`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStagePublishesMixedReuseAndFreshMappings`
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
 

@@ -15,6 +15,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 
@@ -111,6 +112,51 @@ static_assert(sizeof(VsmShaderPageRequestFlags) == 4U);
 {
   return (flags.bits & static_cast<std::uint32_t>(bits)) != 0U;
 }
+
+// Narrow shader upload record for stage 6 reuse decisions.
+//
+// The CPU planner stays authoritative for reuse eligibility and final metadata.
+// This record only carries the compact GPU application payload needed to
+// rebuild the current-frame page table from scratch.
+struct VsmShaderPageReuseDecision {
+  std::uint32_t page_table_index { 0U };
+  std::uint32_t physical_page_index { 0U };
+  VsmShaderPageFlags page_flags {};
+  std::uint32_t _pad0 { 0U };
+  VsmPhysicalPageMeta physical_meta {};
+
+  auto operator==(const VsmShaderPageReuseDecision&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderPageReuseDecision>);
+static_assert(sizeof(VsmShaderPageReuseDecision) == 72U);
+static_assert(offsetof(VsmShaderPageReuseDecision, page_table_index) == 0U);
+static_assert(offsetof(VsmShaderPageReuseDecision, physical_page_index) == 4U);
+static_assert(offsetof(VsmShaderPageReuseDecision, page_flags) == 8U);
+static_assert(offsetof(VsmShaderPageReuseDecision, physical_meta) == 16U);
+
+// Narrow shader upload record for stage 8 allocation decisions.
+//
+// The packed available-page list produced by stage 7 stays the GPU-side source
+// of truth for which physical page slot is consumed, while the CPU planner
+// remains authoritative for the deterministic allocation order.
+struct VsmShaderPageAllocationDecision {
+  std::uint32_t page_table_index { 0U };
+  std::uint32_t available_page_list_index { 0U };
+  VsmShaderPageFlags page_flags {};
+  std::uint32_t _pad0 { 0U };
+  VsmPhysicalPageMeta physical_meta {};
+
+  auto operator==(const VsmShaderPageAllocationDecision&) const -> bool
+    = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderPageAllocationDecision>);
+static_assert(sizeof(VsmShaderPageAllocationDecision) == 72U);
+static_assert(
+  offsetof(VsmShaderPageAllocationDecision, page_table_index) == 0U);
+static_assert(
+  offsetof(VsmShaderPageAllocationDecision, available_page_list_index) == 4U);
+static_assert(offsetof(VsmShaderPageAllocationDecision, page_flags) == 8U);
+static_assert(offsetof(VsmShaderPageAllocationDecision, physical_meta) == 16U);
 
 enum class VsmProjectionLightType : std::uint32_t {
   kLocal = 0U,
