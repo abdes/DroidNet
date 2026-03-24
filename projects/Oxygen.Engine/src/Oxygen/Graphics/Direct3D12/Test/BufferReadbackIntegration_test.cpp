@@ -536,6 +536,31 @@ NOLINT_TEST_F(
   }
 }
 
+NOLINT_TEST_F(BufferReadbackLifecycleTest,
+  ResetAfterCompletionReleasesReadbackOwnedStagingRegistration)
+{
+  const auto source_bytes = MakePatternBytes(96, 0x5A);
+  auto source
+    = CreateInitializedDeviceBuffer(source_bytes, "registry-cleanup-source");
+  auto readback = CreateBufferReadback("registry-cleanup-readback");
+
+  auto& registry = Backend().GetResourceRegistry();
+  const auto baseline_count = registry.GetRegisteredResourceCount();
+
+  EnqueueReadback(readback, source, BufferRange { 8, 40 },
+    "buffer-readback-registry-cleanup");
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+
+  const auto during_readback_count = registry.GetRegisteredResourceCount();
+  EXPECT_GT(during_readback_count, baseline_count);
+
+  readback->Reset();
+
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
+}
+
 NOLINT_TEST_F(BufferReadbackManagerTest,
   ManagerAwaitCompletesTicketProducedByBufferReadback)
 {

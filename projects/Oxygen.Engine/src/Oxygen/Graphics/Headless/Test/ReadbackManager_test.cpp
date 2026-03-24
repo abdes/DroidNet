@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
@@ -260,6 +261,12 @@ protected:
 
   auto SubmitDeferred() -> void { graphics_->SubmitDeferredCommandLists(); }
 
+  auto Registry() -> oxygen::graphics::ResourceRegistry&
+  {
+    CHECK_NOTNULL_F(graphics_);
+    return graphics_->GetResourceRegistry();
+  }
+
 private:
   oxygen::graphics::GraphicsModuleApi* module_api_ { nullptr };
   void* backend_ { nullptr };
@@ -436,6 +443,30 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest, ResetAfterCancellationReturnsToIdle)
   EXPECT_FALSE(readback->Ticket().has_value());
 }
 
+NOLINT_TEST_F(BufferReadbackLifecycleTest,
+  ResetAfterCompletionReleasesOwnedStagingRegistration)
+{
+  auto source
+    = CreateBufferWithBytes(MakePatternBytes(52, 0x91), "cleanup-source");
+  auto readback = CreateBufferReadback("cleanup-readback");
+
+  auto& registry = Registry();
+  const auto baseline_count = registry.GetRegisteredResourceCount();
+
+  EnqueueBufferReadback(
+    readback, source, BufferRange { 4, 24 }, "buffer-cleanup-readback");
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+
+  const auto during_readback_count = registry.GetRegisteredResourceCount();
+  EXPECT_GT(during_readback_count, baseline_count);
+
+  readback->Reset();
+
+  EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
+}
+
 NOLINT_TEST_F(
   BufferReadbackCoroutineTest, AwaitAsyncCompletesWhenIsReadyPumpsCompletion)
 {
@@ -499,6 +530,43 @@ NOLINT_TEST_F(TextureReadbackMappingTest, MapNowReturnsExpectedBytesAndLayout)
     mapped->Data()
       + static_cast<std::ptrdiff_t>(mapped->Layout().slice_pitch.get()));
   EXPECT_EQ(actual, CopyTextureRegionBytes(source_bytes, desc, resolved));
+}
+
+NOLINT_TEST_F(TextureReadbackMappingTest,
+  ResetAfterCompletionReleasesOwnedStagingRegistration)
+{
+  TextureDesc desc {};
+  desc.width = 4;
+  desc.height = 4;
+  desc.format = oxygen::Format::kRGBA8UNorm;
+  desc.texture_type = TextureType::kTexture2D;
+  desc.debug_name = "cleanup-texture";
+  const auto source_bytes = MakePatternBytes(4 * 4 * 4, 0x52);
+  auto source = CreateTextureWithBytes(desc, source_bytes);
+
+  auto& registry = Registry();
+  const auto baseline_count = registry.GetRegisteredResourceCount();
+
+  auto readback = CreateTextureReadback("cleanup-texture-readback");
+  EnqueueTextureReadback(readback, source,
+    TextureReadbackRequest {
+      .src_slice = {
+        .x = 0,
+        .y = 0,
+        .width = 2,
+        .height = 2,
+        .depth = 1,
+      },
+    },
+    "texture-cleanup-readback");
+  const auto mapped = readback->MapNow();
+  ASSERT_TRUE(mapped.has_value());
+
+  const auto during_readback_count = registry.GetRegisteredResourceCount();
+  EXPECT_GT(during_readback_count, baseline_count);
+
+  readback->Reset();
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
 NOLINT_TEST_F(
