@@ -218,6 +218,12 @@ auto ResourceRegistry::Find(
   return {}; // Return invalid NativeView
 }
 
+auto ResourceRegistry::GetRegisteredResourceCount() const noexcept -> size_t
+{
+  std::lock_guard lock(registry_mutex_);
+  return resources_.size();
+}
+
 auto ResourceRegistry::FindShaderVisibleIndex(const NativeResource& resource,
   size_t key_hash) const -> std::optional<bindless::ShaderVisibleIndex>
 {

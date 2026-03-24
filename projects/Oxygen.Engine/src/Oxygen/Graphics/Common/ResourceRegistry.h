@@ -1167,6 +1167,8 @@ public:
     });
   }
 
+  OXGN_GFX_NDAPI auto GetRegisteredResourceCount() const noexcept -> size_t;
+
 private:
   OXGN_GFX_API auto Register(std::shared_ptr<void> resource, TypeId type_id)
     -> void;
