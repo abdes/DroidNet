@@ -195,6 +195,33 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     oxygen::data::AssetKey {}, desc);
 }
 
+[[nodiscard]] auto MakeMaterial(
+  const oxygen::data::MaterialDomain domain,
+  const std::string_view name = "RoutingMaterial")
+  -> std::shared_ptr<const oxygen::data::MaterialAsset>
+{
+  oxygen::data::pak::render::MaterialAssetDesc desc {};
+  const auto copy_count
+    = (std::min)(name.size(), sizeof(desc.header.name) - 1U);
+  std::memcpy(desc.header.name, name.data(), copy_count);
+  desc.header.name[copy_count] = '\0';
+  desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
+  desc.material_domain = static_cast<std::uint8_t>(domain);
+  desc.base_color[0] = 1.0F;
+  desc.base_color[1] = 1.0F;
+  desc.base_color[2] = 1.0F;
+  desc.base_color[3] = 1.0F;
+  desc.base_color_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.normal_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.metallic_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.roughness_texture = oxygen::data::pak::core::kFallbackResourceIndex;
+  desc.ambient_occlusion_texture
+    = oxygen::data::pak::core::kFallbackResourceIndex;
+
+  return std::make_shared<const oxygen::data::MaterialAsset>(
+    oxygen::data::AssetKey {}, desc);
+}
+
 class DrawMetadataEmitterTest : public testing::Test {
 protected:
   auto SetUp() -> void override
@@ -504,6 +531,157 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   ASSERT_EQ(partitions.size(), 1U);
   EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kMasked));
   EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_OpaqueMaterialStaysOutOfTransparentPartitions)
+{
+  namespace d = oxygen::data;
+
+  std::vector<d::Vertex> vertices(3);
+  vertices[0].position = { -1.0F, 0.0F, 0.0F };
+  vertices[1].position = { 1.0F, 0.0F, 0.0F };
+  vertices[2].position = { 0.0F, 1.0F, 0.0F };
+
+  const std::vector<std::uint32_t> indices { 0U, 1U, 2U };
+  const auto material
+    = MakeMaterial(d::MaterialDomain::kOpaque, "OpaqueRouting");
+
+  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.OpaqueRouting")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("default", material)
+                .WithMeshView({ .first_index = 0U,
+                  .index_count = 3U,
+                  .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .EndSubMesh()
+                .Build();
+
+  const auto geometry = oxygen::engine::sceneprep::GeometryRef {
+    .asset_key = oxygen::data::AssetKey {},
+    .lod_index = 0U,
+    .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
+  };
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices_srv = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices_srv.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices_srv.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item {};
+  item.geometry = geometry;
+  item.submesh_index = 0U;
+  item.material = oxygen::engine::sceneprep::MaterialRef {
+    .source_asset_key = material->GetAssetKey(),
+    .resolved_asset_key = material->GetAssetKey(),
+    .resolved_asset = material,
+  };
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 51U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item.main_view_visible = true;
+
+  Emitter().EmitDrawMetadata(item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kOpaque));
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kTransparent));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kMainViewVisible));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 1U);
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kOpaque));
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kTransparent));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_AlphaBlendedMaterialRoutesOnlyThroughTransparentPartition)
+{
+  namespace d = oxygen::data;
+
+  std::vector<d::Vertex> vertices(3);
+  vertices[0].position = { -1.0F, 0.0F, 0.0F };
+  vertices[1].position = { 1.0F, 0.0F, 0.0F };
+  vertices[2].position = { 0.0F, 1.0F, 0.0F };
+
+  const std::vector<std::uint32_t> indices { 0U, 1U, 2U };
+  const auto material = MakeMaterial(
+    d::MaterialDomain::kAlphaBlended, "TransparentRouting");
+
+  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.TransparentRouting")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("default", material)
+                .WithMeshView({ .first_index = 0U,
+                  .index_count = 3U,
+                  .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .EndSubMesh()
+                .Build();
+
+  const auto geometry = oxygen::engine::sceneprep::GeometryRef {
+    .asset_key = oxygen::data::AssetKey {},
+    .lod_index = 0U,
+    .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
+  };
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices_srv = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices_srv.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices_srv.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item {};
+  item.geometry = geometry;
+  item.submesh_index = 0U;
+  item.material = oxygen::engine::sceneprep::MaterialRef {
+    .source_asset_key = material->GetAssetKey(),
+    .resolved_asset_key = material->GetAssetKey(),
+    .resolved_asset = material,
+  };
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 61U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item.main_view_visible = true;
+  item.cast_shadows = true;
+
+  Emitter().EmitDrawMetadata(item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kTransparent));
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kMainViewVisible));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 1U);
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kTransparent));
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
 }
 
 NOLINT_TEST_F(DrawMetadataEmitterTest,
