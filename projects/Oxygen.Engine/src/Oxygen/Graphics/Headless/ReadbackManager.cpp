@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fmt/format.h>
 #include <memory>
 #include <string>
 
@@ -1067,7 +1068,7 @@ auto HeadlessReadbackManager::ReadBufferNow(
   const oxygen::graphics::Buffer& source, BufferRange range)
   -> std::expected<std::vector<std::byte>, ReadbackError>
 {
-  LOG_SCOPE_F(1, "ReadBufferNow `{}`", source.GetName());
+  DLOG_SCOPE_F(1, fmt::format("ReadBufferNow `{}`", source.GetName()).c_str());
 
   auto readback = CreateBufferReadback("ReadBufferNow");
   CHECK_NOTNULL_F(readback.get());
@@ -1111,7 +1112,7 @@ auto HeadlessReadbackManager::ReadTextureNow(
   const bool tightly_pack)
   -> std::expected<OwnedTextureReadbackData, ReadbackError>
 {
-  LOG_SCOPE_F(1, "ReadTextureNow `{}`", source.GetName());
+  DLOG_SCOPE_F(1, fmt::format("ReadTextureNow `{}`", source.GetName()).c_str());
 
   auto readback = CreateTextureReadback("ReadTextureNow");
   CHECK_NOTNULL_F(readback.get());
@@ -1158,7 +1159,8 @@ auto HeadlessReadbackManager::CreateReadbackTextureSurface(
   const TextureDesc& desc)
   -> std::expected<std::shared_ptr<oxygen::graphics::Texture>, ReadbackError>
 {
-  LOG_SCOPE_F(1, "CreateReadbackTextureSurface `{}`", desc.debug_name.c_str());
+  DLOG_SCOPE_F(1,
+    fmt::format("CreateReadbackTextureSurface `{}`", desc.debug_name).c_str());
 
   const auto readback_desc = BuildReadbackSurfaceTextureDesc(desc);
   if (!readback_desc.has_value()) {
@@ -1187,7 +1189,8 @@ auto HeadlessReadbackManager::MapReadbackTextureSurface(
   oxygen::graphics::Texture& surface, TextureSlice slice)
   -> std::expected<ReadbackSurfaceMapping, ReadbackError>
 {
-  LOG_SCOPE_F(1, "MapReadbackTextureSurface `{}`", surface.GetName());
+  DLOG_SCOPE_F(1,
+    fmt::format("MapReadbackTextureSurface `{}`", surface.GetName()).c_str());
 
   if (surface.GetTypeId() != Texture::ClassTypeId()) {
     LOG_F(ERROR,

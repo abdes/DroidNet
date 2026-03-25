@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -48,7 +50,7 @@ void CommandRecorder::Begin()
 auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
 {
   DCHECK_NOTNULL_F(command_list_);
-  DLOG_F(2, "CommandRecorder::End() for: ", command_list_->GetName());
+  DLOG_F(2, "CommandRecorder::End() for: {}", command_list_->GetName());
   DCHECK_NOTNULL_F(command_list_);
   try {
     // Give a chance to the resource state tracker to restore initial states
@@ -73,7 +75,9 @@ void CommandRecorder::FlushBarriers()
     return;
   }
 
-  LOG_SCOPE_F(2, "Flushing barriers for : {}", command_list_->GetName());
+  DLOG_SCOPE_F(2,
+    fmt::format("Flushing barriers for: `{}`", command_list_->GetName())
+      .c_str());
 
   // Execute the pending barriers by calling an abstract method to be
   // implemented by the backend-specific Commander
@@ -162,7 +166,7 @@ bool CommandRecorder::DoIsResourceTracked(const Buffer& resource) const
 void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
-  LOG_F(4, "buffer: begin tracking state 0x{} initial={} {}",
+  DLOG_F(4, "buffer: begin tracking state `{}` initial={}{}",
     resource.GetName(), initial_state,
     keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->BeginTrackingResourceState(
@@ -207,7 +211,7 @@ bool CommandRecorder::DoIsResourceTracked(const Texture& resource) const
 void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
-  LOG_F(4, "texture: begin tracking state 0x{} initial={} {}",
+  DLOG_F(4, "texture: begin tracking state `{}` initial={}{}",
     resource.GetName(), initial_state,
     keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->BeginTrackingResourceState(
