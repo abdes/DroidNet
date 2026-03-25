@@ -209,6 +209,12 @@ public:
     IndirectCommandLayout /*layout*/) -> void override
   {
   }
+  auto ExecuteIndirectCounted(const Buffer& /*argument_buffer*/,
+    uint64_t /*argument_buffer_offset*/, uint32_t /*max_command_count*/,
+    IndirectCommandLayout /*layout*/, const Buffer& /*count_buffer*/,
+    uint64_t /*count_buffer_offset*/) -> void override
+  {
+  }
   auto SetVertexBuffers(uint32_t /*num*/,
     const std::shared_ptr<Buffer>* /*vertex_buffers*/,
     const uint32_t* /*strides*/) const -> void override

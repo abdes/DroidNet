@@ -91,6 +91,11 @@ public:
     uint64_t argument_buffer_offset, uint32_t command_count,
     IndirectCommandLayout layout) -> void override;
 
+  auto ExecuteIndirectCounted(const graphics::Buffer& argument_buffer,
+    uint64_t argument_buffer_offset, uint32_t max_command_count,
+    IndirectCommandLayout layout, const graphics::Buffer& count_buffer,
+    uint64_t count_buffer_offset) -> void override;
+
   // ReSharper disable once CppRedundantQualifier
   auto BindIndexBuffer(const graphics::Buffer& buffer, Format format)
     -> void override;

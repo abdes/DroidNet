@@ -440,6 +440,46 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
     signature, command_count, resource, argument_buffer_offset, nullptr, 0);
 }
 
+auto CommandRecorder::ExecuteIndirectCounted(
+  const graphics::Buffer& argument_buffer,
+  const uint64_t argument_buffer_offset, const uint32_t max_command_count,
+  const IndirectCommandLayout layout, const graphics::Buffer& count_buffer,
+  const uint64_t count_buffer_offset) -> void
+{
+  auto graphics = graphics_weak_.lock();
+  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
+
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& argument_buf = static_cast<const Buffer&>(argument_buffer);
+  auto* argument_resource = argument_buf.GetResource();
+  DCHECK_NOTNULL_F(argument_resource);
+
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  const auto& count_buf = static_cast<const Buffer&>(count_buffer);
+  auto* count_resource = count_buf.GetResource();
+  DCHECK_NOTNULL_F(count_resource);
+
+  ID3D12CommandSignature* signature = nullptr;
+  switch (layout) {
+  case IndirectCommandLayout::kDraw:
+    signature = graphics->GetDrawCommandSignature();
+    break;
+  case IndirectCommandLayout::kDrawWithRootConstant:
+    signature = graphics->GetDrawRootConstantCommandSignature(
+      current_graphics_root_signature_);
+    break;
+  }
+  DCHECK_NOTNULL_F(signature);
+
+  d3d12_command_list->ExecuteIndirect(signature, max_command_count,
+    argument_resource, argument_buffer_offset, count_resource,
+    count_buffer_offset);
+}
+
 auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
 {
   auto graphics = graphics_weak_.lock();
