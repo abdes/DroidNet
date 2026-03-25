@@ -49,7 +49,13 @@ protected:
   [[nodiscard]] static auto MakeProjection(const std::uint32_t map_id,
     const std::uint32_t first_page_table_entry,
     const std::uint32_t pages_x = 2U, const std::uint32_t pages_y = 2U,
-    const std::uint32_t level_count = 2U) -> VsmPageRequestProjection
+    const std::uint32_t level_count = 2U, const std::uint32_t map_pages_x = 0U,
+    const std::uint32_t map_pages_y = 0U,
+    const std::uint32_t page_offset_x = 0U,
+    const std::uint32_t page_offset_y = 0U,
+    const std::uint32_t cube_face_index
+    = oxygen::renderer::vsm::kVsmInvalidCubeFaceIndex)
+    -> VsmPageRequestProjection
   {
     return VsmPageRequestProjection {
       .projection = VsmProjectionData {
@@ -63,10 +69,15 @@ protected:
       },
       .map_id = map_id,
       .first_page_table_entry = first_page_table_entry,
+      .map_pages_x = map_pages_x == 0U ? pages_x : map_pages_x,
+      .map_pages_y = map_pages_y == 0U ? pages_y : map_pages_y,
       .pages_x = pages_x,
       .pages_y = pages_y,
+      .page_offset_x = page_offset_x,
+      .page_offset_y = page_offset_y,
       .level_count = level_count,
       .coarse_level = level_count > 1U ? (level_count - 1U) : 0U,
+      .cube_face_index = cube_face_index,
     };
   }
 
@@ -133,6 +144,9 @@ NOLINT_TEST_F(VsmShadowRasterJobsTest,
   EXPECT_EQ(jobs[0].viewport.width, 128.0F);
   EXPECT_EQ(jobs[0].viewport.height, 128.0F);
   EXPECT_FALSE(jobs[0].static_only);
+  EXPECT_EQ(jobs[0].projection_page.level, 0U);
+  EXPECT_EQ(jobs[0].projection_page.page_x, 1U);
+  EXPECT_EQ(jobs[0].projection_page.page_y, 0U);
 
   EXPECT_EQ(jobs[1].page_table_index, 10U);
   EXPECT_EQ(jobs[1].physical_page.value, 18U);
@@ -143,6 +157,9 @@ NOLINT_TEST_F(VsmShadowRasterJobsTest,
   EXPECT_EQ(jobs[1].scissors.right, 384);
   EXPECT_EQ(jobs[1].scissors.bottom, 256);
   EXPECT_TRUE(jobs[1].static_only);
+  EXPECT_EQ(jobs[1].projection_page.level, 1U);
+  EXPECT_EQ(jobs[1].projection_page.page_x, 0U);
+  EXPECT_EQ(jobs[1].projection_page.page_y, 1U);
 }
 
 NOLINT_TEST_F(VsmShadowRasterJobsTest,
@@ -165,6 +182,58 @@ NOLINT_TEST_F(VsmShadowRasterJobsTest,
 
   const auto jobs = BuildShadowRasterPageJobs(frame, MakePhysicalPool(),
     std::array { MakeProjection(7U, 0U, 1U, 1U, 1U) });
+
+  EXPECT_TRUE(jobs.empty());
+}
+
+NOLINT_TEST_F(VsmShadowRasterJobsTest,
+  BuildShadowRasterPageJobsRoutesSharedMapPagesToMatchingFaceProjection)
+{
+  auto frame = VsmPageAllocationFrame {};
+  frame.snapshot = VsmPageAllocationSnapshot {};
+  frame.plan = VsmPageAllocationPlan {
+    .decisions = {
+      MakeDecision(7U,
+        VsmVirtualPageCoord { .level = 0U, .page_x = 1U, .page_y = 0U },
+        VsmAllocationAction::kAllocateNew, 3U),
+    },
+  };
+  frame.is_ready = true;
+
+  const auto jobs = BuildShadowRasterPageJobs(frame, MakePhysicalPool(),
+    std::array {
+      MakeProjection(7U, 4U, 1U, 1U, 1U, 2U, 1U, 0U, 0U, 0U),
+      MakeProjection(7U, 4U, 1U, 1U, 1U, 2U, 1U, 1U, 0U, 1U),
+    });
+
+  ASSERT_EQ(jobs.size(), 1U);
+  EXPECT_EQ(jobs[0].page_table_index, 5U);
+  EXPECT_EQ(jobs[0].virtual_page,
+    (VsmVirtualPageCoord { .level = 0U, .page_x = 1U, .page_y = 0U }));
+  EXPECT_EQ(jobs[0].projection_page,
+    (VsmVirtualPageCoord { .level = 0U, .page_x = 0U, .page_y = 0U }));
+  EXPECT_EQ(jobs[0].projection.cube_face_index, 1U);
+}
+
+NOLINT_TEST_F(VsmShadowRasterJobsTest,
+  BuildShadowRasterPageJobsRejectsOverlappingProjectionRoutes)
+{
+  auto frame = VsmPageAllocationFrame {};
+  frame.snapshot = VsmPageAllocationSnapshot {};
+  frame.plan = VsmPageAllocationPlan {
+    .decisions = {
+      MakeDecision(7U,
+        VsmVirtualPageCoord { .level = 0U, .page_x = 0U, .page_y = 0U },
+        VsmAllocationAction::kAllocateNew, 3U),
+    },
+  };
+  frame.is_ready = true;
+
+  const auto jobs = BuildShadowRasterPageJobs(frame, MakePhysicalPool(),
+    std::array {
+      MakeProjection(7U, 4U, 1U, 1U, 1U, 1U, 1U, 0U, 0U, 0U),
+      MakeProjection(7U, 4U, 1U, 1U, 1U, 1U, 1U, 0U, 0U, 1U),
+    });
 
   EXPECT_TRUE(jobs.empty());
 }

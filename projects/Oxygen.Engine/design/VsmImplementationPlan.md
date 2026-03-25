@@ -70,7 +70,7 @@ implemented cache/allocation slice:
 | ☑ | C | Page Request Generator pass | Compute pass produces correct page request flags for test scenes with depth and clustered-light inputs |
 | ☑ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
 | ☑ | E | Page flag propagation, initialization, and screen-space HZB passes | Stages 9–11 plus renderer-level `ScreenHzbBuildPass`; hierarchical flags, mapped-mip propagation, selective page init, and screen-space HZB available for Phase F culling |
-| ☐ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
+| ☑ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
 | ☐ | G | Static/Dynamic Merge pass | Composite static slice into dynamic slice for dirty pages |
 | ☐ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild |
 | ☐ | I | Projection and Composite pass | Screen-space shadow factor generation for directional + local lights |
@@ -264,18 +264,17 @@ Validation evidence on 2026-03-25:
 **Architecture ref:** §3.6, §12, stage 12
 
 **Execution note:** this phase is now decomposed in
-`VsmShadowRasterizerImplementationPlan.md`. Parent Phase F remains incomplete
-until that sub-plan's slices are validated. Current sub-plan status:
-`F0`, `F1`, `F2`, and `F3` complete with validation evidence through
-`2026-03-26`; `F4` is the next active slice.
+`VsmShadowRasterizerImplementationPlan.md`. That sub-plan is now complete:
+`F0` through `F4` have validation evidence on `2026-03-26`, so parent Phase F
+is complete. Full renderer-wide VSM orchestration remains parent Phase `K`.
 
 **Deliverables:**
 
 - [x] Create `VsmShadowRasterizerPass` on top of the shared depth-only raster
   path (`DepthPrePass`)
-- [ ] Shadow view creation: generate per-map shadow projection from `VsmProjectionData`
+- [x] Shadow view routing: consume per-map shadow projection data from `VsmProjectionData`
   - Directional clipmaps use per-level views
-  - Point lights publish and schedule per-face views without widening the public remap-key API
+  - Point-light per-face projections route into shared local-light map regions without widening the public remap-key API
 - [x] Instance culling compute shader `VsmInstanceCulling.hlsl`:
   - Test mesh instance bounds against each allocated page's virtual extent
   - Screen-space HZB occlusion culling using previous-frame camera depth pyramid (see architecture §3.10); absent on frame 0, available from frame 1 onward
@@ -294,7 +293,7 @@ until that sub-plan's slices are validated. Current sub-plan status:
 
 **Exit gate:** Shadow depth is correctly rasterized into physical pages for a test scene with known geometry, including point-light face selection and static-recache routing when enabled.
 
-Validation evidence through `F3` on `2026-03-26`:
+Validation evidence through `F4` on `2026-03-26`:
 
 - `VsmShadowRasterizerPass` now submits baseline depth draws into the physical
   VSM dynamic slice for prepared page jobs, with page-local viewport/scissor
@@ -306,6 +305,13 @@ Validation evidence through `F3` on `2026-03-26`:
   slice, publishes rendered-page dirty flags plus physical-page metadata
   updates, forces rerender for newly visible primitives, and records
   static primitive/page feedback for later invalidation refinement
+- `VsmPageRequestProjection` plus the new `VsmProjectionRouting` helpers now
+  support routed subregions inside one owning virtual map, allowing point-light
+  cube faces to share one local-light cache identity while retaining distinct
+  page-request and raster routes
+- `BuildShadowRasterPageJobs` now resolves the matching point-light face route
+  per prepared page, rejects overlapping routes deterministically, and preserves
+  the selected face-local page for raster crop math
 - `VsmCacheManager` now publishes and extracts visible shadow primitives plus
   static primitive/page feedback into the retained frame snapshot
 - `VsmPhysicalPagePoolManager` now registers VSM pool resources on creation and
@@ -319,6 +325,9 @@ Validation evidence through `F3` on `2026-03-26`:
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 1`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.* -v 9`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 1`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
 - low-verbosity logs were clean: no warnings, no failures, and no
   `Reusing partition ... without observed retirement` staging warning
 - max-verbosity logs were sane for the integrated `F3` slice: the static
@@ -327,15 +336,23 @@ Validation evidence through `F3` on `2026-03-26`:
   `previous_hzb_available=true`, the reveal path logged
   `reveal_candidates=1`, and the cache-manager path logged visible-primitive
   plus static-feedback publication before extraction
+- max-verbosity logs were sane for the new point-face path: the routed test
+  logged `prepare map_count=2 prepared_pages=1 ... routed_pages=1 cube_face_pages=1`
+  before counted-indirect execution, the routed physical page received depth,
+  and the neighboring page stayed at the cleared depth
+- max-verbosity CPU routing logs only emitted the expected contract-path
+  warnings for intentionally invalid inputs (`missing projection route` and
+  `overlapping projection routes`)
 - the GPU tests verified indirect count/command buffers, dynamic dirty flag
   publication, physical-page metadata updates, static-only depth writes into
-  slice `1`, and reveal-forced rerender behavior
+  slice `1`, point-light face routing into a shared local-light map, and
+  reveal-forced rerender behavior
 - extra probe note: standalone
   `ScreenHzbBuildGpuTest.PreviousFrameOutputTracksPriorPyramidAcrossFrames`
   still throws an SEH access violation during its own seed-depth setup when run
   directly at `-v 9`, so it is not being used as Phase F evidence
-- Phase F remains `in_progress` because point-light face routing is still
-  pending in `F4`
+- Phase F exit gate is now satisfied; broader forward-pipeline VSM integration
+  is still deferred to parent Phase `K`
 
 ---
 

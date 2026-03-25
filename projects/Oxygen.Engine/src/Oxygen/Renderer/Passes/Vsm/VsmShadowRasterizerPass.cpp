@@ -223,8 +223,8 @@ auto BuildPageCropMatrix(
   const auto scale_x = static_cast<float>(job.projection.pages_x);
   const auto scale_y = static_cast<float>(job.projection.pages_y);
   const auto offset_x = static_cast<float>(job.projection.pages_x)
-    - 2.0F * static_cast<float>(job.virtual_page.page_x) - 1.0F;
-  const auto offset_y = 2.0F * static_cast<float>(job.virtual_page.page_y)
+    - 2.0F * static_cast<float>(job.projection_page.page_x) - 1.0F;
+  const auto offset_y = 2.0F * static_cast<float>(job.projection_page.page_y)
     + 1.0F - static_cast<float>(job.projection.pages_y);
 
   return glm::mat4(glm::vec4 { scale_x, 0.0F, 0.0F, 0.0F },
@@ -1973,15 +1973,30 @@ auto VsmShadowRasterizerPass::DoPrepareResources(CommandRecorder& recorder)
   const auto static_job_count = static_cast<std::size_t>(std::count_if(
     impl_->active_page_jobs.begin(), impl_->active_page_jobs.end(),
     [](const auto& job) { return job.shader_job_flags != 0U; }));
+  const auto routed_job_count
+    = static_cast<std::size_t>(std::count_if(impl_->prepared_pages.begin(),
+      impl_->prepared_pages.end(), [](const auto& job) {
+        return job.projection.map_pages_x != job.projection.pages_x
+          || job.projection.map_pages_y != job.projection.pages_y
+          || job.projection.page_offset_x != 0U
+          || job.projection.page_offset_y != 0U;
+      }));
+  const auto cube_face_job_count
+    = static_cast<std::size_t>(std::count_if(impl_->prepared_pages.begin(),
+      impl_->prepared_pages.end(), [](const auto& job) {
+        return job.projection.cube_face_index
+          != renderer::vsm::kVsmInvalidCubeFaceIndex;
+      }));
   DLOG_F(2,
     "VsmShadowRasterizerPass: prepare map_count={} prepared_pages={} "
-    "active_pages={} static_pages={} source_slice_mismatch={} "
+    "active_pages={} static_pages={} routed_pages={} cube_face_pages={} "
+    "source_slice_mismatch={} "
     "dynamic_slice={} static_slice_available={} base_view_constants={} "
     "view_frame_slot_valid={}",
     impl_->input->projections.size(), impl_->prepared_pages.size(),
-    impl_->active_page_jobs.size(), static_job_count,
-    impl_->deferred_non_dynamic_pages, *impl_->dynamic_slice_index,
-    impl_->static_slice_index.has_value(),
+    impl_->active_page_jobs.size(), static_job_count, routed_job_count,
+    cube_face_job_count, impl_->deferred_non_dynamic_pages,
+    *impl_->dynamic_slice_index, impl_->static_slice_index.has_value(),
     impl_->input->base_view_constants.has_value(),
     impl_->input->base_view_constants.has_value()
       && impl_->input->base_view_constants->view_frame_bindings_bslot

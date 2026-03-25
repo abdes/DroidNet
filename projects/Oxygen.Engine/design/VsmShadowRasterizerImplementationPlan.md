@@ -1,6 +1,6 @@
 # VSM Shadow Rasterizer Implementation Plan
 
-Status: `in_progress`
+Status: `completed`
 Audience: engineer implementing Phase F of the VSM pipeline
 Scope: Stage 12 shadow rasterization, from page-job preparation through raster submission, dirty tracking, reveal handling, and static-feedback hooks
 
@@ -11,9 +11,8 @@ Cross-references:
 
 ## Summary Tracking
 
-This document decomposes parent Phase F into bounded execution slices. Parent
-Phase F remains `in_progress` until every slice below is implemented and
-validated.
+This document decomposes parent Phase F into bounded execution slices. All
+slices `F0` through `F4` are now implemented and validated.
 
 | Status | Slice | Deliverable | Exit Gate |
 | --- | --- | --- | --- |
@@ -21,7 +20,7 @@ validated.
 | ☑ | F1 | Baseline depth submission into physical VSM pages | Dynamic-slice depth writes land in the correct physical page rects for known test geometry without touching unrelated pages |
 | ☑ | F2 | GPU instance culling and compact draw-list generation | Instance culling consumes draw bounds plus previous-frame screen HZB and emits compact per-page draw arguments |
 | ☑ | F3 | Static recache, dirty publication, reveal tracking, and invalidation feedback | Static-only rerender routing, dirty outputs, reveal-forced redraw, and primitive-to-page feedback all exist without breaking the merge contract |
-| ☐ | F4 | Point-light face routing, orchestration hardening, and validation sweep | Directional + local-light paths render correctly, targeted tests pass, and parent Phase F exit gate evidence is complete |
+| ☑ | F4 | Point-light face routing, orchestration hardening, and validation sweep | Directional + local-light paths render correctly, targeted tests pass, and parent Phase F exit gate evidence is complete |
 
 ## 1. Why Phase F Was Split
 
@@ -107,8 +106,8 @@ Scope:
 
 ## 3. Current Slice Status
 
-`F0` through `F3` are now implemented and validated. The next active slice is
-`F4`.
+`F0` through `F4` are now implemented and validated. Parent Phase `F` is now
+complete; the next parent-plan phase is `G`.
 
 Delivered in `F0`:
 
@@ -243,15 +242,55 @@ Evidence backing `F3` on `2026-03-26`:
   reveal-forced dirty flag publication, and visible/static-feedback extraction
   surfaces
 
+Delivered in `F4`:
+
+- `VsmPageRequestProjection` now describes routed subregions inside an owning
+  virtual map instead of assuming one projection equals one full map
+- new shared routing helpers in `VsmProjectionRouting.h/.cpp` keep page-request
+  generation and raster-job expansion on one contract for global-page mapping,
+  page-table indexing, and projection-local page selection
+- `BuildShadowRasterPageJobs` now resolves shared-map point-light face routes
+  without widening public remap-key contracts, rejects overlapping routes
+  deterministically, and preserves the selected face-local page for page crop
+  math
+- `VsmShadowRasterizerPass` now reports routed/cube-face page counts in its
+  debug prepare summary and consumes the selected face-local page when building
+  shadow view constants and per-page crop matrices
+- focused CPU coverage now verifies shared-map request routing plus raster-job
+  face selection and overlap rejection
+- focused GPU coverage now verifies a shared-map point-light face route writes
+  depth into the intended physical page while a neighboring page remains at the
+  cleared depth
+
+Evidence backing `F4` on `2026-03-26`:
+
+- built `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja`
+  (`Debug`)
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests|Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 1`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
+- low-verbosity GPU logs were clean: no warnings, no failures, and `[  PASSED  ] 8 tests.`
+- max-verbosity GPU logs were sane for the new routed path: the point-face test
+  logged `prepare map_count=2 prepared_pages=1 ... routed_pages=1 cube_face_pages=1`
+  before counted-indirect execution, and the targeted physical page was written
+  while its neighbor stayed at the cleared depth
+- max-verbosity CPU logs only emitted the expected contract-path warnings for
+  intentionally invalid inputs (`missing projection route` and
+  `overlapping projection routes`) while the positive routing tests passed
+
 ## 4. Expected Source Layout
 
-Implemented files through `F3`:
+Implemented files through `F4`:
 
 - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h`
 - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.cpp`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h`
+- `src/Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.h`
+- `src/Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.cpp`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.cpp`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h`
@@ -263,19 +302,22 @@ Implemented files through `F3`:
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInstanceCulling.hlsl`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmIndirectDrawCommand.hlsli`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageRequestProjection.hlsli`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPublishRasterResults.hlsl`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmRasterPageJob.hlsli`
 - `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.cpp`
 - `src/Oxygen/Renderer/Types/DrawMetadata.h`
 - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRasterJobs_test.cpp`
+- `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneration_test.cpp`
+- `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneratorPass_test.cpp`
 - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRasterizerPass_test.cpp`
 - `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheManagerOrchestration_test.cpp`
 - `src/Oxygen/Graphics/Common/Test/Commander_test.cpp`
 - `src/Oxygen/Renderer/Test/GpuTimelineProfiler_test.cpp`
 
-Later slices are expected to extend existing raster/orchestration files for
-point-light face routing. Dedicated VSM depth shaders are not planned while the
-shared `DepthPrePass` path remains the contract.
+Dedicated VSM depth shaders are not planned while the shared `DepthPrePass`
+path remains the contract.
 
 ## 5. Build and Test Commands
 
@@ -295,14 +337,14 @@ cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VirtualSh
 Current-slice test commands:
 
 ```powershell
-ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "VsmShadowRaster"
+ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\.Renderer\.VirtualShadowGpuLifecycle\.Tests|Oxygen\.Renderer\.Oxygen\.Renderer\.VirtualShadows\.Tests\.Tests"
 ```
 
 Maximum-verbosity sanity runs:
 
 ```powershell
-out\build-ninja\bin\Debug\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmShadowRasterJobsTest.* -v 9
-out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.* -v 9
+out\build-ninja\bin\Debug\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.* -v 9
+out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 9
 ```
 
 Latest validation evidence (`2026-03-26`):
@@ -310,19 +352,23 @@ Latest validation evidence (`2026-03-26`):
 - build passed for `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests`
 - build passed for `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests|Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests"` passed with `2/2` tests green
-- direct `-v 1` sanity runs passed for `VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.*` and `VsmCacheManagerOrchestrationTest.*`
-- direct `-v 9` sanity runs passed for the same filters
-- the low-verbosity logs were clean: no warnings, no failures, and no staging
-  partition-reuse warning
+- direct `-v 9` CPU routing sanity run passed for
+  `VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.*`
+- direct `-v 1` GPU sanity run passed for
+  `VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.*`
+- direct `-v 9` GPU sanity run passed for the same filter
+- the low-verbosity GPU logs were clean: no warnings, no failures, and no
+  staging partition-reuse warning
 - the max-verbosity logs were coherent:
+  - the point-face path logged `routed_pages=1 cube_face_pages=1` during
+    prepare before writing depth into the routed physical page
   - static recache logged `static_pages=1` during prepare and
     `static_feedback=1` during culling/execute before depth landed in slice `1`
   - the integrated HZB path logged `previous_hzb_available=true` and kept the
     target page at cleared depth with zero dirty bits
   - the reveal path logged `reveal_candidates=1` and published
     `kRevealForced | kDynamicRasterized`
-  - the cache-manager path logged visible-primitive and static-feedback
-    publication before extraction into the retained previous frame
+  - CPU routing logs only warned for the intentional invalid-route coverage
 
 ## 6. Known Risks
 
@@ -333,8 +379,8 @@ Latest validation evidence (`2026-03-26`):
 2. The renderer still exposes only the conventional directional shadow policy at
    the `ShadowManager` seam, so Phase F implementation must avoid implying full
    renderer integration before parent Phase K.
-3. Point-light face routing and higher-level runtime orchestration are still
-   deferred to `F4` / parent Phase `K`; this plan must not imply end-to-end VSM
+3. Higher-level renderer orchestration beyond this raster-phase seam is still
+   deferred to parent Phase `K`; this plan must not imply end-to-end VSM
    renderer integration before those seams land.
 
 ## 7. Exit Criteria for Parent Phase F
@@ -348,3 +394,5 @@ Parent Phase F is only complete when all of the following are true:
 - reveal-forced rerender exists
 - invalidation feedback capture exists
 - validation evidence is recorded in `VsmImplementationPlan.md`
+
+All exit criteria above are now satisfied on `2026-03-26`.

@@ -14,9 +14,6 @@
 #include <tuple>
 #include <unordered_map>
 
-#include <glm/mat4x4.hpp>
-#include <glm/vec4.hpp>
-
 #include <Oxygen/Base/Hash.h>
 
 namespace oxygen::renderer::vsm {
@@ -51,49 +48,6 @@ namespace {
   }
 
 } // namespace
-
-auto IsValid(const VsmPageRequestProjection& projection) noexcept -> bool
-{
-  return projection.map_id != 0U && projection.pages_x != 0U
-    && projection.pages_y != 0U && projection.level_count != 0U;
-}
-
-auto TryProjectWorldToPage(const VsmPageRequestProjection& projection,
-  const glm::vec3& world_position_ws) noexcept
-  -> std::optional<VsmVirtualPageCoord>
-{
-  if (!IsValid(projection)) {
-    return std::nullopt;
-  }
-
-  const auto world = glm::vec4(world_position_ws, 1.0F);
-  const auto view = projection.projection.view_matrix * world;
-  const auto clip = projection.projection.projection_matrix * view;
-  if (std::abs(clip.w) <= 1.0e-6F || clip.w < 0.0F) {
-    return std::nullopt;
-  }
-
-  const auto ndc = glm::vec3(clip) / clip.w;
-  if (ndc.x < -1.0F || ndc.x > 1.0F || ndc.y < -1.0F || ndc.y > 1.0F
-    || ndc.z < 0.0F || ndc.z > 1.0F) {
-    return std::nullopt;
-  }
-
-  const auto uv_x = ndc.x * 0.5F + 0.5F;
-  const auto uv_y = 0.5F - ndc.y * 0.5F;
-  const auto page_x = std::min(
-    static_cast<std::uint32_t>(uv_x * static_cast<float>(projection.pages_x)),
-    projection.pages_x - 1U);
-  const auto page_y = std::min(
-    static_cast<std::uint32_t>(uv_y * static_cast<float>(projection.pages_y)),
-    projection.pages_y - 1U);
-
-  return VsmVirtualPageCoord {
-    .level = 0U,
-    .page_x = page_x,
-    .page_y = page_y,
-  };
-}
 
 auto BuildPageRequests(std::span<const VsmPageRequestProjection> projections,
   std::span<const VsmVisiblePixelSample> samples,
