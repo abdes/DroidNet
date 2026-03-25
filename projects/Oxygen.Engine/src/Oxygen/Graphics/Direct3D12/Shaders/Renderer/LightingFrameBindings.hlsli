@@ -23,28 +23,11 @@ struct LightingFrameBindings
 
 static LightingFrameBindings LoadLightingFrameBindings(uint slot)
 {
-    LightingFrameBindings invalid_bindings;
+    LightingFrameBindings invalid_bindings = (LightingFrameBindings)0;
     invalid_bindings.directional_lights_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.positional_lights_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings._pad0 = 0u;
-    invalid_bindings._pad1 = 0u;
     invalid_bindings.light_culling.bindless_cluster_grid_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.light_culling.bindless_cluster_index_list_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.light_culling.cluster_dim_x = 0u;
-    invalid_bindings.light_culling.cluster_dim_y = 0u;
-    invalid_bindings.light_culling.cluster_dim_z = 0u;
-    invalid_bindings.light_culling.tile_size_px = 0u;
-    invalid_bindings.light_culling.z_near = 0.0f;
-    invalid_bindings.light_culling.z_far = 0.0f;
-    invalid_bindings.light_culling.z_scale = 0.0f;
-    invalid_bindings.light_culling.z_bias = 0.0f;
-    invalid_bindings.light_culling.max_lights_per_cluster = 0u;
-    invalid_bindings.light_culling._pad = 0u;
-    invalid_bindings.sun.enabled = 0u;
-    invalid_bindings.sun.cos_zenith = 0.0f;
-    invalid_bindings.sun._pad = uint2(0u, 0u);
-    invalid_bindings.sun.direction_ws_illuminance = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    invalid_bindings.sun.color_rgb_intensity = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;

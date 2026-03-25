@@ -6,9 +6,24 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
+#include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
 #include <Oxygen/Renderer/Pipeline/Internal/FramePlanBuilder.h>
 
 namespace oxygen::renderer::internal {
+
+namespace {
+
+  auto ShouldCopyPrimarySceneView(const FrameViewPacket& packet) -> bool
+  {
+    const auto& view = packet.View();
+    const auto& desc = view.GetDescriptor();
+    return packet.Plan().Intent() == ViewRenderIntent::kSceneAndComposite
+      && desc.camera.has_value()
+      && desc.z_order == CompositionView::kZOrderScene
+      && packet.GetCompositeOpacity() >= 1.0F;
+  }
+
+} // namespace
 
 CompositionPlanner::~CompositionPlanner() = default;
 
@@ -22,6 +37,24 @@ void CompositionPlanner::PlanCompositingTasks()
     if (!packet.HasCompositeTexture()) {
       continue;
     }
+    if (ShouldCopyPrimarySceneView(packet)) {
+      const auto published_view_id = packet.View().GetPublishedViewId();
+      CHECK_F(published_view_id != kInvalidViewId,
+        "primary scene view '{}' requires a published ViewId before planning "
+        "copy compositing",
+        packet.View().GetDescriptor().name);
+      DLOG_F(2,
+        "scene view '{}' planned as copy (published_view_id={} opacity={})",
+        packet.View().GetDescriptor().name, published_view_id.get(),
+        packet.GetCompositeOpacity());
+      planned_composition_tasks.push_back(
+        oxygen::engine::CompositingTask::MakeCopy(
+          published_view_id, packet.GetCompositeViewport()));
+      continue;
+    }
+
+    DLOG_F(2, "view '{}' planned as texture blend (opacity={})",
+      packet.View().GetDescriptor().name, packet.GetCompositeOpacity());
     planned_composition_tasks.push_back(
       oxygen::engine::CompositingTask::MakeTextureBlend(
         packet.GetCompositeTexture(), packet.GetCompositeViewport(),

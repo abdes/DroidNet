@@ -97,6 +97,240 @@ float3 ComputeSunTransmittance(
     return TransmittanceFromOpticalDepth(optical_depth, atmo);
 }
 
+struct DirectionalLightDiagnosticTerms
+{
+    float3 full_direct;
+    float3 brdf_core;
+    float shadow_visibility;
+    float transmittance_luma;
+    float weight;
+};
+
+static inline float ComputePerceptualLuma(float3 rgb)
+{
+    return dot(rgb, float3(0.2126, 0.7152, 0.0722));
+}
+
+static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnosticTerms(
+    DirectionalLightBasic dl,
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
+    float3 shadow_normal_ws,
+    float3 N,
+    float3 V,
+    float  NdotV,
+    float3 F0,
+    float3 base_rgb,
+    float  metalness,
+    float  roughness)
+{
+    DirectionalLightDiagnosticTerms terms = (DirectionalLightDiagnosticTerms)0;
+
+    if ((dl.flags & DIRECTIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
+        return terms;
+    }
+
+    const float3 light_dir_ws = -dl.direction_ws;
+    const float3 L = SafeNormalize(light_dir_ws);
+    if (dot(L, L) < 0.5) {
+        return terms;
+    }
+
+    const float NdotL = saturate(dot(N, L));
+    if (NdotL <= 0.0) {
+        return terms;
+    }
+    terms.weight = NdotL;
+
+    float3 transmittance = 1.0.xxx;
+    const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
+    const bool env_contribution =
+        (dl.flags & DIRECTIONAL_LIGHT_FLAG_ENV_CONTRIBUTION) != 0u;
+    if (is_sun || env_contribution) {
+        transmittance = saturate(ComputeSunTransmittance(world_pos, atmo, L));
+    }
+    terms.transmittance_luma = ComputePerceptualLuma(transmittance);
+
+    terms.shadow_visibility = saturate(ComputeShadowVisibility(
+        dl.shadow_index, world_pos, shadow_normal_ws, L));
+
+    const float3 H_unorm = V + L;
+    const float H_len_sq = dot(H_unorm, H_unorm);
+    const float3 H = H_len_sq > 1.0e-8 ? H_unorm * rsqrt(H_len_sq) : N;
+    const float NdotH = saturate(dot(N, H));
+    const float VdotH = saturate(dot(V, H));
+
+    const float3 F = FresnelSchlick(VdotH, F0);
+    const float D = DistributionGGX(NdotH, roughness);
+    const float G = GeometrySmith(NdotV, NdotL, roughness);
+
+    const float3 numerator = D * G * F;
+    const float denom = max(4.0 * NdotV * NdotL, 1.0e-6);
+    const float3 specular = numerator / denom;
+
+    const float3 kS = F;
+    const float3 kD = (1.0 - kS) * (1.0 - metalness);
+    const float3 diffuse = kD * base_rgb;
+    terms.brdf_core = (diffuse + specular) * NdotL;
+
+    const float irradiance = LuxToIrradiance(dl.intensity_lux);
+    const float radiance = irradiance * (1.0 / kPi);
+
+    terms.full_direct = terms.brdf_core * dl.color_rgb * transmittance * radiance
+        * terms.shadow_visibility;
+    return terms;
+}
+
+static inline float3 EvaluateDirectionalLightContribution(
+    DirectionalLightBasic dl,
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
+    float3 shadow_normal_ws,
+    float3 N,
+    float3 V,
+    float  NdotV,
+    float3 F0,
+    float3 base_rgb,
+    float  metalness,
+    float  roughness)
+{
+    return EvaluateDirectionalLightDiagnosticTerms(
+        dl, world_pos, atmo, shadow_normal_ws, N, V, NdotV, F0, base_rgb,
+        metalness, roughness).full_direct;
+}
+
+static inline float3 EvaluateDirectionalLightContributionRawLambert(
+    DirectionalLightBasic dl,
+    float3 N,
+    float3 base_rgb)
+{
+    if ((dl.flags & DIRECTIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
+        return 0.0.xxx;
+    }
+
+    const float3 L = SafeNormalize(-dl.direction_ws);
+    if (dot(L, L) < 0.5) {
+        return 0.0.xxx;
+    }
+
+    const float NdotL = saturate(dot(N, L));
+    if (NdotL <= 0.0) {
+        return 0.0.xxx;
+    }
+
+    const float radiance = LuxToIrradiance(dl.intensity_lux) * (1.0 / kPi);
+    return base_rgb * dl.color_rgb * radiance * NdotL;
+}
+
+float3 AccumulateDirectionalLightsRawLambert(
+    float3 N,
+    float3 base_rgb)
+{
+    float3 direct = 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    if (lighting.directional_lights_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
+        return direct;
+    }
+
+    StructuredBuffer<DirectionalLightBasic> dir_lights =
+        ResourceDescriptorHeap[lighting.directional_lights_slot];
+    uint dir_count = 0u;
+    uint dir_stride = 0u;
+    dir_lights.GetDimensions(dir_count, dir_stride);
+
+    const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
+    for (uint i = 0; i < dir_limit; ++i) {
+        direct += EvaluateDirectionalLightContributionRawLambert(
+            dir_lights[i], N, base_rgb);
+    }
+
+    return direct;
+}
+
+float3 AccumulateDirectionalLightGatesDebug(
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
+    float3 shadow_normal_ws,
+    float3 N,
+    float3 V,
+    float  NdotV,
+    float3 F0,
+    float3 base_rgb,
+    float  metalness,
+    float  roughness)
+{
+    float shadow_sum = 0.0;
+    float trans_sum = 0.0;
+    float weight_sum = 0.0;
+
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    if (lighting.directional_lights_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
+        return 0.0.xxx;
+    }
+
+    StructuredBuffer<DirectionalLightBasic> dir_lights =
+        ResourceDescriptorHeap[lighting.directional_lights_slot];
+    uint dir_count = 0u;
+    uint dir_stride = 0u;
+    dir_lights.GetDimensions(dir_count, dir_stride);
+
+    const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
+    for (uint i = 0; i < dir_limit; ++i) {
+        const DirectionalLightDiagnosticTerms terms =
+            EvaluateDirectionalLightDiagnosticTerms(
+                dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+                F0, base_rgb, metalness, roughness);
+        shadow_sum += terms.shadow_visibility * terms.weight;
+        trans_sum += terms.transmittance_luma * terms.weight;
+        weight_sum += terms.weight;
+    }
+
+    if (weight_sum <= 1.0e-6) {
+        return 0.0.xxx;
+    }
+
+    return float3(shadow_sum / weight_sum, trans_sum / weight_sum, 0.0);
+}
+
+float3 AccumulateDirectionalLightsBrdfCore(
+    float3 world_pos,
+    GpuSkyAtmosphereParams atmo,
+    float3 shadow_normal_ws,
+    float3 N,
+    float3 V,
+    float  NdotV,
+    float3 F0,
+    float3 base_rgb,
+    float  metalness,
+    float  roughness)
+{
+    float3 brdf_core = 0.0.xxx;
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    if (lighting.directional_lights_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
+        return brdf_core;
+    }
+
+    StructuredBuffer<DirectionalLightBasic> dir_lights =
+        ResourceDescriptorHeap[lighting.directional_lights_slot];
+    uint dir_count = 0u;
+    uint dir_stride = 0u;
+    dir_lights.GetDimensions(dir_count, dir_stride);
+
+    const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
+    for (uint i = 0; i < dir_limit; ++i) {
+        const DirectionalLightDiagnosticTerms terms =
+            EvaluateDirectionalLightDiagnosticTerms(
+                dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+                F0, base_rgb, metalness, roughness);
+        brdf_core += terms.brdf_core * dir_lights[i].color_rgb;
+    }
+
+    return brdf_core;
+}
+
 float3 AccumulateDirectionalLights(
     float3 world_pos,
     GpuSkyAtmosphereParams atmo,
@@ -111,73 +345,24 @@ float3 AccumulateDirectionalLights(
 {
     float3 direct = float3(0.0, 0.0, 0.0);
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    StructuredBuffer<DirectionalLightBasic> dir_lights;
+    if (lighting.directional_lights_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(lighting.directional_lights_slot)) {
+        return direct;
+    }
+    StructuredBuffer<DirectionalLightBasic> dir_lights =
+        ResourceDescriptorHeap[lighting.directional_lights_slot];
     uint dir_count = 0;
     uint dir_stride = 0;
-    const bool has_directional_buffer =
-        lighting.directional_lights_slot != K_INVALID_BINDLESS_INDEX
-        && BX_IN_GLOBAL_SRV(lighting.directional_lights_slot);
-    if (has_directional_buffer) {
-        dir_lights = ResourceDescriptorHeap[lighting.directional_lights_slot];
-        dir_lights.GetDimensions(dir_count, dir_stride);
-    }
+    dir_lights.GetDimensions(dir_count, dir_stride);
 
     // Direct surface lighting comes only from the directional-light buffer.
     // The resolved sun payload remains an atmosphere/sky input, not a second
     // authoritative source of direct surface illumination.
-    if (has_directional_buffer) {
-        const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
-        for (uint i = 0; i < dir_limit; ++i) {
-            const DirectionalLightBasic dl = dir_lights[i];
-            if ((dl.flags & DIRECTIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
-                continue;
-            }
-            const bool is_sun = (dl.flags & DIRECTIONAL_LIGHT_FLAG_SUN_LIGHT) != 0u;
-
-            const float3 light_dir_ws = -dl.direction_ws;
-            const float3 light_color = dl.color_rgb;
-            const float  light_intensity = dl.intensity_lux; // Assuming lux for all dir lighting
-
-            const float3 L = SafeNormalize(light_dir_ws);
-            const float  NdotL = saturate(dot(N, L));
-            if (NdotL <= 0.0) {
-                continue;
-            }
-
-            float3 transmittance = float3(1.0, 1.0, 1.0);
-            const bool env_contribution
-                = (dl.flags & DIRECTIONAL_LIGHT_FLAG_ENV_CONTRIBUTION) != 0u;
-            // Critical for night correctness:
-            // Any directional light that contributes to the environment (or is tagged as sun)
-            // should be horizon/atmosphere attenuated. Otherwise lights can leak below horizon.
-            if (is_sun || env_contribution) {
-                transmittance = ComputeSunTransmittance(world_pos, atmo, L);
-            }
-            const float shadow_visibility = ComputeShadowVisibility(
-                dl.shadow_index, world_pos, shadow_normal_ws, L);
-
-            const float3 H = SafeNormalize(V + L);
-            const float  NdotH = saturate(dot(N, H));
-            const float  VdotH = saturate(dot(V, H));
-
-            const float3 F = FresnelSchlick(VdotH, F0);
-            const float  D = DistributionGGX(NdotH, roughness);
-            const float  G = GeometrySmith(NdotV, NdotL, roughness);
-
-            const float3 numerator = D * G * F;
-            const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
-            const float3 specular = numerator / denom;
-
-            const float3 kS = F;
-            const float3 kD = (1.0 - kS) * (1.0 - metalness);
-
-            const float3 diffuse = kD * base_rgb;
-
-            const float irradiance = LuxToIrradiance(light_intensity);
-            const float radiance = irradiance * (1.0 / kPi);
-            direct += (diffuse + specular) * light_color * transmittance
-                * radiance * NdotL * shadow_visibility;
-        }
+    const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
+    for (uint i = 0; i < dir_limit; ++i) {
+        direct += EvaluateDirectionalLightContribution(
+            dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+            F0, base_rgb, metalness, roughness);
     }
 
     return direct;

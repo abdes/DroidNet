@@ -46,6 +46,12 @@ using enum ShaderType;
 //   DEBUG_WORLD_NORMALS: World-space normals visualization
 //   DEBUG_ROUGHNESS: Roughness visualization
 //   DEBUG_METALNESS: Metalness visualization
+//   DEBUG_DIRECT_LIGHTING_ONLY: Forward mesh direct-light term only
+//   DEBUG_IBL_ONLY: Forward mesh IBL term only
+//   DEBUG_DIRECT_PLUS_IBL: Forward mesh direct + IBL terms only
+//   DEBUG_DIRECT_LIGHTING_FULL: Full forward direct-light term only
+//   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
+//   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -59,6 +65,42 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "SKIP_BRDF_LUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_DIRECT_LIGHTING_ONLY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_IBL_ONLY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_DIRECT_PLUS_IBL", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_DIRECT_LIGHTING_FULL", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_DIRECT_LIGHT_GATES", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardMesh_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_DIRECT_BRDF_CORE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Wireframe pass pixel shader: ALPHA_TEST permutation
   ShaderFileSpec {
@@ -278,7 +320,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
-// - ForwardMesh_PS base: 4 (ALPHA_TEST x OXYGEN_HDR_OUTPUT)
+// - ForwardMesh_PS base: 8 (ALPHA_TEST x OXYGEN_HDR_OUTPUT x SKIP_BRDF_LUT)
+// - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 8 each
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
 // - ForwardMesh_PS DEBUG_*: 8 each (debug define x ALPHA_TEST x
 // OXYGEN_HDR_OUTPUT)
@@ -300,6 +343,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 1 entry
 // - AutoExposure_Average_CS: 1 entry
-// Total: 111
+// Total: 135
 
 } // namespace oxygen::graphics::d3d12

@@ -19,11 +19,9 @@ struct EnvironmentFrameBindings
 
 static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
 {
-    EnvironmentFrameBindings invalid_bindings;
+    EnvironmentFrameBindings invalid_bindings = (EnvironmentFrameBindings)0;
     invalid_bindings.environment_static_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_view_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings._pad_to_16_0 = 0u;
-    invalid_bindings._pad_to_16_1 = 0u;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;

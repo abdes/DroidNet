@@ -44,6 +44,13 @@ m_gtest_program(
 
 m_gtest_program(PassDebugNames SOURCES "PassDebugNames_test.cpp")
 
+m_gtest_program(
+  CompositionPlanner
+  SOURCES
+    "Fakes/Graphics.h"
+    "CompositionPlanner_test.cpp"
+)
+
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 

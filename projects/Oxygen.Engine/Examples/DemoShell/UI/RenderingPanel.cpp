@@ -113,6 +113,12 @@ void RenderingPanel::DrawDebugModes()
     || current_mode == ShaderDebugMode::kIblIrradiance
     || current_mode == ShaderDebugMode::kIblFaceIndex
     || current_mode == ShaderDebugMode::kIblNoBrdfLut
+    || current_mode == ShaderDebugMode::kDirectLightingOnly
+    || current_mode == ShaderDebugMode::kIblOnly
+    || current_mode == ShaderDebugMode::kDirectPlusIbl
+    || current_mode == ShaderDebugMode::kDirectLightingFull
+    || current_mode == ShaderDebugMode::kDirectLightGates
+    || current_mode == ShaderDebugMode::kDirectBrdfCore
     || current_mode == ShaderDebugMode::kWorldNormals
     || current_mode == ShaderDebugMode::kRoughness
     || current_mode == ShaderDebugMode::kMetalness;
@@ -176,6 +182,36 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton(
         "IBL No BRDF LUT", current_mode == ShaderDebugMode::kIblNoBrdfLut)) {
     vm_->SetDebugMode(ShaderDebugMode::kIblNoBrdfLut);
+  }
+
+  if (ImGui::RadioButton("Direct Lighting Only",
+        current_mode == ShaderDebugMode::kDirectLightingOnly)) {
+    vm_->SetDebugMode(ShaderDebugMode::kDirectLightingOnly);
+  }
+
+  if (ImGui::RadioButton(
+        "IBL Only", current_mode == ShaderDebugMode::kIblOnly)) {
+    vm_->SetDebugMode(ShaderDebugMode::kIblOnly);
+  }
+
+  if (ImGui::RadioButton(
+        "Direct + IBL", current_mode == ShaderDebugMode::kDirectPlusIbl)) {
+    vm_->SetDebugMode(ShaderDebugMode::kDirectPlusIbl);
+  }
+
+  if (ImGui::RadioButton("Direct Lighting Full",
+        current_mode == ShaderDebugMode::kDirectLightingFull)) {
+    vm_->SetDebugMode(ShaderDebugMode::kDirectLightingFull);
+  }
+
+  if (ImGui::RadioButton("Direct Light Gates",
+        current_mode == ShaderDebugMode::kDirectLightGates)) {
+    vm_->SetDebugMode(ShaderDebugMode::kDirectLightGates);
+  }
+
+  if (ImGui::RadioButton(
+        "Direct BRDF Core", current_mode == ShaderDebugMode::kDirectBrdfCore)) {
+    vm_->SetDebugMode(ShaderDebugMode::kDirectBrdfCore);
   }
 
   if (disable_debug_modes) {

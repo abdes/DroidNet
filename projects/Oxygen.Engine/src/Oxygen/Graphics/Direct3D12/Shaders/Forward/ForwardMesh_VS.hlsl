@@ -42,7 +42,7 @@ struct VSOutput {
 
 [shader("vertex")]
 VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
-    VSOutput output;
+    VSOutput output = (VSOutput)0;
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
@@ -119,14 +119,14 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
     // Ensure a valid geometric normal.
     float3 NN = n_ws;
     if (dot(NN, NN) < 0.5) {
-        NN = float3(0.0, 1.0, 0.0);
+        NN = float3(0.0, 0.0, 1.0);
     }
 
     // Gram-Schmidt orthonormalization for tangent.
     float3 T = t_ws_in - NN * dot(NN, t_ws_in);
     if (dot(T, T) <= 1e-6) {
-        const float3 axis = (abs(NN.y) > 0.9) ? float3(1.0, 0.0, 0.0)
-                                              : float3(0.0, 1.0, 0.0);
+        const float3 axis = (abs(NN.z) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                              : float3(0.0, 0.0, 1.0);
         T = cross(NN, axis);
     }
     T = SafeNormalize(T);
