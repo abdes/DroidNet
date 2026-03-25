@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -25,6 +26,8 @@ using oxygen::renderer::vsm::VsmPageRequest;
 using oxygen::renderer::vsm::VsmPageRequestFlags;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
+using oxygen::renderer::vsm::VsmPrimitiveIdentity;
+using oxygen::renderer::vsm::VsmStaticPrimitivePageFeedbackRecord;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame;
 using oxygen::renderer::vsm::testing::VsmCacheManagerTestBase;
 
@@ -166,6 +169,59 @@ NOLINT_TEST_F(VsmCacheManagerOrchestrationTest,
   EXPECT_EQ(frame.snapshot.physical_pages[0].owner_id, current_request.map_id);
   ASSERT_NE(manager.GetPreviousFrame(), nullptr);
   EXPECT_EQ(*manager.GetPreviousFrame(), preserved_previous);
+}
+
+NOLINT_TEST_F(VsmCacheManagerOrchestrationTest,
+  CacheManagerPublishesVisiblePrimitiveAndStaticFeedbackIntoExtractedFrame)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase5-publish-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase5-publish-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  const auto seam = MakeSeam(pool_manager, 5ULL, 100U, "phase5-publish", 1U);
+  const auto request = MakeSinglePageRequest(seam.current_frame);
+
+  auto manager = VsmCacheManager(nullptr);
+  manager.BeginFrame(
+    seam, VsmCacheManagerFrameConfig { .debug_name = "phase5-publish" });
+  manager.SetPageRequests(std::array { request });
+  static_cast<void>(manager.BuildPageAllocationPlan());
+  const auto& frame = manager.CommitPageAllocationFrame();
+
+  const auto visible_primitives = std::array {
+    VsmPrimitiveIdentity {
+      .transform_index = 7U,
+      .transform_generation = 9U,
+      .submesh_index = 3U,
+      .primitive_flags = 5U,
+    },
+  };
+  const auto static_feedback = std::array {
+    VsmStaticPrimitivePageFeedbackRecord {
+      .primitive = visible_primitives[0],
+      .page_table_index
+      = ResolveLocalPageTableEntryIndex(frame.snapshot.virtual_frame),
+      .physical_page = frame.plan.decisions[0].current_physical_page,
+      .map_id = request.map_id,
+      .virtual_page = request.page,
+      .valid = 1U,
+    },
+  };
+
+  manager.PublishVisibleShadowPrimitives(visible_primitives);
+  manager.PublishStaticPrimitivePageFeedback(static_feedback);
+  manager.ExtractFrameData();
+
+  ASSERT_NE(manager.GetPreviousFrame(), nullptr);
+  EXPECT_EQ(manager.GetPreviousFrame()->visible_shadow_primitives,
+    std::vector<VsmPrimitiveIdentity>(
+      visible_primitives.begin(), visible_primitives.end()));
+  EXPECT_EQ(manager.GetPreviousFrame()->static_primitive_page_feedback,
+    std::vector<VsmStaticPrimitivePageFeedbackRecord>(
+      static_feedback.begin(), static_feedback.end()));
 }
 
 } // namespace

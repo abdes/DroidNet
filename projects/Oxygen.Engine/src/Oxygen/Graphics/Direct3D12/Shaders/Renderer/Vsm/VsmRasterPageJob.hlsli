@@ -15,9 +15,9 @@ struct VsmRasterPageJob
     uint virtual_page_x;
     uint virtual_page_y;
     uint virtual_page_level;
+    uint physical_page_index;
+    uint job_flags;
     uint _pad0;
-    uint _pad1;
-    uint _pad2;
 };
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_VSM_VSMRASTERPAGEJOB_HLSLI

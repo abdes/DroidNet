@@ -266,34 +266,35 @@ Validation evidence on 2026-03-25:
 **Execution note:** this phase is now decomposed in
 `VsmShadowRasterizerImplementationPlan.md`. Parent Phase F remains incomplete
 until that sub-plan's slices are validated. Current sub-plan status:
-`F0`, `F1`, and `F2` complete with validation evidence on `2026-03-25`; `F3`
-is the next active slice.
+`F0`, `F1`, `F2`, and `F3` complete with validation evidence through
+`2026-03-26`; `F4` is the next active slice.
 
 **Deliverables:**
 
-- [ ] Create `VsmShadowRasterizerPass` on top of the shared depth-only raster
+- [x] Create `VsmShadowRasterizerPass` on top of the shared depth-only raster
   path (`DepthPrePass`)
 - [ ] Shadow view creation: generate per-map shadow projection from `VsmProjectionData`
   - Directional clipmaps use per-level views
   - Point lights publish and schedule per-face views without widening the public remap-key API
-- [ ] Instance culling compute shader `VsmInstanceCulling.hlsl`:
+- [x] Instance culling compute shader `VsmInstanceCulling.hlsl`:
   - Test mesh instance bounds against each allocated page's virtual extent
   - Screen-space HZB occlusion culling using previous-frame camera depth pyramid (see architecture §3.10); absent on frame 0, available from frame 1 onward
   - Output: compact per-page draw command lists
-- [ ] Shadow depth rasterization shaders:
-  - Vertex shader: transform to shadow-page clip space
-  - Pixel shader: depth-only output to physical page in shadow texture array
-- [ ] Dirty flag update: mark rendered pages dirty in physical page metadata
-- [ ] Primitive reveal tracking: flag newly visible primitives for forced re-render
-- [ ] Static-slice recache path: render static-only content into slice 1 for pages selected by static invalidation without reversing the merge contract
-- [ ] Static invalidation feedback: record primitive-to-page overlap information needed to refine later scene invalidation
-- [ ] Render target setup: bind shadow depth texture array at correct physical page coordinates
+- [x] Shadow depth rasterization path:
+  - Reuse the shared depth-only raster shaders through `DepthPrePass`
+  - Write depth into the physical shadow texture array with per-page DSV,
+    viewport/scissor, and counted indirect replay
+- [x] Dirty flag update: publish rendered-page dirty results needed by later merge/HZB selection and fold them into physical page metadata at the downstream stage boundary
+- [x] Primitive reveal tracking: flag newly visible primitives for forced re-render
+- [x] Static-slice recache path: render static-only content into slice 1 for pages selected by static invalidation without reversing the merge contract
+- [x] Static invalidation feedback: record primitive-to-page overlap information needed to refine later scene invalidation
+- [x] Render target setup: bind shadow depth texture array at correct physical page coordinates
 
 **Dependencies:** Phase E (pages must be initialized before rasterization; screen-space HZB produced in Phase E must be available for instance culling)
 
 **Exit gate:** Shadow depth is correctly rasterized into physical pages for a test scene with known geometry, including point-light face selection and static-recache routing when enabled.
 
-Validation evidence through `F2` on `2026-03-25`:
+Validation evidence through `F3` on `2026-03-26`:
 
 - `VsmShadowRasterizerPass` now submits baseline depth draws into the physical
   VSM dynamic slice for prepared page jobs, with page-local viewport/scissor
@@ -301,38 +302,40 @@ Validation evidence through `F2` on `2026-03-25`:
 - `VsmShadowRasterizerPass` now dispatches GPU instance culling over active
   shadow-caster partitions, compacts per-page indirect draw commands, and
   consumes previous-frame screen HZB when available
+- `VsmShadowRasterizerPass` now routes static-only page jobs into the static
+  slice, publishes rendered-page dirty flags plus physical-page metadata
+  updates, forces rerender for newly visible primitives, and records
+  static primitive/page feedback for later invalidation refinement
+- `VsmCacheManager` now publishes and extracts visible shadow primitives plus
+  static primitive/page feedback into the retained frame snapshot
 - `VsmPhysicalPagePoolManager` now registers VSM pool resources on creation and
   unregisters them on recreate/reset/destruction so per-page DSV creation obeys
   the renderer resource-registry contract
-- built `Oxygen.Graphics.Common.Commander.Tests`,
-  `Oxygen.Renderer.GpuTimelineProfiler.Tests`,
-  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`, and
+- built `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` and
   `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` in
   `out/build-ninja` (`Debug`)
-- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Graphics\\.Common\\.Commander\\.Tests|Oxygen\\.Renderer\\.GpuTimelineProfiler\\.Tests|VsmShadowRaster|VsmPhysicalPagePoolGpuLifecycle"` with `100% tests passed, 0 tests failed out of 17`
-- ran
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Graphics.Common.Commander.Tests.exe -v 9`
-- ran
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GpuTimelineProfiler.Tests.exe -v 9`
-- ran
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPhysicalPagePoolGpuLifecycleTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
-- ran
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmShadowRasterJobsTest.* -v 9`
-- max-verbosity logs were sane for the integrated `F2` slice: pool resource
-  registration, prepare summary, `prepared instance culling`, counted-indirect
-  execute summary, previous-frame HZB availability, and resource unregister on
-  reset/destruction all appeared in the expected order
-- the compact-draw GPU test verified indirect count/command buffers before
-  confirming that only the expected physical pages received depth writes
-- the HZB GPU test verified the previous-frame screen-depth pyramid was visible
-  to the VSM compute path and culled the page to zero indirect draws
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests|Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.* -v 1`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 1`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 9`
+- low-verbosity logs were clean: no warnings, no failures, and no
+  `Reusing partition ... without observed retirement` staging warning
+- max-verbosity logs were sane for the integrated `F3` slice: the static
+  recache test logged `static_pages=1` during prepare and `static_feedback=1`
+  during culling/execute, the HZB path logged
+  `previous_hzb_available=true`, the reveal path logged
+  `reveal_candidates=1`, and the cache-manager path logged visible-primitive
+  plus static-feedback publication before extraction
+- the GPU tests verified indirect count/command buffers, dynamic dirty flag
+  publication, physical-page metadata updates, static-only depth writes into
+  slice `1`, and reveal-forced rerender behavior
 - extra probe note: standalone
   `ScreenHzbBuildGpuTest.PreviousFrameOutputTracksPriorPyramidAcrossFrames`
   still throws an SEH access violation during its own seed-depth setup when run
   directly at `-v 9`, so it is not being used as Phase F evidence
-- Phase F remains `in_progress` because GPU instance culling, static recache,
-  reveal tracking, invalidation feedback, and point-light face routing are
-  still pending in `F3` and `F4`
+- Phase F remains `in_progress` because point-light face routing is still
+  pending in `F4`
 
 ---
 

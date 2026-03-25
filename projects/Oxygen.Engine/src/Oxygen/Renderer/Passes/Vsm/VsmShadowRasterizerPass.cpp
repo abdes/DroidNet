@@ -10,6 +10,7 @@
 #include <cstring>
 #include <optional>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 #include <glm/mat4x4.hpp>
@@ -80,15 +81,67 @@ struct alignas(oxygen::packing::kShaderDataFieldAlignment)
   std::uint32_t previous_frame_hzb_height { 0U };
   std::uint32_t previous_frame_hzb_mip_count { 0U };
   std::uint32_t previous_frame_hzb_available { 0U };
-  std::uint32_t _pad0 { 0U };
+  oxygen::ShaderVisibleIndex reveal_flags_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
 };
 static_assert(sizeof(InstanceCullingPassConstants) == 64U);
+
+struct alignas(oxygen::packing::kShaderDataFieldAlignment)
+  RasterResultPublishPassConstants {
+  oxygen::ShaderVisibleIndex page_job_buffer_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex indirect_commands_srv_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex command_counts_srv_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex reveal_flags_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex dirty_flags_uav_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex physical_meta_uav_index {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  std::uint32_t prepared_page_count { 0U };
+  std::uint32_t max_commands_per_page { 0U };
+  std::uint32_t current_frame_generation_low { 0U };
+  std::uint32_t current_frame_generation_high { 0U };
+  std::uint32_t _pad0 { 0U };
+  std::uint32_t _pad1 { 0U };
+};
+static_assert(sizeof(RasterResultPublishPassConstants) == 48U);
 
 struct ActivePartitionRange {
   oxygen::engine::PassMask pass_mask {};
   std::uint32_t begin { 0U };
   std::uint32_t count { 0U };
 };
+
+struct ActiveRasterPageJob {
+  std::uint32_t prepared_job_index { 0U };
+  std::uint32_t target_slice { 0U };
+  std::uint32_t dirty_bits { 0U };
+  std::uint32_t shader_job_flags { 0U };
+};
+
+struct ClipSphere {
+  glm::vec4 center { 0.0F };
+  glm::vec4 extent { 0.0F };
+};
+
+constexpr auto kStaticOnlyRasterPageJobBit = static_cast<std::uint32_t>(
+  oxygen::renderer::vsm::VsmShaderRasterPageJobFlagBits::kStaticOnly);
+constexpr auto kDynamicRasterizedDirtyBit = static_cast<std::uint32_t>(
+  oxygen::renderer::vsm::VsmRenderedPageDirtyFlagBits::kDynamicRasterized);
+constexpr auto kStaticRasterizedDirtyBit = static_cast<std::uint32_t>(
+  oxygen::renderer::vsm::VsmRenderedPageDirtyFlagBits::kStaticRasterized);
+constexpr auto kRevealForcedDirtyBit = static_cast<std::uint32_t>(
+  oxygen::renderer::vsm::VsmRenderedPageDirtyFlagBits::kRevealForced);
 
 auto FindSliceIndex(const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
   const VsmPhysicalPoolSliceRole role) noexcept -> std::optional<std::uint32_t>
@@ -106,6 +159,49 @@ auto HasRasterDrawMetadata(const PreparedSceneFrame& prepared_frame) noexcept
 {
   return !prepared_frame.draw_metadata_bytes.empty()
     && !prepared_frame.partitions.empty();
+}
+
+auto GetDrawMetadataSpan(const PreparedSceneFrame& prepared_frame)
+  -> std::span<const oxygen::engine::DrawMetadata>
+{
+  CHECK_F(prepared_frame.draw_metadata_bytes.size()
+        % sizeof(oxygen::engine::DrawMetadata)
+      == 0U,
+    "VsmShadowRasterizerPass: draw-metadata byte span must be a multiple of "
+    "DrawMetadata");
+  return {
+    reinterpret_cast<const oxygen::engine::DrawMetadata*>(
+      prepared_frame.draw_metadata_bytes.data()),
+    prepared_frame.draw_metadata_bytes.size()
+      / sizeof(oxygen::engine::DrawMetadata),
+  };
+}
+
+auto MakePrimitiveIdentity(const oxygen::engine::DrawMetadata& metadata)
+  -> oxygen::renderer::vsm::VsmPrimitiveIdentity
+{
+  return {
+    .transform_index = metadata.transform_index,
+    .transform_generation = metadata.transform_generation,
+    .submesh_index = metadata.submesh_index,
+    .primitive_flags = metadata.primitive_flags,
+  };
+}
+
+auto IsMainViewVisibleShadowCaster(
+  const oxygen::engine::DrawMetadata& metadata) noexcept -> bool
+{
+  return metadata.flags.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)
+    && oxygen::engine::HasAnyDrawPrimitiveFlag(metadata.primitive_flags,
+      oxygen::engine::DrawPrimitiveFlagBits::kMainViewVisible);
+}
+
+auto IsStaticShadowCaster(const oxygen::engine::DrawMetadata& metadata) noexcept
+  -> bool
+{
+  return metadata.flags.IsSet(oxygen::engine::PassMaskBit::kShadowCaster)
+    && oxygen::engine::HasAnyDrawPrimitiveFlag(metadata.primitive_flags,
+      oxygen::engine::DrawPrimitiveFlagBits::kStaticShadowCaster);
 }
 
 auto IsShadowRasterPartition(
@@ -150,7 +246,8 @@ auto BuildPageViewProjectionMatrix(
 }
 
 auto MakeShaderRasterJob(
-  const oxygen::renderer::vsm::VsmShadowRasterPageJob& job)
+  const oxygen::renderer::vsm::VsmShadowRasterPageJob& job,
+  const ActiveRasterPageJob& active_job)
   -> oxygen::renderer::vsm::VsmShaderRasterPageJob
 {
   return oxygen::renderer::vsm::VsmShaderRasterPageJob {
@@ -160,6 +257,8 @@ auto MakeShaderRasterJob(
     .virtual_page_x = job.virtual_page.page_x,
     .virtual_page_y = job.virtual_page.page_y,
     .virtual_page_level = job.virtual_page.level,
+    .physical_page_index = job.physical_page.value,
+    .job_flags = active_job.shader_job_flags,
   };
 }
 
@@ -169,6 +268,47 @@ auto MakePartitionCommandOffset(const std::uint32_t page_index,
   return static_cast<std::uint64_t>(page_index)
     * static_cast<std::uint64_t>(max_commands_per_page)
     * sizeof(oxygen::renderer::vsm::VsmShaderIndirectDrawCommand);
+}
+
+auto BuildClipSphere(const glm::mat4& view_projection_matrix,
+  const glm::vec4& sphere_ws) -> ClipSphere
+{
+  const auto center_ws = glm::vec4(sphere_ws.x, sphere_ws.y, sphere_ws.z, 1.0F);
+  const auto radius = std::max(sphere_ws.w, 0.0F);
+
+  const auto center_clip = view_projection_matrix * center_ws;
+  const auto x_clip = view_projection_matrix
+    * glm::vec4(sphere_ws.x + radius, sphere_ws.y, sphere_ws.z, 1.0F);
+  const auto y_clip = view_projection_matrix
+    * glm::vec4(sphere_ws.x, sphere_ws.y + radius, sphere_ws.z, 1.0F);
+  const auto z_clip = view_projection_matrix
+    * glm::vec4(sphere_ws.x, sphere_ws.y, sphere_ws.z + radius, 1.0F);
+
+  auto extent = glm::abs(x_clip - center_clip);
+  extent = glm::max(extent, glm::abs(y_clip - center_clip));
+  extent = glm::max(extent, glm::abs(z_clip - center_clip));
+  return { .center = center_clip, .extent = extent };
+}
+
+auto IntersectsD3DClip(const ClipSphere& clip_sphere) noexcept -> bool
+{
+  const auto max_w = clip_sphere.center.w + clip_sphere.extent.w;
+  if (max_w <= 1.0e-5F) {
+    return false;
+  }
+  if (clip_sphere.center.x + clip_sphere.extent.x < -max_w
+    || clip_sphere.center.x - clip_sphere.extent.x > max_w) {
+    return false;
+  }
+  if (clip_sphere.center.y + clip_sphere.extent.y < -max_w
+    || clip_sphere.center.y - clip_sphere.extent.y > max_w) {
+    return false;
+  }
+  if (clip_sphere.center.z + clip_sphere.extent.z < 0.0F
+    || clip_sphere.center.z - clip_sphere.extent.z > max_w) {
+    return false;
+  }
+  return true;
 }
 
 } // namespace
@@ -190,6 +330,10 @@ struct VsmShadowRasterizerPass::Impl {
       oxygen::kInvalidShaderVisibleIndex
     };
     oxygen::ShaderVisibleIndex count_uav { oxygen::kInvalidShaderVisibleIndex };
+    oxygen::ShaderVisibleIndex command_srv {
+      oxygen::kInvalidShaderVisibleIndex
+    };
+    oxygen::ShaderVisibleIndex count_srv { oxygen::kInvalidShaderVisibleIndex };
   };
 
   observer_ptr<Graphics> gfx;
@@ -197,19 +341,24 @@ struct VsmShadowRasterizerPass::Impl {
   std::optional<VsmShadowRasterizerPassInput> input {};
 
   std::vector<renderer::vsm::VsmShadowRasterPageJob> prepared_pages {};
-  std::vector<std::uint32_t> eligible_page_job_indices {};
+  std::vector<ActiveRasterPageJob> active_page_jobs {};
   std::vector<renderer::vsm::VsmShaderRasterPageJob> page_job_upload_ {};
   std::vector<ViewConstants::GpuData> job_view_constants_upload_ {};
   std::vector<ActivePartitionRange> active_partitions {};
   std::vector<PartitionState> partition_states {};
   std::vector<IndirectPartitionInspection> inspection_partitions {};
+  std::vector<renderer::vsm::VsmPrimitiveIdentity>
+    current_visible_shadow_primitives {};
+  std::vector<renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>
+    static_page_feedback {};
+  std::vector<std::uint32_t> reveal_flags_upload_ {};
 
   bool resources_ready { false };
   bool job_view_constants_uploaded { false };
   bool instance_culling_ready { false };
   std::optional<std::uint32_t> dynamic_slice_index {};
+  std::optional<std::uint32_t> static_slice_index {};
   ScreenHzbBuildPass::ViewOutput previous_frame_hzb {};
-  std::uint32_t deferred_static_pages { 0U };
   std::uint32_t deferred_non_dynamic_pages { 0U };
 
   std::shared_ptr<Buffer> shadow_view_constants_buffer_ {};
@@ -230,7 +379,22 @@ struct VsmShadowRasterizerPass::Impl {
     instance_culling_constants_indices_ {};
   std::uint32_t instance_culling_constants_capacity_ { 0U };
 
+  std::shared_ptr<Buffer> raster_result_publish_constants_buffer_ {};
+  void* raster_result_publish_constants_mapped_ptr_ { nullptr };
+  std::vector<oxygen::ShaderVisibleIndex>
+    raster_result_publish_constants_indices_ {};
+  std::uint32_t raster_result_publish_constants_capacity_ { 0U };
+
+  std::shared_ptr<Buffer> reveal_flags_buffer_ {};
+  std::shared_ptr<Buffer> reveal_flags_upload_buffer_ {};
+  void* reveal_flags_upload_ptr_ { nullptr };
+  std::uint32_t reveal_flags_capacity_ { 0U };
+  oxygen::ShaderVisibleIndex reveal_flags_srv_ {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+
   std::optional<ComputePipelineDesc> instance_culling_pso_ {};
+  std::optional<ComputePipelineDesc> raster_result_publish_pso_ {};
 
   Impl(observer_ptr<Graphics> gfx_, std::shared_ptr<Config> config_)
     : gfx(gfx_)
@@ -243,21 +407,31 @@ struct VsmShadowRasterizerPass::Impl {
   [[nodiscard]] auto HasUsableShadowTexture() const noexcept -> bool;
   auto ResetExecutionState() -> void;
   auto EnsureInstanceCullingPipelineState() -> void;
+  auto EnsureRasterResultPublishPipelineState() -> void;
   auto EnsureShadowViewConstantsCapacity(
     const RenderContext& context, std::uint32_t required_jobs) -> void;
   auto UploadPreparedJobViewConstants(const RenderContext& context) -> void;
   auto BindJobViewConstants(CommandRecorder& recorder,
     const RenderContext& context, std::uint32_t local_job_index) const -> void;
   auto PrepareJobDepthStencilView(const RenderContext& context,
-    graphics::Texture& depth_texture,
-    const renderer::vsm::VsmShadowRasterPageJob& job) const -> NativeView;
+    graphics::Texture& depth_texture, std::uint32_t target_slice) const
+    -> NativeView;
   auto EnsureShaderVisibleIndex(Buffer& buffer,
     const graphics::BufferViewDescription& view_desc,
     const char* debug_label) const -> oxygen::ShaderVisibleIndex;
   auto EnsurePageJobBuffer(std::uint32_t required_jobs) -> void;
+  auto EnsureRevealFlagsBuffer(std::uint32_t required_flags) -> void;
+  auto BuildVisiblePrimitiveState(const PreparedSceneFrame& prepared_frame)
+    -> void;
+  auto BuildStaticPageFeedback(const PreparedSceneFrame& prepared_frame)
+    -> void;
   auto EnsureInstanceCullingConstantsBuffer(std::uint32_t slot_count) -> void;
+  auto EnsureRasterResultPublishConstantsBuffer(std::uint32_t slot_count)
+    -> void;
   auto WriteInstanceCullingConstants(std::uint32_t slot,
     const InstanceCullingPassConstants& constants) const -> void;
+  auto WriteRasterResultPublishConstants(std::uint32_t slot,
+    const RasterResultPublishPassConstants& constants) const -> void;
   auto EnsurePartitionStateCount(std::size_t required_count) -> void;
   auto EnsurePartitionResources(PartitionState& partition,
     std::uint32_t required_pages, std::uint32_t partition_count,
@@ -268,6 +442,8 @@ struct VsmShadowRasterizerPass::Impl {
   auto PrepareInstanceCulling(CommandRecorder& recorder,
     const RenderContext& context, const PreparedSceneFrame& prepared_frame)
     -> void;
+  auto PublishRasterResults(
+    CommandRecorder& recorder, const RenderContext& context) -> void;
   auto ReleasePartitionResources(PartitionState& partition) const -> void;
   static auto ReleaseUploadBuffer(
     std::shared_ptr<Buffer>& buffer, void*& mapped_ptr) -> void;
@@ -280,6 +456,9 @@ VsmShadowRasterizerPass::Impl::~Impl()
   ReleaseUploadBuffer(page_job_upload_buffer_, page_job_upload_ptr_);
   ReleaseUploadBuffer(
     instance_culling_constants_buffer_, instance_culling_constants_mapped_ptr_);
+  ReleaseUploadBuffer(raster_result_publish_constants_buffer_,
+    raster_result_publish_constants_mapped_ptr_);
+  ReleaseUploadBuffer(reveal_flags_upload_buffer_, reveal_flags_upload_ptr_);
 
   if (gfx == nullptr) {
     return;
@@ -295,6 +474,17 @@ VsmShadowRasterizerPass::Impl::~Impl()
   if (instance_culling_constants_buffer_
     && registry.Contains(*instance_culling_constants_buffer_)) {
     registry.UnRegisterResource(*instance_culling_constants_buffer_);
+  }
+  if (raster_result_publish_constants_buffer_
+    && registry.Contains(*raster_result_publish_constants_buffer_)) {
+    registry.UnRegisterResource(*raster_result_publish_constants_buffer_);
+  }
+  if (reveal_flags_buffer_ && registry.Contains(*reveal_flags_buffer_)) {
+    registry.UnRegisterResource(*reveal_flags_buffer_);
+  }
+  if (reveal_flags_upload_buffer_
+    && registry.Contains(*reveal_flags_upload_buffer_)) {
+    registry.UnRegisterResource(*reveal_flags_upload_buffer_);
   }
 
   for (auto& partition : partition_states) {
@@ -340,6 +530,8 @@ auto VsmShadowRasterizerPass::Impl::ReleasePartitionResources(
   partition.count_clear_buffer.reset();
   partition.command_uav = oxygen::kInvalidShaderVisibleIndex;
   partition.count_uav = oxygen::kInvalidShaderVisibleIndex;
+  partition.command_srv = oxygen::kInvalidShaderVisibleIndex;
+  partition.count_srv = oxygen::kInvalidShaderVisibleIndex;
   partition.page_count = 0U;
   partition.max_commands_per_page = 0U;
 }
@@ -353,12 +545,14 @@ auto VsmShadowRasterizerPass::Impl::HasUsableShadowTexture() const noexcept
 
 auto VsmShadowRasterizerPass::Impl::ResetExecutionState() -> void
 {
-  eligible_page_job_indices.clear();
+  active_page_jobs.clear();
   page_job_upload_.clear();
+  reveal_flags_upload_.clear();
   active_partitions.clear();
   inspection_partitions.clear();
-  deferred_static_pages = 0U;
   deferred_non_dynamic_pages = 0U;
+  current_visible_shadow_primitives.clear();
+  static_page_feedback.clear();
   previous_frame_hzb = {};
   instance_culling_ready = false;
 }
@@ -380,6 +574,27 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingPipelineState() -> void
         .SetRootBindings(std::span<const graphics::RootBindingItem>(
           root_bindings.data(), root_bindings.size()))
         .SetDebugName("VsmInstanceCulling_PSO")
+        .Build();
+}
+
+auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishPipelineState()
+  -> void
+{
+  if (raster_result_publish_pso_.has_value()) {
+    return;
+  }
+
+  auto root_bindings = RenderPass::BuildRootBindings();
+  raster_result_publish_pso_
+    = ComputePipelineDesc::Builder()
+        .SetComputeShader(graphics::ShaderRequest {
+          .stage = oxygen::ShaderType::kCompute,
+          .source_path = "Renderer/Vsm/VsmPublishRasterResults.hlsl",
+          .entry_point = "CS",
+        })
+        .SetRootBindings(std::span<const graphics::RootBindingItem>(
+          root_bindings.data(), root_bindings.size()))
+        .SetDebugName("VsmPublishRasterResults_PSO")
         .Build();
 }
 
@@ -430,15 +645,15 @@ auto VsmShadowRasterizerPass::Impl::UploadPreparedJobViewConstants(
     "upload");
   CHECK_F(context.frame_slot != frame::kInvalidSlot,
     "VsmShadowRasterizerPass: invalid frame slot during view constants upload");
-  CHECK_F(eligible_page_job_indices.size() <= shadow_view_constants_capacity_,
+  CHECK_F(active_page_jobs.size() <= shadow_view_constants_capacity_,
     "VsmShadowRasterizerPass: uploaded job count exceeds constants capacity");
   CHECK_NOTNULL_F(shadow_view_constants_mapped_ptr_,
     "VsmShadowRasterizerPass: mapped view constants buffer is required");
 
-  job_view_constants_upload_.resize(eligible_page_job_indices.size());
+  job_view_constants_upload_.resize(active_page_jobs.size());
   const auto base_snapshot = *input->base_view_constants;
-  for (std::size_t i = 0; i < eligible_page_job_indices.size(); ++i) {
-    const auto& job = prepared_pages[eligible_page_job_indices[i]];
+  for (std::size_t i = 0; i < active_page_jobs.size(); ++i) {
+    const auto& job = prepared_pages[active_page_jobs[i].prepared_job_index];
     auto snapshot = base_snapshot;
     snapshot.view_matrix = job.projection.projection.view_matrix;
     snapshot.projection_matrix = BuildPageProjectionMatrix(job);
@@ -482,7 +697,7 @@ auto VsmShadowRasterizerPass::Impl::BindJobViewConstants(
 
 auto VsmShadowRasterizerPass::Impl::PrepareJobDepthStencilView(
   const RenderContext& context, graphics::Texture& depth_texture,
-  const renderer::vsm::VsmShadowRasterPageJob& job) const -> NativeView
+  const std::uint32_t target_slice) const -> NativeView
 {
   auto& graphics = context.GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
@@ -499,7 +714,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareJobDepthStencilView(
     .sub_resources = {
       .base_mip_level = 0U,
       .num_mip_levels = 1U,
-      .base_array_slice = job.physical_coord.slice,
+      .base_array_slice = target_slice,
       .num_array_slices = 1U,
     },
     .is_read_only_dsv = false,
@@ -624,6 +839,232 @@ auto VsmShadowRasterizerPass::Impl::EnsurePageJobBuffer(
     "VsmShadowRasterizerPass: page-job SRV must be valid");
 }
 
+auto VsmShadowRasterizerPass::Impl::EnsureRevealFlagsBuffer(
+  const std::uint32_t required_flags) -> void
+{
+  if (required_flags == 0U) {
+    return;
+  }
+  if (reveal_flags_buffer_ && reveal_flags_upload_buffer_
+    && reveal_flags_upload_ptr_ != nullptr
+    && reveal_flags_capacity_ == required_flags) {
+    return;
+  }
+
+  if (gfx != nullptr) {
+    auto& registry = gfx->GetResourceRegistry();
+    if (reveal_flags_buffer_ && registry.Contains(*reveal_flags_buffer_)) {
+      registry.UnRegisterResource(*reveal_flags_buffer_);
+    }
+    if (reveal_flags_upload_buffer_
+      && registry.Contains(*reveal_flags_upload_buffer_)) {
+      registry.UnRegisterResource(*reveal_flags_upload_buffer_);
+    }
+  }
+  ReleaseUploadBuffer(reveal_flags_upload_buffer_, reveal_flags_upload_ptr_);
+  reveal_flags_buffer_.reset();
+  reveal_flags_capacity_ = required_flags;
+  reveal_flags_srv_ = oxygen::kInvalidShaderVisibleIndex;
+
+  const auto size_bytes
+    = static_cast<std::uint64_t>(required_flags) * sizeof(std::uint32_t);
+  const auto debug_base = config != nullptr && !config->debug_name.empty()
+    ? config->debug_name
+    : "VsmShadowRasterizerPass";
+
+  const graphics::BufferDesc reveal_desc {
+    .size_bytes = size_bytes,
+    .usage = graphics::BufferUsage::kStorage,
+    .memory = graphics::BufferMemory::kDeviceLocal,
+    .debug_name = debug_base + ".RevealFlags",
+  };
+  reveal_flags_buffer_ = gfx->CreateBuffer(reveal_desc);
+  CHECK_NOTNULL_F(reveal_flags_buffer_.get(),
+    "VsmShadowRasterizerPass: failed to create reveal-flags buffer");
+  reveal_flags_buffer_->SetName(reveal_desc.debug_name);
+  gfx->GetResourceRegistry().Register(reveal_flags_buffer_);
+
+  const graphics::BufferDesc upload_desc {
+    .size_bytes = size_bytes,
+    .usage = graphics::BufferUsage::kNone,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = debug_base + ".RevealFlags.Upload",
+  };
+  reveal_flags_upload_buffer_ = gfx->CreateBuffer(upload_desc);
+  CHECK_NOTNULL_F(reveal_flags_upload_buffer_.get(),
+    "VsmShadowRasterizerPass: failed to create reveal-flags upload buffer");
+  reveal_flags_upload_buffer_->SetName(upload_desc.debug_name);
+  gfx->GetResourceRegistry().Register(reveal_flags_upload_buffer_);
+  reveal_flags_upload_ptr_
+    = reveal_flags_upload_buffer_->Map(0U, upload_desc.size_bytes);
+  CHECK_NOTNULL_F(reveal_flags_upload_ptr_,
+    "VsmShadowRasterizerPass: failed to map reveal-flags upload buffer");
+
+  const graphics::BufferViewDescription view_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .range = { 0U, size_bytes },
+    .stride = sizeof(std::uint32_t),
+  };
+  reveal_flags_srv_ = EnsureShaderVisibleIndex(
+    *reveal_flags_buffer_, view_desc, "reveal-flags SRV");
+  CHECK_F(reveal_flags_srv_.IsValid(),
+    "VsmShadowRasterizerPass: reveal-flags SRV must be valid");
+}
+
+auto VsmShadowRasterizerPass::Impl::BuildVisiblePrimitiveState(
+  const PreparedSceneFrame& prepared_frame) -> void
+{
+  current_visible_shadow_primitives.clear();
+  reveal_flags_upload_.clear();
+
+  if (prepared_frame.draw_metadata_bytes.empty()) {
+    return;
+  }
+
+  const auto draw_metadata = GetDrawMetadataSpan(prepared_frame);
+  for (const auto& partition : active_partitions) {
+    CHECK_F(partition.begin + partition.count <= draw_metadata.size(),
+      "VsmShadowRasterizerPass: shadow partition range exceeds draw metadata "
+      "count");
+  }
+
+  auto previous_visible = input.has_value()
+    ? input->previous_visible_shadow_primitives
+    : std::vector<renderer::vsm::VsmPrimitiveIdentity> {};
+  std::sort(previous_visible.begin(), previous_visible.end(),
+    [](const auto& lhs, const auto& rhs) {
+      return std::tie(lhs.transform_index, lhs.transform_generation,
+               lhs.submesh_index, lhs.primitive_flags)
+        < std::tie(rhs.transform_index, rhs.transform_generation,
+          rhs.submesh_index, rhs.primitive_flags);
+    });
+  previous_visible.erase(
+    std::unique(previous_visible.begin(), previous_visible.end()),
+    previous_visible.end());
+
+  reveal_flags_upload_.assign(draw_metadata.size(), 0U);
+  for (const auto& partition : active_partitions) {
+    for (std::uint32_t offset = 0U; offset < partition.count; ++offset) {
+      const auto draw_index = partition.begin + offset;
+      const auto& metadata = draw_metadata[draw_index];
+      if (!IsMainViewVisibleShadowCaster(metadata)) {
+        continue;
+      }
+
+      const auto identity = MakePrimitiveIdentity(metadata);
+      current_visible_shadow_primitives.push_back(identity);
+      if (!std::binary_search(previous_visible.begin(), previous_visible.end(),
+            identity, [](const auto& lhs, const auto& rhs) {
+              return std::tie(lhs.transform_index, lhs.transform_generation,
+                       lhs.submesh_index, lhs.primitive_flags)
+                < std::tie(rhs.transform_index, rhs.transform_generation,
+                  rhs.submesh_index, rhs.primitive_flags);
+            })) {
+        reveal_flags_upload_[draw_index] = 1U;
+      }
+    }
+  }
+
+  std::sort(current_visible_shadow_primitives.begin(),
+    current_visible_shadow_primitives.end(),
+    [](const auto& lhs, const auto& rhs) {
+      return std::tie(lhs.transform_index, lhs.transform_generation,
+               lhs.submesh_index, lhs.primitive_flags)
+        < std::tie(rhs.transform_index, rhs.transform_generation,
+          rhs.submesh_index, rhs.primitive_flags);
+    });
+  current_visible_shadow_primitives.erase(
+    std::unique(current_visible_shadow_primitives.begin(),
+      current_visible_shadow_primitives.end()),
+    current_visible_shadow_primitives.end());
+
+  const auto reveal_candidate_count = static_cast<std::size_t>(
+    std::count(reveal_flags_upload_.begin(), reveal_flags_upload_.end(), 1U));
+  DLOG_F(3,
+    "VsmShadowRasterizerPass: visible primitive state previous={} current={} "
+    "reveal_candidates={} partitions={}",
+    previous_visible.size(), current_visible_shadow_primitives.size(),
+    reveal_candidate_count, active_partitions.size());
+}
+
+auto VsmShadowRasterizerPass::Impl::BuildStaticPageFeedback(
+  const PreparedSceneFrame& prepared_frame) -> void
+{
+  static_page_feedback.clear();
+
+  if (prepared_frame.draw_metadata_bytes.empty()
+    || prepared_frame.draw_bounding_spheres.empty() || active_page_jobs.empty()
+    || active_partitions.empty()) {
+    return;
+  }
+
+  const auto draw_metadata = GetDrawMetadataSpan(prepared_frame);
+  CHECK_F(draw_metadata.size() == prepared_frame.draw_bounding_spheres.size(),
+    "VsmShadowRasterizerPass: draw metadata and draw bounds must have matching "
+    "counts for static feedback");
+  for (const auto& partition : active_partitions) {
+    CHECK_F(partition.begin + partition.count <= draw_metadata.size(),
+      "VsmShadowRasterizerPass: shadow partition range exceeds draw metadata "
+      "count during static feedback build");
+  }
+
+  for (const auto& active_job : active_page_jobs) {
+    const auto& job = prepared_pages[active_job.prepared_job_index];
+    const auto view_projection_matrix = BuildPageViewProjectionMatrix(job);
+    for (const auto& partition : active_partitions) {
+      for (std::uint32_t offset = 0U; offset < partition.count; ++offset) {
+        const auto draw_index = partition.begin + offset;
+        const auto& metadata = draw_metadata[draw_index];
+        if (!IsStaticShadowCaster(metadata)) {
+          continue;
+        }
+
+        const auto& sphere = prepared_frame.draw_bounding_spheres[draw_index];
+        if (sphere.w <= 0.0F) {
+          continue;
+        }
+        if (!IntersectsD3DClip(
+              BuildClipSphere(view_projection_matrix, sphere))) {
+          continue;
+        }
+
+        static_page_feedback.push_back(
+          renderer::vsm::VsmStaticPrimitivePageFeedbackRecord {
+            .primitive = MakePrimitiveIdentity(metadata),
+            .page_table_index = job.page_table_index,
+            .physical_page = job.physical_page,
+            .map_id = job.map_id,
+            .virtual_page = job.virtual_page,
+            .valid = 1U,
+          });
+      }
+    }
+  }
+
+  std::sort(static_page_feedback.begin(), static_page_feedback.end(),
+    [](const auto& lhs, const auto& rhs) {
+      return std::tie(lhs.page_table_index, lhs.primitive.transform_index,
+               lhs.primitive.transform_generation, lhs.primitive.submesh_index,
+               lhs.primitive.primitive_flags)
+        < std::tie(rhs.page_table_index, rhs.primitive.transform_index,
+          rhs.primitive.transform_generation, rhs.primitive.submesh_index,
+          rhs.primitive.primitive_flags);
+    });
+  static_page_feedback.erase(
+    std::unique(static_page_feedback.begin(), static_page_feedback.end()),
+    static_page_feedback.end());
+
+  const auto static_page_count = static_cast<std::size_t>(std::count_if(
+    active_page_jobs.begin(), active_page_jobs.end(), [](const auto& job) {
+      return (job.shader_job_flags & kStaticOnlyRasterPageJobBit) != 0U;
+    }));
+  DLOG_F(3,
+    "VsmShadowRasterizerPass: static feedback entries={} static_pages={} "
+    "partitions={}",
+    static_page_feedback.size(), static_page_count, active_partitions.size());
+}
+
 auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
   const std::uint32_t slot_count) -> void
 {
@@ -691,6 +1132,75 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
   }
 }
 
+auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishConstantsBuffer(
+  const std::uint32_t slot_count) -> void
+{
+  if (slot_count == 0U) {
+    return;
+  }
+  if (raster_result_publish_constants_buffer_
+    && raster_result_publish_constants_capacity_ == slot_count) {
+    return;
+  }
+
+  if (gfx != nullptr) {
+    auto& registry = gfx->GetResourceRegistry();
+    if (raster_result_publish_constants_buffer_
+      && registry.Contains(*raster_result_publish_constants_buffer_)) {
+      registry.UnRegisterResource(*raster_result_publish_constants_buffer_);
+    }
+  }
+  ReleaseUploadBuffer(raster_result_publish_constants_buffer_,
+    raster_result_publish_constants_mapped_ptr_);
+
+  raster_result_publish_constants_capacity_ = slot_count;
+  raster_result_publish_constants_indices_.clear();
+
+  const auto debug_base = config != nullptr && !config->debug_name.empty()
+    ? config->debug_name
+    : "VsmShadowRasterizerPass";
+  const auto total_bytes
+    = static_cast<std::uint64_t>(slot_count) * kInstanceCullingConstantsStride;
+  const graphics::BufferDesc desc {
+    .size_bytes = total_bytes,
+    .usage = graphics::BufferUsage::kConstant,
+    .memory = graphics::BufferMemory::kUpload,
+    .debug_name = debug_base + ".RasterResultPublishConstants",
+  };
+  raster_result_publish_constants_buffer_ = gfx->CreateBuffer(desc);
+  CHECK_NOTNULL_F(raster_result_publish_constants_buffer_.get(),
+    "VsmShadowRasterizerPass: failed to create raster-result publish "
+    "constants");
+  raster_result_publish_constants_buffer_->SetName(desc.debug_name);
+  gfx->GetResourceRegistry().Register(raster_result_publish_constants_buffer_);
+  raster_result_publish_constants_mapped_ptr_
+    = raster_result_publish_constants_buffer_->Map(0U, desc.size_bytes);
+  CHECK_NOTNULL_F(raster_result_publish_constants_mapped_ptr_,
+    "VsmShadowRasterizerPass: failed to map raster-result publish constants");
+
+  raster_result_publish_constants_indices_.reserve(slot_count);
+  for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
+    auto handle = gfx->GetDescriptorAllocator().Allocate(
+      graphics::ResourceViewType::kConstantBuffer,
+      graphics::DescriptorVisibility::kShaderVisible);
+    CHECK_F(handle.IsValid(),
+      "VsmShadowRasterizerPass: failed to allocate raster-result publish "
+      "CBV");
+
+    const graphics::BufferViewDescription view_desc {
+      .view_type = graphics::ResourceViewType::kConstantBuffer,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .range
+      = { static_cast<std::uint64_t>(slot) * kInstanceCullingConstantsStride,
+        kInstanceCullingConstantsStride },
+    };
+    raster_result_publish_constants_indices_.push_back(
+      gfx->GetDescriptorAllocator().GetShaderVisibleIndex(handle));
+    gfx->GetResourceRegistry().RegisterView(
+      *raster_result_publish_constants_buffer_, std::move(handle), view_desc);
+  }
+}
+
 auto VsmShadowRasterizerPass::Impl::WriteInstanceCullingConstants(
   const std::uint32_t slot, const InstanceCullingPassConstants& constants) const
   -> void
@@ -704,6 +1214,23 @@ auto VsmShadowRasterizerPass::Impl::WriteInstanceCullingConstants(
 
   auto* destination
     = static_cast<std::byte*>(instance_culling_constants_mapped_ptr_)
+    + static_cast<std::size_t>(slot) * kInstanceCullingConstantsStride;
+  std::memcpy(destination, &constants, sizeof(constants));
+}
+
+auto VsmShadowRasterizerPass::Impl::WriteRasterResultPublishConstants(
+  const std::uint32_t slot,
+  const RasterResultPublishPassConstants& constants) const -> void
+{
+  CHECK_NOTNULL_F(raster_result_publish_constants_mapped_ptr_,
+    "VsmShadowRasterizerPass: compute constants are not mapped");
+  CHECK_F(slot < raster_result_publish_constants_indices_.size(),
+    "VsmShadowRasterizerPass: raster-result constants slot {} exceeds capacity "
+    "{}",
+    slot, raster_result_publish_constants_indices_.size());
+
+  auto* destination
+    = static_cast<std::byte*>(raster_result_publish_constants_mapped_ptr_)
     + static_cast<std::size_t>(slot) * kInstanceCullingConstantsStride;
   std::memcpy(destination, &constants, sizeof(constants));
 }
@@ -814,6 +1341,28 @@ auto VsmShadowRasterizerPass::Impl::EnsurePartitionResources(
     *partition.count_buffer, count_uav_desc, "command-count UAV");
   CHECK_F(partition.count_uav.IsValid(),
     "VsmShadowRasterizerPass: command-count UAV must be valid");
+
+  const graphics::BufferViewDescription command_srv_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .range = { 0U, command_bytes },
+    .stride = sizeof(renderer::vsm::VsmShaderIndirectDrawCommand),
+  };
+  partition.command_srv = EnsureShaderVisibleIndex(
+    *partition.command_buffer, command_srv_desc, "indirect-command SRV");
+  CHECK_F(partition.command_srv.IsValid(),
+    "VsmShadowRasterizerPass: indirect-command SRV must be valid");
+
+  const graphics::BufferViewDescription count_srv_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .range = { 0U, count_bytes },
+    .stride = sizeof(std::uint32_t),
+  };
+  partition.count_srv = EnsureShaderVisibleIndex(
+    *partition.count_buffer, count_srv_desc, "command-count SRV");
+  CHECK_F(partition.count_srv.IsValid(),
+    "VsmShadowRasterizerPass: command-count SRV must be valid");
 }
 
 auto VsmShadowRasterizerPass::Impl::CollectActiveShadowPartitions(
@@ -834,8 +1383,7 @@ auto VsmShadowRasterizerPass::Impl::CollectActiveShadowPartitions(
 
 auto VsmShadowRasterizerPass::Impl::BuildEligiblePageIndices() -> void
 {
-  eligible_page_job_indices.clear();
-  deferred_static_pages = 0U;
+  active_page_jobs.clear();
   deferred_non_dynamic_pages = 0U;
 
   CHECK_F(dynamic_slice_index.has_value(),
@@ -844,14 +1392,26 @@ auto VsmShadowRasterizerPass::Impl::BuildEligiblePageIndices() -> void
   for (std::uint32_t i = 0U; i < prepared_pages.size(); ++i) {
     const auto& job = prepared_pages[i];
     if (job.static_only) {
-      ++deferred_static_pages;
+      CHECK_F(static_slice_index.has_value(),
+        "VsmShadowRasterizerPass: static-only raster jobs require a static "
+        "depth slice");
+      active_page_jobs.push_back(ActiveRasterPageJob {
+        .prepared_job_index = i,
+        .target_slice = *static_slice_index,
+        .dirty_bits = kStaticRasterizedDirtyBit,
+        .shader_job_flags = kStaticOnlyRasterPageJobBit,
+      });
       continue;
     }
     if (job.physical_coord.slice != *dynamic_slice_index) {
       ++deferred_non_dynamic_pages;
-      continue;
     }
-    eligible_page_job_indices.push_back(i);
+    active_page_jobs.push_back(ActiveRasterPageJob {
+      .prepared_job_index = i,
+      .target_slice = *dynamic_slice_index,
+      .dirty_bits = kDynamicRasterizedDirtyBit,
+      .shader_job_flags = 0U,
+    });
   }
 }
 
@@ -862,7 +1422,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
   instance_culling_ready = false;
   inspection_partitions.clear();
 
-  if (eligible_page_job_indices.empty() || active_partitions.empty()) {
+  if (active_page_jobs.empty() || active_partitions.empty()) {
     instance_culling_ready = true;
     return;
   }
@@ -870,35 +1430,51 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     LOG_F(WARNING,
       "VsmShadowRasterizerPass: skipping {} prepared pages because the "
       "prepared scene frame has no valid bindless draw-metadata slot",
-      eligible_page_job_indices.size());
+      active_page_jobs.size());
     return;
   }
   if (!prepared_frame.bindless_draw_bounds_slot.IsValid()) {
     LOG_F(WARNING,
       "VsmShadowRasterizerPass: skipping {} prepared pages because the "
       "prepared scene frame has no valid bindless draw-bounds slot",
-      eligible_page_job_indices.size());
+      active_page_jobs.size());
     return;
   }
   if (prepared_frame.draw_bounding_spheres.empty()) {
     LOG_F(WARNING,
       "VsmShadowRasterizerPass: skipping {} prepared pages because draw bounds "
       "are unavailable",
-      eligible_page_job_indices.size());
+      active_page_jobs.size());
     return;
   }
 
-  EnsurePageJobBuffer(
-    static_cast<std::uint32_t>(eligible_page_job_indices.size()));
-  page_job_upload_.resize(eligible_page_job_indices.size());
-  for (std::size_t i = 0; i < eligible_page_job_indices.size(); ++i) {
-    page_job_upload_[i]
-      = MakeShaderRasterJob(prepared_pages[eligible_page_job_indices[i]]);
+  const auto draw_metadata = GetDrawMetadataSpan(prepared_frame);
+  CHECK_F(draw_metadata.size() == prepared_frame.draw_bounding_spheres.size(),
+    "VsmShadowRasterizerPass: draw metadata and draw bounds must have matching "
+    "counts for instance culling");
+
+  BuildStaticPageFeedback(prepared_frame);
+
+  EnsurePageJobBuffer(static_cast<std::uint32_t>(active_page_jobs.size()));
+  page_job_upload_.resize(active_page_jobs.size());
+  for (std::size_t i = 0; i < active_page_jobs.size(); ++i) {
+    page_job_upload_[i] = MakeShaderRasterJob(
+      prepared_pages[active_page_jobs[i].prepared_job_index],
+      active_page_jobs[i]);
   }
   CHECK_NOTNULL_F(page_job_upload_ptr_,
     "VsmShadowRasterizerPass: page-job upload buffer must be mapped");
   std::memcpy(page_job_upload_ptr_, page_job_upload_.data(),
     page_job_upload_.size() * sizeof(renderer::vsm::VsmShaderRasterPageJob));
+
+  EnsureRevealFlagsBuffer(
+    static_cast<std::uint32_t>(reveal_flags_upload_.size()));
+  if (!reveal_flags_upload_.empty()) {
+    CHECK_NOTNULL_F(reveal_flags_upload_ptr_,
+      "VsmShadowRasterizerPass: reveal-flags upload buffer must be mapped");
+    std::memcpy(reveal_flags_upload_ptr_, reveal_flags_upload_.data(),
+      reveal_flags_upload_.size() * sizeof(std::uint32_t));
+  }
 
   EnsureInstanceCullingConstantsBuffer(
     static_cast<std::uint32_t>(active_partitions.size()));
@@ -912,6 +1488,16 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     recorder.BeginTrackingResourceState(
       *page_job_buffer_, ResourceStates::kCommon, true);
   }
+  if (!reveal_flags_upload_.empty()
+    && !recorder.IsResourceTracked(*reveal_flags_upload_buffer_)) {
+    recorder.BeginTrackingResourceState(
+      *reveal_flags_upload_buffer_, ResourceStates::kGenericRead, true);
+  }
+  if (!reveal_flags_upload_.empty()
+    && !recorder.IsResourceTracked(*reveal_flags_buffer_)) {
+    recorder.BeginTrackingResourceState(
+      *reveal_flags_buffer_, ResourceStates::kCommon, true);
+  }
   if (!recorder.IsResourceTracked(*instance_culling_constants_buffer_)) {
     recorder.BeginTrackingResourceState(
       *instance_culling_constants_buffer_, ResourceStates::kGenericRead, true);
@@ -920,6 +1506,12 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
   recorder.RequireResourceState(
     *page_job_upload_buffer_, ResourceStates::kCopySource);
   recorder.RequireResourceState(*page_job_buffer_, ResourceStates::kCopyDest);
+  if (!reveal_flags_upload_.empty()) {
+    recorder.RequireResourceState(
+      *reveal_flags_upload_buffer_, ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      *reveal_flags_buffer_, ResourceStates::kCopyDest);
+  }
 
   previous_frame_hzb = {};
   if (const auto* screen_hzb_pass = context.GetPass<ScreenHzbBuildPass>();
@@ -940,8 +1532,8 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     state.begin = partition.begin;
     state.count = partition.count;
     EnsurePartitionResources(state,
-      static_cast<std::uint32_t>(eligible_page_job_indices.size()),
-      partition.count, static_cast<std::uint32_t>(i));
+      static_cast<std::uint32_t>(active_page_jobs.size()), partition.count,
+      static_cast<std::uint32_t>(i));
 
     if (!recorder.IsResourceTracked(*state.command_buffer)) {
       recorder.BeginTrackingResourceState(
@@ -966,6 +1558,10 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
 
   recorder.CopyBuffer(*page_job_buffer_, 0U, *page_job_upload_buffer_, 0U,
     page_job_upload_.size() * sizeof(renderer::vsm::VsmShaderRasterPageJob));
+  if (!reveal_flags_upload_.empty()) {
+    recorder.CopyBuffer(*reveal_flags_buffer_, 0U, *reveal_flags_upload_buffer_,
+      0U, reveal_flags_upload_.size() * sizeof(std::uint32_t));
+  }
   for (std::size_t i = 0; i < active_partitions.size(); ++i) {
     auto& state = partition_states[i];
     recorder.CopyBuffer(*state.count_buffer, 0U, *state.count_clear_buffer, 0U,
@@ -974,6 +1570,10 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
 
   recorder.RequireResourceState(
     *page_job_buffer_, ResourceStates::kShaderResource);
+  if (!reveal_flags_upload_.empty()) {
+    recorder.RequireResourceState(
+      *reveal_flags_buffer_, ResourceStates::kShaderResource);
+  }
   for (std::size_t i = 0; i < active_partitions.size(); ++i) {
     auto& state = partition_states[i];
     recorder.RequireResourceState(
@@ -1001,7 +1601,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
       .indirect_commands_uav_index = state.command_uav,
       .command_counts_uav_index = state.count_uav,
       .prepared_page_count
-      = static_cast<std::uint32_t>(eligible_page_job_indices.size()),
+      = static_cast<std::uint32_t>(active_page_jobs.size()),
       .partition_begin = partition.begin,
       .partition_count = partition.count,
       .draw_bounds_count
@@ -1011,6 +1611,9 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
       .previous_frame_hzb_height = previous_frame_hzb.height,
       .previous_frame_hzb_mip_count = previous_frame_hzb.mip_count,
       .previous_frame_hzb_available = previous_frame_hzb.available ? 1U : 0U,
+      .reveal_flags_index = !reveal_flags_upload_.empty()
+        ? reveal_flags_srv_
+        : oxygen::kInvalidShaderVisibleIndex,
     };
     WriteInstanceCullingConstants(static_cast<std::uint32_t>(i), constants);
 
@@ -1023,12 +1626,161 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     });
   }
 
+  const auto reveal_candidate_count = static_cast<std::size_t>(
+    std::count(reveal_flags_upload_.begin(), reveal_flags_upload_.end(), 1U));
   DLOG_F(2,
     "VsmShadowRasterizerPass: prepared instance culling pages={} "
-    "partitions={} previous_hzb_available={}",
-    eligible_page_job_indices.size(), active_partitions.size(),
-    previous_frame_hzb.available);
+    "partitions={} visible_primitives={} reveal_candidates={} "
+    "static_feedback={} "
+    "previous_hzb_available={}",
+    active_page_jobs.size(), active_partitions.size(),
+    current_visible_shadow_primitives.size(), reveal_candidate_count,
+    static_page_feedback.size(), previous_frame_hzb.available);
   instance_culling_ready = true;
+}
+
+auto VsmShadowRasterizerPass::Impl::PublishRasterResults(
+  CommandRecorder& recorder, const RenderContext& context) -> void
+{
+  CHECK_F(input.has_value(),
+    "VsmShadowRasterizerPass: raster-result publication requires bound input");
+  CHECK_F(input->frame.dirty_flags_buffer != nullptr,
+    "VsmShadowRasterizerPass: dirty-flags buffer is required for raster-result "
+    "publication");
+  CHECK_F(input->frame.physical_page_meta_buffer != nullptr,
+    "VsmShadowRasterizerPass: physical-page metadata buffer is required for "
+    "raster-result publication");
+  CHECK_F(raster_result_publish_pso_.has_value(),
+    "VsmShadowRasterizerPass: raster-result publication pipeline state is "
+    "unavailable");
+  CHECK_NOTNULL_F(context.view_constants.get(),
+    "VsmShadowRasterizerPass: view constants are required for raster-result "
+    "publication");
+  EnsureRasterResultPublishConstantsBuffer(
+    static_cast<std::uint32_t>(active_partitions.size()));
+
+  auto dirty_flags_buffer
+    = std::const_pointer_cast<Buffer>(input->frame.dirty_flags_buffer);
+  auto physical_meta_buffer
+    = std::const_pointer_cast<Buffer>(input->frame.physical_page_meta_buffer);
+  const auto dirty_buffer_bytes
+    = dirty_flags_buffer->GetDescriptor().size_bytes;
+  const auto physical_meta_bytes
+    = physical_meta_buffer->GetDescriptor().size_bytes;
+
+  const graphics::BufferViewDescription dirty_uav_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_UAV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .range = { 0U, dirty_buffer_bytes },
+    .stride = sizeof(std::uint32_t),
+  };
+  const graphics::BufferViewDescription meta_uav_desc {
+    .view_type = graphics::ResourceViewType::kStructuredBuffer_UAV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .range = { 0U, physical_meta_bytes },
+    .stride = sizeof(renderer::vsm::VsmPhysicalPageMeta),
+  };
+  const auto dirty_flags_uav = EnsureShaderVisibleIndex(
+    *dirty_flags_buffer, dirty_uav_desc, "dirty-flags UAV");
+  const auto physical_meta_uav = EnsureShaderVisibleIndex(
+    *physical_meta_buffer, meta_uav_desc, "physical-page metadata UAV");
+  CHECK_F(dirty_flags_uav.IsValid(),
+    "VsmShadowRasterizerPass: dirty-flags UAV must be valid");
+  CHECK_F(physical_meta_uav.IsValid(),
+    "VsmShadowRasterizerPass: physical-page metadata UAV must be valid");
+
+  if (!recorder.IsResourceTracked(*dirty_flags_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *dirty_flags_buffer, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*physical_meta_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *physical_meta_buffer, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*raster_result_publish_constants_buffer_)) {
+    recorder.BeginTrackingResourceState(
+      *raster_result_publish_constants_buffer_, ResourceStates::kGenericRead,
+      true);
+  }
+
+  const auto frame_generation = input->frame.snapshot.frame_generation;
+  const auto frame_generation_low
+    = static_cast<std::uint32_t>(frame_generation & 0xffffffffULL);
+  const auto frame_generation_high
+    = static_cast<std::uint32_t>(frame_generation >> 32U);
+  const auto dirty_flag_entry_count
+    = dirty_buffer_bytes / sizeof(std::uint32_t);
+  const auto physical_meta_entry_count
+    = physical_meta_bytes / sizeof(renderer::vsm::VsmPhysicalPageMeta);
+  const auto static_page_count = static_cast<std::size_t>(std::count_if(
+    active_page_jobs.begin(), active_page_jobs.end(), [](const auto& job) {
+      return (job.shader_job_flags & kStaticOnlyRasterPageJobBit) != 0U;
+    }));
+  const auto reveal_candidate_count = static_cast<std::size_t>(
+    std::count(reveal_flags_upload_.begin(), reveal_flags_upload_.end(), 1U));
+
+  for (std::size_t partition_index = 0U;
+    partition_index < active_partitions.size(); ++partition_index) {
+    auto& state = partition_states[partition_index];
+    CHECK_F(state.command_srv.IsValid() && state.count_srv.IsValid(),
+      "VsmShadowRasterizerPass: publication requires valid partition SRVs");
+
+    recorder.RequireResourceState(
+      *state.command_buffer, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *state.count_buffer, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *dirty_flags_buffer, ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *physical_meta_buffer, ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+
+    const auto constants = RasterResultPublishPassConstants {
+      .page_job_buffer_index = page_job_srv_,
+      .indirect_commands_srv_index = state.command_srv,
+      .command_counts_srv_index = state.count_srv,
+      .reveal_flags_index = !reveal_flags_upload_.empty()
+        ? reveal_flags_srv_
+        : oxygen::kInvalidShaderVisibleIndex,
+      .dirty_flags_uav_index = dirty_flags_uav,
+      .physical_meta_uav_index = physical_meta_uav,
+      .prepared_page_count
+      = static_cast<std::uint32_t>(active_page_jobs.size()),
+      .max_commands_per_page = state.max_commands_per_page,
+      .current_frame_generation_low = frame_generation_low,
+      .current_frame_generation_high = frame_generation_high,
+    };
+    WriteRasterResultPublishConstants(
+      static_cast<std::uint32_t>(partition_index), constants);
+
+    recorder.SetPipelineState(*raster_result_publish_pso_);
+    recorder.SetComputeRootConstantBufferView(
+      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      context.view_constants->GetGPUVirtualAddress());
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      raster_result_publish_constants_indices_[partition_index].get(), 1U);
+    recorder.Dispatch((static_cast<std::uint32_t>(active_page_jobs.size())
+                        + (kInstanceCullingThreadGroupSize - 1U))
+        / kInstanceCullingThreadGroupSize,
+      1U, 1U);
+
+    recorder.RequireResourceState(
+      *state.command_buffer, ResourceStates::kIndirectArgument);
+    recorder.RequireResourceState(
+      *state.count_buffer, ResourceStates::kIndirectArgument);
+  }
+  recorder.FlushBarriers();
+
+  DLOG_F(3,
+    "VsmShadowRasterizerPass: published raster results generation={} "
+    "pages={} static_pages={} partitions={} dirty_entries={} meta_entries={} "
+    "reveal_candidates={}",
+    frame_generation, active_page_jobs.size(), static_page_count,
+    active_partitions.size(), dirty_flag_entry_count, physical_meta_entry_count,
+    reveal_candidate_count);
 }
 
 VsmShadowRasterizerPass::VsmShadowRasterizerPass(
@@ -1057,6 +1809,7 @@ auto VsmShadowRasterizerPass::ResetInput() noexcept -> void
   impl_->resources_ready = false;
   impl_->job_view_constants_uploaded = false;
   impl_->dynamic_slice_index.reset();
+  impl_->static_slice_index.reset();
   impl_->ResetExecutionState();
 }
 
@@ -1077,6 +1830,20 @@ auto VsmShadowRasterizerPass::GetIndirectPartitionsForInspection()
 {
   return { impl_->inspection_partitions.data(),
     impl_->inspection_partitions.size() };
+}
+
+auto VsmShadowRasterizerPass::GetVisibleShadowPrimitives() const noexcept
+  -> std::span<const renderer::vsm::VsmPrimitiveIdentity>
+{
+  return { impl_->current_visible_shadow_primitives.data(),
+    impl_->current_visible_shadow_primitives.size() };
+}
+
+auto VsmShadowRasterizerPass::GetStaticPageFeedback() const noexcept
+  -> std::span<const renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>
+{
+  return { impl_->static_page_feedback.data(),
+    impl_->static_page_feedback.size() };
 }
 
 auto VsmShadowRasterizerPass::GetDepthTexture() const
@@ -1110,6 +1877,7 @@ auto VsmShadowRasterizerPass::OnPrepareResources(CommandRecorder& recorder)
   }
 
   impl_->EnsureInstanceCullingPipelineState();
+  impl_->EnsureRasterResultPublishPipelineState();
   GraphicsRenderPass::OnPrepareResources(recorder);
 }
 
@@ -1152,6 +1920,7 @@ auto VsmShadowRasterizerPass::DoPrepareResources(CommandRecorder& recorder)
 {
   impl_->prepared_pages.clear();
   impl_->dynamic_slice_index.reset();
+  impl_->static_slice_index.reset();
   impl_->job_view_constants_uploaded = false;
   impl_->ResetExecutionState();
 
@@ -1171,6 +1940,8 @@ auto VsmShadowRasterizerPass::DoPrepareResources(CommandRecorder& recorder)
 
   impl_->dynamic_slice_index = FindSliceIndex(
     impl_->input->physical_pool, VsmPhysicalPoolSliceRole::kDynamicDepth);
+  impl_->static_slice_index = FindSliceIndex(
+    impl_->input->physical_pool, VsmPhysicalPoolSliceRole::kStaticDepth);
   if (!impl_->dynamic_slice_index.has_value()) {
     LOG_F(WARNING,
       "VsmShadowRasterizerPass: skipped prepare because the physical pool has "
@@ -1191,21 +1962,26 @@ auto VsmShadowRasterizerPass::DoPrepareResources(CommandRecorder& recorder)
       impl_->input->physical_pool, impl_->input->projections);
   impl_->BuildEligiblePageIndices();
 
-  if (!impl_->eligible_page_job_indices.empty()
+  if (!impl_->active_page_jobs.empty()
     && impl_->input->base_view_constants.has_value()
     && impl_->input->base_view_constants->view_frame_bindings_bslot.IsValid()) {
-    impl_->EnsureShadowViewConstantsCapacity(Context(),
-      static_cast<std::uint32_t>(impl_->eligible_page_job_indices.size()));
+    impl_->EnsureShadowViewConstantsCapacity(
+      Context(), static_cast<std::uint32_t>(impl_->active_page_jobs.size()));
     impl_->UploadPreparedJobViewConstants(Context());
   }
 
+  const auto static_job_count = static_cast<std::size_t>(std::count_if(
+    impl_->active_page_jobs.begin(), impl_->active_page_jobs.end(),
+    [](const auto& job) { return job.shader_job_flags != 0U; }));
   DLOG_F(2,
     "VsmShadowRasterizerPass: prepare map_count={} prepared_pages={} "
-    "eligible_pages={} deferred_static={} deferred_non_dynamic={} "
-    "dynamic_slice={} base_view_constants={} view_frame_slot_valid={}",
+    "active_pages={} static_pages={} source_slice_mismatch={} "
+    "dynamic_slice={} static_slice_available={} base_view_constants={} "
+    "view_frame_slot_valid={}",
     impl_->input->projections.size(), impl_->prepared_pages.size(),
-    impl_->eligible_page_job_indices.size(), impl_->deferred_static_pages,
+    impl_->active_page_jobs.size(), static_job_count,
     impl_->deferred_non_dynamic_pages, *impl_->dynamic_slice_index,
+    impl_->static_slice_index.has_value(),
     impl_->input->base_view_constants.has_value(),
     impl_->input->base_view_constants.has_value()
       && impl_->input->base_view_constants->view_frame_bindings_bslot
@@ -1230,16 +2006,21 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   CHECK_NOTNULL_F(
     shadow_texture.get(), "VsmShadowRasterizerPass requires a shadow texture");
 
-  if (impl_->deferred_static_pages > 0U
-    || impl_->deferred_non_dynamic_pages > 0U) {
+  if (impl_->deferred_non_dynamic_pages > 0U) {
     LOG_F(WARNING,
-      "VsmShadowRasterizerPass: deferred page jobs outside F2 scope "
-      "(static_only={} non_dynamic_slice={})",
-      impl_->deferred_static_pages, impl_->deferred_non_dynamic_pages);
+      "VsmShadowRasterizerPass: {} prepared page jobs reference a source "
+      "physical slice different from the runtime dynamic slice; using the "
+      "shared tile coordinates with explicit slice routing",
+      impl_->deferred_non_dynamic_pages);
   }
 
-  if (impl_->eligible_page_job_indices.empty()) {
-    DLOG_F(2, "VsmShadowRasterizerPass: no eligible dynamic page jobs");
+  const auto psf = Context().current_view.prepared_frame;
+  if (psf == nullptr || !psf->IsValid()) {
+    impl_->current_visible_shadow_primitives.clear();
+    impl_->static_page_feedback.clear();
+    DLOG_F(2,
+      "VsmShadowRasterizerPass: skipped execute because no prepared scene "
+      "frame was available");
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1247,12 +2028,27 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const auto psf = Context().current_view.prepared_frame;
-  if (psf == nullptr || !psf->IsValid() || !HasRasterDrawMetadata(*psf)) {
+  impl_->CollectActiveShadowPartitions(*psf);
+  impl_->BuildVisiblePrimitiveState(*psf);
+
+  if (impl_->active_page_jobs.empty()) {
+    DLOG_F(2,
+      "VsmShadowRasterizerPass: no active raster page jobs "
+      "(visible_primitives={})",
+      impl_->current_visible_shadow_primitives.size());
+    recorder.RequireResourceState(
+      *shadow_texture, ResourceStates::kShaderResource);
+    recorder.FlushBarriers();
+    Context().RegisterPass(this);
+    co_return;
+  }
+
+  if (!HasRasterDrawMetadata(*psf)) {
+    impl_->static_page_feedback.clear();
     DLOG_F(2,
       "VsmShadowRasterizerPass: no shadow-caster draw metadata was available "
-      "for {} eligible prepared pages",
-      impl_->eligible_page_job_indices.size());
+      "for {} active prepared pages",
+      impl_->active_page_jobs.size());
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1262,9 +2058,9 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (!impl_->input->base_view_constants.has_value()) {
     LOG_F(WARNING,
-      "VsmShadowRasterizerPass: skipping {} eligible prepared pages because "
+      "VsmShadowRasterizerPass: skipping {} active prepared pages because "
       "base_view_constants were not provided",
-      impl_->eligible_page_job_indices.size());
+      impl_->active_page_jobs.size());
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1274,10 +2070,10 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (!impl_->input->base_view_constants->view_frame_bindings_bslot.IsValid()) {
     LOG_F(WARNING,
-      "VsmShadowRasterizerPass: skipping {} eligible prepared pages because "
+      "VsmShadowRasterizerPass: skipping {} active prepared pages because "
       "the base view constants do not carry a valid bindless view-frame "
       "bindings slot",
-      impl_->eligible_page_job_indices.size());
+      impl_->active_page_jobs.size());
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1287,9 +2083,9 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (!impl_->job_view_constants_uploaded) {
     LOG_F(WARNING,
-      "VsmShadowRasterizerPass: skipping {} eligible prepared pages because "
+      "VsmShadowRasterizerPass: skipping {} active prepared pages because "
       "page-local view constants were not uploaded",
-      impl_->eligible_page_job_indices.size());
+      impl_->active_page_jobs.size());
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1299,8 +2095,6 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   CHECK_F(impl_->dynamic_slice_index.has_value(),
     "VsmShadowRasterizerPass: dynamic slice must be resolved before execute");
-
-  impl_->CollectActiveShadowPartitions(*psf);
   impl_->PrepareInstanceCulling(recorder, Context(), *psf);
   if (!impl_->instance_culling_ready) {
     recorder.RequireResourceState(
@@ -1313,8 +2107,8 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   if (impl_->active_partitions.empty()) {
     DLOG_F(2,
       "VsmShadowRasterizerPass: no active shadow raster partitions for {} "
-      "eligible pages",
-      impl_->eligible_page_job_indices.size());
+      "active pages",
+      impl_->active_page_jobs.size());
     recorder.RequireResourceState(
       *shadow_texture, ResourceStates::kShaderResource);
     recorder.FlushBarriers();
@@ -1352,23 +2146,23 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       impl_->instance_culling_constants_indices_[partition_index].get(), 1U);
     recorder.Dispatch((partition.count + (kInstanceCullingThreadGroupSize - 1U))
         / kInstanceCullingThreadGroupSize,
-      static_cast<std::uint32_t>(impl_->eligible_page_job_indices.size()), 1U);
+      static_cast<std::uint32_t>(impl_->active_page_jobs.size()), 1U);
 
     recorder.RequireResourceState(
-      *state.command_buffer, ResourceStates::kIndirectArgument);
+      *state.command_buffer, ResourceStates::kShaderResource);
     recorder.RequireResourceState(
-      *state.count_buffer, ResourceStates::kIndirectArgument);
+      *state.count_buffer, ResourceStates::kShaderResource);
   }
   recorder.FlushBarriers();
 
+  impl_->PublishRasterResults(recorder, Context());
+
   for (std::uint32_t local_page_index = 0U;
-    local_page_index < impl_->eligible_page_job_indices.size();
-    ++local_page_index) {
-    const auto& job
-      = impl_
-          ->prepared_pages[impl_->eligible_page_job_indices[local_page_index]];
-    const auto dsv
-      = impl_->PrepareJobDepthStencilView(Context(), *shadow_texture, job);
+    local_page_index < impl_->active_page_jobs.size(); ++local_page_index) {
+    const auto& active_job = impl_->active_page_jobs[local_page_index];
+    const auto& job = impl_->prepared_pages[active_job.prepared_job_index];
+    const auto dsv = impl_->PrepareJobDepthStencilView(
+      Context(), *shadow_texture, active_job.target_slice);
 
     recorder.SetRenderTargets({}, dsv);
     recorder.SetViewport(job.viewport);
@@ -1397,10 +2191,12 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   recorder.FlushBarriers();
 
   DLOG_F(2,
-    "VsmShadowRasterizerPass: execute eligible_pages={} partitions={} "
-    "previous_hzb_available={} counted_indirect=true",
-    impl_->eligible_page_job_indices.size(), impl_->active_partitions.size(),
-    impl_->previous_frame_hzb.available);
+    "VsmShadowRasterizerPass: execute active_pages={} partitions={} "
+    "visible_primitives={} static_feedback={} previous_hzb_available={} "
+    "counted_indirect=true",
+    impl_->active_page_jobs.size(), impl_->active_partitions.size(),
+    impl_->current_visible_shadow_primitives.size(),
+    impl_->static_page_feedback.size(), impl_->previous_frame_hzb.available);
 
   Context().RegisterPass(this);
   co_return;

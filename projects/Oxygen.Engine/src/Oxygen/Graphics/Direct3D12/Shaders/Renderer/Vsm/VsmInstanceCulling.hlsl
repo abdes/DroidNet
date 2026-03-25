@@ -27,6 +27,8 @@ cbuffer RootConstants : register(b2, space0) {
 
 static const uint VSM_INSTANCE_CULL_THREAD_GROUP_SIZE = 64u;
 static const float VSM_OCCLUSION_EPSILON = 1.0e-3f;
+static const uint VSM_RASTER_PAGE_JOB_FLAG_STATIC_ONLY = 1u << 0u;
+static const uint DRAW_PRIMITIVE_FLAG_STATIC_SHADOW_CASTER = 1u << 0u;
 
 struct VsmInstanceCullingPassConstants
 {
@@ -45,7 +47,7 @@ struct VsmInstanceCullingPassConstants
     uint previous_frame_hzb_height;
     uint previous_frame_hzb_mip_count;
     uint previous_frame_hzb_available;
-    uint _pad0;
+    uint reveal_flags_index;
 };
 
 struct VsmClipSphere
@@ -270,6 +272,18 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     const VsmRasterPageJob page_job = page_jobs[dispatch_thread_id.y];
+    if ((page_job.job_flags & VSM_RASTER_PAGE_JOB_FLAG_STATIC_ONLY) != 0u
+        && (metadata.primitive_flags & DRAW_PRIMITIVE_FLAG_STATIC_SHADOW_CASTER) == 0u) {
+        return;
+    }
+
+    uint reveal_flag = 0u;
+    if (BX_IsValidSlot(pass_constants.reveal_flags_index)) {
+        StructuredBuffer<uint> reveal_flags
+            = ResourceDescriptorHeap[pass_constants.reveal_flags_index];
+        reveal_flag = reveal_flags[draw_index];
+    }
+    const bool reveal_forced = reveal_flag != 0u;
     const VsmClipSphere page_clip_sphere
         = VsmBuildClipSphere(page_job.view_projection_matrix, sphere_ws);
     if (!VsmIntersectsD3DClip(page_clip_sphere)) {
@@ -277,7 +291,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     bool occluded = false;
-    if (pass_constants.previous_frame_hzb_available != 0u
+    if (!reveal_forced && pass_constants.previous_frame_hzb_available != 0u
         && BX_IsValidSlot(pass_constants.previous_frame_hzb_index)) {
         Texture2D<float> previous_frame_hzb
             = ResourceDescriptorHeap[pass_constants.previous_frame_hzb_index];
