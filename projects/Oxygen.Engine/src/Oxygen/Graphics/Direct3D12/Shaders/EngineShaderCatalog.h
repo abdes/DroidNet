@@ -338,6 +338,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmAllocateNewPages.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmGenerateHierarchicalFlags.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPropagateMappedMips.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {
     .path="Ui/ImGui.hlsl",
