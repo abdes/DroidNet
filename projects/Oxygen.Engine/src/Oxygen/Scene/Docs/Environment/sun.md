@@ -286,9 +286,10 @@ const getters, no ownership of external objects, and minimal state.
 
 #### SunSource (enum class)
 
-- `kSynthetic` — use authored sun values; skip scene light resolution.
-- `kFromScene` — resolve from the scene (using `light_reference` or the
-  selection rule) with fallback; this is the default.
+- `kSynthetic` — authored environment-sun values for environment systems. This
+  does not create a renderer sun by itself.
+- `kFromScene` — scene-authored mode. Renderer sun selection still requires a
+  directional light tagged as sun; this is the default.
 
 ### Renderer Integration (Internal)
 
@@ -336,7 +337,7 @@ The table summarizes common patterns across mainstream engines and how the propo
 | Unity (URP) | Main Light (directional) + Skybox | Implicit main light | Uses brightest directional |
 | Godot | Directional Light + Sky | Explicit by scene setup | Uses configured directional light |
 | Frostbite / Custom AAA | Directional Light tagged as sun | Explicit tag or role | Fallback to first directional |
-| Oxygen (To‑Be) | Sun component (SunSource: FromScene or Synthetic) | Sun resolves per view; atmosphere uses resolved sun | FromScene by default, with explicit light reference or tagged fallback |
+| Oxygen (To‑Be) | Sun-tagged directional light node | Sun resolves per view from the unique tagged directional light; atmosphere uses derived resolved sun | No renderer fallback heuristic; hydrator must author the sun node/tag |
 
 ## Notes on Shader Integration
 
@@ -384,7 +385,8 @@ The table summarizes common patterns across mainstream engines and how the propo
 ### Gap With Current Code (To‑Be vs Now)
 
 - Renderer currently resolves the sun from `LightManager` directional lights in
-  `Renderer::RunScenePrep()` and does not consume the `Sun` component yet. See
+  `Renderer::RunScenePrep()` using the unique `IsSunLight()` tag and treats the
+  `Sun` component as non-authoritative for renderer sun selection. See
   [src/Oxygen/Renderer/Renderer.cpp](src/Oxygen/Renderer/Renderer.cpp).
 - Debug override sun is still present in `EnvironmentDynamicData` and used by
   shaders (`override_sun_*`, `ATMOSPHERE_OVERRIDE_SUN`). See
@@ -666,14 +668,10 @@ auto KelvinToLinearRgb(float kelvin) -> glm::vec3 {
 - [X] Modify `Renderer::RunScenePrep()` in the view-phase section (around line 1009)
 - [X] Replace `SelectSunLight()` call with new `ResolveSunForView()` function
 - [X] Resolution order:
-  1. Check `SceneEnvironment::TryGetSystem<Sun>()`
-  2. If Sun exists and enabled:
-     - If `sun_source_ == kSynthetic`: use authored values
-     - If `sun_source_ == kFromScene`:
-       - If `light_reference_` is set and `IsAlive()` and has `DirectionalLight`: use that light
-       - Else: `SelectSunLight()` with `IsSunLight()` priority
-  3. If no Sun or Sun disabled: `SelectSunLight()` fallback
-  4. If no light: use `kNoSun` (engine default)
+  1. Scan `DirectionalLightBasic` entries for lights tagged `IsSunLight()`
+  2. If exactly one light is tagged as sun: resolve from that light
+  3. If no light is tagged as sun: use `kNoSun`
+  4. If more than one light is tagged as sun: treat the scene as invalid and use `kNoSun`
 - [X] Build `SunState` from resolved sun (apply temperature conversion if needed)
 - [X] Call `env_dynamic_manager_->SetSunState(view_id, sun_state)`
 
@@ -731,13 +729,13 @@ auto KelvinToLinearRgb(float kelvin) -> glm::vec3 {
 
 #### Task 1.15: Test sun resolution path with unit tests and fakes
 
-- [X] Create unit tests for `ResolveSunForView()` function using fake/mock scene environments
-- [X] Test case 1: No Sun component → verify fallback to `SelectSunLight()`
-- [X] Test case 2: Sun component in Synthetic mode → verify authored values used
-- [X] Test case 3: Sun component in FromScene mode with valid `light_reference` → verify reference used
-- [X] Test case 4: Sun component in FromScene mode with invalid reference → verify fallback to synthetic sun
-- [X] Test case 5: Sun component in FromScene mode without reference → verify `IsSunLight()` priority
-- [X] Test case 6: `SceneNode::IsAlive()` returns false → verify fallback to light selection
+- [X] Create unit tests for `ResolveSunForView()`
+- [X] Test case 1: No sun-tagged directional light → verify `kNoSun`
+- [X] Test case 2: Exactly one sun-tagged directional light → verify resolved sun matches that light
+- [X] Test case 3: Environment synthetic sun data alone does not invent a renderer sun
+- [X] Test case 4: Environment synthetic sun data does not override a tagged directional light
+- [X] Test case 5: Multiple sun-tagged directional lights → verify invalid scene resolves to `kNoSun`
+- [X] Test case 6: Invalid zero-length sun direction → verify `kNoSun`
 - [ ] Manual integration testing: Load TexturedCube and RenderScene examples, verify sun behavior with visual inspection
 
 #### Task 1.16: Verify shadowing policy integration

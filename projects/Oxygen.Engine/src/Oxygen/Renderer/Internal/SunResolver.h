@@ -19,12 +19,32 @@ class Scene;
 
 namespace oxygen::engine::internal {
 
-//! Resolves the effective sun for a view from scene state and lights.
+//! Resolves the renderer sun for a view.
+/*!
+ The renderer has exactly one authoritative sun-selection rule:
+
+ - A sun is a directional light published through `DirectionalLightBasic`
+   with `DirectionalLightFlags::kSunLight` set.
+ - If no directional light is tagged as sun, there is no sun for the view.
+ - If more than one directional light is tagged as sun, the scene is invalid
+   for renderer sun selection and the resolver returns `kNoSun`.
+
+ The renderer intentionally does not invent a sun from heuristics such as
+ "first directional light" and does not treat authored environment-sun data as
+ a second authority for direct lighting. Hydrators may still choose to create a
+ real directional-light scene node and mark it as sun before the renderer runs.
+ `SyntheticSunData` is therefore a derived transport payload, not the source of
+ truth.
+*/
 OXGN_RNDR_API auto ResolveSunForView(scene::Scene& scene,
   std::span<const DirectionalLightBasic> directional_lights)
   -> SyntheticSunData;
 
-//! Returns the first sun-tagged directional light, if any.
+//! Returns the unique sun-tagged directional light, if exactly one exists.
+/*!
+ Returns `std::nullopt` when no sun-tagged directional light exists or when the
+ scene is invalid because multiple directional lights are tagged as sun.
+*/
 OXGN_RNDR_API auto FindSunTaggedDirectionalLight(
   std::span<const DirectionalLightBasic> directional_lights)
   -> std::optional<DirectionalLightBasic>;

@@ -15,29 +15,6 @@ namespace oxygen::renderer {
 
 namespace {
 
-  auto BuildSyntheticSunCandidate(
-    const ShadowManager::SyntheticSunShadowInput& synthetic_sun_shadow)
-    -> engine::DirectionalShadowCandidate
-  {
-    return engine::DirectionalShadowCandidate {
-      .light_index = 0xFFFFFFFFU,
-      .light_flags
-      = static_cast<std::uint32_t>(engine::DirectionalLightFlags::kAffectsWorld
-        | engine::DirectionalLightFlags::kCastsShadows
-        | engine::DirectionalLightFlags::kSunLight
-        | engine::DirectionalLightFlags::kEnvironmentContribution),
-      .mobility = static_cast<std::uint32_t>(scene::LightMobility::kRealtime),
-      .resolution_hint = synthetic_sun_shadow.resolution_hint,
-      .direction_ws = synthetic_sun_shadow.direction_ws,
-      .basis_up_ws = oxygen::space::move::Up,
-      .bias = synthetic_sun_shadow.bias,
-      .normal_bias = synthetic_sun_shadow.normal_bias,
-      .cascade_count = synthetic_sun_shadow.cascade_count,
-      .distribution_exponent = synthetic_sun_shadow.distribution_exponent,
-      .cascade_distances = synthetic_sun_shadow.cascade_distances,
-    };
-  }
-
   auto IsSceneSunShadowCandidate(
     const engine::DirectionalShadowCandidate& candidate) -> bool
   {
@@ -122,7 +99,6 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   const float camera_viewport_width,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
-  const SyntheticSunShadowInput* synthetic_sun_shadow,
   const std::chrono::milliseconds gpu_budget,
   const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
@@ -134,12 +110,6 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   const auto light_candidates = lights.GetDirectionalShadowCandidates();
   candidates_storage.assign(light_candidates.begin(), light_candidates.end());
 
-  std::optional<engine::DirectionalShadowCandidate> synthetic_sun_candidate;
-  if (synthetic_sun_shadow != nullptr && synthetic_sun_shadow->enabled) {
-    synthetic_sun_candidate = BuildSyntheticSunCandidate(*synthetic_sun_shadow);
-    candidates_storage.push_back(*synthetic_sun_candidate);
-  }
-
   for (const auto& candidate : light_candidates) {
     LOG_F(INFO,
       "ShadowManager: scene candidate view={} light_index={} flags=0x{:08x} "
@@ -149,19 +119,6 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       candidate.mobility, candidate.resolution_hint, candidate.direction_ws.x,
       candidate.direction_ws.y, candidate.direction_ws.z, candidate.bias,
       candidate.normal_bias, IsSceneSunShadowCandidate(candidate));
-  }
-  if (synthetic_sun_candidate.has_value()) {
-    LOG_F(INFO,
-      "ShadowManager: synthetic candidate view={} light_index={} "
-      "flags=0x{:08x} resolution_hint={} dir=({:.6f}, {:.6f}, {:.6f}) "
-      "bias={:.6f} normal_bias={:.6f}",
-      view_id.get(), synthetic_sun_candidate->light_index,
-      synthetic_sun_candidate->light_flags,
-      synthetic_sun_candidate->resolution_hint,
-      synthetic_sun_candidate->direction_ws.x,
-      synthetic_sun_candidate->direction_ws.y,
-      synthetic_sun_candidate->direction_ws.z, synthetic_sun_candidate->bias,
-      synthetic_sun_candidate->normal_bias);
   }
   LOG_F(INFO, "ShadowManager: publish view={} scene_light_candidates={}",
     view_id.get(), light_candidates.size());

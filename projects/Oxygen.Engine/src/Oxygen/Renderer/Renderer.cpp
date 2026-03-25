@@ -111,7 +111,6 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/Sun.h>
-#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
@@ -126,10 +125,6 @@ constexpr std::string_view kCVarRendererGpuTimestampExportNextFrame
   = "rndr.gpu_timestamps.export_next_frame";
 constexpr std::string_view kCVarRendererGpuTimestampViewer
   = "rndr.gpu_timestamps.viewer";
-constexpr std::string_view kCVarRendererSyntheticDirectionalBias
-  = "rndr.directional_shadow.synthetic_bias";
-constexpr std::string_view kCVarRendererSyntheticDirectionalNormalBias
-  = "rndr.directional_shadow.synthetic_normal_bias";
 constexpr std::string_view kCommandRendererDumpTextureMemory
   = "rndr.dump_texture_memory";
 constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
@@ -139,48 +134,6 @@ constexpr int64_t kMaxTextureDumpTopN = 500;
 constexpr int64_t kDefaultGpuTimestampMaxScopes = 4096;
 constexpr int64_t kMinGpuTimestampMaxScopes = 1;
 constexpr int64_t kMaxGpuTimestampMaxScopes = 65536;
-constexpr float kDefaultSyntheticDirectionalBias = 0.0F;
-constexpr float kDefaultSyntheticDirectionalNormalBias = 0.02F;
-
-auto BuildSyntheticSunShadowInput(
-  const oxygen::engine::RenderContext& render_context,
-  const oxygen::engine::SyntheticSunData& resolved_sun,
-  const float synthetic_constant_bias, const float synthetic_normal_bias)
-  -> std::optional<oxygen::renderer::ShadowManager::SyntheticSunShadowInput>
-{
-  const auto scene = render_context.GetScene();
-  if (!scene || resolved_sun.enabled == 0U) {
-    return std::nullopt;
-  }
-
-  const auto environment = scene->GetEnvironment();
-  if (!environment) {
-    return std::nullopt;
-  }
-
-  const auto sun = environment->TryGetSystem<oxygen::scene::environment::Sun>();
-  if (!sun || !sun->IsEnabled()
-    || sun->GetSunSource() != oxygen::scene::environment::SunSource::kSynthetic
-    || !sun->CastsShadows()) {
-    return std::nullopt;
-  }
-  const auto shadow_cascades
-    = oxygen::scene::CanonicalizeCascadedShadowSettings(
-      oxygen::scene::CascadedShadowSettings {});
-
-  return oxygen::renderer::ShadowManager::SyntheticSunShadowInput {
-    .enabled = true,
-    .direction_ws = -resolved_sun.GetDirection(),
-    .bias = synthetic_constant_bias,
-    .normal_bias = synthetic_normal_bias,
-    .resolution_hint = static_cast<std::uint32_t>(
-      oxygen::scene::CommonLightProperties {}.shadow.resolution_hint),
-    .cascade_count = shadow_cascades.cascade_count,
-    .distribution_exponent = shadow_cascades.distribution_exponent,
-    .cascade_distances = shadow_cascades.cascade_distances,
-  };
-}
-
 auto ParseTextureDumpTopN(std::string_view value) -> std::optional<int64_t>
 {
   int64_t parsed = 0;
@@ -1137,25 +1090,6 @@ auto Renderer::RegisterConsoleBindings(
     .max_value = std::nullopt,
   });
 
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererSyntheticDirectionalBias),
-    .help = "Synthetic sun directional constant bias",
-    .default_value = static_cast<double>(kDefaultSyntheticDirectionalBias),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 0.01,
-  });
-
-  (void)console->RegisterCVar(console::CVarDefinition {
-    .name = std::string(kCVarRendererSyntheticDirectionalNormalBias),
-    .help = "Synthetic sun directional normal bias",
-    .default_value
-    = static_cast<double>(kDefaultSyntheticDirectionalNormalBias),
-    .flags = console::CVarFlags::kArchive,
-    .min_value = 0.0,
-    .max_value = 8.0,
-  });
-
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = std::string(kCommandRendererDumpTextureMemory),
     .help = "Dump renderer texture memory usage [top_n]",
@@ -1273,32 +1207,6 @@ auto Renderer::ApplyConsoleCVars(
     && gpu_timeline_profiler_ && gpu_timeline_panel_) {
     gpu_timeline_panel_->SetVisible(gpu_timestamp_viewer_enabled);
     gpu_timeline_profiler_->SetRetainLatestFrame(gpu_timestamp_viewer_enabled);
-  }
-
-  double synthetic_constant_bias
-    = directional_shadow_bias_state_.synthetic_constant_bias;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererSyntheticDirectionalBias, synthetic_constant_bias)) {
-    directional_shadow_bias_state_.synthetic_constant_bias
-      = static_cast<float>(synthetic_constant_bias);
-  }
-
-  double synthetic_normal_bias
-    = directional_shadow_bias_state_.synthetic_normal_bias;
-  if (console->TryGetCVarValue<double>(
-        kCVarRendererSyntheticDirectionalNormalBias, synthetic_normal_bias)) {
-    directional_shadow_bias_state_.synthetic_normal_bias
-      = static_cast<float>(synthetic_normal_bias);
-  }
-
-  static bool logged_renderer_bias_cvars = false;
-  if (!logged_renderer_bias_cvars) {
-    LOG_F(INFO,
-      "Renderer bias CVars: synthetic_constant_bias={} "
-      "synthetic_normal_bias={}",
-      directional_shadow_bias_state_.synthetic_constant_bias,
-      directional_shadow_bias_state_.synthetic_normal_bias);
-    logged_renderer_bias_cvars = true;
   }
 }
 
@@ -2663,10 +2571,6 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           = prepared_it != prepared_frames_.end()
           ? prepared_it->second.visible_receiver_bounding_spheres
           : std::span<const glm::vec4> {};
-        const auto synthetic_sun_shadow
-          = BuildSyntheticSunShadowInput(render_context, runtime_state.sun,
-            directional_shadow_bias_state_.synthetic_constant_bias,
-            directional_shadow_bias_state_.synthetic_normal_bias);
         auto shadow_caster_content_hash
           = HashPreparedShadowCasterContent(prepared);
         const auto alpha_test_material_state
@@ -2692,7 +2596,6 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           = shadow_manager_->PublishForView(view_id, view_constants,
             *light_manager, std::max(1.0F, resolved.Viewport().width),
             shadow_caster_bounds, visible_receiver_bounds,
-            synthetic_sun_shadow ? &*synthetic_sun_shadow : nullptr,
             frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
@@ -3236,6 +3139,13 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
           frame_seq, nostd::to_string(view_id), dir_lights.size(),
           sun_tagged_count, env_contrib_count, shadowed_dir_count,
           shadowed_sun_count, first_dir_shadow_index, first_dir_flags);
+
+        CHECK_F(runtime_state.sun.enabled == 0U || sun_tagged_count == 1U,
+          "Renderer: resolved sun must be backed by exactly one sun-tagged "
+          "directional light frame={} view={} sun_enabled={} "
+          "sun_tagged_count={}",
+          frame_seq, nostd::to_string(view_id), runtime_state.sun.enabled,
+          sun_tagged_count);
 
         if (const auto sun_tagged_light
           = internal::FindSunTaggedDirectionalLight(dir_lights);

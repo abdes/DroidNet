@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <array>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -48,18 +47,6 @@ namespace internal {
 //! Renderer-owned shadow-product scheduler and backend coordinator.
 class ShadowManager {
 public:
-  struct SyntheticSunShadowInput {
-    bool enabled { false };
-    glm::vec3 direction_ws { 0.0F, 0.0F, -1.0F };
-    float bias { 0.0F };
-    float normal_bias { 0.0F };
-    std::uint32_t resolution_hint { static_cast<std::uint32_t>(
-      scene::ShadowResolutionHint::kMedium) };
-    std::uint32_t cascade_count { scene::kMaxShadowCascades };
-    float distribution_exponent { 1.0F };
-    std::array<float, scene::kMaxShadowCascades> cascade_distances {};
-  };
-
   using ProviderT = engine::upload::StagingProvider;
   using CoordinatorT = engine::upload::InlineTransfersCoordinator;
 
@@ -84,7 +71,6 @@ public:
     float camera_viewport_width,
     std::span<const glm::vec4> shadow_caster_bounds = {},
     std::span<const glm::vec4> visible_receiver_bounds = {},
-    const SyntheticSunShadowInput* synthetic_sun_shadow = nullptr,
     std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16),
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
