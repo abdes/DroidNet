@@ -18,6 +18,7 @@
 #include <Oxygen/Renderer/Pipeline/Internal/FrameViewPacket.h>
 #include <Oxygen/Renderer/Pipeline/Internal/PipelineSettings.h>
 #include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::renderer::internal {
 
@@ -33,11 +34,11 @@ public:
   };
 
   FramePlanBuilder() = default;
-  ~FramePlanBuilder();
+  OXGN_RNDR_API ~FramePlanBuilder();
   OXYGEN_MAKE_NON_COPYABLE(FramePlanBuilder)
   OXYGEN_MAKE_NON_MOVABLE(FramePlanBuilder)
 
-  void BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
+  OXGN_RNDR_API void BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
     std::span<CompositionViewImpl* const> ordered_active_views,
     const Inputs& inputs);
 
@@ -77,7 +78,7 @@ public:
     return frame_gpu_debug_mouse_down_position_;
   }
 
-  [[nodiscard]] auto FindFrameViewPacket(ViewId id) const
+  [[nodiscard]] OXGN_RNDR_API auto FindFrameViewPacket(ViewId id) const
     -> const FrameViewPacket*;
 
 private:
