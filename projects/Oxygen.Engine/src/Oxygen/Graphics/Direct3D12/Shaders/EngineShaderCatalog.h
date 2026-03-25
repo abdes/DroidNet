@@ -169,6 +169,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } },
     .permutations=std::array<std::string_view, 1> { "CLUSTERED" }
   },
+  // Renderer-level screen-space HZB build shader
+  ShaderFileSpec {
+    .path="Renderer/ScreenHzbBuild.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
     .path="Atmosphere/TransmittanceLut_CS.hlsl",

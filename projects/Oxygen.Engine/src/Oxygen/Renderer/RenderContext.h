@@ -82,6 +82,7 @@ class AutoExposurePass;
 class GpuDebugClearPass;
 class GpuDebugDrawPass;
 class GroundGridPass;
+class ScreenHzbBuildPass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
@@ -91,7 +92,7 @@ class GroundGridPass;
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
-  ConventionalShadowRasterPass>;
+  ConventionalShadowRasterPass, ScreenHzbBuildPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
