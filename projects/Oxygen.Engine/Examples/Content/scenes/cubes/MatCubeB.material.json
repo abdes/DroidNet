@@ -13,5 +13,10 @@
     "roughness": 0.18,
     "ambient_occlusion": 1.0,
     "alpha_cutoff": 0.5
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/MatCubeB_mask.otex"
+    }
   }
 }

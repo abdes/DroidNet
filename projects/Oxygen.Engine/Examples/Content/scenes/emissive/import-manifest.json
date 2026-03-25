@@ -32,11 +32,21 @@
       "content_hashing": true
     },
     {
+      "id": "texture.MatEmissiveMasked_mask",
+      "type": "texture-descriptor",
+      "source": "./MatEmissiveMasked_mask.texture.json",
+      "name": "MatEmissiveMasked_mask",
+      "content_hashing": true
+    },
+    {
       "id": "material.MatEmissiveMasked",
       "type": "material-descriptor",
       "source": "./MatEmissiveMasked.material.json",
       "name": "MatEmissiveMasked",
-      "content_hashing": true
+      "content_hashing": true,
+      "depends_on": [
+        "texture.MatEmissiveMasked_mask"
+      ]
     },
     {
       "id": "material.MatReference",
