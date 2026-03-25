@@ -47,6 +47,17 @@ m_gtest_program(PassDebugNames SOURCES "PassDebugNames_test.cpp")
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
+if(TARGET oxygen::graphics-direct3d12)
+  m_gtest_program(
+    "ScreenHzb"
+    SOURCES
+      "ScreenHzbBuildPass_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+    DEPS
+      oxygen::graphics-direct3d12
+  )
+endif()
+
 m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
 
 m_gtest_program(

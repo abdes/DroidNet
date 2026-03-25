@@ -33,6 +33,7 @@
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/ScreenHzbBuildPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
@@ -191,6 +192,7 @@ private:
   std::shared_ptr<engine::GroundGridPassConfig> grid_pass_config;
   std::shared_ptr<engine::TransparentPassConfig> trans_pass_config;
   std::shared_ptr<engine::LightCullingPassConfig> light_culling_pass_config;
+  std::shared_ptr<engine::ScreenHzbBuildPassConfig> screen_hzb_pass_config;
   std::shared_ptr<engine::ToneMapPassConfig> tone_map_pass_config;
   std::shared_ptr<engine::AutoExposurePassConfig> auto_exposure_config;
 
@@ -203,6 +205,7 @@ private:
   std::shared_ptr<engine::GroundGridPass> ground_grid_pass;
   std::shared_ptr<engine::TransparentPass> transparent_pass;
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
+  std::shared_ptr<engine::ScreenHzbBuildPass> screen_hzb_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
   std::shared_ptr<engine::AutoExposurePass> auto_exposure_pass;
   std::shared_ptr<engine::GpuDebugClearPass> gpu_debug_clear_pass;
@@ -500,6 +503,12 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await depth_pass->PrepareResources(rc, rec);
     co_await depth_pass->Execute(rc, rec);
     rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
+
+    if (screen_hzb_pass) {
+      co_await screen_hzb_pass->PrepareResources(rc, rec);
+      co_await screen_hzb_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::ScreenHzbBuildPass>(screen_hzb_pass.get());
+    }
   }
 
   // Sky must run after DepthPrePass so it can depth-test against the
@@ -830,6 +839,7 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   grid_pass_config = std::make_shared<p::GroundGridPassConfig>();
   trans_pass_config = std::make_shared<p::TransparentPassConfig>();
   light_culling_pass_config = std::make_shared<p::LightCullingPassConfig>();
+  screen_hzb_pass_config = std::make_shared<p::ScreenHzbBuildPassConfig>();
   tone_map_pass_config = std::make_shared<p::ToneMapPassConfig>();
   auto_exposure_config = std::make_shared<p::AutoExposurePassConfig>();
 
@@ -846,6 +856,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   auto gfx_ptr = observer_ptr { gfx.get() };
   light_culling_pass
     = std::make_shared<p::LightCullingPass>(gfx_ptr, light_culling_pass_config);
+  screen_hzb_pass
+    = std::make_shared<p::ScreenHzbBuildPass>(gfx_ptr, screen_hzb_pass_config);
   tone_map_pass = std::make_shared<p::ToneMapPass>(tone_map_pass_config);
   auto_exposure_pass
     = std::make_shared<p::AutoExposurePass>(gfx_ptr, auto_exposure_config);
