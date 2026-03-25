@@ -219,6 +219,33 @@ public:
     IndirectCommandLayout layout) -> void
     = 0;
 
+  //! Issues one or more indirect draw commands using a GPU-written count.
+  /*!
+   This maps to the D3D12 ExecuteIndirect overload that consumes both an
+
+   * argument buffer and a count buffer. The count buffer value is clamped by
+
+   * \p max_command_count.
+
+   \param argument_buffer The buffer containing
+   * indirect draw arguments.
+   \param argument_buffer_offset Offset in bytes
+   * into the argument buffer.
+   \param max_command_count Maximum number of
+   * commands to execute.
+   \param layout Command signature layout for the
+   * argument buffer.
+   \param count_buffer Buffer containing the GPU-written
+   * command count.
+   \param count_buffer_offset Offset in bytes into the count
+   * buffer.
+  */
+  virtual auto ExecuteIndirectCounted(const Buffer& argument_buffer,
+    uint64_t argument_buffer_offset, uint32_t max_command_count,
+    IndirectCommandLayout layout, const Buffer& count_buffer,
+    uint64_t count_buffer_offset) -> void
+    = 0;
+
   virtual auto SetVertexBuffers(uint32_t num,
     const std::shared_ptr<Buffer>* vertex_buffers,
     const uint32_t* strides) const -> void
