@@ -35,6 +35,12 @@ namespace {
       case engine::ShaderDebugMode::kWorldNormals:
       case engine::ShaderDebugMode::kRoughness:
       case engine::ShaderDebugMode::kMetalness:
+      case engine::ShaderDebugMode::kDirectLightingOnly:
+      case engine::ShaderDebugMode::kIblOnly:
+      case engine::ShaderDebugMode::kDirectPlusIbl:
+      case engine::ShaderDebugMode::kDirectLightingFull:
+      case engine::ShaderDebugMode::kDirectLightGates:
+      case engine::ShaderDebugMode::kDirectBrdfCore:
         return true;
       case engine::ShaderDebugMode::kIblSpecular:
       case engine::ShaderDebugMode::kIblRawSky:

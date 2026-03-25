@@ -242,6 +242,12 @@ namespace {
       case kWorldNormals:
       case kRoughness:
       case kMetalness:
+      case kDirectLightingOnly:
+      case kIblOnly:
+      case kDirectPlusIbl:
+      case kDirectLightingFull:
+      case kDirectLightGates:
+      case kDirectBrdfCore:
         return true;
       case kIblSpecular:
       case kIblRawSky:

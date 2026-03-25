@@ -264,8 +264,34 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
       return "DEBUG_ROUGHNESS";
     case ShaderDebugMode::kMetalness:
       return "DEBUG_METALNESS";
+    case ShaderDebugMode::kDirectLightingOnly:
+      return "DEBUG_DIRECT_LIGHTING_ONLY";
+    case ShaderDebugMode::kIblOnly:
+      return "DEBUG_IBL_ONLY";
+    case ShaderDebugMode::kDirectPlusIbl:
+      return "DEBUG_DIRECT_PLUS_IBL";
+    case ShaderDebugMode::kDirectLightingFull:
+      return "DEBUG_DIRECT_LIGHTING_FULL";
+    case ShaderDebugMode::kDirectLightGates:
+      return "DEBUG_DIRECT_LIGHT_GATES";
+    case ShaderDebugMode::kDirectBrdfCore:
+      return "DEBUG_DIRECT_BRDF_CORE";
     default:
       return nullptr;
+    }
+  };
+
+  const auto UsesForwardMeshDebugVariant = [](ShaderDebugMode mode) -> bool {
+    switch (mode) {
+    case ShaderDebugMode::kDirectLightingOnly:
+    case ShaderDebugMode::kIblOnly:
+    case ShaderDebugMode::kDirectPlusIbl:
+    case ShaderDebugMode::kDirectLightingFull:
+    case ShaderDebugMode::kDirectLightGates:
+    case ShaderDebugMode::kDirectBrdfCore:
+      return true;
+    default:
+      return false;
     }
   };
 
@@ -312,7 +338,9 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
 
     const char* ps_source = "Forward/ForwardMesh_PS.hlsl";
     if (const char* debug_define = GetDebugDefineName(debug_mode)) {
-      ps_source = "Forward/ForwardDebug_PS.hlsl";
+      if (!UsesForwardMeshDebugVariant(debug_mode)) {
+        ps_source = "Forward/ForwardDebug_PS.hlsl";
+      }
       ps_defines.push_back(ShaderDefine {
         .name = debug_define,
         .value = "1",

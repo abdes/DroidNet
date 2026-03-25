@@ -234,7 +234,7 @@ float4 PS(VSOutput input) : SV_Target0 {
                 debug_handled = true;
             }
         #else
-            EnvironmentStaticData env_data;
+            EnvironmentStaticData env_data = (EnvironmentStaticData)0;
             if (LoadEnvironmentStaticData(env_data) && env_data.sky_light.enabled) {
                 uint slot = env_data.sky_light.cubemap_slot;
                 if (slot == K_INVALID_BINDLESS_INDEX) slot = env_data.sky_sphere.cubemap_slot;

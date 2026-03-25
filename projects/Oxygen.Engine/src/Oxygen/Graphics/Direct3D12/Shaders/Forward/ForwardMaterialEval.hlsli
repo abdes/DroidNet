@@ -104,7 +104,7 @@ MaterialSurface EvaluateMaterialSurface(
     uint   draw_index,
     bool   is_front_face)
 {
-    MaterialSurface s;
+    MaterialSurface s = (MaterialSurface)0;
 
     // Defaults
     s.base_rgb  = float3(1.0, 1.0, 1.0);
@@ -117,7 +117,7 @@ MaterialSurface EvaluateMaterialSurface(
     s.N = SafeNormalize(world_normal);
     // Fallback for degenerate normals from vertex data
     if (dot(s.N, s.N) < 0.5) {
-        s.N = float3(0.0, 1.0, 0.0);
+        s.N = float3(0.0, 0.0, 1.0);
     }
     s.V = SafeNormalize(camera_position - world_pos);
 
@@ -125,9 +125,21 @@ MaterialSurface EvaluateMaterialSurface(
     if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
         draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
+        uint draw_count = 0u;
+        uint draw_stride = 0u;
+        draw_meta_buffer.GetDimensions(draw_count, draw_stride);
+        if (draw_index >= draw_count) {
+            return s;
+        }
         DrawMetadata meta = draw_meta_buffer[draw_index];
 
         StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+        uint material_count = 0u;
+        uint material_stride = 0u;
+        materials.GetDimensions(material_count, material_stride);
+        if (meta.material_handle >= material_count) {
+            return s;
+        }
         MaterialShadingConstants mat = materials[meta.material_handle];
 
         s.base_rgb  = mat.base_color.rgb;
@@ -167,7 +179,7 @@ MaterialSurface EvaluateMaterialSurface(
             float3 NN = SafeNormalize(world_normal);
             // Fallback if geometric normal is degenerate
             if (dot(NN, NN) < 0.5) {
-                NN = float3(0.0, 1.0, 0.0);
+                NN = float3(0.0, 0.0, 1.0);
             }
 
             // The VS provides an orthonormal TBN basis. In the PS we only do a
@@ -180,8 +192,8 @@ MaterialSurface EvaluateMaterialSurface(
             // across interpolation.
             T = T - NN * dot(NN, T);
             if (dot(T, T) <= 1e-6) {
-                const float3 axis = (abs(NN.y) > 0.9) ? float3(1.0, 0.0, 0.0)
-                                                      : float3(0.0, 1.0, 0.0);
+                const float3 axis = (abs(NN.z) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                                      : float3(0.0, 0.0, 1.0);
                 T = cross(NN, axis);
             }
             T = SafeNormalize(T);

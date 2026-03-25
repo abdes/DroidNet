@@ -13,9 +13,9 @@ namespace oxygen::engine {
 
 //! Debug visualization mode for shading passes.
 //!
-//! These modes correspond to boolean defines in ForwardDebug_PS.hlsl.
-//! The shader is compiled with different defines to create specialized
-//! visualization variants.
+//! These modes correspond to boolean defines in ForwardDebug_PS.hlsl or
+//! ForwardMesh_PS.hlsl. The shader is compiled with different defines to create
+//! specialized visualization variants.
 enum class ShaderDebugMode : uint8_t {
   kDisabled = 0, //!< Normal PBR rendering (default)
 
@@ -40,6 +40,12 @@ enum class ShaderDebugMode : uint8_t {
   // IBL mapping debug modes
   kIblFaceIndex = 13, //!< Visualize cubemap face selection (no textures)
   kIblNoBrdfLut = 14, //!< Normal shading with BRDF LUT bypassed
+  kDirectLightingOnly = 15, //!< Normal forward shader, direct-light term only
+  kIblOnly = 16, //!< Normal forward shader, IBL term only
+  kDirectPlusIbl = 17, //!< Normal forward shader, direct + IBL terms only
+  kDirectLightingFull = 18, //!< Full direct-light term from ForwardMesh_PS
+  kDirectLightGates = 19, //!< R=shadow visibility, G=sun transmittance
+  kDirectBrdfCore = 20, //!< Ungated directional BRDF core from ForwardMesh_PS
 };
 
 constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
@@ -61,6 +67,12 @@ constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
       case ShaderDebugMode::kMetalness: return "Metalness";
       case ShaderDebugMode::kIblFaceIndex: return "IblFaceIndex";
       case ShaderDebugMode::kIblNoBrdfLut: return "IblNoBrdfLut";
+      case ShaderDebugMode::kDirectLightingOnly: return "DirectLightingOnly";
+      case ShaderDebugMode::kIblOnly: return "IblOnly";
+      case ShaderDebugMode::kDirectPlusIbl: return "DirectPlusIbl";
+      case ShaderDebugMode::kDirectLightingFull: return "DirectLightingFull";
+      case ShaderDebugMode::kDirectLightGates: return "DirectLightGates";
+      case ShaderDebugMode::kDirectBrdfCore: return "DirectBrdfCore";
     // clang-format on
   }
 }
