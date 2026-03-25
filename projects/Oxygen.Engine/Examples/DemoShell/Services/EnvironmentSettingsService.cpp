@@ -42,6 +42,12 @@ namespace oxygen::examples {
 
 namespace {
 
+  struct SunSceneScanResult {
+    std::optional<scene::SceneNode> unique_sun {};
+    std::size_t sun_count { 0 };
+    bool has_non_camera_content { false };
+  };
+
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
   constexpr float kMetersToKm = 0.001F;
@@ -120,7 +126,8 @@ namespace {
   auto ComputeLocalRotationForWorldDirection(
     scene::SceneNode& node, const glm::vec3& direction_ws) -> glm::quat
   {
-    const glm::quat desired_world_rotation = RotationFromDirection(direction_ws);
+    const glm::quat desired_world_rotation
+      = RotationFromDirection(direction_ws);
     const auto parent_opt = node.GetParent();
     if (!parent_opt.has_value()) {
       return desired_world_rotation;
@@ -385,6 +392,55 @@ namespace {
       | (static_cast<std::uint32_t>(bytes[3]) << 24U);
   }
 
+  auto ScanSceneSunState(scene::Scene& scene) -> SunSceneScanResult
+  {
+    SunSceneScanResult result {};
+
+    auto roots = scene.GetRootNodes();
+    std::vector<scene::SceneNode> stack {};
+    stack.reserve(roots.size());
+    for (auto& root : roots) {
+      stack.push_back(root);
+    }
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      const bool has_camera = node.HasCamera();
+      const bool has_light = node.HasLight();
+      const bool has_geometry = node.GetRenderable().HasGeometry();
+      const bool has_scripting = node.HasScripting();
+      if (has_light || has_geometry || has_scripting || !has_camera) {
+        result.has_non_camera_content = true;
+      }
+
+      if (auto light = node.GetLightAs<scene::DirectionalLight>()) {
+        if (light->get().IsSunLight()) {
+          ++result.sun_count;
+          if (result.sun_count == 1U) {
+            result.unique_sun = node;
+          }
+        }
+      }
+
+      auto child_opt = node.GetFirstChild();
+      while (child_opt.has_value()) {
+        stack.push_back(*child_opt);
+        child_opt = child_opt->GetNextSibling();
+      }
+    }
+
+    if (result.sun_count != 1U) {
+      result.unique_sun.reset();
+    }
+
+    return result;
+  }
+
 } // namespace
 
 /*!
@@ -563,6 +619,7 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
+  EnsureSceneHasSunAtActivation();
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
@@ -1509,6 +1566,7 @@ auto EnvironmentSettingsService::GetSunLightAvailable() const -> bool
 auto EnvironmentSettingsService::UpdateSunLightCandidate() -> void
 {
   sun_light_available_ = false;
+  sun_light_node_ = {};
   if (!config_.scene) {
     return;
   }
@@ -1587,11 +1645,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (apply_sun && sun) {
     sun->SetEnabled(sun_enabled_);
   }
-  if (apply_sun && (sun) && !sun_enabled_) {
+  if (apply_sun && !sun_enabled_) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
       if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        light->get().SetIsSunLight(false);
         light->get().Common().affects_world = false;
       }
     }
@@ -1599,30 +1656,35 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     if (synthetic_sun_light_node_.IsAlive()) {
       if (auto light
         = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        light->get().SetIsSunLight(false);
         light->get().Common().affects_world = false;
       }
     }
 
-    sun->ClearLightReference();
+    if (sun) {
+      sun->ClearLightReference();
+    }
   }
 
-  if (apply_sun && sun_enabled_ && (sun != nullptr)) {
+  if (apply_sun && sun_enabled_) {
     const auto sun_source = (sun_source_ == 0)
       ? scene::environment::SunSource::kFromScene
       : scene::environment::SunSource::kSynthetic;
-    sun->SetSunSource(sun_source);
-    sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
-    sun->SetIlluminanceLx(sun_illuminance_lx_);
-    sun->SetDiskAngularRadiusRadians(
-      sun_component_disk_radius_deg_ * kDegToRad);
-    if (sun_use_temperature_) {
-      sun->SetLightTemperatureKelvin(sun_temperature_kelvin_);
-    } else {
-      sun->SetColorRgb(sun_color_rgb_);
+    if (sun) {
+      sun->SetSunSource(sun_source);
+      sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
+      sun->SetIlluminanceLx(sun_illuminance_lx_);
+      sun->SetDiskAngularRadiusRadians(
+        sun_component_disk_radius_deg_ * kDegToRad);
+      if (sun_use_temperature_) {
+        sun->SetLightTemperatureKelvin(sun_temperature_kelvin_);
+      } else {
+        sun->SetColorRgb(sun_color_rgb_);
+      }
     }
 
     if (sun_source == scene::environment::SunSource::kFromScene) {
+      const auto scene_name
+        = config_.scene ? config_.scene->GetName() : std::string_view {};
       DestroySyntheticSunLight();
       UpdateSunLightCandidate();
       if (sun_light_available_) {
@@ -1643,9 +1705,17 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
         }
 
-        sun->SetLightReference(sun_light_node_);
+        if (sun) {
+          sun->SetLightReference(sun_light_node_);
+        }
       } else {
-        sun->ClearLightReference();
+        LOG_F(WARNING,
+          "EnvironmentSettingsService: sun source is 'from scene' but no "
+          "sun-tagged directional light is currently available in scene '{}'",
+          scene_name);
+        if (sun) {
+          sun->ClearLightReference();
+        }
       }
     } else {
       UpdateSunLightCandidate();
@@ -1687,9 +1757,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           ApplyLightDirectionWorldSpace(synthetic_sun_light_node_, light_dir);
         }
 
-        sun->SetLightReference(synthetic_sun_light_node_);
+        if (sun) {
+          sun->SetLightReference(synthetic_sun_light_node_);
+        }
       } else {
-        sun->ClearLightReference();
+        if (sun) {
+          sun->ClearLightReference();
+        }
       }
     }
   } else if (apply_sun && sun) {
@@ -2553,6 +2627,86 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   SaveSunSettingsToProfile(1);
 }
 
+auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
+{
+  if (!config_.scene) {
+    return;
+  }
+
+  const auto scan = ScanSceneSunState(*config_.scene);
+  if (scan.sun_count > 1U) {
+    LOG_F(ERROR,
+      "EnvironmentSettingsService: invalid scene lighting configuration in "
+      "scene '{}': {} directional lights are tagged as sun; synthetic sun "
+      "injection suppressed",
+      config_.scene->GetName(), scan.sun_count);
+    sun_light_available_ = false;
+    sun_light_node_ = {};
+    return;
+  }
+
+  if (scan.unique_sun.has_value()) {
+    sun_light_node_ = *scan.unique_sun;
+    sun_light_available_ = sun_light_node_.IsAlive();
+    LOG_F(INFO,
+      "EnvironmentSettingsService: activated scene '{}' already provides a "
+      "sun-tagged directional light",
+      config_.scene->GetName());
+    return;
+  }
+
+  sun_light_available_ = false;
+  sun_light_node_ = {};
+
+  EnsureSyntheticSunLight();
+  CHECK_F(synthetic_sun_light_node_.IsAlive(),
+    "EnvironmentSettingsService: failed to create synthetic sun light during "
+    "scene activation");
+
+  auto light = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>();
+  CHECK_F(light.has_value(),
+    "EnvironmentSettingsService: synthetic sun node was created without a "
+    "DirectionalLight component");
+
+  light->get().SetIsSunLight(true);
+  light->get().SetEnvironmentContribution(true);
+
+  auto& common = light->get().Common();
+  common.affects_world = true;
+  common.casts_shadows = true;
+  common.shadow.bias = kSyntheticSunShadowBias;
+  common.shadow.normal_bias = kSyntheticSunShadowNormalBias;
+  common.shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
+  light->get().SetIntensityLux(sun_illuminance_lx_);
+  common.color_rgb = sun_use_temperature_
+    ? KelvinToLinearRgb(sun_temperature_kelvin_)
+    : sun_color_rgb_;
+
+  if (auto flags = synthetic_sun_light_node_.GetFlags()) {
+    flags->get().SetFlag(scene::SceneNodeFlags::kCastsShadows,
+      scene::SceneFlag {}.SetEffectiveValueBit(true));
+  }
+
+  const auto sun_dir
+    = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
+  ApplyLightDirectionWorldSpace(synthetic_sun_light_node_, -sun_dir);
+
+  sun_light_node_ = synthetic_sun_light_node_;
+  sun_light_available_ = true;
+  sun_present_ = true;
+  sun_enabled_ = true;
+  sun_source_ = 1;
+  saved_sun_source_ = 1;
+  SaveSunSettingsToProfile(1);
+
+  if (scan.has_non_camera_content) {
+    LOG_F(WARNING,
+      "EnvironmentSettingsService: activated non-empty scene '{}' had no "
+      "sun-tagged directional light; injected synthetic sun node '{}'",
+      config_.scene->GetName(), "Synthetic Sun");
+  }
+}
+
 auto EnvironmentSettingsService::FindSunLightCandidate() const
   -> std::optional<scene::SceneNode>
 {
@@ -2560,39 +2714,16 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
     return std::nullopt;
   }
 
-  auto roots = config_.scene->GetRootNodes();
-  std::vector<scene::SceneNode> stack;
-  stack.reserve(roots.size());
-  for (auto& root : roots) {
-    stack.push_back(root);
+  const auto scan = ScanSceneSunState(*config_.scene);
+  if (scan.sun_count > 1U) {
+    LOG_F(ERROR,
+      "EnvironmentSettingsService: invalid scene lighting configuration in "
+      "scene '{}': {} directional lights are tagged as sun",
+      config_.scene->GetName(), scan.sun_count);
+    return std::nullopt;
   }
 
-  std::optional<scene::SceneNode> first_directional;
-  while (!stack.empty()) {
-    auto node = stack.back();
-    stack.pop_back();
-
-    if (!node.IsAlive()) {
-      continue;
-    }
-
-    if (auto light = node.GetLightAs<scene::DirectionalLight>()) {
-      if (light->get().IsSunLight()) {
-        return node;
-      }
-      if (!first_directional.has_value()) {
-        first_directional = node;
-      }
-    }
-
-    auto child_opt = node.GetFirstChild();
-    while (child_opt.has_value()) {
-      stack.push_back(*child_opt);
-      child_opt = child_opt->GetNextSibling();
-    }
-  }
-
-  return first_directional;
+  return scan.unique_sun;
 }
 
 auto EnvironmentSettingsService::EnsureSyntheticSunLight() -> void

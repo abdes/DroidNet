@@ -460,11 +460,6 @@ private:
     bool has_published_view_bindings { false };
   };
 
-  struct DirectionalShadowBiasState {
-    float synthetic_constant_bias { 0.0F };
-    float synthetic_normal_bias { 0.02F };
-  };
-
   //! Build frame data for a specific view (scene prep, culling, draw list).
   /*!\n    Internal method called by OnPreRender for each registered view.
     @param view The resolved view containing camera and projection data
@@ -674,8 +669,6 @@ private:
   std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
   bool sky_capture_requested_ { false };
   const scene::Scene* last_scene_identity_ { nullptr };
-  DirectionalShadowBiasState directional_shadow_bias_state_ {};
-
   // ScenePrep instrumentation.
   std::uint64_t sceneprep_profile_frames_ { 0 };
   std::uint64_t sceneprep_profile_total_ns_ { 0 };

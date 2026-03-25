@@ -4,104 +4,73 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 
-#include <glm/common.hpp>
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/Sun.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::engine::internal {
 
 namespace {
 
-  struct SunLightSelection {
-    glm::vec3 direction_to_sun { 0.0F, 0.866F, 0.5F };
-    glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-    float intensity { 0.0F };
-    float illuminance { 0.0F };
-    bool valid { false };
-  };
-
-  auto SelectSunLight(std::span<const DirectionalLightBasic> dir)
-    -> SunLightSelection
+  [[nodiscard]] auto IsSunTagged(const DirectionalLightBasic& light) noexcept
+    -> bool
   {
-    SunLightSelection first_flagged;
-    SunLightSelection first_any;
-
-    for (const auto& light : dir) {
-      const bool is_sun = (light.flags
-                            & static_cast<std::uint32_t>(
-                              oxygen::engine::DirectionalLightFlags::kSunLight))
-        != 0U;
-
-      const float peak_rgb = (std::max)(light.color_rgb.x,
-        (std::max)(light.color_rgb.y, light.color_rgb.z));
-      const float illum = light.intensity_lux * peak_rgb;
-
-      SunLightSelection candidate {
-        .direction_to_sun = -glm::normalize(light.direction_ws),
-        .color_rgb = light.color_rgb,
-        .intensity = light.intensity_lux,
-        .illuminance = illum,
-        .valid = true,
-      };
-
-      if (is_sun && !first_flagged.valid) {
-        first_flagged = candidate;
-      }
-      if (!first_any.valid) {
-        first_any = candidate;
-      }
-    }
-
-    if (first_flagged.valid) {
-      return first_flagged;
-    }
-    return first_any;
+    const auto flags = static_cast<DirectionalLightFlags>(light.flags);
+    return (flags & DirectionalLightFlags::kSunLight)
+      != DirectionalLightFlags::kNone;
   }
 
-  [[nodiscard]] auto ResolveSunFromSelection(const SunLightSelection& selection,
-    const glm::vec3* color_override) noexcept -> SyntheticSunData
+  [[nodiscard]] auto ResolveUniqueSunTaggedDirectionalLight(
+    std::span<const DirectionalLightBasic> directional_lights)
+    -> std::optional<DirectionalLightBasic>
   {
-    if (!selection.valid
-      || glm::dot(selection.direction_to_sun, selection.direction_to_sun)
-        <= 0.0F) {
+    std::optional<DirectionalLightBasic> sun_light {};
+    std::size_t tagged_count = 0;
+    for (const auto& light : directional_lights) {
+      if (!IsSunTagged(light)) {
+        continue;
+      }
+
+      ++tagged_count;
+      if (tagged_count == 1U) {
+        sun_light = light;
+      }
+    }
+
+    if (tagged_count == 0U) {
+      return std::nullopt;
+    }
+    if (tagged_count > 1U) {
+      LOG_F(ERROR,
+        "SunResolver: invalid scene lighting configuration: {} directional "
+        "lights are tagged as sun; renderer requires exactly one sun-tagged "
+        "directional light",
+        tagged_count);
+      return std::nullopt;
+    }
+    return sun_light;
+  }
+
+  [[nodiscard]] auto BuildResolvedSunFromDirectionalLight(
+    const DirectionalLightBasic& light) noexcept -> SyntheticSunData
+  {
+    const float direction_len_sq
+      = glm::dot(light.direction_ws, light.direction_ws);
+    if (direction_len_sq <= oxygen::math::EpsilonDirection) {
+      LOG_F(ERROR,
+        "SunResolver: sun-tagged directional light has invalid zero-length "
+        "direction; sun resolution disabled for this view");
       return kNoSun;
     }
 
-    const glm::vec3 color
-      = color_override != nullptr ? *color_override : selection.color_rgb;
     return SyntheticSunData::FromDirectionAndLight(
-      selection.direction_to_sun, color, selection.intensity, true);
-  }
-
-  [[nodiscard]] auto ComputeDirectionToSun(
-    const scene::SceneNode& node) noexcept -> std::optional<glm::vec3>
-  {
-    auto transform = node.GetTransform();
-    const auto rotation_opt = transform.GetWorldRotation();
-    if (!rotation_opt) {
-      return std::nullopt;
-    }
-
-    const glm::vec3 light_direction_ws
-      = (*rotation_opt) * oxygen::space::move::Forward;
-    const float len_sq = glm::dot(light_direction_ws, light_direction_ws);
-    if (len_sq <= oxygen::math::EpsilonDirection) {
-      return std::nullopt;
-    }
-
-    return -glm::normalize(light_direction_ws);
+      -glm::normalize(light.direction_ws), light.color_rgb, light.intensity_lux,
+      true);
   }
 
 } // namespace
@@ -110,14 +79,7 @@ auto FindSunTaggedDirectionalLight(
   std::span<const DirectionalLightBasic> directional_lights)
   -> std::optional<DirectionalLightBasic>
 {
-  for (const auto& light : directional_lights) {
-    const auto flags = static_cast<DirectionalLightFlags>(light.flags);
-    if ((flags & DirectionalLightFlags::kSunLight)
-      != DirectionalLightFlags::kNone) {
-      return light;
-    }
-  }
-  return std::nullopt;
+  return ResolveUniqueSunTaggedDirectionalLight(directional_lights);
 }
 
 auto ResolvedSunMatchesDirectionalLight(const SyntheticSunData& resolved_sun,
@@ -128,22 +90,24 @@ auto ResolvedSunMatchesDirectionalLight(const SyntheticSunData& resolved_sun,
     return false;
   }
 
-  const float light_dir_len_sq = glm::dot(light.direction_ws, light.direction_ws);
+  const float light_dir_len_sq
+    = glm::dot(light.direction_ws, light.direction_ws);
   if (light_dir_len_sq <= oxygen::math::EpsilonDirection) {
     return false;
   }
 
-  const glm::vec3 resolved_direction = glm::normalize(resolved_sun.GetDirection());
-  const glm::vec3 expected_direction_to_sun = -glm::normalize(light.direction_ws);
+  const glm::vec3 resolved_direction
+    = glm::normalize(resolved_sun.GetDirection());
+  const glm::vec3 expected_direction_to_sun
+    = -glm::normalize(light.direction_ws);
   const bool direction_matches
     = glm::length(resolved_direction - expected_direction_to_sun)
     <= direction_epsilon;
 
   const float expected_illuminance = light.intensity_lux;
   const float resolved_illuminance = resolved_sun.GetIlluminance();
-  const float illuminance_tolerance
-    = (std::max)(1.0F,
-      std::abs(expected_illuminance) * illuminance_relative_epsilon);
+  const float illuminance_tolerance = (std::max)(1.0F,
+    std::abs(expected_illuminance) * illuminance_relative_epsilon);
   const bool illuminance_matches
     = std::abs(resolved_illuminance - expected_illuminance)
     <= illuminance_tolerance;
@@ -154,59 +118,15 @@ auto ResolvedSunMatchesDirectionalLight(const SyntheticSunData& resolved_sun,
 auto ResolveSunForView(scene::Scene& scene,
   std::span<const DirectionalLightBasic> directional_lights) -> SyntheticSunData
 {
-  if (auto env = scene.GetEnvironment()) {
-    if (auto sun = env->TryGetSystem<scene::environment::Sun>(); sun) {
-      if (!sun->IsEnabled()) {
-        return kNoSun;
-      }
-      if (sun->GetSunSource() == scene::environment::SunSource::kSynthetic) {
-        return SyntheticSunData::FromDirectionAndLight(sun->GetDirectionWs(),
-          sun->GetColorRgb(), sun->GetIlluminanceLx(), true);
-      }
+  static_cast<void>(scene);
 
-      const auto& light_reference = sun->GetLightReference();
-      if (light_reference) {
-        auto node = *light_reference;
-        if (node.IsAlive()) {
-          auto light_opt = node.GetLightAs<scene::DirectionalLight>();
-          if (!light_opt) {
-            sun->ClearLightReference();
-            LOG_F(ERROR,
-              "SunResolver: SunSource::kFromScene has invalid light reference "
-              "(node has no DirectionalLight); reference cleared");
-            return kNoSun;
-          }
-
-          const auto direction_opt = ComputeDirectionToSun(node);
-          if (!direction_opt) {
-            LOG_F(ERROR,
-              "SunResolver: SunSource::kFromScene has invalid light direction "
-              "(node transform produced zero-length direction)");
-            return kNoSun;
-          }
-
-          const auto& light = light_opt->get();
-          const glm::vec3 color = sun->HasLightTemperature()
-            ? sun->GetColorRgb()
-            : light.Common().color_rgb;
-          return SyntheticSunData::FromDirectionAndLight(
-            *direction_opt, color, light.GetIntensityLux(), true);
-        }
-
-        LOG_F(ERROR,
-          "SunResolver: SunSource::kFromScene has stale light reference "
-          "(node is not alive)");
-        return kNoSun;
-      }
-
-      LOG_F(ERROR,
-        "SunResolver: SunSource::kFromScene has no bound scene light "
-        "(missing Sun light reference)");
-      return kNoSun;
-    }
+  const auto sun_light
+    = ResolveUniqueSunTaggedDirectionalLight(directional_lights);
+  if (!sun_light.has_value()) {
+    return kNoSun;
   }
 
-  return ResolveSunFromSelection(SelectSunLight(directional_lights), nullptr);
+  return BuildResolvedSunFromDirectionalLight(*sun_light);
 }
 
 } // namespace oxygen::engine::internal

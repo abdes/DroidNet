@@ -17,3 +17,9 @@ m_gtest_program(
   SOURCES
     "DemoShellConsoleDefaults_test.cpp"
 )
+
+m_gtest_program(
+  EnvironmentSettingsService
+  SOURCES
+    "EnvironmentSettingsService_test.cpp"
+)

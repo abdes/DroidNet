@@ -379,6 +379,7 @@ private:
   auto MaybeAutoLoadSkybox() -> void;
   auto ApplySavedSunSourcePreference() -> void;
   auto ResetSunUiToDefaults() -> void;
+  auto EnsureSceneHasSunAtActivation() -> void;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
   auto EnsureSyntheticSunLight() -> void;
   auto DestroySyntheticSunLight() -> void;
