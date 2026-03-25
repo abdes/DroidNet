@@ -244,4 +244,55 @@ static_assert(offsetof(VsmPageRequestProjection, level_count) == 176U);
 static_assert(offsetof(VsmPageRequestProjection, coarse_level) == 180U);
 static_assert(offsetof(VsmPageRequestProjection, light_index) == 184U);
 
+// Shader-facing shadow-raster work item for one prepared virtual page.
+//
+// The rasterizer pass computes a page-local cropped view-projection matrix on
+// the CPU so the GPU culling shader can test draw bounds directly against the
+// exact page frustum it will later rasterize.
+struct VsmShaderRasterPageJob {
+  glm::mat4 view_projection_matrix { 1.0F };
+  std::uint32_t page_table_index { 0U };
+  VsmVirtualShadowMapId map_id { 0U };
+  std::uint32_t virtual_page_x { 0U };
+  std::uint32_t virtual_page_y { 0U };
+  std::uint32_t virtual_page_level { 0U };
+  std::uint32_t _pad0 { 0U };
+  std::uint32_t _pad1 { 0U };
+  std::uint32_t _pad2 { 0U };
+
+  auto operator==(const VsmShaderRasterPageJob&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderRasterPageJob>);
+static_assert(sizeof(VsmShaderRasterPageJob) == 96U);
+static_assert(offsetof(VsmShaderRasterPageJob, view_projection_matrix) == 0U);
+static_assert(offsetof(VsmShaderRasterPageJob, page_table_index) == 64U);
+static_assert(offsetof(VsmShaderRasterPageJob, map_id) == 68U);
+static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_x) == 72U);
+static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_y) == 76U);
+static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_level) == 80U);
+
+// Packed indirect command layout for ExecuteIndirect(kDrawWithRootConstant).
+//
+// DWORD0 is the per-draw root constant (`g_DrawIndex`), followed by the native
+// D3D12 draw-arguments payload.
+struct VsmShaderIndirectDrawCommand {
+  std::uint32_t draw_index { 0U };
+  std::uint32_t vertex_count_per_instance { 0U };
+  std::uint32_t instance_count { 0U };
+  std::uint32_t start_vertex_location { 0U };
+  std::uint32_t start_instance_location { 0U };
+
+  auto operator==(const VsmShaderIndirectDrawCommand&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderIndirectDrawCommand>);
+static_assert(sizeof(VsmShaderIndirectDrawCommand) == 20U);
+static_assert(offsetof(VsmShaderIndirectDrawCommand, draw_index) == 0U);
+static_assert(
+  offsetof(VsmShaderIndirectDrawCommand, vertex_count_per_instance) == 4U);
+static_assert(offsetof(VsmShaderIndirectDrawCommand, instance_count) == 8U);
+static_assert(
+  offsetof(VsmShaderIndirectDrawCommand, start_vertex_location) == 12U);
+static_assert(
+  offsetof(VsmShaderIndirectDrawCommand, start_instance_location) == 16U);
+
 } // namespace oxygen::renderer::vsm

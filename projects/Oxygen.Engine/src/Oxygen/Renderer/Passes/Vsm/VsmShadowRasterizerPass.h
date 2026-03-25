@@ -15,6 +15,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h>
@@ -47,6 +48,14 @@ class VsmShadowRasterizerPass : public DepthPrePass {
 public:
   using Config = VsmShadowRasterizerPassConfig;
 
+  struct IndirectPartitionInspection {
+    PassMask pass_mask {};
+    std::uint32_t draw_count { 0U };
+    std::uint32_t max_commands_per_page { 0U };
+    const graphics::Buffer* command_buffer { nullptr };
+    const graphics::Buffer* count_buffer { nullptr };
+  };
+
   OXGN_RNDR_API VsmShadowRasterizerPass(
     observer_ptr<Graphics> gfx, std::shared_ptr<Config> config);
   OXGN_RNDR_API ~VsmShadowRasterizerPass() override;
@@ -61,6 +70,9 @@ public:
     -> std::size_t;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetPreparedPages() const noexcept
     -> std::span<const renderer::vsm::VsmShadowRasterPageJob>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetIndirectPartitionsForInspection() const noexcept
+    -> std::span<const IndirectPartitionInspection>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const
     -> const graphics::Texture& override;
 
