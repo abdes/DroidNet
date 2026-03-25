@@ -1040,18 +1040,13 @@ auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   auto* d3d12_command_list = command_list_impl.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  // Resolve the clear values for depth and stencil using the texture format.
+  // Explicit DSV clears must honor the caller-provided values. The optimized
+  // clear value in the texture descriptor is creation metadata, not an
+  // override for runtime clear requests.
   const auto& depth_tex_desc = texture.GetDescriptor();
   const auto format_info = GetFormatInfo(depth_tex_desc.format);
-  const float clear_depth
-    = (depth_tex_desc.use_clear_value && format_info.has_depth)
-    ? depth_tex_desc.clear_value.r
-    : depth;
-  const uint8_t clear_stencil
-    = (depth_tex_desc.use_clear_value && format_info.has_stencil)
-    ? static_cast<uint8_t>(
-        depth_tex_desc.clear_value.g) // Assuming stencil is in .g
-    : stencil;
+  const float clear_depth = format_info.has_depth ? depth : 0.0F;
+  const uint8_t clear_stencil = format_info.has_stencil ? stencil : 0U;
 
   const auto d3d12_clear_flags = detail::ConvertClearFlags(clear_flags);
   const D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = dsv->AsInteger() };
@@ -1077,14 +1072,8 @@ auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
 
   const auto& depth_tex_desc = texture.GetDescriptor();
   const auto format_info = GetFormatInfo(depth_tex_desc.format);
-  const float clear_depth
-    = (depth_tex_desc.use_clear_value && format_info.has_depth)
-    ? depth_tex_desc.clear_value.r
-    : depth;
-  const uint8_t clear_stencil
-    = (depth_tex_desc.use_clear_value && format_info.has_stencil)
-    ? static_cast<uint8_t>(depth_tex_desc.clear_value.g)
-    : stencil;
+  const float clear_depth = format_info.has_depth ? depth : 0.0F;
+  const uint8_t clear_stencil = format_info.has_stencil ? stencil : 0U;
 
   std::vector<D3D12_RECT> d3d_rects;
   d3d_rects.reserve(rects.size());
