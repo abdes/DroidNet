@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
 class Graphics;
@@ -28,7 +29,7 @@ class ViewLifecycleAccessTag;
 
 namespace access {
   struct ViewLifecycleTagFactory {
-    static auto Get() noexcept -> ViewLifecycleAccessTag;
+    static OXGN_RNDR_API auto Get() noexcept -> ViewLifecycleAccessTag;
   };
 } // namespace access
 
@@ -45,7 +46,7 @@ public:
   OXYGEN_DEFAULT_COPYABLE(CompositionViewImpl)
   OXYGEN_DEFAULT_MOVABLE(CompositionViewImpl)
 
-  void PrepareForRender(const CompositionView& descriptor,
+  OXGN_RNDR_API void PrepareForRender(const CompositionView& descriptor,
     uint32_t submission_order, frame::SequenceNumber frame_seq,
     Graphics& graphics, ViewLifecycleAccessTag tag);
 

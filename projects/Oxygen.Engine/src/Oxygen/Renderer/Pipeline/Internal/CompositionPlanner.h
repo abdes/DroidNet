@@ -12,6 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::renderer::internal {
 
@@ -23,12 +24,12 @@ public:
     : frame_plan_builder_(frame_plan_builder)
   {
   }
-  ~CompositionPlanner();
+  OXGN_RNDR_API ~CompositionPlanner();
   OXYGEN_MAKE_NON_COPYABLE(CompositionPlanner)
   OXYGEN_MAKE_NON_MOVABLE(CompositionPlanner)
 
-  void PlanCompositingTasks();
-  auto BuildCompositionSubmission(
+  OXGN_RNDR_API void PlanCompositingTasks();
+  OXGN_RNDR_API auto BuildCompositionSubmission(
     std::shared_ptr<graphics::Framebuffer> final_output)
     -> oxygen::engine::CompositionSubmission;
 
