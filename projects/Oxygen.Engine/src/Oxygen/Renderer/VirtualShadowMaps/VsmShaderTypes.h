@@ -249,6 +249,13 @@ static_assert(offsetof(VsmPageRequestProjection, light_index) == 184U);
 // The rasterizer pass computes a page-local cropped view-projection matrix on
 // the CPU so the GPU culling shader can test draw bounds directly against the
 // exact page frustum it will later rasterize.
+enum class VsmShaderRasterPageJobFlagBits : std::uint32_t {
+  kNone = 0U,
+  kStaticOnly = OXYGEN_FLAG(0),
+};
+
+OXYGEN_DEFINE_FLAGS_OPERATORS(VsmShaderRasterPageJobFlagBits)
+
 struct VsmShaderRasterPageJob {
   glm::mat4 view_projection_matrix { 1.0F };
   std::uint32_t page_table_index { 0U };
@@ -256,9 +263,9 @@ struct VsmShaderRasterPageJob {
   std::uint32_t virtual_page_x { 0U };
   std::uint32_t virtual_page_y { 0U };
   std::uint32_t virtual_page_level { 0U };
+  std::uint32_t physical_page_index { 0U };
+  std::uint32_t job_flags { 0U };
   std::uint32_t _pad0 { 0U };
-  std::uint32_t _pad1 { 0U };
-  std::uint32_t _pad2 { 0U };
 
   auto operator==(const VsmShaderRasterPageJob&) const -> bool = default;
 };
@@ -270,6 +277,8 @@ static_assert(offsetof(VsmShaderRasterPageJob, map_id) == 68U);
 static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_x) == 72U);
 static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_y) == 76U);
 static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_level) == 80U);
+static_assert(offsetof(VsmShaderRasterPageJob, physical_page_index) == 84U);
+static_assert(offsetof(VsmShaderRasterPageJob, job_flags) == 88U);
 
 // Packed indirect command layout for ExecuteIndirect(kDrawWithRootConstant).
 //

@@ -42,6 +42,8 @@ struct VsmShadowRasterizerPassInput {
   renderer::vsm::VsmPhysicalPoolSnapshot physical_pool {};
   std::vector<renderer::vsm::VsmPageRequestProjection> projections {};
   std::optional<ViewConstants::GpuData> base_view_constants {};
+  std::vector<renderer::vsm::VsmPrimitiveIdentity>
+    previous_visible_shadow_primitives {};
 };
 
 class VsmShadowRasterizerPass : public DepthPrePass {
@@ -73,6 +75,10 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetIndirectPartitionsForInspection() const noexcept
     -> std::span<const IndirectPartitionInspection>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetVisibleShadowPrimitives() const noexcept
+    -> std::span<const renderer::vsm::VsmPrimitiveIdentity>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetStaticPageFeedback() const noexcept
+    -> std::span<const renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const
     -> const graphics::Texture& override;
 

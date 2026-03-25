@@ -414,6 +414,38 @@ auto VsmCacheManager::CommitPageAllocationFrame()
   return *runtime_state_.current_frame;
 }
 
+auto VsmCacheManager::PublishVisibleShadowPrimitives(
+  const std::span<const VsmPrimitiveIdentity> primitives) -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishVisibleShadowPrimitives requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishVisibleShadowPrimitives requires a committed current frame");
+
+  auto& published
+    = runtime_state_.current_frame->snapshot.visible_shadow_primitives;
+  published.assign(primitives.begin(), primitives.end());
+
+  DLOG_F(2, "published visible shadow primitives generation={} count={}",
+    runtime_state_.current_frame->snapshot.frame_generation, published.size());
+}
+
+auto VsmCacheManager::PublishStaticPrimitivePageFeedback(
+  const std::span<const VsmStaticPrimitivePageFeedbackRecord> feedback) -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishStaticPrimitivePageFeedback requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishStaticPrimitivePageFeedback requires a committed current frame");
+
+  auto& published
+    = runtime_state_.current_frame->snapshot.static_primitive_page_feedback;
+  published.assign(feedback.begin(), feedback.end());
+
+  DLOG_F(2, "published static primitive/page feedback generation={} count={}",
+    runtime_state_.current_frame->snapshot.frame_generation, published.size());
+}
+
 auto VsmCacheManager::ExtractFrameData() -> void
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,

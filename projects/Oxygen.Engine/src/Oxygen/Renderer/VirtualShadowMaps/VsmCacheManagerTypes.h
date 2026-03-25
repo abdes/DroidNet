@@ -138,6 +138,37 @@ enum class VsmLightCacheKind : std::uint8_t {
 OXGN_RNDR_NDAPI auto to_string(VsmLightCacheKind value) noexcept
   -> std::string_view;
 
+enum class VsmRenderedPageDirtyFlagBits : std::uint32_t {
+  kNone = 0U,
+  kDynamicRasterized = 1U << 0U,
+  kStaticRasterized = 1U << 1U,
+  kRevealForced = 1U << 2U,
+};
+
+struct VsmPrimitiveIdentity {
+  std::uint32_t transform_index { 0U };
+  std::uint32_t transform_generation { 0U };
+  std::uint32_t submesh_index { 0U };
+  std::uint32_t primitive_flags { 0U };
+
+  auto operator==(const VsmPrimitiveIdentity&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmPrimitiveIdentity>);
+static_assert(sizeof(VsmPrimitiveIdentity) == 16U);
+
+struct VsmStaticPrimitivePageFeedbackRecord {
+  VsmPrimitiveIdentity primitive {};
+  std::uint32_t page_table_index { 0U };
+  VsmPhysicalPageIndex physical_page {};
+  VsmVirtualShadowMapId map_id { 0U };
+  VsmVirtualPageCoord virtual_page {};
+  std::uint32_t valid { 0U };
+
+  auto operator==(const VsmStaticPrimitivePageFeedbackRecord&) const -> bool
+    = default;
+};
+static_assert(std::is_standard_layout_v<VsmStaticPrimitivePageFeedbackRecord>);
+
 struct VsmCacheEntryFrameState {
   VsmVirtualShadowMapId virtual_map_id { 0 };
   std::uint32_t first_page_table_entry { 0 };
@@ -274,6 +305,9 @@ struct VsmPageAllocationSnapshot {
   std::vector<VsmLightCacheEntryState> light_cache_entries {};
   std::vector<VsmVirtualMapLayout> retained_local_light_layouts {};
   std::vector<VsmClipmapLayout> retained_directional_layouts {};
+  std::vector<VsmPrimitiveIdentity> visible_shadow_primitives {};
+  std::vector<VsmStaticPrimitivePageFeedbackRecord>
+    static_primitive_page_feedback {};
   std::vector<VsmPageTableEntry> page_table {};
   std::vector<VsmPhysicalPageMeta> physical_pages {};
 
