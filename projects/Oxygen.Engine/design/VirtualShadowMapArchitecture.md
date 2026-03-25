@@ -810,6 +810,62 @@ These rules apply across all modules:
 15. **Scene invalidation uses a dedicated GPU invalidation stage** that writes previous-frame physical metadata flags before the next reuse/page-management pass consumes them.
 16. **Previous-frame HZB is compatibility-gated**, not universally reusable.
 
+### 15.1 Logging and Contract Enforcement
+
+The VSM architecture treats logging and contract validation as first-class design
+requirements, not late polish. New modules and slices must ship with the
+diagnostics needed to explain both success-path flow and contract-path failure
+from day 1.
+
+Rules:
+
+1. **Module-boundary contract checks are mandatory from the first implementation slice.**
+   Validate all published seam inputs when they enter a stage, especially pool
+   availability, snapshot readiness, projection completeness, page-index bounds,
+   and required renderer/graphics dependencies.
+2. **Use `CHECK_*` for non-recoverable runtime contracts.**
+   If the stage cannot proceed safely and continuing would hide a programming or
+   wiring error, fail fast in all builds.
+3. **Use `DCHECK_*` for debug-only internal invariants.**
+   Apply these where the public contract should already guarantee correctness and
+   the assertion exists to catch regressions during development.
+4. **Use always-on `LOG_*` only for actionable diagnostics.**
+   This includes malformed inputs, rejected work, compatibility failures,
+   invalidation reasons, resource creation failures, enqueue/map failures, and
+   other conditions the engine may survive but that indicate broken or degraded
+   behavior.
+5. **Use `DLOG_*` / `DLOG_SCOPE_*` for routine success-path flow.**
+   Stage entry/exit, prepared counts, barrier flush scopes, readback scopes,
+   normal state-tracking chatter, and similar hot-path observability belong in
+   debug-only logging, not always-on logging.
+6. **Do not promote happy-path tracing to always-on logs.**
+   The presence of a normal render, cull, transition, or readback path is not
+   itself a warning condition.
+7. **Scope-log strings must be preformatted at the call site.**
+   For `LOG_SCOPE_F` / `DLOG_SCOPE_F`, construct the final string explicitly
+   (for example with `fmt::format(...).c_str()`) instead of relying on mixed
+   formatting conventions inside the macro.
+8. **Warnings must explain deterministic rejection.**
+   When the system skips or rejects work, the log must name the reason and the
+   key identifiers needed to diagnose it (for example map id, page coordinates,
+   pool identity, or compatibility reason).
+9. **Logs must preserve ownership boundaries.**
+   The module that validates a contract is the module that reports its failure;
+   downstream stages must not silently reinterpret or repair invalid upstream
+   state.
+10. **Validation includes verbose-log review.**
+    New VSM tests and GPU lifecycle tests are not considered sufficiently
+    validated until they are run at maximum log verbosity and the resulting log
+    flow is inspected for sanity, expected ordering, and absence of contradictory
+    behavior.
+
+Expected validation pattern for new VSM work:
+
+- run focused tests for the touched slice
+- rerun them with maximum verbosity
+- confirm the logs show the expected control flow and contract-path diagnostics
+- treat malformed or misleading logs as implementation defects, not cosmetic issues
+
 ---
 
 ## 16. Physical Pool Configuration

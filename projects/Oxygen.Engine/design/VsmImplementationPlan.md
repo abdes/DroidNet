@@ -8,6 +8,7 @@ Cross-references:
 
 - `VirtualShadowMapArchitecture.md` — authoritative architecture spec
 - `VsmCacheManagerAndPageAllocationImplementationPlan.md` — completed cache-manager/allocation plan (Phases 0–8 done)
+- `VsmShadowRasterizerImplementationPlan.md` — active Phase F sub-plan
 
 CPU-GPU ABI Guidelines
 
@@ -261,6 +262,11 @@ Validation evidence on 2026-03-25:
 ### Phase F — Shadow Rasterizer Pass
 
 **Architecture ref:** §3.6, §12, stage 12
+
+**Execution note:** this phase is now decomposed in
+`VsmShadowRasterizerImplementationPlan.md`. Parent Phase F remains incomplete
+until that sub-plan's slices are validated. Current sub-plan status:
+`F0` complete with validation evidence on `2026-03-25`; `F1` not started.
 
 **Deliverables:**
 
@@ -560,7 +566,7 @@ src/Oxygen/Renderer/VirtualShadowMaps/
 
 ## 7. Risk Notes
 
-1. **GPU-driven culling complexity** — Phase F (shadow rasterizer) is the most complex GPU pass. Consider splitting into a sub-plan once Phase E is complete.
+1. **GPU-driven culling complexity** — Phase F (shadow rasterizer) is the most complex GPU pass. It is now split into `VsmShadowRasterizerImplementationPlan.md`; keep parent Phase F status incomplete until every slice there is validated.
 2. **Shader compilation pipeline** — Verify HLSL compilation infrastructure supports compute shaders in the `Vsm/` subdirectory before Phase B work begins.
 3. **CPU ↔ GPU struct parity** — Must be enforced from Phase B onward; drifts here cause silent corruption.
 4. **Performance budget** — Physical pool size and page request generation cost are the primary tuning knobs. Phase L must establish baselines before optimization.

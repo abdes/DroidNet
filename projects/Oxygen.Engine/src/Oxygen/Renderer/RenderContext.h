@@ -84,6 +84,7 @@ class GpuDebugDrawPass;
 class GroundGridPass;
 class ScreenHzbBuildPass;
 class VsmPageRequestGeneratorPass;
+class VsmShadowRasterizerPass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
@@ -93,8 +94,8 @@ class VsmPageRequestGeneratorPass;
 using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
-  ConventionalShadowRasterPass, ScreenHzbBuildPass,
-  VsmPageRequestGeneratorPass>;
+  ConventionalShadowRasterPass, ScreenHzbBuildPass, VsmPageRequestGeneratorPass,
+  VsmShadowRasterizerPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

@@ -72,6 +72,7 @@ m_gtest_program(
     "VirtualShadow/VsmCacheManagerState_test.cpp"
     "VirtualShadow/VsmCacheManagerTypes_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
+    "VirtualShadow/VsmShadowRasterJobs_test.cpp"
     "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
     "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
@@ -97,6 +98,7 @@ source_group(
     "VirtualShadow/VsmCacheManagerState_test.cpp"
     "VirtualShadow/VsmCacheManagerTypes_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
+    "VirtualShadow/VsmShadowRasterJobs_test.cpp"
     "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
     "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
@@ -109,7 +111,7 @@ if(TARGET oxygen::graphics-direct3d12)
     SOURCES
       "ScreenHzbBuildPass_test.cpp"
       "Fixtures/RendererOffscreenGpuTestFixture.h"
-    DEPS
+      DEPS
       oxygen::graphics-direct3d12
   )
 
@@ -122,7 +124,8 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
-    DEPS
+      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
+      DEPS
       oxygen::graphics-direct3d12
   )
 
@@ -138,6 +141,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
+      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
   )
 endif()
 
