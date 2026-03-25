@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
@@ -150,6 +151,57 @@ namespace {
     return texture;
   }
 
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  template <typename Resource>
+  auto UnregisterResourceIfPresent(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (registry.Contains(*resource)) {
+      registry.UnRegisterResource(*resource);
+    }
+  }
+
+  auto ReleaseShadowResources(Graphics* gfx,
+    std::shared_ptr<graphics::Texture>& shadow_texture,
+    std::shared_ptr<graphics::Buffer>& metadata_buffer) -> void
+  {
+    if (gfx != nullptr) {
+      UnregisterResourceIfPresent(*gfx, metadata_buffer);
+      UnregisterResourceIfPresent(*gfx, shadow_texture);
+    }
+
+    shadow_texture.reset();
+    metadata_buffer.reset();
+  }
+
+  auto ReleaseHzbResources(
+    Graphics* gfx, std::shared_ptr<graphics::Texture>& texture) -> void
+  {
+    if (gfx != nullptr) {
+      UnregisterResourceIfPresent(*gfx, texture);
+    }
+
+    texture.reset();
+  }
+
 } // namespace
 
 VsmPhysicalPagePoolManager::VsmPhysicalPagePoolManager(Graphics* gfx) noexcept
@@ -157,7 +209,7 @@ VsmPhysicalPagePoolManager::VsmPhysicalPagePoolManager(Graphics* gfx) noexcept
 {
 }
 
-VsmPhysicalPagePoolManager::~VsmPhysicalPagePoolManager() = default;
+VsmPhysicalPagePoolManager::~VsmPhysicalPagePoolManager() { Reset(); }
 
 auto VsmPhysicalPagePoolManager::EnsureShadowPool(
   const VsmPhysicalPoolConfig& config) -> VsmPhysicalPoolChangeResult
@@ -182,6 +234,8 @@ auto VsmPhysicalPagePoolManager::EnsureShadowPool(
     next_resources.shadow_texture
       = CreateShadowTexture(*gfx_, config, tiles_per_axis);
     next_resources.metadata_buffer = CreateMetadataBuffer(*gfx_, config);
+    RegisterResourceIfNeeded(*gfx_, next_resources.shadow_texture);
+    RegisterResourceIfNeeded(*gfx_, next_resources.metadata_buffer);
   }
 
   if (!shadow_state_.is_available) {
@@ -207,6 +261,8 @@ auto VsmPhysicalPagePoolManager::EnsureShadowPool(
 
   DLOG_F(2, "recreating shadow pool id={} due to {}",
     shadow_state_.pool_identity, to_string(compatibility));
+  ReleaseShadowResources(
+    gfx_, shadow_resources_.shadow_texture, shadow_resources_.metadata_buffer);
   shadow_state_.config = config;
   shadow_state_.tiles_per_axis = tiles_per_axis;
   shadow_state_.is_available = true;
@@ -215,7 +271,7 @@ auto VsmPhysicalPagePoolManager::EnsureShadowPool(
   if (hzb_state_.is_available) {
     DLOG_F(2, "invalidating derived HZB pool because shadow pool changed");
     hzb_state_ = {};
-    hzb_resources_ = {};
+    ReleaseHzbResources(gfx_, hzb_resources_.texture);
   }
   return VsmPhysicalPoolChangeResult::kRecreated;
 }
@@ -257,6 +313,7 @@ auto VsmPhysicalPagePoolManager::EnsureHzbPool(const VsmHzbPoolConfig& config)
       || previous_array_size != derived_array_size)) {
     next_resources.texture = CreateHzbTexture(
       *gfx_, config, derived_width, derived_height, derived_array_size);
+    RegisterResourceIfNeeded(*gfx_, next_resources.texture);
   }
 
   hzb_state_.config = config;
@@ -264,9 +321,9 @@ auto VsmPhysicalPagePoolManager::EnsureHzbPool(const VsmHzbPoolConfig& config)
   hzb_state_.width = derived_width;
   hzb_state_.height = derived_height;
   hzb_state_.array_size = derived_array_size;
-  hzb_resources_ = std::move(next_resources);
 
   if (!was_available) {
+    hzb_resources_ = std::move(next_resources);
     DLOG_F(2, "created HZB pool {}x{} mips={} array_size={}", hzb_state_.width,
       hzb_state_.height, hzb_state_.config.mip_count, hzb_state_.array_size);
     return VsmHzbPoolChangeResult::kCreated;
@@ -275,12 +332,15 @@ auto VsmPhysicalPagePoolManager::EnsureHzbPool(const VsmHzbPoolConfig& config)
   if (previous_config == config && previous_width == derived_width
     && previous_height == derived_height
     && previous_array_size == derived_array_size) {
+    hzb_resources_ = std::move(next_resources);
     DLOG_F(3, "HZB pool config unchanged");
     return VsmHzbPoolChangeResult::kUnchanged;
   }
 
+  ReleaseHzbResources(gfx_, hzb_resources_.texture);
   DLOG_F(2, "recreated HZB pool {}x{} mips={} array_size={}", hzb_state_.width,
     hzb_state_.height, hzb_state_.config.mip_count, hzb_state_.array_size);
+  hzb_resources_ = std::move(next_resources);
   return VsmHzbPoolChangeResult::kRecreated;
 }
 
@@ -289,10 +349,11 @@ auto VsmPhysicalPagePoolManager::Reset() -> void
   DLOG_F(2, "reset shadow_available={} hzb_available={} pool_id={}",
     shadow_state_.is_available, hzb_state_.is_available,
     shadow_state_.pool_identity);
+  ReleaseShadowResources(
+    gfx_, shadow_resources_.shadow_texture, shadow_resources_.metadata_buffer);
+  ReleaseHzbResources(gfx_, hzb_resources_.texture);
   shadow_state_ = {};
   hzb_state_ = {};
-  shadow_resources_ = {};
-  hzb_resources_ = {};
 }
 
 auto VsmPhysicalPagePoolManager::IsShadowPoolAvailable() const noexcept -> bool

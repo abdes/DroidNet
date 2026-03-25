@@ -18,7 +18,7 @@ validated.
 | Status | Slice | Deliverable | Exit Gate |
 | --- | --- | --- | --- |
 | ☑ | F0 | Pass scaffolding and deterministic page-job preparation | `VsmShadowRasterizerPass` exists, consumes current allocation products, expands raster page jobs deterministically, and has focused automated coverage |
-| ☐ | F1 | Baseline depth submission into physical VSM pages | Dynamic-slice depth writes land in the correct physical page rects for known test geometry without touching unrelated pages |
+| ☑ | F1 | Baseline depth submission into physical VSM pages | Dynamic-slice depth writes land in the correct physical page rects for known test geometry without touching unrelated pages |
 | ☐ | F2 | GPU instance culling and compact draw-list generation | Instance culling consumes draw bounds plus previous-frame screen HZB and emits compact per-page draw arguments |
 | ☐ | F3 | Static recache, reveal tracking, and invalidation feedback | Static-only rerender routing, reveal-forced redraw, and primitive-to-page feedback all exist without breaking the merge contract |
 | ☐ | F4 | Point-light face routing, orchestration hardening, and validation sweep | Directional + local-light paths render correctly, targeted tests pass, and parent Phase F exit gate evidence is complete |
@@ -106,7 +106,8 @@ Scope:
 
 ## 3. Current Slice Status
 
-`F0` is now implemented and validated. The next active slice is `F1`.
+`F0` and `F1` are now implemented and validated. The next active slice is
+`F2`.
 
 Delivered in `F0`:
 
@@ -125,6 +126,34 @@ Evidence backing `F0`:
 - the pass fixed its own shadow-texture resource tracking instead of relying on
   implicit upstream state
 - remaining gaps to `F1` are listed instead of implied away
+
+Delivered in `F1`:
+
+- `VsmShadowRasterizerPass` now reuses the shared `DepthPrePass` depth-only
+  raster path instead of inventing a parallel submission stack
+- per-page VSM jobs upload page-local `ViewConstants` derived from the prepared
+  shadow projection while preserving the published bindless view-frame slot
+- dynamic-slice raster submission binds per-page DSVs, viewport/scissor rects,
+  and emits opaque/masked shadow-caster draws into the physical shadow pool
+- `VsmPhysicalPagePoolManager` now owns the `ResourceRegistry` contract for VSM
+  shadow/HZB pool resources, including unregister on recreate/reset/destruction
+- focused GPU coverage verifies both physical-page depth writes and resource
+  registry lifetime behavior
+
+Evidence backing `F1` on `2026-03-25`:
+
+- built `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` and
+  `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` in
+  `out/build-ninja` (`Debug`)
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "VsmShadowRaster|VsmPhysicalPagePoolGpuLifecycle"` with `100% tests passed, 0 tests failed out of 14`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPhysicalPagePoolGpuLifecycleTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmShadowRasterJobsTest.* -v 9`
+- max-verbosity logs showed the expected flow: pool-resource registration,
+  `Common -> DepthWrite`, `VsmShadowRasterizerPass` prepare summary,
+  `execute prepared_pages=1 eligible_pages=1 emitted=1`, and registered pool
+  resources being unregistered on reset/destruction
+- the GPU correctness test verified depth changed inside the target physical
+  page while a neighboring page remained at the cleared depth
 
 ## 4. Expected Source Layout
 
