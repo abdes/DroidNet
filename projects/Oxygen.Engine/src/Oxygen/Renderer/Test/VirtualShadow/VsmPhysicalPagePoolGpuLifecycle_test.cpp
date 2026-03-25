@@ -32,6 +32,7 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   CreatingPoolsPublishesNonNullHandlesAndExpectedDescriptors)
 {
   auto manager = VsmPhysicalPagePoolManager(&Backend());
+  auto& registry = Backend().GetResourceRegistry();
   const auto shadow_config = MakeShadowPoolConfig();
   const auto hzb_config = MakeHzbPoolConfig();
 
@@ -48,6 +49,9 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   ASSERT_NE(shadow_snapshot.metadata_buffer, nullptr);
   ASSERT_TRUE(hzb_snapshot.is_available);
   ASSERT_NE(hzb_snapshot.texture, nullptr);
+  EXPECT_TRUE(registry.Contains(*shadow_snapshot.shadow_texture));
+  EXPECT_TRUE(registry.Contains(*shadow_snapshot.metadata_buffer));
+  EXPECT_TRUE(registry.Contains(*hzb_snapshot.texture));
 
   const auto& shadow_desc = shadow_snapshot.shadow_texture->GetDescriptor();
   EXPECT_EQ(shadow_desc.width, 2048U);
@@ -102,6 +106,7 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   IncompatibleShadowEnsureReplacesHandlesAndAdvancesIdentity)
 {
   auto manager = VsmPhysicalPagePoolManager(&Backend());
+  auto& registry = Backend().GetResourceRegistry();
   auto config = MakeShadowPoolConfig();
 
   ASSERT_EQ(
@@ -119,6 +124,10 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   EXPECT_NE(after.metadata_buffer, before.metadata_buffer);
   EXPECT_EQ(after.shadow_texture->GetDescriptor().width, 4096U);
   EXPECT_EQ(after.shadow_texture->GetDescriptor().height, 4096U);
+  EXPECT_FALSE(registry.Contains(*before.shadow_texture));
+  EXPECT_FALSE(registry.Contains(*before.metadata_buffer));
+  EXPECT_TRUE(registry.Contains(*after.shadow_texture));
+  EXPECT_TRUE(registry.Contains(*after.metadata_buffer));
 }
 
 NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
@@ -217,6 +226,8 @@ NOLINT_TEST_F(
   ASSERT_EQ(manager.EnsureHzbPool(MakeHzbPoolConfig()),
     VsmHzbPoolChangeResult::kCreated);
 
+  const auto shadow_before = manager.GetShadowPoolSnapshot();
+  const auto hzb_before = manager.GetHzbPoolSnapshot();
   manager.Reset();
 
   const auto shadow_snapshot = manager.GetShadowPoolSnapshot();
@@ -226,6 +237,46 @@ NOLINT_TEST_F(
   EXPECT_EQ(shadow_snapshot.shadow_texture, nullptr);
   EXPECT_EQ(shadow_snapshot.metadata_buffer, nullptr);
   EXPECT_EQ(hzb_snapshot.texture, nullptr);
+  EXPECT_FALSE(
+    Backend().GetResourceRegistry().Contains(*shadow_before.shadow_texture));
+  EXPECT_FALSE(
+    Backend().GetResourceRegistry().Contains(*shadow_before.metadata_buffer));
+  EXPECT_FALSE(Backend().GetResourceRegistry().Contains(*hzb_before.texture));
+}
+
+NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
+  DestructorUnregistersPublishedResourcesFromRegistry)
+{
+  auto& registry = Backend().GetResourceRegistry();
+
+  auto shadow_texture = std::shared_ptr<const oxygen::graphics::Texture> {};
+  auto metadata_buffer = std::shared_ptr<const oxygen::graphics::Buffer> {};
+  auto hzb_texture = std::shared_ptr<const oxygen::graphics::Texture> {};
+
+  {
+    auto manager = VsmPhysicalPagePoolManager(&Backend());
+    ASSERT_EQ(manager.EnsureShadowPool(MakeShadowPoolConfig()),
+      VsmPhysicalPoolChangeResult::kCreated);
+    ASSERT_EQ(manager.EnsureHzbPool(MakeHzbPoolConfig()),
+      VsmHzbPoolChangeResult::kCreated);
+
+    const auto shadow_snapshot = manager.GetShadowPoolSnapshot();
+    const auto hzb_snapshot = manager.GetHzbPoolSnapshot();
+    shadow_texture = shadow_snapshot.shadow_texture;
+    metadata_buffer = shadow_snapshot.metadata_buffer;
+    hzb_texture = hzb_snapshot.texture;
+
+    ASSERT_NE(shadow_texture, nullptr);
+    ASSERT_NE(metadata_buffer, nullptr);
+    ASSERT_NE(hzb_texture, nullptr);
+    EXPECT_TRUE(registry.Contains(*shadow_texture));
+    EXPECT_TRUE(registry.Contains(*metadata_buffer));
+    EXPECT_TRUE(registry.Contains(*hzb_texture));
+  }
+
+  EXPECT_FALSE(registry.Contains(*shadow_texture));
+  EXPECT_FALSE(registry.Contains(*metadata_buffer));
+  EXPECT_FALSE(registry.Contains(*hzb_texture));
 }
 
 } // namespace

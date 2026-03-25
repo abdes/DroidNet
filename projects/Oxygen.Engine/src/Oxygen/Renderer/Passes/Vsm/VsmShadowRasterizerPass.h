@@ -14,7 +14,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -39,9 +40,10 @@ struct VsmShadowRasterizerPassInput {
   renderer::vsm::VsmPageAllocationFrame frame {};
   renderer::vsm::VsmPhysicalPoolSnapshot physical_pool {};
   std::vector<renderer::vsm::VsmPageRequestProjection> projections {};
+  std::optional<ViewConstants::GpuData> base_view_constants {};
 };
 
-class VsmShadowRasterizerPass : public GraphicsRenderPass {
+class VsmShadowRasterizerPass : public DepthPrePass {
 public:
   using Config = VsmShadowRasterizerPassConfig;
 
@@ -59,9 +61,13 @@ public:
     -> std::size_t;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetPreparedPages() const noexcept
     -> std::span<const renderer::vsm::VsmShadowRasterPageJob>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const
+    -> const graphics::Texture& override;
 
 protected:
   auto ValidateConfig() -> void override;
+  auto OnPrepareResources(graphics::CommandRecorder& recorder) -> void override;
+  auto OnExecute(graphics::CommandRecorder& recorder) -> void override;
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
   auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
@@ -69,6 +75,8 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
+  auto UsesFramebufferDepthAttachment() const -> bool override;
+
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
