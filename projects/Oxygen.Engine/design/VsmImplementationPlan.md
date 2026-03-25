@@ -266,8 +266,8 @@ Validation evidence on 2026-03-25:
 **Execution note:** this phase is now decomposed in
 `VsmShadowRasterizerImplementationPlan.md`. Parent Phase F remains incomplete
 until that sub-plan's slices are validated. Current sub-plan status:
-`F0` and `F1` complete with validation evidence on `2026-03-25`; `F2` is the
-next active slice.
+`F0`, `F1`, and `F2` complete with validation evidence on `2026-03-25`; `F3`
+is the next active slice.
 
 **Deliverables:**
 
@@ -293,28 +293,46 @@ next active slice.
 
 **Exit gate:** Shadow depth is correctly rasterized into physical pages for a test scene with known geometry, including point-light face selection and static-recache routing when enabled.
 
-Validation evidence through `F1` on `2026-03-25`:
+Validation evidence through `F2` on `2026-03-25`:
 
 - `VsmShadowRasterizerPass` now submits baseline depth draws into the physical
   VSM dynamic slice for prepared page jobs, with page-local viewport/scissor
   and view constants
+- `VsmShadowRasterizerPass` now dispatches GPU instance culling over active
+  shadow-caster partitions, compacts per-page indirect draw commands, and
+  consumes previous-frame screen HZB when available
 - `VsmPhysicalPagePoolManager` now registers VSM pool resources on creation and
   unregisters them on recreate/reset/destruction so per-page DSV creation obeys
   the renderer resource-registry contract
-- built `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` and
+- built `Oxygen.Graphics.Common.Commander.Tests`,
+  `Oxygen.Renderer.GpuTimelineProfiler.Tests`,
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`, and
   `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` in
   `out/build-ninja` (`Debug`)
-- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "VsmShadowRaster|VsmPhysicalPagePoolGpuLifecycle"` with `100% tests passed, 0 tests failed out of 14`
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Graphics\\.Common\\.Commander\\.Tests|Oxygen\\.Renderer\\.GpuTimelineProfiler\\.Tests|VsmShadowRaster|VsmPhysicalPagePoolGpuLifecycle"` with `100% tests passed, 0 tests failed out of 17`
+- ran
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Graphics.Common.Commander.Tests.exe -v 9`
+- ran
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GpuTimelineProfiler.Tests.exe -v 9`
 - ran
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPhysicalPagePoolGpuLifecycleTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
 - ran
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmShadowRasterJobsTest.* -v 9`
-- max-verbosity logs were sane for the `F1` slice: pool resource registration,
-  `Common -> DepthWrite`, raster pass prepare/execute summaries, and resource
-  unregister on reset/destruction all appeared in the expected order
+- max-verbosity logs were sane for the integrated `F2` slice: pool resource
+  registration, prepare summary, `prepared instance culling`, counted-indirect
+  execute summary, previous-frame HZB availability, and resource unregister on
+  reset/destruction all appeared in the expected order
+- the compact-draw GPU test verified indirect count/command buffers before
+  confirming that only the expected physical pages received depth writes
+- the HZB GPU test verified the previous-frame screen-depth pyramid was visible
+  to the VSM compute path and culled the page to zero indirect draws
+- extra probe note: standalone
+  `ScreenHzbBuildGpuTest.PreviousFrameOutputTracksPriorPyramidAcrossFrames`
+  still throws an SEH access violation during its own seed-depth setup when run
+  directly at `-v 9`, so it is not being used as Phase F evidence
 - Phase F remains `in_progress` because GPU instance culling, static recache,
   reveal tracking, invalidation feedback, and point-light face routing are
-  still pending in `F2` through `F4`
+  still pending in `F3` and `F4`
 
 ---
 

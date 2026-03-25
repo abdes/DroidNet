@@ -19,7 +19,7 @@ validated.
 | --- | --- | --- | --- |
 | ☑ | F0 | Pass scaffolding and deterministic page-job preparation | `VsmShadowRasterizerPass` exists, consumes current allocation products, expands raster page jobs deterministically, and has focused automated coverage |
 | ☑ | F1 | Baseline depth submission into physical VSM pages | Dynamic-slice depth writes land in the correct physical page rects for known test geometry without touching unrelated pages |
-| ☐ | F2 | GPU instance culling and compact draw-list generation | Instance culling consumes draw bounds plus previous-frame screen HZB and emits compact per-page draw arguments |
+| ☑ | F2 | GPU instance culling and compact draw-list generation | Instance culling consumes draw bounds plus previous-frame screen HZB and emits compact per-page draw arguments |
 | ☐ | F3 | Static recache, reveal tracking, and invalidation feedback | Static-only rerender routing, reveal-forced redraw, and primitive-to-page feedback all exist without breaking the merge contract |
 | ☐ | F4 | Point-light face routing, orchestration hardening, and validation sweep | Directional + local-light paths render correctly, targeted tests pass, and parent Phase F exit gate evidence is complete |
 
@@ -106,8 +106,8 @@ Scope:
 
 ## 3. Current Slice Status
 
-`F0` and `F1` are now implemented and validated. The next active slice is
-`F2`.
+`F0`, `F1`, and `F2` are now implemented and validated. The next active slice
+is `F3`.
 
 Delivered in `F0`:
 
@@ -155,20 +155,73 @@ Evidence backing `F1` on `2026-03-25`:
 - the GPU correctness test verified depth changed inside the target physical
   page while a neighboring page remained at the cleared depth
 
+Delivered in `F2`:
+
+- `VsmShadowRasterizerPass` now classifies eligible dynamic page jobs, builds
+  GPU-ready page-job payloads, and dispatches compute culling per active shadow
+  partition instead of brute-force replaying every draw for every page
+- new shader ABI types (`VsmShaderRasterPageJob`,
+  `VsmShaderIndirectDrawCommand`) and HLSL includes define the shared CPU/GPU
+  contract for per-page compaction
+- `VsmInstanceCulling.hlsl` consumes prepared page jobs, draw metadata, draw
+  bounds, and previous-frame screen HZB to write compact indirect commands plus
+  per-page command counts
+- `CommandRecorder` now exposes counted indirect execution cleanly at the API
+  layer, with Direct3D12 and headless/fake implementations updated together
+- focused GPU coverage verifies both the compacted indirect buffers and the
+  resulting page-local depth writes, including the previous-frame HZB culling
+  path
+
+Evidence backing `F2` on `2026-03-25`:
+
+- built `Oxygen.Graphics.Common.Commander.Tests`,
+  `Oxygen.Renderer.GpuTimelineProfiler.Tests`,
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`, and
+  `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` in
+  `out/build-ninja` (`Debug`)
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Graphics\\.Common\\.Commander\\.Tests|Oxygen\\.Renderer\\.GpuTimelineProfiler\\.Tests|VsmShadowRaster|VsmPhysicalPagePoolGpuLifecycle"` with `100% tests passed, 0 tests failed out of 17`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Graphics.Common.Commander.Tests.exe -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GpuTimelineProfiler.Tests.exe -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmShadowRasterJobsTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPhysicalPagePoolGpuLifecycleTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
+- max-verbosity logs were sane for the integrated `F2` path: prepare summary,
+  `prepared instance culling`, counted-indirect execute summary, and previous
+  frame HZB availability all appeared in the expected order
+- the compact-draw GPU test verified per-page command counts and indirect
+  command payloads before confirming that only the expected physical pages
+  received depth writes
+- the HZB GPU test verified `ScreenHzbBuildPass` published a previous-frame
+  pyramid (`previous_available=true`) and that the VSM compute path compacted
+  the page to zero draws while the target shadow page remained at the cleared
+  depth
+- extra probe note: `Oxygen.Renderer.ScreenHzb.Tests.exe --gtest_filter=ScreenHzbBuildGpuTest.PreviousFrameOutputTracksPriorPyramidAcrossFrames -v 9`
+  still throws an SEH access violation during the standalone test body's
+  seed-depth setup, so it is not used as `F2` evidence; the integrated VSM HZB
+  test above passed and remains the gating coverage for this slice
+
 ## 4. Expected Source Layout
 
-Planned files for the early slices:
+Implemented files through `F2`:
 
 - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h`
 - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h`
 - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.cpp`
+- `src/Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h`
+- `src/Oxygen/Graphics/Common/CommandRecorder.h`
+- `src/Oxygen/Graphics/Direct3D12/CommandRecorder.h`
+- `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`
+- `src/Oxygen/Graphics/Headless/CommandRecorder.h`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInstanceCulling.hlsl`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmIndirectDrawCommand.hlsli`
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmRasterPageJob.hlsli`
 - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRasterJobs_test.cpp`
 - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRasterizerPass_test.cpp`
+- `src/Oxygen/Graphics/Common/Test/Commander_test.cpp`
+- `src/Oxygen/Renderer/Test/GpuTimelineProfiler_test.cpp`
 
 Later slices are expected to add:
 
-- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInstanceCulling.hlsl`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmShadowDepth_VS.hlsl`
 - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmShadowDepth_PS.hlsl`
 

@@ -254,6 +254,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/ScreenHzbBuild.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmInstanceCulling.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // Sky atmosphere LUT compute shaders (no permutations)
   ShaderFileSpec {
     .path="Atmosphere/TransmittanceLut_CS.hlsl",
