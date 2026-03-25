@@ -22,6 +22,8 @@ static const uint VSM_PAGE_FLAG_DYNAMIC_UNCACHED = 1u << 1;
 static const uint VSM_PAGE_FLAG_STATIC_UNCACHED = 1u << 2;
 // The page intersects detailed geometry and may need finer-grained handling.
 static const uint VSM_PAGE_FLAG_DETAIL_GEOMETRY = 1u << 3;
+// A coarser page has at least one mapped descendant page in a finer level.
+static const uint VSM_PAGE_FLAG_MAPPED_DESCENDANT = 1u << 4;
 
 struct VsmShaderPageFlags
 {

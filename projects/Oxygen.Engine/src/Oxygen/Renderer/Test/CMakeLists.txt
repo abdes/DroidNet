@@ -78,6 +78,31 @@ m_gtest_program(
     "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
 )
 
+source_group(
+  TREE ${CMAKE_CURRENT_SOURCE_DIR}
+  PREFIX VirtualShadows
+  FILES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
+    "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
+    "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
+    "VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp"
+    "VirtualShadow/VsmCacheManagerInvalidation_test.cpp"
+    "VirtualShadow/VsmCacheManagerOrchestration_test.cpp"
+    "VirtualShadow/VsmCacheManagerRetention_test.cpp"
+    "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
+    "VirtualShadow/VsmCacheManagerSeam_test.cpp"
+    "VirtualShadow/VsmShaderTypes_test.cpp"
+    "VirtualShadow/VsmPageRequestGeneration_test.cpp"
+    "VirtualShadow/VsmCacheManagerState_test.cpp"
+    "VirtualShadow/VsmCacheManagerTypes_test.cpp"
+    "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
+    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
+    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
+)
+
 if(TARGET oxygen::graphics-direct3d12)
   m_gtest_program(
     "ScreenHzb"
@@ -93,11 +118,26 @@ if(TARGET oxygen::graphics-direct3d12)
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
       "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
+      "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
     DEPS
       oxygen::graphics-direct3d12
+  )
+
+  source_group(
+    TREE ${CMAKE_CURRENT_SOURCE_DIR}
+    PREFIX VirtualShadowsDedicated
+    FILES
+      "VirtualShadow/VirtualShadowGpuTestFixtures.h"
+      "ScreenHzbBuildPass_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
+      "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
+      "VirtualShadow/VsmPageManagementPass_test.cpp"
+      "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
+      "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
   )
 endif()
 

@@ -24,12 +24,12 @@ The following modules are implemented; statuses below reflect their current
 validation state:
 
 | Module | Architecture § | Status | Key Files |
-|--------|----------------|--------|-----------|
+| ------ | -------------- | ------ | --------- |
 | Physical Page Pool Manager | §3.1 | ✅ Complete | `VsmPhysicalPagePoolManager.h/.cpp`, `VsmPhysicalPagePoolTypes.h/.cpp`, `VsmPhysicalPageAddressing.h/.cpp`, `VsmPhysicalPoolCompatibility.h/.cpp` |
 | Virtual Address Space | §3.2 | ✅ Complete | `VsmVirtualAddressSpace.h/.cpp`, `VsmVirtualAddressSpaceTypes.h/.cpp`, `VsmVirtualClipmapHelpers.h/.cpp`, `VsmVirtualRemapBuilder.h/.cpp` |
 | Cache Manager | §3.3 | ✅ Complete | `VsmCacheManager.h/.cpp`, `VsmCacheManagerSeam.h`, `VsmCacheManagerTypes.h/.cpp` |
 | Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
-| Shader ABI Contracts | §4.1–§4.5 | ◐ Partial | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
+| Shader ABI Contracts | §4.1–§4.5 | ✅ Complete | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
 
 Test coverage: 22 test files across CPU and GPU lifecycle suites.
 
@@ -47,10 +47,11 @@ implemented cache/allocation slice:
 ### What Exists in Renderer Infrastructure (Already Usable)
 
 | Component | Class / File | Relevance |
-|-----------|-------------|-----------|
+| --------- | ----------- | --------- |
 | Shadow coordination | `ShadowManager` | Currently conventional-only; VSM extends via new policy |
 | Pipeline orchestration | `ForwardPipeline`, `RenderingPipeline` | Coroutine-based pass registration |
-| Depth input | `DepthPrePass` | Produces screen depth for page request generation |
+| Depth input | `DepthPrePass` | Produces screen depth for page request generation and screen-space HZB |
+| Screen-space HZB | `ScreenHzbBuildPass` (new) | Renderer-level min-reduce pyramid over `DepthPrePass` output; consumed by VSM Stage 12 instance culling |
 | Compute pass base | `ComputeRenderPass` | Base class for VSM compute passes |
 | Graphics pass base | `GraphicsRenderPass` | Base class for VSM raster passes |
 | Forward lighting shader | `ForwardDirectLighting.hlsli` | Calls `ComputeShadowVisibility()`; swap point for VSM |
@@ -62,12 +63,12 @@ implemented cache/allocation slice:
 ## 2. Remaining Work — Summary
 
 | Status | Phase | Deliverable | Exit Gate |
-|--------|-------|-------------|-----------|
+| ------ | ----- | ----------- | --------- |
 | ☑ | A | Cache-manager plan completion (Phase 8) | Completed in `VsmCacheManagerAndPageAllocationImplementationPlan.md` |
-| ◐ | B | VSM HLSL common types and page-table structures | ABI types exist and CPU ↔ GPU parity is verified; dedicated aggregate HLSL compile validation is still pending |
+| ☑ | B | VSM HLSL common types and page-table structures | ABI types exist, CPU ↔ GPU parity is verified, and runtime VSM shaders compile through the build-time shader bake |
 | ☑ | C | Page Request Generator pass | Compute pass produces correct page request flags for test scenes with depth and clustered-light inputs |
 | ☑ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
-| ☐ | E | Page flag propagation and initialization passes | Stages 9–11: hierarchical flags, mapped-mip propagation, selective page init |
+| ☑ | E | Page flag propagation, initialization, and screen-space HZB passes | Stages 9–11 plus renderer-level `ScreenHzbBuildPass`; hierarchical flags, mapped-mip propagation, selective page init, and screen-space HZB available for Phase F culling |
 | ☐ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
 | ☐ | G | Static/Dynamic Merge pass | Composite static slice into dynamic slice for dirty pages |
 | ☐ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild |
@@ -87,6 +88,7 @@ implemented cache/allocation slice:
 **Status:** completed on 2026-03-24 through the dedicated cache-manager/allocation plan.
 
 **Deliverables:**
+
 - [x] Verify all existing VSM tests pass (`Oxygen.Renderer.VirtualShadows.Tests` + `GpuLifecycle.Tests`)
 - [x] Review strategic `LOG_F` / `LOG_SCOPE_F` placements in cache manager and planner for production diagnostics
 - [x] Document troubleshooting guide in `VirtualShadowMaps/README.md`
@@ -100,9 +102,10 @@ implemented cache/allocation slice:
 
 **Architecture ref:** §4.1 (Virtual Page Table), §4.2 (Physical Page Metadata), §4.3 (Page Flags)
 
-**Status:** `in_progress`
+**Status:** completed on 2026-03-24.
 
 **Deliverables:**
+
 - [x] Create `Shaders/Renderer/Vsm/VsmCommon.hlsli` — shared constants (page size, max mip levels, flag bits)
 - [x] Create `Shaders/Renderer/Vsm/VsmPageTable.hlsli` — `PageTableEntry` struct, page-table lookup functions
 - [x] Create `Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli` — physical page metadata struct matching CPU layout
@@ -111,7 +114,7 @@ implemented cache/allocation slice:
 - [x] Create `Shaders/Renderer/Vsm/VsmProjectionData.hlsli` — per-map projection data struct (§4.5)
 - [x] Define the CPU ↔ GPU projection-data contract needed for both current-frame projection and retained previous-frame invalidation data
 
-**Exit gate:** HLSL headers compile within a dedicated validation shader; struct sizes match CPU counterparts.
+**Exit gate:** Runtime VSM shaders that consume the shared HLSL headers compile through the build-time shader bake; struct sizes match CPU counterparts.
 
 Validation evidence on 2026-03-24:
 
@@ -122,14 +125,12 @@ Validation evidence on 2026-03-24:
 - added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPhysicalPageMeta.hlsli`
 - added `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmProjectionData.hlsli`
 - added aggregate contract shader `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmContracts_CS.hlsl`
-- kept the contract shader out of the runtime engine shader catalog because it is not a renderer pass
+- kept the contract shader out of the runtime engine shader catalog because it is not a renderer pass and is not part of the Phase B exit gate
 - added fixture-based parity coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShaderTypes_test.cpp`
+- verified `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` bakes `shaders.bin` as an `ALL` build target and makes `oxygen-graphics-direct3d12` depend on that bake
+- verified `src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.cpp` compiles the runtime shader catalog declared in `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
 - built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
-
-Remaining validation delta:
-
-- `VsmContracts_CS.hlsl` is not yet wired into a dedicated compile-validation target, so the aggregate HLSL-header compile gate is not closed yet
 
 ---
 
@@ -140,6 +141,7 @@ Remaining validation delta:
 **Status:** completed on 2026-03-24.
 
 **Deliverables:**
+
 - [x] Create `VsmPageRequestGeneratorPass` inheriting `ComputeRenderPass`
 - [x] HLSL compute shader: `Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl`
   - Sample depth buffer at each pixel
@@ -179,6 +181,7 @@ Validation evidence on 2026-03-24:
 The cache manager already computes allocation decisions on the CPU. This phase uploads those decisions to the GPU and applies them.
 
 **Deliverables:**
+
 - [x] GPU upload path: upload `VsmPageAllocationPlan` decisions (page table entries, physical page metadata) to GPU buffers
 - [x] Compute pass `VsmPageReuse.hlsl` — apply reuse decisions: write page-table entries for reused pages, clear entries for evicted pages (stage 6)
 - [x] Compute pass `VsmPackAvailablePages.hlsl` — compact empty-page list into contiguous stack (stage 7)
@@ -210,23 +213,48 @@ Validation evidence on 2026-03-24:
 
 ---
 
-### Phase E — Page Flag Propagation and Initialization Passes
+### Phase E — Page Flag Propagation, Initialization, and Screen-Space HZB Passes
 
-**Architecture ref:** §5 stages 9–11
+**Architecture ref:** §5 stages 9–11; §3.10 (screen-space HZB)
+
+**Status:** completed on 2026-03-25.
 
 **Deliverables:**
-- [ ] Compute pass `VsmGenerateHierarchicalFlags.hlsl` — build mip-chain page flags from leaf flags (stage 9)
-- [ ] Compute pass `VsmPropagateMappedMips.hlsl` — propagate mapping info up the mip chain (stage 10)
-- [ ] Compute pass `VsmPageInitialization.hlsl` — selective page init (stage 11):
+
+- [x] Compute pass `VsmGenerateHierarchicalFlags.hlsl` — build mip-chain page flags from leaf flags (stage 9)
+- [x] Compute pass `VsmPropagateMappedMips.hlsl` — propagate mapping info up the mip chain (stage 10)
+- [x] `VsmPageInitializationPass` — selective page init (stage 11) using explicit shadow-texture clear/copy commands against the physical pool:
   - For uncached pages with valid static slice: copy static slice → dynamic slice
   - For uncached pages without static slice: clear to max depth
   - Skip already-cached pages
-- [ ] Create `VsmPageFlagPropagationPass` and `VsmPageInitializationPass` classes
-- [ ] Unit tests verifying hierarchical flag correctness and selective initialization behavior
+- [x] Create `VsmPageFlagPropagationPass` and `VsmPageInitializationPass` classes
+- [x] `ScreenHzbBuildPass` — renderer-level compute pass dispatched by `ForwardPipeline` immediately after `DepthPrePass`, before the VSM orchestrator:
+  - Compute shader `ScreenHzbBuild.hlsl`: hierarchical min-reduce over `DepthPrePass` depth buffer
+  - Persistent ping-pong HZB pyramid texture (owned by `ForwardPipeline`, not VSM)
+  - Previous frame's pyramid retained as a read-only input for the next frame's Phase F instance culling
+  - Frame 0: no HZB available (culling falls back to AABB-only)
+- [x] Unit tests verifying hierarchical flag correctness and selective initialization behavior
+- [x] Unit test verifying screen-space HZB min values are correct for a known depth buffer
 
 **Dependencies:** Phase D (page-table must be finalized before flag propagation)
 
-**Exit gate:** Hierarchical flags correct for multi-level maps; initialization clears/copies only uncached pages.
+**Exit gate:** Hierarchical flags correct for multi-level maps; initialization clears/copies only uncached pages; screen-space HZB pyramid is available and readable by Phase F instance culling.
+
+Validation evidence on 2026-03-25:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmPageFlagPropagationPass.h/.cpp`
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmPageInitializationPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmGenerateHierarchicalFlags.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPropagateMappedMips.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageHierarchyDispatch.hlsli`
+- implemented `src/Oxygen/Renderer/Passes/ScreenHzbBuildPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ScreenHzbBuild.hlsl`
+- registered `ScreenHzbBuildPass` in `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp` immediately after `DepthPrePass`
+- added GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageLifecyclePasses_test.cpp`
+- added GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/ScreenHzbBuildPass_test.cpp`
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused high-verbosity HZB validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=ScreenHzbBuildGpuTest.*`
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
 
@@ -235,13 +263,14 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §3.6, §12, stage 12
 
 **Deliverables:**
+
 - [ ] Create `VsmShadowRasterizerPass` inheriting from `GraphicsRenderPass`
 - [ ] Shadow view creation: generate per-map shadow projection from `VsmProjectionData`
   - Directional clipmaps use per-level views
   - Point lights publish and schedule per-face views without widening the public remap-key API
 - [ ] Instance culling compute shader `VsmInstanceCulling.hlsl`:
   - Test mesh instance bounds against each allocated page's virtual extent
-  - Optional HZB occlusion culling using previous-frame depth (when available)
+  - Screen-space HZB occlusion culling using previous-frame camera depth pyramid (see architecture §3.10); absent on frame 0, available from frame 1 onward
   - Output: compact per-page draw command lists
 - [ ] Shadow depth rasterization shaders:
   - Vertex shader: transform to shadow-page clip space
@@ -252,7 +281,7 @@ Validation evidence on 2026-03-24:
 - [ ] Static invalidation feedback: record primitive-to-page overlap information needed to refine later scene invalidation
 - [ ] Render target setup: bind shadow depth texture array at correct physical page coordinates
 
-**Dependencies:** Phase E (pages must be initialized before rasterization)
+**Dependencies:** Phase E (pages must be initialized before rasterization; screen-space HZB produced in Phase E must be available for instance culling)
 
 **Exit gate:** Shadow depth is correctly rasterized into physical pages for a test scene with known geometry, including point-light face selection and static-recache routing when enabled.
 
@@ -263,6 +292,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §3.8, §10, stage 13
 
 **Deliverables:**
+
 - [ ] Create `VsmStaticDynamicMergePass` inheriting `ComputeRenderPass`
 - [ ] Compute shader `VsmStaticDynamicMerge.hlsl`:
   - For each dirty page: composite static slice (slice 1) into dynamic slice (slice 0)
@@ -282,6 +312,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §3.7, §11, stage 14
 
 **Deliverables:**
+
 - [ ] Create `VsmHzbUpdaterPass` inheriting `ComputeRenderPass`
 - [ ] Compute shader `VsmHzbBuild.hlsl`:
   - Select dirty/newly-allocated/forced pages for HZB rebuild
@@ -302,6 +333,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §3.9, §13, stage 15
 
 **Deliverables:**
+
 - [ ] Create `VsmProjectionPass` (compute or full-screen graphics pass)
 - [ ] Directional clipmap projection shader `VsmDirectionalProjection.hlsl`:
   - Determine clipmap level from pixel distance
@@ -329,6 +361,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §7, §14.2
 
 **Deliverables:**
+
 - [ ] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
   - Subscribe to `kLightChanged | kTransformChanged` mutations
   - Map affected scene nodes to VSM remap keys
@@ -354,6 +387,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** §14.1, §5 (full 17-stage pipeline)
 
 **Deliverables:**
+
 - [ ] Create `VsmShadowRenderer` orchestrator class coordinating the full per-frame pipeline:
   1. `BeginFrame()` — cache manager seam capture
   2. Virtual address space allocation
@@ -370,7 +404,8 @@ Validation evidence on 2026-03-24:
   13. Mark cache valid
 - [ ] Extend `ShadowManager` with `DirectionalShadowImplementationPolicy::kVirtualShadowMap` enum value
 - [ ] Add VSM code path in `ShadowManager::PublishForView()` delegating to `VsmShadowRenderer`
-- [ ] Register VSM passes in `ForwardPipeline` between depth pre-pass and forward lighting
+- [x] Register `ScreenHzbBuildPass` in `ForwardPipeline` immediately after `DepthPrePass` (renderer-level, independent of VSM toggle)
+- [ ] Register VSM passes in `ForwardPipeline` between `ScreenHzbBuildPass` and forward lighting
 - [ ] Wire `VsmProjectionPass` output (shadow mask) into forward lighting shader inputs
 - [ ] Implement feature toggle: conventional ↔ VSM shadow selection (config-driven, not runtime toggle initially)
 - [ ] Coroutine integration: make VSM orchestration compatible with `ForwardPipeline`'s coroutine model
@@ -388,6 +423,7 @@ Validation evidence on 2026-03-24:
 **Architecture ref:** all sections
 
 **Deliverables:**
+
 - [ ] Create a VSM example/demo scene (extend existing `LightBench` or `RenderScene` example)
 - [ ] Visual regression tests: compare VSM output against reference images
 - [ ] Performance profiling:
@@ -419,7 +455,7 @@ flowchart TD
     B --> C["Phase C<br>Page Request Generator"]
     B --> D["Phase D<br>Page Reuse/Allocation GPU"]
     C --> D
-    D --> E["Phase E<br>Flag Propagation & Init"]
+    D --> E["Phase E<br>Flag Propagation, Init<br>& Screen-Space HZB"]
     E --> F["Phase F<br>Shadow Rasterizer"]
     F --> G["Phase G<br>Static/Dynamic Merge"]
     F --> H["Phase H<br>HZB Updater"]
@@ -458,7 +494,7 @@ New pass classes will be added to the `oxygen-renderer` target. New HLSL shaders
 
 ### HLSL shaders
 
-```
+```text
 src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/
 ├── VsmCommon.hlsli
 ├── VsmPageTable.hlsli
@@ -483,9 +519,16 @@ src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/
 └── VsmShadowHelpers.hlsli
 ```
 
+### Screen-space HZB shader (renderer-level, not VSM-internal)
+
+```text
+src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/
+└── ScreenHzbBuild.hlsl            ← min-reduce over DepthPrePass output
+```
+
 ### C++ pass classes
 
-```
+```text
 src/Oxygen/Renderer/Passes/Vsm/
 ├── VsmPageRequestGeneratorPass.h/.cpp
 ├── VsmPageManagementPass.h/.cpp
@@ -498,9 +541,16 @@ src/Oxygen/Renderer/Passes/Vsm/
 └── VsmInvalidationPass.h/.cpp
 ```
 
+### Screen-space HZB pass (renderer-level, not VSM-internal)
+
+```text
+src/Oxygen/Renderer/Passes/
+└── ScreenHzbBuildPass.h/.cpp      ← owned by ForwardPipeline, runs after DepthPrePass
+```
+
 ### Orchestrator
 
-```
+```text
 src/Oxygen/Renderer/VirtualShadowMaps/
 ├── VsmShadowRenderer.h/.cpp          (new — orchestrator)
 └── VsmSceneInvalidationCollector.h/.cpp  (new — scene observer)

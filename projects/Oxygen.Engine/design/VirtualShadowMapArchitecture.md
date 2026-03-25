@@ -50,6 +50,7 @@ flowchart TB
         Lights["Light Manager"]
         Camera["Camera / View"]
         GBuffer["GBuffer / Visibility"]
+        ScreenHZB["Screen-Space HZB\n(from DepthPrePass, prev frame)"]
     end
 
     Lights --> VAS
@@ -67,6 +68,7 @@ flowchart TB
 
     Alloc --> Render
     Pool --> Render
+    ScreenHZB --> Render
     Render --> HZBUpdate
     HZBUpdate --> HZB
     Render --> Merge
@@ -177,7 +179,7 @@ value objects.
 
 **Responsibilities:**
 
-- Cull mesh instances against allocated shadow pages using the current page table and optional HZB.
+- Cull mesh instances against allocated shadow pages using the current page table and the optional screen-space HZB (see §3.10).
 - Generate compact per-page draw command lists.
 - Rasterize shadow depth into physical pages in the shadow-depth texture array.
 - Mark rendered pages as dirty in physical page metadata.
@@ -214,6 +216,18 @@ value objects.
 - Support directional clipmaps on an explicit per-light projection path.
 - Support local lights through either per-light projection or a one-pass packed mask-bit approach.
 - Composite shadow factors into final screen-space shadow masks consumed by the lighting pass.
+
+### 3.10 Screen-Space HZB (Renderer Prerequisite)
+
+**Ownership:** renderer pipeline — **not** a VSM-internal module.
+
+**Produced by:** a `ScreenHzbBuildPass` compute pass dispatched by `ForwardPipeline` immediately after `DepthPrePass` completes and before the VSM orchestrator begins its per-frame stages. This pass performs a hierarchical min-reduce over the `DepthPrePass` depth buffer and writes the result into a persistent screen-resolution HZB pyramid.
+
+**Consumed by:** §3.6 Shadow Rasterizer (Stage 12 instance culling).
+
+**Cross-frame contract:** the Shadow Rasterizer reads the *previous* frame's screen-space HZB, not the current frame's. On frame 0 the HZB is absent and culling falls back to conservative AABB-only testing. From frame 1 onward the previous-frame pyramid is available as a read-only input without stalling the pipeline. The VSM system does not write the screen-space HZB.
+
+**Why separate from §3.7:** §3.7 (HZB Updater) owns the *shadow-space* HZB — a per-physical-page depth pyramid built from the shadow-depth texture array and used for shadow-space coarse occlusion and filtering. The screen-space HZB is a camera-view pyramid built from scene depth and used purely for shadow-caster culling. The two resources are independent, live in different coordinate spaces, and are rebuilt at different points in the frame.
 
 ---
 
@@ -378,7 +392,7 @@ This is the core cache reuse engine.
 ### Stage 12 — Shadow Rasterization
 
 - Per-page draw commands are generated through GPU-driven culling:
-  1. Cull mesh instances against shadow pages (with optional HZB occlusion culling).
+  1. Cull mesh instances against shadow pages (with optional screen-space HZB occlusion culling against the previous-frame camera depth pyramid; see §3.10).
   2. Allocate output space for visible instance commands.
   3. Emit compact per-page instance/command lists.
   4. Rasterize depth into allocated physical pages.

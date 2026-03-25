@@ -34,6 +34,7 @@ enum class VsmShaderPageFlagBits : std::uint32_t {
   kDynamicUncached = OXYGEN_FLAG(1),
   kStaticUncached = OXYGEN_FLAG(2),
   kDetailGeometry = OXYGEN_FLAG(3),
+  kMappedDescendant = OXYGEN_FLAG(4),
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(VsmShaderPageFlagBits)
@@ -157,6 +158,34 @@ static_assert(
   offsetof(VsmShaderPageAllocationDecision, available_page_list_index) == 4U);
 static_assert(offsetof(VsmShaderPageAllocationDecision, page_flags) == 8U);
 static_assert(offsetof(VsmShaderPageAllocationDecision, physical_meta) == 16U);
+
+// Compact per-level propagation work item for stages 9 and 10.
+//
+// VSM level propagation in Oxygen follows the published virtual-map layout:
+// each coarser level reuses the same page-grid footprint as the next finer
+// level, so propagation operates on matching (x, y) coordinates across levels.
+struct VsmShaderPageHierarchyDispatch {
+  std::uint32_t first_page_table_entry { 0U };
+  std::uint32_t pages_x { 0U };
+  std::uint32_t pages_y { 0U };
+  std::uint32_t pages_per_level { 0U };
+  std::uint32_t source_level { 0U };
+  std::uint32_t target_level { 0U };
+  std::uint32_t _pad0 { 0U };
+  std::uint32_t _pad1 { 0U };
+
+  auto operator==(const VsmShaderPageHierarchyDispatch&) const -> bool
+    = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderPageHierarchyDispatch>);
+static_assert(sizeof(VsmShaderPageHierarchyDispatch) == 32U);
+static_assert(
+  offsetof(VsmShaderPageHierarchyDispatch, first_page_table_entry) == 0U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_x) == 4U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_y) == 8U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_per_level) == 12U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_level) == 16U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, target_level) == 20U);
 
 enum class VsmProjectionLightType : std::uint32_t {
   kLocal = 0U,
