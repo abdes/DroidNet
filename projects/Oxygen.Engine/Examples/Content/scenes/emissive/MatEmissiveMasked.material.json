@@ -18,5 +18,10 @@
       16.0
     ],
     "alpha_cutoff": 0.5
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/MatEmissiveMasked_mask.otex"
+    }
   }
 }

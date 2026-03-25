@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json",
+  "source": "./MatEmissiveMasked_mask.png",
+  "intent": "albedo",
+  "decode": {
+    "color_space": "srgb"
+  },
+  "output": {
+    "format": "bc7_srgb"
+  }
+}

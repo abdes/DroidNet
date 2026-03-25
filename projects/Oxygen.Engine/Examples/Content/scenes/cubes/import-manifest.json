@@ -11,11 +11,21 @@
       "content_hashing": true
     },
     {
+      "id": "texture.MatCubeB_mask",
+      "type": "texture-descriptor",
+      "source": "./MatCubeB_mask.texture.json",
+      "name": "MatCubeB_mask",
+      "content_hashing": true
+    },
+    {
       "id": "material.MatCubeB",
       "type": "material-descriptor",
       "source": "./MatCubeB.material.json",
       "name": "MatCubeB",
-      "content_hashing": true
+      "content_hashing": true,
+      "depends_on": [
+        "texture.MatCubeB_mask"
+      ]
     },
     {
       "id": "material.MatCubeC",
