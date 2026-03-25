@@ -13,6 +13,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -20,8 +21,9 @@ namespace oxygen::renderer::vsm {
 
 // CPU-side reference math for Stage 5 page discovery.
 //
-// The runtime GPU path lives in VsmPageRequestGeneratorPass, but this helper
-// keeps the projection and request-merging policy independently testable.
+// The runtime GPU path lives in VsmPageRequestGeneratorPass, while
+// VsmProjectionRouting keeps the projection-routing math independently
+// testable.
 
 struct VsmVisiblePixelSample {
   glm::vec3 world_position_ws { 0.0F, 0.0F, 0.0F };
@@ -37,14 +39,6 @@ struct VsmPageRequestGenerationOptions {
   auto operator==(const VsmPageRequestGenerationOptions&) const -> bool
     = default;
 };
-
-OXGN_RNDR_NDAPI auto IsValid(
-  const VsmPageRequestProjection& projection) noexcept -> bool;
-
-OXGN_RNDR_NDAPI auto TryProjectWorldToPage(
-  const VsmPageRequestProjection& projection,
-  const glm::vec3& world_position_ws) noexcept
-  -> std::optional<VsmVirtualPageCoord>;
 
 OXGN_RNDR_NDAPI auto BuildPageRequests(
   std::span<const VsmPageRequestProjection> projections,

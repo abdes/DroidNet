@@ -210,25 +210,38 @@ protected:
 
   [[nodiscard]] static auto MakeProjection(const std::uint32_t pages_x = 1U,
     const std::uint32_t pages_y = 1U, const std::uint32_t level_count = 1U,
-    const std::uint32_t first_page_table_entry = kTestPageTableEntry)
+    const std::uint32_t first_page_table_entry = kTestPageTableEntry,
+    const std::uint32_t map_pages_x = 0U, const std::uint32_t map_pages_y = 0U,
+    const std::uint32_t page_offset_x = 0U,
+    const std::uint32_t page_offset_y = 0U,
+    const std::uint32_t cube_face_index
+    = oxygen::renderer::vsm::kVsmInvalidCubeFaceIndex,
+    const glm::mat4& view_matrix = glm::mat4 { 1.0F },
+    const glm::mat4& projection_matrix = glm::mat4 { 1.0F },
+    const glm::vec4& view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 1.0F })
     -> VsmPageRequestProjection
   {
     return VsmPageRequestProjection {
       .projection = VsmProjectionData {
-        .view_matrix = glm::mat4 { 1.0F },
-        .projection_matrix = glm::mat4 { 1.0F },
-        .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 1.0F },
+        .view_matrix = view_matrix,
+        .projection_matrix = projection_matrix,
+        .view_origin_ws_pad = view_origin_ws_pad,
         .clipmap_corner_offset = { 0, 0 },
         .clipmap_level = 0U,
         .light_type = static_cast<std::uint32_t>(VsmProjectionLightType::kLocal),
       },
       .map_id = kTestMapId,
       .first_page_table_entry = first_page_table_entry,
+      .map_pages_x = map_pages_x == 0U ? pages_x : map_pages_x,
+      .map_pages_y = map_pages_y == 0U ? pages_y : map_pages_y,
       .pages_x = pages_x,
       .pages_y = pages_y,
+      .page_offset_x = page_offset_x,
+      .page_offset_y = page_offset_y,
       .level_count = level_count,
       .coarse_level = 0U,
       .light_index = 0U,
+      .cube_face_index = cube_face_index,
     };
   }
 
@@ -688,6 +701,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
 
   EXPECT_EQ(prepared_pages[0].page_table_index, kTestPageTableEntry);
   EXPECT_EQ(prepared_pages[0].map_id, kTestMapId);
+  EXPECT_EQ(prepared_pages[0].projection_page,
+    (VsmVirtualPageCoord { .level = 0U, .page_x = 0U, .page_y = 0U }));
   EXPECT_EQ(prepared_pages[0].physical_page.value, kTestPhysicalPage);
   EXPECT_EQ(prepared_pages[0].physical_coord,
     (VsmPhysicalPageCoord { .tile_x = 3U, .tile_y = 0U, .slice = 0U }));
@@ -701,6 +716,240 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   EXPECT_EQ(prepared_pages[0].viewport.height, 128.0F);
   EXPECT_FALSE(prepared_pages[0].static_only);
 
+  EXPECT_EQ(render_context.GetPass<VsmShadowRasterizerPass>(), &pass);
+}
+
+NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
+  ExecuteRoutesSharedMapPointLightFacesToMatchingProjectionView)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase-f-shadow-point-face")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto physical_pool = pool_manager.GetShadowPoolSnapshot();
+  ASSERT_TRUE(physical_pool.is_available);
+  ASSERT_NE(physical_pool.shadow_texture, nullptr);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  constexpr auto kFrameSlot = Slot { 0U };
+  constexpr auto kFrameSequence = SequenceNumber { 30U };
+
+  std::array<TestVertex, 3> vertices {
+    TestVertex {
+      .position = { 5.0F, -0.2F, -0.2F },
+      .normal = { -1.0F, 0.0F, 0.0F },
+      .texcoord = { 0.0F, 1.0F },
+      .tangent = { 0.0F, 1.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 1.0F, 0.0F, 0.0F, 1.0F },
+    },
+    TestVertex {
+      .position = { 5.0F, -0.2F, 0.2F },
+      .normal = { -1.0F, 0.0F, 0.0F },
+      .texcoord = { 1.0F, 1.0F },
+      .tangent = { 0.0F, 1.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 0.0F, 1.0F, 0.0F, 1.0F },
+    },
+    TestVertex {
+      .position = { 5.0F, 0.2F, 0.0F },
+      .normal = { -1.0F, 0.0F, 0.0F },
+      .texcoord = { 0.5F, 0.0F },
+      .tangent = { 0.0F, 1.0F, 0.0F },
+      .bitangent = { 0.0F, 0.0F, 1.0F },
+      .color = { 0.0F, 0.0F, 1.0F, 1.0F },
+    },
+  };
+  constexpr std::array<std::uint32_t, 3> kIndices { 0U, 1U, 2U };
+
+  auto pass = VsmShadowRasterizerPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmShadowRasterizerPassConfig>(
+      VsmShadowRasterizerPassConfig {
+        .debug_name = "phase-f-rasterizer-point-face" }));
+
+  auto offscreen = renderer->BeginOffscreenFrame(
+    { .frame_slot = kFrameSlot, .frame_sequence = kFrameSequence });
+
+  auto vertex_buffer = CreateStructuredSrvBuffer<TestVertex>(
+    vertices, "phase-f-rasterizer-point-face.vertices");
+  auto index_buffer
+    = CreateUIntIndexBuffer(kIndices, "phase-f-rasterizer-point-face.indices");
+
+  auto world_buffer = TransientStructuredBuffer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(), sizeof(glm::mat4),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-f-rasterizer-point-face.worlds");
+  world_buffer.OnFrameStart(kFrameSequence, kFrameSlot);
+  auto world_allocation = world_buffer.Allocate(1U);
+  ASSERT_TRUE(world_allocation.has_value());
+  ASSERT_TRUE(world_allocation->IsValid(kFrameSequence));
+  const auto world_matrix = glm::mat4 { 1.0F };
+  std::memcpy(
+    world_allocation->mapped_ptr, &world_matrix, sizeof(world_matrix));
+
+  auto draw_metadata_buffer = TransientStructuredBuffer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(), sizeof(DrawMetadata),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-f-rasterizer-point-face.draws");
+  draw_metadata_buffer.OnFrameStart(kFrameSequence, kFrameSlot);
+  auto draw_allocation = draw_metadata_buffer.Allocate(1U);
+  ASSERT_TRUE(draw_allocation.has_value());
+  ASSERT_TRUE(draw_allocation->IsValid(kFrameSequence));
+
+  auto shadow_caster_mask = PassMask {};
+  shadow_caster_mask.Set(PassMaskBit::kOpaque);
+  shadow_caster_mask.Set(PassMaskBit::kShadowCaster);
+
+  std::array<DrawMetadata, 1> draw_records {
+    DrawMetadata {
+      .vertex_buffer_index = vertex_buffer.slot,
+      .index_buffer_index = index_buffer.slot,
+      .first_index = 0U,
+      .base_vertex = 0,
+      .is_indexed = 1U,
+      .instance_count = 1U,
+      .index_count = static_cast<std::uint32_t>(kIndices.size()),
+      .vertex_count = 0U,
+      .material_handle = 0U,
+      .transform_index = 0U,
+      .instance_metadata_buffer_index = 0U,
+      .instance_metadata_offset = 0U,
+      .flags = shadow_caster_mask,
+      .transform_generation = 51U,
+      .submesh_index = 0U,
+      .primitive_flags = 0U,
+    },
+  };
+  std::memcpy(
+    draw_allocation->mapped_ptr, draw_records.data(), sizeof(draw_records));
+
+  const std::array<glm::vec4, 1> draw_bounds {
+    glm::vec4 { 5.0F, 0.0F, 0.0F, 0.35F },
+  };
+  auto draw_bounds_buffer = CreateStructuredSrvBuffer<glm::vec4>(
+    draw_bounds, "phase-f-rasterizer-point-face.bounds");
+
+  auto draw_frame_publisher = PerViewStructuredPublisher<DrawFrameBindings>(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-f-rasterizer-point-face.DrawFrameBindings");
+  draw_frame_publisher.OnFrameStart(kFrameSequence, kFrameSlot);
+  const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
+    DrawFrameBindings {
+      .draw_metadata_slot = BindlessDrawMetadataSlot(draw_allocation->srv),
+      .transforms_slot = BindlessWorldsSlot(world_allocation->srv),
+    });
+  ASSERT_TRUE(draw_frame_slot.IsValid());
+
+  auto view_frame_publisher = PerViewStructuredPublisher<ViewFrameBindings>(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-f-rasterizer-point-face.ViewFrameBindings");
+  view_frame_publisher.OnFrameStart(kFrameSequence, kFrameSlot);
+  const auto view_frame_slot = view_frame_publisher.Publish(
+    kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
+  ASSERT_TRUE(view_frame_slot.IsValid());
+
+  std::array<float, 16> world_matrix_floats {};
+  std::memcpy(world_matrix_floats.data(), &world_matrix, sizeof(world_matrix));
+  std::array<PreparedSceneFrame::PartitionRange, 1> partitions {
+    PreparedSceneFrame::PartitionRange {
+      .pass_mask = shadow_caster_mask,
+      .begin = 0U,
+      .end = 1U,
+    },
+  };
+
+  auto prepared_frame = PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_records));
+  prepared_frame.world_matrices = std::span<const float>(
+    world_matrix_floats.data(), world_matrix_floats.size());
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+  prepared_frame.partitions = std::span(partitions);
+  prepared_frame.bindless_worlds_slot = world_allocation->srv;
+  prepared_frame.bindless_draw_metadata_slot = draw_allocation->srv;
+  prepared_frame.bindless_draw_bounds_slot = draw_bounds_buffer.slot;
+
+  constexpr std::array<AllocatedPageSpec, 1> kPageSpecs {
+    AllocatedPageSpec {
+      .virtual_page = VsmVirtualPageCoord {
+        .level = 0U,
+        .page_x = 1U,
+        .page_y = 0U,
+      },
+      .physical_page = 1U,
+    },
+  };
+  auto frame = MakeFrame(kPageSpecs);
+  AttachRasterOutputBuffers(frame, 600ULL, 4U, "phase-f-rasterizer-point-face");
+
+  const auto face0_view = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
+  const auto face1_view = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
+    glm::vec3 { 1.0F, 0.0F, 0.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
+  const auto face_projection
+    = glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 0.1F, 10.0F);
+
+  pass.SetInput(VsmShadowRasterizerPassInput {
+    .frame = frame,
+    .physical_pool = physical_pool,
+    .projections
+    = {
+        MakeProjection(1U, 1U, 1U, kTestPageTableEntry, 2U, 1U, 0U, 0U, 0U,
+          face0_view, face_projection),
+        MakeProjection(1U, 1U, 1U, kTestPageTableEntry, 2U, 1U, 1U, 0U, 1U,
+          face1_view, face_projection),
+      },
+    .base_view_constants
+    = MakeBaseViewConstants(view_frame_slot, kFrameSlot, kFrameSequence),
+  });
+
+  ClearShadowSlice(physical_pool.shadow_texture, 0U, 1.0F,
+    "phase-f-rasterizer-point-face.clear");
+
+  offscreen.SetCurrentView(kTestViewId, MakeResolvedView(), prepared_frame);
+  auto& render_context = offscreen.GetRenderContext();
+
+  {
+    auto recorder = AcquireRecorder("phase-f-rasterizer-point-face");
+    ASSERT_NE(recorder, nullptr);
+    RunPass(pass, render_context, *recorder);
+  }
+  WaitForQueueIdle();
+
+  const auto prepared_pages = pass.GetPreparedPages();
+  ASSERT_EQ(prepared_pages.size(), 1U);
+  EXPECT_EQ(prepared_pages[0].virtual_page,
+    (VsmVirtualPageCoord { .level = 0U, .page_x = 1U, .page_y = 0U }));
+  EXPECT_EQ(prepared_pages[0].projection_page,
+    (VsmVirtualPageCoord { .level = 0U, .page_x = 0U, .page_y = 0U }));
+  EXPECT_EQ(prepared_pages[0].projection.cube_face_index, 1U);
+
+  const auto inspection = pass.GetIndirectPartitionsForInspection();
+  ASSERT_EQ(inspection.size(), 1U);
+  ASSERT_NE(inspection[0].count_buffer, nullptr);
+
+  const auto count_bytes = ReadBufferBytes(*inspection[0].count_buffer,
+    sizeof(std::uint32_t), "phase-f-rasterizer-point-face.counts");
+  std::uint32_t count = 0U;
+  ASSERT_EQ(count_bytes.size(), sizeof(count));
+  std::memcpy(&count, count_bytes.data(), sizeof(count));
+  EXPECT_EQ(count, 1U);
+
+  const float target_depth = ReadDepthTexel(physical_pool.shadow_texture, 0U,
+    192U, 64U, "phase-f-rasterizer-point-face.target");
+  const float neighbor_depth = ReadDepthTexel(physical_pool.shadow_texture, 0U,
+    64U, 64U, "phase-f-rasterizer-point-face.neighbor");
+  EXPECT_LT(target_depth, 1.0F);
+  EXPECT_FLOAT_EQ(neighbor_depth, 1.0F);
   EXPECT_EQ(render_context.GetPass<VsmShadowRasterizerPass>(), &pass);
 }
 

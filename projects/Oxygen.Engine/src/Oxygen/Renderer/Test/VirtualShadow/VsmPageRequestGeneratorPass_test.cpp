@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -73,6 +74,7 @@ using oxygen::graphics::TextureUploadRegion;
 using oxygen::renderer::vsm::BuildPageRequests;
 using oxygen::renderer::vsm::HasAnyRequestFlag;
 using oxygen::renderer::vsm::kVsmInvalidLightIndex;
+using oxygen::renderer::vsm::TryComputePageTableIndex;
 using oxygen::renderer::vsm::VsmPageRequestProjection;
 using oxygen::renderer::vsm::VsmProjectionData;
 using oxygen::renderer::vsm::VsmProjectionLightType;
@@ -105,25 +107,27 @@ auto BuildExpectedRequestFlags(
   auto flags = std::vector<VsmShaderPageRequestFlags>(virtual_page_count);
   const auto requests = BuildPageRequests(projections, samples);
   for (const auto& request : requests) {
-    const auto first_entry
-      = std::ranges::find_if(projections, [&](const auto& projection) {
-          return projection.map_id == request.map_id;
-        });
-    CHECK_F(first_entry != projections.end(),
-      "Missing projection for map_id {}", request.map_id);
-    const auto pages_per_level = first_entry->pages_x * first_entry->pages_y;
+    auto index = std::optional<std::uint32_t> {};
+    for (const auto& projection : projections) {
+      if (projection.map_id != request.map_id) {
+        continue;
+      }
 
-    const auto index = first_entry->first_page_table_entry
-      + request.page.level * pages_per_level
-      + request.page.page_y * first_entry->pages_x + request.page.page_x;
-    CHECK_F(index < virtual_page_count,
-      "Expected request index {} exceeds virtual page count {}", index,
+      index = TryComputePageTableIndex(projection, request.page);
+      if (index.has_value()) {
+        break;
+      }
+    }
+    CHECK_F(index.has_value(), "Missing projection route for map_id {}",
+      request.map_id);
+    CHECK_F(*index < virtual_page_count,
+      "Expected request index {} exceeds virtual page count {}", *index,
       virtual_page_count);
 
-    flags[index].bits
+    flags[*index].bits
       |= static_cast<std::uint32_t>(VsmShaderPageRequestFlagBits::kRequired);
     if (request.page.level != 0U) {
-      flags[index].bits
+      flags[*index].bits
         |= static_cast<std::uint32_t>(VsmShaderPageRequestFlagBits::kCoarse);
     }
   }
@@ -261,7 +265,13 @@ protected:
   [[nodiscard]] static auto MakeProjection(const std::uint32_t map_id,
     const std::uint32_t first_page_table_entry,
     const std::uint32_t light_index = kVsmInvalidLightIndex,
-    const std::uint32_t level_count = 1U, const std::uint32_t coarse_level = 0U)
+    const std::uint32_t level_count = 1U, const std::uint32_t coarse_level = 0U,
+    const std::uint32_t map_pages_x = 4U, const std::uint32_t map_pages_y = 4U,
+    const std::uint32_t pages_x = 4U, const std::uint32_t pages_y = 4U,
+    const std::uint32_t page_offset_x = 0U,
+    const std::uint32_t page_offset_y = 0U,
+    const std::uint32_t cube_face_index
+    = oxygen::renderer::vsm::kVsmInvalidCubeFaceIndex)
     -> VsmPageRequestProjection
   {
     const auto resolved_view = MakeResolvedView();
@@ -277,11 +287,16 @@ protected:
       },
       .map_id = map_id,
       .first_page_table_entry = first_page_table_entry,
-      .pages_x = 4U,
-      .pages_y = 4U,
+      .map_pages_x = map_pages_x,
+      .map_pages_y = map_pages_y,
+      .pages_x = pages_x,
+      .pages_y = pages_y,
+      .page_offset_x = page_offset_x,
+      .page_offset_y = page_offset_y,
       .level_count = level_count,
       .coarse_level = coarse_level,
       .light_index = light_index,
+      .cube_face_index = cube_face_index,
     };
   }
 

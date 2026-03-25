@@ -24,6 +24,7 @@ struct VsmShadowRasterPageJob {
   std::uint32_t page_table_index { 0U };
   VsmVirtualShadowMapId map_id { 0U };
   VsmVirtualPageCoord virtual_page {};
+  VsmVirtualPageCoord projection_page {};
   VsmPhysicalPageIndex physical_page {};
   VsmPhysicalPageCoord physical_coord {};
   VsmPageRequestProjection projection {};

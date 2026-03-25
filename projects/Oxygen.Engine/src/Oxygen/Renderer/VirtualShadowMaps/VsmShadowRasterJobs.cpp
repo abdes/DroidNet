@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.h>
 
 namespace oxygen::renderer::vsm {
 
@@ -37,52 +38,23 @@ namespace {
       != VsmPageRequestFlags::kNone;
   }
 
-  auto IsProjectionValid(const VsmPageRequestProjection& projection) noexcept
-    -> bool
-  {
-    return projection.map_id != 0U && projection.pages_x != 0U
-      && projection.pages_y != 0U && projection.level_count != 0U;
-  }
-
   auto BuildProjectionLookup(
     std::span<const VsmPageRequestProjection> projections)
     -> std::unordered_map<VsmVirtualShadowMapId,
-      const VsmPageRequestProjection*>
+      std::vector<const VsmPageRequestProjection*>>
   {
     auto lookup = std::unordered_map<VsmVirtualShadowMapId,
-      const VsmPageRequestProjection*> {};
-    lookup.reserve(projections.size());
+      std::vector<const VsmPageRequestProjection*>> {};
 
     for (const auto& projection : projections) {
-      if (!IsProjectionValid(projection)) {
+      if (!IsValid(projection)) {
         continue;
       }
 
-      const auto [it, inserted]
-        = lookup.emplace(projection.map_id, &projection);
-      if (!inserted) {
-        LOG_F(WARNING,
-          "BuildShadowRasterPageJobs: duplicate projection for map_id={} "
-          "ignored",
-          projection.map_id);
-      }
+      lookup[projection.map_id].push_back(&projection);
     }
 
     return lookup;
-  }
-
-  auto TryComputePageTableIndex(const VsmPageRequestProjection& projection,
-    const VsmVirtualPageCoord& page) noexcept -> std::optional<std::uint32_t>
-  {
-    if (page.level >= projection.level_count
-      || page.page_x >= projection.pages_x
-      || page.page_y >= projection.pages_y) {
-      return std::nullopt;
-    }
-
-    const auto pages_per_level = projection.pages_x * projection.pages_y;
-    return projection.first_page_table_entry + page.level * pages_per_level
-      + page.page_y * projection.pages_x + page.page_x;
   }
 
 } // namespace
@@ -120,22 +92,55 @@ auto BuildShadowRasterPageJobs(const VsmPageAllocationFrame& frame,
     const auto projection_it = projection_lookup.find(decision.request.map_id);
     if (projection_it == projection_lookup.end()) {
       LOG_F(WARNING,
-        "BuildShadowRasterPageJobs: missing projection for map_id={} "
+        "BuildShadowRasterPageJobs: missing projection route for map_id={} "
         "(action={})",
         decision.request.map_id, to_string(decision.action));
       continue;
     }
 
-    const auto* projection = projection_it->second;
-    const auto page_table_index
-      = TryComputePageTableIndex(*projection, decision.request.page);
-    if (!page_table_index.has_value()) {
+    const auto& routes = projection_it->second;
+    const VsmPageRequestProjection* matched_projection = nullptr;
+    auto matched_projection_page = VsmVirtualPageCoord {};
+    auto page_table_index = std::optional<std::uint32_t> {};
+    auto ambiguous_route = false;
+    for (const auto* route : routes) {
+      const auto projection_page
+        = TryComputeProjectionLocalPage(*route, decision.request.page);
+      if (!projection_page.has_value()) {
+        continue;
+      }
+
+      const auto candidate_page_table_index
+        = TryComputePageTableIndex(*route, decision.request.page);
+      CHECK_F(candidate_page_table_index.has_value(),
+        "BuildShadowRasterPageJobs: a matched projection route must resolve a "
+        "page-table index");
+
+      if (matched_projection != nullptr) {
+        ambiguous_route = true;
+        break;
+      }
+
+      matched_projection = route;
+      matched_projection_page = *projection_page;
+      page_table_index = candidate_page_table_index;
+    }
+
+    if (ambiguous_route) {
       LOG_F(WARNING,
-        "BuildShadowRasterPageJobs: invalid virtual page request map_id={} "
-        "level={} page=({}, {}) for projection pages={}x{} levels={}",
+        "BuildShadowRasterPageJobs: overlapping projection routes for "
+        "map_id={} level={} page=({}, {})",
         decision.request.map_id, decision.request.page.level,
-        decision.request.page.page_x, decision.request.page.page_y,
-        projection->pages_x, projection->pages_y, projection->level_count);
+        decision.request.page.page_x, decision.request.page.page_y);
+      continue;
+    }
+
+    if (matched_projection == nullptr || !page_table_index.has_value()) {
+      LOG_F(WARNING,
+        "BuildShadowRasterPageJobs: missing projection route for map_id={} "
+        "level={} page=({}, {})",
+        decision.request.map_id, decision.request.page.level,
+        decision.request.page.page_x, decision.request.page.page_y);
       continue;
     }
 
@@ -160,9 +165,10 @@ auto BuildShadowRasterPageJobs(const VsmPageAllocationFrame& frame,
       .page_table_index = *page_table_index,
       .map_id = decision.request.map_id,
       .virtual_page = decision.request.page,
+      .projection_page = matched_projection_page,
       .physical_page = decision.current_physical_page,
       .physical_coord = *physical_coord,
-      .projection = *projection,
+      .projection = *matched_projection,
       .viewport = oxygen::ViewPort {
         .top_left_x = static_cast<float>(left),
         .top_left_y = static_cast<float>(top),

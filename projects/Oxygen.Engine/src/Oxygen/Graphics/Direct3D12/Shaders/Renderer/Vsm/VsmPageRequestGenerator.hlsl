@@ -80,7 +80,15 @@ static bool VsmTryProjectToPage(const VsmPageRequestProjection projection,
     coarse_page_index = 0u;
 
     if (projection.map_id == 0u || projection.pages_x == 0u
-        || projection.pages_y == 0u || projection.level_count == 0u) {
+        || projection.pages_y == 0u || projection.map_pages_x == 0u
+        || projection.map_pages_y == 0u || projection.level_count == 0u) {
+        return false;
+    }
+
+    if (projection.page_offset_x > projection.map_pages_x
+        || projection.page_offset_y > projection.map_pages_y
+        || projection.pages_x > projection.map_pages_x - projection.page_offset_x
+        || projection.pages_y > projection.map_pages_y - projection.page_offset_y) {
         return false;
     }
 
@@ -100,18 +108,20 @@ static bool VsmTryProjectToPage(const VsmPageRequestProjection projection,
     const float2 uv = float2(
         ndc.x * 0.5f + 0.5f,
         0.5f - ndc.y * 0.5f);
-    const uint page_x
+    const uint local_page_x
         = min((uint)(uv.x * projection.pages_x), projection.pages_x - 1u);
-    const uint page_y
+    const uint local_page_y
         = min((uint)(uv.y * projection.pages_y), projection.pages_y - 1u);
-    const uint pages_per_level = projection.pages_x * projection.pages_y;
+    const uint page_x = projection.page_offset_x + local_page_x;
+    const uint page_y = projection.page_offset_y + local_page_y;
+    const uint pages_per_level = projection.map_pages_x * projection.map_pages_y;
     fine_page_index = projection.first_page_table_entry
-        + page_y * projection.pages_x + page_x;
+        + page_y * projection.map_pages_x + page_x;
 
     const uint coarse_level = min(projection.coarse_level, projection.level_count - 1u);
     coarse_page_index = projection.first_page_table_entry
         + coarse_level * pages_per_level
-        + page_y * projection.pages_x + page_x;
+        + page_y * projection.map_pages_x + page_x;
     return true;
 }
 
