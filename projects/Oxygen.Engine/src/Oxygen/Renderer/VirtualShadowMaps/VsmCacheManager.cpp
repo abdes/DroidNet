@@ -8,10 +8,13 @@
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationSnapshotHelpers.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <glm/vec4.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_set>
 #include <utility>
 
@@ -200,6 +203,32 @@ namespace {
     std::uint32_t dynamic_marks { 0 };
   };
 
+  auto MergeInvalidationScope(const VsmCacheInvalidationScope lhs,
+    const VsmCacheInvalidationScope rhs) noexcept -> VsmCacheInvalidationScope
+  {
+    if (lhs == rhs) {
+      return lhs;
+    }
+    return VsmCacheInvalidationScope::kStaticAndDynamic;
+  }
+
+  auto ResolveProjectionIndex(const VsmExtractedCacheFrame& snapshot,
+    const VsmVirtualShadowMapId map_id) -> std::optional<std::uint32_t>
+  {
+    for (std::uint32_t i = 0; i < snapshot.projection_records.size(); ++i) {
+      if (snapshot.projection_records[i].map_id == map_id) {
+        return i;
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto IsUsableInvalidationSphere(const glm::vec4& sphere) noexcept -> bool
+  {
+    return std::isfinite(sphere.x) && std::isfinite(sphere.y)
+      && std::isfinite(sphere.z) && std::isfinite(sphere.w) && sphere.w > 0.0F;
+  }
+
   auto ApplyInvalidationScope(VsmPhysicalPageMeta& meta,
     const VsmCacheInvalidationScope scope, AppliedInvalidationStats& stats)
     -> void
@@ -260,6 +289,8 @@ auto VsmCacheManager::BeginFrame(const VsmCacheManagerSeam& seam,
   runtime_state_.current_plan = {};
   runtime_state_.planned_snapshot.reset();
   runtime_state_.current_frame.reset();
+  runtime_state_.prepared_invalidation_workload = {};
+  runtime_state_.recently_removed_primitives.clear();
   runtime_state_.build_state = VsmCacheBuildState::kFrameOpen;
 
   if (!runtime_state_.previous_frame.has_value()) {
@@ -430,6 +461,22 @@ auto VsmCacheManager::PublishVisibleShadowPrimitives(
     runtime_state_.current_frame->snapshot.frame_generation, published.size());
 }
 
+auto VsmCacheManager::PublishRenderedPrimitiveHistory(
+  const std::span<const VsmRenderedPrimitiveHistoryRecord> history) -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishRenderedPrimitiveHistory requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishRenderedPrimitiveHistory requires a committed current frame");
+
+  auto& published
+    = runtime_state_.current_frame->snapshot.rendered_primitive_history;
+  published.assign(history.begin(), history.end());
+
+  DLOG_F(2, "published rendered primitive history generation={} count={}",
+    runtime_state_.current_frame->snapshot.frame_generation, published.size());
+}
+
 auto VsmCacheManager::PublishStaticPrimitivePageFeedback(
   const std::span<const VsmStaticPrimitivePageFeedbackRecord> feedback) -> void
 {
@@ -478,6 +525,134 @@ auto VsmCacheManager::PublishCurrentFrameHzbAvailability(
     is_current_frame_hzb_data_available);
 }
 
+auto VsmCacheManager::BuildInvalidationWork(
+  const std::span<const VsmPrimitiveInvalidationRecord> invalidations)
+  -> const VsmInvalidationWorkload&
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kFrameOpen,
+    "BuildInvalidationWork requires frame-open state");
+
+  runtime_state_.prepared_invalidation_workload = {};
+
+  if (!runtime_state_.previous_frame.has_value() || invalidations.empty()) {
+    return runtime_state_.prepared_invalidation_workload;
+  }
+
+  const auto& previous = *runtime_state_.previous_frame;
+  auto merged_invalidations = std::vector<VsmPrimitiveInvalidationRecord> {};
+  merged_invalidations.reserve(invalidations.size());
+
+  for (const auto& record : invalidations) {
+    if (!IsUsableInvalidationSphere(record.world_bounding_sphere)) {
+      LOG_F(WARNING,
+        "skipping primitive invalidation with unusable world-bounding sphere "
+        "transform_index={} generation={} submesh_index={}",
+        record.primitive.transform_index, record.primitive.transform_generation,
+        record.primitive.submesh_index);
+      continue;
+    }
+
+    auto existing
+      = std::ranges::find_if(merged_invalidations, [&record](const auto& item) {
+          return item.primitive == record.primitive;
+        });
+    if (existing == merged_invalidations.end()) {
+      merged_invalidations.push_back(record);
+    } else {
+      existing->scope = MergeInvalidationScope(existing->scope, record.scope);
+      existing->is_removed = existing->is_removed || record.is_removed;
+      existing->world_bounding_sphere = record.world_bounding_sphere;
+    }
+
+    if (record.is_removed) {
+      const auto removed_it = std::ranges::find(
+        runtime_state_.recently_removed_primitives, record.primitive);
+      if (removed_it == runtime_state_.recently_removed_primitives.end()) {
+        runtime_state_.recently_removed_primitives.push_back(record.primitive);
+      }
+    }
+  }
+
+  for (const auto& record : merged_invalidations) {
+    auto candidate_maps
+      = std::vector<std::pair<VsmVirtualShadowMapId, bool>> {};
+
+    auto append_candidate = [&](const VsmVirtualShadowMapId map_id,
+                              const bool matched_static_feedback) -> void {
+      if (map_id == 0U) {
+        return;
+      }
+      auto existing = std::ranges::find_if(candidate_maps,
+        [map_id](const auto& item) { return item.first == map_id; });
+      if (existing == candidate_maps.end()) {
+        candidate_maps.emplace_back(map_id, matched_static_feedback);
+      } else {
+        existing->second = existing->second || matched_static_feedback;
+      }
+    };
+
+    for (const auto& history : previous.rendered_primitive_history) {
+      if (history.primitive == record.primitive) {
+        append_candidate(history.map_id, false);
+      }
+    }
+    if (record.scope != VsmCacheInvalidationScope::kDynamicOnly) {
+      for (const auto& feedback : previous.static_primitive_page_feedback) {
+        if (feedback.valid != 0U && feedback.primitive == record.primitive) {
+          append_candidate(feedback.map_id, true);
+        }
+      }
+    }
+
+    for (const auto& [map_id, matched_static_feedback] : candidate_maps) {
+      const auto projection_index = ResolveProjectionIndex(previous, map_id);
+      if (!projection_index.has_value()) {
+        continue;
+      }
+
+      auto& work_items
+        = runtime_state_.prepared_invalidation_workload.work_items;
+      auto existing = std::ranges::find_if(work_items, [&](const auto& item) {
+        return item.primitive == record.primitive
+          && item.projection_index == *projection_index;
+      });
+      if (existing == work_items.end()) {
+        work_items.push_back(VsmInvalidationWorkItem {
+          .primitive = record.primitive,
+          .world_bounding_sphere = record.world_bounding_sphere,
+          .projection_index = *projection_index,
+          .scope = record.scope,
+          .matched_static_feedback = matched_static_feedback,
+        });
+      } else {
+        existing->scope = MergeInvalidationScope(existing->scope, record.scope);
+        existing->matched_static_feedback
+          = existing->matched_static_feedback || matched_static_feedback;
+        existing->world_bounding_sphere = record.world_bounding_sphere;
+      }
+    }
+  }
+
+  std::ranges::sort(runtime_state_.prepared_invalidation_workload.work_items,
+    [](const auto& lhs, const auto& rhs) {
+      return std::tie(lhs.projection_index, lhs.primitive.transform_index,
+               lhs.primitive.transform_generation, lhs.primitive.submesh_index,
+               lhs.primitive.primitive_flags)
+        < std::tie(rhs.projection_index, rhs.primitive.transform_index,
+          rhs.primitive.transform_generation, rhs.primitive.submesh_index,
+          rhs.primitive.primitive_flags);
+    });
+
+  DLOG_F(2,
+    "prepared invalidation workload requests={} work_items={} "
+    "recently_removed={}",
+    merged_invalidations.size(),
+    runtime_state_.prepared_invalidation_workload.work_items.size(),
+    runtime_state_.recently_removed_primitives.size());
+
+  return runtime_state_.prepared_invalidation_workload;
+}
+
 auto VsmCacheManager::ExtractFrameData() -> void
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
@@ -496,6 +671,8 @@ auto VsmCacheManager::ExtractFrameData() -> void
   runtime_state_.page_requests.clear();
   runtime_state_.current_plan = {};
   runtime_state_.planned_snapshot.reset();
+  runtime_state_.prepared_invalidation_workload = {};
+  runtime_state_.recently_removed_primitives.clear();
   runtime_state_.current_frame.reset();
 
   DLOG_F(2,

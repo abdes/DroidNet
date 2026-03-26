@@ -41,12 +41,17 @@ public:
     -> const VsmPageAllocationFrame&;
   OXGN_RNDR_API auto PublishVisibleShadowPrimitives(
     std::span<const VsmPrimitiveIdentity> primitives) -> void;
+  OXGN_RNDR_API auto PublishRenderedPrimitiveHistory(
+    std::span<const VsmRenderedPrimitiveHistoryRecord> history) -> void;
   OXGN_RNDR_API auto PublishStaticPrimitivePageFeedback(
     std::span<const VsmStaticPrimitivePageFeedbackRecord> feedback) -> void;
   OXGN_RNDR_API auto PublishProjectionRecords(
     std::span<const VsmPageRequestProjection> projection_records) -> void;
   OXGN_RNDR_API auto PublishCurrentFrameHzbAvailability(
     bool is_current_frame_hzb_data_available) -> void;
+  OXGN_RNDR_NDAPI auto BuildInvalidationWork(
+    std::span<const VsmPrimitiveInvalidationRecord> invalidations)
+    -> const VsmInvalidationWorkload&;
 
   OXGN_RNDR_API auto ExtractFrameData() -> void;
   OXGN_RNDR_API auto InvalidateAll(VsmCacheInvalidationReason reason) -> void;
@@ -108,6 +113,8 @@ private:
     // immutable after BeginFrame().
     std::optional<VsmPageAllocationFrame> current_frame {};
     std::optional<VsmExtractedCacheFrame> previous_frame {};
+    VsmInvalidationWorkload prepared_invalidation_workload {};
+    std::vector<VsmPrimitiveIdentity> recently_removed_primitives {};
     // Targeted invalidations are queued here and applied to a planning copy of
     // the previous extracted frame so GetPreviousFrame() remains the canonical
     // extracted snapshot until the next ExtractFrameData().

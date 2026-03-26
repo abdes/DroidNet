@@ -188,6 +188,32 @@ static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_per_level) == 12U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_level) == 16U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, target_level) == 20U);
 
+// Shader-facing invalidation work item for the Phase J dedicated GPU pass.
+//
+// The CPU cache manager stays responsible for mapping scene changes and static
+// feedback to one previous-frame projection record. The GPU stage only
+// receives the compact per-projection work item it needs to mark stale
+// physical-page metadata.
+struct VsmShaderInvalidationWorkItem {
+  VsmPrimitiveIdentity primitive {};
+  glm::vec4 world_bounding_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::uint32_t projection_index { 0U };
+  std::uint32_t scope { 0U };
+  std::uint32_t matched_static_feedback { 0U };
+  std::uint32_t _pad0 { 0U };
+
+  auto operator==(const VsmShaderInvalidationWorkItem&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmShaderInvalidationWorkItem>);
+static_assert(sizeof(VsmShaderInvalidationWorkItem) == 48U);
+static_assert(offsetof(VsmShaderInvalidationWorkItem, primitive) == 0U);
+static_assert(
+  offsetof(VsmShaderInvalidationWorkItem, world_bounding_sphere) == 16U);
+static_assert(offsetof(VsmShaderInvalidationWorkItem, projection_index) == 32U);
+static_assert(offsetof(VsmShaderInvalidationWorkItem, scope) == 36U);
+static_assert(
+  offsetof(VsmShaderInvalidationWorkItem, matched_static_feedback) == 40U);
+
 // Shader-facing shadow-raster work item for one prepared virtual page.
 //
 // The rasterizer pass computes a page-local cropped view-projection matrix on

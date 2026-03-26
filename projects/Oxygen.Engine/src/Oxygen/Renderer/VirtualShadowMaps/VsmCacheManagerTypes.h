@@ -14,6 +14,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <glm/vec4.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Bool32.h>
 #include <Oxygen/Graphics/Common/Forward.h>
@@ -170,6 +172,66 @@ struct VsmStaticPrimitivePageFeedbackRecord {
 };
 static_assert(std::is_standard_layout_v<VsmStaticPrimitivePageFeedbackRecord>);
 
+// CPU-side per-light primitive history record retained with extracted cache
+// state so scene invalidation can resolve mutated primitives back to the
+// previous cached shadow-map owners.
+struct VsmRenderedPrimitiveHistoryRecord {
+  VsmPrimitiveIdentity primitive {};
+  VsmVirtualShadowMapId map_id { 0U };
+
+  auto operator==(const VsmRenderedPrimitiveHistoryRecord&) const -> bool
+    = default;
+};
+static_assert(std::is_standard_layout_v<VsmRenderedPrimitiveHistoryRecord>);
+
+// Renderer-side primitive invalidation input prepared from scene changes.
+// The world bound is intentionally a sphere because it is the conservative
+// bound already published by scene/render item extraction and is cheap to
+// upload/project on GPU.
+struct VsmPrimitiveInvalidationRecord {
+  VsmPrimitiveIdentity primitive {};
+  glm::vec4 world_bounding_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
+  VsmCacheInvalidationScope scope { VsmCacheInvalidationScope::kDynamicOnly };
+  Bool32 is_removed { false };
+
+  auto operator==(const VsmPrimitiveInvalidationRecord&) const -> bool
+    = default;
+};
+static_assert(std::is_standard_layout_v<VsmPrimitiveInvalidationRecord>);
+
+struct VsmLightInvalidationRequest {
+  VsmLightCacheKind kind { VsmLightCacheKind::kLocal };
+  VsmRemapKeyList remap_keys {};
+  VsmCacheInvalidationScope scope {
+    VsmCacheInvalidationScope::kStaticAndDynamic
+  };
+  VsmCacheInvalidationReason reason {
+    VsmCacheInvalidationReason::kTargetedInvalidate
+  };
+
+  auto operator==(const VsmLightInvalidationRequest&) const -> bool = default;
+};
+
+// Prepared GPU work item for the dedicated invalidation stage. Each item is
+// already resolved to one previous-frame projection record so the shader does
+// not need to rediscover light ownership from remap keys.
+struct VsmInvalidationWorkItem {
+  VsmPrimitiveIdentity primitive {};
+  glm::vec4 world_bounding_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::uint32_t projection_index { 0U };
+  VsmCacheInvalidationScope scope { VsmCacheInvalidationScope::kDynamicOnly };
+  Bool32 matched_static_feedback { false };
+
+  auto operator==(const VsmInvalidationWorkItem&) const -> bool = default;
+};
+static_assert(std::is_standard_layout_v<VsmInvalidationWorkItem>);
+
+struct VsmInvalidationWorkload {
+  std::vector<VsmInvalidationWorkItem> work_items {};
+
+  auto operator==(const VsmInvalidationWorkload&) const -> bool = default;
+};
+
 struct VsmCacheEntryFrameState {
   VsmVirtualShadowMapId virtual_map_id { 0 };
   std::uint32_t first_page_table_entry { 0 };
@@ -307,6 +369,7 @@ struct VsmPageAllocationSnapshot {
   std::vector<VsmVirtualMapLayout> retained_local_light_layouts {};
   std::vector<VsmClipmapLayout> retained_directional_layouts {};
   std::vector<VsmPrimitiveIdentity> visible_shadow_primitives {};
+  std::vector<VsmRenderedPrimitiveHistoryRecord> rendered_primitive_history {};
   std::vector<VsmStaticPrimitivePageFeedbackRecord>
     static_primitive_page_feedback {};
   std::vector<VsmPageRequestProjection> projection_records {};

@@ -67,6 +67,7 @@ m_gtest_program(
     "VirtualShadow/VsmCacheManagerRetention_test.cpp"
     "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
     "VirtualShadow/VsmCacheManagerSeam_test.cpp"
+    "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
     "VirtualShadow/VsmShaderTypes_test.cpp"
     "VirtualShadow/VsmPageRequestGeneration_test.cpp"
     "VirtualShadow/VsmCacheManagerState_test.cpp"
@@ -93,6 +94,7 @@ source_group(
     "VirtualShadow/VsmCacheManagerRetention_test.cpp"
     "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
     "VirtualShadow/VsmCacheManagerSeam_test.cpp"
+    "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
     "VirtualShadow/VsmShaderTypes_test.cpp"
     "VirtualShadow/VsmPageRequestGeneration_test.cpp"
     "VirtualShadow/VsmCacheManagerState_test.cpp"
@@ -103,6 +105,22 @@ source_group(
     "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
+)
+
+gtest_program(
+  "Oxygen.Renderer.VirtualShadowSceneObserver.Tests"
+  SOURCES
+    "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
+  DEPS
+    oxygen::renderer
+    oxygen::testing
+)
+
+source_group(
+  TREE ${CMAKE_CURRENT_SOURCE_DIR}
+  PREFIX VirtualShadowsIntegration
+  FILES
+    "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
 )
 
 if(TARGET oxygen::graphics-direct3d12)
@@ -123,6 +141,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
+      "VirtualShadow/VsmInvalidationPass_test.cpp"
       "VirtualShadow/VsmHzbUpdaterPass_test.cpp"
       "VirtualShadow/VsmProjectionPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
@@ -143,6 +162,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
+      "VirtualShadow/VsmInvalidationPass_test.cpp"
       "VirtualShadow/VsmHzbUpdaterPass_test.cpp"
       "VirtualShadow/VsmProjectionPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
