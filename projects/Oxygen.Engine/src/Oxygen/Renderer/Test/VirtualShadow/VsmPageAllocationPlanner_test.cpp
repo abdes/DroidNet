@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include "VirtualShadowTestFixtures.h"
-
 #include <array>
 #include <span>
 #include <string_view>
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationPlanner.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualRemapBuilder.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

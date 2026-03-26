@@ -446,6 +446,21 @@ auto VsmCacheManager::PublishStaticPrimitivePageFeedback(
     runtime_state_.current_frame->snapshot.frame_generation, published.size());
 }
 
+auto VsmCacheManager::PublishProjectionRecords(
+  const std::span<const VsmPageRequestProjection> projection_records) -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishProjectionRecords requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishProjectionRecords requires a committed current frame");
+
+  auto& published = runtime_state_.current_frame->snapshot.projection_records;
+  published.assign(projection_records.begin(), projection_records.end());
+
+  DLOG_F(2, "published projection records generation={} count={}",
+    runtime_state_.current_frame->snapshot.frame_generation, published.size());
+}
+
 auto VsmCacheManager::PublishCurrentFrameHzbAvailability(
   const bool is_current_frame_hzb_data_available) -> void
 {

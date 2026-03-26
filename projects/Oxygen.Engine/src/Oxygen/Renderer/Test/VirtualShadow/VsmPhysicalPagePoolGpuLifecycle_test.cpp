@@ -4,17 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include "VirtualShadowGpuTestFixtures.h"
-
 #include <stdexcept>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
+
+#include "VirtualShadowGpuTestFixtures.h"
 
 namespace {
 

@@ -9,9 +9,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowTestFixtures.h"
-
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

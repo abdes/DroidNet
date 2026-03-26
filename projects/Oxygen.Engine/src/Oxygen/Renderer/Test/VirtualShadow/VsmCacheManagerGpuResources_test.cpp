@@ -6,10 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowGpuTestFixtures.h"
-
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
+
+#include "VirtualShadowGpuTestFixtures.h"
 
 namespace {
 

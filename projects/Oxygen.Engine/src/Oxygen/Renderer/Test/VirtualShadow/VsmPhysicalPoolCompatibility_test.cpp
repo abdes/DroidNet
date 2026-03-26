@@ -6,10 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowTestFixtures.h"
-
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPoolCompatibility.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

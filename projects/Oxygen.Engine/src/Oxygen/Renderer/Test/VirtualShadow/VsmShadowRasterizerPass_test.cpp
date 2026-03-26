@@ -4,10 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include "VirtualShadowGpuTestFixtures.h"
-
 #include <array>
 #include <cstring>
 #include <memory>
@@ -21,6 +17,8 @@
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -51,6 +49,8 @@
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
+
+#include "VirtualShadowGpuTestFixtures.h"
 
 namespace {
 
