@@ -6,9 +6,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowTestFixtures.h"
-
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

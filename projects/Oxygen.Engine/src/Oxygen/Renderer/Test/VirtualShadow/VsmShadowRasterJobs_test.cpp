@@ -5,9 +5,9 @@
 
 #include <array>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <glm/mat4x4.hpp>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h>
 

@@ -4,10 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include "VirtualShadowGpuTestFixtures.h"
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -22,6 +18,8 @@
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -42,6 +40,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+
+#include "VirtualShadowGpuTestFixtures.h"
 
 namespace {
 

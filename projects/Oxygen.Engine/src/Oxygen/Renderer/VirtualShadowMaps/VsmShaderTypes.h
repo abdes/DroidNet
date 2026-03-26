@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 
 namespace oxygen::renderer::vsm {
@@ -186,73 +187,6 @@ static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_y) == 8U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_per_level) == 12U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_level) == 16U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, target_level) == 20U);
-
-enum class VsmProjectionLightType : std::uint32_t {
-  kLocal = 0U,
-  kDirectional = 1U,
-};
-
-struct VsmProjectionData {
-  glm::mat4 view_matrix { 1.0F };
-  glm::mat4 projection_matrix { 1.0F };
-  glm::vec4 view_origin_ws_pad { 0.0F, 0.0F, 0.0F, 0.0F };
-  glm::ivec2 clipmap_corner_offset { 0, 0 };
-  std::uint32_t clipmap_level { 0U };
-  std::uint32_t light_type { static_cast<std::uint32_t>(
-    VsmProjectionLightType::kLocal) };
-
-  auto operator==(const VsmProjectionData&) const -> bool = default;
-};
-static_assert(std::is_standard_layout_v<VsmProjectionData>);
-static_assert(sizeof(VsmProjectionData) == 160U);
-static_assert(offsetof(VsmProjectionData, view_matrix) == 0U);
-static_assert(offsetof(VsmProjectionData, projection_matrix) == 64U);
-static_assert(offsetof(VsmProjectionData, view_origin_ws_pad) == 128U);
-static_assert(offsetof(VsmProjectionData, clipmap_corner_offset) == 144U);
-static_assert(offsetof(VsmProjectionData, clipmap_level) == 152U);
-static_assert(offsetof(VsmProjectionData, light_type) == 156U);
-
-inline constexpr std::uint32_t kVsmInvalidLightIndex = 0xffffffffU;
-inline constexpr std::uint32_t kVsmInvalidCubeFaceIndex = 0xffffffffU;
-
-// Shader-facing routing record for page-request generation.
-//
-// The generator needs more than the compact projection payload alone: it also
-// needs the owning virtual-map layout, the routed subregion covered by this
-// projection, and the clustered-light index used to prune local-light demand.
-struct VsmPageRequestProjection {
-  VsmProjectionData projection {};
-  VsmVirtualShadowMapId map_id { 0U };
-  std::uint32_t first_page_table_entry { 0U };
-  std::uint32_t map_pages_x { 0U };
-  std::uint32_t map_pages_y { 0U };
-  std::uint32_t pages_x { 0U };
-  std::uint32_t pages_y { 0U };
-  std::uint32_t page_offset_x { 0U };
-  std::uint32_t page_offset_y { 0U };
-  std::uint32_t level_count { 1U };
-  std::uint32_t coarse_level { 0U };
-  std::uint32_t light_index { kVsmInvalidLightIndex };
-  std::uint32_t cube_face_index { kVsmInvalidCubeFaceIndex };
-
-  auto operator==(const VsmPageRequestProjection&) const -> bool = default;
-};
-static_assert(std::is_standard_layout_v<VsmPageRequestProjection>);
-static_assert(sizeof(VsmPageRequestProjection) == 208U);
-static_assert(offsetof(VsmPageRequestProjection, projection) == 0U);
-static_assert(offsetof(VsmPageRequestProjection, map_id) == 160U);
-static_assert(
-  offsetof(VsmPageRequestProjection, first_page_table_entry) == 164U);
-static_assert(offsetof(VsmPageRequestProjection, map_pages_x) == 168U);
-static_assert(offsetof(VsmPageRequestProjection, map_pages_y) == 172U);
-static_assert(offsetof(VsmPageRequestProjection, pages_x) == 176U);
-static_assert(offsetof(VsmPageRequestProjection, pages_y) == 180U);
-static_assert(offsetof(VsmPageRequestProjection, page_offset_x) == 184U);
-static_assert(offsetof(VsmPageRequestProjection, page_offset_y) == 188U);
-static_assert(offsetof(VsmPageRequestProjection, level_count) == 192U);
-static_assert(offsetof(VsmPageRequestProjection, coarse_level) == 196U);
-static_assert(offsetof(VsmPageRequestProjection, light_index) == 200U);
-static_assert(offsetof(VsmPageRequestProjection, cube_face_index) == 204U);
 
 // Shader-facing shadow-raster work item for one prepared virtual page.
 //

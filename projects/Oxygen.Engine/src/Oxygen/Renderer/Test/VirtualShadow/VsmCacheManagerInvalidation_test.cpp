@@ -8,12 +8,12 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowTestFixtures.h"
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpace.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

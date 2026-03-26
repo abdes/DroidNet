@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -308,6 +309,7 @@ struct VsmPageAllocationSnapshot {
   std::vector<VsmPrimitiveIdentity> visible_shadow_primitives {};
   std::vector<VsmStaticPrimitivePageFeedbackRecord>
     static_primitive_page_feedback {};
+  std::vector<VsmPageRequestProjection> projection_records {};
   std::vector<VsmPageTableEntry> page_table {};
   std::vector<VsmPhysicalPageMeta> physical_pages {};
 

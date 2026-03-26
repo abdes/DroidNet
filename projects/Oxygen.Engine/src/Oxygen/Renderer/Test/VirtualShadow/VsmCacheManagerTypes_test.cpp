@@ -8,10 +8,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include "VirtualShadowTestFixtures.h"
-
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 

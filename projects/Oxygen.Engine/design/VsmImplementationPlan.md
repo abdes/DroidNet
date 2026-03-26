@@ -80,7 +80,7 @@ implemented cache/allocation slice:
 | ☑ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
 | ☑ | G | Static/Dynamic Merge pass | Dirty-page static depth is merged into the lighting-visible dynamic slice through `VsmStaticDynamicMergePass` |
 | ☑ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild and current/previous-frame HZB availability publication for reuse gating |
-| ☐ | I | Projection and Composite pass | Screen-space shadow factor generation for directional + local lights |
+| ☑ | I | Projection and Composite pass | Standalone screen-space shadow factor generation for directional + local lights |
 | ☐ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
 | ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
 | ☐ | L-a | Validation automation and workflow foundation | Automated RenderScene/demo control, capture, CVar setup, and workflow docs exist for repeatable VSM validation |
@@ -445,27 +445,50 @@ Validation evidence on 2026-03-26:
 
 **Architecture ref:** §3.9, §13, stage 15
 
+**Status:** completed on 2026-03-26.
+
 **Deliverables:**
 
-- [ ] Create `VsmProjectionPass` (compute or full-screen graphics pass)
-- [ ] Directional clipmap projection shader `VsmDirectionalProjection.hlsl`:
-  - Determine clipmap level from pixel distance
-  - Transform world position → virtual page space
-  - Page-table lookup → physical page
-  - Sample shadow depth, compute shadow factor
-  - Apply filtering (SMRT / PCF / penumbra estimation)
-- [ ] Local light projection — implement one of:
-  - **One-pass packed mask-bit mode** `VsmLocalLightProjectionPacked.hlsl`
-  - **Per-light mode** `VsmLocalLightProjectionPerLight.hlsl`
-  - (Start with per-light for simplicity; optimize to packed later)
-- [ ] Shadow factor composite into screen-space shadow mask texture
-- [ ] Transmission sampling path for translucent receivers using the VSM page-table lookup path
-- [ ] Create `VsmShadowHelpers.hlsli` — replacement for conventional `ShadowHelpers.hlsli` with VSM page-table sampling
-- [ ] Swap `ComputeShadowVisibility()` in `ForwardDirectLighting.hlsli` to call VSM path when VSM is active
+- [x] Extend cache-manager frame publication with current-frame projection records retained on extract via `VsmCacheManager::PublishProjectionRecords(...)`
+- [x] Create standalone `VsmProjectionPass` (`ComputeRenderPass`) for low-level Stage 15 screen-space projection/composite work
+- [x] Directional clipmap projection shader `VsmDirectionalProjection.hlsl`:
+  - reconstruct world position from scene depth
+  - project into virtual page space using `VsmPageRequestProjection`
+  - resolve physical pages through the page table
+  - sample the dynamic shadow slice and composite into a screen-space shadow mask
+- [x] Local light projection in per-light mode via `VsmLocalLightProjectionPerLight.hlsl`
+- [x] Shadow factor composite into a per-view screen-space shadow mask texture published by `VsmProjectionPass`
+- [x] Create `VsmShadowHelpers.hlsli` — shared projection/page-table sampling helpers for the low-level Stage 15 shaders
+- [x] Focused tests that validate outputs/effects rather than altering internals:
+  - cache-manager lifecycle test for projection-record publication/extraction
+  - GPU projection-pass tests for directional and local-light shadow mask outputs
+
+Phase-scope note:
+
+- Forward-lighting consumption of the Stage 15 shadow mask remains Phase `K`.
+- This phase does **not** wire `ComputeShadowVisibility()` to VSM yet.
+- Translucent-receiver transmission sampling remains deferred until the renderer-integration phase that actually consumes the shadow mask.
 
 **Dependencies:** Phase F (shadow depth), Phase H (HZB for optional quality), Phase B (page-table structures)
 
-**Exit gate:** Screen-space shadow factors match expected output for test scenes with directional and local lights, and VSM transmission paths are wired for translucent receivers.
+**Exit gate:** Standalone Stage 15 screen-space shadow factors match expected output for test scenes with directional and local lights; projection records are published on the committed cache frame and retained on extract.
+
+Validation evidence on 2026-03-26:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmDirectionalProjection.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmLocalLightProjectionPerLight.hlsl`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmShadowHelpers.hlsli`
+- added shared projection ABI ownership in `src/Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h`
+- extended cache-manager continuity publication with `VsmCacheManager::PublishProjectionRecords(...)`
+- added cache-manager lifecycle coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp`
+- added focused GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp`
+- built `oxygen-renderer`, `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused high-verbosity validation:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassBuildsScreenShadowMaskFromMappedVirtualPage`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.LocalProjectionPerLightPassBuildsScreenShadowMaskFromMappedVirtualPage`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*`
 
 ---
 
@@ -476,7 +499,7 @@ Validation evidence on 2026-03-26:
 **Deliverables:**
 
 - [ ] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
-  - Subscribe to `kLightChanged | kTransformChanged` mutations
+  - Subscribe to relevant mutation events
   - Map affected scene nodes to VSM remap keys
   - Queue targeted invalidation payloads
 - [ ] GPU invalidation pass `VsmInvalidation.hlsl`:

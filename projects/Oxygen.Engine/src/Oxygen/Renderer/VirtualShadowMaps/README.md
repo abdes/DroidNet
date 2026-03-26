@@ -22,6 +22,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - GPU page lifecycle execution for stages 9-11 through `VsmPageFlagPropagationPass` and `VsmPageInitializationPass`
   - GPU static/dynamic depth merge for stage 13 through `VsmStaticDynamicMergePass`
   - GPU per-page and top-level VSM HZB rebuild for stage 14 through `VsmHzbUpdaterPass`
+  - standalone Stage 15 screen-space shadow projection/composite through `VsmProjectionPass`
   - deterministic available-page packing so GPU fresh allocation matches CPU plan order
 - renderer-level screen-space HZB prep is implemented through `ScreenHzbBuildPass`
   - `ForwardPipeline` now builds a per-view min-reduced screen HZB immediately after `DepthPrePass`
@@ -32,16 +33,21 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmPageRequestProjection` / `VsmShaderPageRequestFlags` define the shader ABI for Stage 5 demand discovery
   - `VsmPageRequestGeneratorPass` owns the request/projection GPU buffers and dispatch contract
   - `VsmPageRequestGeneration.*` keeps the projection/request-merging policy independently testable on CPU
+- standalone Phase I projection/composite contracts now exist:
+  - `VsmCacheManager::PublishProjectionRecords(...)` publishes current-frame projection records on the committed cache frame and retains them on extraction
+  - `VsmProjectionPass` projects directional and local-light VSM pages into a per-view screen-space shadow mask
+  - `VsmShadowHelpers.hlsli` owns the Stage 15 page-table projection/sampling helpers used by the projection shaders
 - Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
-  - that dedicated bucket now covers physical-pool ABI publication, request generation, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, and screen-HZB history/readback contracts
+  - that dedicated bucket now covers physical-pool ABI publication, request generation, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
 
 ## Known Forward Gaps
 
 - Targeted invalidation currently queues CPU-side invalidation records and applies them to a planning copy of the previous extracted snapshot. This is intentionally shaped to stay compatible with the later dedicated GPU invalidation stage, but that GPU stage is not implemented yet.
-- Projection-data publication is still missing. The ABI contract now exists, but the full architecture still needs cache-manager-owned current and retained previous-frame projection products plus upload/publication plumbing.
 - Scene-mutation invalidation workloads are not implemented yet. Current invalidation is remap-key targeted only.
 - The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K owns that integration.
+- The standalone Stage 15 projection pass now exists, but its shadow-mask output is still not wired into forward lighting. Phase K owns that renderer integration path.
+- Translucent-receiver transmission sampling for VSM-projected shadows is not integrated yet. That stays deferred until the renderer path actually consumes the Stage 15 mask.
 - Phase F still needs to consume the screen-space HZB during instance culling. The HZB producer and previous-frame history contract now exist, but the shadow rasterizer does not use them yet.
 
 ## Helper Policy

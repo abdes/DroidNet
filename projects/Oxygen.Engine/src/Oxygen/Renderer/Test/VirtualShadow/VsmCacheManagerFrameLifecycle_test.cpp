@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <array>
 
-#include "VirtualShadowTestFixtures.h"
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
+
+#include "VirtualShadowTestFixtures.h"
 
 namespace {
 
@@ -18,11 +21,39 @@ using oxygen::renderer::vsm::VsmCacheBuildState;
 using oxygen::renderer::vsm::VsmCacheDataState;
 using oxygen::renderer::vsm::VsmCacheManager;
 using oxygen::renderer::vsm::VsmCacheManagerFrameConfig;
+using oxygen::renderer::vsm::VsmPageRequestProjection;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
+using oxygen::renderer::vsm::VsmProjectionData;
+using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::testing::VsmCacheManagerTestBase;
 
 class VsmCacheManagerFrameLifecycleTest : public VsmCacheManagerTestBase { };
+
+[[nodiscard]] static auto MakeProjectionRecord(const std::uint32_t map_id,
+  const std::uint32_t first_page_table_entry) -> VsmPageRequestProjection
+{
+  return VsmPageRequestProjection {
+    .projection = VsmProjectionData {
+      .view_matrix = glm::mat4 { 1.0F },
+      .projection_matrix = glm::mat4 { 1.0F },
+      .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 0.0F },
+      .clipmap_corner_offset = { 0, 0 },
+      .clipmap_level = 0U,
+      .light_type = static_cast<std::uint32_t>(VsmProjectionLightType::kLocal),
+    },
+    .map_id = map_id,
+    .first_page_table_entry = first_page_table_entry,
+    .map_pages_x = 1U,
+    .map_pages_y = 1U,
+    .pages_x = 1U,
+    .pages_y = 1U,
+    .page_offset_x = 0U,
+    .page_offset_y = 0U,
+    .level_count = 1U,
+    .coarse_level = 0U,
+  };
+}
 
 NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
   CacheManagerCommitAndExtractPublishCanonicalSnapshotShape)
@@ -68,6 +99,44 @@ NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
   EXPECT_EQ(manager.GetCurrentFrame(), nullptr);
   ASSERT_NE(manager.GetPreviousFrame(), nullptr);
   EXPECT_EQ(*manager.GetPreviousFrame(), committed_snapshot);
+}
+
+NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
+  ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase-i-frame-shadow-pool")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(
+    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase-i-frame-hzb-pool")),
+    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
+
+  const auto seam = MakeSeam(pool_manager, 11ULL, 48U, "phase-i-frame", 1U);
+  auto manager = VsmCacheManager(nullptr);
+  manager.BeginFrame(
+    seam, VsmCacheManagerFrameConfig { .debug_name = "phase-i-commit" });
+
+  static_cast<void>(manager.BuildPageAllocationPlan());
+  const auto& frame = manager.CommitPageAllocationFrame();
+  EXPECT_TRUE(frame.snapshot.projection_records.empty());
+
+  const auto projection_records = std::array<VsmPageRequestProjection, 1U> {
+    MakeProjectionRecord(48U, 0U),
+  };
+  manager.PublishProjectionRecords(projection_records);
+
+  ASSERT_NE(manager.GetCurrentFrame(), nullptr);
+  EXPECT_EQ(manager.GetCurrentFrame()->snapshot.projection_records.size(), 1U);
+  EXPECT_EQ(manager.GetCurrentFrame()->snapshot.projection_records[0],
+    projection_records[0]);
+
+  manager.ExtractFrameData();
+
+  ASSERT_NE(manager.GetPreviousFrame(), nullptr);
+  EXPECT_EQ(manager.GetPreviousFrame()->projection_records.size(), 1U);
+  EXPECT_EQ(
+    manager.GetPreviousFrame()->projection_records[0], projection_records[0]);
 }
 
 NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,

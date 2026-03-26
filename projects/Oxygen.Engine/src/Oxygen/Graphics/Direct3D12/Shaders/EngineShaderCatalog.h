@@ -346,6 +346,19 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="CS_BuildTopLevels" }
     }
   },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmDirectionalProjection.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_ClearShadowMask" },
+      EntryPoint { .type=kCompute, .name="CS_ProjectDirectional" }
+    }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmLocalLightProjectionPerLight.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_ProjectLocalLights" }
+    }
+  },
   // VSM runtime page-management shaders (stage 6-8)
   ShaderFileSpec {
     .path="Renderer/Vsm/VsmPageReuse.hlsl",
