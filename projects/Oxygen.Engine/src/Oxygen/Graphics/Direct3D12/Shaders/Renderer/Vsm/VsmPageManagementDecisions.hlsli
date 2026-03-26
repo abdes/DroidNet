@@ -37,4 +37,15 @@ struct VsmShaderPageAllocationDecision
     VsmPhysicalPageMeta physical_meta;
 };
 
+VsmPhysicalPageMeta VsmMergeSeedInvalidationBits(
+    VsmPhysicalPageMeta current_meta,
+    VsmPhysicalPageMeta seed_meta)
+{
+    current_meta.static_invalidated
+        = current_meta.static_invalidated | seed_meta.static_invalidated;
+    current_meta.dynamic_invalidated
+        = current_meta.dynamic_invalidated | seed_meta.dynamic_invalidated;
+    return current_meta;
+}
+
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_VSM_VSMPAGEMANAGEMENTDECISIONS_HLSLI

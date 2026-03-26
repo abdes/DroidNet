@@ -19,6 +19,24 @@ using oxygen::graphics::GraphicsError;
 
 namespace oxygen::engine::upload::internal {
 
+namespace {
+
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+} // namespace
+
 auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
   std::uint64_t size_bytes, const std::uint32_t stride,
@@ -96,7 +114,7 @@ auto EnsureBufferAndSrv(Graphics& gfx,
     // or invalid handles) will abort the program rather than throw exceptions.
     // Our validation above should prevent such violations.
     try {
-      registry.Register(new_buffer);
+      RegisterResourceIfNeeded(gfx, new_buffer);
       registry.RegisterView(*new_buffer, std::move(view_handle), view_desc);
     } catch (const std::exception& e) {
       LOG_F(ERROR, "-failed- to register new buffer or view: {}", e.what());

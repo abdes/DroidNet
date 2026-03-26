@@ -2068,6 +2068,10 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       .primitive_flags
       = static_cast<std::uint32_t>(DrawPrimitiveFlagBits::kMainViewVisible),
     }));
+  const auto rendered_history = pass.GetRenderedPrimitiveHistory();
+  ASSERT_EQ(rendered_history.size(), 1U);
+  EXPECT_EQ(rendered_history[0].map_id, kTestMapId);
+  EXPECT_EQ(rendered_history[0].primitive, visible_primitives[0]);
   EXPECT_EQ(render_context.GetPass<VsmShadowRasterizerPass>(), &pass);
 }
 

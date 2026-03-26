@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
@@ -39,9 +40,16 @@ class Buffer;
 class CommandRecorder;
 }
 
+namespace oxygen::scene {
+class Scene;
+}
+
 namespace oxygen::renderer {
 namespace internal {
   class ConventionalShadowBackend;
+}
+namespace vsm {
+  class VsmShadowRenderer;
 }
 
 //! Renderer-owned shadow-product scheduler and backend coordinator.
@@ -68,7 +76,8 @@ public:
 
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,
-    float camera_viewport_width,
+    observer_ptr<scene::Scene> active_scene, float camera_viewport_width,
+    std::span<const engine::sceneprep::RenderItemData> rendered_items = {},
     std::span<const glm::vec4> shadow_caster_bounds = {},
     std::span<const glm::vec4> visible_receiver_bounds = {},
     std::chrono::milliseconds gpu_budget = std::chrono::milliseconds(16),
@@ -85,6 +94,8 @@ public:
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetConventionalShadowDepthTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetVirtualShadowRenderer() const noexcept
+    -> observer_ptr<vsm::VsmShadowRenderer>;
 
 private:
   observer_ptr<Graphics> gfx_;
@@ -93,10 +104,14 @@ private:
   oxygen::ShadowQualityTier shadow_quality_tier_ {
     oxygen::ShadowQualityTier::kHigh
   };
+  oxygen::DirectionalShadowImplementationPolicy directional_policy_ {
+    oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly
+  };
   std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>
     last_view_directional_implementation_;
 
   std::unique_ptr<internal::ConventionalShadowBackend> conventional_backend_;
+  std::unique_ptr<vsm::VsmShadowRenderer> vsm_shadow_renderer_;
 };
 
 } // namespace oxygen::renderer

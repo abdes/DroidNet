@@ -25,6 +25,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmPageManagementPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
@@ -43,19 +44,27 @@ using oxygen::ViewId;
 using oxygen::ViewPort;
 using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::Renderer;
+using oxygen::engine::VsmInvalidationPass;
+using oxygen::engine::VsmInvalidationPassConfig;
+using oxygen::engine::VsmInvalidationPassInput;
 using oxygen::engine::VsmPageManagementFinalStage;
 using oxygen::engine::VsmPageManagementPass;
 using oxygen::engine::VsmPageManagementPassConfig;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::renderer::vsm::VsmAllocationAction;
+using oxygen::renderer::vsm::VsmCacheInvalidationScope;
 using oxygen::renderer::vsm::VsmCacheManager;
 using oxygen::renderer::vsm::VsmCacheManagerFrameConfig;
+using oxygen::renderer::vsm::VsmInvalidationWorkItem;
 using oxygen::renderer::vsm::VsmPageAllocationFrame;
 using oxygen::renderer::vsm::VsmPageRequest;
+using oxygen::renderer::vsm::VsmPageRequestProjection;
 using oxygen::renderer::vsm::VsmPhysicalPageMeta;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
+using oxygen::renderer::vsm::VsmProjectionData;
+using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::VsmShaderPageFlagBits;
 using oxygen::renderer::vsm::VsmShaderPageFlags;
 using oxygen::renderer::vsm::VsmShaderPageTableEntry;
@@ -186,6 +195,24 @@ protected:
     }
     WaitForQueueIdle();
     return pass.GetAvailablePageCountBuffer();
+  }
+
+  auto CreateMetadataSeedBuffer(
+    const std::span<const VsmPhysicalPageMeta> metadata,
+    std::string_view debug_name)
+    -> std::shared_ptr<const oxygen::graphics::Buffer>
+  {
+    auto buffer = CreateRegisteredBuffer(oxygen::graphics::BufferDesc {
+      .size_bytes = static_cast<std::uint64_t>(metadata.size())
+        * sizeof(VsmPhysicalPageMeta),
+      .usage = oxygen::graphics::BufferUsage::kStorage,
+      .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
+      .debug_name = std::string(debug_name),
+    });
+    CHECK_NOTNULL_F(buffer.get(), "Failed to create metadata seed buffer");
+    UploadBufferBytes(buffer, metadata.data(),
+      metadata.size() * sizeof(VsmPhysicalPageMeta), debug_name);
+    return buffer;
   }
 };
 
@@ -385,6 +412,61 @@ NOLINT_TEST_F(VsmPageReuseStageGpuTest,
     static_cast<bool>(metadata[previous_physical_page.value].is_allocated));
 }
 
+NOLINT_TEST_F(VsmPageReuseStageGpuTest,
+  ReuseStagePreservesInvalidationBitsFromMetadataSeedBuffer)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase-d-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(&Backend());
+  const auto previous_virtual_frame = MakeSinglePageLocalFrame(1ULL, 10U);
+  const auto previous_request = VsmPageRequest {
+    .map_id = previous_virtual_frame.local_light_layouts[0].id,
+    .page = {},
+  };
+
+  manager.BeginFrame(MakeSeam(pool_manager, previous_virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-d-prev" });
+  manager.SetPageRequests({ &previous_request, 1U });
+  static_cast<void>(CommitFrame(manager));
+  manager.ExtractFrameData();
+
+  const auto current_virtual_frame = MakeSinglePageLocalFrame(2ULL, 20U);
+  const auto current_request = VsmPageRequest {
+    .map_id = current_virtual_frame.local_light_layouts[0].id,
+    .page = {},
+  };
+
+  manager.BeginFrame(
+    MakeSeam(pool_manager, current_virtual_frame, &previous_virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-d-current" });
+  manager.SetPageRequests({ &current_request, 1U });
+  const auto& frame = CommitFrame(manager);
+
+  ASSERT_EQ(frame.plan.decisions.size(), 1U);
+  const auto reused_page = frame.plan.decisions[0].current_physical_page.value;
+  auto seeded_metadata = frame.snapshot.physical_pages;
+  seeded_metadata[reused_page].dynamic_invalidated = true;
+
+  auto frame_with_seed = frame;
+  frame_with_seed.physical_page_meta_seed_buffer
+    = CreateMetadataSeedBuffer(seeded_metadata, "vsm-page-reuse-meta-seed");
+
+  static_cast<void>(ExecutePass(frame_with_seed,
+    VsmPageManagementFinalStage::kReuse, "vsm-page-reuse-seeded"));
+
+  const auto metadata = ReadBufferAs<VsmPhysicalPageMeta>(
+    frame_with_seed.physical_page_meta_buffer,
+    frame_with_seed.snapshot.physical_pages.size(),
+    "vsm-page-reuse-seeded-meta");
+  ASSERT_EQ(metadata.size(), frame_with_seed.snapshot.physical_pages.size());
+  EXPECT_TRUE(static_cast<bool>(metadata[reused_page].dynamic_invalidated));
+  EXPECT_TRUE(static_cast<bool>(metadata[reused_page].is_allocated));
+  EXPECT_EQ(metadata[reused_page].owner_id, current_request.map_id);
+}
+
 NOLINT_TEST_F(VsmPackAvailablePagesGpuTest,
   PackStageCompactsUnallocatedPagesIntoAscendingStack)
 {
@@ -522,6 +604,171 @@ NOLINT_TEST_F(
   EXPECT_EQ(allocated.owner_id, current_requests[1].map_id);
   EXPECT_EQ(allocated.owner_page, current_requests[1].page);
   EXPECT_TRUE(static_cast<bool>(allocated.view_uncached));
+}
+
+NOLINT_TEST_F(VsmAllocateNewPagesGpuTest,
+  AllocateStagePreservesInvalidationBitsFromMetadataSeedBuffer)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase-d-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(&Backend());
+  const auto previous_virtual_frame
+    = MakeSinglePageLocalFrame(1ULL, 10U, "prev", 1U);
+  const auto previous_request = VsmPageRequest {
+    .map_id = previous_virtual_frame.local_light_layouts[0].id,
+    .page = {},
+  };
+
+  manager.BeginFrame(MakeSeam(pool_manager, previous_virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-d-prev" });
+  manager.SetPageRequests({ &previous_request, 1U });
+  static_cast<void>(CommitFrame(manager));
+  manager.ExtractFrameData();
+
+  const auto current_virtual_frame
+    = MakeSinglePageLocalFrame(2ULL, 20U, "curr", 2U);
+  const auto current_requests = std::array {
+    VsmPageRequest {
+      .map_id = current_virtual_frame.local_light_layouts[0].id, .page = {} },
+    VsmPageRequest {
+      .map_id = current_virtual_frame.local_light_layouts[1].id, .page = {} },
+  };
+
+  manager.BeginFrame(
+    MakeSeam(pool_manager, current_virtual_frame, &previous_virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-d-current" });
+  manager.SetPageRequests(current_requests);
+  const auto& frame = CommitFrame(manager);
+
+  ASSERT_EQ(frame.plan.decisions.size(), 2U);
+  const auto allocated_page
+    = frame.plan.decisions[1].current_physical_page.value;
+  auto seeded_metadata = frame.snapshot.physical_pages;
+  seeded_metadata[allocated_page].static_invalidated = true;
+
+  auto frame_with_seed = frame;
+  frame_with_seed.physical_page_meta_seed_buffer = CreateMetadataSeedBuffer(
+    seeded_metadata, "vsm-page-allocation-meta-seed");
+
+  static_cast<void>(ExecutePass(frame_with_seed,
+    VsmPageManagementFinalStage::kAllocateNewPages, "vsm-allocate-seeded"));
+
+  const auto metadata = ReadBufferAs<VsmPhysicalPageMeta>(
+    frame_with_seed.physical_page_meta_buffer,
+    frame_with_seed.snapshot.physical_pages.size(), "vsm-allocate-seeded-meta");
+  ASSERT_EQ(metadata.size(), frame_with_seed.snapshot.physical_pages.size());
+  EXPECT_TRUE(static_cast<bool>(metadata[allocated_page].static_invalidated));
+  EXPECT_TRUE(static_cast<bool>(metadata[allocated_page].is_allocated));
+  EXPECT_EQ(metadata[allocated_page].owner_id, current_requests[1].map_id);
+}
+
+NOLINT_TEST_F(VsmAllocateNewPagesGpuTest,
+  AllocateStageAcceptsInvalidationSeedBufferFromTheSameRecorder)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase-d-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(&Backend());
+  const auto current_virtual_frame
+    = MakeSinglePageLocalFrame(2ULL, 20U, "curr", 1U);
+  const auto current_request = VsmPageRequest {
+    .map_id = current_virtual_frame.local_light_layouts[0].id,
+    .page = {},
+  };
+
+  manager.BeginFrame(MakeSeam(pool_manager, current_virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-d-current" });
+  manager.SetPageRequests({ &current_request, 1U });
+  const auto& frame = CommitFrame(manager);
+
+  auto invalidation_pass
+    = VsmInvalidationPass(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      std::make_shared<VsmInvalidationPassConfig>(VsmInvalidationPassConfig {
+        .debug_name = "phase-d-invalidation-seed",
+      }));
+
+  auto previous_metadata
+    = std::vector<VsmPhysicalPageMeta>(frame.snapshot.physical_pages.size());
+  previous_metadata[0] = VsmPhysicalPageMeta {
+    .is_allocated = true,
+    .owner_id = 11U,
+    .owner_mip_level = 0U,
+    .owner_page = {},
+  };
+  invalidation_pass.SetInput(VsmInvalidationPassInput {
+    .previous_projection_records = { VsmPageRequestProjection {
+      .projection = VsmProjectionData {
+        .view_matrix = glm::mat4 { 1.0F },
+        .projection_matrix = glm::mat4 { 1.0F },
+        .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 0.0F },
+        .clipmap_corner_offset = { 0, 0 },
+        .clipmap_level = 0U,
+        .light_type
+        = static_cast<std::uint32_t>(VsmProjectionLightType::kLocal),
+      },
+      .map_id = 11U,
+      .first_page_table_entry = 0U,
+      .map_pages_x = 1U,
+      .map_pages_y = 1U,
+      .pages_x = 1U,
+      .pages_y = 1U,
+      .page_offset_x = 0U,
+      .page_offset_y = 0U,
+      .level_count = 1U,
+      .coarse_level = 0U,
+      .light_index = 0U,
+    } },
+    .previous_page_table_entries
+    = { oxygen::renderer::vsm::MakeMappedShaderPageTableEntry({ 0U }) },
+    .previous_physical_page_metadata = previous_metadata,
+    .invalidation_work_items = {
+      VsmInvalidationWorkItem {
+        .world_bounding_sphere = glm::vec4 { -0.75F, 0.0F, 0.0F, 0.10F },
+        .projection_index = 0U,
+        .scope = VsmCacheInvalidationScope::kDynamicOnly,
+      },
+    },
+  });
+
+  auto page_management_pass = VsmPageManagementPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmPageManagementPassConfig>(VsmPageManagementPassConfig {
+      .final_stage = VsmPageManagementFinalStage::kAllocateNewPages,
+      .debug_name = "phase-d-allocate-seeded-from-invalidation",
+    }));
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto prepared_frame = PreparedSceneFrame {};
+  auto offscreen = renderer->BeginOffscreenFrame(
+    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 1U } });
+  offscreen.SetCurrentView(kTestViewId, MakeResolvedView(), prepared_frame);
+  auto& render_context = offscreen.GetRenderContext();
+
+  auto frame_with_seed = frame;
+  {
+    auto recorder
+      = AcquireRecorder("vsm-allocate-stage-shared-invalidation-seed");
+    CHECK_NOTNULL_F(recorder.get());
+    RunPass(invalidation_pass, render_context, *recorder);
+    frame_with_seed.physical_page_meta_seed_buffer
+      = invalidation_pass.GetCurrentOutputPhysicalMetadataBuffer();
+    page_management_pass.SetFrameInput(frame_with_seed);
+    RunPass(page_management_pass, render_context, *recorder);
+  }
+  WaitForQueueIdle();
+
+  const auto metadata = ReadBufferAs<VsmPhysicalPageMeta>(
+    frame_with_seed.physical_page_meta_buffer,
+    frame_with_seed.snapshot.physical_pages.size(),
+    "vsm-allocate-seeded-from-invalidation.readback");
+  ASSERT_FALSE(metadata.empty());
+  EXPECT_TRUE(static_cast<bool>(metadata[0].dynamic_invalidated));
 }
 
 } // namespace

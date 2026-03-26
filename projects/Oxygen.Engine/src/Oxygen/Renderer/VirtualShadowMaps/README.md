@@ -48,9 +48,10 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
 
 ## Known Forward Gaps
 
-- Phase J is implemented as a standalone invalidation slice, but it is not yet wired into a renderer-owned VSM shadow orchestrator. Phase K owns that renderer integration path.
-- The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K owns that integration.
-- The standalone Stage 15 projection pass now exists, but its shadow-mask output is still not wired into forward lighting. Phase K owns that renderer integration path.
+- Phase J is implemented as a standalone invalidation slice, but it is not yet wired into a renderer-owned VSM shadow orchestrator. Phase K-a owns that renderer integration path.
+- The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K-a owns that integration.
+- The standalone Stage 15 projection pass now exists, but its shadow-mask output is not yet fully consumed by the normal renderer path. Phase K-b and Phase K-c own that forward-lighting integration.
+- Distant-local-light refresh budgeting and point-light per-face update scheduling remain Phase K-d work.
 - Translucent-receiver transmission sampling for VSM-projected shadows is not integrated yet. That stays deferred until the renderer path actually consumes the Stage 15 mask.
 - Phase F still needs to consume the screen-space HZB during instance culling. The HZB producer and previous-frame history contract now exist, but the shadow rasterizer does not use them yet.
 

@@ -141,6 +141,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
+      "VirtualShadow/VsmShadowRendererBridge_test.cpp"
       "VirtualShadow/VsmInvalidationPass_test.cpp"
       "VirtualShadow/VsmHzbUpdaterPass_test.cpp"
       "VirtualShadow/VsmProjectionPass_test.cpp"
@@ -162,6 +163,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
+      "VirtualShadow/VsmShadowRendererBridge_test.cpp"
       "VirtualShadow/VsmInvalidationPass_test.cpp"
       "VirtualShadow/VsmHzbUpdaterPass_test.cpp"
       "VirtualShadow/VsmProjectionPass_test.cpp"
@@ -172,6 +174,13 @@ if(TARGET oxygen::graphics-direct3d12)
 endif()
 
 m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
+
+m_gtest_program(
+  ShadowManagerPolicy
+  SOURCES
+    "Fakes/Graphics.h"
+    "ShadowManager_policy_test.cpp"
+)
 
 m_gtest_program(
   ScenePrep

@@ -16,6 +16,13 @@ Implementation execution rules
 - When a bug is found in an in-progress slice, the response must be professional and architecture-compliant: investigate the bug, identify the failing contract, and fix it within the approved design if at all possible.
 - Do not declare that an entire slice must be reverted just because a bug was found. Reversion is a last-resort recovery action, not a default response.
 - No turning back to shortcuts, no parallel legacy path, and no hacks to satisfy a test while violating the architecture.
+- Every active phase or subphase must have its execution plan written in this document with explicit checklist items.
+- Checklist state is mandatory process state: `[ ]` means incomplete, `[x]` means completed, and the checkboxes must be updated immediately as work progresses.
+- If context is compacted or a session is interrupted, this document remains the source of truth for the next executable task and its current completion state.
+- String conversion and logging conventions are binding:
+  - do not invent local `ToString` helpers
+  - if a type needs string conversion support, define an ADL-visible free `to_string(...)` with the type
+  - when using `LOG_*` / `DLOG_*`, pass the typed value directly and let the logging adapters resolve `to_string`; do not pre-stringify with `nostd::to_string` or `oxygen::to_string`
 
 CPU-GPU ABI Guidelines
 
@@ -82,7 +89,11 @@ implemented cache/allocation slice:
 | ☑ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild and current/previous-frame HZB availability publication for reuse gating |
 | ☑ | I | Projection and Composite pass | Standalone screen-space shadow factor generation for directional + local lights |
 | ☑ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
-| ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
+| ☐ | K-a | VSM orchestrator shell and shadow-mask diagnostics | Engine runs the full VSM pass chain and exposes Stage 15 output for manual validation |
+| ☐ | K-b | Directional-light VSM forward-lighting integration | Directional/sun shadows render end-to-end through the normal forward path |
+| ☐ | K-c | Local-light VSM forward-lighting integration | Local-light VSM shadows render end-to-end through the normal forward path |
+| ☐ | K-d | Point-light scheduling and distant-light refresh budgeting | Point-light face updates and distant-light refresh budgets execute correctly in-engine |
+| ☐ | K-e | VSM policy hardening and full renderer stabilization | Conventional and VSM policies both work; renderer integration is stable enough for Phase L |
 | ☐ | L-a | Validation automation and workflow foundation | Automated RenderScene/demo control, capture, CVar setup, and workflow docs exist for repeatable VSM validation |
 | ☐ | L-b | Functional validation | VSM renders correct results across representative existing and purpose-built scenes |
 | ☐ | L-c | Performance characterization and tuning | Per-stage timings and utilization baselines are measured; major hot paths are characterized and tuned |
@@ -499,7 +510,7 @@ Validation evidence on 2026-03-26:
 **Deliverables:**
 
 - [ ] Extend `VsmCacheManager` invalidation state to match the architecture contract
- - [x] Extend `VsmCacheManager` invalidation state to match the architecture contract
+  - [x] Extend `VsmCacheManager` invalidation state to match the architecture contract
   - Track per-light rendered primitive history needed to translate scene mutations into affected cached entries
   - Track recently removed primitives so stale slot reuse cannot corrupt invalidation targeting
   - Build a prepared invalidation workload from scene changes plus static raster feedback instead of relying on ad hoc remap-key calls alone
@@ -570,35 +581,418 @@ Validation evidence on 2026-03-26:
 
 **Architecture ref:** §14.1, §5 (full 17-stage pipeline)
 
-**Deliverables:**
+**Execution note:** Phase K is intentionally split into self-contained engine-runnable subphases. Each subphase must end with:
 
-- [ ] Create `VsmShadowRenderer` orchestrator class coordinating the full per-frame pipeline:
-  1. `BeginFrame()` — cache manager seam capture
-  2. Virtual address space allocation
-  3. Remap construction
-  4. Current and retained previous-frame projection data upload/publication
-  5. Page request generation (Phase C pass)
-  6. Page management (Phase D passes)
-  7. Flag propagation + initialization (Phase E passes)
-  8. Shadow rasterization (Phase F pass)
-  9. Static/dynamic merge (Phase G pass)
-  10. HZB update (Phase H pass)
-  11. Projection and composite (Phase I pass)
-  12. Extract frame data
-  13. Mark cache valid
-- [ ] Extend `ShadowManager` with `DirectionalShadowImplementationPolicy::kVirtualShadowMap` enum value
-- [ ] Add VSM code path in `ShadowManager::PublishForView()` delegating to `VsmShadowRenderer`
-- [x] Register `ScreenHzbBuildPass` in `ForwardPipeline` immediately after `DepthPrePass` (renderer-level, independent of VSM toggle)
-- [ ] Register VSM passes in `ForwardPipeline` between `ScreenHzbBuildPass` and forward lighting
-- [ ] Wire `VsmProjectionPass` output (shadow mask) into forward lighting shader inputs
-- [ ] Implement feature toggle: conventional ↔ VSM shadow selection (config-driven, not runtime toggle initially)
-- [ ] Coroutine integration: make VSM orchestration compatible with `ForwardPipeline`'s coroutine model
-- [ ] Implement distant-local-light refresh budgeting and scheduling per architecture §9.2, including the cached-skip path for lights not selected this frame
-- [ ] Implement point-light per-face update scheduling and projection upload flow without introducing a second public cache identity model
+- automated validation appropriate to its scope, and
+- a manual whole-engine checkpoint the user can inspect by running the engine.
+
+The split below does not reduce automated validation requirements. It only makes renderer integration checkpoints smaller and easier to inspect manually.
+
+#### Phase K-a — VSM Orchestrator Shell and Shadow-Mask Diagnostics
+
+**Goal:** wire the existing standalone VSM stages into the real renderer path without yet changing the normal forward-lighting result.
+
+**K-a execution rules:**
+
+- This subphase is orchestration-only. It must not change the normal forward-lighting result yet.
+- Do not deviate from the approved architecture:
+  - no `SceneObserverSyncModule` dependency or API change
+  - no node-handle storage inside `SceneNodeImpl`
+  - no fake VSM mode or alternate legacy execution path
+- Reuse the standalone Phase C-J passes as they are. K-a is about real renderer wiring, not redesigning those stages.
+
+**Architecture scope check for K-a:**
+
+- K-a must cover the full renderer-owned orchestration chain from Stage 1 through Stage 17, even though the normal lighting pass must not yet consume the result.
+- The `ScreenHzbBuildPass` remains a renderer prerequisite owned by `ForwardPipeline`; it is not re-owned by VSM.
+- Stage 4 current/previous projection publication, Stage 16 extraction, and Stage 17 cache-valid publication are mandatory K-a work items. They must not be silently folded away into vague "orchestration" wording.
+- Phase J's direct-`Scene` invalidation path must be wired into the live renderer-owned shell in K-a. Standalone invalidation tests are not enough; the active-scene observer lifecycle must participate in the real renderer path.
+- The manual engine-visible result for K-a is the Stage 15 screen-space shadow mask only. Forward-lighting consumption remains strictly Phase K-b / K-c work.
+
+**K-a task breakdown:**
+
+- [x] `K-a.1` Policy and lifetime plumbing
+  - Hook points:
+    - `RendererConfig`
+    - `ShadowManager`
+    - example selection path (`RenderScene` / `DemoShell`)
+  - Primary files:
+    - `src/Oxygen/Config/RendererConfig.h`
+    - `src/Oxygen/Renderer/ShadowManager.h`
+    - `src/Oxygen/Renderer/ShadowManager.cpp`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+  - Required outcome:
+    - `DirectionalShadowImplementationPolicy::kVirtualShadowMap` is selectable
+    - `ShadowManager` owns one renderer-owned `VsmShadowRenderer` when that policy is active
+    - normal conventional rendering remains available
+  - Required evidence:
+    - targeted build
+    - policy selection visible in logs
+  - Stop condition:
+    - no live renderer pass execution yet; this task ends once ownership and selection are correct
+
+- [x] `K-a.2` Per-view VSM input capture
+  - Hook points:
+    - `ShadowManager::PublishForView()`
+    - `VsmShadowRenderer::PrepareView(...)`
+    - active-scene handoff from the live renderer path
+  - Primary files:
+    - `src/Oxygen/Renderer/ShadowManager.cpp`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+  - Required outcome:
+    - capture only the per-view data already produced by the renderer:
+      - view constants
+      - shadow caster bounds
+      - visible receiver bounds
+      - light data already published by `LightManager`
+      - frame-sequence / slot inputs needed by the cache-manager seam
+      - the current active `Scene` needed by the Phase J direct-scene invalidation coordinator
+    - do not change scene ownership semantics
+    - do not invent new scene-node identity rules
+  - Required evidence:
+    - focused log/contract checks
+    - no change to forward-lighting output
+  - Stop condition:
+    - captured inputs are sufficient to start the renderer-owned VSM shell, but nothing has been executed yet
+
+- [x] `K-a.3` Real renderer execution seam
+  - Hook point:
+    - `ForwardPipeline::Impl::RunScenePasses(...)`
+  - Primary files:
+    - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+  - Required outcome:
+    - execute the renderer-owned VSM shell after `ScreenHzbBuildPass` and `LightCullingPass`, before forward shading
+    - keep the shell coroutine-compatible with `ForwardPipeline`
+    - no VSM result is consumed by normal lighting in this subphase
+    - the live seam passes the current view depth texture needed by Stage 5 / Stage 15
+  - Required evidence:
+    - targeted build
+    - pass-order logs showing the VSM shell executes in the live renderer
+  - Stop condition:
+    - the live pipeline enters the VSM shell, even if downstream orchestration work is still stubbed or incomplete
+
+- [x] `K-a.4` Stage 5 to Stage 6 bridge
+  - Architecture stages covered:
+    - Stage 4 `Projection Data Upload`
+    - Stage 5 `Page Request Generation`
+    - bridge into the CPU planner used by Stage 6-8
+  - Primary files:
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.cpp`
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.h`
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.cpp`
+  - Task checklist:
+    - [x] Carry `scene::NodeHandle` through the CPU-side renderer shadow-candidate snapshots used by the live VSM path
+    - [x] Document that live VSM remap identity is derived from `scene::NodeHandle`, not from `SceneNodeImpl`, names, or transient light ordering
+    - [x] Keep node-validity checks debug-only and compile the entire validation path out in release builds
+    - [x] Publish current-frame projection data and retained previous-frame projection data to the passes that need them
+    - [x] Bridge the Stage 5 GPU page-request output into the existing CPU page-planning path without changing architecture
+    - [x] If readback is required, name it honestly and keep it scoped to this bridge
+    - [x] Preserve honest semantics in names if any field/method rename is needed while completing the bridge
+  - Required evidence:
+    - focused orchestration test proving page requests actually affect downstream allocation/commit
+    - high-verbosity executable run if the first attempt fails
+  - Stop condition:
+    - Stage 6-8 can only start once this bridge is proven to feed real request data into the planner
+  - Validation evidence on 2026-03-26:
+    - added `VsmShadowRenderer::ExecutePageRequestReadbackBridge(...)` in `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h/.cpp`
+    - current-frame projection records are published during the bridge commit, and retained previous-frame projection publication remains covered by `VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+    - added focused GPU orchestration coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp`
+    - wired the new GPU test into `src/Oxygen/Renderer/Test/CMakeLists.txt`
+    - built:
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
+    - ran with high verbosity:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.PageRequestReadbackBridgeCommitsAllocationFrameFromGpuRequests`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+
+- [x] `K-a.5` End-to-end C-J shell execution
+  - Architecture stages covered:
+    - Stage 1 `Begin Frame`
+    - Stage 2 `Virtual Address Space Allocation`
+    - Stage 3 `Remap Construction`
+    - Stage 6 `Physical Page Reuse`
+    - Stage 7 `Pack Available Pages`
+    - Stage 8 `Allocate New Page Mappings`
+    - Stage 9 `Generate Hierarchical Page Flags`
+    - Stage 10 `Propagate Mapped Mips`
+    - Stage 11 `Selective Page Initialization`
+    - Stage 12 `Shadow Rasterization`
+    - Stage 13 `Static/Dynamic Merge`
+    - Stage 14 `HZB Update`
+    - Stage 15 `Projection and Composite`
+    - Stage 16 `Extract Frame Data`
+    - Stage 17 `Mark Cache Valid`
+  - Primary files:
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+    - `src/Oxygen/Renderer/ShadowManager.cpp`
+  - Required outcome:
+    - the renderer-owned shell runs the approved stage order:
+      1. begin frame
+      2. virtual address space allocation
+      3. remap construction
+      4. projection publication
+      5. active-scene observer sync / invalidation intake
+      6. request generation
+      7. page management
+      8. flag propagation
+      9. initialization
+      10. rasterization
+      11. static/dynamic merge
+      12. HZB update
+      13. projection/composite
+      14. frame extraction
+      15. cache-valid publication
+    - the active scene is observed directly through the Phase J coordinator path:
+      - bind to the current scene
+      - rebind on scene switch
+      - stop observing old scenes
+      - drain collected mutations into the cache manager before GPU invalidation executes
+    - no `SceneObserverSyncModule` API or ownership changes are allowed in order to achieve this
+    - names in code must match those semantics exactly
+  - Task checklist:
+    - [x] Publish current-frame scene light remap bindings from the live directional/local-light layouts before draining scene mutation inputs
+    - [x] Add a renderer-owned primitive-history conduit that carries `scene::NodeHandle` from scene-prep/render-item extraction into the VSM shell without changing `SceneNodeImpl` ownership semantics
+    - [x] Drain direct-`Scene` mutation inputs in the live renderer path and apply light invalidation requests before `BeginFrame()`
+    - [x] Build primitive invalidation GPU work after `BeginFrame()` on the live renderer path
+    - [x] Feed the Phase J invalidation-pass metadata output into the Stage 6-8 live frame package without changing the cache-manager architecture or overloading `physical_page_meta_buffer` semantics
+    - [x] Run the existing Stage 6-15 passes in the approved order from the live shell and publish current-frame projection records / rendered primitive history / static feedback into the cache manager
+    - [x] Extract frame data and publish current-frame HZB availability only after the Stage 14/15 results are actually available
+    - [x] Keep all debug-only node-validity / handle-validity checks fully compiled out in release builds
+  - Required evidence:
+    - targeted orchestration tests
+    - existing individual pass tests still passing
+    - high-verbosity executable runs for any failing orchestration test before changing semantics
+  - Stop condition:
+    - the shell executes end-to-end for the current view and publishes retained state for the next frame
+  - Validation evidence on 2026-03-26:
+    - live-shell orchestration now runs on the active `ForwardPipeline` recorder via `VsmShadowRenderer::ExecutePreparedViewShell(...) -> co::Co<>`, so pass execution stays in-band with the real renderer path instead of using a side recorder contract
+    - the live shell now builds the current virtual frame, constructs the current seam, publishes scene light remap bindings, drains direct-`Scene` mutation inputs, applies targeted light invalidation requests, and only then opens the cache-manager frame in `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+    - the live shell now also builds primitive invalidation workload only after `BeginFrame()` on that same path
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h` now gives `VsmPageAllocationFrame` an explicit optional `physical_page_meta_seed_buffer`, preserving the meaning of `physical_page_meta_buffer` as the current-frame output metadata buffer
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmPageManagementPass.cpp` plus `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageReuse.hlsl`, `VsmAllocateNewPages.hlsl`, and `VsmPageManagementDecisions.hlsli` now merge invalidation bits from that optional seed buffer into Stage 6 and Stage 8 metadata writes instead of overloading the output buffer contract
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h/.cpp` now expose `PublishPhysicalPageMetaSeedBuffer(...)` as the explicit current-frame publication seam for optional invalidation metadata seed input, preserving the meaning of `physical_page_meta_buffer` as the current-frame output metadata buffer
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h/.cpp` now thread that seed explicitly through `ExecutePageRequestReadbackBridge(...)` instead of hiding it in renderer-owned side state, and the bridge now accepts both `Idle` and already-open `FrameOpen` cache-manager states so the live shell can feed Stage 6-8 in the same frame it opened
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h/.cpp` now publish rendered primitive history records for main-view-visible shadow casters using `VsmRenderedPrimitiveHistoryRecord`, with primitive identity derived from draw metadata and scene identity preserved through the carried `scene::NodeHandle` / transform handle inputs rather than any `SceneNodeImpl` back-reference
+    - `src/Oxygen/Renderer/Test/ShadowManager_policy_test.cpp` now proves the prepared live-shell view captures renderer-owned scene primitive history from scene-prep render items without changing scene ownership semantics:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.ShadowManagerPolicy.Tests.exe -v 9 --gtest_filter=ShadowManagerPolicyTest.VsmPublishCapturesPerViewInputsIntoPreparedState`
+    - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRasterizerPass_test.cpp` now proves the rasterizer publishes rendered primitive history for revealed visible primitives:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.ExecuteRevealForcesPreviouslyOccludedDrawsAndPublishesVisiblePrimitives`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.cpp` and `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmPageRequestGenerator.hlsl` now keep directional clipmap routing level-aware on both CPU and GPU so live directional projection records address the correct page-table slice instead of collapsing every clip level onto level 0
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp` now runs the real Stage 6-15 shell in order on the active renderer recorder:
+      - Stage 6-8 page management
+      - Stage 9-11 page flag propagation / initialization
+      - Stage 12 rasterization
+      - Stage 13 static/dynamic merge
+      - Stage 14 HZB update
+      - Stage 15 projection
+      - publication of rendered primitive history / static feedback / projection output into the cache manager and current view bindings
+      - extraction only after projection and current-frame HZB publication
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.cpp` and `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.cpp` now register externally supplied GPU resources before creating bindless views for them, so the live shell no longer fails at runtime when those passes consume cache-manager-owned buffers/textures
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.cpp` now tracks shared live-shell inputs from `Common` before requiring the pass-local states they need, matching the recorder contract used by the preceding VSM passes and avoiding conflicting initial-state tracking on the same command recorder
+    - the focused live-shell orchestration test in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp` now proves the shell reaches Stage 15, extracts the ready frame, and leaves a published screen shadow mask:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+    - the focused bridge tests now prove both bridge contracts remain valid under the live shell implementation:
+      - allocation-frame commit from GPU requests:
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.PageRequestReadbackBridgeCommitsAllocationFrameFromGpuRequests`
+      - explicit metadata-seed publication into the committed current frame:
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.PageRequestReadbackBridgePublishesInvalidationMetadataSeedIntoCommittedCurrentFrame`
+    - built:
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests oxygen-examples-renderscene --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-examples-renderscene --parallel 8`
+    - live-shell rasterizer resource-registry hardening:
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp` now uses explicit `RegisterResourceIfNeeded(...)` / `UnregisterResourceIfPresent(...)` helpers for pass-owned dynamic buffers instead of raw `ResourceRegistry::Register(...)` calls, matching the lifecycle contract already used by the other VSM passes and preventing timing-sensitive duplicate registration aborts in `EnsurePageJobBuffer(...)`
+      - focused validation:
+        - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests oxygen-examples-renderscene --parallel 8`
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+    - the remaining K-a.6 manual diagnostic checkpoint was revalidated on 2026-03-27 and now closes the K-a exit gate
+
+- [x] `K-a.6` Stage 15 diagnostic publication
+  - Hook points:
+    - `src/Oxygen/Renderer/Renderer.cpp`
+    - `Renderer::UpdateCurrentViewVirtualShadowFrameBindings(...)`
+    - `ViewFrameBindings`
+    - `VsmFrameBindings`
+    - existing debug shader / render-panel mode
+  - Primary files:
+    - `src/Oxygen/Renderer/Renderer.cpp`
+    - `src/Oxygen/Renderer/Types/ViewFrameBindings.h`
+    - `src/Oxygen/Renderer/Types/VsmFrameBindings.h`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ViewFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/VsmFrameBindings.hlsli`
+    - existing debug-view files already wired for `Virtual Shadow Mask`
+  - Required outcome:
+    - Stage 15 screen-space shadow mask is published into an engine-visible binding
+    - the existing debug path can display that mask in the running engine
+    - normal forward-lighting result remains intentionally unchanged
+  - Required evidence:
+    - manual engine validation of the `Virtual Shadow Mask` diagnostic
+    - targeted build
+  - Stop condition:
+    - K-a is not complete until this manual checkpoint is passed
+  - Validation evidence available so far:
+    - built:
+      - `cmake --build out/build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders oxygen-examples-demoshell oxygen-examples-renderscene Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-examples-demoshell oxygen-examples-renderscene --parallel 8`
+    - ran:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellReusesProjectionShadowMaskAcrossConsecutiveFrames`
+    - runtime publication logs now print both:
+      - `virtual_shadow_frame_slot`
+      - `screen_shadow_mask_slot`
+    - state contract hardening:
+      - `VsmProjectionPass` shadow-mask texture now rests in `ShaderResource` state between frames, matching the pass final state and the next-frame tracking assumption
+      - `VsmProjectionPass` now creates its persistent per-view shadow-mask texture in `Common`, tracks `has_current_output` explicitly, and only resumes tracking from `ShaderResource` after a real Stage 15 output has been produced, aligning the live shell with the `ScreenHzbBuildPass` persistent-texture contract
+      - `VsmShadowHelpers.hlsli`, `VsmDirectionalProjection.hlsl`, `VsmLocalLightProjectionPerLight.hlsl`, and `VsmProjectionPass.cpp` now carry an explicit `page_table_entry_count` contract so Stage 15 projection rejects out-of-range page-table accesses without changing the projection-geometry architecture, and both projection shaders now pass that argument in the correct position
+      - `Renderer::RepublishCurrentViewBindings(...)` now publishes a provisional top-level `ViewFrameBindings` payload before `ShadowManager::PublishForView(...)` on full republish, so the prepared VSM base view constants capture a valid bindless view-frame bindings slot for Stage 12 rasterization
+      - `ShadowManager::PublishForView(...)` now asserts that the bindless view-frame bindings slot is valid on the VSM path in Debug builds only
+      - `VsmShadowRasterizerPass.cpp` now registers and unregisters pass-owned dynamic buffers through explicit `RegisterResourceIfNeeded(...)` / `UnregisterResourceIfPresent(...)` helpers, so timing-sensitive live reruns cannot hit `ResourceRegistry::Register(...)` aborts when `EnsurePageJobBuffer(...)` or sibling allocation paths recreate those resources
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.cpp` now registers cache-manager-owned working-set buffers (`PageTable`, `PageFlags`, `DirtyFlags`, `PhysicalPageList`, `PageRectBounds`) when created and unregisters them on recreation, reset, and destruction, so downstream live-shell passes can safely create descriptors for scene-switch / frame-shape-recreated working sets without hitting `ResourceRegistry` “resource not found” failures
+      - `src/Oxygen/Renderer/Upload/UploadHelpers.cpp` now hardens the shared `EnsureBufferAndSrv(...)` first-create path with `RegisterResourceIfNeeded(...)`, and `src/Oxygen/Renderer/Upload/RingBufferStaging.cpp` now uses the same explicit register/unregister-if-present contract for staging-buffer recreation and deferred release, so live scene-prep geometry upload and shared upload buffers no longer rely on raw duplicate-sensitive `ResourceRegistry::Register(...)` calls
+      - `src/Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.cpp` now hardens `EnsurePassConstantsBuffers()` with `RegisterResourceIfNeeded(...)`, so the unified atmosphere constants buffer no longer depends on a raw duplicate-sensitive `ResourceRegistry::Register(...)` call during live reruns
+      - `src/Oxygen/Renderer/Passes/AutoExposurePass.cpp` now hardens all pass-owned buffer registration paths with `RegisterResourceIfNeeded(...)`, and `ReleasePassConstantsBuffer()` now unregisters the pass constants buffer before resetting it, so auto-exposure no longer depends on raw duplicate-sensitive `ResourceRegistry::Register(...)` calls or leaked registry ownership
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.cpp` no longer finalizes its physical-page metadata output buffer to a permanent `Common` state at the end of Stage 5 invalidation work, so the live shell can legally hand that buffer forward as the Stage 6 metadata-seed SRV without tripping the resource-state tracker on `Common -> ShaderResource`
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h/.cpp` now expose `AbortFrame()` as the non-destructive failure-unwind path for a live-shell frame transaction; it restores `kIdle`, preserves the previous extracted frame, marks retained cache data invalidated for the next retry, and avoids the incorrect `Reset()` contract that would have dropped extracted continuity
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp` now wraps the live-shell body in exception cleanup: if any pass fails after `BeginFrame()`, it calls `cache_manager_.AbortFrame()`, clears transient VSM view bindings, and rethrows the original error so the next frame cannot hit the follow-on `BeginFrame requires idle build state` contract abort
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmPageInitializationPass.cpp` now bounds Stage 11 depth-clear submissions to fixed-size rect batches (`kMaxClearRectsPerCall = 64`) instead of emitting one scene-scale `ClearDepthStencilView` rect array, because live engine runs showed a size-dependent driver-side stack-cookie / buffer-overrun failure after large request bursts; this keeps the architecture unchanged while removing the oversized single-call contract
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationPlanner.cpp` is now explicitly slice-aware: dynamic requests allocate and reuse only dynamic-slice physical pages, static-only requests allocate and reuse the static slice when it exists, and legacy previous-frame mappings that point a dynamic request at the static slice are evicted and reallocated into the dynamic slice instead of being silently carried forward into Stage 12/15
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.cpp` is now capacity-aware for live scene growth: the projection buffer/upload buffer and request-flags buffer/clear buffer are re-created when `max_projection_count` or `max_virtual_page_count` grows, instead of continuing to record GPU copies into stale undersized allocations after a smaller-scene run
+    - targeted validation added:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.ShadowManagerPolicy.Tests Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests oxygen-examples-renderscene --parallel 8`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.ShadowManagerPolicy.Tests.exe -v 9 --gtest_filter=ShadowManagerPolicyTest.VsmPublishCapturesPerViewInputsIntoPreparedState`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+      - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.GeometryUploader.Tests Oxygen.Renderer.RingBufferStaging.Tests Oxygen.Renderer.AtlasBuffer.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GeometryUploader.Tests.exe -v 9 --gtest_filter=GeometryUploaderUploadTest.DirtyEntrySubmitsVertexAndIndexUploadsWhenPresent`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GeometryUploader.Tests.exe -v 9 --gtest_filter=GeometryUploaderLifecycleTest.EnsureFrameResourcesIsIdempotentWithinFrame`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.GeometryUploader.Tests.exe -v 9 --gtest_filter=GeometryUploaderEdgeTest.RepeatedEnsureNoUnboundedTicketGrowth`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.RingBufferStaging.Tests.exe -v 9 --gtest_filter=RingBufferStagingEdgeTest.EnsureCapacity_GrowsBuffer:RingBufferStagingTest.EnsureCapacity_UnMapOnGrowth`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.AtlasBuffer.Tests.exe -v 9 --gtest_filter=AtlasBuffer.EnsureCapacityGrowth`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.CommitPublishesNonNullWorkingSetBuffersWithExpectedDescriptors`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.WorkingSetRecreationRebindsRegisteredBuffersForDownstreamPasses`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.ResetDropsReusableWorkingSetBuffers`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerStateTest.CacheManagerAbortFrameRestoresIdleStateAndPreservesPreviousExtraction`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerUsesClearDepthInitializationWhenOnlyStaticContentIsInvalidated`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRoutesStaticOnlyRequestsIntoStaticSliceWhenStaticSliceExists`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRejectsDynamicRequestsBeforeSpillingIntoStaticSliceCapacity`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerEvictsLegacyDynamicMappingsThatPointIntoTheStaticSlice`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStageAcceptsInvalidationSeedBufferFromTheSameRecorder`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsOnlySelectedDynamicPages`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsLargeRectBatchesWithoutTouchingUntargetedPages`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=\"VsmPageRequestGeneratorGpuTest.ExecuteReallocatesProjectionAndRequestBuffersWhenSceneCapacityGrows\"`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer oxygen-examples-renderscene --parallel 8`
+    - attempted but not counted as validation evidence:
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRemainsStableAcrossManyConsecutiveFrames`
+      - this long-running stability test was blocked/killed and is not part of the completion evidence
+    - manual engine validation on 2026-03-27:
+      - the user reran the engine successfully after the prior live-shell stability fixes and reported that scenes are working again
+      - in the simple two-cube-over-floor checkpoint scene, the user provided both a normal render and the `Virtual Shadow Mask` diagnostic with the sun coming from the top left
+      - the mask matched the expected Stage 15 visibility semantics:
+        - white for sun-visible receiver regions
+        - black for shadowed and self-shadowed regions
+        - whole-surface receiver coverage rather than only the shadow footprints
+      - the floor shadow direction in the normal render and the black visibility regions in the diagnostic both projected down-right, matching the reported light direction
+    - completion note:
+      - no remaining K-a.6 validation gap is open
+      - all `K-a.1` through `K-a.6` tasks are now checked
+      - Phase K-a is complete; subsequent work starts at Phase K-b
+
+**Recommended implementation order:**
+
+1. `K-a.1`
+2. `K-a.2`
+3. `K-a.3`
+4. `K-a.4`
+5. `K-a.5`
+6. `K-a.6`
+
+Do not start later tasks by broad codebase exploration alone. Each task above already names the first files and hook points to inspect and edit.
+
+**Implementation note:** partial K-a plumbing may exist in the worktree while this subphase is in progress, but K-a is not complete until all tasks above are implemented, the live renderer path runs, docs remain accurate, and the manual diagnostic checkpoint is passed.
 
 **Dependencies:** All previous phases (C–J)
 
-**Exit gate:** A scene renders end-to-end with VSM-based shadows through the forward pipeline; projection data, distant-light scheduling, and point-light face updates are wired; conventional path still works when VSM is disabled.
+**Manual validation checkpoint:** run the engine with VSM selected and verify that the Stage 15 mask updates plausibly as camera, casters, and light move, while the normal forward-lighting result is intentionally still unchanged.
+
+**Exit gate:** The engine runs the full renderer-owned VSM pass chain end-to-end, the Stage 15 mask is visible through an in-engine diagnostic path, and the orchestration remains architecture-compliant without yet changing the normal forward-lighting result.
+
+#### Phase K-b — Directional-Light VSM Forward-Lighting Integration
+
+**Goal:** consume the Stage 15 mask in the normal forward path for directional/sun lights.
+
+**Deliverables:**
+
+- [ ] Wire the directional-light output of `VsmProjectionPass` into the normal forward-lighting shader inputs
+- [ ] Route the directional/sun shadow path in forward lighting through VSM when the VSM policy is selected
+- [ ] Keep the conventional directional path intact when VSM is not selected
+- [ ] Preserve or improve the existing directional-light diagnostic modes so directional VSM regressions are inspectable in-engine
+
+**Dependencies:** Phase K-a
+
+**Manual validation checkpoint:** run a simple sun-shadow scene in the engine and verify that directional/sun shadows render through the normal forward path, while the conventional directional path still works when VSM is not selected.
+
+**Exit gate:** Directional/sun shadows render end-to-end through the normal forward pipeline using VSM, with manual engine validation and automated coverage both in place.
+
+#### Phase K-c — Local-Light VSM Forward-Lighting Integration
+
+**Goal:** extend the normal forward path to consume VSM output for non-directional local lights.
+
+**Deliverables:**
+
+- [ ] Wire local-light projection/composite outputs from `VsmProjectionPass` into the normal forward-lighting path
+- [ ] Publish and consume the local-light VSM records needed by the forward shader without inventing a second public cache identity model
+- [ ] Preserve the non-VSM path for local lights when VSM is not selected
+
+**Dependencies:** Phase K-b
+
+**Manual validation checkpoint:** run a local-light scene in the engine and verify that local-light VSM shadows appear in the normal forward result, not only in a diagnostic view.
+
+**Exit gate:** Local-light VSM shadows render end-to-end through the normal forward path and remain selectable through the same renderer-owned policy surface.
+
+#### Phase K-d — Point-Light Scheduling and Distant-Light Refresh Budgeting
+
+**Goal:** complete the remaining scheduling policy required by the architecture for broad light support.
+
+**Deliverables:**
+
+- [ ] Implement distant-local-light refresh budgeting and scheduling per architecture §9.2, including the cached-skip path for lights not selected this frame
+- [ ] Implement point-light per-face update scheduling
+- [ ] Implement point-light projection upload flow without introducing a second public cache identity model
+- [ ] Ensure the renderer/orchestrator path preserves clear naming that reflects the final semantics of scheduling, refresh, and projection records
+
+**Dependencies:** Phase K-c
+
+**Manual validation checkpoint:** run scenes with many local lights and at least one point light, and verify in-engine that refresh/update behavior is stable and that point-light face updates produce the expected shadowing.
+
+**Exit gate:** Point-light face scheduling and distant-local-light refresh budgeting execute correctly in the real renderer path and remain debuggable through engine-visible diagnostics/logging.
+
+#### Phase K-e — VSM Policy Hardening and Full Renderer Stabilization
+
+**Goal:** finish the renderer integration so Phase L can treat VSM as a real end-to-end renderer path.
+
+**Deliverables:**
+
+- [ ] Finalize the config-driven conventional ↔ VSM selection behavior for the supported light classes
+- [ ] Verify conventional shadows still work when VSM is disabled
+- [ ] Harden coroutine sequencing, extraction, and per-view state transitions for the full integrated path
+- [ ] Close any remaining renderer-owned integration gaps needed for Phase L automation and validation
+
+**Dependencies:** Phase K-d
+
+**Manual validation checkpoint:** run the full engine across representative scenes and verify that both conventional and VSM policies behave correctly, with no renderer-owned integration gaps blocking Phase L.
+
+**Exit gate:** The full renderer path is stable enough for automated Phase L validation: conventional and VSM policies both work, the integrated VSM path is engine-runnable across supported scenarios, and no known Phase K renderer-integration gap remains.
 
 ---
 
@@ -631,7 +1025,7 @@ Validation evidence on 2026-03-26:
   - how to compare conventional vs. VSM output and interpret diffs
   - how to collect logs/timings/artifacts for regression triage
 
-**Dependencies:** Phase K (full pipeline operational enough to drive end-to-end captures)
+**Dependencies:** Phase K-e (full pipeline operational enough to drive end-to-end captures)
 
 **Exit gate:** A repeatable, documented automation workflow exists for scene setup, CVar configuration, scripted demo control, screenshot capture, and artifact collection; Phase L-b/L-c/L-d can execute without ad hoc manual setup.
 
@@ -687,7 +1081,7 @@ Validation evidence on 2026-03-26:
   - transmission behavior on translucent receivers
   - absence of obvious artifacts such as missing pages, stale pages, seams, flicker, or incorrect receiver selection
 
-**Dependencies:** Phase K, Phase L-a
+**Dependencies:** Phase K-e, Phase L-a
 
 **Exit gate:** Functional validation passes for the defined scenario matrix using scenes that satisfy the large-receiver rule, required new scenes exist, and reference-image comparisons show acceptable results with no unresolved correctness regressions.
 
@@ -716,7 +1110,7 @@ Validation evidence on 2026-03-26:
 - [ ] Identify and document hot paths, then perform targeted tuning where profiling shows clear payoff
 - [ ] Record before/after evidence for any tuning change so later budget work is based on measured behavior rather than intuition
 
-**Dependencies:** Phase K, Phase L-a, Phase L-b
+**Dependencies:** Phase K-e, Phase L-a, Phase L-b
 
 **Exit gate:** Representative scene runs have timestamped performance baselines, utilization data, and documented hot-path findings; major regressions are either fixed or explicitly tracked.
 
@@ -743,7 +1137,7 @@ Validation evidence on 2026-03-26:
 - [ ] Verify the selected defaults preserve Phase L-b functional correctness while producing acceptable Phase L-c timings/utilization
 - [ ] Document the rationale for each chosen default and any known tradeoffs or fallback profiles
 
-**Dependencies:** Phase K, Phase L-a, Phase L-b, Phase L-c
+**Dependencies:** Phase K-e, Phase L-a, Phase L-b, Phase L-c
 
 **Exit gate:** Default VSM budgets and quality profiles are selected from measured evidence, preserve functional correctness across the validation matrix, and are documented well enough to support future regression triage and retuning.
 
@@ -764,9 +1158,13 @@ flowchart TD
     G --> H
     F --> I["Phase I<br>Projection & Composite"]
     H --> I
-    J["Phase J<br>Scene Invalidation"] --> K
-    I --> K["Phase K<br>Orchestrator & Integration"]
-    K --> La["Phase L-a<br>Automation & Workflow"]
+    J["Phase J<br>Scene Invalidation"] --> Ka
+    I --> Ka["Phase K-a<br>Orchestrator & Diagnostics"]
+    Ka --> Kb["Phase K-b<br>Directional Integration"]
+    Kb --> Kc["Phase K-c<br>Local-Light Integration"]
+    Kc --> Kd["Phase K-d<br>Scheduling & Budgets"]
+    Kd --> Ke["Phase K-e<br>Policy & Stabilization"]
+    Ke --> La["Phase L-a<br>Automation & Workflow"]
     La --> Lb["Phase L-b<br>Functional Validation"]
     Lb --> Lc["Phase L-c<br>Performance"]
     Lc --> Ld["Phase L-d<br>Budget Tuning"]

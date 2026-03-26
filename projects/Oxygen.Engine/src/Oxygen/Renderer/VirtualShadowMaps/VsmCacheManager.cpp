@@ -22,6 +22,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 
 namespace oxygen::renderer::vsm {
 
@@ -63,6 +64,47 @@ namespace {
     }
 
     return buffer;
+  }
+
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  template <typename Resource>
+  auto UnregisterResourceIfPresent(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (registry.Contains(*resource)) {
+      registry.UnRegisterResource(*resource);
+    }
+  }
+
+  auto ReleaseWorkingSetResources(Graphics* gfx, auto& resources) -> void
+  {
+    if (gfx != nullptr) {
+      UnregisterResourceIfPresent(*gfx, resources.page_table_buffer);
+      UnregisterResourceIfPresent(*gfx, resources.page_flags_buffer);
+      UnregisterResourceIfPresent(*gfx, resources.dirty_flags_buffer);
+      UnregisterResourceIfPresent(*gfx, resources.physical_page_list_buffer);
+      UnregisterResourceIfPresent(*gfx, resources.page_rect_bounds_buffer);
+    }
+
+    resources = {};
   }
 
   auto IsRemapKeyReferenced(const VsmVirtualAddressSpaceFrame& frame,
@@ -268,10 +310,14 @@ VsmCacheManager::VsmCacheManager(
 {
 }
 
-VsmCacheManager::~VsmCacheManager() = default;
+VsmCacheManager::~VsmCacheManager()
+{
+  ReleaseWorkingSetResources(gfx_, runtime_state_.working_set_resources);
+}
 
 auto VsmCacheManager::Reset() -> void
 {
+  ReleaseWorkingSetResources(gfx_, runtime_state_.working_set_resources);
   runtime_state_ = {};
 
   DLOG_F(2, "reset cache-manager debug_name=`{}`", config_.debug_name);
@@ -508,6 +554,24 @@ auto VsmCacheManager::PublishProjectionRecords(
     runtime_state_.current_frame->snapshot.frame_generation, published.size());
 }
 
+auto VsmCacheManager::PublishPhysicalPageMetaSeedBuffer(
+  std::shared_ptr<const graphics::Buffer> physical_page_meta_seed_buffer)
+  -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishPhysicalPageMetaSeedBuffer requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishPhysicalPageMetaSeedBuffer requires a committed current frame");
+
+  runtime_state_.current_frame->physical_page_meta_seed_buffer
+    = std::move(physical_page_meta_seed_buffer);
+
+  DLOG_F(2,
+    "published physical page metadata seed buffer generation={} has_seed={}",
+    runtime_state_.current_frame->snapshot.frame_generation,
+    runtime_state_.current_frame->physical_page_meta_seed_buffer != nullptr);
+}
+
 auto VsmCacheManager::PublishCurrentFrameHzbAvailability(
   const bool is_current_frame_hzb_data_available) -> void
 {
@@ -653,6 +717,35 @@ auto VsmCacheManager::BuildInvalidationWork(
   return runtime_state_.prepared_invalidation_workload;
 }
 
+auto VsmCacheManager::AbortFrame() -> void
+{
+  if (runtime_state_.build_state == VsmCacheBuildState::kIdle) {
+    return;
+  }
+
+  const auto aborted_generation = runtime_state_.captured_seam.has_value()
+    ? runtime_state_.captured_seam->current_frame.frame_generation
+    : 0ULL;
+  ClearInFlightFrameState();
+  runtime_state_.build_state = VsmCacheBuildState::kIdle;
+  runtime_state_.invalidation_reason
+    = VsmCacheInvalidationReason::kExplicitReset;
+
+  if (runtime_state_.previous_frame.has_value()) {
+    runtime_state_.cache_data_state = VsmCacheDataState::kInvalidated;
+    runtime_state_.is_hzb_data_available = false;
+  } else {
+    MarkCacheDataUnavailable();
+  }
+
+  DLOG_F(2,
+    "aborted cache frame generation={} cache_state={} build_state={} "
+    "hzb_available={} debug_name=`{}`",
+    aborted_generation, runtime_state_.cache_data_state,
+    runtime_state_.build_state, runtime_state_.is_hzb_data_available,
+    config_.debug_name);
+}
+
 auto VsmCacheManager::ExtractFrameData() -> void
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
@@ -665,15 +758,8 @@ auto VsmCacheManager::ExtractFrameData() -> void
   runtime_state_.is_hzb_data_available
     = runtime_state_.previous_frame->is_hzb_data_available;
   runtime_state_.invalidation_reason = VsmCacheInvalidationReason::kNone;
+  ClearInFlightFrameState();
   runtime_state_.build_state = VsmCacheBuildState::kIdle;
-  runtime_state_.captured_seam.reset();
-  runtime_state_.frame_config = {};
-  runtime_state_.page_requests.clear();
-  runtime_state_.current_plan = {};
-  runtime_state_.planned_snapshot.reset();
-  runtime_state_.prepared_invalidation_workload = {};
-  runtime_state_.recently_removed_primitives.clear();
-  runtime_state_.current_frame.reset();
 
   DLOG_F(2,
     "extracted cache frame generation={} pool_identity={} hzb_available={}",
@@ -1072,6 +1158,7 @@ auto VsmCacheManager::EnsureWorkingSetResources(
       "physical_pages={}",
       page_table_entry_capacity, physical_page_capacity);
   }
+  ReleaseWorkingSetResources(gfx_, runtime_state_.working_set_resources);
 
   const auto page_table_entries_bytes
     = static_cast<std::uint64_t>(
@@ -1100,17 +1187,22 @@ auto VsmCacheManager::EnsureWorkingSetResources(
   resources.page_table_buffer
     = CreateWorkingSetBuffer(*gfx_, page_table_entries_bytes,
       BuildWorkingSetDebugName(runtime_state_.frame_config, "PageTable"));
+  RegisterResourceIfNeeded(*gfx_, resources.page_table_buffer);
   resources.page_flags_buffer = CreateWorkingSetBuffer(*gfx_, page_flags_bytes,
     BuildWorkingSetDebugName(runtime_state_.frame_config, "PageFlags"));
+  RegisterResourceIfNeeded(*gfx_, resources.page_flags_buffer);
   resources.dirty_flags_buffer
     = CreateWorkingSetBuffer(*gfx_, dirty_flags_bytes,
       BuildWorkingSetDebugName(runtime_state_.frame_config, "DirtyFlags"));
+  RegisterResourceIfNeeded(*gfx_, resources.dirty_flags_buffer);
   resources.physical_page_list_buffer = CreateWorkingSetBuffer(*gfx_,
     physical_page_list_bytes,
     BuildWorkingSetDebugName(runtime_state_.frame_config, "PhysicalPageList"));
+  RegisterResourceIfNeeded(*gfx_, resources.physical_page_list_buffer);
   resources.page_rect_bounds_buffer
     = CreateWorkingSetBuffer(*gfx_, page_rect_bounds_bytes,
       BuildWorkingSetDebugName(runtime_state_.frame_config, "PageRectBounds"));
+  RegisterResourceIfNeeded(*gfx_, resources.page_rect_bounds_buffer);
 
   DLOG_F(2,
     "created page-allocation working set page_table_entries={} "
@@ -1119,6 +1211,18 @@ auto VsmCacheManager::EnsureWorkingSetResources(
 
   runtime_state_.working_set_resources = std::move(resources);
   return runtime_state_.working_set_resources;
+}
+
+auto VsmCacheManager::ClearInFlightFrameState() -> void
+{
+  runtime_state_.captured_seam.reset();
+  runtime_state_.frame_config = {};
+  runtime_state_.page_requests.clear();
+  runtime_state_.current_plan = {};
+  runtime_state_.planned_snapshot.reset();
+  runtime_state_.prepared_invalidation_workload = {};
+  runtime_state_.recently_removed_primitives.clear();
+  runtime_state_.current_frame.reset();
 }
 
 auto VsmCacheManager::MarkCacheDataUnavailable() noexcept -> void

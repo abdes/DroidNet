@@ -116,6 +116,7 @@ static bool VsmTryProjectToPage(const VsmPageRequestProjection projection,
     const uint page_y = projection.page_offset_y + local_page_y;
     const uint pages_per_level = projection.map_pages_x * projection.map_pages_y;
     fine_page_index = projection.first_page_table_entry
+        + projection.projection.clipmap_level * pages_per_level
         + page_y * projection.map_pages_x + page_x;
 
     const uint coarse_level = min(projection.coarse_level, projection.level_count - 1u);

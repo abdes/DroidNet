@@ -76,6 +76,7 @@ public:
     bool seeded_from_frame_cache = false;
     if (ctx && ctx->HasView()) {
       if (const auto* cached = state.TryGetNodeBasics(item.GetNodePtr())) {
+        item.SetNodeHandle(cached->node_handle);
         item.SetVisible();
         item.SetCastShadows(cached->cast_shadows);
         item.SetReceiveShadows(cached->receive_shadows);

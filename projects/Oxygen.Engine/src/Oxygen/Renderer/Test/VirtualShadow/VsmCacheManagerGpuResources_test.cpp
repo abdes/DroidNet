@@ -81,6 +81,13 @@ NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
   const auto& rect_bounds_desc = frame.page_rect_bounds_buffer->GetDescriptor();
   EXPECT_EQ(rect_bounds_desc.size_bytes, 2ULL * sizeof(std::uint32_t) * 4ULL);
   EXPECT_EQ(rect_bounds_desc.usage, BufferUsage::kStorage);
+
+  auto& registry = Backend().GetResourceRegistry();
+  EXPECT_TRUE(registry.Contains(*frame.page_table_buffer));
+  EXPECT_TRUE(registry.Contains(*frame.page_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*frame.dirty_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*frame.physical_page_list_buffer));
+  EXPECT_TRUE(registry.Contains(*frame.page_rect_bounds_buffer));
 }
 
 NOLINT_TEST_F(
@@ -151,6 +158,67 @@ NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
     3ULL * sizeof(std::uint32_t) * 4ULL);
 }
 
+NOLINT_TEST_F(VsmCacheManagerGpuResourcesTest,
+  WorkingSetRecreationRebindsRegisteredBuffersForDownstreamPasses)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase4-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase4-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(&Backend());
+  auto& registry = Backend().GetResourceRegistry();
+
+  manager.BeginFrame(MakeSeam(pool_manager, 1ULL, 10U, "phase4-frame-a", 1U),
+    VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-a" });
+  const auto& first = CommitFrame(manager);
+  const auto first_page_table = first.page_table_buffer;
+  const auto first_page_flags = first.page_flags_buffer;
+  const auto first_dirty_flags = first.dirty_flags_buffer;
+  const auto first_page_list = first.physical_page_list_buffer;
+  const auto first_rect_bounds = first.page_rect_bounds_buffer;
+  ASSERT_NE(first_page_table, nullptr);
+  ASSERT_NE(first_page_flags, nullptr);
+  ASSERT_NE(first_dirty_flags, nullptr);
+  ASSERT_NE(first_page_list, nullptr);
+  ASSERT_NE(first_rect_bounds, nullptr);
+  EXPECT_TRUE(registry.Contains(*first_page_table));
+  EXPECT_TRUE(registry.Contains(*first_page_flags));
+  EXPECT_TRUE(registry.Contains(*first_dirty_flags));
+  EXPECT_TRUE(registry.Contains(*first_page_list));
+  EXPECT_TRUE(registry.Contains(*first_rect_bounds));
+
+  manager.ExtractFrameData();
+
+  manager.BeginFrame(MakeSeam(pool_manager, 2ULL, 20U, "phase4-frame-b", 3U),
+    VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-b" });
+  const auto& second = CommitFrame(manager);
+
+  ASSERT_NE(second.page_table_buffer, nullptr);
+  ASSERT_NE(second.page_flags_buffer, nullptr);
+  ASSERT_NE(second.dirty_flags_buffer, nullptr);
+  ASSERT_NE(second.physical_page_list_buffer, nullptr);
+  ASSERT_NE(second.page_rect_bounds_buffer, nullptr);
+  EXPECT_NE(second.page_table_buffer, first_page_table);
+  EXPECT_NE(second.page_flags_buffer, first_page_flags);
+  EXPECT_NE(second.dirty_flags_buffer, first_dirty_flags);
+  EXPECT_NE(second.physical_page_list_buffer, first_page_list);
+  EXPECT_NE(second.page_rect_bounds_buffer, first_rect_bounds);
+
+  EXPECT_FALSE(registry.Contains(*first_page_table));
+  EXPECT_FALSE(registry.Contains(*first_page_flags));
+  EXPECT_FALSE(registry.Contains(*first_dirty_flags));
+  EXPECT_FALSE(registry.Contains(*first_page_list));
+  EXPECT_FALSE(registry.Contains(*first_rect_bounds));
+  EXPECT_TRUE(registry.Contains(*second.page_table_buffer));
+  EXPECT_TRUE(registry.Contains(*second.page_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*second.dirty_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*second.physical_page_list_buffer));
+  EXPECT_TRUE(registry.Contains(*second.page_rect_bounds_buffer));
+}
+
 NOLINT_TEST_F(
   VsmCacheManagerGpuResourcesTest, ResetDropsReusableWorkingSetBuffers)
 {
@@ -167,10 +235,25 @@ NOLINT_TEST_F(
   const auto& first = CommitFrame(manager);
   const auto first_page_table = first.page_table_buffer;
   const auto first_meta = first.physical_page_meta_buffer;
+  const auto first_page_flags = first.page_flags_buffer;
+  const auto first_dirty_flags = first.dirty_flags_buffer;
+  const auto first_page_list = first.physical_page_list_buffer;
+  const auto first_rect_bounds = first.page_rect_bounds_buffer;
   ASSERT_NE(first_page_table, nullptr);
+  auto& registry = Backend().GetResourceRegistry();
+  EXPECT_TRUE(registry.Contains(*first_page_table));
+  EXPECT_TRUE(registry.Contains(*first_page_flags));
+  EXPECT_TRUE(registry.Contains(*first_dirty_flags));
+  EXPECT_TRUE(registry.Contains(*first_page_list));
+  EXPECT_TRUE(registry.Contains(*first_rect_bounds));
 
   manager.Reset();
   EXPECT_EQ(manager.GetCurrentFrame(), nullptr);
+  EXPECT_FALSE(registry.Contains(*first_page_table));
+  EXPECT_FALSE(registry.Contains(*first_page_flags));
+  EXPECT_FALSE(registry.Contains(*first_dirty_flags));
+  EXPECT_FALSE(registry.Contains(*first_page_list));
+  EXPECT_FALSE(registry.Contains(*first_rect_bounds));
 
   manager.BeginFrame(MakeSeam(pool_manager, 2ULL, 20U, "phase4-frame-b", 2U),
     VsmCacheManagerFrameConfig { .debug_name = "phase4-frame-b" });
@@ -178,6 +261,11 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(second.physical_page_meta_buffer, first_meta);
   EXPECT_NE(second.page_table_buffer, first_page_table);
+  EXPECT_TRUE(registry.Contains(*second.page_table_buffer));
+  EXPECT_TRUE(registry.Contains(*second.page_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*second.dirty_flags_buffer));
+  EXPECT_TRUE(registry.Contains(*second.physical_page_list_buffer));
+  EXPECT_TRUE(registry.Contains(*second.page_rect_bounds_buffer));
 }
 
 NOLINT_TEST_F(

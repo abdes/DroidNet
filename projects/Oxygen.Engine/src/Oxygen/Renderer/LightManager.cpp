@@ -194,9 +194,11 @@ auto LightManager::Clear() noexcept -> void
   dir_basic_.clear();
   directional_shadow_candidates_.clear();
   positional_.clear();
+  positional_shadow_candidates_.clear();
 }
 
-auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
+auto LightManager::CollectFromNode(const scene::NodeHandle& node_handle,
+  const scene::SceneNodeImpl& node) -> void
 {
   ++nodes_visited_count_;
   ++total_nodes_visited_count_;
@@ -249,6 +251,7 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     if (effective_casts_shadows) {
       directional_shadow_candidates_.push_back(
         engine::DirectionalShadowCandidate {
+          .node_handle = node_handle,
           .light_index = static_cast<std::uint32_t>(dir_basic_.size() - 1U),
           .light_flags = out.flags,
           .mobility = static_cast<std::uint32_t>(common.mobility),
@@ -308,6 +311,14 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
 
     positional_.push_back(out);
 
+    if (effective_casts_shadows) {
+      positional_shadow_candidates_.push_back(
+        engine::PositionalShadowCandidate {
+          .node_handle = node_handle,
+          .light_index = static_cast<std::uint32_t>(positional_.size() - 1U),
+        });
+    }
+
     ++lights_emitted_count_;
     ++total_lights_emitted_count_;
     peak_pos_lights_count_
@@ -351,6 +362,14 @@ auto LightManager::CollectFromNode(const scene::SceneNodeImpl& node) -> void
     out.shadow_map_index = effective_casts_shadows ? 0U : kInvalidShadowIndex;
 
     positional_.push_back(out);
+
+    if (effective_casts_shadows) {
+      positional_shadow_candidates_.push_back(
+        engine::PositionalShadowCandidate {
+          .node_handle = node_handle,
+          .light_index = static_cast<std::uint32_t>(positional_.size() - 1U),
+        });
+    }
 
     ++lights_emitted_count_;
     ++total_lights_emitted_count_;
@@ -442,6 +461,12 @@ auto LightManager::GetPositionalLights() const noexcept
   -> std::span<const engine::PositionalLightData>
 {
   return positional_;
+}
+
+auto LightManager::GetPositionalShadowCandidates() const noexcept
+  -> std::span<const engine::PositionalShadowCandidate>
+{
+  return positional_shadow_candidates_;
 }
 
 } // namespace oxygen::renderer

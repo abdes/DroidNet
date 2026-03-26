@@ -47,12 +47,16 @@ public:
     std::span<const VsmStaticPrimitivePageFeedbackRecord> feedback) -> void;
   OXGN_RNDR_API auto PublishProjectionRecords(
     std::span<const VsmPageRequestProjection> projection_records) -> void;
+  OXGN_RNDR_API auto PublishPhysicalPageMetaSeedBuffer(
+    std::shared_ptr<const graphics::Buffer> physical_page_meta_seed_buffer)
+    -> void;
   OXGN_RNDR_API auto PublishCurrentFrameHzbAvailability(
     bool is_current_frame_hzb_data_available) -> void;
   OXGN_RNDR_NDAPI auto BuildInvalidationWork(
     std::span<const VsmPrimitiveInvalidationRecord> invalidations)
     -> const VsmInvalidationWorkload&;
 
+  OXGN_RNDR_API auto AbortFrame() -> void;
   OXGN_RNDR_API auto ExtractFrameData() -> void;
   OXGN_RNDR_API auto InvalidateAll(VsmCacheInvalidationReason reason) -> void;
   OXGN_RNDR_API auto InvalidateLocalLights(const VsmRemapKeyList& remap_keys,
@@ -135,6 +139,7 @@ private:
     VsmPageAllocationPlan& plan, VsmPageAllocationSnapshot& snapshot) -> void;
   auto EnsureWorkingSetResources(const VsmPageAllocationSnapshot& snapshot)
     -> const FrameWorkingSetResources&;
+  auto ClearInFlightFrameState() -> void;
   auto MarkCacheDataUnavailable() noexcept -> void;
 
   Graphics* gfx_ { nullptr };

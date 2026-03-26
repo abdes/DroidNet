@@ -29,13 +29,13 @@ static const uint VSM_PAGE_REUSE_THREAD_GROUP_SIZE = 64u;
 struct VsmPageReusePassConstants
 {
     uint reuse_decision_buffer_index;
+    uint metadata_seed_srv_index;
     uint page_table_uav_index;
     uint page_flags_uav_index;
     uint metadata_uav_index;
     uint reuse_decision_count;
     uint virtual_page_count;
     uint physical_page_count;
-    uint _pad0;
 };
 
 [shader("compute")]
@@ -75,8 +75,16 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
+    VsmPhysicalPageMeta merged_meta = decision.physical_meta;
+    if (BX_IsValidSlot(pass_constants.metadata_seed_srv_index)) {
+        StructuredBuffer<VsmPhysicalPageMeta> metadata_seed
+            = ResourceDescriptorHeap[pass_constants.metadata_seed_srv_index];
+        merged_meta = VsmMergeSeedInvalidationBits(
+            merged_meta, metadata_seed[decision.physical_page_index]);
+    }
+
     page_table[decision.page_table_index]
         = VsmMakeMappedPageTableEntry(decision.physical_page_index);
     page_flags[decision.page_table_index] = decision.page_flags;
-    physical_meta[decision.physical_page_index] = decision.physical_meta;
+    physical_meta[decision.physical_page_index] = merged_meta;
 }

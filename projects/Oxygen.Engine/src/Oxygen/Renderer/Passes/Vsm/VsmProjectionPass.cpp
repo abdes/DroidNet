@@ -81,13 +81,13 @@ namespace {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex shadow_texture_srv_index { kInvalidShaderVisibleIndex };
+    std::uint32_t page_table_entry_count { 0U };
     std::uint32_t projection_count { 0U };
     std::uint32_t output_width { 0U };
     std::uint32_t output_height { 0U };
     std::uint32_t page_size_texels { 0U };
     std::uint32_t tiles_per_axis { 0U };
     std::uint32_t dynamic_slice_index { 0U };
-    std::uint32_t _pad0 { 0U };
     glm::mat4 inverse_view_projection { 1.0F };
   };
   static_assert(sizeof(VsmProjectionCompositePassConstants)
@@ -229,6 +229,7 @@ struct VsmProjectionPass::Impl {
     ShaderVisibleIndex shadow_mask_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t width { 0U };
     std::uint32_t height { 0U };
+    bool has_current_output { false };
   };
 
   observer_ptr<Graphics> gfx;
@@ -457,6 +458,9 @@ struct VsmProjectionPass::Impl {
     const graphics::BufferViewDescription& desc) -> ShaderVisibleIndex
   {
     auto& registry = gfx->GetResourceRegistry();
+    if (!registry.Contains(buffer)) {
+      registry.Register(std::shared_ptr<Buffer>(&buffer, [](Buffer*) { }));
+    }
     if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
       existing.has_value()) {
       return *existing;
@@ -475,6 +479,9 @@ struct VsmProjectionPass::Impl {
     const graphics::TextureViewDescription& desc) -> ShaderVisibleIndex
   {
     auto& registry = gfx->GetResourceRegistry();
+    if (!registry.Contains(texture)) {
+      registry.Register(std::shared_ptr<Texture>(&texture, [](Texture*) { }));
+    }
     if (const auto existing = registry.FindShaderVisibleIndex(texture, desc);
       existing.has_value()) {
       return *existing;
@@ -540,7 +547,7 @@ auto VsmProjectionPass::GetCurrentOutput(const ViewId view_id) const
     .shadow_mask_srv_index = it->second.shadow_mask_srv_index,
     .width = it->second.width,
     .height = it->second.height,
-    .available = true,
+    .available = it->second.has_current_output,
   };
 }
 
@@ -654,15 +661,17 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
 
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Texture>(input.scene_depth_texture),
-    ResourceStates::kShaderResource, true);
+    ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
-    ResourceStates::kShaderResource, true);
+    ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Buffer>(input.frame.page_table_buffer),
-    ResourceStates::kGenericRead, true);
-  recorder.BeginTrackingResourceState(
-    *view_state.shadow_mask_texture, ResourceStates::kCommon, true);
+    ResourceStates::kCommon, true);
+  recorder.BeginTrackingResourceState(*view_state.shadow_mask_texture,
+    view_state.has_current_output ? ResourceStates::kShaderResource
+                                  : ResourceStates::kCommon,
+    true);
   if (impl_->active_projection_count > 0U) {
     recorder.BeginTrackingResourceState(
       *impl_->projection_upload_buffer, ResourceStates::kGenericRead, true);
@@ -731,6 +740,8 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     .projection_buffer_srv_index = impl_->projection_buffer_srv_index,
     .page_table_buffer_srv_index = impl_->page_table_srv_index,
     .shadow_texture_srv_index = impl_->shadow_texture_srv_index,
+    .page_table_entry_count
+    = static_cast<std::uint32_t>(input.frame.snapshot.page_table.size()),
     .projection_count = impl_->active_projection_count,
     .output_width = output_width,
     .output_height = output_height,
@@ -790,6 +801,7 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   recorder.RequireResourceStateFinal(
     *impl_->active_view_state->shadow_mask_texture,
     ResourceStates::kShaderResource);
+  impl_->active_view_state->has_current_output = true;
 
   DLOG_F(2,
     "executed VSM projection pass generation={} projections={} directional={} "

@@ -32,11 +32,15 @@ struct VsmAllocateNewPagesPassConstants
     uint allocation_decision_buffer_index;
     uint available_pages_srv_index;
     uint available_page_count_srv_index;
+    uint metadata_seed_srv_index;
     uint page_table_uav_index;
     uint page_flags_uav_index;
     uint metadata_uav_index;
     uint allocation_decision_count;
     uint virtual_page_count;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 [shader("compute")]
@@ -86,8 +90,16 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     const uint physical_page_index
         = available_pages[decision.available_page_list_index];
+    VsmPhysicalPageMeta merged_meta = decision.physical_meta;
+    if (BX_IsValidSlot(pass_constants.metadata_seed_srv_index)) {
+        StructuredBuffer<VsmPhysicalPageMeta> metadata_seed
+            = ResourceDescriptorHeap[pass_constants.metadata_seed_srv_index];
+        merged_meta = VsmMergeSeedInvalidationBits(
+            merged_meta, metadata_seed[physical_page_index]);
+    }
+
     page_table[decision.page_table_index]
         = VsmMakeMappedPageTableEntry(physical_page_index);
     page_flags[decision.page_table_index] = decision.page_flags;
-    physical_meta[physical_page_index] = decision.physical_meta;
+    physical_meta[physical_page_index] = merged_meta;
 }

@@ -41,6 +41,7 @@ namespace {
       case engine::ShaderDebugMode::kDirectLightingFull:
       case engine::ShaderDebugMode::kDirectLightGates:
       case engine::ShaderDebugMode::kDirectBrdfCore:
+      case engine::ShaderDebugMode::kVirtualShadowMask:
         return true;
       case engine::ShaderDebugMode::kIblSpecular:
       case engine::ShaderDebugMode::kIblRawSky:

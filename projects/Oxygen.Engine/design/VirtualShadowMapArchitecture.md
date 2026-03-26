@@ -329,6 +329,10 @@ flowchart TD
 - Each shadow-casting light is assigned a contiguous block of virtual IDs.
 - Directional lights receive clipmap layouts (one virtual map per clip level).
 - Local lights receive either single-page (distant) or multi-level layouts.
+- In the live renderer path, stable per-light `remap_key` identity comes from
+  the source `scene::NodeHandle` carried by CPU-side renderer shadow-candidate
+  snapshots. The renderer must not derive VSM identity from `SceneNodeImpl`,
+  node names, or transient light ordering.
 - The total page-table entry count is computed.
 
 ### Stage 3 — Remap Construction
@@ -801,6 +805,9 @@ These rules apply across all modules:
 1. **Physical pool state is persistent** across frames and may own GPU resources.
 2. **Virtual address-space state is rebuilt every frame** and publishes copyable frame snapshots.
 3. **Reuse is key-based**, driven by explicit `remap_key` values, not by virtual ID stability.
+   In the live renderer path, those keys are deterministically derived from the
+   originating light-node `scene::NodeHandle` captured in CPU shadow-candidate
+   snapshots.
 4. **Duplicate or missing remap keys** are treated as explicit reuse rejection, not silent fallback.
 5. **Malformed inputs** are logged and rejected deterministically.
 6. **Invalidation operates in previous-frame space**, using previous-frame page tables and projection data.

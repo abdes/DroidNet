@@ -84,7 +84,14 @@ class GpuDebugDrawPass;
 class GroundGridPass;
 class ScreenHzbBuildPass;
 class VsmPageRequestGeneratorPass;
+class VsmInvalidationPass;
+class VsmPageManagementPass;
+class VsmPageFlagPropagationPass;
+class VsmPageInitializationPass;
 class VsmShadowRasterizerPass;
+class VsmStaticDynamicMergePass;
+class VsmHzbUpdaterPass;
+class VsmProjectionPass;
 
 /*!
  Defines the list of all known render pass types for the current render graph.
@@ -95,7 +102,9 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   SkyPass, SkyCapturePass, TransparentPass, WireframePass, AutoExposurePass,
   GpuDebugClearPass, GpuDebugDrawPass, GroundGridPass,
   ConventionalShadowRasterPass, ScreenHzbBuildPass, VsmPageRequestGeneratorPass,
-  VsmShadowRasterizerPass>;
+  VsmInvalidationPass, VsmPageManagementPass, VsmPageFlagPropagationPass,
+  VsmPageInitializationPass, VsmShadowRasterizerPass, VsmStaticDynamicMergePass,
+  VsmHzbUpdaterPass, VsmProjectionPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.
@@ -188,7 +197,23 @@ struct RenderContext {
    Set by the Renderer during frame preparation. This is a non-owning pointer
    and must not be cached beyond the current frame.
   */
-  observer_ptr<const oxygen::scene::Scene> scene { nullptr };
+  observer_ptr<oxygen::scene::Scene> scene { nullptr };
+
+  //! Returns the active scene for the current frame for mutable integration
+  //! seams that must register observers against the live Scene object.
+  [[nodiscard]] auto GetSceneMutable() noexcept
+    -> observer_ptr<oxygen::scene::Scene>
+  {
+    return scene;
+  }
+
+  //! Returns the active scene for mutable integration seams even when the
+  //! render context itself is observed through a const reference.
+  [[nodiscard]] auto GetSceneMutable() const noexcept
+    -> observer_ptr<oxygen::scene::Scene>
+  {
+    return scene;
+  }
 
   //! Returns the active scene for the current frame.
   [[nodiscard]] auto GetScene() const noexcept

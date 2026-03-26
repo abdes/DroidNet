@@ -10,6 +10,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Internal/ConventionalShadowBackend.h>
 #include <Oxygen/Renderer/ShadowManager.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 
 namespace oxygen::renderer {
 
@@ -44,9 +45,15 @@ namespace {
         "(eligible_candidates={})",
         key, candidate_count);
       break;
+    case engine::ShadowImplementationKind::kVirtual:
+      LOG_F(INFO,
+        "ShadowManager: view {} is using virtual directional shadows "
+        "(eligible_candidates={})",
+        key, candidate_count);
+      break;
     default:
       LOG_F(INFO,
-        "ShadowManager: view {} has no active directional shadow backend "
+        "ShadowManager: view {} has no published directional shadow products "
         "(eligible_candidates={})",
         key, candidate_count);
       break;
@@ -64,15 +71,31 @@ ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
   , shadow_quality_tier_(quality_tier)
+  , directional_policy_(directional_policy)
   , conventional_backend_(std::make_unique<internal::ConventionalShadowBackend>(
       gfx_, staging_provider_, inline_transfers_, shadow_quality_tier_))
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "expecting valid staging provider");
   DCHECK_NOTNULL_F(inline_transfers_, "expecting valid transfer coordinator");
-  CHECK_F(directional_policy
-      == oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly,
-    "ShadowManager: only conventional directional shadows are supported");
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    vsm_shadow_renderer_ = std::make_unique<vsm::VsmShadowRenderer>(
+      gfx_, staging_provider_, inline_transfers_, shadow_quality_tier_);
+  }
+
+  LOG_F(INFO,
+    "ShadowManager: initialized directional policy={} conventional_backend={} "
+    "vsm_shell={}",
+    directional_policy_,
+    conventional_backend_ != nullptr ? "enabled" : "disabled",
+    vsm_shadow_renderer_ != nullptr ? "enabled" : "disabled");
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    LOG_F(INFO,
+      "ShadowManager: VSM policy selected; conventional shadow publication "
+      "remains active until Phase K-b integrates VSM lighting consumption");
+  }
 }
 
 ShadowManager::~ShadowManager() = default;
@@ -83,6 +106,9 @@ auto ShadowManager::OnFrameStart(RendererTag tag,
   if (conventional_backend_) {
     conventional_backend_->OnFrameStart(tag, sequence, slot);
   }
+  if (vsm_shadow_renderer_) {
+    vsm_shadow_renderer_->OnFrameStart(tag, sequence, slot);
+  }
 }
 
 auto ShadowManager::ResetCachedState() -> void
@@ -92,11 +118,16 @@ auto ShadowManager::ResetCachedState() -> void
   if (conventional_backend_) {
     conventional_backend_->ResetCachedState();
   }
+  if (vsm_shadow_renderer_) {
+    vsm_shadow_renderer_->ResetCachedState();
+  }
 }
 
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
+  const observer_ptr<scene::Scene> active_scene,
   const float camera_viewport_width,
+  const std::span<const engine::sceneprep::RenderItemData> rendered_items,
   const std::span<const glm::vec4> shadow_caster_bounds,
   const std::span<const glm::vec4> visible_receiver_bounds,
   const std::chrono::milliseconds gpu_budget,
@@ -122,6 +153,25 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   }
   LOG_F(INFO, "ShadowManager: publish view={} scene_light_candidates={}",
     view_id.get(), light_candidates.size());
+
+  if (vsm_shadow_renderer_) {
+#if !defined(NDEBUG)
+    CHECK_F(view_constants.GetBindlessViewFrameBindingsSlot().IsValid(),
+      "ShadowManager: VSM preparation requires a valid bindless "
+      "view-frame bindings slot for view {}",
+      view_id.get());
+#endif // !defined(NDEBUG)
+    const auto has_virtual_shadow_work = vsm_shadow_renderer_->PrepareView(
+      view_id, view_constants, lights, active_scene, camera_viewport_width,
+      rendered_items, shadow_caster_bounds, visible_receiver_bounds, gpu_budget,
+      shadow_caster_content_hash);
+    if (has_virtual_shadow_work) {
+      LOG_F(INFO,
+        "ShadowManager: prepared VSM shell inputs for view {} "
+        "(directional_policy={})",
+        view_id.get(), static_cast<std::uint32_t>(directional_policy_));
+    }
+  }
 
   if (!conventional_backend_) {
     LOG_F(WARNING,
@@ -189,6 +239,12 @@ auto ShadowManager::GetConventionalShadowDepthTexture() const noexcept
 
   static const std::shared_ptr<graphics::Texture> kNullTexture {};
   return kNullTexture;
+}
+
+auto ShadowManager::GetVirtualShadowRenderer() const noexcept
+  -> observer_ptr<vsm::VsmShadowRenderer>
+{
+  return observer_ptr { vsm_shadow_renderer_.get() };
 }
 
 } // namespace oxygen::renderer
