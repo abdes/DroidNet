@@ -330,7 +330,7 @@ protected:
 
     auto light_manager = renderer.GetLightManager();
     ASSERT_NE(light_manager, nullptr);
-    light_manager->CollectFromNode(impl->get());
+    light_manager->CollectFromNode(node.GetHandle(), impl->get());
   }
 };
 
@@ -541,6 +541,130 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
     actual_flags[10], VsmShaderPageRequestFlagBits::kRequired));
   EXPECT_FALSE(HasAnyRequestFlag(
     actual_flags[26], VsmShaderPageRequestFlagBits::kRequired));
+}
+
+NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
+  ExecuteReallocatesProjectionAndRequestBuffersWhenSceneCapacityGrows)
+{
+  constexpr std::uint32_t kSmallProjectionCount = 1U;
+  constexpr std::uint32_t kLargeProjectionCount = 32U;
+  constexpr std::uint32_t kSmallVirtualPageCount = 64U;
+  constexpr std::uint32_t kLargeVirtualPageCount = 14080U;
+  constexpr std::uint32_t kPagesPerProjection = 16U;
+
+  const auto resolved_view = MakeResolvedView();
+  const auto world_position = glm::vec3 { 0.0F, 0.0F, -5.0F };
+  const auto depth = ComputeDepthForWorldPoint(resolved_view, world_position);
+  auto depth_texture
+    = UploadSingleChannelTexture(depth, "vsm-request-growth-depth");
+  EXPECT_NEAR(ReadSingleChannelTexture(depth_texture), depth, 1.0e-5F);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  auto depth_pass = DepthPrePass(std::make_shared<DepthPrePass::Config>(
+    DepthPrePass::Config { .depth_texture = depth_texture }));
+  auto config = std::make_shared<VsmPageRequestGeneratorPassConfig>(
+    VsmPageRequestGeneratorPassConfig {
+      .max_projection_count = kSmallProjectionCount,
+      .max_virtual_page_count = kSmallVirtualPageCount,
+      .enable_coarse_pages = false,
+      .enable_light_grid_pruning = false,
+      .debug_name = "VsmPageRequestGeneratorGrowth",
+    });
+  auto request_pass = VsmPageRequestGeneratorPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()), config);
+
+  const auto run_pass
+    = [&](const std::vector<VsmPageRequestProjection>& projections,
+        const std::uint32_t virtual_page_count, const char* recorder_name,
+        const SequenceNumber frame_sequence) {
+        request_pass.SetFrameInputs(projections, virtual_page_count);
+
+        auto prepared_frame = PreparedSceneFrame {};
+        auto offscreen = renderer->BeginOffscreenFrame(
+          { .frame_slot = Slot { 0U }, .frame_sequence = frame_sequence });
+        offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
+        auto& render_context = offscreen.GetRenderContext();
+        render_context.RegisterPass(&depth_pass);
+
+        auto recorder = AcquireRecorder(recorder_name);
+        CHECK_NOTNULL_F(recorder.get());
+        RunPass(request_pass, render_context, *recorder);
+        WaitForQueueIdle();
+      };
+
+  const auto small_projections
+    = std::vector<VsmPageRequestProjection> { MakeProjection(7U, 0U) };
+  run_pass(small_projections, kSmallVirtualPageCount,
+    "vsm-request-growth-small", SequenceNumber { 1U });
+
+  auto small_projection_buffer
+    = std::const_pointer_cast<oxygen::graphics::Buffer>(
+      request_pass.GetProjectionBuffer());
+  auto small_request_flags_buffer
+    = std::const_pointer_cast<oxygen::graphics::Buffer>(
+      request_pass.GetPageRequestFlagsBuffer());
+  ASSERT_NE(small_projection_buffer, nullptr);
+  ASSERT_NE(small_request_flags_buffer, nullptr);
+  EXPECT_EQ(small_projection_buffer->GetDescriptor().size_bytes,
+    static_cast<std::uint64_t>(kSmallProjectionCount)
+      * sizeof(VsmPageRequestProjection));
+  EXPECT_EQ(small_request_flags_buffer->GetDescriptor().size_bytes,
+    static_cast<std::uint64_t>(kSmallVirtualPageCount)
+      * sizeof(VsmShaderPageRequestFlags));
+
+  config->max_projection_count = kLargeProjectionCount;
+  config->max_virtual_page_count = kLargeVirtualPageCount;
+
+  auto large_projections = std::vector<VsmPageRequestProjection> {};
+  large_projections.reserve(kLargeProjectionCount);
+  for (std::uint32_t i = 0U; i < kLargeProjectionCount; ++i) {
+    large_projections.push_back(
+      MakeProjection(100U + i, i * kPagesPerProjection));
+  }
+
+  run_pass(large_projections, kLargeVirtualPageCount,
+    "vsm-request-growth-large", SequenceNumber { 2U });
+
+  auto large_projection_buffer
+    = std::const_pointer_cast<oxygen::graphics::Buffer>(
+      request_pass.GetProjectionBuffer());
+  auto large_request_flags_buffer
+    = std::const_pointer_cast<oxygen::graphics::Buffer>(
+      request_pass.GetPageRequestFlagsBuffer());
+  ASSERT_NE(large_projection_buffer, nullptr);
+  ASSERT_NE(large_request_flags_buffer, nullptr);
+  EXPECT_EQ(large_projection_buffer->GetDescriptor().size_bytes,
+    static_cast<std::uint64_t>(kLargeProjectionCount)
+      * sizeof(VsmPageRequestProjection));
+  EXPECT_EQ(large_request_flags_buffer->GetDescriptor().size_bytes,
+    static_cast<std::uint64_t>(kLargeVirtualPageCount)
+      * sizeof(VsmShaderPageRequestFlags));
+
+  const auto bytes = ReadBufferBytes(large_request_flags_buffer,
+    kLargeVirtualPageCount * sizeof(VsmShaderPageRequestFlags),
+    "vsm-request-growth-large-readback");
+  ASSERT_EQ(
+    bytes.size(), kLargeVirtualPageCount * sizeof(VsmShaderPageRequestFlags));
+
+  const auto* actual_flags
+    = reinterpret_cast<const VsmShaderPageRequestFlags*>(bytes.data());
+  const auto expected_flags = BuildExpectedRequestFlags(large_projections,
+    std::vector<VsmVisiblePixelSample> {
+      { .world_position_ws = world_position } },
+    kLargeVirtualPageCount);
+
+  if (!std::equal(actual_flags, actual_flags + kLargeVirtualPageCount,
+        expected_flags.begin(), expected_flags.end(),
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+    ADD_FAILURE() << "actual non-zero flags: "
+                  << DescribeNonZeroFlags(actual_flags, kLargeVirtualPageCount)
+                  << ", expected non-zero flags: "
+                  << DescribeNonZeroFlags(expected_flags.data(),
+                       static_cast<std::uint32_t>(expected_flags.size()));
+  }
 }
 
 } // namespace

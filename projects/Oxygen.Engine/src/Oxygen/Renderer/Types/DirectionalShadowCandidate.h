@@ -12,6 +12,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::engine {
 
@@ -19,8 +20,13 @@ namespace oxygen::engine {
 /*!
  ShadowManager consumes these candidates to build stable per-view shadow
  products without introducing a second light collector.
+
+ `node_handle` intentionally preserves the source scene-node identity for
+ downstream VSM orchestration. The handle remains a scene-owned value object;
+ this type does not move ownership into `SceneNodeImpl`.
 */
 struct DirectionalShadowCandidate {
+  scene::NodeHandle node_handle {};
   std::uint32_t light_index { 0U };
   std::uint32_t light_flags { 0U };
   std::uint32_t mobility { 0U };

@@ -268,6 +268,10 @@ struct VsmStaticDynamicMergePass::Impl {
     auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
 
+    if (!registry.Contains(buffer)) {
+      registry.Register(std::shared_ptr<Buffer>(&buffer, [](Buffer*) { }));
+    }
+
     if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
       existing.has_value()) {
       index = *existing;
@@ -292,6 +296,11 @@ struct VsmStaticDynamicMergePass::Impl {
   {
     auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
+
+    if (!registry.Contains(texture)) {
+      registry.Register(std::shared_ptr<graphics::Texture>(
+        &texture, [](graphics::Texture*) { }));
+    }
 
     if (const auto existing = registry.FindShaderVisibleIndex(texture, desc);
       existing.has_value()) {

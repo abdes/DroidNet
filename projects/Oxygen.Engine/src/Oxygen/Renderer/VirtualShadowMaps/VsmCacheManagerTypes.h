@@ -382,7 +382,14 @@ struct VsmPageAllocationSnapshot {
 struct VsmPageAllocationFrame {
   VsmPageAllocationSnapshot snapshot {};
   VsmPageAllocationPlan plan {};
+  // Current-frame physical metadata output buffer consumed and rewritten by
+  // stages 6-15.
   std::shared_ptr<const graphics::Buffer> physical_page_meta_buffer {};
+  // Optional prior-metadata seed consumed by stages 6-8 when renderer-owned
+  // GPU invalidation has already produced invalidation bits that must carry
+  // into the current-frame metadata output without changing cache-manager
+  // ownership of that output buffer.
+  std::shared_ptr<const graphics::Buffer> physical_page_meta_seed_buffer {};
   std::shared_ptr<const graphics::Buffer> page_table_buffer {};
   std::shared_ptr<const graphics::Buffer> page_flags_buffer {};
   std::shared_ptr<const graphics::Buffer> dirty_flags_buffer {};

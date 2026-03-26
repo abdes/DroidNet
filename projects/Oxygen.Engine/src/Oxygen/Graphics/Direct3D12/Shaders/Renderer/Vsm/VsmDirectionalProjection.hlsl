@@ -30,13 +30,13 @@ struct VsmProjectionCompositePassConstants
     uint projection_buffer_srv_index;
     uint page_table_buffer_srv_index;
     uint shadow_texture_srv_index;
+    uint page_table_entry_count;
     uint projection_count;
     uint output_width;
     uint output_height;
     uint page_size_texels;
     uint tiles_per_axis;
     uint dynamic_slice_index;
-    uint _pad0;
     float4x4 inverse_view_projection;
 };
 
@@ -113,7 +113,8 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
         }
 
         VsmProjectedShadowSample sample;
-        if (!VsmTryProjectMappedSample(projection, page_table, world_position_ws,
+        if (!VsmTryProjectMappedSample(projection, page_table,
+                pass_constants.page_table_entry_count, world_position_ws,
                 pass_constants.tiles_per_axis, pass_constants.page_size_texels, sample)) {
             continue;
         }

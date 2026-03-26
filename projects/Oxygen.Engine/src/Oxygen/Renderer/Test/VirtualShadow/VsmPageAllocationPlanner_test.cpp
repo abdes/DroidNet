@@ -34,6 +34,7 @@ using oxygen::renderer::vsm::VsmPageRequestFlags;
 using oxygen::renderer::vsm::VsmPhysicalPageIndex;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
+using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
 using oxygen::renderer::vsm::VsmSinglePageLightDesc;
 using oxygen::renderer::vsm::VsmVirtualAddressSpace;
 using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
@@ -529,10 +530,177 @@ NOLINT_TEST_F(VsmPageAllocationPlannerTest,
   const auto result
     = BuildPlannerResult(seam, &previous_snapshot, std::span { &request, 1U });
 
+  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
+  ASSERT_EQ(shadow_pool.slice_count, 2U);
+  const auto first_static_page
+    = shadow_pool.tile_capacity / shadow_pool.slice_count;
   ASSERT_EQ(result.plan.initialization_work.size(), 1U);
-  EXPECT_EQ(result.plan.initialization_work[0].physical_page.value, 0U);
+  EXPECT_EQ(
+    result.plan.initialization_work[0].physical_page.value, first_static_page);
   EXPECT_EQ(result.plan.initialization_work[0].action,
     VsmPageInitializationAction::kClearDepth);
+}
+
+NOLINT_TEST_F(VsmPageAllocationPlannerTest,
+  PlannerRoutesStaticOnlyRequestsIntoStaticSliceWhenStaticSliceExists)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  auto pool_config = MakeShadowPoolConfig("phase3-static-slice-shadow");
+  pool_config.physical_tile_capacity = 8U;
+  pool_config.array_slice_count = 2U;
+  pool_config.slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
+    VsmPhysicalPoolSliceRole::kStaticDepth };
+  ASSERT_EQ(pool_manager.EnsureShadowPool(pool_config),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(
+    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase3-static-slice-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  constexpr auto specs = std::array { LocalLightSpec { .remap_key = "hero" } };
+  const auto current_frame = MakeLocalFrame(1ULL, 30U, specs, "curr");
+  const auto seam = MakeSeam(pool_manager, current_frame);
+  const auto request = VsmPageRequest {
+    .map_id = current_frame.local_light_layouts[0].id,
+    .page = {},
+    .flags = VsmPageRequestFlags::kStaticOnly,
+  };
+
+  const auto result = BuildPlannerResult(
+    seam, nullptr, std::span { &request, 1U }, VsmCacheDataState::kUnavailable);
+
+  const auto first_static_page
+    = pool_config.physical_tile_capacity / pool_config.array_slice_count;
+  ASSERT_EQ(result.plan.decisions.size(), 1U);
+  EXPECT_EQ(result.plan.decisions[0].action, VsmAllocationAction::kAllocateNew);
+  EXPECT_EQ(
+    result.plan.decisions[0].current_physical_page.value, first_static_page);
+  ASSERT_EQ(result.plan.initialization_work.size(), 1U);
+  EXPECT_EQ(
+    result.plan.initialization_work[0].physical_page.value, first_static_page);
+
+  const auto entry_index
+    = ResolvePageTableEntryIndex(current_frame, request.map_id, request.page);
+  EXPECT_TRUE(result.snapshot.page_table[entry_index].is_mapped);
+  EXPECT_EQ(result.snapshot.page_table[entry_index].physical_page.value,
+    first_static_page);
+}
+
+NOLINT_TEST_F(VsmPageAllocationPlannerTest,
+  PlannerRejectsDynamicRequestsBeforeSpillingIntoStaticSliceCapacity)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  auto pool_config = MakeShadowPoolConfig("phase3-dynamic-cap-shadow");
+  pool_config.physical_tile_capacity = 8U;
+  pool_config.array_slice_count = 2U;
+  pool_config.slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
+    VsmPhysicalPoolSliceRole::kStaticDepth };
+  ASSERT_EQ(pool_manager.EnsureShadowPool(pool_config),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(
+    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase3-dynamic-cap-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  constexpr auto specs = std::array {
+    LocalLightSpec { .remap_key = "hero-a" },
+    LocalLightSpec { .remap_key = "hero-b" },
+    LocalLightSpec { .remap_key = "hero-c" },
+    LocalLightSpec { .remap_key = "hero-d" },
+    LocalLightSpec { .remap_key = "hero-e" },
+  };
+  const auto current_frame = MakeLocalFrame(1ULL, 40U, specs, "curr");
+  const auto seam = MakeSeam(pool_manager, current_frame);
+  const auto requests = std::array {
+    VsmPageRequest {
+      .map_id = current_frame.local_light_layouts[0].id,
+      .page = {},
+      .flags = VsmPageRequestFlags::kRequired,
+    },
+    VsmPageRequest {
+      .map_id = current_frame.local_light_layouts[1].id,
+      .page = {},
+      .flags = VsmPageRequestFlags::kRequired,
+    },
+    VsmPageRequest {
+      .map_id = current_frame.local_light_layouts[2].id,
+      .page = {},
+      .flags = VsmPageRequestFlags::kRequired,
+    },
+    VsmPageRequest {
+      .map_id = current_frame.local_light_layouts[3].id,
+      .page = {},
+      .flags = VsmPageRequestFlags::kRequired,
+    },
+    VsmPageRequest {
+      .map_id = current_frame.local_light_layouts[4].id,
+      .page = {},
+      .flags = VsmPageRequestFlags::kRequired,
+    },
+  };
+
+  const auto result = BuildPlannerResult(
+    seam, nullptr, requests, VsmCacheDataState::kUnavailable);
+
+  ASSERT_EQ(result.plan.decisions.size(), requests.size());
+  EXPECT_EQ(result.plan.allocated_page_count, 4U);
+  EXPECT_EQ(result.plan.rejected_page_count, 1U);
+  for (std::uint32_t i = 0U; i < 4U; ++i) {
+    EXPECT_EQ(
+      result.plan.decisions[i].action, VsmAllocationAction::kAllocateNew);
+    EXPECT_EQ(result.plan.decisions[i].current_physical_page.value, i);
+  }
+  EXPECT_EQ(result.plan.decisions[4].action, VsmAllocationAction::kReject);
+  EXPECT_EQ(result.plan.decisions[4].failure_reason,
+    VsmAllocationFailureReason::kNoAvailablePhysicalPages);
+  ASSERT_EQ(result.plan.initialization_work.size(), 4U);
+  for (std::uint32_t i = 0U; i < 4U; ++i) {
+    EXPECT_EQ(result.plan.initialization_work[i].physical_page.value, i);
+  }
+}
+
+NOLINT_TEST_F(VsmPageAllocationPlannerTest,
+  PlannerEvictsLegacyDynamicMappingsThatPointIntoTheStaticSlice)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  auto pool_config
+    = MakeShadowPoolConfig("phase3-legacy-static-mapping-shadow");
+  pool_config.physical_tile_capacity = 8U;
+  pool_config.array_slice_count = 2U;
+  pool_config.slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
+    VsmPhysicalPoolSliceRole::kStaticDepth };
+  ASSERT_EQ(pool_manager.EnsureShadowPool(pool_config),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(pool_manager.EnsureHzbPool(
+              MakeHzbPoolConfig("phase3-legacy-static-mapping-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  constexpr auto specs = std::array { LocalLightSpec { .remap_key = "hero" } };
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U, specs, "prev");
+  const auto current_frame = MakeLocalFrame(2ULL, 20U, specs, "curr");
+
+  auto previous_snapshot = MakeSnapshot(pool_manager, previous_frame);
+  AssignPreviousMapping(previous_snapshot,
+    previous_frame.local_light_layouts[0].id, VsmVirtualPageCoord {},
+    VsmPhysicalPageIndex { .value = 4U });
+
+  const auto seam = MakeSeam(pool_manager, current_frame, &previous_frame);
+  const auto request = VsmPageRequest {
+    .map_id = current_frame.local_light_layouts[0].id,
+    .page = {},
+    .flags = VsmPageRequestFlags::kRequired,
+  };
+
+  const auto result
+    = BuildPlannerResult(seam, &previous_snapshot, std::span { &request, 1U });
+
+  ASSERT_EQ(result.plan.decisions.size(), 2U);
+  EXPECT_EQ(result.plan.decisions[0].action, VsmAllocationAction::kAllocateNew);
+  EXPECT_EQ(result.plan.decisions[0].current_physical_page.value, 0U);
+  EXPECT_EQ(result.plan.decisions[1].action, VsmAllocationAction::kEvict);
+  EXPECT_EQ(result.plan.decisions[1].previous_physical_page.value, 4U);
+  EXPECT_EQ(result.plan.allocated_page_count, 1U);
+  EXPECT_EQ(result.plan.evicted_page_count, 1U);
+  ASSERT_EQ(result.plan.initialization_work.size(), 1U);
+  EXPECT_EQ(result.plan.initialization_work[0].physical_page.value, 0U);
 }
 
 } // namespace

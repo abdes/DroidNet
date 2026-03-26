@@ -18,6 +18,7 @@
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::data {
 class Mesh;
@@ -174,8 +175,10 @@ public:
 
    @see RenderItemData, Renderable(), Transform()
   */
-  explicit RenderItemProto(const scn::SceneNodeImpl& impl)
+  explicit RenderItemProto(
+    const scn::SceneNodeImpl& impl, const scn::NodeHandle node_handle = {})
     : node_(&impl)
+    , node_handle_(node_handle)
     , renderable_facade_(impl.GetComponent<scn_detail::RenderableComponent>())
     , transform_facade_(impl.GetComponent<scn_detail::TransformComponent>())
   {
@@ -224,6 +227,16 @@ public:
   [[nodiscard]] auto GetNodePtr() const noexcept -> const scn::SceneNodeImpl*
   {
     return node_;
+  }
+
+  [[nodiscard]] auto GetNodeHandle() const noexcept -> scn::NodeHandle
+  {
+    return node_handle_;
+  }
+
+  void SetNodeHandle(const scn::NodeHandle node_handle) noexcept
+  {
+    node_handle_ = node_handle;
   }
 
   auto& Flags() const noexcept { return node_->GetFlags(); }
@@ -346,6 +359,7 @@ private:
 
   // Internal stuff
   const scn::SceneNodeImpl* node_ { nullptr };
+  scn::NodeHandle node_handle_ {};
   RenderableFacade renderable_facade_;
   TransformFacade transform_facade_;
 };

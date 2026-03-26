@@ -311,6 +311,34 @@ auto IntersectsD3DClip(const ClipSphere& clip_sphere) noexcept -> bool
   return true;
 }
 
+template <typename Resource>
+auto RegisterResourceIfNeeded(
+  Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+{
+  if (!resource) {
+    return;
+  }
+
+  auto& registry = gfx.GetResourceRegistry();
+  if (!registry.Contains(*resource)) {
+    registry.Register(resource);
+  }
+}
+
+template <typename Resource>
+auto UnregisterResourceIfPresent(
+  Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+{
+  if (!resource) {
+    return;
+  }
+
+  auto& registry = gfx.GetResourceRegistry();
+  if (registry.Contains(*resource)) {
+    registry.UnRegisterResource(*resource);
+  }
+}
+
 } // namespace
 
 namespace oxygen::engine {
@@ -349,6 +377,8 @@ struct VsmShadowRasterizerPass::Impl {
   std::vector<IndirectPartitionInspection> inspection_partitions {};
   std::vector<renderer::vsm::VsmPrimitiveIdentity>
     current_visible_shadow_primitives {};
+  std::vector<renderer::vsm::VsmRenderedPrimitiveHistoryRecord>
+    rendered_primitive_history {};
   std::vector<renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>
     static_page_feedback {};
   std::vector<std::uint32_t> reveal_flags_upload_ {};
@@ -423,6 +453,8 @@ struct VsmShadowRasterizerPass::Impl {
   auto EnsureRevealFlagsBuffer(std::uint32_t required_flags) -> void;
   auto BuildVisiblePrimitiveState(const PreparedSceneFrame& prepared_frame)
     -> void;
+  auto BuildRenderedPrimitiveHistory(const PreparedSceneFrame& prepared_frame)
+    -> void;
   auto BuildStaticPageFeedback(const PreparedSceneFrame& prepared_frame)
     -> void;
   auto EnsureInstanceCullingConstantsBuffer(std::uint32_t slot_count) -> void;
@@ -464,28 +496,12 @@ VsmShadowRasterizerPass::Impl::~Impl()
     return;
   }
 
-  auto& registry = gfx->GetResourceRegistry();
-  if (page_job_buffer_ && registry.Contains(*page_job_buffer_)) {
-    registry.UnRegisterResource(*page_job_buffer_);
-  }
-  if (page_job_upload_buffer_ && registry.Contains(*page_job_upload_buffer_)) {
-    registry.UnRegisterResource(*page_job_upload_buffer_);
-  }
-  if (instance_culling_constants_buffer_
-    && registry.Contains(*instance_culling_constants_buffer_)) {
-    registry.UnRegisterResource(*instance_culling_constants_buffer_);
-  }
-  if (raster_result_publish_constants_buffer_
-    && registry.Contains(*raster_result_publish_constants_buffer_)) {
-    registry.UnRegisterResource(*raster_result_publish_constants_buffer_);
-  }
-  if (reveal_flags_buffer_ && registry.Contains(*reveal_flags_buffer_)) {
-    registry.UnRegisterResource(*reveal_flags_buffer_);
-  }
-  if (reveal_flags_upload_buffer_
-    && registry.Contains(*reveal_flags_upload_buffer_)) {
-    registry.UnRegisterResource(*reveal_flags_upload_buffer_);
-  }
+  UnregisterResourceIfPresent(*gfx, page_job_buffer_);
+  UnregisterResourceIfPresent(*gfx, page_job_upload_buffer_);
+  UnregisterResourceIfPresent(*gfx, instance_culling_constants_buffer_);
+  UnregisterResourceIfPresent(*gfx, raster_result_publish_constants_buffer_);
+  UnregisterResourceIfPresent(*gfx, reveal_flags_buffer_);
+  UnregisterResourceIfPresent(*gfx, reveal_flags_upload_buffer_);
 
   for (auto& partition : partition_states) {
     ReleasePartitionResources(partition);
@@ -511,18 +527,9 @@ auto VsmShadowRasterizerPass::Impl::ReleasePartitionResources(
   }
 
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (partition.command_buffer
-      && registry.Contains(*partition.command_buffer)) {
-      registry.UnRegisterResource(*partition.command_buffer);
-    }
-    if (partition.count_buffer && registry.Contains(*partition.count_buffer)) {
-      registry.UnRegisterResource(*partition.count_buffer);
-    }
-    if (partition.count_clear_buffer
-      && registry.Contains(*partition.count_clear_buffer)) {
-      registry.UnRegisterResource(*partition.count_clear_buffer);
-    }
+    UnregisterResourceIfPresent(*gfx, partition.command_buffer);
+    UnregisterResourceIfPresent(*gfx, partition.count_buffer);
+    UnregisterResourceIfPresent(*gfx, partition.count_clear_buffer);
   }
 
   partition.command_buffer.reset();
@@ -552,6 +559,7 @@ auto VsmShadowRasterizerPass::Impl::ResetExecutionState() -> void
   inspection_partitions.clear();
   deferred_non_dynamic_pages = 0U;
   current_visible_shadow_primitives.clear();
+  rendered_primitive_history.clear();
   static_page_feedback.clear();
   previous_frame_hzb = {};
   instance_culling_ready = false;
@@ -779,14 +787,8 @@ auto VsmShadowRasterizerPass::Impl::EnsurePageJobBuffer(
   }
 
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (page_job_buffer_ && registry.Contains(*page_job_buffer_)) {
-      registry.UnRegisterResource(*page_job_buffer_);
-    }
-    if (page_job_upload_buffer_
-      && registry.Contains(*page_job_upload_buffer_)) {
-      registry.UnRegisterResource(*page_job_upload_buffer_);
-    }
+    UnregisterResourceIfPresent(*gfx, page_job_buffer_);
+    UnregisterResourceIfPresent(*gfx, page_job_upload_buffer_);
   }
   ReleaseUploadBuffer(page_job_upload_buffer_, page_job_upload_ptr_);
   page_job_buffer_.reset();
@@ -809,7 +811,7 @@ auto VsmShadowRasterizerPass::Impl::EnsurePageJobBuffer(
   CHECK_NOTNULL_F(page_job_buffer_.get(),
     "VsmShadowRasterizerPass: failed to create page-job buffer");
   page_job_buffer_->SetName(page_job_desc.debug_name);
-  gfx->GetResourceRegistry().Register(page_job_buffer_);
+  RegisterResourceIfNeeded(*gfx, page_job_buffer_);
 
   const graphics::BufferDesc upload_desc {
     .size_bytes = size_bytes,
@@ -821,7 +823,7 @@ auto VsmShadowRasterizerPass::Impl::EnsurePageJobBuffer(
   CHECK_NOTNULL_F(page_job_upload_buffer_.get(),
     "VsmShadowRasterizerPass: failed to create page-job upload buffer");
   page_job_upload_buffer_->SetName(upload_desc.debug_name);
-  gfx->GetResourceRegistry().Register(page_job_upload_buffer_);
+  RegisterResourceIfNeeded(*gfx, page_job_upload_buffer_);
   page_job_upload_ptr_
     = page_job_upload_buffer_->Map(0U, upload_desc.size_bytes);
   CHECK_NOTNULL_F(page_job_upload_ptr_,
@@ -852,14 +854,8 @@ auto VsmShadowRasterizerPass::Impl::EnsureRevealFlagsBuffer(
   }
 
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (reveal_flags_buffer_ && registry.Contains(*reveal_flags_buffer_)) {
-      registry.UnRegisterResource(*reveal_flags_buffer_);
-    }
-    if (reveal_flags_upload_buffer_
-      && registry.Contains(*reveal_flags_upload_buffer_)) {
-      registry.UnRegisterResource(*reveal_flags_upload_buffer_);
-    }
+    UnregisterResourceIfPresent(*gfx, reveal_flags_buffer_);
+    UnregisterResourceIfPresent(*gfx, reveal_flags_upload_buffer_);
   }
   ReleaseUploadBuffer(reveal_flags_upload_buffer_, reveal_flags_upload_ptr_);
   reveal_flags_buffer_.reset();
@@ -882,7 +878,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRevealFlagsBuffer(
   CHECK_NOTNULL_F(reveal_flags_buffer_.get(),
     "VsmShadowRasterizerPass: failed to create reveal-flags buffer");
   reveal_flags_buffer_->SetName(reveal_desc.debug_name);
-  gfx->GetResourceRegistry().Register(reveal_flags_buffer_);
+  RegisterResourceIfNeeded(*gfx, reveal_flags_buffer_);
 
   const graphics::BufferDesc upload_desc {
     .size_bytes = size_bytes,
@@ -894,7 +890,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRevealFlagsBuffer(
   CHECK_NOTNULL_F(reveal_flags_upload_buffer_.get(),
     "VsmShadowRasterizerPass: failed to create reveal-flags upload buffer");
   reveal_flags_upload_buffer_->SetName(upload_desc.debug_name);
-  gfx->GetResourceRegistry().Register(reveal_flags_upload_buffer_);
+  RegisterResourceIfNeeded(*gfx, reveal_flags_upload_buffer_);
   reveal_flags_upload_ptr_
     = reveal_flags_upload_buffer_->Map(0U, upload_desc.size_bytes);
   CHECK_NOTNULL_F(reveal_flags_upload_ptr_,
@@ -988,6 +984,77 @@ auto VsmShadowRasterizerPass::Impl::BuildVisiblePrimitiveState(
     reveal_candidate_count, active_partitions.size());
 }
 
+auto VsmShadowRasterizerPass::Impl::BuildRenderedPrimitiveHistory(
+  const PreparedSceneFrame& prepared_frame) -> void
+{
+  rendered_primitive_history.clear();
+
+  if (prepared_frame.draw_metadata_bytes.empty()
+    || prepared_frame.draw_bounding_spheres.empty() || active_page_jobs.empty()
+    || active_partitions.empty()) {
+    return;
+  }
+
+  const auto draw_metadata = GetDrawMetadataSpan(prepared_frame);
+  CHECK_F(draw_metadata.size() == prepared_frame.draw_bounding_spheres.size(),
+    "VsmShadowRasterizerPass: draw metadata and draw bounds must have matching "
+    "counts for rendered-history publication");
+  for (const auto& partition : active_partitions) {
+    CHECK_F(partition.begin + partition.count <= draw_metadata.size(),
+      "VsmShadowRasterizerPass: shadow partition range exceeds draw metadata "
+      "count during rendered-history build");
+  }
+
+  for (const auto& active_job : active_page_jobs) {
+    const auto& job = prepared_pages[active_job.prepared_job_index];
+    const auto view_projection_matrix = BuildPageViewProjectionMatrix(job);
+    for (const auto& partition : active_partitions) {
+      for (std::uint32_t offset = 0U; offset < partition.count; ++offset) {
+        const auto draw_index = partition.begin + offset;
+        const auto& metadata = draw_metadata[draw_index];
+        if (!IsMainViewVisibleShadowCaster(metadata)) {
+          continue;
+        }
+
+        const auto& sphere = prepared_frame.draw_bounding_spheres[draw_index];
+        if (sphere.w <= 0.0F) {
+          continue;
+        }
+        if (!IntersectsD3DClip(
+              BuildClipSphere(view_projection_matrix, sphere))) {
+          continue;
+        }
+
+        rendered_primitive_history.push_back(
+          renderer::vsm::VsmRenderedPrimitiveHistoryRecord {
+            .primitive = MakePrimitiveIdentity(metadata),
+            .map_id = job.map_id,
+          });
+      }
+    }
+  }
+
+  std::sort(rendered_primitive_history.begin(),
+    rendered_primitive_history.end(), [](const auto& lhs, const auto& rhs) {
+      return std::tie(lhs.map_id, lhs.primitive.transform_index,
+               lhs.primitive.transform_generation, lhs.primitive.submesh_index,
+               lhs.primitive.primitive_flags)
+        < std::tie(rhs.map_id, rhs.primitive.transform_index,
+          rhs.primitive.transform_generation, rhs.primitive.submesh_index,
+          rhs.primitive.primitive_flags);
+    });
+  rendered_primitive_history.erase(
+    std::unique(
+      rendered_primitive_history.begin(), rendered_primitive_history.end()),
+    rendered_primitive_history.end());
+
+  DLOG_F(3,
+    "VsmShadowRasterizerPass: rendered primitive history entries={} pages={} "
+    "partitions={}",
+    rendered_primitive_history.size(), active_page_jobs.size(),
+    active_partitions.size());
+}
+
 auto VsmShadowRasterizerPass::Impl::BuildStaticPageFeedback(
   const PreparedSceneFrame& prepared_frame) -> void
 {
@@ -1077,11 +1144,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
   }
 
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (instance_culling_constants_buffer_
-      && registry.Contains(*instance_culling_constants_buffer_)) {
-      registry.UnRegisterResource(*instance_culling_constants_buffer_);
-    }
+    UnregisterResourceIfPresent(*gfx, instance_culling_constants_buffer_);
   }
   ReleaseUploadBuffer(
     instance_culling_constants_buffer_, instance_culling_constants_mapped_ptr_);
@@ -1104,7 +1167,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
   CHECK_NOTNULL_F(instance_culling_constants_buffer_.get(),
     "VsmShadowRasterizerPass: failed to create instance-culling constants");
   instance_culling_constants_buffer_->SetName(desc.debug_name);
-  gfx->GetResourceRegistry().Register(instance_culling_constants_buffer_);
+  RegisterResourceIfNeeded(*gfx, instance_culling_constants_buffer_);
   instance_culling_constants_mapped_ptr_
     = instance_culling_constants_buffer_->Map(0U, desc.size_bytes);
   CHECK_NOTNULL_F(instance_culling_constants_mapped_ptr_,
@@ -1144,11 +1207,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishConstantsBuffer(
   }
 
   if (gfx != nullptr) {
-    auto& registry = gfx->GetResourceRegistry();
-    if (raster_result_publish_constants_buffer_
-      && registry.Contains(*raster_result_publish_constants_buffer_)) {
-      registry.UnRegisterResource(*raster_result_publish_constants_buffer_);
-    }
+    UnregisterResourceIfPresent(*gfx, raster_result_publish_constants_buffer_);
   }
   ReleaseUploadBuffer(raster_result_publish_constants_buffer_,
     raster_result_publish_constants_mapped_ptr_);
@@ -1172,7 +1231,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishConstantsBuffer(
     "VsmShadowRasterizerPass: failed to create raster-result publish "
     "constants");
   raster_result_publish_constants_buffer_->SetName(desc.debug_name);
-  gfx->GetResourceRegistry().Register(raster_result_publish_constants_buffer_);
+  RegisterResourceIfNeeded(*gfx, raster_result_publish_constants_buffer_);
   raster_result_publish_constants_mapped_ptr_
     = raster_result_publish_constants_buffer_->Map(0U, desc.size_bytes);
   CHECK_NOTNULL_F(raster_result_publish_constants_mapped_ptr_,
@@ -1289,7 +1348,7 @@ auto VsmShadowRasterizerPass::Impl::EnsurePartitionResources(
   CHECK_NOTNULL_F(partition.command_buffer.get(),
     "VsmShadowRasterizerPass: failed to create indirect-command buffer");
   partition.command_buffer->SetName(command_desc.debug_name);
-  gfx->GetResourceRegistry().Register(partition.command_buffer);
+  RegisterResourceIfNeeded(*gfx, partition.command_buffer);
 
   const graphics::BufferDesc count_desc {
     .size_bytes = count_bytes,
@@ -1301,7 +1360,7 @@ auto VsmShadowRasterizerPass::Impl::EnsurePartitionResources(
   CHECK_NOTNULL_F(partition.count_buffer.get(),
     "VsmShadowRasterizerPass: failed to create command-count buffer");
   partition.count_buffer->SetName(count_desc.debug_name);
-  gfx->GetResourceRegistry().Register(partition.count_buffer);
+  RegisterResourceIfNeeded(*gfx, partition.count_buffer);
 
   const graphics::BufferDesc clear_desc {
     .size_bytes = count_bytes,
@@ -1313,7 +1372,7 @@ auto VsmShadowRasterizerPass::Impl::EnsurePartitionResources(
   CHECK_NOTNULL_F(partition.count_clear_buffer.get(),
     "VsmShadowRasterizerPass: failed to create command-count clear buffer");
   partition.count_clear_buffer->SetName(clear_desc.debug_name);
-  gfx->GetResourceRegistry().Register(partition.count_clear_buffer);
+  RegisterResourceIfNeeded(*gfx, partition.count_clear_buffer);
   partition.count_clear_mapped_ptr
     = partition.count_clear_buffer->Map(0U, clear_desc.size_bytes);
   CHECK_NOTNULL_F(partition.count_clear_mapped_ptr,
@@ -1453,6 +1512,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     "VsmShadowRasterizerPass: draw metadata and draw bounds must have matching "
     "counts for instance culling");
 
+  BuildRenderedPrimitiveHistory(prepared_frame);
   BuildStaticPageFeedback(prepared_frame);
 
   EnsurePageJobBuffer(static_cast<std::uint32_t>(active_page_jobs.size()));
@@ -1839,6 +1899,13 @@ auto VsmShadowRasterizerPass::GetVisibleShadowPrimitives() const noexcept
     impl_->current_visible_shadow_primitives.size() };
 }
 
+auto VsmShadowRasterizerPass::GetRenderedPrimitiveHistory() const noexcept
+  -> std::span<const renderer::vsm::VsmRenderedPrimitiveHistoryRecord>
+{
+  return { impl_->rendered_primitive_history.data(),
+    impl_->rendered_primitive_history.size() };
+}
+
 auto VsmShadowRasterizerPass::GetStaticPageFeedback() const noexcept
   -> std::span<const renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>
 {
@@ -2032,6 +2099,7 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   const auto psf = Context().current_view.prepared_frame;
   if (psf == nullptr || !psf->IsValid()) {
     impl_->current_visible_shadow_primitives.clear();
+    impl_->rendered_primitive_history.clear();
     impl_->static_page_feedback.clear();
     DLOG_F(2,
       "VsmShadowRasterizerPass: skipped execute because no prepared scene "
@@ -2059,6 +2127,7 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   }
 
   if (!HasRasterDrawMetadata(*psf)) {
+    impl_->rendered_primitive_history.clear();
     impl_->static_page_feedback.clear();
     DLOG_F(2,
       "VsmShadowRasterizerPass: no shadow-caster draw metadata was available "
@@ -2207,10 +2276,11 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   DLOG_F(2,
     "VsmShadowRasterizerPass: execute active_pages={} partitions={} "
-    "visible_primitives={} static_feedback={} previous_hzb_available={} "
-    "counted_indirect=true",
+    "visible_primitives={} rendered_history={} static_feedback={} "
+    "previous_hzb_available={} counted_indirect=true",
     impl_->active_page_jobs.size(), impl_->active_partitions.size(),
     impl_->current_visible_shadow_primitives.size(),
+    impl_->rendered_primitive_history.size(),
     impl_->static_page_feedback.size(), impl_->previous_frame_hzb.available);
 
   Context().RegisterPass(this);

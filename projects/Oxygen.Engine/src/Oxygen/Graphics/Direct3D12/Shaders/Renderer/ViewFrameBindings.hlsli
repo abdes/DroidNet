@@ -17,12 +17,12 @@ struct ViewFrameBindings
     uint view_color_frame_slot;
     uint scene_depth_slot;
     uint shadow_frame_slot;
+    uint virtual_shadow_frame_slot;
     uint post_process_frame_slot;
     uint debug_frame_slot;
     uint history_frame_slot;
     uint ray_tracing_frame_slot;
     uint _pad_to_16_0;
-    uint _pad_to_16_1;
 };
 
 static ViewFrameBindings LoadViewFrameBindings(uint slot)
@@ -35,12 +35,12 @@ static ViewFrameBindings LoadViewFrameBindings(uint slot)
         invalid_bindings.view_color_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.scene_depth_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.shadow_frame_slot = K_INVALID_BINDLESS_INDEX;
+        invalid_bindings.virtual_shadow_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.post_process_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.debug_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.history_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.ray_tracing_frame_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings._pad_to_16_0 = 0u;
-        invalid_bindings._pad_to_16_1 = 0u;
         return invalid_bindings;
     }
 

@@ -48,6 +48,7 @@
 #include <Oxygen/Renderer/Types/ViewColorData.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
+#include <Oxygen/Renderer/Types/VsmFrameBindings.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -138,7 +139,7 @@ public:
     frame::Slot frame_slot { frame::Slot { 0U } };
     frame::SequenceNumber frame_sequence { 1U };
     float delta_time_seconds { 1.0F / 60.0F };
-    observer_ptr<const scene::Scene> scene { nullptr };
+    observer_ptr<scene::Scene> scene { nullptr };
   };
 
   //! Scoped renderer-owned off-screen frame session.
@@ -408,6 +409,9 @@ public:
   OXGN_RNDR_API auto UpdateCurrentViewLightCullingConfig(
     const RenderContext& render_context, const LightCullingConfig& config)
     -> void;
+  OXGN_RNDR_API auto UpdateCurrentViewVirtualShadowFrameBindings(
+    const RenderContext& render_context, const VsmFrameBindings& bindings)
+    -> void;
 
   //=== Debug Overrides ===---------------------------------------------------//
 
@@ -446,13 +450,14 @@ public:
 private:
   enum class ViewBindingRepublishMode : std::uint8_t {
     kFull,
-    kLightingOnly,
+    kDynamicSystemBindings,
   };
 
   struct PerViewRuntimeState {
     LightCullingConfig light_culling {};
     SyntheticSunData sun { kNoSun };
     EnvironmentViewData environment_view {};
+    VsmFrameBindings virtual_shadow {};
     ViewFrameBindings published_view_bindings {};
     ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
     const graphics::Texture* scene_depth_texture_owner { nullptr };
@@ -543,6 +548,8 @@ private:
   std::unique_ptr<renderer::ShadowManager> shadow_manager_;
   std::unique_ptr<internal::PerViewStructuredPublisher<ShadowFrameBindings>>
     shadow_frame_bindings_publisher_;
+  std::unique_ptr<internal::PerViewStructuredPublisher<VsmFrameBindings>>
+    vsm_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
     environment_view_data_publisher_;
   std::unique_ptr<

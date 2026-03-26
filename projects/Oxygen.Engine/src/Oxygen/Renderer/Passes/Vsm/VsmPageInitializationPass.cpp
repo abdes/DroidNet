@@ -33,6 +33,8 @@ namespace oxygen::engine {
 
 namespace {
 
+  constexpr std::size_t kMaxClearRectsPerCall = 64U;
+
   auto FindSliceIndex(const renderer::vsm::VsmPhysicalPoolSnapshot& pool,
     const VsmPhysicalPoolSliceRole role) noexcept
     -> std::optional<std::uint32_t>
@@ -362,16 +364,33 @@ auto VsmPageInitializationPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   if (!clear_rects.empty()) {
     recorder.RequireResourceState(*shadow_texture, ResourceStates::kDepthWrite);
     recorder.FlushBarriers();
-    recorder.ClearDepthStencilView(*shadow_texture, impl_->dynamic_slice_dsv,
-      graphics::ClearFlags::kDepth, 1.0F, 0U, clear_rects);
+
+    // Keep rect lists bounded per API call. Large scene-scale clear batches
+    // have shown unstable driver behavior when emitted as one giant
+    // ClearDepthStencilView rect array.
+    for (std::size_t offset = 0; offset < clear_rects.size();
+      offset += kMaxClearRectsPerCall) {
+      const auto batch_count
+        = std::min(kMaxClearRectsPerCall, clear_rects.size() - offset);
+      recorder.ClearDepthStencilView(*shadow_texture, impl_->dynamic_slice_dsv,
+        graphics::ClearFlags::kDepth, 1.0F, 0U,
+        std::span<const oxygen::Scissors> {
+          clear_rects.data() + offset,
+          batch_count,
+        });
+    }
   }
 
   DLOG_F(2,
     "executed VSM page-initialization pass generation={} work_items={} "
-    "copy_static={} clear_depth={}",
+    "copy_static={} clear_depth={} clear_batches={}",
     impl_->input->frame.snapshot.frame_generation,
     impl_->input->frame.plan.initialization_work.size(), needs_copy,
-    !clear_rects.empty());
+    !clear_rects.empty(),
+    clear_rects.empty()
+      ? 0U
+      : static_cast<unsigned>((clear_rects.size() + kMaxClearRectsPerCall - 1U)
+          / kMaxClearRectsPerCall));
   co_return;
 }
 

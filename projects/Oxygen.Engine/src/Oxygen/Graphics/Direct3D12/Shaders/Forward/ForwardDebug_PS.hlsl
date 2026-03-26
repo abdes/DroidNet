@@ -16,6 +16,7 @@
 #include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/DebugHelpers.hlsli"
 #include "Renderer/ShadowHelpers.hlsli"
+#include "Renderer/VsmFrameBindings.hlsli"
 #include "Renderer/Vertex.hlsli"
 
 #include "MaterialFlags.hlsli"
@@ -246,6 +247,25 @@ float4 PS(VSOutput input) : SV_Target0 {
                 }
             }
         #endif
+    }
+#elif defined(DEBUG_VIRTUAL_SHADOW_MASK)
+    {
+        const ViewFrameBindings view_bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+        const VsmFrameBindings vsm_bindings = LoadVsmFrameBindings(view_bindings.virtual_shadow_frame_slot);
+        if (vsm_bindings.screen_shadow_mask_slot == K_INVALID_BINDLESS_INDEX) {
+            debug_out = float3(1.0f, 0.0f, 1.0f);
+        } else {
+            Texture2D<float> shadow_mask = ResourceDescriptorHeap[vsm_bindings.screen_shadow_mask_slot];
+            uint shadow_mask_width = 0u;
+            uint shadow_mask_height = 0u;
+            shadow_mask.GetDimensions(shadow_mask_width, shadow_mask_height);
+            const uint2 pixel = min(uint2(input.position.xy), uint2(
+                max(1u, shadow_mask_width) - 1u,
+                max(1u, shadow_mask_height) - 1u));
+            const float visibility = saturate(shadow_mask.Load(int3(pixel, 0)));
+            debug_out = visibility.xxx;
+        }
+        debug_handled = true;
     }
 #endif
 

@@ -123,6 +123,7 @@ set(
   "Types/MaterialPermutations.h"
   "Types/PassMask.h"
   "Types/PositionalLightData.h"
+  "Types/PositionalShadowCandidate.h"
   "Types/ProceduralGridMaterialConstants.h"
   "Types/RasterShadowRenderPlan.h"
   "Types/ShadowFrameBindings.h"
@@ -141,6 +142,7 @@ set(
   "VirtualShadowMaps/VsmPageRequestGeneration.h"
   "VirtualShadowMaps/VsmSceneInvalidationCollector.h"
   "VirtualShadowMaps/VsmSceneInvalidationCoordinator.h"
+  "VirtualShadowMaps/VsmShadowRenderer.h"
   "VirtualShadowMaps/VsmShadowRasterJobs.h"
   "VirtualShadowMaps/VsmShaderTypes.h"
   "VirtualShadowMaps/VsmPhysicalPoolCompatibility.h"
@@ -153,6 +155,7 @@ set(
   "Types/SyntheticSunData.h"
   "Types/ViewColorData.h"
   "Types/ViewFrameBindings.h"
+  "Types/VsmFrameBindings.h"
   "Upload/Errors.h"
 )
 set(
@@ -255,6 +258,7 @@ set(
   "Types/ViewConstants.cpp"
   "VirtualShadowMaps/VsmSceneInvalidationCollector.cpp"
   "VirtualShadowMaps/VsmSceneInvalidationCoordinator.cpp"
+  "VirtualShadowMaps/VsmShadowRenderer.cpp"
   "Upload/AtlasBuffer.cpp"
   "Upload/AtlasBuffer.h"
   "Upload/Errors.cpp"

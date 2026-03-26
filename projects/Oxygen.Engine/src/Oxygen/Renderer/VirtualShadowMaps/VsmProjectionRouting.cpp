@@ -13,6 +13,25 @@
 
 namespace oxygen::renderer::vsm {
 
+namespace {
+
+  [[nodiscard]] auto IsDirectionalProjection(
+    const VsmPageRequestProjection& projection) noexcept -> bool
+  {
+    return projection.projection.light_type
+      == static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional);
+  }
+
+  [[nodiscard]] auto ProjectionLevel(
+    const VsmPageRequestProjection& projection) noexcept -> std::uint32_t
+  {
+    return IsDirectionalProjection(projection)
+      ? projection.projection.clipmap_level
+      : 0U;
+  }
+
+} // namespace
+
 auto IsValid(const VsmPageRequestProjection& projection) noexcept -> bool
 {
   if (projection.map_id == 0U || projection.map_pages_x == 0U
@@ -58,7 +77,7 @@ auto TryProjectWorldToPage(const VsmPageRequestProjection& projection,
     projection.pages_y - 1U);
 
   return VsmVirtualPageCoord {
-    .level = 0U,
+    .level = ProjectionLevel(projection),
     .page_x = projection.page_offset_x + local_page_x,
     .page_y = projection.page_offset_y + local_page_y,
   };
@@ -68,9 +87,16 @@ auto TryComputeProjectionLocalPage(const VsmPageRequestProjection& projection,
   const VsmVirtualPageCoord& page) noexcept
   -> std::optional<VsmVirtualPageCoord>
 {
-  if (!IsValid(projection) || page.level >= projection.level_count
-    || page.page_x < projection.page_offset_x
+  if (!IsValid(projection) || page.page_x < projection.page_offset_x
     || page.page_y < projection.page_offset_y) {
+    return std::nullopt;
+  }
+
+  if (IsDirectionalProjection(projection)) {
+    if (page.level != projection.projection.clipmap_level) {
+      return std::nullopt;
+    }
+  } else if (page.level >= projection.level_count) {
     return std::nullopt;
   }
 

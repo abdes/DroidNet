@@ -619,6 +619,11 @@ This stage is pure demand discovery:
 
 Now the system tries to preserve as much old work as possible.
 
+In the live renderer path, stable per-light `remap_key` identity comes from the
+source `scene::NodeHandle` carried by CPU-side renderer shadow-candidate
+snapshots. The renderer must not derive VSM identity from `SceneNodeImpl`,
+node names, or transient light ordering.
+
 For every physical page from the previous frame:
 
 1. look at its old owner virtual page,
@@ -1661,6 +1666,9 @@ If you remember only a few things, remember these:
 - Real memory lives in a shared physical page pool.
 - Cache-management policy is mostly CPU-owned; page-level realization is mostly GPU-owned.
 - Reuse happens by remapping physical pages into new virtual IDs each frame.
+- In the live renderer path, reuse keys are deterministically derived from
+  light-node `scene::NodeHandle` values captured in CPU shadow-candidate
+  snapshots.
 - Invalidation does not immediately destroy pages. It marks them as needing rerender.
 - Clear is selective, not global.
 - Directional clipmaps reuse pages through panning and depth-range stability rules.

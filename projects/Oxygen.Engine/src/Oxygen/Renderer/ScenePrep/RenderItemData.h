@@ -13,11 +13,16 @@
 #include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-
+#include <Oxygen/Scene/Types/NodeHandle.h>
 namespace oxygen::engine::sceneprep {
 
 struct RenderItemData {
   std::uint32_t submesh_index = 0;
+
+  // Source scene-node identity retained for the frame so downstream VSM
+  // invalidation/history publication can map rendered primitives back to scene
+  // mutations without storing handles inside SceneNodeImpl.
+  scene::NodeHandle node_handle {};
 
   // Resolved geometry reference (stable identity + resolved LOD mesh).
   sceneprep::GeometryRef geometry;

@@ -58,13 +58,13 @@ namespace {
     ShaderVisibleIndex reuse_decision_buffer_index {
       kInvalidShaderVisibleIndex
     };
+    ShaderVisibleIndex metadata_seed_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_table_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_flags_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex metadata_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t reuse_decision_count { 0U };
     std::uint32_t virtual_page_count { 0U };
     std::uint32_t physical_page_count { 0U };
-    std::uint32_t _pad0 { 0U };
   };
   static_assert(
     sizeof(VsmPageReusePassConstants) % packing::kShaderDataFieldAlignment
@@ -92,11 +92,15 @@ namespace {
     ShaderVisibleIndex available_page_count_srv_index {
       kInvalidShaderVisibleIndex
     };
+    ShaderVisibleIndex metadata_seed_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_table_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex page_flags_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex metadata_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t allocation_decision_count { 0U };
     std::uint32_t virtual_page_count { 0U };
+    std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
   };
   static_assert(sizeof(VsmAllocateNewPagesPassConstants)
       % packing::kShaderDataFieldAlignment
@@ -235,6 +239,7 @@ struct VsmPageManagementPass::Impl {
   DescriptorHandle page_table_uav_handle {};
   DescriptorHandle page_flags_uav_handle {};
   DescriptorHandle metadata_uav_handle {};
+  DescriptorHandle metadata_seed_srv_handle {};
   DescriptorHandle available_pages_uav_handle {};
   DescriptorHandle available_pages_srv_handle {};
 
@@ -248,12 +253,14 @@ struct VsmPageManagementPass::Impl {
   ShaderVisibleIndex page_table_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_flags_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex metadata_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex metadata_seed_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex available_pages_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex available_pages_srv { kInvalidShaderVisibleIndex };
 
   const Buffer* page_table_owner { nullptr };
   const Buffer* page_flags_owner { nullptr };
   const Buffer* metadata_owner { nullptr };
+  const Buffer* metadata_seed_owner { nullptr };
   const Buffer* available_pages_owner { nullptr };
   const Buffer* reuse_decision_owner { nullptr };
   const Buffer* allocation_decision_owner { nullptr };
@@ -624,6 +631,14 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
       "unavailable");
     co_return;
   }
+  if (impl_->frame_input->physical_page_meta_seed_buffer != nullptr
+    && impl_->frame_input->physical_page_meta_seed_buffer.get()
+      == impl_->frame_input->physical_page_meta_buffer.get()) {
+    LOG_F(ERROR,
+      "VSM page-management pass skipped because the physical metadata seed "
+      "buffer aliases the current-frame metadata output buffer");
+    co_return;
+  }
 
   impl_->BuildStageUploads();
   impl_->EnsureAvailablePageCountBuffer();
@@ -682,6 +697,8 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
     = std::const_pointer_cast<Buffer>(impl_->frame_input->page_flags_buffer);
   auto metadata_buffer = std::const_pointer_cast<Buffer>(
     impl_->frame_input->physical_page_meta_buffer);
+  auto metadata_seed_buffer = std::const_pointer_cast<Buffer>(
+    impl_->frame_input->physical_page_meta_seed_buffer);
   auto available_pages_buffer = std::const_pointer_cast<Buffer>(
     impl_->frame_input->physical_page_list_buffer);
 
@@ -693,6 +710,14 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
         sizeof(VsmShaderPageReuseDecision)),
       impl_->reuse_decision_srv_handle, impl_->reuse_decision_srv,
       impl_->reuse_decision_owner),
+    .metadata_seed_srv_index = metadata_seed_buffer != nullptr
+      ? impl_->EnsureBufferView(*metadata_seed_buffer,
+          BuildBufferViewDesc(ResourceViewType::kStructuredBuffer_SRV,
+            metadata_seed_buffer->GetDescriptor().size_bytes,
+            sizeof(renderer::vsm::VsmPhysicalPageMeta)),
+          impl_->metadata_seed_srv_handle, impl_->metadata_seed_srv,
+          impl_->metadata_seed_owner)
+      : kInvalidShaderVisibleIndex,
     .page_table_uav_index = impl_->EnsureBufferView(*page_table_buffer,
       BuildBufferViewDesc(ResourceViewType::kStructuredBuffer_UAV,
         page_table_buffer->GetDescriptor().size_bytes, sizeof(std::uint32_t)),
@@ -762,6 +787,7 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
         sizeof(std::uint32_t)),
       impl_->available_page_count_srv_handle, impl_->available_page_count_srv,
       impl_->available_count_owner),
+    .metadata_seed_srv_index = reuse_constants.metadata_seed_srv_index,
     .page_table_uav_index = impl_->page_table_uav,
     .page_flags_uav_index = impl_->page_flags_uav,
     .metadata_uav_index = impl_->metadata_uav,
@@ -775,6 +801,9 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
 
   if (!RequireValidIndex(
         reuse_constants.reuse_decision_buffer_index, "reuse-decision SRV")
+    || (metadata_seed_buffer != nullptr
+      && !RequireValidIndex(reuse_constants.metadata_seed_srv_index,
+        "physical-page metadata seed SRV"))
     || !RequireValidIndex(
       reuse_constants.page_table_uav_index, "page-table UAV")
     || !RequireValidIndex(
@@ -817,6 +846,10 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
     *page_flags_buffer, ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *metadata_buffer, ResourceStates::kCommon, true);
+  if (metadata_seed_buffer != nullptr) {
+    recorder.BeginTrackingResourceState(
+      *metadata_seed_buffer, ResourceStates::kCommon, true);
+  }
   recorder.BeginTrackingResourceState(
     *available_pages_buffer, ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
@@ -870,6 +903,10 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
   require_clear(impl_->frame_input->page_rect_bounds_buffer);
   recorder.RequireResourceState(
     *impl_->available_page_count_buffer, ResourceStates::kCopyDest);
+  if (metadata_seed_buffer != nullptr) {
+    recorder.RequireResourceState(
+      *metadata_seed_buffer, ResourceStates::kShaderResource);
+  }
   recorder.FlushBarriers();
 
   const auto clear_buffer_into

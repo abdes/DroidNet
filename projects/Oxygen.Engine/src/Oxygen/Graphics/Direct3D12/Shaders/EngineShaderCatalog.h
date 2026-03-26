@@ -52,6 +52,7 @@ using enum ShaderType;
 //   DEBUG_DIRECT_LIGHTING_FULL: Full forward direct-light term only
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
+//   DEBUG_VIRTUAL_SHADOW_MASK: Stage 15 VSM screen-space shadow mask
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -236,6 +237,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .required_defines=std::array<std::string_view, 1> { "DEBUG_METALNESS" },
     .permutations=std::array<std::string_view, 2>
       { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VIRTUAL_SHADOW_MASK", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with alpha-test permutation
   ShaderFileSpec {

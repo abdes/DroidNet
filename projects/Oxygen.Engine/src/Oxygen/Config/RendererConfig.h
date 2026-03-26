@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Config/PathFinderConfig.h>
 
@@ -22,7 +23,22 @@ enum class ShadowQualityTier : std::uint8_t {
 
 enum class DirectionalShadowImplementationPolicy : std::uint8_t {
   kConventionalOnly,
+  kVirtualShadowMap,
 };
+
+[[nodiscard]] constexpr auto to_string(
+  const DirectionalShadowImplementationPolicy policy) noexcept
+  -> std::string_view
+{
+  switch (policy) {
+  case DirectionalShadowImplementationPolicy::kConventionalOnly:
+    return "conventional";
+  case DirectionalShadowImplementationPolicy::kVirtualShadowMap:
+    return "vsm";
+  default:
+    return "unknown";
+  }
+}
 
 struct RendererConfig {
   //! Immutable configuration for path resolution.

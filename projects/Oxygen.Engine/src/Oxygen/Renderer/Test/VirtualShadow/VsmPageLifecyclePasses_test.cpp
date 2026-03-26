@@ -18,6 +18,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -671,6 +672,98 @@ NOLINT_TEST_F(VsmPageInitializationGpuTest,
   EXPECT_FLOAT_EQ(ReadShadowDepthTexel(shadow_pool.shadow_texture, neighbor_x,
                     neighbor_y, 0U, "phase-e-copy-neighbor"),
     0.20F);
+}
+
+NOLINT_TEST_F(VsmPageInitializationGpuTest,
+  InitializationPassClearsLargeRectBatchesWithoutTouchingUntargetedPages)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(VsmPhysicalPoolConfig {
+      .page_size_texels = 128U,
+      .physical_tile_capacity = 576U,
+      .array_slice_count = 1U,
+      .depth_format = oxygen::Format::kDepth32,
+      .slice_roles
+      = { oxygen::renderer::vsm::VsmPhysicalPoolSliceRole::kDynamicDepth },
+      .debug_name = "phase-e-large-clear-shadow",
+    }),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
+  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
+
+  auto frame = VsmPageAllocationFrame {};
+  frame.snapshot.frame_generation = 1ULL;
+  frame.is_ready = true;
+  frame.plan.initialization_work.reserve(300U);
+  for (std::uint32_t physical_page = 0U; physical_page < 300U;
+    ++physical_page) {
+    frame.plan.initialization_work.push_back(
+      oxygen::renderer::vsm::VsmPageInitializationWorkItem {
+        .physical_page = { physical_page },
+        .action
+        = oxygen::renderer::vsm::VsmPageInitializationAction::kClearDepth,
+      });
+  }
+
+  constexpr auto kSeedValue = 0.25F;
+  const auto seed_pages = std::array { 0U, 150U, 299U, 300U };
+  for (const auto physical_page : seed_pages) {
+    const auto coord = TryConvertToCoord(
+      oxygen::renderer::vsm::VsmPhysicalPageIndex {
+        .value = physical_page,
+      },
+      shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
+      shadow_pool.slice_count);
+    ASSERT_TRUE(coord.has_value());
+    SeedShadowPageValue(shadow_pool.shadow_texture,
+      shadow_pool.page_size_texels, coord->tile_x, coord->tile_y, coord->slice,
+      kSeedValue,
+      std::string("phase-e-large-clear-seed-")
+        + std::string(nostd::to_string(physical_page)));
+  }
+
+  ExecuteInitializationPass(VsmPageInitializationPassInput { .frame = frame,
+                              .physical_pool = shadow_pool },
+    "vsm-phase-e-large-clear");
+
+  for (const auto physical_page : std::array { 0U, 150U, 299U }) {
+    const auto coord = TryConvertToCoord(
+      oxygen::renderer::vsm::VsmPhysicalPageIndex {
+        .value = physical_page,
+      },
+      shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
+      shadow_pool.slice_count);
+    ASSERT_TRUE(coord.has_value());
+    const auto texel_x = coord->tile_x * shadow_pool.page_size_texels
+      + shadow_pool.page_size_texels / 2U;
+    const auto texel_y = coord->tile_y * shadow_pool.page_size_texels
+      + shadow_pool.page_size_texels / 2U;
+    EXPECT_FLOAT_EQ(ReadShadowDepthTexel(shadow_pool.shadow_texture, texel_x,
+                      texel_y, coord->slice,
+                      std::string("phase-e-large-clear-target-")
+                        + std::string(nostd::to_string(physical_page))),
+      1.0F);
+  }
+
+  const auto untouched_coord = TryConvertToCoord(
+    oxygen::renderer::vsm::VsmPhysicalPageIndex {
+      .value = 300U,
+    },
+    shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
+    shadow_pool.slice_count);
+  ASSERT_TRUE(untouched_coord.has_value());
+  const auto untouched_x
+    = untouched_coord->tile_x * shadow_pool.page_size_texels
+    + shadow_pool.page_size_texels / 2U;
+  const auto untouched_y
+    = untouched_coord->tile_y * shadow_pool.page_size_texels
+    + shadow_pool.page_size_texels / 2U;
+  EXPECT_FLOAT_EQ(
+    ReadShadowDepthTexel(shadow_pool.shadow_texture, untouched_x, untouched_y,
+      untouched_coord->slice, "phase-e-large-clear-untouched"),
+    kSeedValue);
 }
 
 } // namespace

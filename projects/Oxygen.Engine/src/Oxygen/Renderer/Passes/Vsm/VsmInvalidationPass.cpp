@@ -532,8 +532,6 @@ auto VsmInvalidationPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     *impl_->physical_meta_buffer, ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
   recorder.Dispatch(dispatch_groups, 1U, 1U);
-  recorder.RequireResourceStateFinal(
-    *impl_->physical_meta_buffer, ResourceStates::kCommon);
 
   co_return;
 }

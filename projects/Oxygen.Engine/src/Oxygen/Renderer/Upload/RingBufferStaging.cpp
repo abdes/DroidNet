@@ -37,6 +37,35 @@ constexpr std::uint64_t kInitialBytesPerPartition = 10ULL * 1024ULL * 1024ULL;
 
 constexpr std::uint32_t kIdleFramesBeforeShrink = 120U;
 
+template <typename Resource>
+auto RegisterResourceIfNeeded(const oxygen::observer_ptr<oxygen::Graphics> gfx,
+  const std::shared_ptr<Resource>& resource) -> void
+{
+  if (gfx == nullptr || resource == nullptr) {
+    return;
+  }
+
+  auto& registry = gfx->GetResourceRegistry();
+  if (!registry.Contains(*resource)) {
+    registry.Register(resource);
+  }
+}
+
+template <typename Resource>
+auto UnregisterResourceIfPresent(
+  const oxygen::observer_ptr<oxygen::Graphics> gfx,
+  const std::shared_ptr<Resource>& resource) -> void
+{
+  if (gfx == nullptr || resource == nullptr) {
+    return;
+  }
+
+  auto& registry = gfx->GetResourceRegistry();
+  if (registry.Contains(*resource)) {
+    registry.UnRegisterResource(*resource);
+  }
+}
+
 } // namespace
 
 namespace oxygen::engine::upload {
@@ -56,7 +85,7 @@ namespace {
     reclaimer.RegisterDeferredAction(
       [gfx, old_buffer = std::move(old_buffer)]() mutable {
         if (gfx != nullptr && old_buffer != nullptr) {
-          gfx->GetResourceRegistry().UnRegisterResource(*old_buffer);
+          UnregisterResourceIfPresent(gfx, old_buffer);
         }
         old_buffer.reset();
       });
@@ -205,7 +234,7 @@ auto RingBufferStaging::RecreateBuffer(
   UploadError error_code;
   try {
     buffer_ = gfx_->CreateBuffer(desc);
-    gfx_->GetResourceRegistry().Register(buffer_);
+    RegisterResourceIfNeeded(gfx_, buffer_);
     auto map_result = Map();
     if (map_result) {
       capacity_per_partition_ = aligned_per_partition;
@@ -313,7 +342,7 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   UploadError error_code;
   try {
     buffer_ = gfx_->CreateBuffer(desc);
-    gfx_->GetResourceRegistry().Register(buffer_);
+    RegisterResourceIfNeeded(gfx_, buffer_);
     Stats().buffer_growth_count++;
     auto map_result = Map(); // This may throw for now...
     if (map_result) {

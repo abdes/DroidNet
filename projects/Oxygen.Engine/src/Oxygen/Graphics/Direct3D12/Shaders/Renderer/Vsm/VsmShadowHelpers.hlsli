@@ -21,6 +21,7 @@ struct VsmProjectedShadowSample
 static bool VsmTryProjectMappedSample(
     VsmPageRequestProjection projection,
     StructuredBuffer<VsmShaderPageTableEntry> page_table,
+    uint page_table_entry_count,
     float3 world_position_ws,
     uint tiles_per_axis,
     uint page_size_texels,
@@ -33,7 +34,16 @@ static bool VsmTryProjectMappedSample(
 
     if (projection.map_id == 0u || projection.pages_x == 0u || projection.pages_y == 0u
         || projection.map_pages_x == 0u || projection.map_pages_y == 0u
+        || projection.level_count == 0u
         || page_size_texels == 0u || tiles_per_axis == 0u) {
+        return false;
+    }
+
+    if (projection.projection.clipmap_level >= projection.level_count
+        || projection.page_offset_x > projection.map_pages_x
+        || projection.page_offset_y > projection.map_pages_y
+        || projection.pages_x > projection.map_pages_x - projection.page_offset_x
+        || projection.pages_y > projection.map_pages_y - projection.page_offset_y) {
         return false;
     }
 
@@ -60,6 +70,9 @@ static bool VsmTryProjectMappedSample(
         + projection.projection.clipmap_level * pages_per_level
         + page_y * projection.map_pages_x
         + page_x;
+    if (page_table_index >= page_table_entry_count) {
+        return false;
+    }
 
     const VsmShaderPageTableEntry entry = page_table[page_table_index];
     if (!VsmIsPageTableEntryMapped(entry)) {

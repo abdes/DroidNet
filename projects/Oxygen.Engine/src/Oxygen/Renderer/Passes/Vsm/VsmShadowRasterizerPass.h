@@ -17,6 +17,7 @@
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -77,6 +78,9 @@ public:
     -> std::span<const IndirectPartitionInspection>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetVisibleShadowPrimitives() const noexcept
     -> std::span<const renderer::vsm::VsmPrimitiveIdentity>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetRenderedPrimitiveHistory() const noexcept
+    -> std::span<const renderer::vsm::VsmRenderedPrimitiveHistoryRecord>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetStaticPageFeedback() const noexcept
     -> std::span<const renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetDepthTexture() const

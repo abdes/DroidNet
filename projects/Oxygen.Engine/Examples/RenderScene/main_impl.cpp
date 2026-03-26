@@ -194,9 +194,12 @@ auto ParseDirectionalShadowPolicy(std::string value)
   if (value == "conventional" || value == "conventional-only") {
     return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
   }
+  if (value == "vsm" || value == "virtual-shadow-map") {
+    return oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap;
+  }
 
   throw std::runtime_error("Invalid value for --directional-shadows. "
-                           "Expected one of: conventional");
+                           "Expected one of: conventional, vsm");
 }
 
 auto NormalizeCliToken(std::string value) -> std::string
@@ -245,8 +248,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
-    developer_options->Add(Option::WithKey("directional-shadows")
-        .About("Directional shadow backend policy")
+    default_command.WithOption(Option::WithKey("directional-shadows")
+        .About("Directional shadow backend policy: conventional, vsm.")
         .Long("directional-shadows")
         .WithValue<std::string>()
         .DefaultValue(std::string("conventional"))
@@ -299,6 +302,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       frames, target_fps);
     app.directional_shadow_policy
       = ParseDirectionalShadowPolicy(directional_shadows);
+    LOG_F(INFO, "Resolved directional shadow policy = {}",
+      app.directional_shadow_policy);
 
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {

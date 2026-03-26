@@ -7,6 +7,8 @@
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationPlanner.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationSnapshotHelpers.h>
 
+#include <Oxygen/Base/Logging.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -43,6 +45,7 @@ namespace {
   struct PendingRequest {
     VsmPageAllocationDecision decision {};
     std::uint32_t page_table_index { 0 };
+    std::uint32_t target_slice { 0U };
     std::optional<VsmPageInitializationAction> initialization_action {};
     bool is_resolved { false };
     bool is_duplicate { false };
@@ -69,6 +72,52 @@ namespace {
     return std::ranges::find(
              pool.slice_roles, VsmPhysicalPoolSliceRole::kStaticDepth)
       != pool.slice_roles.end();
+  }
+
+  auto FindSliceIndex(const VsmPhysicalPoolSnapshot& pool,
+    const VsmPhysicalPoolSliceRole role) noexcept
+    -> std::optional<std::uint32_t>
+  {
+    for (std::uint32_t i = 0; i < pool.slice_roles.size(); ++i) {
+      if (pool.slice_roles[i] == role) {
+        return i;
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto ResolveTargetSlice(const VsmPhysicalPoolSnapshot& pool,
+    const VsmPageRequestFlags flags) noexcept -> std::optional<std::uint32_t>
+  {
+    const auto dynamic_slice
+      = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kDynamicDepth);
+    if (!dynamic_slice.has_value()) {
+      return std::nullopt;
+    }
+
+    if (IsDynamicRequest(flags)) {
+      return dynamic_slice;
+    }
+
+    if (const auto static_slice
+      = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kStaticDepth);
+      static_slice.has_value()) {
+      return static_slice;
+    }
+
+    return dynamic_slice;
+  }
+
+  auto TryResolvePhysicalPageSlice(const VsmPhysicalPoolSnapshot& pool,
+    const VsmPhysicalPageIndex physical_page) noexcept
+    -> std::optional<std::uint32_t>
+  {
+    const auto coord = TryConvertToCoord(
+      physical_page, pool.tile_capacity, pool.tiles_per_axis, pool.slice_count);
+    if (!coord.has_value()) {
+      return std::nullopt;
+    }
+    return coord->slice;
   }
 
   auto DetermineInitializationAction(const VsmCacheManagerSeam& seam,
@@ -167,6 +216,9 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
   auto remap_rejected_current_ids
     = std::unordered_set<VsmVirtualShadowMapId> {};
   auto eviction_decisions = std::vector<VsmPageAllocationDecision> {};
+  auto available_physical_pages_by_slice
+    = std::vector<std::vector<VsmPhysicalPageIndex>>(
+      seam.physical_pool.slice_count);
 
   for (std::size_t i = 0; i < requests.size(); ++i) {
     auto& pending = pending_requests[i];
@@ -191,6 +243,16 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
     }
 
     pending.page_table_index = *page_table_index;
+    const auto target_slice
+      = ResolveTargetSlice(seam.physical_pool, requests[i].flags);
+    if (!target_slice.has_value()) {
+      pending.decision.action = VsmAllocationAction::kReject;
+      pending.decision.failure_reason
+        = VsmAllocationFailureReason::kInvalidRequest;
+      ++plan.rejected_page_count;
+      continue;
+    }
+    pending.target_slice = *target_slice;
     if (!request_index_by_key
           .emplace(RequestKey { .map_id = requests[i].map_id,
                      .page = requests[i].page },
@@ -216,22 +278,27 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
     }
   }
 
-  auto available_physical_pages = std::vector<VsmPhysicalPageIndex> {};
-  available_physical_pages.reserve(seam.physical_pool.tile_capacity);
-
   if (previous_frame != nullptr) {
     for (std::uint32_t page_index = 0;
       page_index < snapshot.physical_pages.size(); ++page_index) {
       const auto physical_page = VsmPhysicalPageIndex { .value = page_index };
+      const auto physical_page_slice
+        = TryResolvePhysicalPageSlice(seam.physical_pool, physical_page);
+      CHECK_F(physical_page_slice.has_value(),
+        "VsmPageAllocationPlanner: physical page {} must resolve to a valid "
+        "slice for the active pool layout",
+        physical_page.value);
       const auto& previous_meta = previous_frame->physical_pages[page_index];
       if (!previous_meta.is_allocated) {
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
       if (cache_data_state != VsmCacheDataState::kAvailable) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
@@ -240,7 +307,8 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         || remap_it->second.rejection_reason
           != VsmReuseRejectionReason::kNone) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
@@ -248,14 +316,16 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         seam.current_frame, previous_meta, remap_it->second);
       if (!translated.has_value()) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
       const auto request_it = request_index_by_key.find(*translated);
       if (request_it == request_index_by_key.end()) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
@@ -267,7 +337,15 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         || pending.decision.action == VsmAllocationAction::kInitializeOnly
         || pending.decision.action == VsmAllocationAction::kAllocateNew) {
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
+        continue;
+      }
+
+      if (pending.target_slice != *physical_page_slice) {
+        PushEvictionDecision(plan, eviction_decisions, physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
@@ -275,7 +353,8 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         pending.initialization_action = DetermineInitializationAction(
           seam, previous_meta, pending.decision.request);
         PushEvictionDecision(plan, eviction_decisions, physical_page);
-        available_physical_pages.push_back(physical_page);
+        available_physical_pages_by_slice[*physical_page_slice].push_back(
+          physical_page);
         continue;
       }
 
@@ -308,12 +387,20 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
   } else {
     for (std::uint32_t page_index = 0;
       page_index < snapshot.physical_pages.size(); ++page_index) {
-      available_physical_pages.push_back(
-        VsmPhysicalPageIndex { .value = page_index });
+      const auto physical_page = VsmPhysicalPageIndex { .value = page_index };
+      const auto physical_page_slice
+        = TryResolvePhysicalPageSlice(seam.physical_pool, physical_page);
+      CHECK_F(physical_page_slice.has_value(),
+        "VsmPageAllocationPlanner: physical page {} must resolve to a valid "
+        "slice for the active pool layout",
+        physical_page.value);
+      available_physical_pages_by_slice[*physical_page_slice].push_back(
+        physical_page);
     }
   }
 
-  std::size_t next_available_page = 0;
+  auto next_available_page_by_slice
+    = std::vector<std::size_t>(seam.physical_pool.slice_count, 0U);
   for (auto& pending : pending_requests) {
     if (pending.is_resolved
       || (pending.decision.action == VsmAllocationAction::kReject
@@ -330,6 +417,10 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
       continue;
     }
 
+    auto& next_available_page
+      = next_available_page_by_slice[pending.target_slice];
+    const auto& available_physical_pages
+      = available_physical_pages_by_slice[pending.target_slice];
     if (next_available_page >= available_physical_pages.size()) {
       pending.decision.action = VsmAllocationAction::kReject;
       pending.decision.failure_reason

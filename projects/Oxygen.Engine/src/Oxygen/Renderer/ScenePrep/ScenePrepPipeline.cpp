@@ -7,6 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
+#include <Oxygen/Scene/SceneTraversal.h>
 
 namespace oxygen::engine::sceneprep {
 
@@ -58,42 +59,39 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
     // Reserve an upper bound to minimize reallocations in producer
     state.ReserveCapacityForItems(items.size());
 
-    for (const auto& node_impl : items) {
-      if (const auto light_manager = state.GetLightManager()) {
-        light_manager->CollectFromNode(node_impl);
-      }
-      if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
-        // Skip node if RenderItemProto construction fails (missing components)
-        continue;
-      }
-      DLOG_F(3, "Node: {}", node_impl.GetName());
-      try {
-        // Track collected count before running collection for this node so we
-        // can capture indices/nodes added by the producer.
-        RenderItemProto item { node_impl };
-        CollectImpl(ctx_, *prep_state_, item);
-
-        // If we are in Frame-phase (no view), cache a reference to the node
-        // and view-invariant extraction outputs for faster per-view iteration
-        // later. Producers may emit multiple items per node;
-        // `AddFilteredSceneNode` deduplicates consecutive inserts to avoid
-        // repeating the same node multiple times.
-        if (!ctx_->HasView() && !item.IsDropped()) {
-          prep_state_->CacheNodeBasics(&node_impl,
-            ScenePrepState::CachedNodeBasics {
-              .cast_shadows = item.CastsShadows(),
-              .receive_shadows = item.ReceivesShadows(),
-              .world_transform = item.GetWorldTransform(),
-              .geometry = item.Geometry(),
-              .transform_handle = item.GetTransformHandle(),
-            });
-          prep_state_->AddFilteredSceneNode(&node_impl);
+    auto traversal = scene::SceneTraversal(scene.shared_from_this());
+    static_cast<void>(
+      traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
+        const auto& node_impl = *visited.node_impl;
+        if (const auto light_manager = state.GetLightManager()) {
+          light_manager->CollectFromNode(visited.handle, node_impl);
         }
+        if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+          return scene::VisitResult::kContinue;
+        }
+        DLOG_F(3, "Node: {}", node_impl.GetName());
+        try {
+          RenderItemProto item { node_impl, visited.handle };
+          CollectImpl(ctx_, *prep_state_, item);
 
-      } catch (const std::exception& ex) {
-        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
-      }
-    }
+          if (!ctx_->HasView() && !item.IsDropped()) {
+            prep_state_->CacheNodeBasics(&node_impl,
+              ScenePrepState::CachedNodeBasics {
+                .node_handle = item.GetNodeHandle(),
+                .cast_shadows = item.CastsShadows(),
+                .receive_shadows = item.ReceivesShadows(),
+                .world_transform = item.GetWorldTransform(),
+                .geometry = item.Geometry(),
+                .transform_handle = item.GetTransformHandle(),
+              });
+            prep_state_->AddFilteredSceneNode(&node_impl);
+          }
+
+        } catch (const std::exception& ex) {
+          LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+        }
+        return scene::VisitResult::kContinue;
+      }));
   }
 }
 
@@ -118,21 +116,25 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
   const auto items = node_table.Items();
   state.ReserveCapacityForItems(items.size());
 
-  for (const auto& node_impl : items) {
-    if (const auto light_manager = state.GetLightManager()) {
-      light_manager->CollectFromNode(node_impl);
-    }
-    if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
-      continue;
-    }
-    DLOG_F(3, "Node: {}", node_impl.GetName());
-    try {
-      RenderItemProto item { node_impl };
-      CollectImpl(ctx_, *prep_state_, item);
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
-    }
-  }
+  auto traversal = scene::SceneTraversal(scene.shared_from_this());
+  static_cast<void>(
+    traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
+      const auto& node_impl = *visited.node_impl;
+      if (const auto light_manager = state.GetLightManager()) {
+        light_manager->CollectFromNode(visited.handle, node_impl);
+      }
+      if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+        return scene::VisitResult::kContinue;
+      }
+      DLOG_F(3, "Node: {}", node_impl.GetName());
+      try {
+        RenderItemProto item { node_impl, visited.handle };
+        CollectImpl(ctx_, *prep_state_, item);
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+      }
+      return scene::VisitResult::kContinue;
+    }));
 }
 
 auto ScenePrepPipeline::Finalize() -> void

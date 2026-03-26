@@ -46,6 +46,32 @@ namespace {
 
   constexpr std::uint32_t kThreadGroupSize = 8U;
 
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  template <typename Resource>
+  auto UnregisterResourceIfPresent(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+    auto& registry = gfx.GetResourceRegistry();
+    if (registry.Contains(*resource)) {
+      registry.UnRegisterResource(*resource);
+    }
+  }
+
   struct alignas(packing::kShaderDataFieldAlignment)
     VsmPageRequestGeneratorPassConstants {
     ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
@@ -92,6 +118,8 @@ struct VsmPageRequestGeneratorPass::Impl {
   void* projection_mapped_ptr { nullptr };
   void* request_clear_mapped_ptr { nullptr };
   void* pass_constants_mapped_ptr { nullptr };
+  std::uint32_t projection_capacity { 0U };
+  std::uint32_t request_capacity { 0U };
 
   ShaderVisibleIndex projection_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex request_flags_uav { kInvalidShaderVisibleIndex };
@@ -123,29 +151,35 @@ struct VsmPageRequestGeneratorPass::Impl {
     }
 
     if (gfx != nullptr) {
-      auto& registry = gfx->GetResourceRegistry();
-      const auto unregister_if_present = [&](const auto& resource) {
-        if (resource && registry.Contains(*resource)) {
-          registry.UnRegisterResource(*resource);
-        }
-      };
-
-      unregister_if_present(pass_constants_buffer);
-      unregister_if_present(request_clear_buffer);
-      unregister_if_present(request_flags_buffer);
-      unregister_if_present(projection_upload_buffer);
-      unregister_if_present(projection_buffer);
+      UnregisterResourceIfPresent(*gfx, pass_constants_buffer);
+      UnregisterResourceIfPresent(*gfx, request_clear_buffer);
+      UnregisterResourceIfPresent(*gfx, request_flags_buffer);
+      UnregisterResourceIfPresent(*gfx, projection_upload_buffer);
+      UnregisterResourceIfPresent(*gfx, projection_buffer);
     }
   }
 
-  auto EnsureProjectionBuffer() -> void
+  auto EnsureProjectionBuffer(const std::uint32_t required_capacity) -> void
   {
-    if (projection_buffer) {
+    if (required_capacity == 0U) {
+      return;
+    }
+    if (projection_buffer && projection_upload_buffer
+      && projection_capacity >= required_capacity) {
       return;
     }
 
-    const auto buffer_size
-      = static_cast<std::uint64_t>(config->max_projection_count)
+    if (projection_upload_buffer && projection_mapped_ptr != nullptr) {
+      projection_upload_buffer->UnMap();
+      projection_mapped_ptr = nullptr;
+    }
+    UnregisterResourceIfPresent(*gfx, projection_upload_buffer);
+    UnregisterResourceIfPresent(*gfx, projection_buffer);
+    projection_upload_buffer.reset();
+    projection_buffer.reset();
+    projection_srv = kInvalidShaderVisibleIndex;
+
+    const auto buffer_size = static_cast<std::uint64_t>(required_capacity)
       * sizeof(VsmPageRequestProjection);
     const graphics::BufferDesc desc {
       .size_bytes = buffer_size,
@@ -157,10 +191,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     CHECK_NOTNULL_F(
       projection_buffer.get(), "Failed to create VSM projection buffer");
     projection_buffer->SetName(desc.debug_name);
-
-    auto& registry = gfx->GetResourceRegistry();
-    auto& allocator = gfx->GetDescriptorAllocator();
-    registry.Register(projection_buffer);
+    RegisterResourceIfNeeded(*gfx, projection_buffer);
 
     const graphics::BufferDesc upload_desc {
       .size_bytes = buffer_size,
@@ -172,13 +203,14 @@ struct VsmPageRequestGeneratorPass::Impl {
     CHECK_NOTNULL_F(projection_upload_buffer.get(),
       "Failed to create VSM projection upload buffer");
     projection_upload_buffer->SetName(upload_desc.debug_name);
-    registry.Register(projection_upload_buffer);
+    RegisterResourceIfNeeded(*gfx, projection_upload_buffer);
 
     projection_mapped_ptr
       = projection_upload_buffer->Map(0U, upload_desc.size_bytes);
     CHECK_NOTNULL_F(
       projection_mapped_ptr, "Failed to map VSM projection buffer");
 
+    auto& allocator = gfx->GetDescriptorAllocator();
     auto srv_handle
       = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
@@ -190,17 +222,33 @@ struct VsmPageRequestGeneratorPass::Impl {
     srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     srv_desc.range = { 0U, desc.size_bytes };
     srv_desc.stride = sizeof(VsmPageRequestProjection);
+    auto& registry = gfx->GetResourceRegistry();
     registry.RegisterView(*projection_buffer, std::move(srv_handle), srv_desc);
+    projection_capacity = required_capacity;
   }
 
-  auto EnsureRequestBuffers() -> void
+  auto EnsureRequestBuffers(const std::uint32_t required_capacity) -> void
   {
-    if (request_flags_buffer && request_clear_buffer) {
+    if (required_capacity == 0U) {
+      return;
+    }
+    if (request_flags_buffer && request_clear_buffer
+      && request_capacity >= required_capacity) {
       return;
     }
 
-    const auto buffer_size
-      = static_cast<std::uint64_t>(config->max_virtual_page_count)
+    if (request_clear_buffer && request_clear_mapped_ptr != nullptr) {
+      request_clear_buffer->UnMap();
+      request_clear_mapped_ptr = nullptr;
+    }
+    UnregisterResourceIfPresent(*gfx, request_clear_buffer);
+    UnregisterResourceIfPresent(*gfx, request_flags_buffer);
+    request_clear_buffer.reset();
+    request_flags_buffer.reset();
+    request_flags_uav = kInvalidShaderVisibleIndex;
+    request_flags_srv = kInvalidShaderVisibleIndex;
+
+    const auto buffer_size = static_cast<std::uint64_t>(required_capacity)
       * sizeof(VsmShaderPageRequestFlags);
     auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
@@ -215,7 +263,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     CHECK_NOTNULL_F(
       request_flags_buffer.get(), "Failed to create VSM request flag buffer");
     request_flags_buffer->SetName(flags_desc.debug_name);
-    registry.Register(request_flags_buffer);
+    RegisterResourceIfNeeded(*gfx, request_flags_buffer);
 
     const graphics::BufferDesc clear_desc {
       .size_bytes = buffer_size,
@@ -227,7 +275,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     CHECK_NOTNULL_F(
       request_clear_buffer.get(), "Failed to create VSM request clear buffer");
     request_clear_buffer->SetName(clear_desc.debug_name);
-    registry.Register(request_clear_buffer);
+    RegisterResourceIfNeeded(*gfx, request_clear_buffer);
 
     request_clear_mapped_ptr
       = request_clear_buffer->Map(0U, clear_desc.size_bytes);
@@ -262,6 +310,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     srv_desc.stride = sizeof(VsmShaderPageRequestFlags);
     registry.RegisterView(
       *request_flags_buffer, std::move(srv_handle), srv_desc);
+    request_capacity = required_capacity;
   }
 
   auto EnsurePassConstantsBuffer() -> void
@@ -283,7 +332,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     CHECK_NOTNULL_F(
       pass_constants_buffer.get(), "Failed to create VSM request constants");
     pass_constants_buffer->SetName(desc.debug_name);
-    registry.Register(pass_constants_buffer);
+    RegisterResourceIfNeeded(*gfx, pass_constants_buffer);
 
     pass_constants_mapped_ptr = pass_constants_buffer->Map(0U, desc.size_bytes);
     CHECK_NOTNULL_F(
@@ -460,8 +509,10 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
     co_return;
   }
 
-  impl_->EnsureProjectionBuffer();
-  impl_->EnsureRequestBuffers();
+  impl_->EnsureProjectionBuffer(
+    std::max(impl_->config->max_projection_count, GetProjectionCount()));
+  impl_->EnsureRequestBuffers(
+    std::max(impl_->config->max_virtual_page_count, impl_->virtual_page_count));
   impl_->EnsurePassConstantsBuffer();
 
   if (!impl_->frame_projections.empty()) {
