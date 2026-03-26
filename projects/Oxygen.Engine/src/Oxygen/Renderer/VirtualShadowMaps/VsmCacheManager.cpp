@@ -446,6 +446,23 @@ auto VsmCacheManager::PublishStaticPrimitivePageFeedback(
     runtime_state_.current_frame->snapshot.frame_generation, published.size());
 }
 
+auto VsmCacheManager::PublishCurrentFrameHzbAvailability(
+  const bool is_current_frame_hzb_data_available) -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "PublishCurrentFrameHzbAvailability requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "PublishCurrentFrameHzbAvailability requires a committed current frame");
+
+  runtime_state_.current_frame->snapshot.is_hzb_data_available
+    = is_current_frame_hzb_data_available;
+
+  DLOG_F(2,
+    "published current-frame HZB availability generation={} available={}",
+    runtime_state_.current_frame->snapshot.frame_generation,
+    is_current_frame_hzb_data_available);
+}
+
 auto VsmCacheManager::ExtractFrameData() -> void
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,

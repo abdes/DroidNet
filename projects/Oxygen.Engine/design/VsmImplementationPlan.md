@@ -10,6 +10,13 @@ Cross-references:
 - `VsmCacheManagerAndPageAllocationImplementationPlan.md` — completed cache-manager/allocation plan (Phases 0–8 done)
 - `VsmShadowRasterizerImplementationPlan.md` — active Phase F sub-plan
 
+Implementation execution rules
+
+- Architecture is binding. No phase may deviate from `VirtualShadowMapArchitecture.md` without the user's explicit approval recorded first.
+- When a bug is found in an in-progress slice, the response must be professional and architecture-compliant: investigate the bug, identify the failing contract, and fix it within the approved design if at all possible.
+- Do not declare that an entire slice must be reverted just because a bug was found. Reversion is a last-resort recovery action, not a default response.
+- No turning back to shortcuts, no parallel legacy path, and no hacks to satisfy a test while violating the architecture.
+
 CPU-GPU ABI Guidelines
 
 - keep rich CPU cache/state in CPU-only structs/classes,
@@ -72,7 +79,7 @@ implemented cache/allocation slice:
 | ☑ | E | Page flag propagation, initialization, and screen-space HZB passes | Stages 9–11 plus renderer-level `ScreenHzbBuildPass`; hierarchical flags, mapped-mip propagation, selective page init, and screen-space HZB available for Phase F culling |
 | ☑ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
 | ☑ | G | Static/Dynamic Merge pass | Dirty-page static depth is merged into the lighting-visible dynamic slice through `VsmStaticDynamicMergePass` |
-| ☐ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild |
+| ☑ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild and current/previous-frame HZB availability publication for reuse gating |
 | ☐ | I | Projection and Composite pass | Screen-space shadow factor generation for directional + local lights |
 | ☐ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
 | ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
@@ -399,20 +406,38 @@ Validation evidence on 2026-03-26:
 
 **Architecture ref:** §3.7, §11, stage 14
 
+**Status:** completed on 2026-03-26.
+
 **Deliverables:**
 
-- [ ] Create `VsmHzbUpdaterPass` inheriting `ComputeRenderPass`
-- [ ] Compute shader `VsmHzbBuild.hlsl`:
+- [x] Create `VsmHzbUpdaterPass` inheriting `ComputeRenderPass`
+- [x] Compute shader `VsmHzbBuild.hlsl`:
   - Select dirty/newly-allocated/forced pages for HZB rebuild
   - Build per-page HZB mip chain from shadow depth texture
   - Fold dirty/invalidation scratch flags into persistent physical page metadata
-- [ ] Selective rebuild: only touched pages, not entire pool
-- [ ] HZB top-level build for coarse occlusion queries
-- [ ] Integration test: verify HZB mip chain correctness after shadow rasterization
+- [x] Selective rebuild: only touched pages, not entire pool
+- [x] HZB top-level build for coarse occlusion queries
+- [x] Integration test: verify HZB mip chain correctness after shadow rasterization
 
 **Dependencies:** Phase F (shadow depth must exist before HZB build), Phase G (merge before HZB)
 
 **Exit gate:** HZB mip chain is correct for dirty pages; previous-frame HZB is usable for next-frame culling.
+
+Validation evidence on 2026-03-26:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmHzbUpdaterPass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmHzbBuild.hlsl`
+- wired the pass and shader into `src/Oxygen/Renderer/CMakeLists.txt`, `src/Oxygen/Renderer/Test/CMakeLists.txt`, and `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+- extended cache-manager continuity publication via `VsmCacheManager::PublishCurrentFrameHzbAvailability(...)` and `is_hzb_data_available` propagation across extract/reuse gating
+- added focused GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmHzbUpdaterPass_test.cpp`
+- kept the documented compact selected-page-list architecture and fixed the implementation bug by giving each dispatch a stable pass-constants CBV slice inside `VsmHzbUpdaterPass`, rather than changing Stage 14 semantics
+- built `oxygen-renderer` and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` for both `Debug` and `Release`
+- ran focused high-verbosity validation:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsSelectivelyAndClearsConsumedDirtyState`
+  - `out\\build-ninja\\bin\\Release\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsSelectivelyAndClearsConsumedDirtyState`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.CurrentFrameHzbAvailabilityRequiresExplicitPublicationBeforeExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.PublishedCurrentFrameHzbAvailabilityEnablesNextFrameReuseGating`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.CacheManagerHzbAvailabilityIsCompatibilityGated`
 
 ---
 

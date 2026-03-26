@@ -337,6 +337,15 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmStaticDynamicMerge.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmHzbBuild.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_SelectPages" },
+      EntryPoint { .type=kCompute, .name="CS_ClearScratchRect" },
+      EntryPoint { .type=kCompute, .name="CS_BuildPerPage" },
+      EntryPoint { .type=kCompute, .name="CS_BuildTopLevels" }
+    }
+  },
   // VSM runtime page-management shaders (stage 6-8)
   ShaderFileSpec {
     .path="Renderer/Vsm/VsmPageReuse.hlsl",
