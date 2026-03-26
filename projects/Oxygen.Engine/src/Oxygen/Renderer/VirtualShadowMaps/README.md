@@ -37,14 +37,18 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmCacheManager::PublishProjectionRecords(...)` publishes current-frame projection records on the committed cache frame and retains them on extraction
   - `VsmProjectionPass` projects directional and local-light VSM pages into a per-view screen-space shadow mask
   - `VsmShadowHelpers.hlsli` owns the Stage 15 page-table projection/sampling helpers used by the projection shaders
+- standalone Phase J scene invalidation contracts now exist:
+  - `VsmSceneInvalidationCoordinator` binds directly to the active `Scene` and rebinds cleanly across scene switches without modifying `SceneObserverSyncModule`
+  - `VsmSceneInvalidationCollector` translates scene mutations into explicit light-request and primitive-invalidation frame inputs
+  - `VsmCacheManager::BuildInvalidationWork(...)` merges scene-driven primitive invalidations with retained primitive history and static raster feedback
+  - `VsmInvalidationPass` executes the dedicated GPU invalidation stage against previous-frame page tables and physical metadata
 - Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
-  - that dedicated bucket now covers physical-pool ABI publication, request generation, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
+  - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
 
 ## Known Forward Gaps
 
-- Targeted invalidation currently queues CPU-side invalidation records and applies them to a planning copy of the previous extracted snapshot. This is intentionally shaped to stay compatible with the later dedicated GPU invalidation stage, but that GPU stage is not implemented yet.
-- Scene-mutation invalidation workloads are not implemented yet. Current invalidation is remap-key targeted only.
+- Phase J is implemented as a standalone invalidation slice, but it is not yet wired into a renderer-owned VSM shadow orchestrator. Phase K owns that renderer integration path.
 - The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K owns that integration.
 - The standalone Stage 15 projection pass now exists, but its shadow-mask output is still not wired into forward lighting. Phase K owns that renderer integration path.
 - Translucent-receiver transmission sampling for VSM-projected shadows is not integrated yet. That stays deferred until the renderer path actually consumes the Stage 15 mask.

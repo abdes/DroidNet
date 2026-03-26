@@ -334,6 +334,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   ShaderFileSpec {
+    .path="Renderer/Vsm/VsmInvalidation.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
     .path="Renderer/Vsm/VsmStaticDynamicMerge.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },

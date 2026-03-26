@@ -63,7 +63,7 @@ implemented cache/allocation slice:
 | Compute pass base | `ComputeRenderPass` | Base class for VSM compute passes |
 | Graphics pass base | `GraphicsRenderPass` | Base class for VSM raster passes |
 | Forward lighting shader | `ForwardDirectLighting.hlsli` | Calls `ComputeShadowVisibility()`; swap point for VSM |
-| Scene observer system | `ISceneObserver`, `SceneObserverSyncModule` | Mutation dispatch for invalidation |
+| Scene observer system | `ISceneObserver`, `Scene` | Mutation dispatch for invalidation |
 | Render graph factory | `Renderer::RegisterViewRenderGraph()` | Per-view render graph composition |
 
 ---
@@ -81,7 +81,7 @@ implemented cache/allocation slice:
 | ☑ | G | Static/Dynamic Merge pass | Dirty-page static depth is merged into the lighting-visible dynamic slice through `VsmStaticDynamicMergePass` |
 | ☑ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild and current/previous-frame HZB availability publication for reuse gating |
 | ☑ | I | Projection and Composite pass | Standalone screen-space shadow factor generation for directional + local lights |
-| ☐ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
+| ☑ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
 | ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
 | ☐ | L-a | Validation automation and workflow foundation | Automated RenderScene/demo control, capture, CVar setup, and workflow docs exist for repeatable VSM validation |
 | ☐ | L-b | Functional validation | VSM renders correct results across representative existing and purpose-built scenes |
@@ -498,23 +498,71 @@ Validation evidence on 2026-03-26:
 
 **Deliverables:**
 
-- [ ] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
+- [ ] Extend `VsmCacheManager` invalidation state to match the architecture contract
+ - [x] Extend `VsmCacheManager` invalidation state to match the architecture contract
+  - Track per-light rendered primitive history needed to translate scene mutations into affected cached entries
+  - Track recently removed primitives so stale slot reuse cannot corrupt invalidation targeting
+  - Build a prepared invalidation workload from scene changes plus static raster feedback instead of relying on ad hoc remap-key calls alone
+- [x] Create `VsmSceneInvalidationCollector` implementing `ISceneObserver`
   - Subscribe to relevant mutation events
-  - Map affected scene nodes to VSM remap keys
-  - Queue targeted invalidation payloads
-- [ ] GPU invalidation pass `VsmInvalidation.hlsl`:
+  - Resolve affected renderable nodes into invalidation workload inputs
+  - Queue scene-driven invalidation records without mutating cache state immediately
+- [x] GPU invalidation pass `VsmInvalidation.hlsl`:
   - Project changed primitive bounds into previous-frame shadow space
   - Mark invalidation bits in previous-frame physical page metadata
   - Respect scope control (static, dynamic, or both)
-- [ ] Create `VsmInvalidationPass` class
-- [ ] Wire collector into `SceneObserverSyncModule` registration
-- [ ] Feed queued invalidations through `VsmCacheManager::InvalidateLocalLights()` / `InvalidateDirectionalClipmaps()`
-- [ ] Consume raster feedback records so static-geometry mutations can refine page-level invalidation beyond remap-key routing alone
-- [ ] Test: add/remove/move a mesh → verify only affected pages are invalidated
+- [x] Create `VsmInvalidationPass` class
+- [x] Wire collector directly into the active `Scene` observer registration
+  - Use `FrameContext` / render-context scene knowledge to bind the collector to the current scene
+  - Handle scene switches by unregistering from the old scene and registering on the new one
+  - Do not change `SceneObserverSyncModule` for VSM-specific needs
+- [x] Feed queued invalidations through the cache-manager invalidation workflow
+  - Preserve the existing targeted remap-key APIs for explicit callers
+  - Route scene-driven invalidation through the prepared workload path required by the architecture
+- [x] Consume raster feedback records so static-geometry mutations can refine page-level invalidation beyond remap-key routing alone
+- [x] Test: add/remove/move a mesh → verify only affected pages are invalidated
+
+Phase-scope note:
+
+- Phase `J` delivers the standalone scene-observer → cache-manager → GPU invalidation slice through `VsmSceneInvalidationCoordinator`, `VsmSceneInvalidationCollector`, `VsmCacheManager::BuildInvalidationWork(...)`, and `VsmInvalidationPass`.
+- It intentionally uses direct `Scene` observer registration and does **not** modify `SceneObserverSyncModule`.
+- Renderer-wide orchestration of this slice inside the future VSM shadow backend remains Phase `K`.
 
 **Dependencies:** Scene observer system (exists), cache manager invalidation APIs (exist)
 
 **Exit gate:** Scene-driven invalidation correctly marks affected pages; unaffected cached pages remain valid.
+
+Validation evidence on 2026-03-26:
+
+- implemented direct-scene observer owner:
+  - `src/Oxygen/Renderer/VirtualShadowMaps/VsmSceneInvalidationCoordinator.h/.cpp`
+- implemented scene-mutation collector and scene-facing history/binding records:
+  - `src/Oxygen/Renderer/VirtualShadowMaps/VsmSceneInvalidationCollector.h/.cpp`
+- extended cache-manager invalidation state and workload preparation:
+  - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h/.cpp`
+  - `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h`
+  - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h`
+- implemented standalone GPU invalidation stage:
+  - `src/Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h/.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInvalidation.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInvalidationWorkItem.hlsli`
+- built incrementally in `out/build-ninja` (`Debug`):
+  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
+  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
+- ran focused high-verbosity validation:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe -v 9 --gtest_filter=VsmSceneObserverIntegrationTest.DirectSceneObserverRegistrationDeliversSceneMutationsIntoCollectorDrains`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe -v 9 --gtest_filter=VsmSceneObserverIntegrationTest.DirectSceneObserverRebindingStopsDeliveringOldSceneMutations`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainPrimitiveInvalidationRecordsMergesTransformAndDestroyIntoSortedOutput`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainLightInvalidationRequestsAggregatesAndDeduplicatesRemapKeysByLightKind`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.ResetClearsPublishedStateAndPendingSceneMutations`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.RenderedPrimitiveHistoryAndStaticFeedbackArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkResolvesPreviousFrameHistoryAndStaticFeedbackIntoProjectionScopedItems`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkMergesDuplicatePrimitiveInvalidationsPerProjection`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkRejectsUnusableWorldBoundingSpheresAndLogsWarning`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.SceneLightInvalidationRequestsApplyThroughCoordinatorAndExistingTargetedApis`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.ScenePrimitiveInvalidationsFlowFromCoordinatorIntoPreparedGpuWorkload`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmInvalidationPassGpuTest.MarksOnlyOverlappedMappedPagesAndLeavesOtherPagesUntouched`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmInvalidationPassGpuTest.RespectsScopeFlagsAndIgnoresUnmappedOrOutOfRangeWorkItems`
 
 ---
 
