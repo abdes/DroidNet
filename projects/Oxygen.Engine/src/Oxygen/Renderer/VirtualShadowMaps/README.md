@@ -21,6 +21,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - GPU page-management execution for stages 6-8 through `VsmPageManagementPass`
   - GPU page lifecycle execution for stages 9-11 through `VsmPageFlagPropagationPass` and `VsmPageInitializationPass`
   - GPU static/dynamic depth merge for stage 13 through `VsmStaticDynamicMergePass`
+  - GPU per-page and top-level VSM HZB rebuild for stage 14 through `VsmHzbUpdaterPass`
   - deterministic available-page packing so GPU fresh allocation matches CPU plan order
 - renderer-level screen-space HZB prep is implemented through `ScreenHzbBuildPass`
   - `ForwardPipeline` now builds a per-view min-reduced screen HZB immediately after `DepthPrePass`
@@ -33,7 +34,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmPageRequestGeneration.*` keeps the projection/request-merging policy independently testable on CPU
 - Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
-  - that dedicated bucket now covers physical-pool ABI publication, request generation, page-management stage readback contracts, static/dynamic merge readback contracts, and screen-HZB history/readback contracts
+  - that dedicated bucket now covers physical-pool ABI publication, request generation, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, and screen-HZB history/readback contracts
 
 ## Known Forward Gaps
 
@@ -42,7 +43,6 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
 - Scene-mutation invalidation workloads are not implemented yet. Current invalidation is remap-key targeted only.
 - The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K owns that integration.
 - Phase F still needs to consume the screen-space HZB during instance culling. The HZB producer and previous-frame history contract now exist, but the shadow rasterizer does not use them yet.
-- Phase H still needs to rebuild the per-page VSM HZB selectively from the merged dynamic shadow slice. Phase G now supplies the merged dynamic result, but the HZB update stage itself is not implemented yet.
 
 ## Helper Policy
 

@@ -224,4 +224,67 @@ NOLINT_TEST_F(VsmCacheManagerOrchestrationTest,
       static_feedback.begin(), static_feedback.end()));
 }
 
+NOLINT_TEST_F(VsmCacheManagerOrchestrationTest,
+  CurrentFrameHzbAvailabilityRequiresExplicitPublicationBeforeExtraction)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase-h-orchestration-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(
+    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase-h-orchestration-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(nullptr);
+  const auto frame = MakeSinglePageLocalFrame(1ULL, 10U, "phase-h-prev", 1U);
+  const auto request = MakeSinglePageRequest(frame);
+
+  manager.BeginFrame(MakeSeam(pool_manager, frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-h-prev" });
+  manager.SetPageRequests(std::array { request });
+  static_cast<void>(manager.BuildPageAllocationPlan());
+  const auto& committed = manager.CommitPageAllocationFrame();
+  EXPECT_FALSE(committed.snapshot.is_hzb_data_available);
+
+  manager.ExtractFrameData();
+  ASSERT_NE(manager.GetPreviousFrame(), nullptr);
+  EXPECT_FALSE(manager.GetPreviousFrame()->is_hzb_data_available);
+}
+
+NOLINT_TEST_F(VsmCacheManagerOrchestrationTest,
+  PublishedCurrentFrameHzbAvailabilityEnablesNextFrameReuseGating)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase-h-orchestration-shadow2")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(
+    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase-h-orchestration-hzb2")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  auto manager = VsmCacheManager(nullptr);
+  const auto previous_frame
+    = MakeSinglePageLocalFrame(1ULL, 10U, "phase-h-hzb-prev", 1U);
+  const auto previous_request = MakeSinglePageRequest(previous_frame);
+
+  manager.BeginFrame(MakeSeam(pool_manager, previous_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-h-hzb-prev" });
+  manager.SetPageRequests(std::array { previous_request });
+  static_cast<void>(manager.BuildPageAllocationPlan());
+  static_cast<void>(manager.CommitPageAllocationFrame());
+  manager.PublishCurrentFrameHzbAvailability(true);
+  manager.ExtractFrameData();
+
+  ASSERT_NE(manager.GetPreviousFrame(), nullptr);
+  EXPECT_TRUE(manager.GetPreviousFrame()->is_hzb_data_available);
+  EXPECT_TRUE(manager.IsHzbDataAvailable());
+
+  const auto current_frame
+    = MakeSinglePageLocalFrame(2ULL, 20U, "phase-h-hzb-curr", 1U);
+  manager.BeginFrame(MakeSeam(pool_manager, current_frame, &previous_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-h-hzb-curr" });
+
+  EXPECT_TRUE(manager.IsHzbDataAvailable());
+}
+
 } // namespace

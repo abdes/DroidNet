@@ -74,7 +74,10 @@ namespace oxygen::renderer::vsm::detail {
   snapshot.pool_slice_count = seam.physical_pool.slice_count;
   snapshot.pool_depth_format = seam.physical_pool.depth_format;
   snapshot.pool_slice_roles = seam.physical_pool.slice_roles;
-  snapshot.is_hzb_data_available = seam.hzb_pool.is_available;
+  // The current-frame snapshot starts with no shadow-space HZB data published.
+  // Phase H explicitly marks this true only after the HZB updater has rebuilt
+  // the current frame's derived data.
+  snapshot.is_hzb_data_available = false;
   snapshot.virtual_frame = seam.current_frame;
   snapshot.light_cache_entries = BuildLightCacheEntries(seam.current_frame);
   snapshot.page_table.resize(seam.current_frame.total_page_table_entry_count);

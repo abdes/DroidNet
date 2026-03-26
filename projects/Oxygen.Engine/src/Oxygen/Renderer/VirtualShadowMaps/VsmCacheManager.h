@@ -43,6 +43,8 @@ public:
     std::span<const VsmPrimitiveIdentity> primitives) -> void;
   OXGN_RNDR_API auto PublishStaticPrimitivePageFeedback(
     std::span<const VsmStaticPrimitivePageFeedbackRecord> feedback) -> void;
+  OXGN_RNDR_API auto PublishCurrentFrameHzbAvailability(
+    bool is_current_frame_hzb_data_available) -> void;
 
   OXGN_RNDR_API auto ExtractFrameData() -> void;
   OXGN_RNDR_API auto InvalidateAll(VsmCacheInvalidationReason reason) -> void;
