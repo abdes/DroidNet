@@ -124,6 +124,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
+      "VirtualShadow/VsmStaticDynamicMergePass_test.cpp"
       "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
       DEPS
       oxygen::graphics-direct3d12
@@ -141,6 +142,7 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmPageManagementPass_test.cpp"
       "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
+      "VirtualShadow/VsmStaticDynamicMergePass_test.cpp"
       "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
   )
 endif()

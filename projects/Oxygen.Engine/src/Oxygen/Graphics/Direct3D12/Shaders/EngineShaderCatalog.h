@@ -333,6 +333,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmPageRequestGenerator.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmStaticDynamicMerge.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
   // VSM runtime page-management shaders (stage 6-8)
   ShaderFileSpec {
     .path="Renderer/Vsm/VsmPageReuse.hlsl",

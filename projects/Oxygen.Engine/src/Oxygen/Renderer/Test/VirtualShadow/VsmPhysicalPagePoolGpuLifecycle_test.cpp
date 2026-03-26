@@ -61,6 +61,7 @@ NOLINT_TEST_F(VsmPhysicalPagePoolGpuLifecycleTest,
   EXPECT_EQ(shadow_desc.texture_type, TextureType::kTexture2DArray);
   EXPECT_TRUE(shadow_desc.is_render_target);
   EXPECT_TRUE(shadow_desc.is_shader_resource);
+  EXPECT_FALSE(shadow_desc.is_uav);
 
   const auto metadata_desc = shadow_snapshot.metadata_buffer->GetDescriptor();
   EXPECT_EQ(metadata_desc.size_bytes,

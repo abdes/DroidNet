@@ -71,12 +71,15 @@ implemented cache/allocation slice:
 | ☑ | D | Physical page reuse and allocation GPU passes | GPU passes implement stages 6–8 (reuse, pack, allocate) |
 | ☑ | E | Page flag propagation, initialization, and screen-space HZB passes | Stages 9–11 plus renderer-level `ScreenHzbBuildPass`; hierarchical flags, mapped-mip propagation, selective page init, and screen-space HZB available for Phase F culling |
 | ☑ | F | Shadow Rasterizer pass | GPU-driven per-page shadow depth rendering with culling |
-| ☐ | G | Static/Dynamic Merge pass | Composite static slice into dynamic slice for dirty pages |
+| ☑ | G | Static/Dynamic Merge pass | Dirty-page static depth is merged into the lighting-visible dynamic slice through `VsmStaticDynamicMergePass` |
 | ☐ | H | HZB Updater pass | Selective per-page hierarchical Z-buffer rebuild |
 | ☐ | I | Projection and Composite pass | Screen-space shadow factor generation for directional + local lights |
 | ☐ | J | Scene invalidation integration | Scene observer → cache manager invalidation pipeline |
 | ☐ | K | VSM orchestrator and renderer integration | Wire all passes into ForwardPipeline; ShadowManager VSM policy path |
-| ☐ | L | End-to-end validation and performance tuning | Full frame renders correct shadows; profiling and budget tuning |
+| ☐ | L-a | Validation automation and workflow foundation | Automated RenderScene/demo control, capture, CVar setup, and workflow docs exist for repeatable VSM validation |
+| ☐ | L-b | Functional validation | VSM renders correct results across representative existing and purpose-built scenes |
+| ☐ | L-c | Performance characterization and tuning | Per-stage timings and utilization baselines are measured; major hot paths are characterized and tuned |
+| ☐ | L-d | Budget tuning and default selection | Shipping-oriented VSM budgets/defaults are chosen from validated functional + performance evidence |
 
 ---
 
@@ -360,19 +363,35 @@ Validation evidence through `F4` on `2026-03-26`:
 
 **Architecture ref:** §3.8, §10, stage 13
 
+**Status:** completed on 2026-03-26.
+
 **Deliverables:**
 
-- [ ] Create `VsmStaticDynamicMergePass` inheriting `ComputeRenderPass`
-- [ ] Compute shader `VsmStaticDynamicMerge.hlsl`:
+- [x] Create `VsmStaticDynamicMergePass` inheriting `ComputeRenderPass`
+- [x] Compute shader `VsmStaticDynamicMerge.hlsl`:
   - For each dirty page: composite static slice (slice 1) into dynamic slice (slice 0)
   - Selection based on dirty flags and static-cache validity
-- [ ] Keep static recache separate from merge; this phase must consume static-slice results, not turn merge into a reverse refresh path
-- [ ] Support optional disable when static caching is off (single-slice mode)
-- [ ] Unit test verifying merge direction and dirty-page selection
+- [x] Keep static recache separate from merge; this phase must consume static-slice results, not turn merge into a reverse refresh path
+- [x] Support optional disable when static caching is off (single-slice mode)
+- [x] Unit test verifying merge direction and dirty-page selection
 
 **Dependencies:** Phase F (dirty flags set during rasterization)
 
 **Exit gate:** After merge, dynamic slice contains correct composite of static + dynamic shadow content.
+
+Validation evidence on 2026-03-26:
+
+- implemented `src/Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h/.cpp`
+- implemented `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmStaticDynamicMerge.hlsl`
+- wired the pass into `src/Oxygen/Renderer/CMakeLists.txt`, `src/Oxygen/Renderer/Test/CMakeLists.txt`, and `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+- added focused GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmStaticDynamicMergePass_test.cpp`
+- kept the physical shadow pool as a depth-backed non-UAV resource and merged through a dedicated float scratch atlas inside `VsmStaticDynamicMergePass`, so Phase G stays compatible with the existing raster/depth contract
+- revalidated the shadow-pool contract in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp`
+- built `oxygen-renderer`, `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused high-verbosity validation:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.CommitPublishesNonNullWorkingSetBuffersWithExpectedDescriptors`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmStaticDynamicMergePassGpuTest.*`
+- ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests|Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
 
@@ -487,32 +506,150 @@ Validation evidence through `F4` on `2026-03-26`:
 
 ---
 
-### Phase L — End-to-End Validation and Performance Tuning
+### Phase L-a — Validation Automation and Workflow Foundation
 
 **Architecture ref:** all sections
 
 **Deliverables:**
 
-- [ ] Create a VSM example/demo scene (extend existing `LightBench` or `RenderScene` example)
-- [ ] Visual regression tests: compare VSM output against reference images
-- [ ] Performance profiling:
-  - Measure per-stage GPU time using existing timestamp system
-  - Profile physical page utilization vs. budget
-  - Profile page request generation cost
-  - Identify hot paths for optimization
-- [ ] Budget tuning:
-  - Physical pool size defaults
-  - Distant-light refresh budget (§9.2)
-  - Unreferenced-entry retention window
+- [ ] Extend the `RenderScene` example and/or companion automation harness so a scripted run can:
+  - mount/select a cooked scene source deterministically
+  - apply a named CVar/test profile before load and before capture
+  - position/select the test camera and deterministic playback path
+  - trigger fixed-frame warmup, capture, and shutdown without interactive input
+  - emit screen captures, frame metrics, and log bundles into a predictable output folder
+- [ ] Add automated test scripts/helpers for Phase L execution:
+  - scene selection and mount orchestration
+  - screenshot/reference-image capture
+  - demo control while running (camera rails, playback sequencing, quit-on-complete)
+  - per-run metadata capture for scene name, renderer config, commit/build identity, and active CVar profile
+- [ ] Define canonical VSM validation CVar profiles covering at least:
+  - conventional shadows baseline
+  - VSM default functional validation
+  - VSM debug/diagnostic capture
+  - VSM stress/performance capture
+- [ ] Document the workflow and procedures for Phase L and future renderer validation:
+  - scene cooking/mount prerequisites
+  - how to execute automated captures locally and in CI-like runs
+  - how to regenerate/update reference images
+  - how to compare conventional vs. VSM output and interpret diffs
+  - how to collect logs/timings/artifacts for regression triage
+
+**Dependencies:** Phase K (full pipeline operational enough to drive end-to-end captures)
+
+**Exit gate:** A repeatable, documented automation workflow exists for scene setup, CVar configuration, scripted demo control, screenshot capture, and artifact collection; Phase L-b/L-c/L-d can execute without ad hoc manual setup.
+
+---
+
+### Phase L-b — Functional Validation
+
+**Architecture ref:** all sections
+
+**Deliverables:**
+
+- [ ] Establish and document the validation-scene contract for VSM image-based testing:
+  - every primary VSM validation scene must include at least one large, mostly continuous shadow receiver such as a floor, courtyard, road deck, or terrain patch
+  - the receiver must be large enough to expose page residency errors, stale-cache artifacts, clipmap seams, and incorrect local-light routing in screen captures
+  - scenes without such a receiver are auxiliary only; they may support scripting or stress experiments, but they are not sufficient as primary VSM correctness evidence
+- [ ] Build the functional validation matrix around scenario targets first, then bind each target to the best existing scene under `Examples/Content/scenes` that satisfies the large-receiver rule:
+  - baseline directional correctness on a simple static receiver/caster setup: `vsm-two-cubes`
+    - use for deterministic reference captures of contact placement, shadow extent, and obvious missing/stale-page artifacts on the large floor receiver
+  - detailed geometry and self-shadowing projected onto a broad receiver: `bottle-on-box`
+    - use for higher-frequency occluder silhouettes, self-shadow continuity on complex geometry, and contact behavior on the large floor receiver
+  - dynamic-object invalidation and rerender behavior over a broad receiver: `physics_domains`
+    - use for moving casters, stacked bodies, vehicle parts, and other animated/dynamic elements whose shadows are easy to inspect on the large ground plane
+  - longer-running camera/traversal coverage with a broad receiver and benchmark-friendly motion: `physics_domains_vsm_benchmark`
+    - use for repeatable long-path capture runs that exercise wider view movement, larger coverage, and accumulation of cache/update behavior while keeping a large ground receiver in frame
+- [ ] Explicitly exclude the current `cubes`, `instancing`, `multi-script`, and `proc-cubes` scenes from the primary VSM screenshot-validation set unless they are revised to add a large receiver:
+  - they can still be reused for auxiliary scripting, content, or stress experiments
+  - they are not acceptable as primary VSM correctness evidence in their current form
+- [ ] Create purpose-built new validation scenes where the repository lacks the right scenario with a large receiver:
+  - `vsm-directional-clipmap-scroll-yard`
+    - large courtyard/terrain receiver plus tall, uneven landmarks and a deterministic camera rail
+    - validates clipmap panning, reuse, page residency churn, and seam stability across long travel while the receiver keeps artifacts visible
+  - `vsm-point-light-face-courtyard`
+    - large courtyard receiver with one shadow-casting point light and six asymmetric caster groupings arranged to isolate cube-face coverage
+    - validates per-face routing, face-local updates, and neighboring-face isolation using shadows projected onto the shared receiver
+  - `vsm-static-dynamic-recache-yard`
+    - large plaza receiver with static architecture plus scripted dynamic movers crossing and leaving the receiver
+    - validates static recache, merge direction, invalidation scoping, and stale-page rejection where the receiver makes before/after differences obvious
+  - `vsm-time-of-day-courtyard`
+    - large receiver plus fixed architectural landmarks and scripted solar motion derived from the existing day/night behavior
+    - validates directional-light motion, temporal stability, and invalidation/reprojection behavior under continuously changing sun direction while preserving a stable receiver reference
+  - `vsm-transmission-courtyard`
+    - large receiver with translucent or thin-geometry test assets positioned to cast transmission-relevant shadows onto the receiver
+    - validates transmission sampling without regressing opaque receiver results
+- [ ] Visual regression coverage:
+  - compare VSM output against approved references for each validation scene/camera/CVar profile
+  - compare VSM against the conventional shadow path where parity is expected
+  - define acceptable-difference rules for cases where filter kernels or cache reuse make exact pixel matches unrealistic
+- [ ] Functional scenario checks must explicitly cover:
+  - directional clipmap scrolling
+  - local-light and point-light face selection
+  - static-cache refresh and merge correctness
+  - scene invalidation after transform/light changes
+  - transmission behavior on translucent receivers
+  - absence of obvious artifacts such as missing pages, stale pages, seams, flicker, or incorrect receiver selection
+
+**Dependencies:** Phase K, Phase L-a
+
+**Exit gate:** Functional validation passes for the defined scenario matrix using scenes that satisfy the large-receiver rule, required new scenes exist, and reference-image comparisons show acceptable results with no unresolved correctness regressions.
+
+---
+
+### Phase L-c — Performance Characterization and Tuning
+
+**Architecture ref:** all sections, with emphasis on renderer scheduling and timestamp instrumentation
+
+**Deliverables:**
+
+- [ ] Measure per-stage GPU time using the existing timestamp system across the Phase L-b scene matrix, at minimum for:
+  - page request generation
+  - page management
+  - page initialization
+  - shadow rasterization
+  - static/dynamic merge
+  - VSM HZB update
+  - projection/composite
+- [ ] Capture utilization and workload metrics per scene/profile:
+  - physical page pool occupancy and churn
+  - page request counts and newly allocated page counts
+  - rasterized page counts and per-light/update counts
+  - HZB rebuild counts
+- [ ] Add at least one explicit stress characterization run using high-pressure content, anchored on `physics_domains_vsm_benchmark` and a new `vsm-many-local-lights-courtyard-stress` scene if the existing benchmark is insufficient for dense local-light overlap
+- [ ] Identify and document hot paths, then perform targeted tuning where profiling shows clear payoff
+- [ ] Record before/after evidence for any tuning change so later budget work is based on measured behavior rather than intuition
+
+**Dependencies:** Phase K, Phase L-a, Phase L-b
+
+**Exit gate:** Representative scene runs have timestamped performance baselines, utilization data, and documented hot-path findings; major regressions are either fixed or explicitly tracked.
+
+---
+
+### Phase L-d — Budget Tuning and Default Selection
+
+**Architecture ref:** all sections, especially architecture §9.2
+
+**Deliverables:**
+
+- [ ] Tune and select default budgets/settings using the validated Phase L-b scenes and Phase L-c measurements:
+  - physical pool size defaults
+  - distant-local-light refresh budget (§9.2)
+  - unreferenced-entry retention window
   - HZB rebuild selectivity
-- [ ] Multi-light stress test: many local lights with varying screen footprints
-- [ ] Clipmap scrolling test: camera movement causing clipmap pan with correct reuse
-- [ ] Static-cache test: static geometry changes correctly trigger static invalidation path
-- [ ] Transmission validation: translucent receivers use the VSM transmission path without regressing opaque shadow results
+  - any default quality/performance CVar profiles introduced in Phase L-a
+- [ ] Define scene classes and target envelopes for the chosen defaults:
+  - deterministic small-scene validation
+  - dense-instance scenes
+  - moving/scenario-mutation scenes
+  - large-world clipmap traversal scenes
+  - local-light stress scenes
+- [ ] Verify the selected defaults preserve Phase L-b functional correctness while producing acceptable Phase L-c timings/utilization
+- [ ] Document the rationale for each chosen default and any known tradeoffs or fallback profiles
 
-**Dependencies:** Phase K (full pipeline operational)
+**Dependencies:** Phase K, Phase L-a, Phase L-b, Phase L-c
 
-**Exit gate:** VSM produces correct, performant shadows across representative scenes; no visual artifacts from caching, reuse, or invalidation.
+**Exit gate:** Default VSM budgets and quality profiles are selected from measured evidence, preserve functional correctness across the validation matrix, and are documented well enough to support future regression triage and retuning.
 
 ---
 
@@ -533,7 +670,10 @@ flowchart TD
     H --> I
     J["Phase J<br>Scene Invalidation"] --> K
     I --> K["Phase K<br>Orchestrator & Integration"]
-    K --> L["Phase L<br>Validation & Tuning"]
+    K --> La["Phase L-a<br>Automation & Workflow"]
+    La --> Lb["Phase L-b<br>Functional Validation"]
+    Lb --> Lc["Phase L-c<br>Performance"]
+    Lc --> Ld["Phase L-d<br>Budget Tuning"]
 ```
 
 Phase J (scene invalidation) can proceed in parallel with Phases C–I since it targets the CPU-side observer → cache manager path, which already exists.
@@ -632,5 +772,5 @@ src/Oxygen/Renderer/VirtualShadowMaps/
 1. **GPU-driven culling complexity** — Phase F (shadow rasterizer) is the most complex GPU pass. It is now split into `VsmShadowRasterizerImplementationPlan.md`; keep parent Phase F status incomplete until every slice there is validated.
 2. **Shader compilation pipeline** — Verify HLSL compilation infrastructure supports compute shaders in the `Vsm/` subdirectory before Phase B work begins.
 3. **CPU ↔ GPU struct parity** — Must be enforced from Phase B onward; drifts here cause silent corruption.
-4. **Performance budget** — Physical pool size and page request generation cost are the primary tuning knobs. Phase L must establish baselines before optimization.
+4. **Performance budget** — Physical pool size and page request generation cost are the primary tuning knobs. Phase L-b must establish functional confidence first, Phase L-c must produce the baselines, and only then should Phase L-d lock defaults.
 5. **Conventional shadow coexistence** — The conventional shadow path must remain functional throughout; never break it while adding VSM.
