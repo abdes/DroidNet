@@ -404,6 +404,11 @@ This is the core cache reuse engine.
 - When static caching is enabled, dirty pages have their rendered content merged:
   - Select pages where static cached content must be composited into the dynamic slice.
   - Composite static slice content into the dynamic slice using the fixed `slice1 -> slice0` direction.
+  - The physical shadow atlas remains a depth-backed resource; the merge pass must not require UAV access on that atlas.
+  - On D3D12, the merge therefore runs through a transient float scratch atlas:
+    1. copy the dynamic slice into scratch,
+    2. run compute merge against scratch,
+    3. copy the merged result back into the dynamic slice.
   - Any refresh of the static slice itself is handled by a separate static-recache path, not by reversing the merge direction.
 
 ### Stage 14 — HZB Update

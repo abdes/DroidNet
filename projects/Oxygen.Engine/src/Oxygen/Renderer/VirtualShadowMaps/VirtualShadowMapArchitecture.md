@@ -730,6 +730,15 @@ Why:
 
 This merge happens only for pages marked dirty.
 
+Resource contract:
+
+- the physical shadow atlas stays depth-backed and is not treated as a UAV target,
+- the merge direction remains fixed: static slice into dynamic slice,
+- on D3D12 the merge should use a transient float scratch atlas:
+  - copy dynamic depth into scratch,
+  - run the compute merge in scratch,
+  - copy the merged result back into the dynamic slice.
+
 Ownership:
 
 - `[CPU]` decides whether separate static caching exists at all
