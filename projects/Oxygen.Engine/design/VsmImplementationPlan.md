@@ -59,7 +59,7 @@ Stage-suite refactor status on `2026-03-27`:
   only malformed-input rejection tests mutate those published snapshots after real construction
 - the shared live-scene harness now lives in
   `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-  two-box lighting scenes through the dedicated Stage 1-6 executables
+  two-box lighting scenes through the dedicated Stage 1-8 executables
 - the shared live-scene harness now rotates test lights from the engine's
   `oxygen::space::move::Forward` basis instead of an ad hoc `-Z` basis, so
   spotlight and directional live-scene targets match engine transform reality
@@ -79,6 +79,7 @@ Stage-suite refactor status on `2026-03-27`:
 - Stage 6 physical-page reuse coverage now lives in the dedicated `VsmPageReuse` test program
 - Stage 7 available-page packing coverage now lives in the dedicated `VsmAvailablePages` test
   program
+- Stage 8 new-page-mapping coverage now lives in the dedicated `VsmPageMappings` test program
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -94,14 +95,16 @@ Stage-suite refactor status on `2026-03-27`:
   selective page initialization, shadow rasterization, static/dynamic merge, HZB update,
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
-  `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VirtualShadows`, and
-  `VirtualShadowGpuLifecycle`;
+  `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VsmAvailablePages`,
+  `VsmPageMappings`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
   `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`,
   `Oxygen.Renderer.VsmProjectionRecords.Tests`,
   `Oxygen.Renderer.VsmPageRequests.Tests`,
   `Oxygen.Renderer.VsmPageReuse.Tests`,
+  `Oxygen.Renderer.VsmAvailablePages.Tests`,
+  `Oxygen.Renderer.VsmPageMappings.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
@@ -143,6 +146,18 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 6 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageReuse.Tests.exe`
   and `4 tests from 1 test suite` passed
+- Stage 7 review and boundary rewrite used the UE5 reference-comparison rule through a subagent
+  audit before moving Stage 7 ownership into its dedicated executable
+- built `Oxygen.Renderer.VsmAvailablePages.Tests` in `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 7 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmAvailablePages.Tests.exe`
+  and `3 tests from 1 test suite` passed
+- Stage 8 review and boundary rewrite used the UE5 reference-comparison rule through a subagent
+  audit before moving Stage 8 ownership into its dedicated executable
+- built `Oxygen.Renderer.VsmPageMappings.Tests` in `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 8 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageMappings.Tests.exe`
+  and `3 tests from 1 test suite` passed
 - reran the shared-harness Stage 4 executable after the light-orientation harness fix:
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmProjectionRecords.Tests.exe`
   and `2 tests from 1 test suite` passed
@@ -429,6 +444,10 @@ Validation evidence on 2026-03-24:
 - Stage 7 ownership was later moved onto the dedicated
   `Oxygen.Renderer.VsmAvailablePages.Tests` executable with live-scene validation and the old
   synthetic `VsmPackAvailablePagesGpuTest` ownership was removed from
+  `VsmPageManagementPass_test.cpp`
+- Stage 8 ownership was later moved onto the dedicated
+  `Oxygen.Renderer.VsmPageMappings.Tests` executable with live-scene validation and the old
+  synthetic `VsmAllocateNewPagesGpuTest` ownership was removed along with
   `VsmPageManagementPass_test.cpp`
 
 ---
