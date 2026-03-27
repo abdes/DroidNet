@@ -434,6 +434,9 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
     signature = graphics->GetDrawRootConstantCommandSignature(
       current_graphics_root_signature_);
     break;
+  case IndirectCommandLayout::kDispatch:
+    signature = graphics->GetDispatchCommandSignature();
+    break;
   }
   DCHECK_NOTNULL_F(signature);
 
@@ -473,6 +476,9 @@ auto CommandRecorder::ExecuteIndirectCounted(
     signature = graphics->GetDrawRootConstantCommandSignature(
       current_graphics_root_signature_);
     break;
+  case IndirectCommandLayout::kDispatch:
+    throw std::runtime_error(
+      "ExecuteIndirectCounted does not support dispatch arguments");
   }
   DCHECK_NOTNULL_F(signature);
 
@@ -1113,13 +1119,14 @@ auto CommandRecorder::SetRenderTargets(
     rtv_handles.push_back({ .ptr = rtv->AsInteger() });
   }
 
+  D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle {};
   const D3D12_CPU_DESCRIPTOR_HANDLE* dsv_handle_ptr { nullptr };
   if (dsv.has_value()) {
     if (!(*dsv)->IsValid()) {
       LOG_F(ERROR, "invalid depth/stencil view: {}, dropped",
         nostd::to_string(*dsv).c_str());
     } else {
-      D3D12_CPU_DESCRIPTOR_HANDLE dsv_handle { .ptr = (*dsv)->AsInteger() };
+      dsv_handle.ptr = (*dsv)->AsInteger();
       dsv_handle_ptr = &dsv_handle;
     }
   }

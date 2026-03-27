@@ -443,6 +443,26 @@ auto Graphics::GetDrawRootConstantCommandSignature(
   return raw_signature;
 }
 
+auto Graphics::GetDispatchCommandSignature() const -> ID3D12CommandSignature*
+{
+  if (!dispatch_command_signature_) {
+    D3D12_INDIRECT_ARGUMENT_DESC args[1] {};
+    args[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+
+    D3D12_COMMAND_SIGNATURE_DESC desc {};
+    desc.ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS);
+    desc.NumArgumentDescs = 1U;
+    desc.pArgumentDescs = args;
+    desc.NodeMask = 0U;
+
+    if (FAILED(GetCurrentDevice()->CreateCommandSignature(
+          &desc, nullptr, IID_PPV_ARGS(&dispatch_command_signature_)))) {
+      throw std::runtime_error("Failed to create dispatch command signature");
+    }
+  }
+  return dispatch_command_signature_.Get();
+}
+
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::unique_ptr<Surface>

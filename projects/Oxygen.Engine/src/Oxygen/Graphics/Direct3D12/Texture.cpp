@@ -516,10 +516,14 @@ auto Texture::CreateDepthStencilView(D3D12_CPU_DESCRIPTOR_HANDLE& dh_cpu,
   -> void
 {
   sub_resources = sub_resources.Resolve(desc_, true);
+  const auto resolved_format
+    = format == Format::kUnknown ? desc_.format : format;
+  CHECK_NE_F(resolved_format, Format::kUnknown,
+    "Texture `{}` cannot create a DSV without a typed format", GetName());
 
   D3D12_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
 
-  dsv_desc.Format = GetDxgiFormatMapping(format).rtv_format;
+  dsv_desc.Format = GetDxgiFormatMapping(resolved_format).rtv_format;
 
   if (is_read_only) {
     dsv_desc.Flags |= D3D12_DSV_FLAG_READ_ONLY_DEPTH;
