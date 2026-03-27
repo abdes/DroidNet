@@ -168,6 +168,26 @@ NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllWaitsForRequestedTickets)
   EXPECT_EQ((*results)[1].bytes_copied.get(), 12U);
 }
 
+NOLINT_TEST_F(
+  ReadbackTrackerTest, AwaitReturnsNotFoundWhenTicketIsRetiredWhileWaiting)
+{
+  tracker.OnFrameStart(oxygen::frame::Slot { 2 });
+  const auto ticket = tracker.Register(
+    FenceValue { 52 }, SizeBytes { 20 }, "retired-while-awaiting");
+
+  auto future = std::async(
+    std::launch::async, [&]() { return tracker.Await(ticket.id); });
+
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
+    std::future_status::timeout);
+
+  tracker.OnFrameStart(oxygen::frame::Slot { 2 });
+
+  const auto result = future.get();
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), ReadbackError::kTicketNotFound);
+}
+
 NOLINT_TEST_F(ReadbackTrackerTest, CancelMissingTicketReturnsNotFound)
 {
   const auto cancelled

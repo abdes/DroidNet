@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ReadbackTracker.h>
 
 namespace oxygen::graphics {
@@ -96,15 +98,45 @@ auto ReadbackTracker::Await(const ReadbackTicketId id)
   -> std::expected<ReadbackResult, ReadbackError>
 {
   std::unique_lock lk(mu_);
+  constexpr auto kAwaitWarningInterval = std::chrono::seconds { 1 };
+  uint64_t warning_count = 0;
 
-  const auto it = entries_.find(id);
-  if (it == entries_.end()) {
-    return std::unexpected(ReadbackError::kTicketNotFound);
+  while (true) {
+    const auto it = entries_.find(id);
+    if (it == entries_.end()) {
+      return std::unexpected(ReadbackError::kTicketNotFound);
+    }
+    if (it->second.completed) {
+      return it->second.result;
+    }
+
+    const auto woke_for_completion
+      = cv_.wait_for(lk, kAwaitWarningInterval, [&]() noexcept {
+          const auto current = entries_.find(id);
+          return current == entries_.end() || current->second.completed;
+        });
+    if (woke_for_completion) {
+      continue;
+    }
+
+    const auto current = entries_.find(id);
+    if (current == entries_.end()) {
+      return std::unexpected(ReadbackError::kTicketNotFound);
+    }
+
+    ++warning_count;
+    const auto waited_ms
+      = std::chrono::duration_cast<std::chrono::milliseconds>(
+        kAwaitWarningInterval * static_cast<int64_t>(warning_count))
+          .count();
+    LOG_F(WARNING,
+      "ReadbackTracker::Await still waiting for ticket {} (`{}`) after {} ms "
+      "(ticket_fence={} completed_fence={} creation_slot={}). If no queue "
+      "completion can advance this ticket, the caller is deadlocked.",
+      current->second.ticket.id.get(), current->second.name.c_str(), waited_ms,
+      current->second.ticket.fence.get(), completed_fence_.Get().get(),
+      current->second.creation_slot.get());
   }
-
-  cv_.wait(lk, [&]() noexcept { return it->second.completed; });
-
-  return it->second.result;
 }
 
 auto ReadbackTracker::AwaitAll(const std::span<const ReadbackTicket> tickets)

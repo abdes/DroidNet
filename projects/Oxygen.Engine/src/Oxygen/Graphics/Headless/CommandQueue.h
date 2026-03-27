@@ -58,6 +58,7 @@ public:
 private:
   friend class internal::CommandExecutor;
   auto CompleteSubmission() const -> void;
+  auto NoteSubmittedSignal(uint64_t value) const -> void;
   auto SignalImmediate(uint64_t value) const -> void override;
   auto QueueWaitImmediate(uint64_t value) const -> void;
 

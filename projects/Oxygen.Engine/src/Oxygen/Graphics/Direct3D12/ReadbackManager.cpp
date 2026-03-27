@@ -1122,12 +1122,47 @@ auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)
 {
   PumpCompletions();
 
+  if (const auto ready = tracker_.TryGetResult(ticket.id); ready.has_value()) {
+    return *ready;
+  }
+
   observer_ptr<graphics::CommandQueue> queue;
+  bool shutdown = false;
   {
     std::lock_guard lock(mutex_);
     queue = tracked_queue_;
+    shutdown = shutdown_;
   }
-  if (queue != nullptr && queue->GetCompletedValue() < ticket.fence.get()) {
+
+  if (shutdown) {
+    LOG_F(WARNING,
+      "Readback await rejected for ticket {} at fence {} because the D3D12 "
+      "readback manager is shutting down",
+      ticket.id.get(), ticket.fence.get());
+    return std::unexpected(ReadbackError::kShutdown);
+  }
+  if (queue == nullptr) {
+    LOG_F(WARNING,
+      "Readback await would deadlock for ticket {} at fence {} because no "
+      "tracked D3D12 queue is available",
+      ticket.id.get(), ticket.fence.get());
+    return std::unexpected(ReadbackError::kWouldDeadlock);
+  }
+
+  const auto current = FenceValue { queue->GetCurrentValue() };
+  const auto completed = FenceValue { queue->GetCompletedValue() };
+  if (current < ticket.fence) {
+    LOG_F(WARNING,
+      "Readback await would deadlock for ticket {} at fence {} on D3D12 "
+      "queue `{}` because the signal has not been submitted yet "
+      "(queue current={} completed={}). Submit the command recorder before "
+      "awaiting the ticket.",
+      ticket.id.get(), ticket.fence.get(), queue->GetName(), current.get(),
+      completed.get());
+    return std::unexpected(ReadbackError::kWouldDeadlock);
+  }
+
+  if (completed < ticket.fence) {
     try {
       queue->Wait(ticket.fence.get());
     } catch (...) {
@@ -1136,6 +1171,12 @@ auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)
       return std::unexpected(ReadbackError::kBackendFailure);
     }
     tracker_.MarkFenceCompleted(ticket.fence);
+  } else {
+    // The queue may complete the fence after the initial PumpCompletions()
+    // call but before we reach this branch. Mark that completion explicitly
+    // so tracker_.Await() does not sleep forever on an already-completed
+    // ticket.
+    tracker_.MarkFenceCompleted(completed);
   }
   return tracker_.Await(ticket.id);
 }

@@ -24,6 +24,7 @@ enum class ReadbackError : int {
   kCancelled = 9,
   kBackendFailure = 10,
   kShutdown = 11,
+  kWouldDeadlock = 12,
 };
 
 inline auto to_string(ReadbackError value) -> const char*
@@ -41,6 +42,7 @@ inline auto to_string(ReadbackError value) -> const char*
   case ReadbackError::kCancelled: return "kCancelled";
   case ReadbackError::kBackendFailure: return "kBackendFailure";
   case ReadbackError::kShutdown: return "kShutdown";
+  case ReadbackError::kWouldDeadlock: return "kWouldDeadlock";
   }
   // clang-format on
   return "Unknown";
@@ -75,6 +77,9 @@ public:
       return "Backend failed while processing readback operation";
     case ReadbackError::kShutdown:
       return "Readback manager is shutting down";
+    case ReadbackError::kWouldDeadlock:
+      return "Readback await would deadlock because no progress source can "
+             "complete the ticket";
     default:
       return "Unknown readback subsystem error";
     }

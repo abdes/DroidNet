@@ -131,6 +131,16 @@ Provide synchronous readback helpers (already present) and optionally an
 asynchronous `ReadbackManager` for non-blocking readback flows and simulated
 transfer timings.
 
+Readback contract notes:
+
+- `ReadbackManager::Await(...)` must warn and return
+  `ReadbackError::kWouldDeadlock` when a caller blocks on a ticket whose submit
+  signal was never submitted.
+- `CommandQueue::GetCurrentValue()` must therefore advance at submission time
+  for recorded queue signals, not only when execution completes.
+- Long tracker waits should emit periodic warnings so stalled readbacks are
+  visible in logs.
+
 ### Diagnostic / serialization
 
 Use `Command::Serialize()` to emit submission traces in a JSON or text format

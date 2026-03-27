@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -57,6 +58,7 @@ using oxygen::graphics::TextureSlice;
 using oxygen::graphics::headless::Buffer;
 using oxygen::graphics::headless::Graphics;
 using oxygen::graphics::headless::Texture;
+using oxygen::testing::ScopedLogCapture;
 
 extern "C" auto GetGraphicsModuleApi() -> void*;
 
@@ -289,6 +291,7 @@ class TextureReadbackValidationTest : public HeadlessReadbackTestBase { };
 class BlockingReadbackTest : public HeadlessReadbackTestBase { };
 class ReadbackSurfaceTest : public HeadlessReadbackTestBase { };
 class ReadbackShutdownTest : public HeadlessReadbackTestBase { };
+class ReadbackAwaitGuardTest : public HeadlessReadbackTestBase { };
 
 NOLINT_TEST_F(BufferReadbackCreationTest, NewBufferReadbackStartsIdle)
 {
@@ -810,6 +813,61 @@ NOLINT_TEST_F(ReadbackShutdownTest,
   ASSERT_FALSE(shutdown_result.has_value());
   EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+
+  const auto cancelled = GetReadbackManager()->Cancel(ticket);
+  ASSERT_TRUE(cancelled.has_value());
+  EXPECT_TRUE(*cancelled);
+}
+
+NOLINT_TEST_F(ReadbackAwaitGuardTest,
+  AwaitWarnsAndReturnsWouldDeadlockWhenTicketSignalWasNeverSubmitted)
+{
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes(40, 0xD1), "await-deadlock-source");
+  auto readback = CreateBufferReadback("await-deadlock-readback");
+
+  const auto ticket = EnqueueBufferReadback(
+    readback, source, BufferRange { 4, 20 }, "buffer-await-deadlock", false);
+
+  ScopedLogCapture capture { "HeadlessReadbackAwaitWouldDeadlock",
+    loguru::Verbosity_WARNING };
+  const auto awaited = GetReadbackManager()->Await(ticket);
+
+  ASSERT_FALSE(awaited.has_value());
+  EXPECT_EQ(awaited.error(), ReadbackError::kWouldDeadlock);
+  EXPECT_TRUE(capture.Contains("would deadlock"));
+  EXPECT_TRUE(
+    capture.Contains("Submit the command recorder before awaiting the ticket"));
+
+  const auto cancelled = GetReadbackManager()->Cancel(ticket);
+  ASSERT_TRUE(cancelled.has_value());
+  EXPECT_TRUE(*cancelled);
+}
+
+NOLINT_TEST_F(ReadbackAwaitGuardTest,
+  AwaitWarnsAndReturnsShutdownWhenManagerWasAlreadyShutDown)
+{
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  auto source = CreateBufferWithBytes(
+    MakePatternBytes(44, 0xE1), "await-shutdown-source");
+  auto readback = CreateBufferReadback("await-shutdown-readback");
+
+  const auto ticket = EnqueueBufferReadback(
+    readback, source, BufferRange { 6, 18 }, "buffer-await-shutdown", false);
+
+  const auto shutdown_result
+    = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
+  ASSERT_FALSE(shutdown_result.has_value());
+  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
+
+  ScopedLogCapture capture { "HeadlessReadbackAwaitShutdown",
+    loguru::Verbosity_WARNING };
+  const auto awaited = GetReadbackManager()->Await(ticket);
+
+  ASSERT_FALSE(awaited.has_value());
+  EXPECT_EQ(awaited.error(), ReadbackError::kShutdown);
+  EXPECT_TRUE(capture.Contains("shutting down"));
 
   const auto cancelled = GetReadbackManager()->Cancel(ticket);
   ASSERT_TRUE(cancelled.has_value());
