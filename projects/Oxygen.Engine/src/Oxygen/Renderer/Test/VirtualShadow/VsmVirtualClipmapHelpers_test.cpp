@@ -4,54 +4,51 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <glm/vec2.hpp>
+#include <array>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualClipmapHelpers.h>
 
-#include "VirtualShadowTestFixtures.h"
+#include "VirtualShadowStageCpuHarness.h"
 
 namespace {
 
 using oxygen::renderer::vsm::ComputeClipmapReuse;
-using oxygen::renderer::vsm::VsmClipmapLayout;
-using oxygen::renderer::vsm::VsmClipmapReuseConfig;
 using oxygen::renderer::vsm::VsmReuseRejectionReason;
-using oxygen::renderer::vsm::testing::VirtualShadowTest;
+using oxygen::renderer::vsm::testing::DirectionalStageClipmapSpec;
+using oxygen::renderer::vsm::testing::VsmStageCpuHarness;
 
-auto MakeClipmapLayout() -> VsmClipmapLayout
+auto MakeClipmapSpec(const std::string_view remap_key,
+  std::vector<glm::ivec2> page_grid_origin = { { 4, 5 }, { 8, 10 } },
+  std::vector<float> page_world_size = { 32.0F, 64.0F },
+  std::vector<float> near_depth = { 1.0F, 2.0F },
+  std::vector<float> far_depth = { 101.0F, 202.0F },
+  const std::uint32_t pages_per_axis = 8U) -> DirectionalStageClipmapSpec
 {
-  return VsmClipmapLayout {
-    .first_id = 10,
-    .remap_key = "sun",
-    .clip_level_count = 2,
-    .pages_per_axis = 8,
-    .first_page_table_entry = 0,
-    .page_grid_origin = { { 4, 5 }, { 8, 10 } },
-    .page_world_size = { 32.0F, 64.0F },
-    .near_depth = { 1.0F, 2.0F },
-    .far_depth = { 101.0F, 202.0F },
+  return DirectionalStageClipmapSpec {
+    .remap_key = remap_key,
+    .clip_level_count = static_cast<std::uint32_t>(page_grid_origin.size()),
+    .pages_per_axis = pages_per_axis,
+    .page_grid_origin = std::move(page_grid_origin),
+    .page_world_size = std::move(page_world_size),
+    .near_depth = std::move(near_depth),
+    .far_depth = std::move(far_depth),
   };
 }
 
-auto MakeReuseConfig() -> VsmClipmapReuseConfig
-{
-  return VsmClipmapReuseConfig {
-    .max_page_offset_x = 4,
-    .max_page_offset_y = 4,
-    .depth_range_epsilon = 0.01F,
-    .page_world_size_epsilon = 0.01F,
-  };
-}
+class VsmClipmapReuseTest : public VsmStageCpuHarness { };
 
-class VsmVirtualClipmapHelpersTest : public VirtualShadowTest { };
-
-NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, StableClipmapLayoutReportsReusableZeroOffset)
+NOLINT_TEST_F(VsmClipmapReuseTest, IdenticalClipmapsReuseWithZeroOffsets)
 {
-  const auto layout = MakeClipmapLayout();
-  const auto result = ComputeClipmapReuse(layout, layout, MakeReuseConfig());
+  const auto frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun") }, "vsm-remap.clipmap.identical");
+  const auto& layout = frame.directional_layouts[0];
+  const auto result
+    = ComputeClipmapReuse(layout, layout, frame.config.clipmap_reuse_config);
 
   EXPECT_TRUE(result.reusable);
   ASSERT_EQ(result.page_offsets.size(), 2U);
@@ -60,46 +57,61 @@ NOLINT_TEST_F(
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST_F(VsmVirtualClipmapHelpersTest,
-  PageAlignedPanInsideToleranceReportsReusableOffset)
+NOLINT_TEST_F(
+  VsmClipmapReuseTest, PerLevelPagePansWithinToleranceProduceIndependentOffsets)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.page_grid_origin = { { 6, 4 }, { 10, 9 } };
+  const auto previous_frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun") }, "vsm-remap.clipmap.pan.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 6, 5 }, { 11, 9 } }) },
+    "vsm-remap.clipmap.pan.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_TRUE(result.reusable);
   ASSERT_EQ(result.page_offsets.size(), 2U);
-  EXPECT_EQ(result.page_offsets[0], glm::ivec2(2, -1));
-  EXPECT_EQ(result.page_offsets[1], glm::ivec2(2, -1));
+  EXPECT_EQ(result.page_offsets[0], glm::ivec2(2, 0));
+  EXPECT_EQ(result.page_offsets[1], glm::ivec2(3, -1));
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, PanOutsideToleranceReportsExplicitRejection)
+NOLINT_TEST_F(VsmClipmapReuseTest,
+  PanOutsideToleranceRejectsReuseAndReturnsComputedOffsetsUpToFailure)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.page_grid_origin = { { 9, 5 }, { 13, 10 } };
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.pan-out.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 9, 5 }, { 13, 10 } }) },
+    "vsm-remap.clipmap.pan-out.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_FALSE(result.reusable);
   ASSERT_EQ(result.page_offsets.size(), 2U);
   EXPECT_EQ(result.page_offsets[0], glm::ivec2(5, 0));
+  EXPECT_EQ(result.page_offsets[1], glm::ivec2(0, 0));
   EXPECT_EQ(
     result.rejection_reason, VsmReuseRejectionReason::kPageOffsetOutOfRange);
 }
 
 NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, DepthRangeSizeMismatchReportsExplicitRejection)
+  VsmClipmapReuseTest, DepthRangeSizeMismatchReportsExplicitRejection)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.far_depth[1] = 210.0F;
+  const auto previous_frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun") }, "vsm-remap.clipmap.depth.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 4, 5 }, { 8, 10 } },
+      { 32.0F, 64.0F }, { 1.0F, 2.0F }, { 101.0F, 210.0F }) },
+    "vsm-remap.clipmap.depth.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_FALSE(result.reusable);
   EXPECT_EQ(
@@ -107,61 +119,79 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, PageWorldSizeMismatchReportsExplicitRejection)
+  VsmClipmapReuseTest, PageWorldSizeMismatchReportsExplicitRejection)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.page_world_size[1] = 96.0F;
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.world-size.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array {
+      MakeClipmapSpec("sun", { { 4, 5 }, { 8, 10 } }, { 32.0F, 96.0F }) },
+    "vsm-remap.clipmap.world-size.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_FALSE(result.reusable);
   EXPECT_EQ(
     result.rejection_reason, VsmReuseRejectionReason::kPageWorldSizeMismatch);
 }
 
-NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, NonUniformPerLevelOffsetsReportReusable)
+NOLINT_TEST_F(VsmClipmapReuseTest, PagesPerAxisMismatchReportsExplicitRejection)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  // Level 0 pans by (1, 0), level 1 pans by (3, -1) -- different offsets OK.
-  current.page_grid_origin = { { 5, 5 }, { 11, 9 } };
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.pages-per-axis.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 4, 5 }, { 8, 10 } },
+      { 32.0F, 64.0F }, { 1.0F, 2.0F }, { 101.0F, 202.0F }, 4U) },
+    "vsm-remap.clipmap.pages-per-axis.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
-  EXPECT_TRUE(result.reusable);
-  ASSERT_EQ(result.page_offsets.size(), 2U);
-  EXPECT_EQ(result.page_offsets[0], glm::ivec2(1, 0));
-  EXPECT_EQ(result.page_offsets[1], glm::ivec2(3, -1));
-  EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kNone);
+  EXPECT_FALSE(result.reusable);
+  EXPECT_TRUE(result.page_offsets.empty());
+  EXPECT_EQ(
+    result.rejection_reason, VsmReuseRejectionReason::kPagesPerAxisMismatch);
 }
 
 NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, MalformedClipmapLayoutsReportExplicitRejection)
+  VsmClipmapReuseTest, MalformedClipmapLayoutsReportExplicitRejection)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.page_world_size.pop_back();
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.malformed.previous");
+  auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.malformed.current");
+  current_frame.directional_layouts[0].page_world_size.pop_back();
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_FALSE(result.reusable);
   EXPECT_EQ(result.rejection_reason, VsmReuseRejectionReason::kUnspecified);
 }
 
 NOLINT_TEST_F(
-  VsmVirtualClipmapHelpersTest, ChangedClipLevelCountReportsExplicitRejection)
+  VsmClipmapReuseTest, ChangedClipLevelCountReportsExplicitRejection)
 {
-  const auto previous = MakeClipmapLayout();
-  auto current = MakeClipmapLayout();
-  current.clip_level_count = 3;
-  current.page_grid_origin.push_back({ 16, 20 });
-  current.page_world_size.push_back(128.0F);
-  current.near_depth.push_back(4.0F);
-  current.far_depth.push_back(404.0F);
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.clipmap.level-count.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 4, 5 }, { 8, 10 }, { 16, 20 } },
+      { 32.0F, 64.0F, 128.0F }, { 1.0F, 2.0F, 4.0F },
+      { 101.0F, 202.0F, 404.0F }) },
+    "vsm-remap.clipmap.level-count.current");
 
-  const auto result = ComputeClipmapReuse(previous, current, MakeReuseConfig());
+  const auto result = ComputeClipmapReuse(previous_frame.directional_layouts[0],
+    current_frame.directional_layouts[0],
+    current_frame.config.clipmap_reuse_config);
 
   EXPECT_FALSE(result.reusable);
   EXPECT_EQ(

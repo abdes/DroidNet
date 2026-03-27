@@ -54,41 +54,71 @@ Stage-suite refactor status on `2026-03-27`:
   through `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
   `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert published frame contracts from
   real directional/local layout inputs instead of ad hoc setup
+- the shared CPU harness now also drives Stage 3 remap construction from real previous/current
+  frame snapshots through `MakeFrame(...)`, `MakeLocalFrame(...)`, and `MakeDirectionalFrame(...)`;
+  only malformed-input rejection tests mutate those published snapshots after real construction
+- the shared live-scene harness now lives in
+  `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
+  two-box lighting scenes through the dedicated Stage 1-4 executables
 - the shared GPU harness now exposes paged-light request and entry-resolution helpers through
   `MakePageRequests(...)` and `ResolvePageTableEntryIndex(...)` so stage suites do not duplicate
   page-request assembly or hardcode page-table slots
 - Stage 2 virtual-address-allocation coverage now lives in the dedicated
   `VsmVirtualAddressSpace` test program; helper/value-only virtual-address-space coverage now lives
   outside the Stage 2 executable
+- Stage 3 remap-construction coverage now lives in the dedicated `VsmRemap` test program
+- Stage 4 projection-record publication coverage now lives in the dedicated
+  `VsmProjectionRecords` test program; shader ABI and cache lifecycle helpers remain outside the
+  Stage 4 executable
+- the dedicated Stage 1-4 executables now each include live real-scene validation:
+  Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
+  multi-page directional clipmap publication from the real scene; Stage 3 checks exact
+  previous-driven clipmap remap offsets across a real camera pan; Stage 4 checks scene-derived
+  projection-record publication for directional clipmaps and paged local spot lights
 - dedicated semantic stage suites now exist for begin-frame, virtual-address allocation,
   remap construction, projection-record publication, page-request generation, physical-page reuse,
   available-page packing, new-page mapping, hierarchical page flags, mapped-mip propagation,
   selective page initialization, shadow rasterization, static/dynamic merge, HZB update,
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
-  `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+  `VsmRemap`, `VsmProjectionRecords`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
+  `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+  `Oxygen.Renderer.VsmRemap.Tests`,
+  `Oxygen.Renderer.VsmProjectionRecords.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
 Validation evidence on `2026-03-27`:
 
-- built `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`, `Oxygen.Renderer.VsmBasic.Tests`,
-  and `Oxygen.Renderer.VirtualShadows.Tests` in `out/build-ninja` (`Debug`)
+- built `Oxygen.Renderer.VsmBeginFrame.Tests`, `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+  `Oxygen.Renderer.VsmRemap.Tests`, `Oxygen.Renderer.VsmProjectionRecords.Tests`,
+  `Oxygen.Renderer.VsmBasic.Tests`, and
+  `Oxygen.Renderer.VirtualShadows.Tests` in
+  `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 1 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBeginFrame.Tests.exe`
+  and `33 tests from 4 test suites` passed
 - reran the dedicated Stage 2 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe`
-  and `7 tests from 3 test suites` passed
+  and `8 tests from 4 test suites` passed
+- reran the dedicated Stage 3 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmRemap.Tests.exe`
+  and `29 tests from 5 test suites` passed
+- reran the dedicated Stage 4 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmProjectionRecords.Tests.exe`
+  and `2 tests from 1 test suite` passed
 - reran the supporting helper coverage moved out of Stage 2 with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBasic.Tests.exe --gtest_filter=VsmVirtualAddressSpaceTypesTest.*`
   and `2 tests from 1 test suite` passed
 - built `Oxygen.Renderer.VirtualShadows.Tests` and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
-- ran focused CPU stage-suite validation with
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe --gtest_filter=VsmBeginFrameTest.*:VsmVirtualAddressAllocationTest.*:VsmRemapConstructionTest.*:VsmProjectionRecordPublicationTest.*:VsmPageRequestGenerationTest.*:VsmFrameExtractionTest.*:VsmCacheValidityTest.*`
+- Stage 3 review and rewrite used the UE5 reference-comparison rule through a subagent audit
+  before changing executable boundaries or test scenarios
 - ran focused GPU stage-suite validation with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmPhysicalPageReuseTest.*:VsmAvailablePagePackingTest.*:VsmNewPageMappingTest.*:VsmHierarchicalPageFlagsTest.*:VsmMappedMipPropagationTest.*:VsmSelectivePageInitializationTest.*:VsmShadowRasterizerPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmProjectionPassGpuTest.*`
 - reran the full CPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe`
-  with `104 tests from 26 test suites` passing
+  with `63 tests from 14 test suites` passing
 - reran the refactored bottom-stage GPU suites individually after switching them onto the shared
   harness:
   - `VsmProjectionPassGpuTest.*`

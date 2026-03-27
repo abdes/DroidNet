@@ -83,12 +83,20 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  VirtualShadows
+  VsmRemap
   SOURCES
     "VirtualShadow/VirtualShadowTestFixtures.h"
     "VirtualShadow/VirtualShadowStageCpuHarness.h"
     "VirtualShadow/VsmRemapConstruction_test.cpp"
-    "VirtualShadow/VsmProjectionRecordPublication_test.cpp"
+    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
+    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
+)
+
+m_gtest_program(
+  VirtualShadows
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
     "VirtualShadow/VsmFrameExtraction_test.cpp"
     "VirtualShadow/VsmCacheValidity_test.cpp"
     "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
@@ -103,8 +111,6 @@ m_gtest_program(
     "VirtualShadow/VsmPageRequestGeneration_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
     "VirtualShadow/VsmShadowRasterJobs_test.cpp"
-    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
-    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
 )
 
 gtest_program(
@@ -124,6 +130,52 @@ source_group(
 )
 
 if(TARGET oxygen::graphics-direct3d12)
+  m_gtest_program(
+    VsmProjectionRecords
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmProjectionRecordPublication_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmBeginFrame.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmBeginFrameLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmBeginFrame.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmVirtualAddressSpace.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmVirtualAddressLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmVirtualAddressSpace.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmRemap.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmRemapLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmRemap.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
   m_gtest_program(
     "ScreenHzb"
     SOURCES

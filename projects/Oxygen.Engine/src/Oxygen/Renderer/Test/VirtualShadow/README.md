@@ -1,10 +1,12 @@
 # Virtual Shadow Map Tests
 
-Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across six test programs:
+Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across eight test programs:
 
 - `VsmBasic`
 - `VsmBeginFrame`
 - `VsmVirtualAddressSpace`
+- `VsmRemap`
+- `VsmProjectionRecords`
 - `VirtualShadows`
 - `VirtualShadowGpuLifecycle`
 - `Oxygen.Renderer.VirtualShadowSceneObserver.Tests`
@@ -17,8 +19,9 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 - Cross-cutting helper and unit suites are secondary contract coverage. They support stage suites, but they do not replace them.
 - Stage suites must reuse the shared stage harnesses in `VirtualShadowStageCpuHarness.h` and `VirtualShadowStageGpuHarness.h` instead of rebuilding bespoke setup paths.
 - Functional stage suites should prefer multi-page inputs, real geometry, real shadows, and assertions by behavior, virtual coordinate, or physical output rather than magic slot numbers.
+- The dedicated Stage 1-4 executables now also reuse `VirtualShadowLiveSceneHarness.h` for live real-scene validation on real geometry, real light data, and multi-page directional or local layouts.
 - One-page fixtures and direct slot assertions are acceptable only for narrow ABI checks, malformed-input checks, or other explicitly scoped negative tests.
-- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
+- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VsmRemap`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
 - A passing helper suite is not evidence that a stage is complete. Completion claims require the dedicated stage suite, any required broader reruns, and explicit recorded evidence.
 - When correctness is in doubt, the AI agent working in this repository must check the UE5 reference implementation through a new or recycled subagent rather than reasoning from memory or local intuition alone.
 
@@ -36,9 +39,11 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 | CMake declaration | Generated target / binary | What it covers |
 | ----------------- | ------------------------- | -------------- |
 | `VsmBasic` | `Oxygen.Renderer.VsmBasic.Tests` / `bin/<Config>/Oxygen.Renderer.VsmBasic.Tests.exe` | Cross-cutting type contracts: copy semantics, enum string surfaces, DTO field round-trips, `IsValid`/`Validate` for page requests and remap keys |
-| `VsmBeginFrame` | `Oxygen.Renderer.VsmBeginFrame.Tests` / `bin/<Config>/Oxygen.Renderer.VsmBeginFrame.Tests.exe` | Stage 1 only: seam type contracts, build-state machine, cache-data state transitions, pool compatibility, HZB availability |
-| `VsmVirtualAddressSpace` | `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` / `bin/<Config>/Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe` | Stage 2 only: frame-local virtual layout allocation/publication contracts for directional clipmaps and local lights |
-| `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond Stages 1-2: remap, planner, extraction, cache validity, invalidation, orchestration, helper contracts |
+| `VsmBeginFrame` | `Oxygen.Renderer.VsmBeginFrame.Tests` / `bin/<Config>/Oxygen.Renderer.VsmBeginFrame.Tests.exe` | Stage 1 only: seam type contracts, build-state machine, cache-data state transitions, pool compatibility, HZB availability, plus a dedicated live two-box directional real-scene validation when the D3D12 backend is available |
+| `VsmVirtualAddressSpace` | `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` / `bin/<Config>/Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe` | Stage 2 only: frame-local virtual layout allocation/publication contracts for directional clipmaps and local lights, plus a dedicated live two-box directional real-scene validation when the D3D12 backend is available |
+| `VsmRemap` | `Oxygen.Renderer.VsmRemap.Tests` / `bin/<Config>/Oxygen.Renderer.VsmRemap.Tests.exe` | Stage 3 only: previous-driven remap construction, stable-key matching, clipmap reuse offsets, explicit reuse-rejection contracts, and a dedicated live two-box directional real-scene validation when the D3D12 backend is available |
+| `VsmProjectionRecords` | `Oxygen.Renderer.VsmProjectionRecords.Tests` / `bin/<Config>/Oxygen.Renderer.VsmProjectionRecords.Tests.exe` | Stage 4 only: real-scene projection-record construction and publication contracts for multi-page directional clipmaps and paged local spot lights when the D3D12 backend is available |
+| `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, extraction, cache validity, invalidation, orchestration, helper contracts |
 | `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed stage and integration coverage: request generation, allocation passes, flag propagation, initialization, rasterizer, merge, HZB, projection, bridge, invalidation |
 | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe` | Scene observer → cache manager invalidation integration |
 
@@ -60,7 +65,13 @@ cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmBeginF
 # Stage 2 tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmVirtualAddressSpace.Tests" --parallel 6
 
-# All other CPU tests
+# Stage 3 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmRemap.Tests" --parallel 6
+
+# Stage 4 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmProjectionRecords.Tests" --parallel 6
+
+# All remaining CPU tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VirtualShadows.Tests" --parallel 6
 
 # GPU lifecycle tests (requires D3D12 backend)
@@ -82,6 +93,8 @@ For Release builds, substitute `Debug` with `Release` throughout. The executable
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmBasic.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmBeginFrame.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmRemap.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmProjectionRecords.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadows.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe
 ```
@@ -116,7 +129,7 @@ Useful verbosity levels:
 
 ```powershell
 ctest --test-dir out/build-ninja -C Debug --output-on-failure `
-    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
+    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
 ```
 
 ---
@@ -136,6 +149,7 @@ All Stage 1 tests live in the dedicated `VsmBeginFrame` CMake program, which pro
 | `VsmBeginFrameTest` | `VsmBeginFrame_test.cpp` | Seam type contracts, cold-start, warm-start, force-invalidate, sticky-invalidate, Abort/Reset recovery, illegal API ordering, shape-compatibility contract |
 | `VsmBeginFramePoolCompatibilityTest` | `VsmBeginFramePoolCompatibility_test.cpp` | Each of the six pool-snapshot fields (`pool_identity`, `page_size_texels`, `tile_capacity`, `slice_count`, `depth_format`, `slice_roles`) independently triggers `kInvalidated`; compatible pool preserves `kAvailable` |
 | `VsmBeginFrameHzbAvailabilityTest` | `VsmBeginFrameHzbAvailability_test.cpp` | Cold start reports HZB unavailable; warm start after `PublishCurrentFrameHzbAvailability(true)` reports available; absent HZB pool suppresses availability even when previous frame had HZB |
+| `VsmBeginFrameLiveSceneTest` | `VsmBeginFrameLiveScene_test.cpp` | Real two-box directional scene: extracted frame survives `OnFrameStart`, prepared-view state is rebuilt for the new frame, and the new Stage 1 boundary retains previous-frame virtual history without carrying stale prepared-view state |
 
 ### Stage 2 — Virtual Address Space Allocation
 
@@ -146,25 +160,28 @@ Each light is assigned virtual IDs; clipmap and local-light layouts are computed
 | `VsmVirtualAddressAllocationTest` | `VsmVirtualAddressAllocation_test.cpp` | VsmVirtualAddressSpace |
 | `VsmVirtualAddressSpaceIdsTest` | `VsmVirtualAddressSpaceIds_test.cpp` | VsmVirtualAddressSpace |
 | `VsmVirtualAddressSpaceLayoutsTest` | `VsmVirtualAddressSpaceLayouts_test.cpp` | VsmVirtualAddressSpace |
+| `VsmVirtualAddressLiveSceneTest` | `VsmVirtualAddressLiveScene_test.cpp` | VsmVirtualAddressSpace |
 
 ### Stage 3 — Remap Construction
 
-Previous-to-current virtual ID mappings are generated, including clipmap pan offsets.
+Previous-to-current virtual ID mappings are generated from real previous/current frame snapshots, including clipmap pan offsets and explicit reuse-rejection reasons.
+
+This dedicated Stage 3 executable now includes owner-required live-scene geometry validation for a retained multi-page directional light.
 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
-| `VsmRemapConstructionTest` | `VsmRemapConstruction_test.cpp` | VirtualShadows |
-| `VsmVirtualRemapBuilderTest` | `VsmVirtualRemapBuilder_test.cpp` | VirtualShadows |
-| `VsmVirtualClipmapHelpersTest` | `VsmVirtualClipmapHelpers_test.cpp` | VirtualShadows |
+| `VsmRemapConstructionTest` | `VsmRemapConstruction_test.cpp` | VsmRemap |
+| `VsmLocalRemapContractTest` / `VsmDirectionalRemapContractTest` | `VsmVirtualRemapBuilder_test.cpp` | VsmRemap |
+| `VsmClipmapReuseTest` | `VsmVirtualClipmapHelpers_test.cpp` | VsmRemap |
+| `VsmRemapLiveSceneTest` | `VsmRemapLiveScene_test.cpp` | VsmRemap |
 
 ### Stage 4 — Projection Data Upload
 
-Per-map projection matrices are published to GPU; shader ABI contracts are verified.
+Per-map projection records are built from the prepared scene plus the current virtual frame, published onto the committed current frame, and retained on extraction for later invalidation consumers.
 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
-| `VsmProjectionRecordPublicationTest` | `VsmProjectionRecordPublication_test.cpp` | VirtualShadows |
-| `VsmShaderTypesTest` | `VsmShaderTypes_test.cpp` | VirtualShadows |
+| `VsmProjectionRecordPublicationLiveSceneTest` | `VsmProjectionRecordPublication_test.cpp` | VsmProjectionRecords |
 
 ### Stage 5 — Page Request Generation
 
@@ -245,6 +262,14 @@ All tests live in the dedicated `VsmBasic` CMake program, which produces the `Ox
 | `VsmCacheManagerTypesTest` | `VsmCacheManagerTypes_test.cpp` | Copy-constructibility of all cache-manager value types; `to_string` surface of every enum; config-must-not-mirror-seam domain-ownership contract; `IsValid`/`Validate` on `VsmPageRequest` and `VsmRemapKeyList`; field round-trip fidelity for `VsmPageAllocationPlan`, `VsmPageAllocationSnapshot`, `VsmLightCacheEntryState`, `VsmPhysicalPageMeta`, and related types |
 | `VsmVirtualAddressSpaceTypesTest` | `VsmVirtualAddressSpaceTypes_test.cpp` | Supporting type-contract coverage for virtual-layout value types and stable `VsmReuseRejectionReason` string surfaces; this is helper coverage, not Stage 2 functional proof |
 
+### Cross-cutting — Shader ABI Contracts
+
+These tests validate shared shader ABI bit layouts and value packing. They support the stage suites, but they are not Stage 4 functional proof.
+
+| Test suite | File | Executable |
+| ---------- | ---- | --------- |
+| `VsmShaderTypesTest` | `VsmShaderTypes_test.cpp` | VirtualShadows |
+
 ### Cross-cutting — Physical Pool Contracts
 
 These suites validate physical-pool layout, addressing, and compatibility contracts. They are foundational, but they are not Stage 2 virtual-address-allocation proof.
@@ -288,6 +313,7 @@ All three are header-only, no backend dependency, no D3D12.
 
 `VsmStageCpuHarness` extends `VsmCacheManagerTestBase` and adds richer frame assembly:
 
+- `VirtualShadowLiveSceneHarness.h` — shared live-scene harness for the dedicated Stage 1-4 executables; builds the real two-box scene, attaches directional or spot lights, prepares the per-frame renderer data, and executes the live shell up to the point each early-stage suite needs to inspect.
 - `MakeFrame()` — builds a mixed `VsmVirtualAddressSpaceFrame` from directional and local-light descriptors so CPU stage suites can assert the published frame contract directly.
 - `MakeLocalFrame()` — builds a `VsmVirtualAddressSpaceFrame` from a list of `LocalStageLightSpec` descriptors (mix of single-page and multi-level local lights).
 - `MakeDirectionalFrame()` — builds a directional clipmap frame from `DirectionalStageClipmapSpec` descriptors.
@@ -356,6 +382,8 @@ Shader path resolution is automatic: the fixture walks up from `current_path()` 
 1. Add the `.cpp` file to the correct `m_gtest_program` block in `src/Oxygen/Renderer/Test/CMakeLists.txt`.
    - Stage 1 (`BeginFrame`) tests belong in the `VsmBeginFrame` block.
    - Stage 2 virtual-address-allocation tests belong in the `VsmVirtualAddressSpace` block.
+   - Stage 3 remap-construction tests belong in the `VsmRemap` block.
+   - Stage 4 projection-record publication tests belong in the `VsmProjectionRecords` block.
    - All other CPU-only tests belong in the `VirtualShadows` block.
    - GPU tests belong in the `VirtualShadowGpuLifecycle` block (inside the `if(TARGET oxygen::graphics-direct3d12)` guard).
 2. Include only what the test actually uses. The harness headers already pull in the heavy GPU and renderer headers; do not re-include them.

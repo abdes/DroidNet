@@ -5,40 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-
-#include <glm/vec2.hpp>
+#include <array>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualRemapBuilder.h>
 
-#include "VirtualShadowTestFixtures.h"
+#include "VirtualShadowStageCpuHarness.h"
 
 namespace {
 
 using oxygen::renderer::vsm::BuildVirtualRemapTable;
-using oxygen::renderer::vsm::VsmClipmapLayout;
-using oxygen::renderer::vsm::VsmClipmapReuseConfig;
 using oxygen::renderer::vsm::VsmReuseRejectionReason;
-using oxygen::renderer::vsm::VsmVirtualAddressSpaceConfig;
-using oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame;
-using oxygen::renderer::vsm::VsmVirtualMapLayout;
 using oxygen::renderer::vsm::VsmVirtualRemapEntry;
-using oxygen::renderer::vsm::testing::VirtualShadowTest;
-
-auto MakeConfig() -> VsmVirtualAddressSpaceConfig
-{
-  return VsmVirtualAddressSpaceConfig {
-    .first_virtual_id = 1,
-    .clipmap_reuse_config = {
-      .max_page_offset_x = 4,
-      .max_page_offset_y = 4,
-      .depth_range_epsilon = 0.01F,
-      .page_world_size_epsilon = 0.01F,
-    },
-    .debug_name = "phase5-frame",
-  };
-}
+using oxygen::renderer::vsm::testing::DirectionalStageClipmapSpec;
+using oxygen::renderer::vsm::testing::LocalStageLightSpec;
+using oxygen::renderer::vsm::testing::VsmStageCpuHarness;
 
 auto FindEntry(const std::vector<VsmVirtualRemapEntry>& entries,
   const std::uint32_t previous_id) -> const VsmVirtualRemapEntry*
@@ -50,439 +35,447 @@ auto FindEntry(const std::vector<VsmVirtualRemapEntry>& entries,
   return it == entries.end() ? nullptr : &*it;
 }
 
-class VsmVirtualRemapBuilderTest : public VirtualShadowTest { };
-
-NOLINT_TEST_F(
-  VsmVirtualRemapBuilderTest, RemapTableMapsRetainedEntriesExactlyOnce)
+auto MakeLocalSpec(const std::string_view remap_key,
+  const std::uint32_t level_count = 1U,
+  const std::uint32_t pages_per_level_x = 1U,
+  const std::uint32_t pages_per_level_y = 1U) -> LocalStageLightSpec
 {
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .total_page_table_entry_count = 40,
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 10,
-        .remap_key = "local-a",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-        .first_page_table_entry = 0,
-      },
-      VsmVirtualMapLayout {
-        .id = 11,
-        .remap_key = "local-b",
-        .level_count = 2,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 8,
-        .first_page_table_entry = 1,
-      },
-    },
-    .directional_layouts = {
-      VsmClipmapLayout {
-        .first_id = 20,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .first_page_table_entry = 9,
-        .page_grid_origin = { { 0, 0 }, { 4, 4 } },
-        .page_world_size = { 32.0F, 64.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-    },
+  return LocalStageLightSpec {
+    .remap_key = remap_key,
+    .level_count = level_count,
+    .pages_per_level_x = pages_per_level_x,
+    .pages_per_level_y = pages_per_level_y,
   };
-  const auto current_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .total_page_table_entry_count = 40,
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 101,
-        .remap_key = "local-a",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-        .first_page_table_entry = 0,
-      },
-      VsmVirtualMapLayout {
-        .id = 102,
-        .remap_key = "local-b",
-        .level_count = 2,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 8,
-        .first_page_table_entry = 1,
-      },
-    },
-    .directional_layouts = {
-      VsmClipmapLayout {
-        .first_id = 200,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .first_page_table_entry = 9,
-        .page_grid_origin = { { 1, -1 }, { 5, 3 } },
-        .page_world_size = { 32.0F, 64.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-    },
-  };
-
-  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
-
-  ASSERT_EQ(table.entries.size(), 4U);
-  const auto* local_a = FindEntry(table.entries, 10);
-  const auto* local_b = FindEntry(table.entries, 11);
-  const auto* sun0 = FindEntry(table.entries, 20);
-  const auto* sun1 = FindEntry(table.entries, 21);
-  ASSERT_NE(local_a, nullptr);
-  ASSERT_NE(local_b, nullptr);
-  ASSERT_NE(sun0, nullptr);
-  ASSERT_NE(sun1, nullptr);
-  EXPECT_EQ(local_a->current_id, 101U);
-  EXPECT_EQ(local_b->current_id, 102U);
-  EXPECT_EQ(local_a->rejection_reason, VsmReuseRejectionReason::kNone);
-  EXPECT_EQ(local_b->rejection_reason, VsmReuseRejectionReason::kNone);
-  EXPECT_EQ(sun0->current_id, 200U);
-  EXPECT_EQ(sun1->current_id, 201U);
-  EXPECT_EQ(sun0->page_offset, glm::ivec2(1, -1));
-  EXPECT_EQ(sun1->page_offset, glm::ivec2(1, -1));
-  EXPECT_EQ(sun0->rejection_reason, VsmReuseRejectionReason::kNone);
-  EXPECT_EQ(sun1->rejection_reason, VsmReuseRejectionReason::kNone);
 }
 
-NOLINT_TEST_F(
-  VsmVirtualRemapBuilderTest, RemapMatchingUsesStableKeysNotAllocationOrder)
+auto MakeClipmapSpec(const std::string_view remap_key,
+  std::vector<glm::ivec2> page_grid_origin = { { 0, 0 }, { 4, 4 } },
+  std::vector<float> page_world_size = { 32.0F, 64.0F },
+  std::vector<float> near_depth = { 1.0F, 2.0F },
+  std::vector<float> far_depth = { 101.0F, 202.0F },
+  const std::uint32_t pages_per_axis = 4U) -> DirectionalStageClipmapSpec
 {
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 5,
-        .remap_key = "local-a",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-      VsmVirtualMapLayout {
-        .id = 6,
-        .remap_key = "local-b",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-    },
+  return DirectionalStageClipmapSpec {
+    .remap_key = remap_key,
+    .clip_level_count = static_cast<std::uint32_t>(page_grid_origin.size()),
+    .pages_per_axis = pages_per_axis,
+    .page_grid_origin = std::move(page_grid_origin),
+    .page_world_size = std::move(page_world_size),
+    .near_depth = std::move(near_depth),
+    .far_depth = std::move(far_depth),
   };
-  const auto current_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 60,
-        .remap_key = "local-b",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-      VsmVirtualMapLayout {
-        .id = 50,
-        .remap_key = "local-a",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-    },
-  };
-
-  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
-
-  ASSERT_EQ(table.entries.size(), 2U);
-  const auto* local_a = FindEntry(table.entries, 5);
-  const auto* local_b = FindEntry(table.entries, 6);
-  ASSERT_NE(local_a, nullptr);
-  ASSERT_NE(local_b, nullptr);
-  EXPECT_EQ(local_a->current_id, 50U);
-  EXPECT_EQ(local_b->current_id, 60U);
 }
 
-NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
-  FreshIdsForRetainedEntriesStillPermitRemapBookkeeping)
+class VsmLocalRemapContractTest : public VsmStageCpuHarness { };
+class VsmDirectionalRemapContractTest : public VsmStageCpuHarness { };
+
+NOLINT_TEST_F(VsmLocalRemapContractTest,
+  RejectsMissingCurrentLocalLayoutsWithExplicitReason)
 {
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 10,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 30,
-        .remap_key = "hero-light",
-        .level_count = 3,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 12,
-      },
-    },
-  };
-  const auto current_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 11,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 77,
-        .remap_key = "hero-light",
-        .level_count = 3,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 12,
-      },
-    },
-  };
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.missing.previous");
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("other", 2U, 2U, 2U) },
+    "vsm-remap.local.missing.current");
 
   const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
 
   ASSERT_EQ(table.entries.size(), 1U);
-  EXPECT_EQ(table.entries[0].previous_id, 30U);
-  EXPECT_EQ(table.entries[0].current_id, 77U);
-  EXPECT_EQ(table.entries[0].rejection_reason, VsmReuseRejectionReason::kNone);
+  EXPECT_EQ(
+    table.entries[0].previous_id, previous_frame.local_light_layouts[0].id);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kNoMatchingCurrentLayout);
 }
 
-NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
-  DuplicateCurrentLocalLightRemapKeysReportExplicitRejection)
+NOLINT_TEST_F(
+  VsmLocalRemapContractTest, RejectsStableKeysWhoseLocalLayoutsChanged)
 {
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 10,
-        .remap_key = "hero",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-    },
-  };
-  const auto current_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 20,
-        .remap_key = "hero",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-      VsmVirtualMapLayout {
-        .id = 21,
-        .remap_key = "hero",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-    },
-  };
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.mismatch.previous");
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("hero", 3U, 2U, 2U) },
+    "vsm-remap.local.mismatch.current");
 
   const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
 
   ASSERT_EQ(table.entries.size(), 1U);
-  EXPECT_EQ(table.entries[0].previous_id, 10U);
+  EXPECT_EQ(
+    table.entries[0].previous_id, previous_frame.local_light_layouts[0].id);
+  EXPECT_EQ(
+    table.entries[0].current_id, current_frame.local_light_layouts[0].id);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kLocalLightLayoutMismatch);
+}
+
+NOLINT_TEST_F(
+  VsmLocalRemapContractTest, RejectsMissingLocalRemapKeysFromRealFrameSnapshots)
+{
+  const auto previous_frame
+    = MakeLocalFrame(1ULL, 10U, std::array { MakeLocalSpec("", 2U, 2U, 2U) },
+      "vsm-remap.local.missing-key.previous");
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.missing-key.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 1U);
+  EXPECT_EQ(
+    table.entries[0].previous_id, previous_frame.local_light_layouts[0].id);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kMissingRemapKey);
+}
+
+NOLINT_TEST_F(VsmLocalRemapContractTest, RejectsDuplicateCurrentLocalRemapKeys)
+{
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.duplicate-current.previous");
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array {
+      MakeLocalSpec("hero", 2U, 2U, 2U),
+      MakeLocalSpec("hero", 2U, 2U, 2U),
+    },
+    "vsm-remap.local.duplicate-current.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 1U);
+  EXPECT_EQ(
+    table.entries[0].previous_id, previous_frame.local_light_layouts[0].id);
   EXPECT_EQ(table.entries[0].current_id, 0U);
   EXPECT_EQ(table.entries[0].rejection_reason,
     VsmReuseRejectionReason::kDuplicateRemapKey);
 }
 
-NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
-  MissingRemapKeysAndLayoutMismatchReportExplicitRejection)
+NOLINT_TEST_F(VsmLocalRemapContractTest,
+  RejectsDuplicatePreviousLocalRemapKeysForEachPreviousLayout)
 {
-  const auto missing_key_previous = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 10,
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U,
+    std::array {
+      MakeLocalSpec("hero", 2U, 2U, 2U),
+      MakeLocalSpec("hero"),
     },
-  };
-  const auto mismatched_current = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 30,
-        .remap_key = "hero",
-        .level_count = 2,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 8,
-      },
-    },
-  };
-  const auto matched_previous = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 11,
-        .remap_key = "hero",
-        .level_count = 1,
-        .pages_per_level_x = 1,
-        .pages_per_level_y = 1,
-        .total_page_count = 1,
-      },
-    },
-  };
+    "vsm-remap.local.duplicate-previous.previous");
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.duplicate-previous.current");
 
-  const auto missing_key_table
-    = BuildVirtualRemapTable(missing_key_previous, mismatched_current);
-  ASSERT_EQ(missing_key_table.entries.size(), 1U);
-  EXPECT_EQ(missing_key_table.entries[0].rejection_reason,
-    VsmReuseRejectionReason::kMissingRemapKey);
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
 
-  const auto mismatch_table
-    = BuildVirtualRemapTable(matched_previous, mismatched_current);
-  ASSERT_EQ(mismatch_table.entries.size(), 1U);
-  EXPECT_EQ(mismatch_table.entries[0].previous_id, 11U);
-  EXPECT_EQ(mismatch_table.entries[0].current_id, 30U);
-  EXPECT_EQ(mismatch_table.entries[0].rejection_reason,
-    VsmReuseRejectionReason::kLocalLightLayoutMismatch);
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kDuplicateRemapKey);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kDuplicateRemapKey);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[1].current_id, 0U);
 }
 
-NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
-  DuplicateCurrentClipmapKeysAndMalformedCurrentLayoutsReportExplicitRejection)
+NOLINT_TEST_F(
+  VsmLocalRemapContractTest, RejectsMalformedCurrentLocalLightLayouts)
 {
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .directional_layouts = {
-      VsmClipmapLayout {
-        .first_id = 40,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .page_grid_origin = { { 0, 0 }, { 4, 4 } },
-        .page_world_size = { 32.0F, 64.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-    },
-  };
-  const auto duplicate_current = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .directional_layouts = {
-      VsmClipmapLayout {
-        .first_id = 80,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .page_grid_origin = { { 1, 0 }, { 5, 4 } },
-        .page_world_size = { 32.0F, 64.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-      VsmClipmapLayout {
-        .first_id = 90,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .page_grid_origin = { { 1, 0 }, { 5, 4 } },
-        .page_world_size = { 32.0F, 64.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-    },
-  };
-  auto malformed_current = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 3,
-    .config = MakeConfig(),
-    .directional_layouts = {
-      VsmClipmapLayout {
-        .first_id = 100,
-        .remap_key = "sun",
-        .clip_level_count = 2,
-        .pages_per_axis = 4,
-        .page_grid_origin = { { 1, 0 }, { 5, 4 } },
-        .page_world_size = { 32.0F },
-        .near_depth = { 1.0F, 2.0F },
-        .far_depth = { 101.0F, 202.0F },
-      },
-    },
-  };
-
-  const auto duplicate_table
-    = BuildVirtualRemapTable(previous_frame, duplicate_current);
-  ASSERT_EQ(duplicate_table.entries.size(), 2U);
-  EXPECT_EQ(duplicate_table.entries[0].rejection_reason,
-    VsmReuseRejectionReason::kDuplicateRemapKey);
-  EXPECT_EQ(duplicate_table.entries[1].rejection_reason,
-    VsmReuseRejectionReason::kDuplicateRemapKey);
-
-  const auto malformed_table
-    = BuildVirtualRemapTable(previous_frame, malformed_current);
-  ASSERT_EQ(malformed_table.entries.size(), 2U);
-  EXPECT_EQ(malformed_table.entries[0].rejection_reason,
-    VsmReuseRejectionReason::kUnspecified);
-  EXPECT_EQ(malformed_table.entries[1].rejection_reason,
-    VsmReuseRejectionReason::kUnspecified);
-  EXPECT_EQ(malformed_table.entries[0].current_id, 100U);
-  EXPECT_EQ(malformed_table.entries[1].current_id, 101U);
-}
-
-NOLINT_TEST_F(VsmVirtualRemapBuilderTest,
-  MalformedCurrentLocalLightLayoutsReportExplicitRejection)
-{
-  const auto previous_frame = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 1,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 15,
-        .remap_key = "hero",
-        .level_count = 2,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 8,
-      },
-    },
-  };
-  const auto malformed_current = VsmVirtualAddressSpaceFrame {
-    .frame_generation = 2,
-    .config = MakeConfig(),
-    .local_light_layouts = {
-      VsmVirtualMapLayout {
-        .id = 55,
-        .remap_key = "hero",
-        .level_count = 2,
-        .pages_per_level_x = 2,
-        .pages_per_level_y = 2,
-        .total_page_count = 7,
-      },
-    },
-  };
+  const auto previous_frame = MakeLocalFrame(1ULL, 10U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.malformed.previous");
+  auto malformed_current = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.malformed.current");
+  malformed_current.local_light_layouts[0].total_page_count -= 1U;
 
   const auto table = BuildVirtualRemapTable(previous_frame, malformed_current);
 
   ASSERT_EQ(table.entries.size(), 1U);
-  EXPECT_EQ(table.entries[0].previous_id, 15U);
-  EXPECT_EQ(table.entries[0].current_id, 55U);
+  EXPECT_EQ(
+    table.entries[0].previous_id, previous_frame.local_light_layouts[0].id);
+  EXPECT_EQ(
+    table.entries[0].current_id, malformed_current.local_light_layouts[0].id);
   EXPECT_EQ(
     table.entries[0].rejection_reason, VsmReuseRejectionReason::kUnspecified);
+}
+
+NOLINT_TEST_F(
+  VsmLocalRemapContractTest, RejectsMalformedPreviousLocalLightLayouts)
+{
+  auto malformed_previous = MakeLocalFrame(1ULL, 10U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.malformed-previous.previous");
+  malformed_previous.local_light_layouts[0].total_page_count -= 1U;
+  const auto current_frame = MakeLocalFrame(2ULL, 100U,
+    std::array { MakeLocalSpec("hero", 2U, 2U, 2U) },
+    "vsm-remap.local.malformed-previous.current");
+
+  const auto table = BuildVirtualRemapTable(malformed_previous, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 1U);
+  EXPECT_EQ(
+    table.entries[0].previous_id, malformed_previous.local_light_layouts[0].id);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(
+    table.entries[0].rejection_reason, VsmReuseRejectionReason::kUnspecified);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsMissingCurrentClipmapsPerPreviousLevel)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.missing.previous");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("moon") },
+      "vsm-remap.directional.missing.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  for (std::uint32_t clip_index = 0; clip_index < 2U; ++clip_index) {
+    const auto* entry = FindEntry(table.entries,
+      previous_frame.directional_layouts[0].first_id + clip_index);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->current_id, 0U);
+    EXPECT_EQ(entry->rejection_reason,
+      VsmReuseRejectionReason::kNoMatchingCurrentLayout);
+  }
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsChangedClipLevelCountForEveryPreviousLevel)
+{
+  const auto previous_frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun", { { 0, 0 }, { 4, 4 }, { 8, 8 } },
+      { 16.0F, 32.0F, 64.0F }, { 1.0F, 2.0F, 4.0F },
+      { 51.0F, 102.0F, 204.0F }) },
+    "vsm-remap.directional.level-count.previous");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.level-count.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 3U);
+  for (std::uint32_t clip_index = 0; clip_index < 2U; ++clip_index) {
+    const auto* entry = FindEntry(table.entries,
+      previous_frame.directional_layouts[0].first_id + clip_index);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->current_id,
+      current_frame.directional_layouts[0].first_id + clip_index);
+    EXPECT_EQ(entry->page_offset, glm::ivec2(0, 0));
+    EXPECT_EQ(entry->rejection_reason,
+      VsmReuseRejectionReason::kClipLevelCountMismatch);
+  }
+
+  const auto* dropped_level = FindEntry(
+    table.entries, previous_frame.directional_layouts[0].first_id + 2U);
+  ASSERT_NE(dropped_level, nullptr);
+  EXPECT_EQ(dropped_level->current_id, 0U);
+  EXPECT_EQ(dropped_level->rejection_reason,
+    VsmReuseRejectionReason::kClipLevelCountMismatch);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsDirectionalPageOffsetsOutsideToleranceAndKeepsComputedOffsets)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.pan.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 5, 0 }, { 7, 1 } }) },
+    "vsm-remap.directional.pan.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  const auto* level0
+    = FindEntry(table.entries, previous_frame.directional_layouts[0].first_id);
+  const auto* level1 = FindEntry(
+    table.entries, previous_frame.directional_layouts[0].first_id + 1U);
+  ASSERT_NE(level0, nullptr);
+  ASSERT_NE(level1, nullptr);
+
+  EXPECT_EQ(level0->current_id, current_frame.directional_layouts[0].first_id);
+  EXPECT_EQ(level0->page_offset, glm::ivec2(5, 0));
+  EXPECT_EQ(
+    level0->rejection_reason, VsmReuseRejectionReason::kPageOffsetOutOfRange);
+
+  EXPECT_EQ(
+    level1->current_id, current_frame.directional_layouts[0].first_id + 1U);
+  EXPECT_EQ(level1->page_offset, glm::ivec2(0, 0));
+  EXPECT_EQ(
+    level1->rejection_reason, VsmReuseRejectionReason::kPageOffsetOutOfRange);
+}
+
+NOLINT_TEST_F(
+  VsmDirectionalRemapContractTest, RejectsDirectionalDepthRangeMismatch)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.depth.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array { MakeClipmapSpec("sun", { { 0, 0 }, { 4, 4 } },
+      { 32.0F, 64.0F }, { 1.0F, 2.0F }, { 101.0F, 210.0F }) },
+    "vsm-remap.directional.depth.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kDepthRangeMismatch);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kDepthRangeMismatch);
+}
+
+NOLINT_TEST_F(
+  VsmDirectionalRemapContractTest, RejectsDirectionalPageWorldSizeMismatch)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.world-size.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array {
+      MakeClipmapSpec("sun", { { 0, 0 }, { 4, 4 } }, { 32.0F, 96.0F }) },
+    "vsm-remap.directional.world-size.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kPageWorldSizeMismatch);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kPageWorldSizeMismatch);
+}
+
+NOLINT_TEST_F(
+  VsmDirectionalRemapContractTest, RejectsDirectionalPagesPerAxisMismatch)
+{
+  const auto previous_frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun", { { 0, 0 }, { 4, 4 } },
+      { 32.0F, 64.0F }, { 1.0F, 2.0F }, { 101.0F, 202.0F }, 8U) },
+    "vsm-remap.directional.pages-per-axis.previous");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.pages-per-axis.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kPagesPerAxisMismatch);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kPagesPerAxisMismatch);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsMissingDirectionalRemapKeysPerPreviousLevel)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("") },
+      "vsm-remap.directional.missing-key.previous");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.missing-key.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kMissingRemapKey);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kMissingRemapKey);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[1].current_id, 0U);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsDuplicateCurrentDirectionalRemapKeysForEachPreviousLevel)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.duplicate-current.previous");
+  const auto current_frame = MakeDirectionalFrame(2ULL, 100U,
+    std::array {
+      MakeClipmapSpec("sun"), MakeClipmapSpec("sun", { { 1, 0 }, { 5, 4 } }) },
+    "vsm-remap.directional.duplicate-current.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].rejection_reason,
+    VsmReuseRejectionReason::kDuplicateRemapKey);
+  EXPECT_EQ(table.entries[1].rejection_reason,
+    VsmReuseRejectionReason::kDuplicateRemapKey);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[1].current_id, 0U);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsDuplicatePreviousDirectionalRemapKeysForEachPreviousLevel)
+{
+  const auto previous_frame = MakeDirectionalFrame(1ULL, 10U,
+    std::array { MakeClipmapSpec("sun"),
+      MakeClipmapSpec("sun", { { 8, 8 }, { 12, 12 } }) },
+    "vsm-remap.directional.duplicate-previous.previous");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.duplicate-previous.current");
+
+  const auto table = BuildVirtualRemapTable(previous_frame, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 4U);
+  for (const auto& entry : table.entries) {
+    EXPECT_EQ(entry.current_id, 0U);
+    EXPECT_EQ(
+      entry.rejection_reason, VsmReuseRejectionReason::kDuplicateRemapKey);
+  }
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsMalformedCurrentClipmapLayoutsPerPreviousLevel)
+{
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.malformed.previous");
+  auto malformed_current
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.malformed.current");
+  malformed_current.directional_layouts[0].page_world_size.pop_back();
+
+  const auto table = BuildVirtualRemapTable(previous_frame, malformed_current);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].current_id,
+    malformed_current.directional_layouts[0].first_id);
+  EXPECT_EQ(table.entries[1].current_id,
+    malformed_current.directional_layouts[0].first_id + 1U);
+  EXPECT_EQ(
+    table.entries[0].rejection_reason, VsmReuseRejectionReason::kUnspecified);
+  EXPECT_EQ(
+    table.entries[1].rejection_reason, VsmReuseRejectionReason::kUnspecified);
+}
+
+NOLINT_TEST_F(VsmDirectionalRemapContractTest,
+  RejectsMalformedPreviousClipmapLayoutsPerPreviousLevel)
+{
+  auto malformed_previous
+    = MakeDirectionalFrame(1ULL, 10U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.malformed-previous.previous");
+  malformed_previous.directional_layouts[0].page_world_size.pop_back();
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 100U, std::array { MakeClipmapSpec("sun") },
+      "vsm-remap.directional.malformed-previous.current");
+
+  const auto table = BuildVirtualRemapTable(malformed_previous, current_frame);
+
+  ASSERT_EQ(table.entries.size(), 2U);
+  EXPECT_EQ(table.entries[0].current_id, 0U);
+  EXPECT_EQ(table.entries[1].current_id, 0U);
+  EXPECT_EQ(
+    table.entries[0].rejection_reason, VsmReuseRejectionReason::kUnspecified);
+  EXPECT_EQ(
+    table.entries[1].rejection_reason, VsmReuseRejectionReason::kUnspecified);
 }
 
 } // namespace

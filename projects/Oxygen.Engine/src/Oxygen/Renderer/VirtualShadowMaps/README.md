@@ -46,11 +46,30 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - shared harnesses now live in `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageCpuHarness.h`
     and `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageGpuHarness.h`
   - Stage 2 virtual-address-allocation coverage now lives in the dedicated
-    `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` program so the Stage 2 functional proof is
+    `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` program so the Stage 2 contract coverage is
     isolated from helper math and cross-cutting CPU coverage
+  - Stage 3 remap-construction coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmRemap.Tests` program so stable-key matching, previous-driven remap
+    cardinality, directional clipmap pan offsets, and explicit rejection contracts are isolated
+    from later CPU cache/planner coverage
+  - Stage 4 projection-record publication coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmProjectionRecords.Tests` program so real-scene directional clipmap and
+    paged local-spot projection publication is isolated from cache lifecycle helpers and shader ABI
+    checks
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
+  - the Stage 3 suites now build their primary inputs through `MakeFrame(...)`,
+    `MakeLocalFrame(...)`, and `MakeDirectionalFrame(...)`; only malformed-input checks mutate the
+    published snapshots after real construction
+  - the shared live-scene harness now lives in
+    `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
+    two-box lighting scenes through the dedicated Stage 1-4 executables
+  - the dedicated Stage 1-4 executables now each include live real-scene validation:
+    Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
+    multi-page directional clipmap publication from the real scene; Stage 3 checks exact
+    previous-driven clipmap remap offsets across a real camera pan; Stage 4 checks scene-derived
+    projection-record publication for directional clipmaps and paged local spot lights
   - dedicated semantic suites now cover stages 1-17 at the stage-owned level; stages 5 and 9-15
     now execute through the shared GPU harness path or shared GPU harness helpers instead of
     standalone fixture-only setup or hardcoded page-table slots
@@ -77,19 +96,27 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - the Stage 14 dedicated suite now includes a rasterized multi-page real-geometry proof through
     `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
   - renderer test `CMakeLists.txt` now uses logical target names
-    `VsmVirtualAddressSpace`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
-    `m_gtest_program(...)` expands them to `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+    `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VirtualShadows`, and
+    `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+    `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+    `Oxygen.Renderer.VsmRemap.Tests`,
+    `Oxygen.Renderer.VsmProjectionRecords.Tests`,
     `Oxygen.Renderer.VirtualShadows.Tests`, and
     `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
-  `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
+  `Oxygen.Renderer.VsmRemap.Tests`, `Oxygen.Renderer.VsmProjectionRecords.Tests`,
+  `Oxygen.Renderer.VirtualShadows.Tests`, and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
   - validation snapshot on `2026-03-27`:
-    - `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` passes with `7 tests from 3 test suites`
+    - `Oxygen.Renderer.VsmBeginFrame.Tests` passes with `33 tests from 4 test suites`
+    - `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` passes with `8 tests from 4 test suites`
+    - `Oxygen.Renderer.VsmRemap.Tests` passes with `29 tests from 5 test suites`
+    - `Oxygen.Renderer.VsmProjectionRecords.Tests` passes with `2 tests from 1 test suite`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
-    - `Oxygen.Renderer.VirtualShadows.Tests` passes
+    - `Oxygen.Renderer.VirtualShadows.Tests` passes with `63 tests from 14 test suites`
     - focused stage-owned suites pass for request generation, page reuse/packing/allocation,
       hierarchical page flags, mapped-mip propagation, selective initialization, shadow
       rasterization, static/dynamic merge, HZB update, projection/composite, extraction,
