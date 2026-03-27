@@ -180,10 +180,14 @@ public:
     }
 
   private:
+    auto RebindCurrentViewPointers() noexcept -> void;
+
     auto Release() noexcept -> void;
 
     Renderer* renderer_ { nullptr };
     RenderContext render_context_ {};
+    std::optional<ResolvedView> current_resolved_view_ {};
+    std::optional<PreparedSceneFrame> current_prepared_frame_ {};
     bool active_ { false };
   };
 

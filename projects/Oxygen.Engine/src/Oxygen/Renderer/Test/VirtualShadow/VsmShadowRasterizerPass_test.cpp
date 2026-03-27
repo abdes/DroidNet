@@ -1053,7 +1053,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       { .frame_slot = kFrameSlot, .frame_sequence = kFrameSequence });
     raster_offscreen.SetCurrentView(kTestViewId,
       MakeResolvedView(kOutputWidth, kOutputHeight), prepared_frame);
-    auto& raster_context = raster_offscreen.GetRenderContext();
+    auto moved_raster_offscreen = std::move(raster_offscreen);
+    auto& raster_context = moved_raster_offscreen.GetRenderContext();
 
     auto recorder = AcquireRecorder("phase-f-rasterizer-localized");
     ASSERT_NE(recorder, nullptr);
@@ -1082,7 +1083,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     auto projection_prepared_frame = PreparedSceneFrame {};
     projection_offscreen.SetCurrentView(kTestViewId,
       MakeResolvedView(kOutputWidth, kOutputHeight), projection_prepared_frame);
-    auto& projection_context = projection_offscreen.GetRenderContext();
+    auto moved_projection_offscreen = std::move(projection_offscreen);
+    auto& projection_context = moved_projection_offscreen.GetRenderContext();
 
     auto recorder = AcquireRecorder("phase-f-rasterizer-localized.projection");
     ASSERT_NE(recorder, nullptr);

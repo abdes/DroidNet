@@ -129,8 +129,18 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     the propagation pass leaves the page table unchanged and matches a CPU model across
     directional, mixed directional-plus-local, mixed-local, reuse-only, and invalidated-refresh
     scenes
+  - Stage 12 rasterization coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmShadowRasterization.Tests` program so real Stage 11→12 live-scene page-job
+    construction and current-frame raster outputs are validated at the Stage 12 boundary; direct
+    pass coverage in the same executable still owns static-only slice routing, reveal forcing,
+    point-light face routing, and previous-frame HZB culling
   - the Stage 12 rasterization suite now consumes the shared GPU harness buffer, texture, mip
     readback, and raw-buffer readback helpers instead of carrying a private duplicate fixture layer
+  - a later `2026-03-28` Stage 12 hardening pass fixed a real engine-side offscreen-view lifetime
+    bug: `Renderer::OffscreenFrameSession::SetCurrentView(...)` had been storing raw pointers to
+    caller-owned `ResolvedView` temporaries, which let `VsmProjectionPass` resume against dead
+    stack memory in the localized directional-mask raster/projection regression; the offscreen
+    session now owns the active resolved/prepared view snapshots and rebinds them after moves
   - the Stage 15 dedicated suite now includes a rasterized multi-page real-geometry proof through
     `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
   - the Stage 14 dedicated suite now includes a rasterized multi-page real-geometry proof through
@@ -191,6 +201,15 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
       `VsmSelectivePageInitializationLiveSceneTest.*`; the previous synthetic
       `VsmPageInitializationGpuTest.*` lifecycle ownership was removed
     - `VsmShadowRasterizerPassGpuTest.*` passes with `7 tests from 1 test suite`
+    - `Oxygen.Renderer.VsmShadowRasterization.Tests` now passes with
+      `13 tests from 3 test suites`
+    - the localized directional-mask raster/projection regression in the Stage 12 executable now
+      passes `5/5` repeated executions in `out/build-ninja`
+    - after the offscreen-view ownership fix, both
+      `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
+      and
+      `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellProjectsLocalizedDirectionalMaskForRasterizedCasters`
+      pass again in `out/build-ninja`
     - the bottom-stage GPU filter for request generation plus stages 12-15 passes with
       `29 tests from 5 test suites`, including the Stage 12 shared-harness refactor plus the
       Stage 14 and Stage 15 rasterized multi-page proofs
@@ -231,6 +250,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
       `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
       after removing the embedded Stage 5 assertions from that bridge test, the remaining failure
       is purely Stage 15: several shadowed floor probes remain lit
+    - corrective scope note on `2026-03-28`: despite the focused Stage 12 and Stage 15 passes
+      above, a user-provided live renderer capture still shows semantically wrong page-aligned
+      floor shadow artifacts, so the broader Stage 12→15 path remains `in_progress`
 
 ## Known Forward Gaps
 
@@ -239,7 +261,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
 - The standalone Stage 15 projection pass now exists, but its shadow-mask output is not yet fully consumed by the normal renderer path. Phase K-b and Phase K-c own that forward-lighting integration.
 - Distant-local-light refresh budgeting and point-light per-face update scheduling remain Phase K-d work.
 - Translucent-receiver transmission sampling for VSM-projected shadows is not integrated yet. That stays deferred until the renderer path actually consumes the Stage 15 mask.
-- Phase F still needs to consume the screen-space HZB during instance culling. The HZB producer and previous-frame history contract now exist, but the shadow rasterizer does not use them yet.
+- Dedicated Phase F coverage already proves previous-frame screen-space HZB consumption during
+  instance culling. The remaining Phase F gap is broader live-scene visual validation across the
+  Stage 12→15 path, where user-provided evidence still shows incorrect final floor-shadow output.
 
 ## Helper Policy
 

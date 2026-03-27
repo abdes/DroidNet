@@ -47,6 +47,7 @@
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -59,6 +60,7 @@
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageRequestGeneration.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRasterJobs.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -160,6 +162,27 @@ struct TwoBoxPageFlagPropagationResult {
   TwoBoxNewPageMappingResult mapping {};
   std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> page_table {};
   std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags {};
+};
+
+struct TwoBoxPageInitializationResult {
+  TwoBoxPageFlagPropagationResult propagation {};
+  oxygen::renderer::vsm::VsmPhysicalPoolSnapshot physical_pool {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> page_table {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta> physical_metadata {};
+};
+
+struct TwoBoxShadowRasterizationResult {
+  TwoBoxPageInitializationResult initialization {};
+  std::vector<oxygen::renderer::vsm::VsmShadowRasterPageJob> prepared_pages {};
+  std::vector<oxygen::renderer::vsm::VsmPrimitiveIdentity>
+    visible_shadow_primitives {};
+  std::vector<oxygen::renderer::vsm::VsmRenderedPrimitiveHistoryRecord>
+    rendered_primitive_history {};
+  std::vector<oxygen::renderer::vsm::VsmStaticPrimitivePageFeedbackRecord>
+    static_page_feedback {};
+  std::vector<std::uint32_t> dirty_flags {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta> physical_metadata {};
 };
 
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
@@ -1706,6 +1729,252 @@ protected:
       .mapping = std::move(mapping),
       .page_table = std::move(page_table),
       .page_flags = std::move(page_flags),
+    };
+  }
+
+  auto RunTwoBoxPageInitializationStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxPageInitializationResult
+  {
+    auto propagated = RunTwoBoxPageFlagPropagationStage(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, primitive_invalidations_override,
+      require_virtual_shadow_work);
+
+    const auto pool
+      = vsm_renderer.GetPhysicalPagePoolManager().GetShadowPoolSnapshot();
+    CHECK_F(pool.is_available,
+      "Stage 11 physical pool must be available before initialization");
+    CHECK_NOTNULL_F(
+      pool.shadow_texture.get(), "Stage 11 physical shadow pool is null");
+
+    ExecuteInitializationPass(
+      oxygen::engine::VsmPageInitializationPassInput {
+        .frame = propagated.mapping.bridge.committed_frame,
+        .physical_pool = pool,
+      },
+      "stage-eleven-two-box.initialize");
+
+    const auto page_table
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        propagated.mapping.bridge.committed_frame.page_table_buffer,
+        propagated.mapping.bridge.committed_frame.snapshot.page_table.size(),
+        "stage-eleven-two-box.page-table");
+    const auto page_flags
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        propagated.mapping.bridge.committed_frame.page_flags_buffer,
+        propagated.mapping.bridge.committed_frame.snapshot.page_table.size(),
+        "stage-eleven-two-box.page-flags");
+    const auto physical_metadata
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        propagated.mapping.bridge.committed_frame.physical_page_meta_buffer,
+        propagated.mapping.bridge.committed_frame.snapshot.physical_pages
+          .size(),
+        "stage-eleven-two-box.physical-meta");
+
+    return TwoBoxPageInitializationResult {
+      .propagation = std::move(propagated),
+      .physical_pool = pool,
+      .page_table = std::move(page_table),
+      .page_flags = std::move(page_flags),
+      .physical_metadata = std::move(physical_metadata),
+    };
+  }
+
+  auto RunTwoBoxShadowRasterizationStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxShadowRasterizationResult
+  {
+    using oxygen::engine::DrawFrameBindings;
+    using oxygen::engine::PreparedSceneFrame;
+    using oxygen::engine::ViewFrameBindings;
+    using oxygen::engine::internal::PerViewStructuredPublisher;
+    using oxygen::engine::upload::TransientStructuredBuffer;
+
+    auto initialized = RunTwoBoxPageInitializationStage(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, primitive_invalidations_override,
+      require_virtual_shadow_work);
+
+    const auto frame_slot = ResolveHarnessFrameSlot(sequence, slot);
+    auto frame_config = oxygen::engine::Renderer::OffscreenFrameConfig {
+      .frame_slot = frame_slot,
+      .frame_sequence = sequence,
+      .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
+        scene_data.scene.get(),
+      },
+    };
+    auto offscreen = renderer.BeginOffscreenFrame(frame_config);
+
+    auto world_buffer = TransientStructuredBuffer(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(), sizeof(glm::mat4),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-twelve-two-box.worlds");
+    world_buffer.OnFrameStart(sequence, frame_slot);
+    auto world_allocation = world_buffer.Allocate(
+      static_cast<std::uint32_t>(scene_data.world_matrices.size()));
+    CHECK_F(world_allocation.has_value(), "Failed to allocate world buffer");
+    CHECK_F(
+      world_allocation->IsValid(sequence), "World allocation is not valid");
+    std::memcpy(world_allocation->mapped_ptr, scene_data.world_matrices.data(),
+      sizeof(scene_data.world_matrices));
+
+    auto draw_metadata_buffer = TransientStructuredBuffer(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(), sizeof(oxygen::engine::DrawMetadata),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-twelve-two-box.draws");
+    draw_metadata_buffer.OnFrameStart(sequence, frame_slot);
+    auto draw_allocation = draw_metadata_buffer.Allocate(
+      static_cast<std::uint32_t>(scene_data.draw_records.size()));
+    CHECK_F(
+      draw_allocation.has_value(), "Failed to allocate draw metadata buffer");
+    CHECK_F(draw_allocation->IsValid(sequence),
+      "Draw metadata allocation is not valid");
+    std::memcpy(draw_allocation->mapped_ptr, scene_data.draw_records.data(),
+      sizeof(scene_data.draw_records));
+
+    auto draw_frame_publisher = PerViewStructuredPublisher<DrawFrameBindings>(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-twelve-two-box.DrawFrameBindings");
+    draw_frame_publisher.OnFrameStart(sequence, frame_slot);
+    const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
+      DrawFrameBindings {
+        .draw_metadata_slot
+        = oxygen::engine::BindlessDrawMetadataSlot(draw_allocation->srv),
+        .transforms_slot
+        = oxygen::engine::BindlessWorldsSlot(world_allocation->srv),
+      });
+    CHECK_F(draw_frame_slot.IsValid(), "Draw frame slot is invalid");
+
+    auto view_frame_publisher = PerViewStructuredPublisher<ViewFrameBindings>(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-twelve-two-box.ViewFrameBindings");
+    view_frame_publisher.OnFrameStart(sequence, frame_slot);
+    const auto view_frame_slot = view_frame_publisher.Publish(
+      kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
+    CHECK_F(view_frame_slot.IsValid(), "View frame slot is invalid");
+
+    auto world_matrix_floats = std::array<float, 48> {};
+    std::memcpy(world_matrix_floats.data(), scene_data.world_matrices.data(),
+      sizeof(scene_data.world_matrices));
+    std::array<PreparedSceneFrame::PartitionRange, 2> partitions {
+      PreparedSceneFrame::PartitionRange {
+        .pass_mask = scene_data.receiver_mask,
+        .begin = 0U,
+        .end = 1U,
+      },
+      PreparedSceneFrame::PartitionRange {
+        .pass_mask = scene_data.shadow_caster_mask,
+        .begin = 1U,
+        .end = 3U,
+      },
+    };
+
+    auto prepared_frame = PreparedSceneFrame {};
+    prepared_frame.draw_metadata_bytes
+      = std::as_bytes(std::span(scene_data.draw_records));
+    prepared_frame.world_matrices = std::span<const float>(
+      world_matrix_floats.data(), world_matrix_floats.size());
+    prepared_frame.partitions = std::span(partitions);
+    prepared_frame.draw_bounding_spheres = std::span(scene_data.draw_bounds);
+    prepared_frame.shadow_caster_bounding_spheres
+      = std::span(scene_data.shadow_caster_bounds);
+    prepared_frame.visible_receiver_bounding_spheres
+      = std::span(scene_data.receiver_bounds);
+    prepared_frame.bindless_worlds_slot = world_allocation->srv;
+    prepared_frame.bindless_draw_metadata_slot = draw_allocation->srv;
+    prepared_frame.bindless_draw_bounds_slot
+      = scene_data.draw_bounds_buffer.slot;
+
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
+      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot));
+    auto& render_context = offscreen.GetRenderContext();
+
+    const auto previous_frame
+      = vsm_renderer.GetCacheManager().GetPreviousFrame();
+    const auto previous_visible_shadow_primitives = previous_frame != nullptr
+      ? std::span<const oxygen::renderer::vsm::VsmPrimitiveIdentity>(
+          previous_frame->visible_shadow_primitives)
+      : std::span<const oxygen::renderer::vsm::VsmPrimitiveIdentity> {};
+
+    const auto rasterizer_pass = vsm_renderer.GetShadowRasterizerPass();
+    CHECK_NOTNULL_F(
+      rasterizer_pass.get(), "VSM shadow rasterizer pass is unavailable");
+    rasterizer_pass->SetInput(oxygen::engine::VsmShadowRasterizerPassInput {
+      .frame = initialized.propagation.mapping.bridge.committed_frame,
+      .physical_pool = initialized.physical_pool,
+      .projections
+      = initialized.propagation.mapping.bridge.prepared_products
+          .projection_records,
+      .base_view_constants
+      = MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot)
+          .GetSnapshot(),
+      .previous_visible_shadow_primitives = {
+        previous_visible_shadow_primitives.begin(),
+        previous_visible_shadow_primitives.end(),
+      },
+    });
+
+    {
+      auto recorder = AcquireRecorder("stage-twelve-two-box.raster");
+      CHECK_NOTNULL_F(
+        recorder.get(), "Failed to acquire shadow-rasterizer recorder");
+      RunPass(*rasterizer_pass, render_context, *recorder);
+    }
+    WaitForQueueIdle();
+
+    const auto dirty_flags = ReadBufferAs<std::uint32_t>(
+      initialized.propagation.mapping.bridge.committed_frame.dirty_flags_buffer,
+      initialized.propagation.mapping.bridge.committed_frame.snapshot
+        .physical_pages.size(),
+      "stage-twelve-two-box.dirty-flags");
+    const auto physical_metadata
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        initialized.propagation.mapping.bridge.committed_frame
+          .physical_page_meta_buffer,
+        initialized.propagation.mapping.bridge.committed_frame.snapshot
+          .physical_pages.size(),
+        "stage-twelve-two-box.physical-meta");
+
+    return TwoBoxShadowRasterizationResult {
+      .initialization = std::move(initialized),
+      .prepared_pages = { rasterizer_pass->GetPreparedPages().begin(),
+        rasterizer_pass->GetPreparedPages().end() },
+      .visible_shadow_primitives
+      = { rasterizer_pass->GetVisibleShadowPrimitives().begin(),
+        rasterizer_pass->GetVisibleShadowPrimitives().end() },
+      .rendered_primitive_history
+      = { rasterizer_pass->GetRenderedPrimitiveHistory().begin(),
+        rasterizer_pass->GetRenderedPrimitiveHistory().end() },
+      .static_page_feedback
+      = { rasterizer_pass->GetStaticPageFeedback().begin(),
+        rasterizer_pass->GetStaticPageFeedback().end() },
+      .dirty_flags = std::move(dirty_flags),
+      .physical_metadata = std::move(physical_metadata),
     };
   }
 };
