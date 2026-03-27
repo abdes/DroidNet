@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <optional>
 #include <span>
@@ -20,6 +22,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageRequestGeneration.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.h>
@@ -47,11 +51,6 @@ using oxygen::renderer::vsm::VsmShadowRenderer;
 using oxygen::renderer::vsm::VsmVirtualMapLayout;
 using oxygen::renderer::vsm::VsmVisiblePixelSample;
 using oxygen::renderer::vsm::testing::VsmLiveSceneHarness;
-
-struct AxisAlignedBox {
-  glm::vec3 min {};
-  glm::vec3 max {};
-};
 
 auto DescribeNonZeroRequestFlags(const VsmShaderPageRequestFlags* flags,
   const std::uint32_t count) -> std::string
@@ -112,125 +111,6 @@ auto BuildExpectedRequestFlags(
   return flags;
 }
 
-auto RaycastDistanceToAabb(const glm::vec3 origin, const glm::vec3 direction,
-  const AxisAlignedBox& box) -> std::optional<float>
-{
-  auto t_min = 0.0F;
-  auto t_max = std::numeric_limits<float>::infinity();
-
-  for (auto axis = 0; axis < 3; ++axis) {
-    const auto dir = direction[axis];
-    if (std::abs(dir) < 1.0e-6F) {
-      if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) {
-        return std::nullopt;
-      }
-      continue;
-    }
-
-    auto t1 = (box.min[axis] - origin[axis]) / dir;
-    auto t2 = (box.max[axis] - origin[axis]) / dir;
-    if (t1 > t2) {
-      std::swap(t1, t2);
-    }
-    t_min = std::max(t_min, t1);
-    t_max = std::min(t_max, t2);
-    if (t_min > t_max) {
-      return std::nullopt;
-    }
-  }
-
-  return t_max >= std::max(0.0F, t_min) ? std::optional<float> { t_min }
-                                        : std::nullopt;
-}
-
-auto RaycastDistanceToFloor(const glm::vec3 origin, const glm::vec3 direction,
-  const float half_extent = 4.5F) -> std::optional<float>
-{
-  if (std::abs(direction.y) < 1.0e-6F) {
-    return std::nullopt;
-  }
-
-  const auto distance = -origin.y / direction.y;
-  if (distance <= 0.0F) {
-    return std::nullopt;
-  }
-
-  const auto hit = origin + direction * distance;
-  if (std::abs(hit.x) > half_extent || std::abs(hit.z) > half_extent) {
-    return std::nullopt;
-  }
-  return distance;
-}
-
-auto BuildTwoBoxVisibleSamples(const oxygen::ResolvedView& resolved_view,
-  const std::uint32_t width, const std::uint32_t height)
-  -> std::vector<VsmVisiblePixelSample>
-{
-  constexpr auto tall_box = AxisAlignedBox {
-    .min = glm::vec3 { 0.55F, 0.0F, -0.65F },
-    .max = glm::vec3 { 1.35F, 3.2F, 0.15F },
-  };
-  constexpr auto short_box = AxisAlignedBox {
-    .min = glm::vec3 { -0.95F, 0.0F, 0.25F },
-    .max = glm::vec3 { -0.15F, 1.1F, 1.05F },
-  };
-
-  auto visible_samples = std::vector<VsmVisiblePixelSample> {};
-  visible_samples.reserve(static_cast<std::size_t>(width) * height);
-
-  const auto inverse_view_projection = glm::inverse(
-    resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
-  auto pixel_center_ray = [&](const std::uint32_t x, const std::uint32_t y) {
-    const auto ndc_x
-      = (2.0F * (static_cast<float>(x) + 0.5F) / static_cast<float>(width))
-      - 1.0F;
-    const auto ndc_y = 1.0F
-      - (2.0F * (static_cast<float>(y) + 0.5F) / static_cast<float>(height));
-    auto near_point
-      = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
-    auto far_point
-      = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 1.0F, 1.0F };
-    near_point /= near_point.w;
-    far_point /= far_point.w;
-    const auto origin = glm::vec3 { near_point };
-    const auto direction = glm::normalize(glm::vec3 { far_point - near_point });
-    return std::pair { origin, direction };
-  };
-
-  for (std::uint32_t y = 0U; y < height; ++y) {
-    for (std::uint32_t x = 0U; x < width; ++x) {
-      const auto [origin, direction] = pixel_center_ray(x, y);
-      auto nearest_distance = std::numeric_limits<float>::infinity();
-      auto hit_point = std::optional<glm::vec3> {};
-
-      if (const auto floor_distance = RaycastDistanceToFloor(origin, direction);
-        floor_distance.has_value() && *floor_distance < nearest_distance) {
-        nearest_distance = *floor_distance;
-        hit_point = origin + direction * *floor_distance;
-      }
-      if (const auto tall_distance
-        = RaycastDistanceToAabb(origin, direction, tall_box);
-        tall_distance.has_value() && *tall_distance < nearest_distance) {
-        nearest_distance = *tall_distance;
-        hit_point = origin + direction * *tall_distance;
-      }
-      if (const auto short_distance
-        = RaycastDistanceToAabb(origin, direction, short_box);
-        short_distance.has_value() && *short_distance < nearest_distance) {
-        nearest_distance = *short_distance;
-        hit_point = origin + direction * *short_distance;
-      }
-
-      if (hit_point.has_value()) {
-        visible_samples.push_back(
-          VsmVisiblePixelSample { .world_position_ws = *hit_point });
-      }
-    }
-  }
-
-  return visible_samples;
-}
-
 class VsmPageRequestLiveSceneTest : public VsmLiveSceneHarness {
 protected:
   auto ReadUploadedProjectionRecords(VsmShadowRenderer& renderer,
@@ -267,6 +147,104 @@ protected:
     }
     return ReadBufferAs<VsmShaderPageRequestFlags>(
       *buffer, virtual_page_count, debug_name);
+  }
+
+  auto ReadDepthTextureSamples(const oxygen::graphics::Texture& texture,
+    const oxygen::ResolvedView& resolved_view, std::string_view debug_name)
+    -> std::vector<VsmVisiblePixelSample>
+  {
+    auto float_texture = CreateSingleChannelTexture2D(texture.GetDescriptor().width,
+      texture.GetDescriptor().height, oxygen::Format::kR32Float,
+      std::string(debug_name) + ".float-copy");
+    EXPECT_NE(float_texture, nullptr);
+    if (float_texture == nullptr) {
+      return {};
+    }
+
+    {
+      auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
+      EXPECT_NE(recorder, nullptr);
+      if (recorder == nullptr) {
+        return {};
+      }
+      recorder->BeginTrackingResourceState(
+        texture, oxygen::graphics::ResourceStates::kCommon, true);
+      EnsureTracked(
+        *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->RequireResourceState(
+        texture, oxygen::graphics::ResourceStates::kCopySource);
+      recorder->RequireResourceState(
+        *float_texture, oxygen::graphics::ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyTexture(texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture.GetDescriptor().width,
+          .height = texture.GetDescriptor().height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture(), *float_texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture.GetDescriptor().width,
+          .height = texture.GetDescriptor().height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture());
+      recorder->RequireResourceStateFinal(
+        *float_texture, oxygen::graphics::ResourceStates::kCommon);
+    }
+    WaitForQueueIdle();
+
+    const auto readback = GetReadbackManager()->ReadTextureNow(*float_texture,
+      oxygen::graphics::TextureReadbackRequest {
+        .src_slice = {},
+        .aspects = oxygen::graphics::ClearFlags::kColor,
+      },
+      true);
+    EXPECT_TRUE(readback.has_value()) << debug_name;
+    if (!readback.has_value()) {
+      return {};
+    }
+
+    const auto& data = *readback;
+    EXPECT_EQ(data.layout.width, texture.GetDescriptor().width);
+    EXPECT_EQ(data.layout.height, texture.GetDescriptor().height);
+    EXPECT_GE(data.layout.row_pitch.get(),
+      static_cast<std::uint64_t>(data.layout.width) * sizeof(float));
+
+    auto visible_samples = std::vector<VsmVisiblePixelSample> {};
+    visible_samples.reserve(static_cast<std::size_t>(data.layout.width)
+      * data.layout.height);
+    for (std::uint32_t y = 0U; y < data.layout.height; ++y) {
+      const auto* row
+        = data.bytes.data()
+        + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
+      for (std::uint32_t x = 0U; x < data.layout.width; ++x) {
+        auto depth = 1.0F;
+        std::memcpy(
+          &depth, row + static_cast<std::size_t>(x) * sizeof(float),
+          sizeof(depth));
+        if (depth >= 1.0F) {
+          continue;
+        }
+        visible_samples.push_back(VsmVisiblePixelSample {
+          .world_position_ws = ComputeWorldPointForPixel(
+            resolved_view, data.layout.width, data.layout.height, x, y, depth),
+        });
+      }
+    }
+
+    EXPECT_FALSE(visible_samples.empty()) << debug_name;
+    return visible_samples;
   }
 
   static auto ExpectFlagsEqual(
@@ -445,9 +423,7 @@ protected:
     };
     const auto ndc_xy = glm::vec2 { uv.x * 2.0F - 1.0F, 1.0F - uv.y * 2.0F };
     const auto clip = glm::vec4 { ndc_xy, depth, 1.0F };
-    const auto inverse_view_projection
-      = glm::inverse(view.ProjectionMatrix() * view.ViewMatrix());
-    const auto world = inverse_view_projection * clip;
+    const auto world = view.InverseViewProjection() * clip;
     return glm::vec3(world) / std::max(world.w, 1.0e-6F);
   }
 
@@ -521,8 +497,9 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
     = static_cast<std::uint32_t>(result.extracted_frame->page_table.size());
   const auto actual_flags = ReadRequestFlags(
     vsm_renderer, virtual_page_count, "vsm-stage-five.directional.flags");
-  const auto visible_samples
-    = BuildTwoBoxVisibleSamples(resolved_view, kWidth, kHeight);
+  ASSERT_NE(result.scene_depth_texture, nullptr);
+  const auto visible_samples = ReadDepthTextureSamples(*result.scene_depth_texture,
+    resolved_view, "vsm-stage-five.directional.depth-readback");
   ASSERT_FALSE(visible_samples.empty());
 
   const auto expected_flags
