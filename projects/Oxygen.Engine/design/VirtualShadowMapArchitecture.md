@@ -367,7 +367,9 @@ This is the core cache reuse engine.
 
 ### Stage 7 — Pack Available Pages
 
-- Compact the empty page list into a contiguous available-page stack.
+- Compact the unallocated physical pages into a contiguous available-page stack.
+- Publish the stack in ascending physical-page order so fresh GPU allocation
+  consumes the same deterministic order chosen by the CPU planner.
 
 ### Stage 8 — Allocate New Page Mappings
 

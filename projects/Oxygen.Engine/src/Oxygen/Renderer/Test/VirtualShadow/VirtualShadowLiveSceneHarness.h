@@ -135,6 +135,15 @@ struct TwoBoxReuseStageResult {
   std::uint32_t available_page_count { 0U };
 };
 
+struct TwoBoxAvailablePagePackingResult {
+  TwoBoxPageRequestBridgeResult bridge {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> page_table {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta> physical_metadata {};
+  std::vector<std::uint32_t> available_pages {};
+  std::uint32_t available_page_count { 0U };
+};
+
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
 protected:
   using EventLoop = oxygen::co::testing::TestEventLoop;
@@ -1450,6 +1459,67 @@ protected:
       .page_table = std::move(page_table),
       .page_flags = std::move(page_flags),
       .physical_metadata = std::move(physical_metadata),
+      .available_page_count = available_count[0],
+    };
+  }
+
+  auto RunTwoBoxAvailablePagePackingStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxAvailablePagePackingResult
+  {
+    auto bridge = RunTwoBoxPageRequestBridge(renderer, scene_data, vsm_renderer,
+      resolved_view, width, height, sequence, slot, shadow_caster_content_hash,
+      primitive_invalidations_override, require_virtual_shadow_work);
+
+    const auto available_count_buffer
+      = ExecutePageManagementPass(bridge.committed_frame,
+        oxygen::engine::VsmPageManagementFinalStage::kPackAvailablePages,
+        "stage-seven-two-box.pack");
+    CHECK_NOTNULL_F(
+      available_count_buffer.get(), "Stage 7 available-count buffer is null");
+
+    const auto page_table
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        bridge.committed_frame.page_table_buffer,
+        bridge.committed_frame.snapshot.page_table.size(),
+        "stage-seven-two-box.page-table");
+    const auto page_flags
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        bridge.committed_frame.page_flags_buffer,
+        bridge.committed_frame.snapshot.page_table.size(),
+        "stage-seven-two-box.page-flags");
+    const auto physical_metadata
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        bridge.committed_frame.physical_page_meta_buffer,
+        bridge.committed_frame.snapshot.physical_pages.size(),
+        "stage-seven-two-box.physical-meta");
+    const auto available_count = ReadBufferAs<std::uint32_t>(
+      available_count_buffer, 1U, "stage-seven-two-box.available-count");
+    CHECK_EQ_F(
+      available_count.size(), 1U, "Stage 7 available-count readback mismatch");
+
+    auto available_pages = std::vector<std::uint32_t> {};
+    if (available_count[0] > 0U) {
+      available_pages = ReadBufferAs<std::uint32_t>(
+        bridge.committed_frame.physical_page_list_buffer, available_count[0],
+        "stage-seven-two-box.available-pages");
+    }
+
+    return TwoBoxAvailablePagePackingResult {
+      .bridge = std::move(bridge),
+      .page_table = std::move(page_table),
+      .page_flags = std::move(page_flags),
+      .physical_metadata = std::move(physical_metadata),
+      .available_pages = std::move(available_pages),
       .available_page_count = available_count[0],
     };
   }

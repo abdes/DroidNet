@@ -210,9 +210,9 @@ Stage 6: reuse previous pages; Stage 7: pack available pages; Stage 8: allocate 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
 | `VsmPageReuseLiveSceneTest` | `VsmPageReuse_test.cpp` | VsmPageReuse |
-| `VsmAvailablePagePackingTest` | `VsmAvailablePagePacking_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmAvailablePagePackingLiveSceneTest` | `VsmAvailablePagePacking_test.cpp` | VsmAvailablePages |
 | `VsmNewPageMappingTest` | `VsmNewPageMapping_test.cpp` | VirtualShadowGpuLifecycle |
-| `VsmPackAvailablePagesGpuTest` / `VsmAllocateNewPagesGpuTest` | `VsmPageManagementPass_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmAllocateNewPagesGpuTest` | `VsmPageManagementPass_test.cpp` | VirtualShadowGpuLifecycle |
 | `VsmPhysicalPagePoolGpuLifecycleTest` | `VsmPhysicalPagePoolGpuLifecycle_test.cpp` | VirtualShadowGpuLifecycle |
 | `VsmCacheManagerGpuResourcesTest` | `VsmCacheManagerGpuResources_test.cpp` | VirtualShadowGpuLifecycle |
 | `VsmPageAllocationPlannerTest` | `VsmPageAllocationPlanner_test.cpp` | VirtualShadows |

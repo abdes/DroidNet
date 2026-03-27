@@ -77,6 +77,8 @@ Stage-suite refactor status on `2026-03-27`:
   program; CPU-side request-routing and request-merging policy coverage now lives in `VsmBasic`
   and does not count as Stage 5 completion evidence
 - Stage 6 physical-page reuse coverage now lives in the dedicated `VsmPageReuse` test program
+- Stage 7 available-page packing coverage now lives in the dedicated `VsmAvailablePages` test
+  program
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -424,6 +426,10 @@ Validation evidence on 2026-03-24:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPackAvailablePagesGpuTest.PackStageCompactsUnallocatedPagesIntoAscendingStack`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStagePublishesMixedReuseAndFreshMappings`
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
+- Stage 7 ownership was later moved onto the dedicated
+  `Oxygen.Renderer.VsmAvailablePages.Tests` executable with live-scene validation and the old
+  synthetic `VsmPackAvailablePagesGpuTest` ownership was removed from
+  `VsmPageManagementPass_test.cpp`
 
 ---
 
