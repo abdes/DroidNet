@@ -109,6 +109,7 @@ struct TwoBoxLiveFrameResult {
   const oxygen::renderer::vsm::VsmExtractedCacheFrame* extracted_frame {
     nullptr
   };
+  std::shared_ptr<const oxygen::graphics::Texture> scene_depth_texture {};
 };
 
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
@@ -893,6 +894,9 @@ protected:
       EnsureTracked(
         *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
       RunPass(depth_pass, render_context, *recorder);
+      recorder->RequireResourceStateFinal(
+        *depth_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->FlushBarriers();
     }
     WaitForQueueIdle();
 
@@ -952,6 +956,7 @@ protected:
       .virtual_frame = vsm_renderer.GetVirtualAddressSpace().DescribeFrame(),
       .prepared_view = vsm_renderer.TryGetPreparedViewState(kTestViewId),
       .extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame(),
+      .scene_depth_texture = depth_texture,
     };
   }
 };

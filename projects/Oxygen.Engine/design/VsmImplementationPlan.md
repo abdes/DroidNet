@@ -127,7 +127,20 @@ Validation evidence on `2026-03-27`:
   and `7 tests from 1 test suite` passed
 - reran the dedicated Stage 5 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe`
-  and it currently reports `3 tests from 1 test suite`, `2 passed / 1 failed`
+  and it now reports `3 tests from 1 test suite` passing
+- fixed a real live-scene infrastructure bug in the Stage 5 harness by restoring the shared
+  two-box depth texture back to `Common` after the standalone depth prepass recorder; this removed
+  the D3D12 `RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH` error that had been corrupting the Stage 5
+  handoff into the live shell
+- rewrote the failing Stage 5 live-scene directional oracle to build expected visible samples from
+  the actual rasterized depth texture copied into an `R32Float` texture and read back from the
+  same frame instead of analytic box/floor raycasts, and reran
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe --gtest_filter=VsmPageRequestLiveSceneTest.DirectionalTwoBoxScenePublishesUploadedProjectionRecordsAndExpectedRequestFlags`
+- aligned the Stage 5 live-scene oracle with the exact cached inverse view-projection matrix used
+  by the runtime pass constants so the CPU reference no longer recomputes a separate inverse
+- after the depth-state fix plus the real-depth oracle rewrite, the dedicated Stage 5 directional
+  live-scene regression now passes; the previous extra request at page-table index `54` was caused
+  by test-side defects rather than a remaining Stage 5 runtime mismatch
 - the dedicated Stage 5 executable now contains:
   - a real two-box directional live-scene regression that takes input through Stages 1-5 and
     asserts uploaded projection records plus decoded request flags from the runtime GPU path
@@ -199,12 +212,13 @@ Validation evidence on `2026-03-27`:
   after removing embedded Stage 5 assertions from that test, and the remaining failure is now
   isolated to Stage 15 floor probes that remain lit
 - reran the full GPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
-  and it still reports exactly one failure out of `75 tests from 20 test suites`:
+  and it now reports exactly one failure out of `66 tests from 19 test suites`:
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
-- Stage 5 completion evidence is still blocked by the known live-scene directional regression
-  `VsmPageRequestLiveSceneTest.DirectionalTwoBoxScenePublishesUploadedProjectionRecordsAndExpectedRequestFlags`;
-  the runtime still emits one extra request at page-table index `54`, so the Stage 5 slice remains
-  `in_progress`
+- Stage 5 completion evidence is now satisfied:
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe` passes with
+    `3 tests from 1 test suite`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBasic.Tests.exe --gtest_filter=VsmPageRequestPolicyTest.*`
+    passes with `7 tests from 1 test suite`
 - full GPU validation is still blocked by the known live-shell failure
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
   after removing embedded Stage 5 assertions from that bridge test, the remaining failure is Stage

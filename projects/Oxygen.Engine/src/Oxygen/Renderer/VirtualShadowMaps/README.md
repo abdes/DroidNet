@@ -121,8 +121,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` passes with `8 tests from 4 test suites`
     - `Oxygen.Renderer.VsmRemap.Tests` passes with `29 tests from 5 test suites`
     - `Oxygen.Renderer.VsmProjectionRecords.Tests` passes with `2 tests from 1 test suite`
-    - `Oxygen.Renderer.VsmPageRequests.Tests` currently reports `3 tests from 1 test suite`,
-      `2 passed / 1 failed`
+    - `Oxygen.Renderer.VsmPageRequests.Tests` passes with `3 tests from 1 test suite`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
     - `VsmPageRequestPolicyTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
@@ -140,11 +139,12 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
       `29 tests from 5 test suites`, including the Stage 12 shared-harness refactor plus the
       Stage 14 and Stage 15 rasterized multi-page proofs
     - a full rerun of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` now reports
-      `75 tests from 20 test suites`, `74 passed / 1 failed`; the only failing case remains the
+      `66 tests from 19 test suites`, `65 passed / 1 failed`; the only failing case remains the
       analytic-floor bridge test below
-    - `Oxygen.Renderer.VsmPageRequests.Tests` currently has one known Stage 5 live-shell failure in
-      `VsmPageRequestLiveSceneTest.DirectionalTwoBoxScenePublishesUploadedProjectionRecordsAndExpectedRequestFlags`;
-      the runtime still emits one extra request at page-table index `54`
+    - the dedicated Stage 5 live-shell regression now passes after restoring the shared
+      two-box depth texture to `Common` between the standalone depth prepass recorder and the live
+      shell, then switching the Stage 5 oracle to the actual rasterized depth texture copied into
+      an `R32Float` readback surface instead of analytic raycasts
     - `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` still has one known live-shell failure in
       `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
       after removing the embedded Stage 5 assertions from that bridge test, the remaining failure
