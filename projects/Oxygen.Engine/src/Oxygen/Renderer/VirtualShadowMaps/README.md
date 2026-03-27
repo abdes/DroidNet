@@ -42,9 +42,73 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmSceneInvalidationCollector` translates scene mutations into explicit light-request and primitive-invalidation frame inputs
   - `VsmCacheManager::BuildInvalidationWork(...)` merges scene-driven primitive invalidations with retained primitive history and static raster feedback
   - `VsmInvalidationPass` executes the dedicated GPU invalidation stage against previous-frame page tables and physical metadata
-- Frequently run coverage lives under `Oxygen.Renderer.VirtualShadows.Tests`.
-- Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests`.
+- stage-suite refactor is in progress:
+  - shared harnesses now live in `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageCpuHarness.h`
+    and `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageGpuHarness.h`
+  - Stage 2 virtual-address-allocation coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` program so the Stage 2 functional proof is
+    isolated from helper math and cross-cutting CPU coverage
+  - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
+    `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
+    publication from real inputs instead of ad hoc setup or magic slot numbers
+  - dedicated semantic suites now cover stages 1-17 at the stage-owned level; stages 5 and 9-15
+    now execute through the shared GPU harness path or shared GPU harness helpers instead of
+    standalone fixture-only setup or hardcoded page-table slots
+  - the shared GPU harness now exposes `MakePageRequests(...)` and
+    `ResolvePageTableEntryIndex(...)` so paged-light stage suites can assemble real multi-page
+    inputs and assert by virtual coordinate instead of by magic slot number
+  - the Stage 5 dedicated suite now reuses the shared GPU harness float-texture upload and
+    mip-readback helpers instead of carrying a private request-generation upload path
+  - the Stage 11 dedicated suite now includes multi-page paged-light clear/copy coverage through
+    `VsmSelectivePageInitializationTest.ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages`
+    and
+    `VsmSelectivePageInitializationTest.CopiesStaticSliceIntoMultipleDynamicPagesAfterDynamicOnlyInvalidation`
+  - the Stage 10 dedicated suite now proves mapped-descendant propagation across a three-level
+    paged-light scenario with two requested leaf pages and one directly requested parent page
+    through
+    `VsmMappedMipPropagationTest.MarksMappedDescendantsAcrossRequestedLeafAndParentPages`
+  - the Stage 9 dedicated suite now proves hierarchical allocated/dynamic-uncached/static-uncached
+    propagation across the same three-level paged-light scenario through
+    `VsmHierarchicalPageFlagsTest.BuildsAllocatedAndUncachedFlagsAcrossRequestedLeafAndAncestorPages`
+  - the Stage 12 rasterization suite now consumes the shared GPU harness buffer, texture, mip
+    readback, and raw-buffer readback helpers instead of carrying a private duplicate fixture layer
+  - the Stage 15 dedicated suite now includes a rasterized multi-page real-geometry proof through
+    `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
+  - the Stage 14 dedicated suite now includes a rasterized multi-page real-geometry proof through
+    `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
+  - renderer test `CMakeLists.txt` now uses logical target names
+    `VsmVirtualAddressSpace`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
+    `m_gtest_program(...)` expands them to `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+    `Oxygen.Renderer.VirtualShadows.Tests`, and
+    `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
+- Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+  `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
+- Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
+  - validation snapshot on `2026-03-27`:
+    - `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` passes with `7 tests from 3 test suites`
+    - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
+      `2 tests from 1 test suite`
+    - `Oxygen.Renderer.VirtualShadows.Tests` passes
+    - focused stage-owned suites pass for request generation, page reuse/packing/allocation,
+      hierarchical page flags, mapped-mip propagation, selective initialization, shadow
+      rasterization, static/dynamic merge, HZB update, projection/composite, extraction,
+      and cache validity
+    - `VsmPageRequestGeneratorGpuTest.*` passes with `9 tests from 1 test suite`
+    - `VsmHierarchicalPageFlagsTest.*` passes with `1 test from 1 test suite`
+    - `VsmMappedMipPropagationTest.*` passes with `1 test from 1 test suite`
+    - `VsmSelectivePageInitializationTest.*` passes with `4 tests from 1 test suite`
+    - `VsmShadowRasterizerPassGpuTest.*` passes with `7 tests from 1 test suite`
+    - the bottom-stage GPU filter for request generation plus stages 12-15 passes with
+      `29 tests from 5 test suites`, including the Stage 12 shared-harness refactor plus the
+      Stage 14 and Stage 15 rasterized multi-page proofs
+    - a full rerun of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` now reports
+      `75 tests from 20 test suites`, `74 passed / 1 failed`; the only failing case remains the
+      analytic-floor bridge test below
+    - `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` still has one known live-shell failure in
+      `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
+      Stage 5 emits one extra request at page-table index `54`, and the Stage 15 mask keeps
+      several shadowed floor probes lit
 
 ## Known Forward Gaps
 

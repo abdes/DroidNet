@@ -364,6 +364,13 @@ struct VsmPageAllocationSnapshot {
   Format pool_depth_format { Format::kUnknown };
   VsmPhysicalPoolSliceRoleList pool_slice_roles {};
   bool is_hzb_data_available { false };
+  // HZB pool geometry at the time of extraction. ComputeHzbAvailability uses
+  // these to detect a pool resize between the extraction frame and the current
+  // frame; a change in any dimension or format suppresses HZB reuse.
+  std::uint32_t hzb_pool_width { 0 };
+  std::uint32_t hzb_pool_height { 0 };
+  std::uint32_t hzb_pool_mip_count { 0 };
+  Format hzb_pool_format { Format::kUnknown };
   VsmVirtualAddressSpaceFrame virtual_frame {};
   std::vector<VsmLightCacheEntryState> light_cache_entries {};
   std::vector<VsmVirtualMapLayout> retained_local_light_layouts {};

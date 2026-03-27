@@ -342,6 +342,9 @@ auto VsmCacheManager::BeginFrame(const VsmCacheManagerSeam& seam,
   if (!runtime_state_.previous_frame.has_value()) {
     runtime_state_.invalidation_reason = VsmCacheInvalidationReason::kNone;
     MarkCacheDataUnavailable();
+  } else if (!config_.allow_reuse || !config.allow_reuse) {
+    runtime_state_.invalidation_reason = VsmCacheInvalidationReason::kNone;
+    MarkCacheDataUnavailable();
   } else if (runtime_state_.cache_data_state
     == VsmCacheDataState::kInvalidated) {
     runtime_state_.is_hzb_data_available = false;
@@ -867,8 +870,12 @@ auto VsmCacheManager::ComputeHzbAvailability(
     return false;
   }
 
-  return runtime_state_.previous_frame->is_hzb_data_available
-    && seam.hzb_pool.is_available;
+  const auto& prev = *runtime_state_.previous_frame;
+  return prev.is_hzb_data_available && seam.hzb_pool.is_available
+    && prev.hzb_pool_width == seam.hzb_pool.width
+    && prev.hzb_pool_height == seam.hzb_pool.height
+    && prev.hzb_pool_mip_count == seam.hzb_pool.mip_count
+    && prev.hzb_pool_format == seam.hzb_pool.format;
 }
 
 auto VsmCacheManager::QueueTargetedInvalidation(const VsmLightCacheKind kind,

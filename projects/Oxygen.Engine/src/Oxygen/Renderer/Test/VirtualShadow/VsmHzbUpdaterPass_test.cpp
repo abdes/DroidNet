@@ -13,12 +13,15 @@
 #include <string_view>
 #include <vector>
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
@@ -26,15 +29,22 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmHzbUpdaterPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/Types/DrawFrameBindings.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
+#include <Oxygen/Renderer/Types/ViewFrameBindings.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpace.h>
 
-#include "VirtualShadowGpuTestFixtures.h"
+#include "VirtualShadowStageGpuHarness.h"
 
 namespace {
 
@@ -45,80 +55,57 @@ using oxygen::Scissors;
 using oxygen::View;
 using oxygen::ViewId;
 using oxygen::ViewPort;
+using oxygen::engine::BindlessDrawMetadataSlot;
+using oxygen::engine::BindlessWorldsSlot;
+using oxygen::engine::DrawFrameBindings;
+using oxygen::engine::DrawMetadata;
+using oxygen::engine::PassMask;
+using oxygen::engine::PassMaskBit;
 using oxygen::engine::PreparedSceneFrame;
+using oxygen::engine::ViewFrameBindings;
 using oxygen::engine::VsmHzbUpdaterPass;
 using oxygen::engine::VsmHzbUpdaterPassConfig;
 using oxygen::engine::VsmHzbUpdaterPassInput;
+using oxygen::engine::VsmShadowRasterizerPass;
+using oxygen::engine::VsmShadowRasterizerPassConfig;
+using oxygen::engine::VsmShadowRasterizerPassInput;
+using oxygen::engine::internal::PerViewStructuredPublisher;
+using oxygen::engine::upload::TransientStructuredBuffer;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Texture;
 using oxygen::renderer::vsm::TryConvertToCoord;
+using oxygen::renderer::vsm::VsmAllocationAction;
 using oxygen::renderer::vsm::VsmCacheManager;
 using oxygen::renderer::vsm::VsmCacheManagerFrameConfig;
+using oxygen::renderer::vsm::VsmPageAllocationDecision;
 using oxygen::renderer::vsm::VsmPageAllocationFrame;
+using oxygen::renderer::vsm::VsmPageAllocationSnapshot;
 using oxygen::renderer::vsm::VsmPageRequest;
+using oxygen::renderer::vsm::VsmPageRequestFlags;
 using oxygen::renderer::vsm::VsmPhysicalPageMeta;
 using oxygen::renderer::vsm::VsmPhysicalPagePoolManager;
 using oxygen::renderer::vsm::VsmPhysicalPoolChangeResult;
-using oxygen::renderer::vsm::VsmPhysicalPoolConfig;
-using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
+using oxygen::renderer::vsm::VsmProjectionData;
+using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::VsmRenderedPageDirtyFlagBits;
-using oxygen::renderer::vsm::testing::VsmCacheManagerGpuTestBase;
+using oxygen::renderer::vsm::VsmVirtualPageCoord;
+using oxygen::renderer::vsm::testing::StageMeshVertex;
+using oxygen::renderer::vsm::testing::VsmStageGpuHarness;
 
 constexpr ViewId kTestViewId { 17U };
-constexpr std::uint32_t kTextureUploadRowAlignment = 256U;
-
-class VsmHzbUpdaterPassGpuTest : public VsmCacheManagerGpuTestBase {
+class VsmHzbUpdaterPassGpuTest : public VsmStageGpuHarness {
 protected:
-  [[nodiscard]] static auto AlignUp(
-    const std::uint32_t value, const std::uint32_t alignment) -> std::uint32_t
-  {
-    CHECK_NE_F(alignment, 0U, "alignment must be non-zero");
-    return (value + alignment - 1U) / alignment * alignment;
-  }
-
-  [[nodiscard]] static auto MakeResolvedView() -> ResolvedView
-  {
-    auto view_config = View {};
-    view_config.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = 1.0F,
-      .height = 1.0F,
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
+  struct AllocatedPageSpec {
+    VsmVirtualPageCoord virtual_page {
+      .level = 0U,
+      .page_x = 0U,
+      .page_y = 0U,
     };
-    view_config.scissor = Scissors {
-      .left = 0,
-      .top = 0,
-      .right = 1,
-      .bottom = 1,
-    };
-
-    return ResolvedView(ResolvedView::Params {
-      .view_config = view_config,
-      .view_matrix = glm::mat4 { 1.0F },
-      .proj_matrix = glm::mat4 { 1.0F },
-      .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .depth_range = NdcDepthRange::ZeroToOne,
-      .near_plane = 0.1F,
-      .far_plane = 100.0F,
-    });
-  }
-
-  [[nodiscard]] static auto MakeSmallShadowPoolConfig(const char* debug_name)
-    -> VsmPhysicalPoolConfig
-  {
-    return VsmPhysicalPoolConfig {
-      .page_size_texels = 8U,
-      .physical_tile_capacity = 4U,
-      .array_slice_count = 1U,
-      .depth_format = Format::kDepth32,
-      .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth },
-      .debug_name = debug_name,
-    };
-  }
+    std::uint32_t physical_page { 0U };
+    VsmPageRequestFlags flags { VsmPageRequestFlags::kRequired };
+  };
 
   [[nodiscard]] static auto MakeSmallHzbPoolConfig(const char* debug_name)
     -> oxygen::renderer::vsm::VsmHzbPoolConfig
@@ -130,11 +117,57 @@ protected:
     };
   }
 
-  static auto CommitFrame(VsmCacheManager& manager)
-    -> const VsmPageAllocationFrame&
+  [[nodiscard]] static auto MakeAllocatedFrame(
+    std::span<const AllocatedPageSpec> pages) -> VsmPageAllocationFrame
   {
-    static_cast<void>(manager.BuildPageAllocationPlan());
-    return manager.CommitPageAllocationFrame();
+    constexpr auto kMapId = 17U;
+    auto frame = VsmPageAllocationFrame {};
+    frame.snapshot = VsmPageAllocationSnapshot {};
+    frame.plan.decisions.reserve(pages.size());
+    for (const auto& page : pages) {
+      frame.plan.decisions.push_back(VsmPageAllocationDecision {
+        .request = VsmPageRequest {
+          .map_id = kMapId,
+          .page = page.virtual_page,
+          .flags = page.flags,
+        },
+        .action = VsmAllocationAction::kAllocateNew,
+        .current_physical_page
+        = oxygen::renderer::vsm::VsmPhysicalPageIndex {
+          .value = page.physical_page,
+        },
+      });
+    }
+    frame.plan.allocated_page_count
+      = static_cast<std::uint32_t>(frame.plan.decisions.size());
+    frame.is_ready = true;
+    return frame;
+  }
+
+  [[nodiscard]] static auto MakeRasterizedDirectionalProjection()
+    -> oxygen::renderer::vsm::VsmPageRequestProjection
+  {
+    return oxygen::renderer::vsm::VsmPageRequestProjection {
+      .projection = VsmProjectionData {
+        .view_matrix = glm::mat4 { 1.0F },
+        .projection_matrix = glm::mat4 { 1.0F },
+        .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 1.0F },
+        .clipmap_corner_offset = { 0, 0 },
+        .clipmap_level = 0U,
+        .light_type = static_cast<std::uint32_t>(
+          VsmProjectionLightType::kDirectional),
+      },
+      .map_id = 17U,
+      .first_page_table_entry = 8U,
+      .map_pages_x = 2U,
+      .map_pages_y = 1U,
+      .pages_x = 2U,
+      .pages_y = 1U,
+      .page_offset_x = 0U,
+      .page_offset_y = 0U,
+      .level_count = 1U,
+      .coarse_level = 0U,
+    };
   }
 
   auto ExecutePass(
@@ -179,18 +212,6 @@ protected:
   {
     UploadBufferBytes(std::const_pointer_cast<Buffer>(buffer), metadata.data(),
       metadata.size() * sizeof(VsmPhysicalPageMeta), debug_name);
-  }
-
-  template <typename T>
-  auto ReadBufferAs(const std::shared_ptr<const Buffer>& buffer,
-    const std::size_t element_count, std::string_view debug_name)
-    -> std::vector<T>
-  {
-    const auto bytes = ReadBufferBytes(std::const_pointer_cast<Buffer>(buffer),
-      element_count * sizeof(T), debug_name);
-    auto result = std::vector<T>(element_count);
-    std::memcpy(result.data(), bytes.data(), bytes.size());
-    return result;
   }
 
   auto UploadMipData(const std::shared_ptr<const Texture>& texture,
@@ -449,8 +470,8 @@ NOLINT_TEST_F(VsmHzbUpdaterPassGpuTest,
   RebuildsDirtyPageMipsSelectivelyAndClearsConsumedDirtyState)
 {
   auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(
-    pool_manager.EnsureShadowPool(MakeSmallShadowPoolConfig("phase-h-shadow")),
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeSingleSliceShadowPoolConfig(8U, 4U, "phase-h-shadow")),
     VsmPhysicalPoolChangeResult::kCreated);
   ASSERT_EQ(pool_manager.EnsureHzbPool(MakeSmallHzbPoolConfig("phase-h-hzb")),
     oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
@@ -582,6 +603,362 @@ NOLINT_TEST_F(VsmHzbUpdaterPassGpuTest,
   EXPECT_FALSE(static_cast<bool>(meta_after[0].is_dirty));
   EXPECT_TRUE(static_cast<bool>(meta_after[0].is_allocated));
   EXPECT_TRUE(static_cast<bool>(meta_after[1].is_allocated));
+}
+
+NOLINT_TEST_F(VsmHzbUpdaterPassGpuTest,
+  RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeSingleSliceShadowPoolConfig(
+              8U, 4U, "phase-h-rasterized-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(pool_manager.EnsureHzbPool(
+              MakeSmallHzbPoolConfig("phase-h-rasterized-hzb")),
+    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
+
+  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
+  const auto hzb_pool = pool_manager.GetHzbPoolSnapshot();
+  ASSERT_TRUE(shadow_pool.is_available);
+  ASSERT_TRUE(hzb_pool.is_available);
+  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
+  ASSERT_NE(hzb_pool.texture, nullptr);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  constexpr auto kFrameSlot = Slot { 0U };
+  constexpr auto kFrameSequence = SequenceNumber { 41U };
+  constexpr auto kOutputWidth = 64U;
+  constexpr auto kOutputHeight = 64U;
+  constexpr auto kRasterizedPageTableEntry = 8U;
+
+  std::array<StageMeshVertex, 4> vertices {
+    StageMeshVertex {
+      .position = { -0.15F, -0.15F, 0.25F },
+      .normal = { 0.0F, 0.0F, 1.0F },
+      .texcoord = { 0.0F, 1.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 1.0F, 0.0F },
+      .color = { 1.0F, 0.0F, 0.0F, 1.0F },
+    },
+    StageMeshVertex {
+      .position = { 0.15F, -0.15F, 0.25F },
+      .normal = { 0.0F, 0.0F, 1.0F },
+      .texcoord = { 1.0F, 1.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 1.0F, 0.0F },
+      .color = { 0.0F, 1.0F, 0.0F, 1.0F },
+    },
+    StageMeshVertex {
+      .position = { 0.15F, 0.15F, 0.25F },
+      .normal = { 0.0F, 0.0F, 1.0F },
+      .texcoord = { 1.0F, 0.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 1.0F, 0.0F },
+      .color = { 0.0F, 0.0F, 1.0F, 1.0F },
+    },
+    StageMeshVertex {
+      .position = { -0.15F, 0.15F, 0.25F },
+      .normal = { 0.0F, 0.0F, 1.0F },
+      .texcoord = { 0.0F, 0.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
+      .bitangent = { 0.0F, 1.0F, 0.0F },
+      .color = { 1.0F, 1.0F, 0.0F, 1.0F },
+    },
+  };
+  constexpr std::array<std::uint32_t, 6> kIndices {
+    0U,
+    1U,
+    2U,
+    0U,
+    2U,
+    3U,
+  };
+
+  auto vertex_buffer = CreateStructuredSrvBuffer<StageMeshVertex>(
+    vertices, "phase-h-rasterized.vertices");
+  auto index_buffer
+    = CreateUIntIndexBuffer(kIndices, "phase-h-rasterized.indices");
+
+  auto world_buffer = TransientStructuredBuffer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(), sizeof(glm::mat4),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-h-rasterized.worlds");
+  world_buffer.OnFrameStart(kFrameSequence, kFrameSlot);
+  auto world_allocation = world_buffer.Allocate(2U);
+  ASSERT_TRUE(world_allocation.has_value());
+  ASSERT_TRUE(world_allocation->IsValid(kFrameSequence));
+  const std::array<glm::mat4, 2> world_matrices {
+    glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -0.5F, 0.0F, 0.0F }),
+    glm::translate(glm::mat4 { 1.0F }, glm::vec3 { 0.5F, 0.0F, 0.0F }),
+  };
+  std::memcpy(world_allocation->mapped_ptr, world_matrices.data(),
+    sizeof(world_matrices));
+
+  auto draw_metadata_buffer = TransientStructuredBuffer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(), sizeof(DrawMetadata),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-h-rasterized.draws");
+  draw_metadata_buffer.OnFrameStart(kFrameSequence, kFrameSlot);
+  auto draw_allocation = draw_metadata_buffer.Allocate(2U);
+  ASSERT_TRUE(draw_allocation.has_value());
+  ASSERT_TRUE(draw_allocation->IsValid(kFrameSequence));
+
+  auto shadow_caster_mask = PassMask {};
+  shadow_caster_mask.Set(PassMaskBit::kOpaque);
+  shadow_caster_mask.Set(PassMaskBit::kShadowCaster);
+
+  std::array<DrawMetadata, 2> draw_records {
+    DrawMetadata {
+      .vertex_buffer_index = vertex_buffer.slot,
+      .index_buffer_index = index_buffer.slot,
+      .first_index = 0U,
+      .base_vertex = 0,
+      .is_indexed = 1U,
+      .instance_count = 1U,
+      .index_count = static_cast<std::uint32_t>(kIndices.size()),
+      .vertex_count = 0U,
+      .material_handle = 0U,
+      .transform_index = 0U,
+      .instance_metadata_buffer_index = 0U,
+      .instance_metadata_offset = 0U,
+      .flags = shadow_caster_mask,
+      .transform_generation = 41U,
+      .submesh_index = 0U,
+      .primitive_flags = 0U,
+    },
+    DrawMetadata {
+      .vertex_buffer_index = vertex_buffer.slot,
+      .index_buffer_index = index_buffer.slot,
+      .first_index = 0U,
+      .base_vertex = 0,
+      .is_indexed = 1U,
+      .instance_count = 1U,
+      .index_count = static_cast<std::uint32_t>(kIndices.size()),
+      .vertex_count = 0U,
+      .material_handle = 0U,
+      .transform_index = 1U,
+      .instance_metadata_buffer_index = 0U,
+      .instance_metadata_offset = 0U,
+      .flags = shadow_caster_mask,
+      .transform_generation = 42U,
+      .submesh_index = 0U,
+      .primitive_flags = 0U,
+    },
+  };
+  std::memcpy(
+    draw_allocation->mapped_ptr, draw_records.data(), sizeof(draw_records));
+
+  const std::array<glm::vec4, 2> draw_bounds {
+    glm::vec4 { -0.5F, 0.0F, 0.25F, 0.35F },
+    glm::vec4 { 0.5F, 0.0F, 0.25F, 0.35F },
+  };
+  auto draw_bounds_buffer = CreateStructuredSrvBuffer<glm::vec4>(
+    draw_bounds, "phase-h-rasterized.bounds");
+
+  auto draw_frame_publisher = PerViewStructuredPublisher<DrawFrameBindings>(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-h-rasterized.DrawFrameBindings");
+  draw_frame_publisher.OnFrameStart(kFrameSequence, kFrameSlot);
+  const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
+    DrawFrameBindings {
+      .draw_metadata_slot = BindlessDrawMetadataSlot(draw_allocation->srv),
+      .transforms_slot = BindlessWorldsSlot(world_allocation->srv),
+    });
+  ASSERT_TRUE(draw_frame_slot.IsValid());
+
+  auto view_frame_publisher = PerViewStructuredPublisher<ViewFrameBindings>(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    renderer->GetStagingProvider(),
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    "phase-h-rasterized.ViewFrameBindings");
+  view_frame_publisher.OnFrameStart(kFrameSequence, kFrameSlot);
+  const auto view_frame_slot = view_frame_publisher.Publish(
+    kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
+  ASSERT_TRUE(view_frame_slot.IsValid());
+
+  auto world_matrix_floats = std::array<float, 32> {};
+  std::memcpy(
+    world_matrix_floats.data(), world_matrices.data(), sizeof(world_matrices));
+
+  std::array<PreparedSceneFrame::PartitionRange, 1> partitions {
+    PreparedSceneFrame::PartitionRange {
+      .pass_mask = shadow_caster_mask,
+      .begin = 0U,
+      .end = 2U,
+    },
+  };
+
+  auto prepared_frame = PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_records));
+  prepared_frame.world_matrices = std::span<const float>(
+    world_matrix_floats.data(), world_matrix_floats.size());
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+  prepared_frame.partitions = std::span(partitions);
+  prepared_frame.bindless_worlds_slot = world_allocation->srv;
+  prepared_frame.bindless_draw_metadata_slot = draw_allocation->srv;
+  prepared_frame.bindless_draw_bounds_slot = draw_bounds_buffer.slot;
+
+  constexpr std::array<AllocatedPageSpec, 2> kPages {
+    AllocatedPageSpec {
+      .virtual_page = VsmVirtualPageCoord {
+        .level = 0U,
+        .page_x = 0U,
+        .page_y = 0U,
+      },
+      .physical_page = 0U,
+    },
+    AllocatedPageSpec {
+      .virtual_page = VsmVirtualPageCoord {
+        .level = 0U,
+        .page_x = 1U,
+        .page_y = 0U,
+      },
+      .physical_page = 1U,
+    },
+  };
+
+  auto frame = MakeAllocatedFrame(kPages);
+  auto initial_meta = std::vector<VsmPhysicalPageMeta>(4U);
+  initial_meta[0].is_allocated = true;
+  initial_meta[0].dynamic_invalidated = true;
+  initial_meta[0].view_uncached = true;
+  initial_meta[1].is_allocated = true;
+  initial_meta[1].dynamic_invalidated = true;
+  initial_meta[1].view_uncached = true;
+  AttachRasterOutputBuffers(
+    frame, 800ULL, initial_meta.size(), "phase-h-rasterized", initial_meta);
+
+  const auto projection = MakeRasterizedDirectionalProjection();
+  frame.snapshot.projection_records = { projection };
+  frame.snapshot.page_table.resize(kRasterizedPageTableEntry + 2U);
+  frame.snapshot.page_table[kRasterizedPageTableEntry] = {
+    .is_mapped = true,
+    .physical_page
+    = oxygen::renderer::vsm::VsmPhysicalPageIndex { .value = 0U },
+  };
+  frame.snapshot.page_table[kRasterizedPageTableEntry + 1U] = {
+    .is_mapped = true,
+    .physical_page
+    = oxygen::renderer::vsm::VsmPhysicalPageIndex { .value = 1U },
+  };
+
+  auto shader_page_table
+    = std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+      frame.snapshot.page_table.size(),
+      oxygen::renderer::vsm::MakeUnmappedShaderPageTableEntry());
+  shader_page_table[kRasterizedPageTableEntry]
+    = oxygen::renderer::vsm::MakeMappedShaderPageTableEntry(
+      oxygen::renderer::vsm::VsmPhysicalPageIndex { .value = 0U });
+  shader_page_table[kRasterizedPageTableEntry + 1U]
+    = oxygen::renderer::vsm::MakeMappedShaderPageTableEntry(
+      oxygen::renderer::vsm::VsmPhysicalPageIndex { .value = 1U });
+  frame.page_table_buffer = CreateStructuredStorageBuffer(
+    std::span<const oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+      shader_page_table.data(), shader_page_table.size()),
+    "phase-h-rasterized.PageTable");
+
+  auto rasterizer_pass = VsmShadowRasterizerPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmShadowRasterizerPassConfig>(
+      VsmShadowRasterizerPassConfig {
+        .debug_name = "phase-h-rasterized.rasterizer",
+      }));
+  rasterizer_pass.SetInput(VsmShadowRasterizerPassInput {
+    .frame = frame,
+    .physical_pool = shadow_pool,
+    .projections = { projection },
+    .base_view_constants
+    = MakeBaseViewConstants(view_frame_slot, kFrameSlot, kFrameSequence),
+  });
+
+  ClearShadowSlice(
+    shadow_pool.shadow_texture, 0U, 1.0F, "phase-h-rasterized.clear");
+
+  {
+    auto offscreen = renderer->BeginOffscreenFrame(
+      { .frame_slot = kFrameSlot, .frame_sequence = kFrameSequence });
+    offscreen.SetCurrentView(kTestViewId,
+      MakeResolvedView(kOutputWidth, kOutputHeight), prepared_frame);
+    auto& render_context = offscreen.GetRenderContext();
+
+    auto recorder = AcquireRecorder("phase-h-rasterized.rasterizer");
+    ASSERT_NE(recorder, nullptr);
+    RunPass(rasterizer_pass, render_context, *recorder);
+    WaitForQueueIdle();
+  }
+
+  for (std::uint32_t mip_level = 0U; mip_level < hzb_pool.mip_count;
+    ++mip_level) {
+    const auto mip_extent = std::max(1U, hzb_pool.width >> mip_level);
+    auto mip_values = std::vector<float>(
+      static_cast<std::size_t>(mip_extent) * mip_extent, 0.77F);
+    UploadMipData(hzb_pool.texture, mip_level, mip_extent, mip_extent,
+      mip_values,
+      std::string("phase-h-rasterized.seed-hzb-mip")
+        + std::to_string(mip_level));
+  }
+
+  const auto dirty_before
+    = ReadBufferAs<std::uint32_t>(frame.dirty_flags_buffer,
+      shadow_pool.tile_capacity, "phase-h-rasterized.dirty-before");
+  EXPECT_EQ(dirty_before[0],
+    static_cast<std::uint32_t>(
+      VsmRenderedPageDirtyFlagBits::kDynamicRasterized));
+  EXPECT_EQ(dirty_before[1],
+    static_cast<std::uint32_t>(
+      VsmRenderedPageDirtyFlagBits::kDynamicRasterized));
+  EXPECT_EQ(dirty_before[2], 0U);
+
+  const auto meta_before
+    = ReadBufferAs<VsmPhysicalPageMeta>(frame.physical_page_meta_buffer,
+      shadow_pool.tile_capacity, "phase-h-rasterized.meta-before");
+  EXPECT_TRUE(static_cast<bool>(meta_before[0].is_dirty));
+  EXPECT_TRUE(static_cast<bool>(meta_before[1].is_dirty));
+  EXPECT_FALSE(static_cast<bool>(meta_before[2].is_dirty));
+
+  EXPECT_NEAR(ReadDepthTexel(shadow_pool.shadow_texture, 0U, 4U, 4U,
+                "phase-h-rasterized.shadow-left"),
+    0.25F, 1.0e-3F);
+  EXPECT_NEAR(ReadDepthTexel(shadow_pool.shadow_texture, 0U, 12U, 4U,
+                "phase-h-rasterized.shadow-right"),
+    0.25F, 1.0e-3F);
+
+  ExecutePass({ .frame = frame,
+                .physical_pool = shadow_pool,
+                .hzb_pool = hzb_pool,
+                .can_preserve_existing_hzb_contents = true,
+                .force_rebuild_all_allocated_pages = false },
+    "phase-h-rasterized.hzb-update");
+
+  EXPECT_NEAR(
+    ReadMipTexel(hzb_pool.texture, 2U, 0U, 0U, "phase-h-rasterized.mip2.page0"),
+    0.25F, 1.0e-3F);
+  EXPECT_NEAR(
+    ReadMipTexel(hzb_pool.texture, 2U, 1U, 0U, "phase-h-rasterized.mip2.page1"),
+    0.25F, 1.0e-3F);
+  EXPECT_NEAR(
+    ReadMipTexel(hzb_pool.texture, 2U, 0U, 1U, "phase-h-rasterized.mip2.page2"),
+    0.77F, 1.0e-5F);
+  EXPECT_NEAR(ReadMipTexel(
+                hzb_pool.texture, 3U, 0U, 0U, "phase-h-rasterized.mip3.global"),
+    0.25F, 1.0e-3F);
+
+  const auto dirty_after = ReadBufferAs<std::uint32_t>(frame.dirty_flags_buffer,
+    shadow_pool.tile_capacity, "phase-h-rasterized.dirty-after");
+  EXPECT_EQ(dirty_after[0], 0U);
+  EXPECT_EQ(dirty_after[1], 0U);
+  EXPECT_EQ(dirty_after[2], 0U);
+
+  const auto meta_after
+    = ReadBufferAs<VsmPhysicalPageMeta>(frame.physical_page_meta_buffer,
+      shadow_pool.tile_capacity, "phase-h-rasterized.meta-after");
+  EXPECT_FALSE(static_cast<bool>(meta_after[0].is_dirty));
+  EXPECT_FALSE(static_cast<bool>(meta_after[1].is_dirty));
 }
 
 } // namespace

@@ -21,20 +21,11 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
-#include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ScreenHzbBuildPass.h>
@@ -45,27 +36,21 @@
 #include <Oxygen/Renderer/Types/DrawFrameBindings.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
-#include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
 
-#include "VirtualShadowGpuTestFixtures.h"
+#include "VirtualShadowStageGpuHarness.h"
 
 namespace {
 
-using oxygen::Format;
 using oxygen::NdcDepthRange;
 using oxygen::ResolvedView;
 using oxygen::Scissors;
 using oxygen::ShaderVisibleIndex;
-using oxygen::TextureType;
-using oxygen::View;
 using oxygen::ViewId;
-using oxygen::ViewPort;
 using oxygen::engine::BindlessDrawMetadataSlot;
-using oxygen::engine::BindlessViewFrameBindingsSlot;
 using oxygen::engine::BindlessWorldsSlot;
 using oxygen::engine::DepthPrePass;
 using oxygen::engine::DrawFrameBindings;
@@ -77,11 +62,10 @@ using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::Renderer;
 using oxygen::engine::ScreenHzbBuildPass;
 using oxygen::engine::ScreenHzbBuildPassConfig;
+using oxygen::engine::ViewFrameBindings;
 using oxygen::engine::VsmProjectionPass;
 using oxygen::engine::VsmProjectionPassConfig;
 using oxygen::engine::VsmProjectionPassInput;
-using oxygen::engine::ViewConstants;
-using oxygen::engine::ViewFrameBindings;
 using oxygen::engine::VsmShadowRasterizerPass;
 using oxygen::engine::VsmShadowRasterizerPassConfig;
 using oxygen::engine::VsmShadowRasterizerPassInput;
@@ -90,11 +74,6 @@ using oxygen::engine::upload::TransientStructuredBuffer;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::graphics::Buffer;
-using oxygen::graphics::BufferDesc;
-using oxygen::graphics::BufferRange;
-using oxygen::graphics::BufferUsage;
-using oxygen::graphics::ResourceStates;
-using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
 using oxygen::renderer::vsm::VsmAllocationAction;
 using oxygen::renderer::vsm::VsmPageAllocationDecision;
@@ -113,33 +92,19 @@ using oxygen::renderer::vsm::VsmPrimitiveIdentity;
 using oxygen::renderer::vsm::VsmProjectionData;
 using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::VsmRenderedPageDirtyFlagBits;
-using oxygen::renderer::vsm::VsmShaderPageTableEntry;
 using oxygen::renderer::vsm::VsmShaderIndirectDrawCommand;
+using oxygen::renderer::vsm::VsmShaderPageTableEntry;
 using oxygen::renderer::vsm::VsmVirtualPageCoord;
-using oxygen::renderer::vsm::testing::VsmCacheManagerGpuTestBase;
+using oxygen::renderer::vsm::testing::StageMeshVertex;
+using oxygen::renderer::vsm::testing::VsmStageGpuHarness;
 
 constexpr ViewId kTestViewId { 41U };
 constexpr std::uint32_t kTestMapId = 17U;
 constexpr std::uint32_t kTestPageTableEntry = 8U;
 constexpr std::uint32_t kTestPhysicalPage = 3U;
-constexpr std::uint32_t kReadbackRowPitch = 256U;
+using TestVertex = StageMeshVertex;
 
-struct TestVertex {
-  glm::vec3 position {};
-  glm::vec3 normal {};
-  glm::vec2 texcoord {};
-  glm::vec3 tangent {};
-  glm::vec3 bitangent {};
-  glm::vec4 color {};
-};
-static_assert(sizeof(TestVertex) == 72U);
-
-struct ShaderVisibleBuffer {
-  std::shared_ptr<Buffer> buffer {};
-  ShaderVisibleIndex slot { oxygen::kInvalidShaderVisibleIndex };
-};
-
-class VsmShadowRasterizerPassGpuTest : public VsmCacheManagerGpuTestBase {
+class VsmShadowRasterizerPassGpuTest : public VsmStageGpuHarness {
 protected:
   struct AllocatedPageSpec {
     VsmVirtualPageCoord virtual_page {
@@ -150,36 +115,6 @@ protected:
     std::uint32_t physical_page { kTestPhysicalPage };
     VsmPageRequestFlags flags { VsmPageRequestFlags::kRequired };
   };
-
-  [[nodiscard]] static auto MakeResolvedView(const std::uint32_t width = 1U,
-    const std::uint32_t height = 1U) -> ResolvedView
-  {
-    auto view_config = View {};
-    view_config.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(width),
-      .height = static_cast<float>(height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-    view_config.scissor = Scissors {
-      .left = 0,
-      .top = 0,
-      .right = static_cast<std::int32_t>(width),
-      .bottom = static_cast<std::int32_t>(height),
-    };
-
-    return ResolvedView(ResolvedView::Params {
-      .view_config = view_config,
-      .view_matrix = glm::mat4 { 1.0F },
-      .proj_matrix = glm::mat4 { 1.0F },
-      .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .depth_range = NdcDepthRange::ZeroToOne,
-      .near_plane = 0.1F,
-      .far_plane = 100.0F,
-    });
-  }
 
   [[nodiscard]] static auto MakeFrame(std::span<const AllocatedPageSpec> pages)
     -> VsmPageAllocationFrame
@@ -248,417 +183,6 @@ protected:
       .light_index = 0U,
       .cube_face_index = cube_face_index,
     };
-  }
-
-  auto CreateDepthTexture2D(const std::uint32_t width,
-    const std::uint32_t height, std::string_view debug_name)
-    -> std::shared_ptr<Texture>
-  {
-    auto texture_desc = oxygen::graphics::TextureDesc {};
-    texture_desc.width = width;
-    texture_desc.height = height;
-    texture_desc.format = Format::kDepth32;
-    texture_desc.texture_type = TextureType::kTexture2D;
-    texture_desc.is_shader_resource = true;
-    texture_desc.is_render_target = true;
-    texture_desc.use_clear_value = true;
-    texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
-    texture_desc.initial_state = ResourceStates::kCommon;
-    texture_desc.debug_name = std::string(debug_name);
-    return CreateRegisteredTexture(texture_desc);
-  }
-
-  auto UploadDepthTexture(const std::shared_ptr<Texture>& depth_texture,
-    const float depth_value, std::string_view debug_name) -> void
-  {
-    CHECK_NOTNULL_F(depth_texture.get(), "Cannot upload into a null texture");
-
-    constexpr std::uint32_t kRowPitch = 256U;
-    const auto width = depth_texture->GetDescriptor().width;
-    const auto height = depth_texture->GetDescriptor().height;
-    auto upload_bytes = std::vector<std::byte>(
-      static_cast<std::size_t>(kRowPitch) * height, std::byte { 0 });
-
-    for (std::uint32_t y = 0U; y < height; ++y) {
-      for (std::uint32_t x = 0U; x < width; ++x) {
-        std::memcpy(upload_bytes.data()
-            + static_cast<std::size_t>(y) * kRowPitch
-            + static_cast<std::size_t>(x) * sizeof(float),
-          &depth_value, sizeof(depth_value));
-      }
-    }
-
-    auto upload = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = static_cast<std::uint64_t>(upload_bytes.size()),
-      .usage = BufferUsage::kNone,
-      .memory = oxygen::graphics::BufferMemory::kUpload,
-      .debug_name = std::string(debug_name) + ".Upload",
-    });
-    CHECK_NOTNULL_F(upload.get(), "Failed to create upload buffer");
-    upload->Update(upload_bytes.data(), upload_bytes.size(), 0U);
-
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name) + ".SeedDepth");
-      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire upload recorder");
-      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
-      EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
-      recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
-      recorder->RequireResourceState(*depth_texture, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
-      recorder->CopyBufferToTexture(*upload,
-        oxygen::graphics::TextureUploadRegion {
-          .buffer_offset = 0U,
-          .buffer_row_pitch = kRowPitch,
-          .buffer_slice_pitch = kRowPitch * height,
-          .dst_slice = {
-            .x = 0U,
-            .y = 0U,
-            .z = 0U,
-            .width = width,
-            .height = height,
-            .depth = 1U,
-            .mip_level = 0U,
-            .array_slice = 0U,
-          },
-        },
-        *depth_texture);
-      recorder->RequireResourceStateFinal(
-        *depth_texture, ResourceStates::kCommon);
-    }
-    WaitForQueueIdle();
-  }
-
-  template <typename T>
-  auto CreateStructuredSrvBuffer(std::span<const T> elements,
-    std::string_view debug_name) -> ShaderVisibleBuffer
-  {
-    CHECK_F(
-      !elements.empty(), "Structured SRV buffer requires at least one element");
-
-    auto buffer = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = static_cast<std::uint64_t>(elements.size_bytes()),
-      .usage = BufferUsage::kStorage,
-      .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
-      .debug_name = std::string(debug_name),
-    });
-    CHECK_NOTNULL_F(buffer.get(), "Failed to create buffer `{}`", debug_name);
-
-    UploadBufferBytes(
-      buffer, elements.data(), elements.size_bytes(), debug_name);
-
-    auto& allocator
-      = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      oxygen::graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(), "Failed to allocate structured SRV for `{}`",
-      debug_name);
-
-    const auto slot = allocator.GetShaderVisibleIndex(handle);
-    const oxygen::graphics::BufferViewDescription view_desc {
-      .view_type = ResourceViewType::kStructuredBuffer_SRV,
-      .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
-      .range
-      = BufferRange { 0U, static_cast<std::uint64_t>(elements.size_bytes()) },
-      .stride = static_cast<std::uint32_t>(sizeof(T)),
-    };
-
-    auto view = Backend().GetResourceRegistry().RegisterView(
-      *buffer, std::move(handle), view_desc);
-    CHECK_F(view->IsValid(), "Failed to register structured SRV for `{}`",
-      debug_name);
-
-    return ShaderVisibleBuffer { .buffer = std::move(buffer), .slot = slot };
-  }
-
-  auto CreateUIntIndexBuffer(std::span<const std::uint32_t> indices,
-    std::string_view debug_name) -> ShaderVisibleBuffer
-  {
-    CHECK_F(!indices.empty(), "Index buffer requires at least one element");
-
-    auto buffer = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = static_cast<std::uint64_t>(indices.size_bytes()),
-      .usage = BufferUsage::kStorage,
-      .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
-      .debug_name = std::string(debug_name),
-    });
-    CHECK_NOTNULL_F(buffer.get(), "Failed to create buffer `{}`", debug_name);
-
-    UploadBufferBytes(buffer, indices.data(), indices.size_bytes(), debug_name);
-
-    auto& allocator
-      = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kRawBuffer_SRV,
-      oxygen::graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(
-      handle.IsValid(), "Failed to allocate typed SRV for `{}`", debug_name);
-
-    const auto slot = allocator.GetShaderVisibleIndex(handle);
-    const oxygen::graphics::BufferViewDescription view_desc {
-      .view_type = ResourceViewType::kRawBuffer_SRV,
-      .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
-      .format = Format::kR32UInt,
-      .range
-      = BufferRange { 0U, static_cast<std::uint64_t>(indices.size_bytes()) },
-    };
-
-    auto view = Backend().GetResourceRegistry().RegisterView(
-      *buffer, std::move(handle), view_desc);
-    CHECK_F(
-      view->IsValid(), "Failed to register typed SRV for `{}`", debug_name);
-
-    return ShaderVisibleBuffer { .buffer = std::move(buffer), .slot = slot };
-  }
-
-  auto ClearShadowSlice(const std::shared_ptr<const Texture>& shadow_texture,
-    const std::uint32_t array_slice, const float depth_value,
-    std::string_view debug_name) -> void
-  {
-    auto texture = std::const_pointer_cast<Texture>(shadow_texture);
-    CHECK_NOTNULL_F(texture.get(), "Cannot clear a null shadow texture");
-    CHECK_F(Backend().GetResourceRegistry().Contains(*texture),
-      "Shadow pool texture must be registered before test DSV creation");
-
-    auto& allocator
-      = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kTexture_DSV,
-      oxygen::graphics::DescriptorVisibility::kCpuOnly);
-    CHECK_F(handle.IsValid(), "Failed to allocate DSV for `{}`", debug_name);
-
-    const auto dsv_desc = oxygen::graphics::TextureViewDescription {
-      .view_type = ResourceViewType::kTexture_DSV,
-      .visibility = oxygen::graphics::DescriptorVisibility::kCpuOnly,
-      .format = texture->GetDescriptor().format,
-      .dimension = texture->GetDescriptor().texture_type,
-      .sub_resources = {
-        .base_mip_level = 0U,
-        .num_mip_levels = 1U,
-        .base_array_slice = array_slice,
-        .num_array_slices = 1U,
-      },
-      .is_read_only_dsv = false,
-    };
-    auto dsv = Backend().GetResourceRegistry().RegisterView(
-      *texture, std::move(handle), dsv_desc);
-    CHECK_F(dsv->IsValid(), "Failed to register DSV for `{}`", debug_name);
-
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name));
-      ASSERT_NE(recorder, nullptr);
-      EnsureTracked(*recorder, texture, ResourceStates::kCommon);
-      recorder->RequireResourceState(*texture, ResourceStates::kDepthWrite);
-      recorder->FlushBarriers();
-      recorder->ClearDepthStencilView(
-        *texture, dsv, oxygen::graphics::ClearFlags::kDepth, depth_value, 0U);
-      recorder->RequireResourceStateFinal(*texture, ResourceStates::kCommon);
-    }
-    WaitForQueueIdle();
-  }
-
-  auto ReadDepthTexel(const std::shared_ptr<const Texture>& shadow_texture,
-    const std::uint32_t array_slice, const std::uint32_t x,
-    const std::uint32_t y, std::string_view debug_name) -> float
-  {
-    auto texture = std::const_pointer_cast<Texture>(shadow_texture);
-    CHECK_NOTNULL_F(texture.get(), "Cannot read a null shadow texture");
-
-    auto readback = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = kReadbackRowPitch,
-      .usage = BufferUsage::kNone,
-      .memory = oxygen::graphics::BufferMemory::kReadBack,
-      .debug_name = std::string(debug_name) + ".Readback",
-    });
-    CHECK_NOTNULL_F(readback.get(), "Failed to create readback buffer");
-
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name) + ".Probe");
-      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire probe recorder");
-      EnsureTracked(*recorder, texture, ResourceStates::kShaderResource);
-      EnsureTracked(*recorder, readback, ResourceStates::kCopyDest);
-      recorder->RequireResourceState(*texture, ResourceStates::kCopySource);
-      recorder->RequireResourceState(*readback, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
-      recorder->CopyTextureToBuffer(*readback, *texture,
-        oxygen::graphics::TextureBufferCopyRegion {
-          .buffer_offset = oxygen::OffsetBytes { 0U },
-          .buffer_row_pitch = oxygen::SizeBytes { kReadbackRowPitch },
-          .texture_slice = {
-            .x = x,
-            .y = y,
-            .z = 0U,
-            .width = 1U,
-            .height = 1U,
-            .depth = 1U,
-            .mip_level = 0U,
-            .array_slice = array_slice,
-          },
-        });
-    }
-    WaitForQueueIdle();
-
-    float value = 0.0F;
-    const auto* mapped
-      = static_cast<const std::byte*>(readback->Map(0U, kReadbackRowPitch));
-    CHECK_NOTNULL_F(mapped, "Failed to map readback buffer");
-    std::memcpy(&value, mapped, sizeof(value));
-    readback->UnMap();
-    return value;
-  }
-
-  auto ReadTextureMipTexel(const std::shared_ptr<const Texture>& texture,
-    const std::uint32_t mip_level, const std::uint32_t x, const std::uint32_t y,
-    std::string_view debug_name) -> float
-  {
-    CHECK_NOTNULL_F(texture.get(), "Cannot read from a null texture");
-
-    auto readback = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = kReadbackRowPitch,
-      .usage = BufferUsage::kNone,
-      .memory = oxygen::graphics::BufferMemory::kReadBack,
-      .debug_name = std::string(debug_name) + ".Readback",
-    });
-    CHECK_NOTNULL_F(readback.get(), "Failed to create readback buffer");
-
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name) + ".Probe");
-      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire readback recorder");
-      EnsureTracked(*recorder, std::const_pointer_cast<Texture>(texture),
-        ResourceStates::kShaderResource);
-      EnsureTracked(*recorder, readback, ResourceStates::kCopyDest);
-      recorder->RequireResourceState(*texture, ResourceStates::kCopySource);
-      recorder->RequireResourceState(*readback, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
-      recorder->CopyTextureToBuffer(*readback, *texture,
-        oxygen::graphics::TextureBufferCopyRegion {
-          .buffer_offset = oxygen::OffsetBytes { 0U },
-          .buffer_row_pitch = oxygen::SizeBytes { kReadbackRowPitch },
-          .texture_slice = {
-            .x = x,
-            .y = y,
-            .z = 0U,
-            .width = 1U,
-            .height = 1U,
-            .depth = 1U,
-            .mip_level = mip_level,
-            .array_slice = 0U,
-          },
-        });
-    }
-    WaitForQueueIdle();
-
-    float value = 0.0F;
-    const auto* mapped
-      = static_cast<const std::byte*>(readback->Map(0U, kReadbackRowPitch));
-    CHECK_NOTNULL_F(mapped, "Failed to map readback buffer");
-    std::memcpy(&value, mapped, sizeof(value));
-    readback->UnMap();
-    return value;
-  }
-
-  auto ReadBufferBytes(const Buffer& source, const std::size_t size_bytes,
-    std::string_view debug_name) -> std::vector<std::byte>
-  {
-    auto readback = GetReadbackManager()->CreateBufferReadback(debug_name);
-    CHECK_NOTNULL_F(readback.get(), "Failed to create buffer readback");
-
-    oxygen::graphics::ReadbackTicket ticket {};
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name));
-      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire readback recorder");
-      recorder->BeginTrackingResourceState(
-        source, ResourceStates::kCommon, true);
-
-      const auto queued_ticket = readback->EnqueueCopy(
-        *recorder, source, oxygen::graphics::BufferRange { 0U, size_bytes });
-      CHECK_F(queued_ticket.has_value(), "Buffer readback enqueue failed");
-      ticket = *queued_ticket;
-    }
-
-    const auto result = AwaitReadback(ticket);
-    CHECK_F(result.has_value(), "Buffer readback await failed");
-
-    const auto mapped = readback->TryMap();
-    CHECK_F(mapped.has_value(), "Buffer readback map failed");
-    const auto bytes = mapped->Bytes();
-    return { bytes.begin(), bytes.end() };
-  }
-
-  template <typename T>
-  auto CreateStructuredStorageBuffer(std::span<const T> elements,
-    std::string_view debug_name) -> std::shared_ptr<Buffer>
-  {
-    CHECK_F(!elements.empty(),
-      "Structured storage buffer requires at least one element");
-
-    auto buffer = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = static_cast<std::uint64_t>(elements.size_bytes()),
-      .usage = BufferUsage::kStorage,
-      .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
-      .debug_name = std::string(debug_name),
-    });
-    CHECK_NOTNULL_F(
-      buffer.get(), "Failed to create storage buffer `{}`", debug_name);
-    UploadBufferBytes(
-      buffer, elements.data(), elements.size_bytes(), debug_name);
-    return buffer;
-  }
-
-  template <typename T>
-  auto ReadBufferAs(const Buffer& source, const std::size_t element_count,
-    std::string_view debug_name) -> std::vector<T>
-  {
-    const auto bytes
-      = ReadBufferBytes(source, sizeof(T) * element_count, debug_name);
-    std::vector<T> values(element_count);
-    CHECK_F(bytes.size() == sizeof(T) * element_count,
-      "Readback size mismatch for `{}`", debug_name);
-    std::memcpy(values.data(), bytes.data(), bytes.size());
-    return values;
-  }
-
-  auto AttachRasterOutputBuffers(VsmPageAllocationFrame& frame,
-    const std::uint64_t frame_generation, const std::size_t physical_page_count,
-    std::string_view debug_name,
-    std::vector<VsmPhysicalPageMeta> initial_meta = {},
-    std::vector<std::uint32_t> initial_dirty_flags = {}) -> void
-  {
-    CHECK_F(physical_page_count != 0U,
-      "Raster output buffers require at least one physical page");
-    if (initial_meta.empty()) {
-      initial_meta.resize(physical_page_count);
-    }
-    if (initial_dirty_flags.empty()) {
-      initial_dirty_flags.resize(physical_page_count, 0U);
-    }
-    CHECK_F(initial_meta.size() == physical_page_count,
-      "Initial physical-page metadata size mismatch");
-    CHECK_F(initial_dirty_flags.size() == physical_page_count,
-      "Initial dirty-flags size mismatch");
-
-    frame.snapshot.frame_generation = frame_generation;
-    frame.snapshot.physical_pages = initial_meta;
-    frame.physical_page_meta_buffer = CreateStructuredStorageBuffer(
-      std::span<const VsmPhysicalPageMeta>(frame.snapshot.physical_pages.data(),
-        frame.snapshot.physical_pages.size()),
-      std::string(debug_name) + ".PhysicalMeta");
-    frame.dirty_flags_buffer = CreateStructuredStorageBuffer(
-      std::span<const std::uint32_t>(
-        initial_dirty_flags.data(), initial_dirty_flags.size()),
-      std::string(debug_name) + ".DirtyFlags");
-  }
-
-  [[nodiscard]] static auto MakeBaseViewConstants(
-    const ShaderVisibleIndex view_frame_slot, const Slot frame_slot,
-    const SequenceNumber frame_sequence) -> ViewConstants::GpuData
-  {
-    auto base_view_constants = ViewConstants {};
-    base_view_constants.SetTimeSeconds(0.0F, ViewConstants::kRenderer)
-      .SetFrameSlot(frame_slot, ViewConstants::kRenderer)
-      .SetFrameSequenceNumber(frame_sequence, ViewConstants::kRenderer)
-      .SetBindlessViewFrameBindingsSlot(
-        BindlessViewFrameBindingsSlot(view_frame_slot),
-        ViewConstants::kRenderer);
-    return base_view_constants.GetSnapshot();
   }
 };
 
@@ -1233,9 +757,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   EXPECT_NEAR(right_page_depth, 0.25F, 1.0e-4F);
   EXPECT_FLOAT_EQ(untouched_depth, 1.0F);
 
-  const auto dirty_flags
-    = ReadBufferAs<std::uint32_t>(*frame.dirty_flags_buffer,
-      initial_meta.size(), "phase-f-rasterizer-draw.dirty");
+  const auto dirty_flags = ReadBufferAs<std::uint32_t>(frame.dirty_flags_buffer,
+    initial_meta.size(), "phase-f-rasterizer-draw.dirty");
   EXPECT_EQ(dirty_flags[0],
     static_cast<std::uint32_t>(
       VsmRenderedPageDirtyFlagBits::kDynamicRasterized));
@@ -1245,7 +768,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   EXPECT_EQ(dirty_flags[2], 0U);
 
   const auto metadata
-    = ReadBufferAs<VsmPhysicalPageMeta>(*frame.physical_page_meta_buffer,
+    = ReadBufferAs<VsmPhysicalPageMeta>(frame.physical_page_meta_buffer,
       initial_meta.size(), "phase-f-rasterizer-draw.meta");
   EXPECT_TRUE(static_cast<bool>(metadata[0].is_dirty));
   EXPECT_TRUE(static_cast<bool>(metadata[1].is_dirty));
@@ -1266,8 +789,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   ExecuteRasterizedDirectionalPagesProjectLocalizedShadowMaskInsteadOfPageWideDarkening)
 {
   auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(
-    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase-f-shadow-localized")),
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeShadowPoolConfig("phase-f-shadow-localized")),
     VsmPhysicalPoolChangeResult::kCreated);
 
   const auto physical_pool = pool_manager.GetShadowPoolSnapshot();
@@ -1333,8 +856,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
 
   auto vertex_buffer = CreateStructuredSrvBuffer<TestVertex>(
     vertices, "phase-f-rasterizer-localized.vertices");
-  auto index_buffer = CreateUIntIndexBuffer(
-    kIndices, "phase-f-rasterizer-localized.indices");
+  auto index_buffer
+    = CreateUIntIndexBuffer(kIndices, "phase-f-rasterizer-localized.indices");
 
   auto world_buffer = TransientStructuredBuffer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
@@ -1488,8 +1011,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     "phase-f-rasterizer-localized", initial_meta);
 
   auto projection = MakeProjection(2U, 1U);
-  projection.projection.light_type = static_cast<std::uint32_t>(
-    VsmProjectionLightType::kDirectional);
+  projection.projection.light_type
+    = static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional);
   frame.snapshot.projection_records = { projection };
   frame.snapshot.page_table.resize(kTestPageTableEntry + 2U);
   frame.snapshot.page_table[kTestPageTableEntry] = {
@@ -1500,9 +1023,9 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     .is_mapped = true,
     .physical_page = VsmPhysicalPageIndex { .value = 1U },
   };
-  auto shader_page_table = std::vector<VsmShaderPageTableEntry>(
-    frame.snapshot.page_table.size(),
-    oxygen::renderer::vsm::MakeUnmappedShaderPageTableEntry());
+  auto shader_page_table
+    = std::vector<VsmShaderPageTableEntry>(frame.snapshot.page_table.size(),
+      oxygen::renderer::vsm::MakeUnmappedShaderPageTableEntry());
   shader_page_table[kTestPageTableEntry]
     = oxygen::renderer::vsm::MakeMappedShaderPageTableEntry(
       VsmPhysicalPageIndex { .value = 0U });
@@ -1538,16 +1061,15 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     WaitForQueueIdle();
   }
 
-  auto scene_depth = CreateDepthTexture2D(kOutputWidth, kOutputHeight,
-    "phase-f-rasterizer-localized.depth");
-  UploadDepthTexture(
-    scene_depth, 0.75F, "phase-f-rasterizer-localized.depth");
+  auto scene_depth = CreateDepthTexture2D(
+    kOutputWidth, kOutputHeight, "phase-f-rasterizer-localized.depth");
+  UploadDepthTexture(scene_depth, 0.75F, "phase-f-rasterizer-localized.depth");
 
-  auto projection_pass = VsmProjectionPass(
-    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-    std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
-      .debug_name = "phase-f-rasterizer-localized.projection",
-    }));
+  auto projection_pass
+    = VsmProjectionPass(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
+        .debug_name = "phase-f-rasterizer-localized.projection",
+      }));
   projection_pass.SetInput(VsmProjectionPassInput {
     .frame = frame,
     .physical_pool = physical_pool,
@@ -1562,8 +1084,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       MakeResolvedView(kOutputWidth, kOutputHeight), projection_prepared_frame);
     auto& projection_context = projection_offscreen.GetRenderContext();
 
-    auto recorder
-      = AcquireRecorder("phase-f-rasterizer-localized.projection");
+    auto recorder = AcquireRecorder("phase-f-rasterizer-localized.projection");
     ASSERT_NE(recorder, nullptr);
     RunPass(projection_pass, projection_context, *recorder);
     WaitForQueueIdle();
@@ -1573,23 +1094,21 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   ASSERT_TRUE(output.available);
   ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
 
-  const auto left_center = ReadDepthTexel(
-    output.directional_shadow_mask_texture, 0U, 16U, 32U,
-    "phase-f-rasterizer-localized.mask.left-center");
-  const auto right_center = ReadDepthTexel(
-    output.directional_shadow_mask_texture, 0U, 48U, 32U,
-    "phase-f-rasterizer-localized.mask.right-center");
-  const auto left_edge = ReadDepthTexel(
-    output.directional_shadow_mask_texture, 0U, 4U, 32U,
-    "phase-f-rasterizer-localized.mask.left-edge");
-  const auto right_edge = ReadDepthTexel(
-    output.directional_shadow_mask_texture, 0U, 60U, 32U,
-    "phase-f-rasterizer-localized.mask.right-edge");
+  const auto left_center
+    = ReadDepthTexel(output.directional_shadow_mask_texture, 0U, 16U, 32U,
+      "phase-f-rasterizer-localized.mask.left-center");
+  const auto right_center
+    = ReadDepthTexel(output.directional_shadow_mask_texture, 0U, 48U, 32U,
+      "phase-f-rasterizer-localized.mask.right-center");
+  const auto left_edge = ReadDepthTexel(output.directional_shadow_mask_texture,
+    0U, 4U, 32U, "phase-f-rasterizer-localized.mask.left-edge");
+  const auto right_edge = ReadDepthTexel(output.directional_shadow_mask_texture,
+    0U, 60U, 32U, "phase-f-rasterizer-localized.mask.right-edge");
   const auto top_left = ReadDepthTexel(output.directional_shadow_mask_texture,
     0U, 4U, 4U, "phase-f-rasterizer-localized.mask.top-left");
-  const auto bottom_right = ReadDepthTexel(
-    output.directional_shadow_mask_texture, 0U, 60U, 60U,
-    "phase-f-rasterizer-localized.mask.bottom-right");
+  const auto bottom_right
+    = ReadDepthTexel(output.directional_shadow_mask_texture, 0U, 60U, 60U,
+      "phase-f-rasterizer-localized.mask.bottom-right");
 
   EXPECT_LT(left_center, 0.1F);
   EXPECT_LT(right_center, 0.1F);
@@ -1815,16 +1334,15 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   EXPECT_FLOAT_EQ(dynamic_depth, dynamic_depth_before);
   EXPECT_NEAR(static_depth, 0.25F, 1.0e-4F);
 
-  const auto dirty_flags
-    = ReadBufferAs<std::uint32_t>(*frame.dirty_flags_buffer,
-      initial_meta.size(), "phase-f-rasterizer-static.dirty");
+  const auto dirty_flags = ReadBufferAs<std::uint32_t>(frame.dirty_flags_buffer,
+    initial_meta.size(), "phase-f-rasterizer-static.dirty");
   EXPECT_EQ(dirty_flags[0],
     static_cast<std::uint32_t>(
       VsmRenderedPageDirtyFlagBits::kStaticRasterized));
   EXPECT_EQ(dirty_flags[1], 0U);
 
   const auto metadata
-    = ReadBufferAs<VsmPhysicalPageMeta>(*frame.physical_page_meta_buffer,
+    = ReadBufferAs<VsmPhysicalPageMeta>(frame.physical_page_meta_buffer,
       initial_meta.size(), "phase-f-rasterizer-static.meta");
   EXPECT_TRUE(static_cast<bool>(metadata[0].is_dirty));
   EXPECT_TRUE(static_cast<bool>(metadata[0].used_this_frame));
@@ -2125,7 +1643,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(count, 0U);
 
   const auto dirty_flags = ReadBufferAs<std::uint32_t>(
-    *frame.dirty_flags_buffer, 2U, "phase-f-rasterizer-hzb.dirty");
+    frame.dirty_flags_buffer, 2U, "phase-f-rasterizer-hzb.dirty");
   EXPECT_EQ(dirty_flags[0], 0U);
 
   const float page_depth = ReadDepthTexel(
@@ -2390,7 +1908,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   EXPECT_EQ(count, 1U);
 
   const auto dirty_flags = ReadBufferAs<std::uint32_t>(
-    *frame.dirty_flags_buffer, 2U, "phase-f-rasterizer-reveal.dirty");
+    frame.dirty_flags_buffer, 2U, "phase-f-rasterizer-reveal.dirty");
   EXPECT_EQ(dirty_flags[0],
     static_cast<std::uint32_t>(VsmRenderedPageDirtyFlagBits::kDynamicRasterized)
       | static_cast<std::uint32_t>(
