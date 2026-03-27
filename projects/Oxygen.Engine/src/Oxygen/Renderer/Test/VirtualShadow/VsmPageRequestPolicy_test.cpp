@@ -28,7 +28,7 @@ using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::VsmVisiblePixelSample;
 using oxygen::renderer::vsm::testing::VirtualShadowTest;
 
-class VsmPageRequestGenerationTest : public VirtualShadowTest {
+class VsmPageRequestPolicyTest : public VirtualShadowTest {
 protected:
   [[nodiscard]] static auto MakeProjection(const std::uint32_t map_id,
     const std::uint32_t first_page_table_entry, const std::uint32_t level_count,
@@ -71,8 +71,8 @@ protected:
   }
 };
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
-  VisibleWorldSampleProjectsIntoFineAndCoarseRequests)
+NOLINT_TEST_F(
+  VsmPageRequestPolicyTest, VisibleWorldSampleProjectsIntoFineAndCoarseRequests)
 {
   const auto projection = MakeProjection(7U, 100U, 4U, 3U);
 
@@ -96,7 +96,7 @@ NOLINT_TEST_F(VsmPageRequestGenerationTest,
     VsmPageRequestFlags::kRequired | VsmPageRequestFlags::kCoarse);
 }
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
+NOLINT_TEST_F(VsmPageRequestPolicyTest,
   LightGridPruningSkipsLocalLightsThatDoNotAffectTheSample)
 {
   const auto requests
@@ -110,8 +110,8 @@ NOLINT_TEST_F(VsmPageRequestGenerationTest,
   EXPECT_EQ(requests[0].map_id, 12U);
 }
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
-  DisablingLightGridPruningKeepsAllLocalLightRequests)
+NOLINT_TEST_F(
+  VsmPageRequestPolicyTest, DisablingLightGridPruningKeepsAllLocalLightRequests)
 {
   const auto requests
     = BuildPageRequests(std::array { MakeProjection(11U, 0U, 1U, 0U, 3U),
@@ -130,7 +130,7 @@ NOLINT_TEST_F(VsmPageRequestGenerationTest,
 }
 
 NOLINT_TEST_F(
-  VsmPageRequestGenerationTest, CoarseRequestsCanBeDisabledPerGenerationRun)
+  VsmPageRequestPolicyTest, CoarseRequestsCanBeDisabledPerGenerationRun)
 {
   const auto requests
     = BuildPageRequests(std::array { MakeProjection(7U, 100U, 4U, 3U) },
@@ -146,7 +146,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(requests[0].flags, VsmPageRequestFlags::kRequired);
 }
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
+NOLINT_TEST_F(VsmPageRequestPolicyTest,
   MalformedProjectionsAreIgnoredAndDuplicateSamplesCoalesce)
 {
   auto malformed = MakeProjection(15U, 0U, 1U, 0U);
@@ -163,7 +163,7 @@ NOLINT_TEST_F(VsmPageRequestGenerationTest,
   EXPECT_EQ(requests[1].map_id, 16U);
 }
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
+NOLINT_TEST_F(VsmPageRequestPolicyTest,
   WorldPositionsOutsideTheProjectionFrustumProduceNoRequests)
 {
   const auto page = TryProjectWorldToPage(
@@ -172,7 +172,7 @@ NOLINT_TEST_F(VsmPageRequestGenerationTest,
   EXPECT_FALSE(page.has_value());
 }
 
-NOLINT_TEST_F(VsmPageRequestGenerationTest,
+NOLINT_TEST_F(VsmPageRequestPolicyTest,
   SharedMapProjectionRoutesProduceDistinctGlobalPageRequests)
 {
   const auto face0_view = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },

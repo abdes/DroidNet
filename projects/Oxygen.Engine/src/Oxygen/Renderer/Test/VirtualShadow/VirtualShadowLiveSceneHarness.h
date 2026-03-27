@@ -19,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -43,6 +44,7 @@
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -75,6 +77,7 @@ struct TwoBoxShadowSceneData {
   std::shared_ptr<oxygen::scene::Scene> scene {};
   oxygen::scene::SceneNode sun_node {};
   oxygen::scene::SceneNode spot_node {};
+  std::vector<oxygen::scene::SceneNode> additional_light_nodes {};
   oxygen::scene::SceneNode floor_node {};
   oxygen::scene::SceneNode tall_box_node {};
   oxygen::scene::SceneNode short_box_node {};
@@ -203,24 +206,29 @@ protected:
   static auto CollectSceneLights(oxygen::renderer::LightManager& lights,
     TwoBoxShadowSceneData& scene_data) -> void
   {
-    if (scene_data.sun_node.IsValid()) {
-      auto sun_impl = scene_data.sun_node.GetImpl();
-      if (!sun_impl.has_value()) {
-        ADD_FAILURE() << "directional light node has no implementation";
-      } else {
-        lights.CollectFromNode(
-          scene_data.sun_node.GetHandle(), sun_impl->get());
+    auto collect_node = [&](oxygen::scene::SceneNode node, const char* label) {
+      if (!node.IsValid()) {
+        return;
       }
+
+      auto impl = node.GetImpl();
+      if (!impl.has_value()) {
+        ADD_FAILURE() << label << " light node has no implementation";
+        return;
+      }
+      lights.CollectFromNode(node.GetHandle(), impl->get());
+    };
+
+    if (scene_data.sun_node.IsValid()) {
+      collect_node(scene_data.sun_node, "directional");
     }
 
     if (scene_data.spot_node.IsValid()) {
-      auto spot_impl = scene_data.spot_node.GetImpl();
-      if (!spot_impl.has_value()) {
-        ADD_FAILURE() << "spot light node has no implementation";
-      } else {
-        lights.CollectFromNode(
-          scene_data.spot_node.GetHandle(), spot_impl->get());
-      }
+      collect_node(scene_data.spot_node, "spot");
+    }
+
+    for (const auto& light_node : scene_data.additional_light_nodes) {
+      collect_node(light_node, "additional");
     }
   }
 
@@ -267,6 +275,58 @@ protected:
     scene_data.spot_range = range;
     scene_data.spot_inner_cone_radians = inner_cone_radians;
     scene_data.spot_outer_cone_radians = outer_cone_radians;
+  }
+
+  auto AttachAdditionalSpotLightToTwoBoxScene(TwoBoxShadowSceneData& scene_data,
+    const glm::vec3& spot_position_ws, const glm::vec3& spot_target_ws,
+    const float range, const float inner_cone_radians = glm::radians(22.0F),
+    const float outer_cone_radians = glm::radians(32.0F))
+    -> oxygen::scene::SceneNode
+  {
+    CHECK_NOTNULL_F(scene_data.scene.get(),
+      "Two-box scene must exist before adding an additional spot light");
+
+    const auto visible_flags
+      = oxygen::scene::SceneNode::Flags {}
+          .SetFlag(oxygen::scene::SceneNodeFlags::kVisible,
+            oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true))
+          .SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
+            oxygen::scene::SceneFlag {}.SetEffectiveValueBit(true));
+    auto spot_node = scene_data.scene->CreateNode("spot-extra", visible_flags);
+    CHECK_F(spot_node.IsValid(), "Failed to create additional spot node");
+    CHECK_F(spot_node.AttachLight(std::make_unique<oxygen::scene::SpotLight>()),
+      "Failed to attach additional spot light");
+
+    auto spot_impl = spot_node.GetImpl();
+    CHECK_F(
+      spot_impl.has_value(), "Additional spot node has no implementation");
+    auto& spot_light
+      = spot_impl->get().GetComponent<oxygen::scene::SpotLight>();
+    spot_light.Common().casts_shadows = true;
+    spot_light.SetRange(range);
+    spot_light.SetInnerConeAngleRadians(inner_cone_radians);
+    spot_light.SetOuterConeAngleRadians(outer_cone_radians);
+
+    CHECK_F(spot_node.GetTransform().SetLocalPosition(spot_position_ws),
+      "Failed to position additional spot node");
+    CHECK_F(spot_node.GetTransform().SetLocalRotation(
+              RotationFromForwardTo(spot_target_ws - spot_position_ws)),
+      "Failed to rotate additional spot node");
+    UpdateTransforms(*scene_data.scene, spot_node);
+
+    scene_data.additional_light_nodes.push_back(spot_node);
+    return spot_node;
+  }
+
+  static auto CollectRendererSceneLights(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data) -> void
+  {
+    auto light_manager = renderer.GetLightManager();
+    ASSERT_NE(light_manager, nullptr);
+    if (light_manager == nullptr) {
+      return;
+    }
+    CollectSceneLights(*light_manager, scene_data);
   }
 
   auto ExecutePreparedViewShell(
@@ -709,7 +769,8 @@ protected:
     const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
     const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
     const oxygen::frame::Slot slot,
-    const std::uint64_t shadow_caster_content_hash) -> TwoBoxLiveFrameResult
+    const std::uint64_t shadow_caster_content_hash,
+    const bool enable_light_culling = false) -> TwoBoxLiveFrameResult
   {
     using oxygen::engine::DrawFrameBindings;
     using oxygen::engine::PreparedSceneFrame;
@@ -834,6 +895,35 @@ protected:
       RunPass(depth_pass, render_context, *recorder);
     }
     WaitForQueueIdle();
+
+    auto light_culling_pass
+      = std::optional<oxygen::engine::LightCullingPass> {};
+    if (enable_light_culling) {
+      CollectRendererSceneLights(renderer, scene_data);
+      light_culling_pass.emplace(
+        oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+        std::make_shared<oxygen::engine::LightCullingPassConfig>(
+          oxygen::engine::LightCullingPassConfig {
+            .cluster =
+              [] {
+                auto config = oxygen::engine::LightCullingConfig::Default();
+                config.cluster_dim_z = 1U;
+                config.tile_size_px = 16U;
+                return config;
+              }(),
+            .debug_name = "early-stage-two-box.light-culling",
+          }));
+      render_context.RegisterPass(&(*light_culling_pass));
+      {
+        auto recorder = AcquireRecorder("early-stage-two-box.light-culling");
+        CHECK_NOTNULL_F(
+          recorder.get(), "Failed to acquire light-culling recorder");
+        RunPass(*light_culling_pass, render_context, *recorder);
+      }
+      WaitForQueueIdle();
+      EXPECT_TRUE(light_culling_pass->GetClusterGridSrvIndex().IsValid());
+      EXPECT_TRUE(light_culling_pass->GetLightIndexListSrvIndex().IsValid());
+    }
 
     auto lights = oxygen::renderer::LightManager(
       oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
