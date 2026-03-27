@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
 #include <optional>
 #include <vector>
 
@@ -60,6 +61,28 @@ namespace {
     }
   }
 
+  [[nodiscard]] auto BuildShadowProductFlags(const std::uint32_t light_flags)
+    -> std::uint32_t
+  {
+    using engine::DirectionalLightFlags;
+    using engine::ShadowProductFlags;
+
+    auto flags = ShadowProductFlags::kValid;
+    const auto directional_flags
+      = static_cast<DirectionalLightFlags>(light_flags);
+
+    if ((directional_flags & DirectionalLightFlags::kContactShadows)
+      != DirectionalLightFlags::kNone) {
+      flags |= ShadowProductFlags::kContactShadows;
+    }
+    if ((directional_flags & DirectionalLightFlags::kSunLight)
+      != DirectionalLightFlags::kNone) {
+      flags |= ShadowProductFlags::kSunLight;
+    }
+
+    return static_cast<std::uint32_t>(flags);
+  }
+
 } // namespace
 
 ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
@@ -72,6 +95,9 @@ ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   , inline_transfers_(inline_transfers)
   , shadow_quality_tier_(quality_tier)
   , directional_policy_(directional_policy)
+  , vsm_shadow_instance_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(engine::ShadowInstanceMetadata)),
+      inline_transfers_, "ShadowManager.VsmShadowInstanceMetadata")
   , conventional_backend_(std::make_unique<internal::ConventionalShadowBackend>(
       gfx_, staging_provider_, inline_transfers_, shadow_quality_tier_))
 {
@@ -93,8 +119,9 @@ ShadowManager::ShadowManager(const observer_ptr<Graphics> gfx,
   if (directional_policy_
     == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
     LOG_F(INFO,
-      "ShadowManager: VSM policy selected; conventional shadow publication "
-      "remains active until Phase K-b integrates VSM lighting consumption");
+      "ShadowManager: VSM policy selected; directional publication will use "
+      "the VSM lighting product and skip conventional directional raster "
+      "plans");
   }
 }
 
@@ -103,6 +130,8 @@ ShadowManager::~ShadowManager() = default;
 auto ShadowManager::OnFrameStart(RendererTag tag,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  vsm_shadow_instance_buffer_.OnFrameStart(sequence, slot);
+  virtual_view_cache_.clear();
   if (conventional_backend_) {
     conventional_backend_->OnFrameStart(tag, sequence, slot);
   }
@@ -114,6 +143,7 @@ auto ShadowManager::OnFrameStart(RendererTag tag,
 auto ShadowManager::ResetCachedState() -> void
 {
   last_view_directional_implementation_.clear();
+  virtual_view_cache_.clear();
 
   if (conventional_backend_) {
     conventional_backend_->ResetCachedState();
@@ -173,6 +203,89 @@ auto ShadowManager::PublishForView(const ViewId view_id,
     }
   }
 
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    auto state = VirtualViewCacheEntry {};
+    state.shadow_instances.reserve(candidates_storage.size());
+
+    std::optional<std::size_t> primary_virtual_candidate_index {};
+    if (!candidates_storage.empty()) {
+      primary_virtual_candidate_index = std::size_t { 0U };
+      if (candidates_storage.size() > 1U) {
+        LOG_F(WARNING,
+          "ShadowManager: VSM directional publication currently routes the "
+          "primary directional candidate only (view={} candidate_count={} "
+          "primary_light_index={})",
+          view_id.get(), candidates_storage.size(),
+          candidates_storage.front().light_index);
+      }
+    }
+
+    for (std::size_t candidate_index = 0U;
+      candidate_index < candidates_storage.size(); ++candidate_index) {
+      const auto& candidate = candidates_storage[candidate_index];
+      const auto is_primary_virtual_candidate
+        = primary_virtual_candidate_index.has_value()
+        && *primary_virtual_candidate_index == candidate_index;
+      state.shadow_instances.push_back(engine::ShadowInstanceMetadata {
+        .light_index = candidate.light_index,
+        .payload_index = 0U,
+        .domain = static_cast<std::uint32_t>(engine::ShadowDomain::kDirectional),
+        .implementation_kind = static_cast<std::uint32_t>(
+          is_primary_virtual_candidate
+            ? engine::ShadowImplementationKind::kVirtual
+            : engine::ShadowImplementationKind::kNone),
+        .flags = is_primary_virtual_candidate
+          ? BuildShadowProductFlags(candidate.light_flags)
+          : 0U,
+      });
+      if (is_primary_virtual_candidate
+        && (state.shadow_instances.back().flags
+             & static_cast<std::uint32_t>(engine::ShadowProductFlags::kSunLight))
+          != 0U) {
+        state.frame_publication.sun_shadow_index
+          = static_cast<std::uint32_t>(candidate_index);
+      }
+    }
+
+    if (!state.shadow_instances.empty()) {
+      const auto allocation = vsm_shadow_instance_buffer_.Allocate(
+        static_cast<std::uint32_t>(state.shadow_instances.size()));
+      if (!allocation) {
+        LOG_F(ERROR,
+          "ShadowManager: failed to allocate VSM shadow-instance metadata "
+          "buffer for view {}: {}",
+          view_id.get(), allocation.error().message());
+      } else {
+        const auto& published = *allocation;
+        if (published.mapped_ptr != nullptr) {
+          std::memcpy(published.mapped_ptr, state.shadow_instances.data(),
+            state.shadow_instances.size()
+              * sizeof(engine::ShadowInstanceMetadata));
+        }
+        state.frame_publication.shadow_instance_metadata_srv = published.srv;
+      }
+    }
+
+    if (state.frame_publication.shadow_instance_metadata_srv
+      != kInvalidShaderVisibleIndex) {
+      RecordDirectionalImplementation(last_view_directional_implementation_,
+        view_id, engine::ShadowImplementationKind::kVirtual,
+        static_cast<std::uint32_t>(candidates_storage.size()));
+    } else {
+      RecordDirectionalImplementation(last_view_directional_implementation_,
+        view_id, engine::ShadowImplementationKind::kNone,
+        static_cast<std::uint32_t>(candidates_storage.size()));
+    }
+
+    auto [it, inserted]
+      = virtual_view_cache_.insert_or_assign(view_id, std::move(state));
+    DCHECK_F(inserted || it != virtual_view_cache_.end(),
+      "ShadowManager failed to cache VSM publication for view {}",
+      view_id.get());
+    return it->second.frame_publication;
+  }
+
   if (!conventional_backend_) {
     LOG_F(WARNING,
       "ShadowManager: no conventional backend is available for view {}",
@@ -209,6 +322,12 @@ auto ShadowManager::SetPublishedViewFrameBindingsSlot(const ViewId view_id,
 auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept
   -> const ShadowFramePublication*
 {
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    const auto it = virtual_view_cache_.find(view_id);
+    return it != virtual_view_cache_.end() ? &it->second.frame_publication
+                                           : nullptr;
+  }
   return conventional_backend_
     ? conventional_backend_->TryGetFramePublication(view_id)
     : nullptr;
@@ -217,6 +336,11 @@ auto ShadowManager::TryGetFramePublication(const ViewId view_id) const noexcept
 auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
   -> const RasterShadowRenderPlan*
 {
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    static_cast<void>(view_id);
+    return nullptr;
+  }
   return conventional_backend_
     ? conventional_backend_->TryGetRasterRenderPlan(view_id)
     : nullptr;
@@ -225,6 +349,13 @@ auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
 auto ShadowManager::TryGetShadowInstanceMetadata(
   const ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*
 {
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    const auto it = virtual_view_cache_.find(view_id);
+    return it != virtual_view_cache_.end() && !it->second.shadow_instances.empty()
+      ? &it->second.shadow_instances.front()
+      : nullptr;
+  }
   return conventional_backend_ != nullptr
     ? conventional_backend_->TryGetShadowInstanceMetadata(view_id)
     : nullptr;

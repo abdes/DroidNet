@@ -164,6 +164,10 @@ public:
     OXGN_RNDR_API auto SetCurrentView(ViewId view_id,
       const ResolvedView& resolved_view,
       const PreparedSceneFrame& prepared_frame) -> void;
+    OXGN_RNDR_API auto SetCurrentView(ViewId view_id,
+      const ResolvedView& resolved_view,
+      const PreparedSceneFrame& prepared_frame,
+      const ViewConstants& view_constants) -> void;
 
     [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
     {

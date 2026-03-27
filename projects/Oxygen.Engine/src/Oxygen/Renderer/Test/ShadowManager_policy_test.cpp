@@ -8,12 +8,18 @@
 #include <memory>
 #include <string>
 
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/LightManager.h>
@@ -42,7 +48,12 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 namespace {
 
 using oxygen::DirectionalShadowImplementationPolicy;
+using oxygen::NdcDepthRange;
+using oxygen::ResolvedView;
+using oxygen::Scissors;
+using oxygen::View;
 using oxygen::observer_ptr;
+using oxygen::ViewPort;
 using oxygen::engine::ViewConstants;
 using oxygen::engine::sceneprep::RenderItemData;
 using oxygen::engine::sceneprep::TransformHandle;
@@ -139,6 +150,86 @@ protected:
     return view_constants;
   }
 
+  [[nodiscard]] static auto MakeResolvedView() -> ResolvedView
+  {
+    const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
+    const auto projection_matrix
+      = glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
+
+    auto view_config = View {};
+    view_config.viewport = ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 1.0F,
+      .height = 1.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    view_config.scissor = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = 1,
+      .bottom = 1,
+    };
+
+    return ResolvedView(ResolvedView::Params {
+      .view_config = view_config,
+      .view_matrix = view_matrix,
+      .proj_matrix = projection_matrix,
+      .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
+      .depth_range = NdcDepthRange::ZeroToOne,
+      .near_plane = 0.1F,
+      .far_plane = 100.0F,
+    });
+  }
+
+  [[nodiscard]] static auto MakeViewConstants(const ResolvedView& resolved_view)
+    -> ViewConstants
+  {
+    auto view_constants = MakeViewConstants();
+    view_constants.SetViewMatrix(resolved_view.ViewMatrix())
+      .SetProjectionMatrix(resolved_view.ProjectionMatrix())
+      .SetCameraPosition(resolved_view.CameraPosition());
+    return view_constants;
+  }
+
+  [[nodiscard]] static auto HasValidDepthSpan(
+    const ViewConstants& view_constants) -> bool
+  {
+    const auto snapshot = view_constants.GetSnapshot();
+    const auto inv_proj = glm::inverse(snapshot.projection_matrix);
+    constexpr auto kMinCascadeSpan = 0.1F;
+    constexpr std::array<glm::vec2, 4> clip_corners {
+      glm::vec2(-1.0F, -1.0F),
+      glm::vec2(1.0F, -1.0F),
+      glm::vec2(1.0F, 1.0F),
+      glm::vec2(-1.0F, 1.0F),
+    };
+
+    auto transform_point = [](const glm::mat4& matrix, const glm::vec3 point) {
+      const auto transformed = matrix * glm::vec4(point, 1.0F);
+      const auto inv_w
+        = std::abs(transformed.w) > 1.0e-6F ? (1.0F / transformed.w) : 1.0F;
+      return glm::vec3(transformed) * inv_w;
+    };
+
+    auto near_depth = 0.0F;
+    auto far_depth = 0.0F;
+    for (const auto& clip_corner : clip_corners) {
+      const auto near_corner
+        = transform_point(inv_proj, glm::vec3(clip_corner, 0.0F));
+      const auto far_corner
+        = transform_point(inv_proj, glm::vec3(clip_corner, 1.0F));
+      near_depth += std::max(0.0F, -near_corner.z);
+      far_depth += std::max(0.0F, -far_corner.z);
+    }
+
+    near_depth /= static_cast<float>(clip_corners.size());
+    far_depth /= static_cast<float>(clip_corners.size());
+    return far_depth > near_depth + kMinCascadeSpan;
+  }
+
 private:
   std::shared_ptr<FakeGraphics> gfx_;
   std::unique_ptr<UploadCoordinator> uploader_;
@@ -208,6 +299,49 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
   }
 }
 
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyPublishesConventionalDirectionalProductsAndRasterPlan)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView();
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  directional_impl->get()
+    .GetComponent<DirectionalLight>()
+    .Common()
+    .casts_shadows
+    = true;
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 4 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 4 }, Slot { 0 });
+
+  EXPECT_TRUE(HasValidDepthSpan(view_constants));
+
+  const auto publication = manager->PublishForView(oxygen::ViewId { 5 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } });
+
+  EXPECT_NE(
+    publication.shadow_instance_metadata_srv, oxygen::kInvalidShaderVisibleIndex);
+  const auto* shadow_instance
+    = manager->TryGetShadowInstanceMetadata(oxygen::ViewId { 5 });
+  ASSERT_NE(shadow_instance, nullptr);
+  EXPECT_EQ(shadow_instance->implementation_kind,
+    static_cast<std::uint32_t>(oxygen::engine::ShadowImplementationKind::kConventional));
+  EXPECT_NE(manager->TryGetRasterRenderPlan(oxygen::ViewId { 5 }), nullptr);
+}
+
 NOLINT_TEST_F(
   ShadowManagerPolicyTest, VsmPublishCapturesPerViewInputsIntoPreparedState)
 {
@@ -261,10 +395,31 @@ NOLINT_TEST_F(
     .main_view_visible = true,
     .static_shadow_caster = true,
   } };
-  static_cast<void>(manager->PublishForView(oxygen::ViewId { 7 },
+  const auto publication = manager->PublishForView(oxygen::ViewId { 7 },
     view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1920.0F,
     rendered_items, shadow_caster_bounds, visible_receiver_bounds,
-    std::chrono::milliseconds { 23 }, 0xBEEFULL));
+    std::chrono::milliseconds { 23 }, 0xBEEFULL);
+
+  EXPECT_NE(
+    publication.shadow_instance_metadata_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(publication.directional_shadow_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(publication.directional_shadow_texture_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(manager->TryGetRasterRenderPlan(oxygen::ViewId { 7 }), nullptr);
+  const auto* shadow_instance
+    = manager->TryGetShadowInstanceMetadata(oxygen::ViewId { 7 });
+  ASSERT_NE(shadow_instance, nullptr);
+  EXPECT_EQ(shadow_instance->light_index, 0U);
+  EXPECT_EQ(shadow_instance->implementation_kind,
+    static_cast<std::uint32_t>(oxygen::engine::ShadowImplementationKind::kVirtual));
+  EXPECT_EQ(
+    shadow_instance->domain,
+    static_cast<std::uint32_t>(oxygen::engine::ShadowDomain::kDirectional));
+  EXPECT_NE(
+    shadow_instance->flags & static_cast<std::uint32_t>(
+      oxygen::engine::ShadowProductFlags::kValid),
+    0U);
 
   const auto vsm_renderer = manager->GetVirtualShadowRenderer();
   ASSERT_NE(vsm_renderer.get(), nullptr);

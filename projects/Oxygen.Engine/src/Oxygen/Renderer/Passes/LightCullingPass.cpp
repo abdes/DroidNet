@@ -53,6 +53,25 @@ namespace oxygen::engine {
 
 namespace {
 
+  [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
+    -> graphics::ResourceStates
+  {
+    const auto initial_state = texture.GetDescriptor().initial_state;
+    if (initial_state != graphics::ResourceStates::kUnknown
+      && initial_state != graphics::ResourceStates::kUndefined) {
+      return initial_state;
+    }
+    switch (texture.GetDescriptor().format) {
+    case Format::kDepth16:
+    case Format::kDepth24Stencil8:
+    case Format::kDepth32:
+    case Format::kDepth32Stencil8:
+      return graphics::ResourceStates::kDepthWrite;
+    default:
+      return graphics::ResourceStates::kCommon;
+    }
+  }
+
   //! Pass constants uploaded to GPU for the light culling dispatch.
   /*!
    Layout must match `LightCullingPassConstants` in LightCulling.hlsl.
@@ -668,7 +687,7 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   recorder.BeginTrackingResourceState(
     *impl_->light_index_list_buffer, graphics::ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
-    depth_tex, graphics::ResourceStates::kCommon, true);
+    depth_tex, DepthTextureInitialState(depth_tex), true);
   if (impl_->num_positional_lights > 0) {
     CHECK_NOTNULL_F(impl_->positional_lights_buffer,
       "LightCullingPass expected positional light buffer for {} lights",

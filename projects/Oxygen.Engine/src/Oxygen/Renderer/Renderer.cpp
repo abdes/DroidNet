@@ -665,6 +665,33 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
   renderer_->WireContext(render_context_, buffer_info.buffer);
 }
 
+auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
+  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
+  const ViewConstants& view_constants) -> void
+{
+  SetCurrentView(view_id, resolved_view, prepared_frame);
+
+  CHECK_F(active_ && renderer_ != nullptr,
+    "OffscreenFrameSession::SetCurrentView called on an inactive session");
+  CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
+    "Renderer offscreen frame requires ViewConstantsManager");
+
+  auto override_constants = view_constants;
+  override_constants
+    .SetTimeSeconds(renderer_->last_frame_dt_seconds_, ViewConstants::kRenderer)
+    .SetFrameSlot(renderer_->frame_slot_, ViewConstants::kRenderer)
+    .SetFrameSequenceNumber(renderer_->frame_seq_num, ViewConstants::kRenderer);
+
+  const auto& snapshot = override_constants.GetSnapshot();
+  auto buffer_info = renderer_->view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(snapshot));
+  CHECK_F(buffer_info.buffer != nullptr,
+    "Renderer offscreen frame failed to override ViewConstants for view {}",
+    view_id.get());
+
+  renderer_->WireContext(render_context_, buffer_info.buffer);
+}
+
 auto Renderer::OffscreenFrameSession::Release() noexcept -> void
 {
   if (!active_) {
@@ -2721,13 +2748,15 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
     LOG_F(INFO,
       "Renderer: frame={} view={} republish mode={} cached_view_bindings={} "
       "view_frame_slot={} shadow_frame_slot={} lighting_frame_slot={} "
-      "virtual_shadow_frame_slot={} screen_shadow_mask_slot={}",
+      "virtual_shadow_frame_slot={} directional_shadow_mask_slot={} "
+      "screen_shadow_mask_slot={}",
       render_context.frame_sequence.get(), view_id.get(),
       dynamic_system_bindings_only ? "dynamic-system-bindings" : "full",
       can_reuse_cached_view_bindings, view_bindings_slot,
       view_bindings.shadow_frame_slot.get(),
       view_bindings.lighting_frame_slot.get(),
       view_bindings.virtual_shadow_frame_slot.get(),
+      runtime_state.virtual_shadow.directional_shadow_mask_slot.get(),
       runtime_state.virtual_shadow.screen_shadow_mask_slot.get());
     view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),

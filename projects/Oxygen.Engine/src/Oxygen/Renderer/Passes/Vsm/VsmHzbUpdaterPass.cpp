@@ -66,8 +66,8 @@ namespace {
     };
     std::uint32_t physical_page_count { 0U };
     std::uint32_t force_rebuild_all_allocated_pages { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
+    std::uint32_t tiles_per_axis { 0U };
+    std::uint32_t dynamic_slice_index { 0U };
   };
   static_assert(
     sizeof(VsmHzbSelectPagesPassConstants) % packing::kShaderDataFieldAlignment
@@ -106,6 +106,19 @@ namespace {
   };
   static_assert(
     sizeof(VsmHzbPerPageBuildPassConstants) % packing::kShaderDataFieldAlignment
+    == 0U);
+
+  struct alignas(packing::kShaderDataFieldAlignment)
+    VsmHzbPrepareDispatchArgsPassConstants {
+    ShaderVisibleIndex selected_page_count_srv_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex dispatch_args_uav_index { kInvalidShaderVisibleIndex };
+    std::uint32_t thread_group_count_x { 0U };
+    std::uint32_t thread_group_count_y { 0U };
+  };
+  static_assert(sizeof(VsmHzbPrepareDispatchArgsPassConstants)
+      % packing::kShaderDataFieldAlignment
     == 0U);
 
   struct alignas(packing::kShaderDataFieldAlignment)
@@ -182,6 +195,7 @@ struct VsmHzbUpdaterPass::Impl {
 
   std::shared_ptr<Buffer> selected_page_index_buffer {};
   std::shared_ptr<Buffer> selected_page_count_buffer {};
+  std::shared_ptr<Buffer> dispatch_args_buffer {};
   std::uint32_t selected_page_capacity { 0U };
 
   std::array<std::shared_ptr<Texture>, 2> scratch_textures {};
@@ -203,11 +217,13 @@ struct VsmHzbUpdaterPass::Impl {
   ShaderVisibleIndex selected_pages_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex selected_page_count_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex selected_page_count_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex dispatch_args_uav { kInvalidShaderVisibleIndex };
   std::vector<ShaderVisibleIndex> hzb_mip_srv_indices {};
   std::vector<ShaderVisibleIndex> hzb_mip_uav_indices {};
 
   std::optional<std::uint32_t> dynamic_slice_index {};
   std::optional<graphics::ComputePipelineDesc> select_pages_pso {};
+  std::optional<graphics::ComputePipelineDesc> prepare_dispatch_args_pso {};
   std::optional<graphics::ComputePipelineDesc> clear_scratch_rect_pso {};
   std::optional<graphics::ComputePipelineDesc> build_per_page_pso {};
   std::optional<graphics::ComputePipelineDesc> build_top_levels_pso {};
@@ -218,6 +234,7 @@ struct VsmHzbUpdaterPass::Impl {
   auto EnsurePassConstantsBuffer(std::uint32_t required_slot_count) -> void;
   auto EnsureZeroFillBuffer(std::uint64_t required_size) -> void;
   auto EnsureSelectionBuffers(std::uint32_t physical_page_count) -> void;
+  auto EnsureDispatchArgsBuffer() -> void;
   auto EnsureScratchTextures(std::uint32_t extent, oxygen::Format format)
     -> void;
   auto EnsureBufferViewIndex(Buffer& buffer,
@@ -448,6 +465,7 @@ VsmHzbUpdaterPass::Impl::~Impl()
   UnregisterResourceIfPresent(*gfx, zero_fill_buffer);
   UnregisterResourceIfPresent(*gfx, selected_page_index_buffer);
   UnregisterResourceIfPresent(*gfx, selected_page_count_buffer);
+  UnregisterResourceIfPresent(*gfx, dispatch_args_buffer);
   for (auto& scratch_texture : scratch_textures) {
     UnregisterResourceIfPresent(*gfx, scratch_texture);
   }
@@ -583,6 +601,24 @@ auto VsmHzbUpdaterPass::Impl::EnsureSelectionBuffers(
   selected_pages_uav = kInvalidShaderVisibleIndex;
   selected_page_count_srv = kInvalidShaderVisibleIndex;
   selected_page_count_uav = kInvalidShaderVisibleIndex;
+}
+
+auto VsmHzbUpdaterPass::Impl::EnsureDispatchArgsBuffer() -> void
+{
+  if (dispatch_args_buffer != nullptr) {
+    return;
+  }
+
+  dispatch_args_buffer = gfx->CreateBuffer(BufferDesc {
+    .size_bytes = sizeof(std::uint32_t) * 3U,
+    .usage = BufferUsage::kStorage | BufferUsage::kIndirect,
+    .memory = BufferMemory::kDeviceLocal,
+    .debug_name = config->debug_name + ".PerPageDispatchArgs",
+  });
+  CHECK_NOTNULL_F(dispatch_args_buffer.get(),
+    "Failed to create VSM HZB dispatch-args buffer");
+  RegisterResourceIfNeeded(*gfx, dispatch_args_buffer);
+  dispatch_args_uav = kInvalidShaderVisibleIndex;
 }
 
 auto VsmHzbUpdaterPass::Impl::EnsureScratchTextures(
@@ -784,9 +820,10 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
   CHECK_NOTNULL_F(physical_meta_buffer.get(),
     "VSM HZB updater requires a physical-metadata buffer");
 
-  impl_->EnsurePassConstantsBuffer(1U + 2U * input.hzb_pool.mip_count);
+  impl_->EnsurePassConstantsBuffer(1U + 3U * input.hzb_pool.mip_count);
   impl_->EnsureZeroFillBuffer(sizeof(std::uint32_t));
   impl_->EnsureSelectionBuffers(input.physical_pool.tile_capacity);
+  impl_->EnsureDispatchArgsBuffer();
   impl_->EnsureScratchTextures(input.hzb_pool.width, input.hzb_pool.format);
   impl_->PrepareScratchViewIndices();
   impl_->PrepareHzbMipViewIndices(
@@ -822,6 +859,11 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
       MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
         impl_->selected_page_count_buffer->GetDescriptor().size_bytes,
         sizeof(std::uint32_t)));
+  impl_->dispatch_args_uav = impl_->EnsureBufferViewIndex(
+    *impl_->dispatch_args_buffer,
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
+      impl_->dispatch_args_buffer->GetDescriptor().size_bytes,
+      sizeof(std::uint32_t)));
 
   if (impl_->pass_constants_indices.empty()
     || !RequireValidIndex(
@@ -834,7 +876,8 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
     || !RequireValidIndex(
       impl_->selected_page_count_srv, "selected-page-count SRV")
     || !RequireValidIndex(
-      impl_->selected_page_count_uav, "selected-page-count UAV")) {
+      impl_->selected_page_count_uav, "selected-page-count UAV")
+    || !RequireValidIndex(impl_->dispatch_args_uav, "dispatch-args UAV")) {
     co_return;
   }
   for (std::uint32_t slot = 0U; slot < impl_->scratch_textures.size(); ++slot) {
@@ -850,13 +893,14 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
     "VSM HZB updater bindings pass_constants_slots={} first_pass_constants={} "
     "shadow_depth_srv={} dirty_flags_uav={} "
     "physical_meta_uav={} selected_pages_srv={} selected_pages_uav={} "
-    "selected_page_count_srv={} selected_page_count_uav={} dynamic_slice={}",
+    "selected_page_count_srv={} selected_page_count_uav={} dispatch_args_uav={} "
+    "dynamic_slice={}",
     impl_->pass_constants_slot_count,
     impl_->pass_constants_indices.front().get(), impl_->shadow_depth_srv.get(),
     impl_->dirty_flags_uav.get(), impl_->physical_meta_uav.get(),
     impl_->selected_pages_srv.get(), impl_->selected_pages_uav.get(),
     impl_->selected_page_count_srv.get(), impl_->selected_page_count_uav.get(),
-    *impl_->dynamic_slice_index);
+    impl_->dispatch_args_uav.get(), *impl_->dynamic_slice_index);
   for (std::uint32_t mip_level = 0U; mip_level < input.hzb_pool.mip_count;
     ++mip_level) {
     if (!RequireValidIndex(impl_->hzb_mip_srv_indices[mip_level], "HZB mip SRV")
@@ -878,6 +922,8 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
     *impl_->selected_page_index_buffer, ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *impl_->selected_page_count_buffer, ResourceStates::kCommon, true);
+  recorder.BeginTrackingResourceState(
+    *impl_->dispatch_args_buffer, ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *impl_->pass_constants_buffer, ResourceStates::kGenericRead, true);
   recorder.BeginTrackingResourceState(
@@ -918,6 +964,7 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   if (!impl_->resources_prepared || !impl_->input.has_value()
     || !impl_->dynamic_slice_index.has_value() || !impl_->select_pages_pso
+    || !impl_->prepare_dispatch_args_pso
     || !impl_->clear_scratch_rect_pso || !impl_->build_per_page_pso
     || !impl_->build_top_levels_pso) {
     DLOG_F(2, "VSM HZB updater skipped execute");
@@ -958,6 +1005,8 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       .physical_page_count = physical_page_count,
       .force_rebuild_all_allocated_pages
       = input.force_rebuild_all_allocated_pages ? 1U : 0U,
+      .tiles_per_axis = input.physical_pool.tiles_per_axis,
+      .dynamic_slice_index = *impl_->dynamic_slice_index,
     });
   SetPassConstantsIndex(select_pages_constants_index);
   BindComputeStage(recorder, *impl_->select_pages_pso,
@@ -1058,6 +1107,25 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
         .destination_page_extent_texels = destination_page_extent,
         .source_is_shadow_depth = mip_level == 0U ? 1U : 0U,
       });
+    const auto prepare_dispatch_args_constants_index
+      = impl_->WritePassConstants(VsmHzbPrepareDispatchArgsPassConstants {
+        .selected_page_count_srv_index = impl_->selected_page_count_srv,
+        .dispatch_args_uav_index = impl_->dispatch_args_uav,
+        .thread_group_count_x
+        = MakeDispatchGroups(destination_page_extent, kBuildHzbThreadGroupSize),
+        .thread_group_count_y
+        = MakeDispatchGroups(destination_page_extent, kBuildHzbThreadGroupSize),
+      });
+    SetPassConstantsIndex(prepare_dispatch_args_constants_index);
+    BindComputeStage(recorder, *impl_->prepare_dispatch_args_pso,
+      prepare_dispatch_args_constants_index, Context());
+    recorder.RequireResourceState(
+      *impl_->selected_page_count_buffer, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *impl_->dispatch_args_buffer, ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+    recorder.Dispatch(1U, 1U, 1U);
+
     SetPassConstantsIndex(per_page_build_constants_index);
     BindComputeStage(recorder, *impl_->build_per_page_pso,
       per_page_build_constants_index, Context());
@@ -1067,11 +1135,12 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     }
     recorder.RequireResourceState(*impl_->scratch_textures[destination_slot],
       ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *impl_->dispatch_args_buffer, ResourceStates::kIndirectArgument);
     recorder.FlushBarriers();
-    recorder.Dispatch(
-      MakeDispatchGroups(destination_page_extent, kBuildHzbThreadGroupSize),
-      MakeDispatchGroups(destination_page_extent, kBuildHzbThreadGroupSize),
-      physical_page_count);
+    recorder.SetMarker("VsmHzbUpdaterPass.ExecuteIndirect.BuildPerPage");
+    recorder.ExecuteIndirect(*impl_->dispatch_args_buffer, 0U, 1U,
+      CommandRecorder::IndirectCommandLayout::kDispatch);
 
     recorder.RequireResourceState(
       *impl_->scratch_textures[destination_slot], ResourceStates::kCopySource);
@@ -1190,6 +1259,8 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     *impl_->selected_page_index_buffer, ResourceStates::kCommon);
   recorder.RequireResourceState(
     *impl_->selected_page_count_buffer, ResourceStates::kCommon);
+  recorder.RequireResourceState(
+    *impl_->dispatch_args_buffer, ResourceStates::kCommon);
   for (const auto& scratch_texture : impl_->scratch_textures) {
     recorder.RequireResourceState(*scratch_texture, ResourceStates::kCommon);
   }
@@ -1233,6 +1304,8 @@ auto VsmHzbUpdaterPass::CreatePipelineStateDesc()
 
   impl_->select_pages_pso
     = build_pso("CS_SelectPages", "VsmHzbSelectPages_PSO");
+  impl_->prepare_dispatch_args_pso
+    = build_pso("CS_PrepareDispatchArgs", "VsmHzbPrepareDispatchArgs_PSO");
   impl_->clear_scratch_rect_pso
     = build_pso("CS_ClearScratchRect", "VsmHzbClearScratchRect_PSO");
   impl_->build_per_page_pso

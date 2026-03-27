@@ -7,6 +7,9 @@
 #include <array>
 #include <span>
 #include <string_view>
+#include <vector>
+
+#include <glm/vec2.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -26,6 +29,7 @@ using oxygen::renderer::vsm::VsmCacheDataState;
 using oxygen::renderer::vsm::VsmCacheManagerSeam;
 using oxygen::renderer::vsm::VsmExtractedCacheFrame;
 using oxygen::renderer::vsm::VsmHzbPoolChangeResult;
+using oxygen::renderer::vsm::VsmDirectionalClipmapDesc;
 using oxygen::renderer::vsm::VsmLocalLightDesc;
 using oxygen::renderer::vsm::VsmPageAllocationPlanner;
 using oxygen::renderer::vsm::VsmPageInitializationAction;
@@ -49,6 +53,16 @@ struct LocalLightSpec {
   std::uint32_t level_count { 1 };
   std::uint32_t pages_per_level_x { 1 };
   std::uint32_t pages_per_level_y { 1 };
+};
+
+struct DirectionalClipmapSpec {
+  std::string_view remap_key {};
+  std::uint32_t clip_level_count { 1 };
+  std::uint32_t pages_per_axis { 1 };
+  std::vector<glm::ivec2> page_grid_origin {};
+  std::vector<float> page_world_size {};
+  std::vector<float> near_depth {};
+  std::vector<float> far_depth {};
 };
 
 class VsmPageAllocationPlannerTest : public VsmPhysicalPoolTestBase {
@@ -81,6 +95,42 @@ protected:
           .debug_name = std::string(spec.remap_key),
         });
       }
+    }
+
+    return address_space.DescribeFrame();
+  }
+
+  static auto MakeDirectionalFrame(const std::uint64_t frame_generation,
+    const std::uint32_t first_virtual_id,
+    std::span<const DirectionalClipmapSpec> specs, const char* debug_name)
+    -> VsmVirtualAddressSpaceFrame
+  {
+    auto address_space = VsmVirtualAddressSpace {};
+    address_space.BeginFrame(
+      VsmVirtualAddressSpaceConfig {
+        .first_virtual_id = first_virtual_id,
+        .clipmap_reuse_config
+        = {
+            .max_page_offset_x = 4,
+            .max_page_offset_y = 4,
+            .depth_range_epsilon = 0.01F,
+            .page_world_size_epsilon = 0.01F,
+          },
+        .debug_name = debug_name,
+      },
+      frame_generation);
+
+    for (const auto& spec : specs) {
+      address_space.AllocateDirectionalClipmap(VsmDirectionalClipmapDesc {
+        .remap_key = std::string(spec.remap_key),
+        .clip_level_count = spec.clip_level_count,
+        .pages_per_axis = spec.pages_per_axis,
+        .page_grid_origin = spec.page_grid_origin,
+        .page_world_size = spec.page_world_size,
+        .near_depth = spec.near_depth,
+        .far_depth = spec.far_depth,
+        .debug_name = std::string(spec.remap_key),
+      });
     }
 
     return address_space.DescribeFrame();
@@ -137,8 +187,17 @@ protected:
       return *index;
     }
 
-    ADD_FAILURE()
-      << "page lookup only supports local-light layouts in this fixture";
+    for (const auto& layout : frame.directional_layouts) {
+      if (page.level >= layout.clip_level_count
+        || map_id != layout.first_id + page.level) {
+        continue;
+      }
+      const auto index = TryGetPageTableEntryIndex(layout, page);
+      EXPECT_TRUE(index.has_value());
+      return *index;
+    }
+
+    ADD_FAILURE() << "page lookup did not match any local or directional layout";
     return 0U;
   }
 
@@ -227,6 +286,93 @@ NOLINT_TEST_F(VsmPageAllocationPlannerTest,
   EXPECT_TRUE(result.snapshot.page_table[entry_index].is_mapped);
   EXPECT_EQ(result.snapshot.page_table[entry_index].physical_page.value, 3U);
   EXPECT_EQ(result.snapshot.physical_pages[3].owner_id, request.map_id);
+}
+
+NOLINT_TEST_F(VsmPageAllocationPlannerTest,
+  PlannerReusesDirectionalClipmapPagesAcrossPageAlignedPan)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
+  ASSERT_EQ(
+    pool_manager.EnsureShadowPool(MakeShadowPoolConfig("phase3-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+  ASSERT_EQ(pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase3-hzb")),
+    VsmHzbPoolChangeResult::kCreated);
+
+  const auto previous_specs = std::array {
+    DirectionalClipmapSpec {
+      .remap_key = "sun",
+      .clip_level_count = 2U,
+      .pages_per_axis = 4U,
+      .page_grid_origin = { { 4, 5 }, { 8, 10 } },
+      .page_world_size = { 32.0F, 64.0F },
+      .near_depth = { 1.0F, 2.0F },
+      .far_depth = { 101.0F, 202.0F },
+    },
+  };
+  const auto current_specs = std::array {
+    DirectionalClipmapSpec {
+      .remap_key = "sun",
+      .clip_level_count = 2U,
+      .pages_per_axis = 4U,
+      .page_grid_origin = { { 6, 4 }, { 10, 9 } },
+      .page_world_size = { 32.0F, 64.0F },
+      .near_depth = { 1.0F, 2.0F },
+      .far_depth = { 101.0F, 202.0F },
+    },
+  };
+
+  const auto previous_frame
+    = MakeDirectionalFrame(1ULL, 10U, previous_specs, "prev");
+  const auto current_frame
+    = MakeDirectionalFrame(2ULL, 20U, current_specs, "curr");
+
+  auto previous_snapshot = MakeSnapshot(pool_manager, previous_frame);
+  AssignPreviousMapping(previous_snapshot,
+    previous_frame.directional_layouts[0].first_id + 1U,
+    VsmVirtualPageCoord {
+      .level = 1U,
+      .page_x = 3U,
+      .page_y = 1U,
+    },
+    VsmPhysicalPageIndex { .value = 3 });
+
+  const auto seam = MakeSeam(pool_manager, current_frame, &previous_frame);
+  const auto request = VsmPageRequest {
+    .map_id = current_frame.directional_layouts[0].first_id + 1U,
+    .page
+    = {
+        .level = 1U,
+        .page_x = 1U,
+        .page_y = 2U,
+      },
+    .flags = VsmPageRequestFlags::kRequired,
+  };
+
+  const auto result
+    = BuildPlannerResult(seam, &previous_snapshot, std::span { &request, 1U });
+
+  ASSERT_EQ(result.plan.decisions.size(), 1U);
+  EXPECT_EQ(
+    result.plan.decisions[0].action, VsmAllocationAction::kReuseExisting);
+  EXPECT_EQ(result.plan.decisions[0].previous_physical_page,
+    VsmPhysicalPageIndex { .value = 3 });
+  EXPECT_EQ(result.plan.decisions[0].current_physical_page,
+    VsmPhysicalPageIndex { .value = 3 });
+  EXPECT_EQ(result.plan.reused_page_count, 1U);
+  EXPECT_EQ(result.plan.allocated_page_count, 0U);
+  EXPECT_EQ(result.plan.initialized_page_count, 0U);
+  EXPECT_EQ(result.plan.evicted_page_count, 0U);
+  EXPECT_EQ(result.plan.rejected_page_count, 0U);
+  EXPECT_TRUE(result.plan.initialization_work.empty());
+
+  const auto entry_index
+    = ResolvePageTableEntryIndex(current_frame, request.map_id, request.page);
+  EXPECT_TRUE(result.snapshot.page_table[entry_index].is_mapped);
+  EXPECT_EQ(result.snapshot.page_table[entry_index].physical_page.value, 3U);
+  EXPECT_EQ(result.snapshot.physical_pages[3].owner_id, request.map_id);
+  EXPECT_EQ(result.snapshot.physical_pages[3].owner_page.level, 1U);
+  EXPECT_EQ(result.snapshot.physical_pages[3].owner_page.page_x, 1U);
+  EXPECT_EQ(result.snapshot.physical_pages[3].owner_page.page_y, 2U);
 }
 
 NOLINT_TEST_F(VsmPageAllocationPlannerTest,

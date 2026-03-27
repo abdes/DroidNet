@@ -46,6 +46,40 @@ namespace {
 
   constexpr std::uint32_t kThreadGroupSize = 8U;
 
+  [[nodiscard]] auto DepthSrvFormat(const graphics::Texture& texture)
+    -> oxygen::Format
+  {
+    switch (texture.GetDescriptor().format) {
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32Stencil8:
+      return oxygen::Format::kR32Float;
+    case oxygen::Format::kDepth16:
+      return oxygen::Format::kR16UNorm;
+    default:
+      return texture.GetDescriptor().format;
+    }
+  }
+
+  [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
+    -> graphics::ResourceStates
+  {
+    const auto initial_state = texture.GetDescriptor().initial_state;
+    if (initial_state != graphics::ResourceStates::kUnknown
+      && initial_state != graphics::ResourceStates::kUndefined) {
+      return initial_state;
+    }
+    switch (texture.GetDescriptor().format) {
+    case oxygen::Format::kDepth16:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth32Stencil8:
+      return graphics::ResourceStates::kDepthWrite;
+    default:
+      return graphics::ResourceStates::kCommon;
+    }
+  }
+
   template <typename Resource>
   auto RegisterResourceIfNeeded(
     Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
@@ -360,7 +394,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     graphics::TextureViewDescription srv_desc {
       .view_type = ResourceViewType::kTexture_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = oxygen::Format::kR32Float,
+      .format = DepthSrvFormat(depth_tex),
       .dimension = depth_tex.GetDescriptor().texture_type,
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
       .is_read_only_dsv = false,
@@ -575,7 +609,7 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
   recorder.BeginTrackingResourceState(
     *impl_->request_clear_buffer, graphics::ResourceStates::kGenericRead, true);
   recorder.BeginTrackingResourceState(
-    depth_texture, graphics::ResourceStates::kCommon, true);
+    depth_texture, DepthTextureInitialState(depth_texture), true);
   if (impl_->config->enable_light_grid_pruning) {
     if (cluster_grid_buffer == nullptr || light_index_list_buffer == nullptr) {
       LOG_F(ERROR,

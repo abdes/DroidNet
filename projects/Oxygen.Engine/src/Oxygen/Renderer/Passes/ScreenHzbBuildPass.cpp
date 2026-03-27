@@ -128,16 +128,47 @@ namespace {
   [[nodiscard]] auto DepthSrvDesc(const graphics::Texture& texture)
     -> graphics::TextureViewDescription
   {
+    auto format = texture.GetDescriptor().format;
+    switch (format) {
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32Stencil8:
+      format = oxygen::Format::kR32Float;
+      break;
+    case oxygen::Format::kDepth16:
+      format = oxygen::Format::kR16UNorm;
+      break;
+    default:
+      break;
+    }
+
     return graphics::TextureViewDescription {
       .view_type = graphics::ResourceViewType::kTexture_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = texture.GetDescriptor().format == oxygen::Format::kDepth32
-        ? oxygen::Format::kR32Float
-        : texture.GetDescriptor().format,
+      .format = format,
       .dimension = texture.GetDescriptor().texture_type,
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
       .is_read_only_dsv = false,
     };
+  }
+
+  [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
+    -> graphics::ResourceStates
+  {
+    const auto initial_state = texture.GetDescriptor().initial_state;
+    if (initial_state != graphics::ResourceStates::kUnknown
+      && initial_state != graphics::ResourceStates::kUndefined) {
+      return initial_state;
+    }
+    switch (texture.GetDescriptor().format) {
+    case oxygen::Format::kDepth16:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth32Stencil8:
+      return graphics::ResourceStates::kDepthWrite;
+    default:
+      return graphics::ResourceStates::kCommon;
+    }
   }
 
   auto BindDispatchConstants(graphics::CommandRecorder& recorder,
@@ -679,7 +710,7 @@ auto ScreenHzbBuildPass::DoPrepareResources(graphics::CommandRecorder& recorder)
 
   if (!recorder.IsResourceTracked(depth_texture)) {
     recorder.BeginTrackingResourceState(
-      depth_texture, graphics::ResourceStates::kCommon, true);
+      depth_texture, DepthTextureInitialState(depth_texture), true);
   }
   if (!recorder.IsResourceTracked(*write_texture)) {
     recorder.BeginTrackingResourceState(*write_texture,

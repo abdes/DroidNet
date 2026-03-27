@@ -94,6 +94,8 @@ protected:
     -> co::Co<> override;
   auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
   auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
+  auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
+    -> graphics::RasterizerStateDesc override;
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:

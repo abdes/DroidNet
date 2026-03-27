@@ -106,6 +106,7 @@ protected:
     texture_desc.texture_type = TextureType::kTexture2D;
     texture_desc.is_shader_resource = true;
     texture_desc.is_render_target = true;
+    texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
       = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };

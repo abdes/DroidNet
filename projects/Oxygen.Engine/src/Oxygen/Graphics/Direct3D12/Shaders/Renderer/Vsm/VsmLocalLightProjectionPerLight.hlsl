@@ -18,6 +18,7 @@ cbuffer RootConstants : register(b2, space0)
 struct VsmProjectionCompositePassConstants
 {
     uint scene_depth_srv_index;
+    uint directional_shadow_mask_uav_index;
     uint shadow_mask_uav_index;
     uint projection_buffer_srv_index;
     uint page_table_buffer_srv_index;
@@ -29,6 +30,9 @@ struct VsmProjectionCompositePassConstants
     uint page_size_texels;
     uint tiles_per_axis;
     uint dynamic_slice_index;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     float4x4 inverse_view_projection;
 };
 
@@ -91,7 +95,7 @@ void CS_ProjectLocalLights(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         accumulated_visibility *= VsmSampleVisibilityPcf2x2(
             shadow_texture, sample.atlas_uv, sample.receiver_depth,
-            pass_constants.dynamic_slice_index);
+            sample.atlas_slice);
     }
 
     shadow_mask[dispatch_thread_id.xy] *= accumulated_visibility;

@@ -352,6 +352,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmHzbBuild.hlsl",
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="CS_SelectPages" },
+      EntryPoint { .type=kCompute, .name="CS_PrepareDispatchArgs" },
       EntryPoint { .type=kCompute, .name="CS_ClearScratchRect" },
       EntryPoint { .type=kCompute, .name="CS_BuildPerPage" },
       EntryPoint { .type=kCompute, .name="CS_BuildTopLevels" }
