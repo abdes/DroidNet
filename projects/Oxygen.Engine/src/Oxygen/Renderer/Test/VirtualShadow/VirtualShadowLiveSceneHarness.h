@@ -26,6 +26,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -45,6 +46,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -56,6 +58,7 @@
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmPageRequestGeneration.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -112,6 +115,26 @@ struct TwoBoxLiveFrameResult {
   std::shared_ptr<const oxygen::graphics::Texture> scene_depth_texture {};
 };
 
+struct TwoBoxPageRequestBridgeResult {
+  const oxygen::renderer::vsm::VsmShadowRenderer::PreparedViewState*
+    prepared_view { nullptr };
+  oxygen::renderer::vsm::VsmShadowRenderer::PreparedViewProducts
+    prepared_products {};
+  oxygen::renderer::vsm::VsmPageAllocationFrame committed_frame {};
+  std::shared_ptr<const oxygen::graphics::Buffer> metadata_seed_buffer {};
+  std::shared_ptr<const oxygen::graphics::Texture> scene_depth_texture {};
+  oxygen::renderer::vsm::VsmSceneInvalidationFrameInputs invalidation_inputs {};
+  bool bridge_committed_requests { false };
+};
+
+struct TwoBoxReuseStageResult {
+  TwoBoxPageRequestBridgeResult bridge {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> page_table {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta> physical_metadata {};
+  std::uint32_t available_page_count { 0U };
+};
+
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
 protected:
   using EventLoop = oxygen::co::testing::TestEventLoop;
@@ -152,12 +175,12 @@ protected:
   [[nodiscard]] static auto RotationFromForwardTo(const glm::vec3& direction)
     -> glm::quat
   {
-    const auto start = glm::normalize(glm::vec3 { 0.0F, 0.0F, -1.0F });
+    const auto start = glm::normalize(oxygen::space::move::Forward);
     const auto dest = glm::normalize(direction);
     const auto cos_theta = glm::dot(start, dest);
 
     if (cos_theta < -0.9999F) {
-      auto axis = glm::cross(glm::vec3 { 0.0F, 1.0F, 0.0F }, start);
+      auto axis = glm::cross(oxygen::space::move::Up, start);
       if (glm::dot(axis, axis) < 1.0e-6F) {
         axis = glm::cross(glm::vec3 { 1.0F, 0.0F, 0.0F }, start);
       }
@@ -330,6 +353,68 @@ protected:
     CollectSceneLights(*light_manager, scene_data);
   }
 
+  [[nodiscard]] static auto BuildShaderPageTableEntries(
+    const std::span<const oxygen::renderer::vsm::VsmPageTableEntry> page_table)
+    -> std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry>
+  {
+    auto shader_entries
+      = std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> {};
+    shader_entries.reserve(page_table.size());
+    for (const auto& entry : page_table) {
+      shader_entries.push_back(entry.is_mapped
+          ? oxygen::renderer::vsm::MakeMappedShaderPageTableEntry(
+              entry.physical_page)
+          : oxygen::renderer::vsm::MakeUnmappedShaderPageTableEntry());
+    }
+    return shader_entries;
+  }
+
+  [[nodiscard]] static auto BuildSceneLightRemapBindings(
+    const oxygen::renderer::vsm::VsmShadowRenderer::PreparedViewState&
+      prepared_view,
+    const oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame& current_frame)
+    -> std::vector<oxygen::renderer::vsm::VsmSceneLightRemapBinding>
+  {
+    auto bindings
+      = std::vector<oxygen::renderer::vsm::VsmSceneLightRemapBinding> {};
+    bindings.reserve(prepared_view.directional_shadow_candidates.size()
+      + prepared_view.positional_shadow_candidates.size());
+
+    CHECK_EQ_F(current_frame.directional_layouts.size(),
+      prepared_view.directional_shadow_candidates.size(),
+      "Two-box live-scene directional layout count={} does not match "
+      "prepared directional candidate count={}",
+      current_frame.directional_layouts.size(),
+      prepared_view.directional_shadow_candidates.size());
+    for (std::size_t i = 0U;
+      i < prepared_view.directional_shadow_candidates.size(); ++i) {
+      bindings.push_back(oxygen::renderer::vsm::VsmSceneLightRemapBinding {
+        .node_handle
+        = prepared_view.directional_shadow_candidates[i].node_handle,
+        .kind = oxygen::renderer::vsm::VsmLightCacheKind::kDirectional,
+        .remap_keys = { current_frame.directional_layouts[i].remap_key },
+      });
+    }
+
+    CHECK_EQ_F(current_frame.local_light_layouts.size(),
+      prepared_view.positional_shadow_candidates.size(),
+      "Two-box live-scene local layout count={} does not match prepared "
+      "local shadow candidate count={}",
+      current_frame.local_light_layouts.size(),
+      prepared_view.positional_shadow_candidates.size());
+    for (std::size_t i = 0U;
+      i < prepared_view.positional_shadow_candidates.size(); ++i) {
+      bindings.push_back(oxygen::renderer::vsm::VsmSceneLightRemapBinding {
+        .node_handle
+        = prepared_view.positional_shadow_candidates[i].node_handle,
+        .kind = oxygen::renderer::vsm::VsmLightCacheKind::kLocal,
+        .remap_keys = { current_frame.local_light_layouts[i].remap_key },
+      });
+    }
+
+    return bindings;
+  }
+
   auto ExecutePreparedViewShell(
     oxygen::renderer::vsm::VsmShadowRenderer& renderer,
     const oxygen::engine::RenderContext& render_context,
@@ -460,6 +545,107 @@ protected:
     texture_desc.initial_state = oxygen::graphics::ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
+  }
+
+  [[nodiscard]] static auto ComputeWorldPointForPixel(
+    const oxygen::ResolvedView& view, const std::uint32_t width,
+    const std::uint32_t height, const std::uint32_t pixel_x,
+    const std::uint32_t pixel_y, const float depth) -> glm::vec3
+  {
+    const auto uv = glm::vec2 {
+      (static_cast<float>(pixel_x) + 0.5F) / static_cast<float>(width),
+      (static_cast<float>(pixel_y) + 0.5F) / static_cast<float>(height),
+    };
+    const auto ndc_xy = glm::vec2 { uv.x * 2.0F - 1.0F, 1.0F - uv.y * 2.0F };
+    const auto clip = glm::vec4 { ndc_xy, depth, 1.0F };
+    const auto world = view.InverseViewProjection() * clip;
+    return glm::vec3(world) / std::max(world.w, 1.0e-6F);
+  }
+
+  auto ReadDepthTextureSamples(const oxygen::graphics::Texture& texture,
+    const oxygen::ResolvedView& resolved_view, std::string_view debug_name)
+    -> std::vector<oxygen::renderer::vsm::VsmVisiblePixelSample>
+  {
+    auto float_texture = CreateSingleChannelTexture2D(
+      texture.GetDescriptor().width, texture.GetDescriptor().height,
+      oxygen::Format::kR32Float, std::string(debug_name) + ".float-copy");
+    CHECK_NOTNULL_F(float_texture.get(),
+      "Failed to create float copy texture for `{}`", debug_name);
+
+    {
+      auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
+      CHECK_NOTNULL_F(recorder.get(),
+        "Failed to acquire depth-copy recorder for `{}`", debug_name);
+      recorder->BeginTrackingResourceState(
+        texture, oxygen::graphics::ResourceStates::kCommon, true);
+      EnsureTracked(
+        *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->RequireResourceState(
+        texture, oxygen::graphics::ResourceStates::kCopySource);
+      recorder->RequireResourceState(
+        *float_texture, oxygen::graphics::ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyTexture(texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture.GetDescriptor().width,
+          .height = texture.GetDescriptor().height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture(),
+        *float_texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture.GetDescriptor().width,
+          .height = texture.GetDescriptor().height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture());
+      recorder->RequireResourceStateFinal(
+        *float_texture, oxygen::graphics::ResourceStates::kCommon);
+    }
+    WaitForQueueIdle();
+
+    const auto readback = GetReadbackManager()->ReadTextureNow(*float_texture,
+      oxygen::graphics::TextureReadbackRequest {
+        .src_slice = {},
+        .aspects = oxygen::graphics::ClearFlags::kColor,
+      },
+      true);
+    CHECK_F(readback.has_value(),
+      "Failed to read back float depth copy for `{}`", debug_name);
+
+    const auto& data = *readback;
+    auto visible_samples
+      = std::vector<oxygen::renderer::vsm::VsmVisiblePixelSample> {};
+    visible_samples.reserve(
+      static_cast<std::size_t>(data.layout.width) * data.layout.height);
+    for (std::uint32_t y = 0U; y < data.layout.height; ++y) {
+      const auto* row = data.bytes.data()
+        + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
+      for (std::uint32_t x = 0U; x < data.layout.width; ++x) {
+        auto depth = 1.0F;
+        std::memcpy(&depth, row + static_cast<std::size_t>(x) * sizeof(float),
+          sizeof(depth));
+        if (depth >= 1.0F) {
+          continue;
+        }
+        visible_samples.push_back(oxygen::renderer::vsm::VsmVisiblePixelSample {
+          .world_position_ws = ComputeWorldPointForPixel(
+            resolved_view, data.layout.width, data.layout.height, x, y, depth),
+        });
+      }
+    }
+
+    return visible_samples;
   }
 
   auto CreateTwoBoxShadowScene(const glm::vec3& sun_direction_ws,
@@ -957,6 +1143,314 @@ protected:
       .prepared_view = vsm_renderer.TryGetPreparedViewState(kTestViewId),
       .extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame(),
       .scene_depth_texture = depth_texture,
+    };
+  }
+
+  auto RunTwoBoxPageRequestBridge(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxPageRequestBridgeResult
+  {
+    using oxygen::engine::DrawFrameBindings;
+    using oxygen::engine::PreparedSceneFrame;
+    using oxygen::engine::ViewFrameBindings;
+    using oxygen::engine::internal::PerViewStructuredPublisher;
+    using oxygen::engine::upload::TransientStructuredBuffer;
+
+    auto frame_config = oxygen::engine::Renderer::OffscreenFrameConfig {
+      .frame_slot = slot,
+      .frame_sequence = sequence,
+      .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
+        scene_data.scene.get(),
+      },
+    };
+    auto offscreen = renderer.BeginOffscreenFrame(frame_config);
+
+    auto world_buffer = TransientStructuredBuffer(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(), sizeof(glm::mat4),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-six-two-box.worlds");
+    world_buffer.OnFrameStart(sequence, slot);
+    auto world_allocation = world_buffer.Allocate(
+      static_cast<std::uint32_t>(scene_data.world_matrices.size()));
+    CHECK_F(world_allocation.has_value(), "Failed to allocate world buffer");
+    CHECK_F(
+      world_allocation->IsValid(sequence), "World allocation is not valid");
+    std::memcpy(world_allocation->mapped_ptr, scene_data.world_matrices.data(),
+      sizeof(scene_data.world_matrices));
+
+    auto draw_metadata_buffer = TransientStructuredBuffer(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(), sizeof(oxygen::engine::DrawMetadata),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-six-two-box.draws");
+    draw_metadata_buffer.OnFrameStart(sequence, slot);
+    auto draw_allocation = draw_metadata_buffer.Allocate(
+      static_cast<std::uint32_t>(scene_data.draw_records.size()));
+    CHECK_F(
+      draw_allocation.has_value(), "Failed to allocate draw metadata buffer");
+    CHECK_F(draw_allocation->IsValid(sequence),
+      "Draw metadata allocation is not valid");
+    std::memcpy(draw_allocation->mapped_ptr, scene_data.draw_records.data(),
+      sizeof(scene_data.draw_records));
+
+    auto draw_frame_publisher = PerViewStructuredPublisher<DrawFrameBindings>(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-six-two-box.DrawFrameBindings");
+    draw_frame_publisher.OnFrameStart(sequence, slot);
+    const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
+      DrawFrameBindings {
+        .draw_metadata_slot
+        = oxygen::engine::BindlessDrawMetadataSlot(draw_allocation->srv),
+        .transforms_slot
+        = oxygen::engine::BindlessWorldsSlot(world_allocation->srv),
+      });
+    CHECK_F(draw_frame_slot.IsValid(), "Draw frame slot is invalid");
+
+    auto view_frame_publisher = PerViewStructuredPublisher<ViewFrameBindings>(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      renderer.GetStagingProvider(),
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "stage-six-two-box.ViewFrameBindings");
+    view_frame_publisher.OnFrameStart(sequence, slot);
+    const auto view_frame_slot = view_frame_publisher.Publish(
+      kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
+    CHECK_F(view_frame_slot.IsValid(), "View frame slot is invalid");
+
+    auto world_matrix_floats = std::array<float, 48> {};
+    std::memcpy(world_matrix_floats.data(), scene_data.world_matrices.data(),
+      sizeof(scene_data.world_matrices));
+    std::array<PreparedSceneFrame::PartitionRange, 2> partitions {
+      PreparedSceneFrame::PartitionRange {
+        .pass_mask = scene_data.receiver_mask,
+        .begin = 0U,
+        .end = 1U,
+      },
+      PreparedSceneFrame::PartitionRange {
+        .pass_mask = scene_data.shadow_caster_mask,
+        .begin = 1U,
+        .end = 3U,
+      },
+    };
+
+    auto prepared_frame = PreparedSceneFrame {};
+    prepared_frame.draw_metadata_bytes
+      = std::as_bytes(std::span(scene_data.draw_records));
+    prepared_frame.world_matrices = std::span<const float>(
+      world_matrix_floats.data(), world_matrix_floats.size());
+    prepared_frame.partitions = std::span(partitions);
+    prepared_frame.draw_bounding_spheres = std::span(scene_data.draw_bounds);
+    prepared_frame.shadow_caster_bounding_spheres
+      = std::span(scene_data.shadow_caster_bounds);
+    prepared_frame.visible_receiver_bounding_spheres
+      = std::span(scene_data.receiver_bounds);
+    prepared_frame.bindless_worlds_slot = world_allocation->srv;
+    prepared_frame.bindless_draw_metadata_slot = draw_allocation->srv;
+    prepared_frame.bindless_draw_bounds_slot
+      = scene_data.draw_bounds_buffer.slot;
+
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
+      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot));
+
+    auto depth_texture
+      = CreateDepthTexture2D(width, height, "stage-six-two-box.depth");
+    CHECK_NOTNULL_F(depth_texture.get(), "Failed to create depth texture");
+    auto depth_pass = oxygen::engine::DepthPrePass(
+      std::make_shared<oxygen::engine::DepthPrePass::Config>(
+        oxygen::engine::DepthPrePass::Config {
+          .depth_texture = depth_texture,
+          .debug_name = "stage-six-two-box.depth-pass",
+        }));
+    auto& render_context = offscreen.GetRenderContext();
+    render_context.RegisterPass(&depth_pass);
+    {
+      auto recorder = AcquireRecorder("stage-six-two-box.depth-pass");
+      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire depth recorder");
+      EnsureTracked(
+        *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
+      RunPass(depth_pass, render_context, *recorder);
+      recorder->RequireResourceStateFinal(
+        *depth_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->FlushBarriers();
+    }
+    WaitForQueueIdle();
+
+    auto lights = oxygen::renderer::LightManager(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      oxygen::observer_ptr { &renderer.GetStagingProvider() },
+      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() });
+    lights.OnFrameStart(
+      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+    CollectSceneLights(lights, scene_data);
+
+    vsm_renderer.OnFrameStart(
+      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+    const auto has_work = vsm_renderer.PrepareView(kTestViewId,
+      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot), lights,
+      oxygen::observer_ptr<oxygen::scene::Scene> { scene_data.scene.get() },
+      static_cast<float>(width), std::span(scene_data.rendered_items),
+      std::span(scene_data.shadow_caster_bounds),
+      std::span(scene_data.receiver_bounds), std::chrono::milliseconds { 16 },
+      shadow_caster_content_hash);
+    if (require_virtual_shadow_work) {
+      CHECK_F(has_work, "Two-box scene should produce virtual shadow work");
+    }
+
+    const auto* prepared_view
+      = vsm_renderer.TryGetPreparedViewState(kTestViewId);
+    CHECK_NOTNULL_F(prepared_view, "Prepared two-box view state is missing");
+    const auto prepared_products
+      = vsm_renderer.BuildPreparedViewProducts(kTestViewId);
+    CHECK_F(prepared_products.has_value(),
+      "Prepared two-box view products are unavailable");
+
+    auto& cache_manager = vsm_renderer.GetCacheManager();
+    cache_manager.BeginFrame(prepared_products->seam,
+      oxygen::renderer::vsm::VsmCacheManagerFrameConfig {
+        .allow_reuse = true,
+        .force_invalidate_all = false,
+        .debug_name = "stage-six-two-box.bridge",
+      });
+
+    auto& invalidation_coordinator
+      = vsm_renderer.GetSceneInvalidationCoordinator();
+    invalidation_coordinator.SyncObservedScene(prepared_view->active_scene);
+    const auto scene_light_remap_bindings = BuildSceneLightRemapBindings(
+      *prepared_view, prepared_products->virtual_frame);
+    invalidation_coordinator.PublishSceneLightRemapBindings(
+      scene_light_remap_bindings);
+    invalidation_coordinator.PublishScenePrimitiveHistory(
+      prepared_view->scene_primitive_history);
+    auto invalidation_inputs = invalidation_coordinator.DrainFrameInputs();
+    if (!primitive_invalidations_override.empty()) {
+      invalidation_inputs.primitive_invalidations.assign(
+        primitive_invalidations_override.begin(),
+        primitive_invalidations_override.end());
+    }
+    oxygen::renderer::vsm::VsmSceneInvalidationCoordinator::
+      ApplyLightInvalidationRequests(
+        cache_manager, invalidation_inputs.light_invalidation_requests);
+
+    auto metadata_seed_buffer
+      = std::shared_ptr<const oxygen::graphics::Buffer> {};
+    const auto* previous_frame = cache_manager.GetPreviousFrame();
+    const auto& invalidation_workload = cache_manager.BuildInvalidationWork(
+      invalidation_inputs.primitive_invalidations);
+    if (previous_frame != nullptr
+      && !invalidation_workload.work_items.empty()) {
+      const auto invalidation_pass = vsm_renderer.GetInvalidationPass();
+      CHECK_NOTNULL_F(
+        invalidation_pass.get(), "VSM invalidation pass is unavailable");
+      invalidation_pass->SetInput(oxygen::engine::VsmInvalidationPassInput {
+        .previous_projection_records = previous_frame->projection_records,
+        .previous_page_table_entries
+        = BuildShaderPageTableEntries(previous_frame->page_table),
+        .previous_physical_page_metadata = previous_frame->physical_pages,
+        .invalidation_work_items = invalidation_workload.work_items,
+      });
+      {
+        auto recorder = AcquireRecorder("stage-six-two-box.invalidation");
+        CHECK_NOTNULL_F(
+          recorder.get(), "Failed to acquire invalidation recorder");
+        RunPass(*invalidation_pass, render_context, *recorder);
+      }
+      WaitForQueueIdle();
+      metadata_seed_buffer
+        = invalidation_pass->GetCurrentOutputPhysicalMetadataBuffer();
+    } else {
+      const auto invalidation_pass = vsm_renderer.GetInvalidationPass();
+      if (invalidation_pass != nullptr) {
+        invalidation_pass->ResetInput();
+      }
+    }
+
+    auto bridge_committed_requests = false;
+    EventLoop loop;
+    oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+      bridge_committed_requests
+        = co_await vsm_renderer.ExecutePageRequestReadbackBridge(render_context,
+          prepared_products->seam, prepared_products->projection_records,
+          metadata_seed_buffer);
+    });
+    WaitForQueueIdle();
+
+    const auto* committed_frame = cache_manager.GetCurrentFrame();
+    CHECK_NOTNULL_F(
+      committed_frame, "Two-box page-request bridge did not commit a frame");
+    CHECK_F(committed_frame->is_ready,
+      "Two-box page-request bridge committed an unready frame");
+
+    return TwoBoxPageRequestBridgeResult {
+      .prepared_view = prepared_view,
+      .prepared_products = *prepared_products,
+      .committed_frame = *committed_frame,
+      .metadata_seed_buffer = std::move(metadata_seed_buffer),
+      .scene_depth_texture = depth_texture,
+      .invalidation_inputs = std::move(invalidation_inputs),
+      .bridge_committed_requests = bridge_committed_requests,
+    };
+  }
+
+  auto RunTwoBoxReuseStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true) -> TwoBoxReuseStageResult
+  {
+    auto bridge = RunTwoBoxPageRequestBridge(renderer, scene_data, vsm_renderer,
+      resolved_view, width, height, sequence, slot, shadow_caster_content_hash,
+      primitive_invalidations_override, require_virtual_shadow_work);
+
+    const auto available_count_buffer
+      = ExecutePageManagementPass(bridge.committed_frame,
+        oxygen::engine::VsmPageManagementFinalStage::kReuse,
+        "stage-six-two-box.reuse");
+    CHECK_NOTNULL_F(
+      available_count_buffer.get(), "Stage 6 available-count buffer is null");
+
+    const auto page_table
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        bridge.committed_frame.page_table_buffer,
+        bridge.committed_frame.snapshot.page_table.size(),
+        "stage-six-two-box.page-table");
+    const auto page_flags
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        bridge.committed_frame.page_flags_buffer,
+        bridge.committed_frame.snapshot.page_table.size(),
+        "stage-six-two-box.page-flags");
+    const auto physical_metadata
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        bridge.committed_frame.physical_page_meta_buffer,
+        bridge.committed_frame.snapshot.physical_pages.size(),
+        "stage-six-two-box.physical-meta");
+    const auto available_count = ReadBufferAs<std::uint32_t>(
+      available_count_buffer, 1U, "stage-six-two-box.available-count");
+    CHECK_EQ_F(
+      available_count.size(), 1U, "Stage 6 available-count readback mismatch");
+
+    return TwoBoxReuseStageResult {
+      .bridge = std::move(bridge),
+      .page_table = std::move(page_table),
+      .page_flags = std::move(page_flags),
+      .physical_metadata = std::move(physical_metadata),
+      .available_page_count = available_count[0],
     };
   }
 };

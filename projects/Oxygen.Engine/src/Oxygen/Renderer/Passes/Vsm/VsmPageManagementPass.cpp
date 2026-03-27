@@ -461,6 +461,58 @@ auto VsmPageManagementPass::Impl::BuildStageUploads() -> void
   reuse_decisions.clear();
   allocation_decisions.clear();
 
+  const auto append_retained_mapping
+    = [&](const std::uint32_t page_table_index,
+        const renderer::vsm::VsmPageTableEntry& mapping) {
+        if (!mapping.is_mapped) {
+          return;
+        }
+
+        CHECK_F(page_table_index < frame_input->snapshot.page_table.size(),
+          "Retained page-table index {} exceeds snapshot size {}",
+          page_table_index, frame_input->snapshot.page_table.size());
+        CHECK_F(mapping.physical_page.value
+            < frame_input->snapshot.physical_pages.size(),
+          "Retained physical page {} exceeds snapshot capacity {}",
+          mapping.physical_page.value,
+          frame_input->snapshot.physical_pages.size());
+
+        reuse_decisions.push_back(VsmShaderPageReuseDecision {
+      .page_table_index = page_table_index,
+      .physical_page_index = mapping.physical_page.value,
+      .page_flags = VsmShaderPageFlags {
+        .bits = static_cast<std::uint32_t>(VsmShaderPageFlagBits::kAllocated),
+      },
+      .physical_meta
+      = frame_input->snapshot.physical_pages[mapping.physical_page.value],
+    });
+      };
+
+  const auto append_retained_range
+    = [&](const std::uint32_t first_page_table_entry,
+        const std::uint32_t page_count) {
+        CHECK_F(first_page_table_entry + page_count
+            <= frame_input->snapshot.page_table.size(),
+          "Retained page-table range [{}:{}) exceeds snapshot size {}",
+          first_page_table_entry, first_page_table_entry + page_count,
+          frame_input->snapshot.page_table.size());
+        for (std::uint32_t i = 0U; i < page_count; ++i) {
+          append_retained_mapping(first_page_table_entry + i,
+            frame_input->snapshot.page_table[first_page_table_entry + i]);
+        }
+      };
+
+  for (const auto& retained_layout :
+    frame_input->snapshot.retained_local_light_layouts) {
+    append_retained_range(
+      retained_layout.first_page_table_entry, retained_layout.total_page_count);
+  }
+  for (const auto& retained_layout :
+    frame_input->snapshot.retained_directional_layouts) {
+    append_retained_range(retained_layout.first_page_table_entry,
+      renderer::vsm::TotalPageCount(retained_layout));
+  }
+
   std::uint32_t next_available_page_list_index = 0U;
   for (const auto& decision : frame_input->plan.decisions) {
     switch (decision.action) {

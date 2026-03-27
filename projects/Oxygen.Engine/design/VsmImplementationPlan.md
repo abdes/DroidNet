@@ -59,7 +59,10 @@ Stage-suite refactor status on `2026-03-27`:
   only malformed-input rejection tests mutate those published snapshots after real construction
 - the shared live-scene harness now lives in
   `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-  two-box lighting scenes through the dedicated Stage 1-4 executables
+  two-box lighting scenes through the dedicated Stage 1-6 executables
+- the shared live-scene harness now rotates test lights from the engine's
+  `oxygen::space::move::Forward` basis instead of an ad hoc `-Z` basis, so
+  spotlight and directional live-scene targets match engine transform reality
 - the shared GPU harness now exposes paged-light request and entry-resolution helpers through
   `MakePageRequests(...)` and `ResolvePageTableEntryIndex(...)` so stage suites do not duplicate
   page-request assembly or hardcode page-table slots
@@ -73,24 +76,30 @@ Stage-suite refactor status on `2026-03-27`:
 - Stage 5 page-request generation coverage now lives in the dedicated `VsmPageRequests` test
   program; CPU-side request-routing and request-merging policy coverage now lives in `VsmBasic`
   and does not count as Stage 5 completion evidence
+- Stage 6 physical-page reuse coverage now lives in the dedicated `VsmPageReuse` test program
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
   previous-driven clipmap remap offsets across a real camera pan; Stage 4 checks scene-derived
   projection-record publication for directional clipmaps and paged local spot lights
+- the dedicated Stage 6 executable now includes live real-scene validation for:
+  stable directional reuse, directional clipmap pan reuse, moved-caster invalidation seeding,
+  and retained unreferenced paged-spotlight continuity using a real depth-derived spotlight
+  target and a Stage 5 CPU oracle configured to match the no-light-culling bridge path
 - dedicated semantic stage suites now exist for begin-frame, virtual-address allocation,
   remap construction, projection-record publication, page-request generation, physical-page reuse,
   available-page packing, new-page mapping, hierarchical page flags, mapped-mip propagation,
   selective page initialization, shadow rasterization, static/dynamic merge, HZB update,
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
-  `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VirtualShadows`, and
+  `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VirtualShadows`, and
   `VirtualShadowGpuLifecycle`;
   `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`,
   `Oxygen.Renderer.VsmProjectionRecords.Tests`,
   `Oxygen.Renderer.VsmPageRequests.Tests`,
+  `Oxygen.Renderer.VsmPageReuse.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
@@ -128,6 +137,13 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 5 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe`
   and it now reports `3 tests from 1 test suite` passing
+- built `Oxygen.Renderer.VsmPageReuse.Tests` in `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 6 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageReuse.Tests.exe`
+  and `4 tests from 1 test suite` passed
+- reran the shared-harness Stage 4 executable after the light-orientation harness fix:
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmProjectionRecords.Tests.exe`
+  and `2 tests from 1 test suite` passed
 - fixed a real live-scene infrastructure bug in the Stage 5 harness by restoring the shared
   two-box depth texture back to `Common` after the standalone depth prepass recorder; this removed
   the D3D12 `RESOURCE_BARRIER_BEFORE_AFTER_MISMATCH` error that had been corrupting the Stage 5
