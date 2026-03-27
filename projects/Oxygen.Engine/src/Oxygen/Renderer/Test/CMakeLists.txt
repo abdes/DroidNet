@@ -200,6 +200,16 @@ if(TARGET oxygen::graphics-direct3d12)
       oxygen::graphics-direct3d12
   )
 
+  m_gtest_program(
+    VsmPageInitialization
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmSelectivePageInitialization_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
   target_sources(
     Oxygen.Renderer.VsmBeginFrame.Tests
     PRIVATE
@@ -250,7 +260,6 @@ if(TARGET oxygen::graphics-direct3d12)
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
       "VirtualShadow/VirtualShadowStageGpuHarness.h"
-      "VirtualShadow/VsmSelectivePageInitialization_test.cpp"
       "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmShadowRendererBridge_test.cpp"

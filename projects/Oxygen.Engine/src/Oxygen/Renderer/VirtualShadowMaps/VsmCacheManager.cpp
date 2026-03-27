@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <glm/vec4.hpp>
 #include <stdexcept>
 #include <string>
@@ -21,8 +22,11 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
 
 namespace oxygen::renderer::vsm {
 
@@ -220,6 +224,51 @@ namespace {
     return found_mapping ? max_age + 1U : 0U;
   }
 
+  template <typename T>
+  auto DeserializeBufferReadback(const std::vector<std::byte>& bytes,
+    const std::size_t expected_count, std::string_view debug_name)
+    -> std::vector<T>
+  {
+    const auto expected_bytes = expected_count * sizeof(T);
+    CHECK_F(bytes.size() == expected_bytes,
+      "buffer readback size mismatch debug_name=`{}` expected_bytes={} "
+      "actual_bytes={}",
+      debug_name, expected_bytes, bytes.size());
+
+    auto values = std::vector<T>(expected_count);
+    if (!bytes.empty()) {
+      std::memcpy(values.data(), bytes.data(), bytes.size());
+    }
+    return values;
+  }
+
+  auto AwaitBufferReadback(graphics::ReadbackManager& readback_manager,
+    const std::shared_ptr<graphics::GpuBufferReadback>& readback,
+    const graphics::ReadbackTicket ticket, const std::size_t expected_bytes,
+    std::string_view debug_name) -> std::vector<std::byte>
+  {
+    CHECK_NOTNULL_F(readback.get(),
+      "buffer readback object is null debug_name=`{}`", debug_name);
+
+    const auto wait_result = readback_manager.Await(ticket);
+    CHECK_F(wait_result.has_value(),
+      "buffer readback await failed debug_name=`{}` ticket={} fence={} "
+      "error={}",
+      debug_name, ticket.id, ticket.fence.get(), wait_result.error());
+
+    const auto mapped = readback->TryMap();
+    CHECK_F(mapped.has_value(),
+      "buffer readback map failed debug_name=`{}` ticket={} fence={} error={}",
+      debug_name, ticket.id, ticket.fence.get(), mapped.error());
+
+    const auto bytes = mapped->Bytes();
+    CHECK_F(bytes.size() == expected_bytes,
+      "buffer readback mapped byte count mismatch debug_name=`{}` "
+      "expected_bytes={} actual_bytes={}",
+      debug_name, expected_bytes, bytes.size());
+    return { bytes.begin(), bytes.end() };
+  }
+
   auto RemoveEvictionsForRetainedPages(VsmPageAllocationPlan& plan,
     const std::unordered_set<std::uint32_t>& retained_pages) -> void
   {
@@ -328,6 +377,8 @@ auto VsmCacheManager::BeginFrame(const VsmCacheManagerSeam& seam,
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kIdle,
     "BeginFrame requires idle build state");
+
+  FinalizePendingFrameExtraction();
 
   runtime_state_.captured_seam = seam;
   runtime_state_.frame_config = config;
@@ -749,6 +800,90 @@ auto VsmCacheManager::AbortFrame() -> void
     config_.debug_name);
 }
 
+auto VsmCacheManager::QueueFrameExtraction(graphics::CommandRecorder& recorder)
+  -> void
+{
+  CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
+    "QueueFrameExtraction requires ready state");
+  CHECK_F(runtime_state_.current_frame.has_value(),
+    "QueueFrameExtraction requires a committed current frame");
+  CHECK_F(!runtime_state_.pending_frame_extraction.has_value(),
+    "QueueFrameExtraction requires no pending extraction");
+
+  auto extracted_snapshot = runtime_state_.current_frame->snapshot;
+  auto queued_readback = std::optional<PendingFrameExtraction> {};
+
+  const auto readback_manager = gfx_ != nullptr
+    ? gfx_->GetReadbackManager()
+    : observer_ptr<graphics::ReadbackManager> {};
+  if (readback_manager != nullptr
+    && runtime_state_.current_frame->physical_page_meta_buffer != nullptr
+    && runtime_state_.current_frame->page_table_buffer != nullptr) {
+    queued_readback = PendingFrameExtraction {
+      .physical_page_meta_readback
+      = readback_manager->CreateBufferReadback(BuildWorkingSetDebugName(
+        runtime_state_.frame_config, "PhysicalMeta.Extract")),
+      .physical_page_count = extracted_snapshot.physical_pages.size(),
+      .page_table_readback
+      = readback_manager->CreateBufferReadback(BuildWorkingSetDebugName(
+        runtime_state_.frame_config, "PageTable.Extract")),
+      .page_table_entry_count = extracted_snapshot.page_table.size(),
+    };
+
+    CHECK_NOTNULL_F(queued_readback->physical_page_meta_readback.get(),
+      "QueueFrameExtraction requires physical metadata readback object");
+    CHECK_NOTNULL_F(queued_readback->page_table_readback.get(),
+      "QueueFrameExtraction requires page-table readback object");
+
+    recorder.BeginTrackingResourceState(
+      *runtime_state_.current_frame->physical_page_meta_buffer,
+      graphics::ResourceStates::kCommon, true);
+    const auto physical_range = graphics::BufferRange { 0U,
+      static_cast<std::uint64_t>(queued_readback->physical_page_count)
+        * sizeof(VsmPhysicalPageMeta) };
+    const auto physical_ticket
+      = queued_readback->physical_page_meta_readback->EnqueueCopy(recorder,
+        *runtime_state_.current_frame->physical_page_meta_buffer,
+        physical_range);
+    CHECK_F(physical_ticket.has_value(),
+      "QueueFrameExtraction failed to enqueue physical metadata readback "
+      "error={}",
+      physical_ticket.error());
+    queued_readback->physical_page_meta_ticket = *physical_ticket;
+
+    recorder.BeginTrackingResourceState(
+      *runtime_state_.current_frame->page_table_buffer,
+      graphics::ResourceStates::kCommon, true);
+    const auto page_table_range = graphics::BufferRange { 0U,
+      static_cast<std::uint64_t>(queued_readback->page_table_entry_count)
+        * sizeof(VsmShaderPageTableEntry) };
+    const auto page_table_ticket
+      = queued_readback->page_table_readback->EnqueueCopy(recorder,
+        *runtime_state_.current_frame->page_table_buffer, page_table_range);
+    CHECK_F(page_table_ticket.has_value(),
+      "QueueFrameExtraction failed to enqueue page-table readback error={}",
+      page_table_ticket.error());
+    queued_readback->page_table_ticket = *page_table_ticket;
+  }
+
+  runtime_state_.previous_frame = std::move(extracted_snapshot);
+  runtime_state_.pending_frame_extraction = std::move(queued_readback);
+  runtime_state_.cache_data_state = VsmCacheDataState::kAvailable;
+  runtime_state_.is_hzb_data_available
+    = runtime_state_.previous_frame->is_hzb_data_available;
+  runtime_state_.invalidation_reason = VsmCacheInvalidationReason::kNone;
+  ClearInFlightFrameState();
+  runtime_state_.build_state = VsmCacheBuildState::kIdle;
+
+  DLOG_F(2,
+    "queued cache frame extraction generation={} pool_identity={} "
+    "pending_gpu_readback={} hzb_available={}",
+    runtime_state_.previous_frame->frame_generation,
+    runtime_state_.previous_frame->pool_identity,
+    runtime_state_.pending_frame_extraction.has_value(),
+    runtime_state_.is_hzb_data_available);
+}
+
 auto VsmCacheManager::ExtractFrameData() -> void
 {
   CHECK_F(runtime_state_.build_state == VsmCacheBuildState::kReady,
@@ -756,7 +891,11 @@ auto VsmCacheManager::ExtractFrameData() -> void
   CHECK_F(runtime_state_.current_frame.has_value(),
     "ExtractFrameData requires a committed current frame");
 
-  runtime_state_.previous_frame = runtime_state_.current_frame->snapshot;
+  auto extracted_snapshot = runtime_state_.current_frame->snapshot;
+  static_cast<void>(TrySynchronizeSnapshotFromGpu(
+    *runtime_state_.current_frame, extracted_snapshot));
+
+  runtime_state_.previous_frame = std::move(extracted_snapshot);
   runtime_state_.cache_data_state = VsmCacheDataState::kAvailable;
   runtime_state_.is_hzb_data_available
     = runtime_state_.previous_frame->is_hzb_data_available;
@@ -1131,6 +1270,114 @@ auto VsmCacheManager::ApplyRetainedEntryContinuity(
       snapshot.frame_generation, retained_entry_count,
       retained_physical_pages.size());
   }
+}
+
+auto VsmCacheManager::FinalizePendingFrameExtraction() -> void
+{
+  if (!runtime_state_.pending_frame_extraction.has_value()) {
+    return;
+  }
+
+  CHECK_F(runtime_state_.previous_frame.has_value(),
+    "pending frame extraction requires an extracted snapshot");
+  CHECK_NOTNULL_F(gfx_, "pending frame extraction requires a graphics device");
+
+  const auto readback_manager = gfx_->GetReadbackManager();
+  CHECK_NOTNULL_F(readback_manager.get(),
+    "pending frame extraction requires ReadbackManager");
+
+  auto& pending = *runtime_state_.pending_frame_extraction;
+  auto& snapshot = *runtime_state_.previous_frame;
+
+  const auto physical_bytes = AwaitBufferReadback(*readback_manager,
+    pending.physical_page_meta_readback, pending.physical_page_meta_ticket,
+    pending.physical_page_count * sizeof(VsmPhysicalPageMeta),
+    "VsmCacheManager.ExtractFrameData.PhysicalMeta");
+  snapshot.physical_pages = DeserializeBufferReadback<VsmPhysicalPageMeta>(
+    physical_bytes, pending.physical_page_count,
+    "VsmCacheManager.ExtractFrameData.PhysicalMeta");
+
+  const auto page_table_bytes = AwaitBufferReadback(*readback_manager,
+    pending.page_table_readback, pending.page_table_ticket,
+    pending.page_table_entry_count * sizeof(VsmShaderPageTableEntry),
+    "VsmCacheManager.ExtractFrameData.PageTable");
+  const auto shader_page_table
+    = DeserializeBufferReadback<VsmShaderPageTableEntry>(page_table_bytes,
+      pending.page_table_entry_count,
+      "VsmCacheManager.ExtractFrameData.PageTable");
+  snapshot.page_table.resize(shader_page_table.size());
+  for (std::size_t i = 0; i < shader_page_table.size(); ++i) {
+    snapshot.page_table[i] = {
+      .is_mapped = IsMapped(shader_page_table[i]),
+      .physical_page = DecodePhysicalPageIndex(shader_page_table[i]),
+    };
+  }
+
+  runtime_state_.pending_frame_extraction.reset();
+
+  DLOG_F(2,
+    "finalized pending cache extraction generation={} physical_pages={} "
+    "page_table_entries={}",
+    snapshot.frame_generation, snapshot.physical_pages.size(),
+    snapshot.page_table.size());
+}
+
+auto VsmCacheManager::TrySynchronizeSnapshotFromGpu(
+  const VsmPageAllocationFrame& frame,
+  VsmPageAllocationSnapshot& snapshot) const -> bool
+{
+  if (gfx_ == nullptr || frame.physical_page_meta_buffer == nullptr
+    || frame.page_table_buffer == nullptr) {
+    return false;
+  }
+
+  const auto readback_manager = gfx_->GetReadbackManager();
+  if (readback_manager == nullptr) {
+    return false;
+  }
+
+  const auto physical_bytes
+    = readback_manager->ReadBufferNow(*frame.physical_page_meta_buffer,
+      graphics::BufferRange { 0U,
+        static_cast<std::uint64_t>(snapshot.physical_pages.size())
+          * sizeof(VsmPhysicalPageMeta) });
+  if (!physical_bytes.has_value()) {
+    LOG_F(WARNING,
+      "failed to read back current-frame physical metadata during extraction "
+      "generation={} error={}",
+      snapshot.frame_generation, physical_bytes.error());
+    return false;
+  }
+  snapshot.physical_pages = DeserializeBufferReadback<VsmPhysicalPageMeta>(
+    *physical_bytes, snapshot.physical_pages.size(),
+    "VsmCacheManager.ExtractFrameData.PhysicalMeta.Now");
+
+  const auto page_table_bytes
+    = readback_manager->ReadBufferNow(*frame.page_table_buffer,
+      graphics::BufferRange { 0U,
+        static_cast<std::uint64_t>(snapshot.page_table.size())
+          * sizeof(VsmShaderPageTableEntry) });
+  if (!page_table_bytes.has_value()) {
+    LOG_F(WARNING,
+      "failed to read back current-frame page table during extraction "
+      "generation={} error={}",
+      snapshot.frame_generation, page_table_bytes.error());
+    return false;
+  }
+
+  const auto shader_page_table
+    = DeserializeBufferReadback<VsmShaderPageTableEntry>(*page_table_bytes,
+      snapshot.page_table.size(),
+      "VsmCacheManager.ExtractFrameData.PageTable.Now");
+  snapshot.page_table.resize(shader_page_table.size());
+  for (std::size_t i = 0; i < shader_page_table.size(); ++i) {
+    snapshot.page_table[i] = {
+      .is_mapped = IsMapped(shader_page_table[i]),
+      .physical_page = DecodePhysicalPageIndex(shader_page_table[i]),
+    };
+  }
+
+  return true;
 }
 
 auto VsmCacheManager::EnsureWorkingSetResources(

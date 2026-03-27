@@ -59,7 +59,7 @@ Stage-suite refactor status on `2026-03-27`:
   only malformed-input rejection tests mutate those published snapshots after real construction
 - the shared live-scene harness now lives in
   `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-  two-box lighting scenes through the dedicated Stage 1-10 executables
+  two-box lighting scenes through the dedicated Stage 1-11 executables
 - the shared live-scene harness now rotates test lights from the engine's
   `oxygen::space::move::Forward` basis instead of an ad hoc `-Z` basis, so
   spotlight and directional live-scene targets match engine transform reality
@@ -84,6 +84,8 @@ Stage-suite refactor status on `2026-03-27`:
   program
 - Stage 10 mapped-mip propagation coverage now lives in the dedicated `VsmMappedMips` test
   program
+- Stage 11 selective-page-initialization coverage now lives in the dedicated
+  `VsmPageInitialization` test program
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -114,7 +116,8 @@ Stage-suite refactor status on `2026-03-27`:
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
   `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VsmAvailablePages`,
-  `VsmPageMappings`, `VsmHierarchicalFlags`, `VsmMappedMips`, `VirtualShadows`, and
+  `VsmPageMappings`, `VsmHierarchicalFlags`, `VsmMappedMips`, `VsmPageInitialization`,
+  `VirtualShadows`, and
   `VirtualShadowGpuLifecycle`;
   `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
@@ -126,6 +129,7 @@ Stage-suite refactor status on `2026-03-27`:
   `Oxygen.Renderer.VsmPageMappings.Tests`,
   `Oxygen.Renderer.VsmHierarchicalFlags.Tests`,
   `Oxygen.Renderer.VsmMappedMips.Tests`,
+  `Oxygen.Renderer.VsmPageInitialization.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
@@ -191,6 +195,20 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 10 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmMappedMips.Tests.exe`
   and `5 tests from 1 test suite` passed
+- Stage 11 review and extraction-semantics validation used the UE5 reference-comparison rule
+  through a subagent audit before changing runtime extraction or executable ownership
+- built `Oxygen.Renderer.VsmPageInitialization.Tests` and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- fixed a real Stage 11 engine bug by switching end-of-frame extraction from stale CPU-only
+  snapshot publication to recorder-queued GPU readback finalized at the next `BeginFrame()` so
+  stable cached frames preserve the real previous-frame physical-page metadata and do not
+  reinitialize pages spuriously
+- reran the dedicated Stage 11 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageInitialization.Tests.exe`
+  and `3 tests from 1 test suite` passed
+- reran supporting propagation smoke with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageFlagPropagationGpuTest.*`
+  and `1 test from 1 test suite` passed
 - reran focused neighboring propagation coverage with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageFlagPropagationGpuTest.*`
   and `1 test from 1 test suite` passed
@@ -219,7 +237,7 @@ Validation evidence on `2026-03-27`:
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - Stage 3 review and rewrite used the UE5 reference-comparison rule through a subagent audit
   before changing executable boundaries or test scenarios
-- ran focused GPU stage-suite validation with
+- ran focused GPU stage-suite validation before the Stage 11 executable split with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmPhysicalPageReuseTest.*:VsmAvailablePagePackingTest.*:VsmNewPageMappingTest.*:VsmHierarchicalPageFlagsTest.*:VsmMappedMipPropagationTest.*:VsmSelectivePageInitializationTest.*:VsmShadowRasterizerPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmProjectionPassGpuTest.*`
 - reran the full CPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe`
   with `63 tests from 14 test suites` passing
@@ -250,13 +268,9 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 12 suite with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*`
   and `7 tests from 1 test suite` passed
-- strengthened the Stage 11 dedicated suite with multi-page paged-light initialization coverage:
-  `VsmSelectivePageInitializationTest.ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages`
-  and
-  `VsmSelectivePageInitializationTest.CopiesStaticSliceIntoMultipleDynamicPagesAfterDynamicOnlyInvalidation`
-- reran the dedicated Stage 11 suite with
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmSelectivePageInitializationTest.*`
-  and `4 tests from 1 test suite` passed
+- superseded historical Stage 11 lifecycle coverage has been replaced by the dedicated
+  `Oxygen.Renderer.VsmPageInitialization.Tests` executable; selective initialization ownership no
+  longer lives in `VirtualShadowGpuLifecycle`
 - historical evidence before the Stage 10 executable split:
   `VsmMappedMipPropagationTest.MarksMappedDescendantsAcrossRequestedLeafAndParentPages`
   passed in the lifecycle binary and originally proved mapped-descendant propagation across a
@@ -277,7 +291,7 @@ Validation evidence on `2026-03-27`:
   after removing embedded Stage 5 assertions from that test, and the remaining failure is now
   isolated to Stage 15 floor probes that remain lit
 - reran the full GPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
-  and it now reports exactly one failure out of `66 tests from 19 test suites`:
+  and it now reports exactly one failure out of `46 tests from 9 test suites`:
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
 - Stage 5 completion evidence is now satisfied:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe` passes with
