@@ -78,6 +78,12 @@ namespace oxygen::renderer::vsm::detail {
   // Phase H explicitly marks this true only after the HZB updater has rebuilt
   // the current frame's derived data.
   snapshot.is_hzb_data_available = false;
+  // Capture HZB pool geometry so BeginFrame can detect pool resizes between
+  // this extraction and the next frame's seam.
+  snapshot.hzb_pool_width = seam.hzb_pool.width;
+  snapshot.hzb_pool_height = seam.hzb_pool.height;
+  snapshot.hzb_pool_mip_count = seam.hzb_pool.mip_count;
+  snapshot.hzb_pool_format = seam.hzb_pool.format;
   snapshot.virtual_frame = seam.current_frame;
   snapshot.light_cache_entries = BuildLightCacheEntries(seam.current_frame);
   snapshot.page_table.resize(seam.current_frame.total_page_table_entry_count);

@@ -1,6 +1,6 @@
 # Virtual Shadow Map — Remaining Implementation Plan
 
-Status: `planned`
+Status: `in_progress`
 Audience: engineer implementing VSM rendering pipeline stages
 Scope: all work required to bring the VSM system from its current CPU-side cache/allocation engine to a fully functional shadow rendering pipeline
 
@@ -46,7 +46,109 @@ validation state:
 | Page Allocation Planner | §3.4 | ✅ Complete | `VsmPageAllocationPlanner.h/.cpp`, `VsmPageAllocationSnapshotHelpers.h` |
 | Shader ABI Contracts | §4.1–§4.5 | ✅ Complete | `VsmShaderTypes.h`, `Shaders/Renderer/Vsm/Vsm*.hlsli` |
 
-Test coverage: 22 test files across CPU and GPU lifecycle suites.
+Stage-suite refactor status on `2026-03-27`:
+
+- shared harnesses now live in `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageCpuHarness.h`
+  and `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowStageGpuHarness.h`
+- the shared CPU harness now exposes mixed-frame and directional/local entry-resolution helpers
+  through `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
+  `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert published frame contracts from
+  real directional/local layout inputs instead of ad hoc setup
+- the shared GPU harness now exposes paged-light request and entry-resolution helpers through
+  `MakePageRequests(...)` and `ResolvePageTableEntryIndex(...)` so stage suites do not duplicate
+  page-request assembly or hardcode page-table slots
+- Stage 2 virtual-address-allocation coverage now lives in the dedicated
+  `VsmVirtualAddressSpace` test program; helper/value-only virtual-address-space coverage now lives
+  outside the Stage 2 executable
+- dedicated semantic stage suites now exist for begin-frame, virtual-address allocation,
+  remap construction, projection-record publication, page-request generation, physical-page reuse,
+  available-page packing, new-page mapping, hierarchical page flags, mapped-mip propagation,
+  selective page initialization, shadow rasterization, static/dynamic merge, HZB update,
+  projection/composite, frame extraction, and cache validity
+- renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
+  `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+  `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
+  `Oxygen.Renderer.VirtualShadows.Tests`, and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
+
+Validation evidence on `2026-03-27`:
+
+- built `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`, `Oxygen.Renderer.VsmBasic.Tests`,
+  and `Oxygen.Renderer.VirtualShadows.Tests` in `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 2 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe`
+  and `7 tests from 3 test suites` passed
+- reran the supporting helper coverage moved out of Stage 2 with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBasic.Tests.exe --gtest_filter=VsmVirtualAddressSpaceTypesTest.*`
+  and `2 tests from 1 test suite` passed
+- built `Oxygen.Renderer.VirtualShadows.Tests` and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused CPU stage-suite validation with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe --gtest_filter=VsmBeginFrameTest.*:VsmVirtualAddressAllocationTest.*:VsmRemapConstructionTest.*:VsmProjectionRecordPublicationTest.*:VsmPageRequestGenerationTest.*:VsmFrameExtractionTest.*:VsmCacheValidityTest.*`
+- ran focused GPU stage-suite validation with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmPhysicalPageReuseTest.*:VsmAvailablePagePackingTest.*:VsmNewPageMappingTest.*:VsmHierarchicalPageFlagsTest.*:VsmMappedMipPropagationTest.*:VsmSelectivePageInitializationTest.*:VsmShadowRasterizerPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmProjectionPassGpuTest.*`
+- reran the full CPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe`
+  with `104 tests from 26 test suites` passing
+- reran the refactored bottom-stage GPU suites individually after switching them onto the shared
+  harness:
+  - `VsmProjectionPassGpuTest.*`
+  - `VsmHzbUpdaterPassGpuTest.*`
+  - `VsmStaticDynamicMergePassGpuTest.*`
+  - `VsmShadowRasterizerPassGpuTest.*`
+  - `VsmPageRequestGeneratorGpuTest.*`
+- strengthened the Stage 15 dedicated suite so
+  `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
+  now drives projection from a rasterized two-page directional scene with real geometry through the
+  shared GPU harness instead of seeded shadow pages
+- strengthened the Stage 14 dedicated suite so
+  `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
+  now rebuilds page HZB data from rasterized multi-page directional geometry through the shared GPU
+  harness instead of seeded shadow pages alone
+- tightened the Stage 5 dedicated suite so `VsmPageRequestGeneratorPass_test.cpp` now reuses the
+  shared GPU harness float-texture upload and mip-readback helpers instead of carrying a private
+  texture-upload path for request-generation depth inputs
+- reran the dedicated Stage 5 suite with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*`
+  and `9 tests from 1 test suite` passed
+- tightened the Stage 12 dedicated suite so `VsmShadowRasterizerPass_test.cpp` now reuses the
+  shared GPU harness buffer, texture, mip-readback, and raw-buffer readback helpers instead of
+  carrying a private duplicate mini-fixture
+- reran the dedicated Stage 12 suite with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*`
+  and `7 tests from 1 test suite` passed
+- strengthened the Stage 11 dedicated suite with multi-page paged-light initialization coverage:
+  `VsmSelectivePageInitializationTest.ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages`
+  and
+  `VsmSelectivePageInitializationTest.CopiesStaticSliceIntoMultipleDynamicPagesAfterDynamicOnlyInvalidation`
+- reran the dedicated Stage 11 suite with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmSelectivePageInitializationTest.*`
+  and `4 tests from 1 test suite` passed
+- strengthened the Stage 10 dedicated suite so
+  `VsmMappedMipPropagationTest.MarksMappedDescendantsAcrossRequestedLeafAndParentPages`
+  now proves mapped-descendant propagation across a three-level multi-page paged-light scenario
+  with two requested leaf pages and one directly requested parent page through the shared GPU
+  harness request/index helpers instead of hardcoded page-table slots
+- reran the dedicated Stage 10 suite with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmMappedMipPropagationTest.*`
+  and `1 test from 1 test suite` passed
+- strengthened the Stage 9 dedicated suite so
+  `VsmHierarchicalPageFlagsTest.BuildsAllocatedAndUncachedFlagsAcrossRequestedLeafAndAncestorPages`
+  now proves hierarchical allocated/dynamic-uncached/static-uncached propagation across the same
+  three-level multi-page paged-light scenario through the shared GPU harness request/index helpers
+  instead of hardcoded page-table slots
+- reran the dedicated Stage 9 suite with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmHierarchicalPageFlagsTest.*`
+  and `1 test from 1 test suite` passed
+- reran focused bottom-stage GPU validation with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmProjectionPassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmShadowRasterizerPassGpuTest.*:VsmPageRequestGeneratorGpuTest.*`
+  and `29 tests from 5 test suites` passed
+- reran the full GPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
+  and it still reports exactly one failure out of `75 tests from 20 test suites`:
+  `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+- full GPU validation is still blocked by the known live-shell failure
+  `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
+  that test still reports one extra Stage 5 request at page-table index `54` and Stage 15 floor
+  probes that remain lit, so the test-refactor slice cannot be marked complete yet
 
 The remaining phases below explicitly own the current forward gaps from the
 implemented cache/allocation slice:
@@ -151,7 +253,7 @@ Validation evidence on 2026-03-24:
 - added fixture-based parity coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShaderTypes_test.cpp`
 - verified `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` bakes `shaders.bin` as an `ALL` build target and makes `oxygen-graphics-direct3d12` depend on that bake
 - verified `src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.cpp` compiles the runtime shader catalog declared in `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
-- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
@@ -188,9 +290,9 @@ Validation evidence on 2026-03-24:
 - added CPU-side request math coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneration_test.cpp`
 - added GPU/live-render-context execution coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneratorPass_test.cpp`
 - the GPU pass tests now execute against a renderer-owned off-screen frame session via `Renderer::BeginOffscreenFrame(...)`, so Phase C no longer relies on friend-based test-only seams
-- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
-- ran focused high-verbosity GPU validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageRequestGeneratorGpuTest.*`
+- ran focused high-verbosity GPU validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageRequestGeneratorGpuTest.*`
 
 ---
 
@@ -226,11 +328,11 @@ Validation evidence on 2026-03-24:
 - stage 7 now packs available pages in ascending physical-page order so GPU allocation consumes the same deterministic order chosen by the CPU planner
 - added GPU readback coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageManagementPass_test.cpp`
 - tightened GPU publication coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp` and `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheManagerGpuResources_test.cpp`
-- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran focused high-verbosity validation:
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageReuseStageGpuTest.ReuseStagePublishesCurrentFrameMappingForReusablePages`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPackAvailablePagesGpuTest.PackStageCompactsUnallocatedPagesIntoAscendingStack`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStagePublishesMixedReuseAndFreshMappings`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageReuseStageGpuTest.ReuseStagePublishesCurrentFrameMappingForReusablePages`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPackAvailablePagesGpuTest.PackStageCompactsUnallocatedPagesIntoAscendingStack`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStagePublishesMixedReuseAndFreshMappings`
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
@@ -274,8 +376,8 @@ Validation evidence on 2026-03-25:
 - registered `ScreenHzbBuildPass` in `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp` immediately after `DepthPrePass`
 - added GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageLifecyclePasses_test.cpp`
 - added GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/ScreenHzbBuildPass_test.cpp`
-- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
-- ran focused high-verbosity HZB validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests.exe -v 9 --gtest_filter=ScreenHzbBuildGpuTest.*`
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- ran focused high-verbosity HZB validation with `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=ScreenHzbBuildGpuTest.*`
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadows\\.Tests|Oxygen\\.Renderer\\.VirtualShadows\\.GpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
 ---
@@ -339,14 +441,14 @@ Validation evidence through `F4` on `2026-03-26`:
   unregisters them on recreate/reset/destruction so per-page DSV creation obeys
   the renderer resource-registry contract
 - built `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` and
-  `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests` in
+  `Oxygen.Renderer.VirtualShadows.Tests` in
   `out/build-ninja` (`Debug`)
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests|Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.* -v 1`
-- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 1`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 1`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmPhysicalPagePoolGpuLifecycleTest.* -v 9`
-- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 9`
-- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe --gtest_filter=VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe --gtest_filter=VsmCacheManagerOrchestrationTest.* -v 9`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe --gtest_filter=VsmPageRequestGenerationTest.*:VsmShadowRasterJobsTest.* -v 9`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 1`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageRequestGeneratorGpuTest.*:VsmShadowRasterizerPassGpuTest.* -v 9`
 - low-verbosity logs were clean: no warnings, no failures, and no
@@ -405,7 +507,7 @@ Validation evidence on 2026-03-26:
 - added focused GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmStaticDynamicMergePass_test.cpp`
 - kept the physical shadow pool as a depth-backed non-UAV resource and merged through a dedicated float scratch atlas inside `VsmStaticDynamicMergePass`, so Phase G stays compatible with the existing raster/depth contract
 - revalidated the shadow-pool contract in `src/Oxygen/Renderer/Test/VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp`
-- built `oxygen-renderer`, `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran focused high-verbosity validation:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.CommitPublishesNonNullWorkingSetBuffersWithExpectedDescriptors`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmStaticDynamicMergePassGpuTest.*`
@@ -446,9 +548,9 @@ Validation evidence on 2026-03-26:
 - ran focused high-verbosity validation:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsSelectivelyAndClearsConsumedDirtyState`
   - `out\\build-ninja\\bin\\Release\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsSelectivelyAndClearsConsumedDirtyState`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.CurrentFrameHzbAvailabilityRequiresExplicitPublicationBeforeExtraction`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.PublishedCurrentFrameHzbAvailabilityEnablesNextFrameReuseGating`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.CacheManagerHzbAvailabilityIsCompatibilityGated`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.CurrentFrameHzbAvailabilityRequiresExplicitPublicationBeforeExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerOrchestrationTest.PublishedCurrentFrameHzbAvailabilityEnablesNextFrameReuseGating`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.CacheManagerHzbAvailabilityIsCompatibilityGated`
 
 ---
 
@@ -494,9 +596,9 @@ Validation evidence on 2026-03-26:
 - extended cache-manager continuity publication with `VsmCacheManager::PublishProjectionRecords(...)`
 - added cache-manager lifecycle coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp`
 - added focused GPU coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp`
-- built `oxygen-renderer`, `Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
+- built `oxygen-renderer`, `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - ran focused high-verbosity validation:
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassBuildsScreenShadowMaskFromMappedVirtualPage`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.LocalProjectionPerLightPassBuildsScreenShadowMaskFromMappedVirtualPage`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*`
@@ -558,20 +660,20 @@ Validation evidence on 2026-03-26:
   - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInvalidation.hlsl`
   - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmInvalidationWorkItem.hlsli`
 - built incrementally in `out/build-ninja` (`Debug`):
-  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
-  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
+  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.VirtualShadows.Tests --parallel 8`
+  - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.VirtualShadowSceneObserver.Tests Oxygen.Renderer.VirtualShadows.Tests --parallel 8`
 - ran focused high-verbosity validation:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe -v 9 --gtest_filter=VsmSceneObserverIntegrationTest.DirectSceneObserverRegistrationDeliversSceneMutationsIntoCollectorDrains`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe -v 9 --gtest_filter=VsmSceneObserverIntegrationTest.DirectSceneObserverRebindingStopsDeliveringOldSceneMutations`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainPrimitiveInvalidationRecordsMergesTransformAndDestroyIntoSortedOutput`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainLightInvalidationRequestsAggregatesAndDeduplicatesRemapKeysByLightKind`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.ResetClearsPublishedStateAndPendingSceneMutations`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.RenderedPrimitiveHistoryAndStaticFeedbackArePublishedIntoCurrentFrameAndRetainedOnExtraction`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkResolvesPreviousFrameHistoryAndStaticFeedbackIntoProjectionScopedItems`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkMergesDuplicatePrimitiveInvalidationsPerProjection`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkRejectsUnusableWorldBoundingSpheresAndLogsWarning`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.SceneLightInvalidationRequestsApplyThroughCoordinatorAndExistingTargetedApis`
-  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.ScenePrimitiveInvalidationsFlowFromCoordinatorIntoPreparedGpuWorkload`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainPrimitiveInvalidationRecordsMergesTransformAndDestroyIntoSortedOutput`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.DrainLightInvalidationRequestsAggregatesAndDeduplicatesRemapKeysByLightKind`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmSceneInvalidationCollectorTest.ResetClearsPublishedStateAndPendingSceneMutations`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.RenderedPrimitiveHistoryAndStaticFeedbackArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkResolvesPreviousFrameHistoryAndStaticFeedbackIntoProjectionScopedItems`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkMergesDuplicatePrimitiveInvalidationsPerProjection`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.BuildInvalidationWorkRejectsUnusableWorldBoundingSpheresAndLogsWarning`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.SceneLightInvalidationRequestsApplyThroughCoordinatorAndExistingTargetedApis`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerInvalidationTest.ScenePrimitiveInvalidationsFlowFromCoordinatorIntoPreparedGpuWorkload`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmInvalidationPassGpuTest.MarksOnlyOverlappedMappedPagesAndLeavesOtherPagesUntouched`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmInvalidationPassGpuTest.RespectsScopeFlagsAndIgnoresUnmappedOrOutOfRangeWorkItems`
 
@@ -705,10 +807,10 @@ The split below does not reduce automated validation requirements. It only makes
     - added focused GPU orchestration coverage in `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp`
     - wired the new GPU test into `src/Oxygen/Renderer/Test/CMakeLists.txt`
     - built:
-      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests --parallel 8`
+      - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests Oxygen.Renderer.VirtualShadows.Tests --parallel 8`
     - ran with high verbosity:
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.PageRequestReadbackBridgeCommitsAllocationFrameFromGpuRequests`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerFrameLifecycleTest.ProjectionRecordsArePublishedIntoCurrentFrameAndRetainedOnExtraction`
 
 - [x] `K-a.5` End-to-end C-J shell execution
   - Architecture stages covered:
@@ -884,11 +986,11 @@ The split below does not reduce automated validation requirements. It only makes
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.CommitPublishesNonNullWorkingSetBuffersWithExpectedDescriptors`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.WorkingSetRecreationRebindsRegisteredBuffersForDownstreamPasses`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmCacheManagerGpuResourcesTest.ResetDropsReusableWorkingSetBuffers`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmCacheManagerStateTest.CacheManagerAbortFrameRestoresIdleStateAndPreservesPreviousExtraction`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerUsesClearDepthInitializationWhenOnlyStaticContentIsInvalidated`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRoutesStaticOnlyRequestsIntoStaticSliceWhenStaticSliceExists`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRejectsDynamicRequestsBeforeSpillingIntoStaticSliceCapacity`
-      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.Oxygen.Renderer.VirtualShadows.Tests.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerEvictsLegacyDynamicMappingsThatPointIntoTheStaticSlice`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmCacheManagerStateTest.CacheManagerAbortFrameRestoresIdleStateAndPreservesPreviousExtraction`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerUsesClearDepthInitializationWhenOnlyStaticContentIsInvalidated`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRoutesStaticOnlyRequestsIntoStaticSliceWhenStaticSliceExists`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerRejectsDynamicRequestsBeforeSpillingIntoStaticSliceCapacity`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe -v 9 --gtest_filter=VsmPageAllocationPlannerTest.PlannerEvictsLegacyDynamicMappingsThatPointIntoTheStaticSlice`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmAllocateNewPagesGpuTest.AllocateStageAcceptsInvalidationSeedBufferFromTheSameRecorder`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsOnlySelectedDynamicPages`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsLargeRectBatchesWithoutTouchingUntargetedPages`
@@ -1318,8 +1420,8 @@ All commands assume repository root: `H:\projects\DroidNet\projects\Oxygen.Engin
 ```powershell
 cmake --build out/build-ninja --config Debug --target oxygen-renderer --parallel 8
 cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadows.Tests --parallel 8
-cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests --parallel 8
-ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen.Renderer.VirtualShadows.Tests|Oxygen.Renderer.VirtualShadows.GpuLifecycle.Tests"
+cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8
+ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen.Renderer.VirtualShadows.Tests|Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests"
 ```
 
 ### New targets (Phases B+)

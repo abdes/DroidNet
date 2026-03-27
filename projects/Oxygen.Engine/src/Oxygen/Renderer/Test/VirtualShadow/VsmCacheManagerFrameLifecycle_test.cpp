@@ -8,7 +8,6 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
 
@@ -16,7 +15,6 @@
 
 namespace {
 
-using oxygen::Format;
 using oxygen::renderer::vsm::VsmCacheBuildState;
 using oxygen::renderer::vsm::VsmCacheDataState;
 using oxygen::renderer::vsm::VsmCacheManager;
@@ -98,7 +96,7 @@ NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
   EXPECT_EQ(manager.DescribeBuildState(), VsmCacheBuildState::kIdle);
   EXPECT_EQ(manager.DescribeCacheDataState(), VsmCacheDataState::kAvailable);
   EXPECT_TRUE(manager.IsCacheDataAvailable());
-  EXPECT_TRUE(manager.IsHzbDataAvailable());
+  EXPECT_FALSE(manager.IsHzbDataAvailable());
   EXPECT_EQ(manager.GetCurrentFrame(), nullptr);
   ASSERT_NE(manager.GetPreviousFrame(), nullptr);
   EXPECT_EQ(*manager.GetPreviousFrame(), committed_snapshot);
@@ -212,103 +210,6 @@ NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
     manager.GetPreviousFrame()->static_primitive_page_feedback.size(), 1U);
   EXPECT_EQ(manager.GetPreviousFrame()->static_primitive_page_feedback[0],
     static_feedback[0]);
-}
-
-NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
-  CacheManagerInvalidatesPreviousDataWhenPoolCompatibilityChanges)
-{
-  auto previous_pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  ASSERT_EQ(previous_pool_manager.EnsureShadowPool(
-              MakeShadowPoolConfig("phase2-frame-shadow-pool")),
-    VsmPhysicalPoolChangeResult::kCreated);
-  ASSERT_EQ(previous_pool_manager.EnsureHzbPool(
-              MakeHzbPoolConfig("phase2-frame-hzb-pool")),
-    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
-
-  auto manager = VsmCacheManager(nullptr);
-  manager.BeginFrame(
-    MakeSeam(previous_pool_manager, 1ULL, 10U, "phase2-frame", 1U));
-  static_cast<void>(manager.BuildPageAllocationPlan());
-  static_cast<void>(manager.CommitPageAllocationFrame());
-  manager.ExtractFrameData();
-
-  auto incompatible_pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  auto different_pool = MakeShadowPoolConfig("phase2-frame-shadow-pool");
-  different_pool.depth_format = Format::kDepth32Stencil8;
-  ASSERT_EQ(incompatible_pool_manager.EnsureShadowPool(different_pool),
-    VsmPhysicalPoolChangeResult::kCreated);
-  ASSERT_EQ(incompatible_pool_manager.EnsureHzbPool(
-              MakeHzbPoolConfig("phase2-frame-hzb-pool")),
-    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
-
-  manager.BeginFrame(
-    MakeSeam(incompatible_pool_manager, 2ULL, 20U, "phase2-frame", 1U));
-  EXPECT_EQ(manager.DescribeCacheDataState(), VsmCacheDataState::kInvalidated);
-  EXPECT_FALSE(manager.IsCacheDataAvailable());
-  EXPECT_FALSE(manager.IsHzbDataAvailable());
-}
-
-NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
-  CacheManagerKeepsPreviousDataAvailableAcrossOrdinaryFrameShapeChanges)
-{
-  auto pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  ASSERT_EQ(pool_manager.EnsureShadowPool(
-              MakeShadowPoolConfig("phase2-frame-shadow-pool")),
-    VsmPhysicalPoolChangeResult::kCreated);
-  ASSERT_EQ(
-    pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase2-frame-hzb-pool")),
-    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
-
-  auto manager = VsmCacheManager(nullptr);
-  manager.BeginFrame(MakeSeam(pool_manager, 1ULL, 10U, "phase2-frame", 1U));
-  static_cast<void>(manager.BuildPageAllocationPlan());
-  static_cast<void>(manager.CommitPageAllocationFrame());
-  manager.ExtractFrameData();
-
-  manager.BeginFrame(MakeSeam(pool_manager, 2ULL, 20U, "phase2-frame", 2U));
-  EXPECT_EQ(manager.DescribeCacheDataState(), VsmCacheDataState::kAvailable);
-  EXPECT_TRUE(manager.IsCacheDataAvailable());
-  EXPECT_TRUE(manager.IsHzbDataAvailable());
-}
-
-NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
-  CacheManagerHzbAvailabilityIsCompatibilityGated)
-{
-  auto previous_pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  ASSERT_EQ(previous_pool_manager.EnsureShadowPool(
-              MakeShadowPoolConfig("phase2-frame-shadow-pool")),
-    VsmPhysicalPoolChangeResult::kCreated);
-  ASSERT_EQ(previous_pool_manager.EnsureHzbPool(
-              MakeHzbPoolConfig("phase2-frame-hzb-pool")),
-    oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
-
-  auto manager = VsmCacheManager(nullptr);
-  manager.BeginFrame(
-    MakeSeam(previous_pool_manager, 1ULL, 10U, "phase2-frame", 1U));
-  static_cast<void>(manager.BuildPageAllocationPlan());
-  static_cast<void>(manager.CommitPageAllocationFrame());
-  manager.ExtractFrameData();
-
-  auto no_hzb_pool_manager = VsmPhysicalPagePoolManager(nullptr);
-  ASSERT_EQ(no_hzb_pool_manager.EnsureShadowPool(
-              MakeShadowPoolConfig("phase2-frame-shadow-pool")),
-    VsmPhysicalPoolChangeResult::kCreated);
-
-  manager.BeginFrame(
-    MakeSeam(no_hzb_pool_manager, 2ULL, 20U, "phase2-frame", 1U));
-  EXPECT_EQ(manager.DescribeCacheDataState(), VsmCacheDataState::kAvailable);
-  EXPECT_TRUE(manager.IsCacheDataAvailable());
-  EXPECT_FALSE(manager.IsHzbDataAvailable());
-}
-
-NOLINT_TEST_F(VsmCacheManagerFrameLifecycleTest,
-  CacheManagerIllegalApiOrderingFailsDeterministically)
-{
-  auto manager = VsmCacheManager(nullptr);
-
-  NOLINT_EXPECT_DEATH((void)manager.BuildPageAllocationPlan(), ".*");
-  NOLINT_EXPECT_DEATH((void)manager.CommitPageAllocationFrame(), ".*");
-  NOLINT_EXPECT_DEATH((void)manager.ExtractFrameData(), ".*");
 }
 
 } // namespace

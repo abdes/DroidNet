@@ -55,36 +55,42 @@ m_gtest_program(
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
 m_gtest_program(
-  "Oxygen.Renderer.VirtualShadows.Tests"
+  VsmBasic
   SOURCES
     "VirtualShadow/VirtualShadowTestFixtures.h"
-    "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
-    "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
-    "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
-    "VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp"
-    "VirtualShadow/VsmCacheManagerInvalidation_test.cpp"
-    "VirtualShadow/VsmCacheManagerOrchestration_test.cpp"
-    "VirtualShadow/VsmCacheManagerRetention_test.cpp"
-    "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
-    "VirtualShadow/VsmCacheManagerSeam_test.cpp"
-    "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
-    "VirtualShadow/VsmShaderTypes_test.cpp"
-    "VirtualShadow/VsmPageRequestGeneration_test.cpp"
-    "VirtualShadow/VsmCacheManagerState_test.cpp"
     "VirtualShadow/VsmCacheManagerTypes_test.cpp"
-    "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
-    "VirtualShadow/VsmShadowRasterJobs_test.cpp"
-    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
-    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceTypes_test.cpp"
+)
+
+m_gtest_program(
+  VsmBeginFrame
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmBeginFrame_test.cpp"
+    "VirtualShadow/VsmBeginFramePoolCompatibility_test.cpp"
+    "VirtualShadow/VsmBeginFrameHzbAvailability_test.cpp"
+)
+
+m_gtest_program(
+  VsmVirtualAddressSpace
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmVirtualAddressAllocation_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
     "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
 )
 
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  PREFIX VirtualShadows
-  FILES
+m_gtest_program(
+  VirtualShadows
+  SOURCES
     "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmRemapConstruction_test.cpp"
+    "VirtualShadow/VsmProjectionRecordPublication_test.cpp"
+    "VirtualShadow/VsmFrameExtraction_test.cpp"
+    "VirtualShadow/VsmCacheValidity_test.cpp"
     "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
     "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
     "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
@@ -92,19 +98,13 @@ source_group(
     "VirtualShadow/VsmCacheManagerInvalidation_test.cpp"
     "VirtualShadow/VsmCacheManagerOrchestration_test.cpp"
     "VirtualShadow/VsmCacheManagerRetention_test.cpp"
-    "VirtualShadow/VsmCacheManagerScaffold_test.cpp"
-    "VirtualShadow/VsmCacheManagerSeam_test.cpp"
     "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
     "VirtualShadow/VsmShaderTypes_test.cpp"
     "VirtualShadow/VsmPageRequestGeneration_test.cpp"
-    "VirtualShadow/VsmCacheManagerState_test.cpp"
-    "VirtualShadow/VsmCacheManagerTypes_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
     "VirtualShadow/VsmShadowRasterJobs_test.cpp"
     "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
     "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
-    "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
-    "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
 )
 
 gtest_program(
@@ -134,9 +134,16 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
-    "VirtualShadowGpuLifecycle"
+    VirtualShadowGpuLifecycle
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VsmPhysicalPageReuse_test.cpp"
+      "VirtualShadow/VsmAvailablePagePacking_test.cpp"
+      "VirtualShadow/VsmNewPageMapping_test.cpp"
+      "VirtualShadow/VsmHierarchicalPageFlags_test.cpp"
+      "VirtualShadow/VsmMappedMipPropagation_test.cpp"
+      "VirtualShadow/VsmSelectivePageInitialization_test.cpp"
       "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
       "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
       "VirtualShadow/VsmPageManagementPass_test.cpp"
@@ -150,26 +157,6 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
       DEPS
       oxygen::graphics-direct3d12
-  )
-
-  source_group(
-    TREE ${CMAKE_CURRENT_SOURCE_DIR}
-    PREFIX VirtualShadowsDedicated
-    FILES
-      "VirtualShadow/VirtualShadowGpuTestFixtures.h"
-      "ScreenHzbBuildPass_test.cpp"
-      "Fixtures/RendererOffscreenGpuTestFixture.h"
-      "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
-      "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
-      "VirtualShadow/VsmPageManagementPass_test.cpp"
-      "VirtualShadow/VsmPageRequestGeneratorPass_test.cpp"
-      "VirtualShadow/VsmShadowRendererBridge_test.cpp"
-      "VirtualShadow/VsmInvalidationPass_test.cpp"
-      "VirtualShadow/VsmHzbUpdaterPass_test.cpp"
-      "VirtualShadow/VsmProjectionPass_test.cpp"
-      "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
-      "VirtualShadow/VsmStaticDynamicMergePass_test.cpp"
-      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
   )
 endif()
 

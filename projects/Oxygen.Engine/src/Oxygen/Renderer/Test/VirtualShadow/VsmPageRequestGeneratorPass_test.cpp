@@ -25,7 +25,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -42,7 +41,7 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 
-#include "VirtualShadowGpuTestFixtures.h"
+#include "VirtualShadowStageGpuHarness.h"
 
 namespace {
 
@@ -50,7 +49,6 @@ using oxygen::Format;
 using oxygen::NdcDepthRange;
 using oxygen::ResolvedView;
 using oxygen::Scissors;
-using oxygen::TextureType;
 using oxygen::View;
 using oxygen::ViewId;
 using oxygen::ViewPort;
@@ -63,15 +61,10 @@ using oxygen::engine::VsmPageRequestGeneratorPass;
 using oxygen::engine::VsmPageRequestGeneratorPassConfig;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
-using oxygen::graphics::BufferDesc;
-using oxygen::graphics::BufferMemory;
-using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
-using oxygen::graphics::TextureDesc;
-using oxygen::graphics::TextureUploadRegion;
 using oxygen::renderer::vsm::BuildPageRequests;
 using oxygen::renderer::vsm::HasAnyRequestFlag;
 using oxygen::renderer::vsm::kVsmInvalidLightIndex;
@@ -82,13 +75,12 @@ using oxygen::renderer::vsm::VsmProjectionLightType;
 using oxygen::renderer::vsm::VsmShaderPageRequestFlagBits;
 using oxygen::renderer::vsm::VsmShaderPageRequestFlags;
 using oxygen::renderer::vsm::VsmVisiblePixelSample;
-using oxygen::renderer::vsm::testing::VirtualShadowGpuTest;
+using oxygen::renderer::vsm::testing::VsmStageGpuHarness;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 
-constexpr std::uint32_t kTextureUploadRowPitch = 256U;
 constexpr std::uint32_t kTestVirtualPageCount = 64U;
 constexpr ViewId kTestViewId { 1U };
 
@@ -101,13 +93,6 @@ struct ObliqueDepthField {
   std::vector<float> depth_values {};
   std::vector<VsmVisiblePixelSample> visible_samples {};
 };
-
-auto EncodeFloatTexel(const float value) -> std::vector<std::byte>
-{
-  auto bytes = std::vector<std::byte>(kTextureUploadRowPitch, std::byte { 0 });
-  std::memcpy(bytes.data(), &value, sizeof(value));
-  return bytes;
-}
 
 auto BuildExpectedRequestFlags(
   const std::vector<VsmPageRequestProjection>& projections,
@@ -140,8 +125,7 @@ auto BuildExpectedRequestFlags(
 
     flags[*index].bits
       |= static_cast<std::uint32_t>(VsmShaderPageRequestFlagBits::kRequired);
-    const auto is_directional
-      = matched_projection->projection.light_type
+    const auto is_directional = matched_projection->projection.light_type
       == static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional);
     if (!is_directional && request.page.level != 0U) {
       flags[*index].bits
@@ -169,125 +153,15 @@ auto DescribeNonZeroFlags(const VsmShaderPageRequestFlags* flags,
   return result.empty() ? std::string { "<none>" } : result;
 }
 
-class VsmPageRequestGeneratorGpuTest : public VirtualShadowGpuTest {
+class VsmPageRequestGeneratorGpuTest : public VsmStageGpuHarness {
 protected:
-  auto UploadDepthValuesTexture(const std::vector<float>& values,
-    const std::uint32_t width, const std::uint32_t height,
-    std::string_view debug_name, const Format format,
-    const bool is_typeless = false) -> std::shared_ptr<Texture>
-  {
-    TextureDesc texture_desc {};
-    texture_desc.width = width;
-    texture_desc.height = height;
-    texture_desc.format = format;
-    texture_desc.texture_type = TextureType::kTexture2D;
-    texture_desc.is_shader_resource = true;
-    texture_desc.is_typeless = is_typeless;
-    texture_desc.initial_state = ResourceStates::kCommon;
-    texture_desc.debug_name = std::string(debug_name);
-
-    auto texture = CreateRegisteredTexture(texture_desc);
-    CHECK_EQ_F(values.size(), static_cast<std::size_t>(width) * height,
-      "Depth upload size must match the texture extent");
-
-    const auto row_pitch = std::max(kTextureUploadRowPitch,
-      width * static_cast<std::uint32_t>(sizeof(float)));
-    auto upload = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = static_cast<std::uint64_t>(row_pitch) * height,
-      .usage = BufferUsage::kNone,
-      .memory = BufferMemory::kUpload,
-      .debug_name = std::string(debug_name) + "_Upload",
-    });
-    auto upload_bytes = std::vector<std::byte>(
-      static_cast<std::size_t>(row_pitch) * height, std::byte { 0 });
-    for (std::uint32_t y = 0U; y < height; ++y) {
-      for (std::uint32_t x = 0U; x < width; ++x) {
-        const auto value = values[static_cast<std::size_t>(y) * width + x];
-        std::memcpy(upload_bytes.data()
-            + static_cast<std::size_t>(y) * row_pitch
-            + static_cast<std::size_t>(x) * sizeof(float),
-          &value, sizeof(value));
-      }
-    }
-    upload->Update(upload_bytes.data(), upload_bytes.size(), 0U);
-
-    const TextureUploadRegion upload_region {
-      .buffer_offset = 0U,
-      .buffer_row_pitch = row_pitch,
-      .buffer_slice_pitch = row_pitch * height,
-      .dst_slice = {
-        .x = 0U,
-        .y = 0U,
-        .z = 0U,
-        .width = width,
-        .height = height,
-        .depth = 1U,
-        .mip_level = 0U,
-        .array_slice = 0U,
-      },
-    };
-
-    {
-      auto recorder = AcquireRecorder(std::string(debug_name) + "_Init");
-      CHECK_NOTNULL_F(recorder.get());
-      EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
-      EnsureTracked(*recorder, texture, ResourceStates::kCommon);
-      recorder->RequireResourceState(*upload, ResourceStates::kCopySource);
-      recorder->RequireResourceState(*texture, ResourceStates::kCopyDest);
-      recorder->FlushBarriers();
-      recorder->CopyBufferToTexture(*upload, upload_region, *texture);
-      recorder->RequireResourceStateFinal(*texture, ResourceStates::kCommon);
-    }
-    WaitForQueueIdle();
-    return texture;
-  }
-
-  auto UploadDepthTexture(const std::vector<float>& values,
-    const std::uint32_t width, const std::uint32_t height,
-    std::string_view debug_name) -> std::shared_ptr<Texture>
-  {
-    return UploadDepthValuesTexture(
-      values, width, height, debug_name, Format::kR32Float);
-  }
-
-  auto UploadSingleChannelTexture(
-    const float value, std::string_view debug_name) -> std::shared_ptr<Texture>
-  {
-    return UploadDepthTexture({ value }, 1U, 1U, debug_name);
-  }
-
-  auto ReadSingleChannelTexture(const std::shared_ptr<Texture>& texture) const
-    -> float
-  {
-    EXPECT_NE(texture, nullptr);
-    if (texture == nullptr) {
-      return 0.0F;
-    }
-    const auto readback
-      = GetReadbackManager()->ReadTextureNow(*texture, {}, true);
-    EXPECT_TRUE(readback.has_value());
-    if (!readback.has_value()) {
-      return 0.0F;
-    }
-    EXPECT_GE(readback->bytes.size(), sizeof(float));
-    if (readback->bytes.size() < sizeof(float)) {
-      return 0.0F;
-    }
-
-    float value = 0.0F;
-    std::memcpy(&value, readback->bytes.data(), sizeof(value));
-    return value;
-  }
-
-  [[nodiscard]] static auto MakeResolvedView(
-    const std::uint32_t width = 1U, const std::uint32_t height = 1U)
-    -> ResolvedView
+  [[nodiscard]] static auto MakeResolvedView(const std::uint32_t width = 1U,
+    const std::uint32_t height = 1U) -> ResolvedView
   {
     const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
       glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
-    const auto projection_matrix
-      = glm::perspectiveRH_ZO(glm::radians(90.0F),
-        static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F);
+    const auto projection_matrix = glm::perspectiveRH_ZO(glm::radians(90.0F),
+      static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F);
     auto view_config = View {};
     view_config.viewport = ViewPort {
       .top_left_x = 0.0F,
@@ -356,8 +230,8 @@ protected:
   [[nodiscard]] static auto MakeDirectionalProjection(
     const std::uint32_t map_id, const std::uint32_t first_page_table_entry,
     const std::uint32_t clipmap_level, const std::uint32_t level_count,
-    const std::uint32_t map_pages_x = 4U,
-    const std::uint32_t map_pages_y = 4U) -> VsmPageRequestProjection
+    const std::uint32_t map_pages_x = 4U, const std::uint32_t map_pages_y = 4U)
+    -> VsmPageRequestProjection
   {
     const auto resolved_view = MakeResolvedView();
     return VsmPageRequestProjection {
@@ -418,8 +292,8 @@ protected:
 
   [[nodiscard]] static auto MakeLookAtResolvedView(const glm::vec3 eye,
     const glm::vec3 target, const std::uint32_t width,
-    const std::uint32_t height,
-    const float fov_y_radians = glm::radians(60.0F)) -> ResolvedView
+    const std::uint32_t height, const float fov_y_radians = glm::radians(60.0F))
+    -> ResolvedView
   {
     auto view_config = View {};
     view_config.viewport = ViewPort {
@@ -440,9 +314,8 @@ protected:
     return ResolvedView(ResolvedView::Params {
       .view_config = view_config,
       .view_matrix = glm::lookAtRH(eye, target, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-      .proj_matrix = glm::perspectiveRH_ZO(
-        fov_y_radians, static_cast<float>(width) / static_cast<float>(height),
-        0.1F, 100.0F),
+      .proj_matrix = glm::perspectiveRH_ZO(fov_y_radians,
+        static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F),
       .camera_position = eye,
       .depth_range = NdcDepthRange::ZeroToOne,
       .near_plane = 0.1F,
@@ -483,9 +356,8 @@ protected:
   [[nodiscard]] static auto MakeDirectionalProjection(
     const std::uint32_t map_id, const std::uint32_t first_page_table_entry,
     const glm::mat4& view_matrix, const glm::mat4& projection_matrix,
-    const glm::ivec2 clipmap_corner_offset,
-    const std::uint32_t map_pages_x, const std::uint32_t map_pages_y)
-    -> VsmPageRequestProjection
+    const glm::ivec2 clipmap_corner_offset, const std::uint32_t map_pages_x,
+    const std::uint32_t map_pages_y) -> VsmPageRequestProjection
   {
     return VsmPageRequestProjection {
       .projection = VsmProjectionData {
@@ -522,8 +394,8 @@ protected:
 
   [[nodiscard]] static auto ComputeWorldPointForPixel(const ResolvedView& view,
     const std::uint32_t width, const std::uint32_t height,
-    const std::uint32_t pixel_x, const std::uint32_t pixel_y,
-    const float depth) -> glm::vec3
+    const std::uint32_t pixel_x, const std::uint32_t pixel_y, const float depth)
+    -> glm::vec3
   {
     const auto uv = glm::vec2 {
       (static_cast<float>(pixel_x) + 0.5F) / static_cast<float>(width),
@@ -570,8 +442,8 @@ protected:
   }
 
   [[nodiscard]] static auto RaycastDistanceToFloor(const glm::vec3 origin,
-    const glm::vec3 direction,
-    const float half_extent = 4.5F) -> std::optional<float>
+    const glm::vec3 direction, const float half_extent = 4.5F)
+    -> std::optional<float>
   {
     if (std::abs(direction.y) < 1.0e-6F) {
       return std::nullopt;
@@ -604,18 +476,16 @@ protected:
     };
 
     auto field = ObliqueDepthField {};
-    field.depth_values.assign(
-      static_cast<std::size_t>(width) * height, 1.0F);
+    field.depth_values.assign(static_cast<std::size_t>(width) * height, 1.0F);
     field.visible_samples.reserve(static_cast<std::size_t>(width) * height);
 
-    const auto inverse_view_projection
-      = glm::inverse(resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
+    const auto inverse_view_projection = glm::inverse(
+      resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
     auto pixel_center_ray = [&](const std::uint32_t x, const std::uint32_t y) {
       const auto ndc_x
         = (2.0F * (static_cast<float>(x) + 0.5F) / static_cast<float>(width))
         - 1.0F;
-      const auto ndc_y
-        = 1.0F
+      const auto ndc_y = 1.0F
         - (2.0F * (static_cast<float>(y) + 0.5F) / static_cast<float>(height));
       auto near_point
         = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
@@ -624,7 +494,8 @@ protected:
       near_point /= near_point.w;
       far_point /= far_point.w;
       const auto origin = glm::vec3 { near_point };
-      const auto direction = glm::normalize(glm::vec3 { far_point - near_point });
+      const auto direction
+        = glm::normalize(glm::vec3 { far_point - near_point });
       return std::pair { origin, direction };
     };
 
@@ -634,20 +505,20 @@ protected:
         auto nearest_distance = std::numeric_limits<float>::infinity();
         auto hit_point = std::optional<glm::vec3> {};
 
-        if (const auto floor_distance = RaycastDistanceToFloor(
-              ray_origin, ray_direction, kFloorHalfExtent);
+        if (const auto floor_distance
+          = RaycastDistanceToFloor(ray_origin, ray_direction, kFloorHalfExtent);
           floor_distance.has_value() && *floor_distance < nearest_distance) {
           nearest_distance = *floor_distance;
           hit_point = ray_origin + ray_direction * *floor_distance;
         }
         if (const auto tall_distance
-            = RaycastDistanceToAabb(ray_origin, ray_direction, tall_box);
+          = RaycastDistanceToAabb(ray_origin, ray_direction, tall_box);
           tall_distance.has_value() && *tall_distance < nearest_distance) {
           nearest_distance = *tall_distance;
           hit_point = ray_origin + ray_direction * *tall_distance;
         }
         if (const auto short_distance
-            = RaycastDistanceToAabb(ray_origin, ray_direction, short_box);
+          = RaycastDistanceToAabb(ray_origin, ray_direction, short_box);
           short_distance.has_value() && *short_distance < nearest_distance) {
           nearest_distance = *short_distance;
           hit_point = ray_origin + ray_direction * *short_distance;
@@ -757,14 +628,15 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr auto kHeight = 128U;
   constexpr auto kMapPages = 8U;
 
-  const auto resolved_view = MakeLookAtResolvedView(
-    glm::vec3 { -3.2F, 3.4F, 5.8F }, glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth,
-    kHeight);
-  const auto field = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
+  const auto resolved_view
+    = MakeLookAtResolvedView(glm::vec3 { -3.2F, 3.4F, 5.8F },
+      glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth, kHeight);
+  const auto field
+    = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
   ASSERT_FALSE(field.visible_samples.empty());
 
-  auto depth_texture = UploadDepthValuesTexture(field.depth_values, kWidth,
-    kHeight, "vsm-request-two-box-float-depth", Format::kR32Float);
+  auto depth_texture = CreateUploadedFloatTexture2D(field.depth_values, kWidth,
+    kHeight, Format::kR32Float, "vsm-request-two-box-float-depth");
   auto projections = std::vector<VsmPageRequestProjection> {
     MakeLocalProjection(61U, 0U, resolved_view.ViewMatrix(),
       resolved_view.ProjectionMatrix(), kMapPages, kMapPages)
@@ -781,7 +653,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
 
   if (!std::equal(actual_flags.begin(), actual_flags.end(),
         expected_flags.begin(), expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
     ADD_FAILURE() << "actual non-zero flags: "
                   << DescribeNonZeroFlags(actual_flags.data(),
                        static_cast<std::uint32_t>(actual_flags.size()))
@@ -802,14 +675,15 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr auto kHeight = 128U;
   constexpr auto kMapPages = 8U;
 
-  const auto resolved_view = MakeLookAtResolvedView(
-    glm::vec3 { -3.2F, 3.4F, 5.8F }, glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth,
-    kHeight);
-  const auto field = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
+  const auto resolved_view
+    = MakeLookAtResolvedView(glm::vec3 { -3.2F, 3.4F, 5.8F },
+      glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth, kHeight);
+  const auto field
+    = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
   ASSERT_FALSE(field.visible_samples.empty());
 
-  auto depth_texture = UploadDepthValuesTexture(field.depth_values, kWidth,
-    kHeight, "vsm-request-two-box-depth32", Format::kDepth32);
+  auto depth_texture = CreateUploadedFloatTexture2D(field.depth_values, kWidth,
+    kHeight, Format::kDepth32, "vsm-request-two-box-depth32");
   auto projections = std::vector<VsmPageRequestProjection> {
     MakeLocalProjection(62U, 0U, resolved_view.ViewMatrix(),
       resolved_view.ProjectionMatrix(), kMapPages, kMapPages)
@@ -826,7 +700,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
 
   if (!std::equal(actual_flags.begin(), actual_flags.end(),
         expected_flags.begin(), expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
     ADD_FAILURE() << "actual non-zero flags: "
                   << DescribeNonZeroFlags(actual_flags.data(),
                        static_cast<std::uint32_t>(actual_flags.size()))
@@ -847,14 +722,15 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr auto kHeight = 128U;
   constexpr auto kMapPages = 8U;
 
-  const auto resolved_view = MakeLookAtResolvedView(
-    glm::vec3 { -3.2F, 3.4F, 5.8F }, glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth,
-    kHeight);
-  const auto field = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
+  const auto resolved_view
+    = MakeLookAtResolvedView(glm::vec3 { -3.2F, 3.4F, 5.8F },
+      glm::vec3 { 0.2F, 0.8F, 0.0F }, kWidth, kHeight);
+  const auto field
+    = BuildObliqueTwoBoxDepthField(resolved_view, kWidth, kHeight);
   ASSERT_FALSE(field.visible_samples.empty());
 
-  auto depth_texture = UploadDepthValuesTexture(field.depth_values, kWidth,
-    kHeight, "vsm-request-two-box-depth32-typeless", Format::kDepth32, true);
+  auto depth_texture = CreateUploadedFloatTexture2D(field.depth_values, kWidth,
+    kHeight, Format::kDepth32, "vsm-request-two-box-depth32-typeless", true);
   auto projections = std::vector<VsmPageRequestProjection> {
     MakeLocalProjection(63U, 0U, resolved_view.ViewMatrix(),
       resolved_view.ProjectionMatrix(), kMapPages, kMapPages)
@@ -871,7 +747,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
 
   if (!std::equal(actual_flags.begin(), actual_flags.end(),
         expected_flags.begin(), expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
     ADD_FAILURE() << "actual non-zero flags: "
                   << DescribeNonZeroFlags(actual_flags.data(),
                        static_cast<std::uint32_t>(actual_flags.size()))
@@ -891,8 +768,12 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   const auto resolved_view = MakeResolvedView();
   const auto world_position = glm::vec3 { 0.0F, 0.0F, -5.0F };
   const auto depth = ComputeDepthForWorldPoint(resolved_view, world_position);
-  auto depth_texture = UploadSingleChannelTexture(depth, "vsm-request-depth");
-  EXPECT_NEAR(ReadSingleChannelTexture(depth_texture), depth, 1.0e-5F);
+  const std::array<float, 1> depth_values { depth };
+  auto depth_texture = CreateUploadedFloatTexture2D(
+    depth_values, 1U, 1U, Format::kR32Float, "vsm-request-depth");
+  EXPECT_NEAR(ReadTextureMipTexel(
+                depth_texture, 0U, 0U, 0U, "vsm-request-depth-readback"),
+    depth, 1.0e-5F);
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -972,9 +853,9 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr std::uint32_t kPagesY = 2U;
 
   const auto resolved_view = MakeResolvedView(kWidth, kHeight);
-  auto depth_texture = UploadDepthTexture(
+  auto depth_texture = CreateUploadedFloatTexture2D(
     std::vector<float>(static_cast<std::size_t>(kWidth) * kHeight, kDepth),
-    kWidth, kHeight, "vsm-request-multipage-depth");
+    kWidth, kHeight, Format::kR32Float, "vsm-request-multipage-depth");
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -992,10 +873,9 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
         .debug_name = "VsmPageRequestGeneratorMultiPage",
       }));
 
-  const auto projections = std::vector<VsmPageRequestProjection> {
-    MakeProjection(31U, 0U, kVsmInvalidLightIndex, 1U, 0U, kPagesX, kPagesY,
-      kPagesX, kPagesY)
-  };
+  const auto projections
+    = std::vector<VsmPageRequestProjection> { MakeProjection(31U, 0U,
+      kVsmInvalidLightIndex, 1U, 0U, kPagesX, kPagesY, kPagesX, kPagesY) };
   request_pass.SetFrameInputs(projections, kTestVirtualPageCount);
 
   auto prepared_frame = PreparedSceneFrame {};
@@ -1028,8 +908,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   for (std::uint32_t y = 0U; y < kHeight; ++y) {
     for (std::uint32_t x = 0U; x < kWidth; ++x) {
       visible_samples.push_back(VsmVisiblePixelSample {
-        .world_position_ws
-        = ComputeWorldPointForPixel(resolved_view, kWidth, kHeight, x, y, kDepth),
+        .world_position_ws = ComputeWorldPointForPixel(
+          resolved_view, kWidth, kHeight, x, y, kDepth),
       });
     }
   }
@@ -1040,7 +920,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
     projections, visible_samples, kTestVirtualPageCount);
   if (!std::equal(actual_flags, actual_flags + kTestVirtualPageCount,
         expected_flags.begin(), expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
     ADD_FAILURE() << "actual non-zero flags: "
                   << DescribeNonZeroFlags(actual_flags, kTestVirtualPageCount)
                   << ", expected non-zero flags: "
@@ -1076,9 +957,9 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr std::uint32_t kPagesPerLevel = kPagesX * kPagesY;
 
   const auto resolved_view = MakeResolvedView(kWidth, kHeight);
-  auto depth_texture = UploadDepthTexture(
+  auto depth_texture = CreateUploadedFloatTexture2D(
     std::vector<float>(static_cast<std::size_t>(kWidth) * kHeight, kDepth),
-    kWidth, kHeight, "vsm-request-directional-depth");
+    kWidth, kHeight, Format::kR32Float, "vsm-request-directional-depth");
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -1096,10 +977,9 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
         .debug_name = "VsmPageRequestDirectionalClipLevel",
       }));
 
-  const auto projections = std::vector<VsmPageRequestProjection> {
-    MakeDirectionalProjection(41U, 0U, kClipLevel, kLevelCount, kPagesX,
-      kPagesY)
-  };
+  const auto projections
+    = std::vector<VsmPageRequestProjection> { MakeDirectionalProjection(
+      41U, 0U, kClipLevel, kLevelCount, kPagesX, kPagesY) };
   request_pass.SetFrameInputs(projections, kTestVirtualPageCount);
 
   auto prepared_frame = PreparedSceneFrame {};
@@ -1132,8 +1012,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   for (std::uint32_t y = 0U; y < kHeight; ++y) {
     for (std::uint32_t x = 0U; x < kWidth; ++x) {
       visible_samples.push_back(VsmVisiblePixelSample {
-        .world_position_ws
-        = ComputeWorldPointForPixel(resolved_view, kWidth, kHeight, x, y, kDepth),
+        .world_position_ws = ComputeWorldPointForPixel(
+          resolved_view, kWidth, kHeight, x, y, kDepth),
       });
     }
   }
@@ -1144,7 +1024,8 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
     projections, visible_samples, kTestVirtualPageCount);
   if (!std::equal(actual_flags, actual_flags + kTestVirtualPageCount,
         expected_flags.begin(), expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
+        [](
+          const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
     ADD_FAILURE() << "actual non-zero flags: "
                   << DescribeNonZeroFlags(actual_flags, kTestVirtualPageCount)
                   << ", expected non-zero flags: "
@@ -1176,9 +1057,9 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   constexpr std::uint32_t kPagesX = 2U;
   constexpr std::uint32_t kPagesY = 2U;
   const auto resolved_view = MakeIdentityResolvedView(kWidth, kHeight);
-  auto depth_texture = UploadDepthTexture(
+  auto depth_texture = CreateUploadedFloatTexture2D(
     std::vector<float>(static_cast<std::size_t>(kWidth) * kHeight, kDepth),
-    kWidth, kHeight, "vsm-request-directional-pan-depth");
+    kWidth, kHeight, Format::kR32Float, "vsm-request-directional-pan-depth");
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -1201,9 +1082,10 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
               .debug_name = std::string(debug_name),
             }));
 
-        request_pass.SetFrameInputs(std::vector<VsmPageRequestProjection> {
-          projection,
-        },
+        request_pass.SetFrameInputs(
+          std::vector<VsmPageRequestProjection> {
+            projection,
+          },
           kTestVirtualPageCount);
 
         auto prepared_frame = PreparedSceneFrame {};
@@ -1241,12 +1123,10 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
       };
 
   const auto base_projection = MakeDirectionalProjection(51U, 0U,
-    glm::mat4 { 1.0F }, glm::mat4 { 1.0F },
-    { 0, 0 }, kPagesX, kPagesY);
+    glm::mat4 { 1.0F }, glm::mat4 { 1.0F }, { 0, 0 }, kPagesX, kPagesY);
   const auto panned_projection = MakeDirectionalProjection(52U, 0U,
     glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -1.0F, 0.0F, 0.0F }),
-    glm::mat4 { 1.0F },
-    { 1, 0 }, kPagesX, kPagesY);
+    glm::mat4 { 1.0F }, { 1, 0 }, kPagesX, kPagesY);
 
   const auto base_flags = run_request_pass(
     base_projection, SequenceNumber { 4U }, "vsm-request-directional-pan.base");
@@ -1279,8 +1159,12 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   const auto resolved_view = MakeResolvedView();
   const auto world_position = glm::vec3 { 0.0F, 0.0F, -5.0F };
   const auto depth = ComputeDepthForWorldPoint(resolved_view, world_position);
-  auto depth_texture = UploadSingleChannelTexture(depth, "vsm-pruning-depth");
-  EXPECT_NEAR(ReadSingleChannelTexture(depth_texture), depth, 1.0e-5F);
+  const std::array<float, 1> pruning_depth_values { depth };
+  auto depth_texture = CreateUploadedFloatTexture2D(
+    pruning_depth_values, 1U, 1U, Format::kR32Float, "vsm-pruning-depth");
+  EXPECT_NEAR(ReadTextureMipTexel(
+                depth_texture, 0U, 0U, 0U, "vsm-pruning-depth-readback"),
+    depth, 1.0e-5F);
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -1417,9 +1301,12 @@ NOLINT_TEST_F(VsmPageRequestGeneratorGpuTest,
   const auto resolved_view = MakeResolvedView();
   const auto world_position = glm::vec3 { 0.0F, 0.0F, -5.0F };
   const auto depth = ComputeDepthForWorldPoint(resolved_view, world_position);
-  auto depth_texture
-    = UploadSingleChannelTexture(depth, "vsm-request-growth-depth");
-  EXPECT_NEAR(ReadSingleChannelTexture(depth_texture), depth, 1.0e-5F);
+  const std::array<float, 1> growth_depth_values { depth };
+  auto depth_texture = CreateUploadedFloatTexture2D(
+    growth_depth_values, 1U, 1U, Format::kR32Float, "vsm-request-growth-depth");
+  EXPECT_NEAR(ReadTextureMipTexel(
+                depth_texture, 0U, 0U, 0U, "vsm-request-growth-depth-readback"),
+    depth, 1.0e-5F);
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
