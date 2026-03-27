@@ -166,6 +166,22 @@ class VsmLiveSceneHarness : public VsmStageGpuHarness {
 protected:
   using EventLoop = oxygen::co::testing::TestEventLoop;
 
+  [[nodiscard]] static auto ResolveHarnessFrameSlot(
+    const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot requested_slot) -> oxygen::frame::Slot
+  {
+    constexpr auto kHarnessFrameSlotCount = 3U;
+    CHECK_F(requested_slot != oxygen::frame::kInvalidSlot,
+      "Live-scene harness requires a valid frame slot");
+
+    // The real renderer advances through a small ring of frame slots. The
+    // stage tests often execute several sequential frames inside one process,
+    // so pinning every offscreen frame to Slot{0} can race the inline staging
+    // ring and turn timing into test behavior.
+    return oxygen::frame::Slot { static_cast<std::uint32_t>(
+      (requested_slot.get() + sequence.get()) % kHarnessFrameSlotCount) };
+  }
+
   [[nodiscard]] static auto MakeLookAtResolvedView(const glm::vec3& eye,
     const glm::vec3& target, const std::uint32_t width,
     const std::uint32_t height, const float fov_y_radians = glm::radians(60.0F))
@@ -367,6 +383,24 @@ protected:
 
     scene_data.additional_light_nodes.push_back(spot_node);
     return spot_node;
+  }
+
+  [[nodiscard]] static auto PrimarySpotTargetForTwoBoxScene(
+    const TwoBoxShadowSceneData& scene_data) -> glm::vec3
+  {
+    CHECK_GE_F(scene_data.draw_bounds.size(), 3U,
+      "Two-box scene requires floor and two caster bounds");
+    return (glm::vec3 { scene_data.draw_bounds[1] }
+             + glm::vec3 { scene_data.draw_bounds[2] })
+      * 0.5F;
+  }
+
+  [[nodiscard]] static auto SecondarySpotTargetForTwoBoxScene(
+    const TwoBoxShadowSceneData& scene_data) -> glm::vec3
+  {
+    CHECK_GE_F(scene_data.draw_bounds.size(), 3U,
+      "Two-box scene requires floor and two caster bounds");
+    return glm::vec3 { scene_data.draw_bounds[2] };
   }
 
   static auto CollectRendererSceneLights(oxygen::engine::Renderer& renderer,
@@ -992,8 +1026,9 @@ protected:
     using oxygen::engine::internal::PerViewStructuredPublisher;
     using oxygen::engine::upload::TransientStructuredBuffer;
 
+    const auto frame_slot = ResolveHarnessFrameSlot(sequence, slot);
     auto frame_config = oxygen::engine::Renderer::OffscreenFrameConfig {
-      .frame_slot = slot,
+      .frame_slot = frame_slot,
       .frame_sequence = sequence,
       .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
         scene_data.scene.get(),
@@ -1006,7 +1041,7 @@ protected:
       renderer.GetStagingProvider(), sizeof(glm::mat4),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "early-stage-two-box.worlds");
-    world_buffer.OnFrameStart(sequence, slot);
+    world_buffer.OnFrameStart(sequence, frame_slot);
     auto world_allocation = world_buffer.Allocate(
       static_cast<std::uint32_t>(scene_data.world_matrices.size()));
     CHECK_F(world_allocation.has_value(), "Failed to allocate world buffer");
@@ -1020,7 +1055,7 @@ protected:
       renderer.GetStagingProvider(), sizeof(oxygen::engine::DrawMetadata),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "early-stage-two-box.draws");
-    draw_metadata_buffer.OnFrameStart(sequence, slot);
+    draw_metadata_buffer.OnFrameStart(sequence, frame_slot);
     auto draw_allocation = draw_metadata_buffer.Allocate(
       static_cast<std::uint32_t>(scene_data.draw_records.size()));
     CHECK_F(
@@ -1035,7 +1070,7 @@ protected:
       renderer.GetStagingProvider(),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "early-stage-two-box.DrawFrameBindings");
-    draw_frame_publisher.OnFrameStart(sequence, slot);
+    draw_frame_publisher.OnFrameStart(sequence, frame_slot);
     const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
       DrawFrameBindings {
         .draw_metadata_slot
@@ -1050,7 +1085,7 @@ protected:
       renderer.GetStagingProvider(),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "early-stage-two-box.ViewFrameBindings");
-    view_frame_publisher.OnFrameStart(sequence, slot);
+    view_frame_publisher.OnFrameStart(sequence, frame_slot);
     const auto view_frame_slot = view_frame_publisher.Publish(
       kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
     CHECK_F(view_frame_slot.IsValid(), "View frame slot is invalid");
@@ -1088,7 +1123,7 @@ protected:
       = scene_data.draw_bounds_buffer.slot;
 
     offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
-      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot));
+      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot));
 
     auto depth_texture
       = CreateDepthTexture2D(width, height, "early-stage-two-box.depth");
@@ -1146,14 +1181,16 @@ protected:
       oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
       oxygen::observer_ptr { &renderer.GetStagingProvider() },
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() });
-    lights.OnFrameStart(
-      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+    lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+      sequence, frame_slot);
     CollectSceneLights(lights, scene_data);
 
     vsm_renderer.OnFrameStart(
-      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+      oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
+      frame_slot);
     const auto has_work = vsm_renderer.PrepareView(kTestViewId,
-      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot), lights,
+      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot),
+      lights,
       oxygen::observer_ptr<oxygen::scene::Scene> { scene_data.scene.get() },
       static_cast<float>(width), std::span(scene_data.rendered_items),
       std::span(scene_data.shadow_caster_bounds),
@@ -1171,6 +1208,23 @@ protected:
       .extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame(),
       .scene_depth_texture = depth_texture,
     };
+  }
+
+  auto PrimeTwoBoxExtractedFrame(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const bool enable_light_culling = false) -> TwoBoxLiveFrameResult
+  {
+    auto frame = RunTwoBoxLiveShellFrame(renderer, scene_data, vsm_renderer,
+      resolved_view, width, height, sequence, slot, shadow_caster_content_hash,
+      enable_light_culling);
+    CHECK_NOTNULL_F(frame.extracted_frame,
+      "Two-box live shell frame did not publish an extracted cache frame");
+    return frame;
   }
 
   auto RunTwoBoxPageRequestBridge(oxygen::engine::Renderer& renderer,
@@ -1192,8 +1246,9 @@ protected:
     using oxygen::engine::internal::PerViewStructuredPublisher;
     using oxygen::engine::upload::TransientStructuredBuffer;
 
+    const auto frame_slot = ResolveHarnessFrameSlot(sequence, slot);
     auto frame_config = oxygen::engine::Renderer::OffscreenFrameConfig {
-      .frame_slot = slot,
+      .frame_slot = frame_slot,
       .frame_sequence = sequence,
       .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
         scene_data.scene.get(),
@@ -1206,7 +1261,7 @@ protected:
       renderer.GetStagingProvider(), sizeof(glm::mat4),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "stage-six-two-box.worlds");
-    world_buffer.OnFrameStart(sequence, slot);
+    world_buffer.OnFrameStart(sequence, frame_slot);
     auto world_allocation = world_buffer.Allocate(
       static_cast<std::uint32_t>(scene_data.world_matrices.size()));
     CHECK_F(world_allocation.has_value(), "Failed to allocate world buffer");
@@ -1220,7 +1275,7 @@ protected:
       renderer.GetStagingProvider(), sizeof(oxygen::engine::DrawMetadata),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "stage-six-two-box.draws");
-    draw_metadata_buffer.OnFrameStart(sequence, slot);
+    draw_metadata_buffer.OnFrameStart(sequence, frame_slot);
     auto draw_allocation = draw_metadata_buffer.Allocate(
       static_cast<std::uint32_t>(scene_data.draw_records.size()));
     CHECK_F(
@@ -1235,7 +1290,7 @@ protected:
       renderer.GetStagingProvider(),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "stage-six-two-box.DrawFrameBindings");
-    draw_frame_publisher.OnFrameStart(sequence, slot);
+    draw_frame_publisher.OnFrameStart(sequence, frame_slot);
     const auto draw_frame_slot = draw_frame_publisher.Publish(kTestViewId,
       DrawFrameBindings {
         .draw_metadata_slot
@@ -1250,7 +1305,7 @@ protected:
       renderer.GetStagingProvider(),
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() },
       "stage-six-two-box.ViewFrameBindings");
-    view_frame_publisher.OnFrameStart(sequence, slot);
+    view_frame_publisher.OnFrameStart(sequence, frame_slot);
     const auto view_frame_slot = view_frame_publisher.Publish(
       kTestViewId, ViewFrameBindings { .draw_frame_slot = draw_frame_slot });
     CHECK_F(view_frame_slot.IsValid(), "View frame slot is invalid");
@@ -1288,7 +1343,7 @@ protected:
       = scene_data.draw_bounds_buffer.slot;
 
     offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
-      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot));
+      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot));
 
     auto depth_texture
       = CreateDepthTexture2D(width, height, "stage-six-two-box.depth");
@@ -1317,14 +1372,16 @@ protected:
       oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
       oxygen::observer_ptr { &renderer.GetStagingProvider() },
       oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() });
-    lights.OnFrameStart(
-      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+    lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+      sequence, frame_slot);
     CollectSceneLights(lights, scene_data);
 
     vsm_renderer.OnFrameStart(
-      oxygen::renderer::internal::RendererTagFactory::Get(), sequence, slot);
+      oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
+      frame_slot);
     const auto has_work = vsm_renderer.PrepareView(kTestViewId,
-      MakeViewConstants(resolved_view, sequence, slot, view_frame_slot), lights,
+      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot),
+      lights,
       oxygen::observer_ptr<oxygen::scene::Scene> { scene_data.scene.get() },
       static_cast<float>(width), std::span(scene_data.rendered_items),
       std::span(scene_data.shadow_caster_bounds),

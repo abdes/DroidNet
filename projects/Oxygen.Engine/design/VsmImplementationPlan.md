@@ -293,6 +293,51 @@ Validation evidence on `2026-03-27`:
 - reran the full GPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
   and it now reports exactly one failure out of `46 tests from 9 test suites`:
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+- corrective status update on `2026-03-28`:
+  - the previous stage-pass claims above were only validated in `out/build-ninja` and were too
+    broad
+  - the shared local-light Stage 6-10 regressions were then traced to a test-side previous-frame
+    seed bug: those suites were extracting the prior frame immediately after
+    `RunTwoBoxPageRequestBridge(...)`, before the GPU page-management stages had materialized the
+    page table and physical metadata required for reuse
+  - the shared live-scene harness now seeds those suites through
+    `PrimeTwoBoxExtractedFrame(...)`, which runs a real previous frame through the live shell and
+    publishes an extracted cache frame before the Stage 6-10 current frame begins
+  - after that correction, a full `out/build-ninja` rerun of all dedicated Stage 1-11 executables
+    is green:
+    - Stage 1 `Oxygen.Renderer.VsmBeginFrame.Tests.exe`: `33 tests from 4 test suites`
+    - Stage 2 `Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe`: `8 tests from 4 test suites`
+    - Stage 3 `Oxygen.Renderer.VsmRemap.Tests.exe`: `29 tests from 5 test suites`
+    - Stage 4 `Oxygen.Renderer.VsmProjectionRecords.Tests.exe`: `2 tests from 1 test suite`
+    - Stage 5 `Oxygen.Renderer.VsmPageRequests.Tests.exe`: `3 tests from 1 test suite`
+    - Stage 6 `Oxygen.Renderer.VsmPageReuse.Tests.exe`: `4 tests from 1 test suite`
+    - Stage 7 `Oxygen.Renderer.VsmAvailablePages.Tests.exe`: `3 tests from 1 test suite`
+    - Stage 8 `Oxygen.Renderer.VsmPageMappings.Tests.exe`: `3 tests from 1 test suite`
+    - Stage 9 `Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe`: `3 tests from 1 test suite`
+    - Stage 10 `Oxygen.Renderer.VsmMappedMips.Tests.exe`: `5 tests from 1 test suite`
+    - Stage 11 `Oxygen.Renderer.VsmPageInitialization.Tests.exe`: `3 tests from 1 test suite`
+  - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` was also
+    rerun after the seed-path fix and still reports exactly one failure out of
+    `46 tests from 9 test suites`:
+    `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+  - a later `2026-03-28` live-scene timing fix then changed the shared
+    `VirtualShadowLiveSceneHarness` to rotate sequential offscreen frames across a 3-slot ring
+    instead of pinning every step to `Slot { 0 }`; that removed the test-side inline-staging
+    timing hazard behind the `RingBufferStaging.cpp:294` warnings in the multi-frame Stage 6-11
+    suites
+  - recorded evidence after the slot-rotation fix in `out/build-ninja`:
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageReuse.Tests.exe`: `4 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmAvailablePages.Tests.exe`: `3 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageMappings.Tests.exe`: `3 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe`: `3 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmMappedMips.Tests.exe`: `5 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageInitialization.Tests.exe`: `3 tests from 1 test suite`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_filter=VsmAvailablePagePackingLiveSceneTest.StablePagedSpotLightScenePacksOnlyUnusedPagesAfterLocalReuse --gtest_repeat=10`: all `10/10` iterations passed without `-v`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe --gtest_filter=VsmHierarchicalPageFlagsLiveSceneTest.AddedSpotLightsMatchCpuHierarchicalPropagationAcrossMixedLocalLayouts --gtest_repeat=10`: all `10/10` iterations passed without `-v`
+    - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageInitialization.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
+  - `out/build-asan-vs` was not rerun after the seed-path correction and therefore remains
+    unvalidated here by owner instruction not to use that build tree
 - Stage 5 completion evidence is now satisfied:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe` passes with
     `3 tests from 1 test suite`

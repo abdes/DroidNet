@@ -63,6 +63,48 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 
 **All manual testing uses the `build-ninja` tree only.** Visual Studio build trees are not used for running tests by hand.
 
+Corrective status note on `2026-03-28`: the earlier dedicated-stage pass evidence in this README
+was collected from `out/build-ninja`.
+
+Later on `2026-03-28`, the shared local-light Stage 6-10 regressions were traced to a test-side
+previous-frame seed bug: those suites were extracting the prior frame immediately after
+`RunTwoBoxPageRequestBridge(...)`, before the GPU page-management stages had materialized the page
+table and physical metadata needed for reuse. The shared harness now seeds those current-frame
+reuse tests through `PrimeTwoBoxExtractedFrame(...)`, which runs a real prior frame through the
+live shell and publishes an extracted cache frame before the Stage 6-10 current frame begins.
+
+Recorded evidence after that fix in `out/build-ninja`:
+- `Oxygen.Renderer.VsmBeginFrame.Tests.exe`: `33 tests from 4 test suites` passed
+- `Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe`: `8 tests from 4 test suites` passed
+- `Oxygen.Renderer.VsmRemap.Tests.exe`: `29 tests from 5 test suites` passed
+- `Oxygen.Renderer.VsmProjectionRecords.Tests.exe`: `2 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageRequests.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageReuse.Tests.exe`: `4 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageMappings.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmMappedMips.Tests.exe`: `5 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageInitialization.Tests.exe`: `3 tests from 1 test suite` passed
+
+Later on `2026-03-28`, another live-scene timing issue was fixed in the same harness: multi-frame
+tests were reusing `Slot { 0 }` for every offscreen frame inside one process, which could make the
+inline staging ring race the test and produce `RingBufferStaging.cpp:294` warnings. The shared
+live-scene harness now rotates test offscreen frames across a 3-slot ring based on sequence
+number. Recorded evidence after that fix in `out/build-ninja`:
+- `Oxygen.Renderer.VsmPageReuse.Tests.exe`: `4 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageMappings.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmMappedMips.Tests.exe`: `5 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmPageInitialization.Tests.exe`: `3 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_filter=VsmAvailablePagePackingLiveSceneTest.StablePagedSpotLightScenePacksOnlyUnusedPagesAfterLocalReuse --gtest_repeat=10`: all `10/10` iterations passed without `-v`
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
+- `Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe --gtest_filter=VsmHierarchicalPageFlagsLiveSceneTest.AddedSpotLightsMatchCpuHierarchicalPropagationAcrossMixedLocalLayouts --gtest_repeat=10`: all `10/10` iterations passed without `-v`
+- `Oxygen.Renderer.VsmPageInitialization.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
+
+`out/build-asan-vs` was not rerun after this correction and therefore remains unvalidated in this
+README. Manual testing still uses `build-ninja` only.
+
 ---
 
 ## Build Commands
