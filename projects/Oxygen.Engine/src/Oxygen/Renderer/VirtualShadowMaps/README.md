@@ -197,6 +197,32 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - a full rerun of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` now reports
       `46 tests from 9 test suites`, `45 passed / 1 failed`; the only failing case remains the
       analytic-floor bridge test below
+    - corrective status update on `2026-03-28`: the reported Stage 6-10 local-light regressions
+      were traced to a test-side previous-frame seed bug. Those suites were seeding reuse from an
+      early page-request bridge snapshot instead of a real extracted previous frame. The shared
+      live-scene harness now seeds those suites through `PrimeTwoBoxExtractedFrame(...)`, which
+      runs a real prior frame through the live shell before the Stage 6-10 current frame executes
+    - after that harness correction, the dedicated Stage 6-10 executables all pass again in
+      `out/build-ninja` as part of a clean Stage 1-11 rerun:
+      - `VsmPageReuse`: `4 tests from 1 test suite`
+      - `VsmAvailablePages`: `3 tests from 1 test suite`
+      - `VsmPageMappings`: `3 tests from 1 test suite`
+      - `VsmHierarchicalFlags`: `3 tests from 1 test suite`
+      - `VsmMappedMips`: `5 tests from 1 test suite`
+      - `VsmPageInitialization`: `3 tests from 1 test suite`
+    - a later `2026-03-28` live-scene timing fix then changed the shared harness to rotate
+      sequential offscreen frames across a 3-slot ring instead of pinning every step to
+      `Slot { 0 }`; this removed the test-side inline-staging timing hazard behind the
+      `RingBufferStaging.cpp:294` warnings seen in the multi-frame Stage 6-11 suites
+    - recorded post-fix stress evidence in `out/build-ninja`:
+      - `VsmAvailablePages` specific stable-local-light Stage 7 test passes `10/10` consecutive
+        iterations without `-v`
+      - `VsmAvailablePages` combined suite passes `3` consecutive repeated runs
+      - `VsmHierarchicalFlags` specific mixed-local Stage 9 test passes `10/10` consecutive
+        iterations without `-v`
+      - `VsmPageInitialization` combined suite passes `3` consecutive repeated runs
+    - `out/build-asan-vs` was not rerun after the seed-path correction and therefore remains
+      unvalidated here
     - the dedicated Stage 5 live-shell regression now passes after restoring the shared
       two-box depth texture to `Common` between the standalone depth prepass recorder and the live
       shell, then switching the Stage 5 oracle to the actual rasterized depth texture copied into

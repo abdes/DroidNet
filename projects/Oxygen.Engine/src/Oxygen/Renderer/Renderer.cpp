@@ -837,6 +837,10 @@ auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
 
 auto Renderer::EndOffscreenFrame() noexcept -> void
 {
+  if (auto gfx = gfx_weak_.lock();
+    gfx != nullptr && frame_slot_ != frame::kInvalidSlot) {
+    gfx->EndFrame(frame_seq_num, frame_slot_);
+  }
   offscreen_frame_active_ = false;
 }
 
@@ -1599,6 +1603,14 @@ auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
     }
   }
 
+  auto gfx = gfx_weak_.lock();
+  CHECK_F(gfx != nullptr,
+    "Renderer::BeginOffscreenFrame requires a live Graphics backend");
+
+  // Offscreen frames must advance the graphics frame lifecycle too. Without
+  // this, readback retirement and deferred reclamation never move forward for
+  // explicit test/tool frames, which can turn timing into hangs.
+  gfx->BeginFrame(config.frame_sequence, config.frame_slot);
   BeginFrameServices(config.frame_slot, config.frame_sequence);
   offscreen_frame_active_ = true;
   return OffscreenFrameSession(*this, config);

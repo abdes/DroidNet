@@ -266,7 +266,6 @@ NOLINT_TEST_F(VsmMappedMipPropagationLiveSceneTest,
   constexpr auto kWidth = 1024U;
   constexpr auto kHeight = 1024U;
   constexpr auto kSlot = Slot { 0U };
-  constexpr auto kProbeSequence = SequenceNumber { 127U };
   constexpr auto kSequence = SequenceNumber { 128U };
 
   const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
@@ -279,30 +278,9 @@ NOLINT_TEST_F(VsmMappedMipPropagationLiveSceneTest,
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
   auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
-
-  auto probe_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
-    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-    oxygen::observer_ptr { &renderer->GetStagingProvider() },
-    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
-    oxygen::ShadowQualityTier::kHigh);
-  const auto depth_probe = RunTwoBoxPageRequestBridge(*renderer, scene,
-    probe_renderer, resolved_view, kWidth, kHeight, kProbeSequence, kSlot,
-    0xA006ULL, {}, false);
-  ASSERT_NE(depth_probe.scene_depth_texture, nullptr);
-  const auto probe_samples
-    = ReadDepthTextureSamples(*depth_probe.scene_depth_texture, resolved_view,
-      "stage-ten.mixed-map.target-probe");
-  ASSERT_FALSE(probe_samples.empty());
-
-  const auto target_it = std::min_element(probe_samples.begin(),
-    probe_samples.end(), [&](const auto& lhs, const auto& rhs) {
-      const auto lhs_delta = lhs.world_position_ws - camera_target;
-      const auto rhs_delta = rhs.world_position_ws - camera_target;
-      return glm::dot(lhs_delta, lhs_delta) < glm::dot(rhs_delta, rhs_delta);
-    });
-  ASSERT_NE(target_it, probe_samples.end());
-  AttachSpotLightToTwoBoxScene(scene, camera_eye, target_it->world_position_ws,
-    18.0F, glm::radians(30.0F), glm::radians(50.0F));
+  AttachSpotLightToTwoBoxScene(scene, camera_eye,
+    PrimarySpotTargetForTwoBoxScene(scene), 18.0F, glm::radians(30.0F),
+    glm::radians(50.0F));
 
   auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
@@ -351,7 +329,6 @@ NOLINT_TEST_F(VsmMappedMipPropagationLiveSceneTest,
   constexpr auto kWidth = 1024U;
   constexpr auto kHeight = 1024U;
   constexpr auto kSlot = Slot { 0U };
-  constexpr auto kProbeSequence = SequenceNumber { 122U };
   constexpr auto kFirstSequence = SequenceNumber { 123U };
   constexpr auto kSecondSequence = SequenceNumber { 124U };
 
@@ -371,37 +348,8 @@ NOLINT_TEST_F(VsmMappedMipPropagationLiveSceneTest,
     = sun_impl->get().GetComponent<oxygen::scene::DirectionalLight>();
   sun_light.Common().casts_shadows = false;
   UpdateTransforms(*scene.scene, scene.sun_node);
-
-  auto probe_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
-    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-    oxygen::observer_ptr { &renderer->GetStagingProvider() },
-    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
-    oxygen::ShadowQualityTier::kHigh);
-  const auto depth_probe = RunTwoBoxPageRequestBridge(*renderer, scene,
-    probe_renderer, resolved_view, kWidth, kHeight, kProbeSequence, kSlot,
-    0xA002ULL, {}, false);
-  ASSERT_NE(depth_probe.scene_depth_texture, nullptr);
-  const auto probe_samples
-    = ReadDepthTextureSamples(*depth_probe.scene_depth_texture, resolved_view,
-      "stage-ten.local-multi-light.target-probe");
-  ASSERT_FALSE(probe_samples.empty());
-
-  const auto first_target_it = std::min_element(probe_samples.begin(),
-    probe_samples.end(), [&](const auto& lhs, const auto& rhs) {
-      const auto lhs_delta = lhs.world_position_ws - camera_target;
-      const auto rhs_delta = rhs.world_position_ws - camera_target;
-      return glm::dot(lhs_delta, lhs_delta) < glm::dot(rhs_delta, rhs_delta);
-    });
-  ASSERT_NE(first_target_it, probe_samples.end());
-  const auto first_target = first_target_it->world_position_ws;
-  const auto second_target_it = std::max_element(probe_samples.begin(),
-    probe_samples.end(), [&](const auto& lhs, const auto& rhs) {
-      const auto lhs_delta = lhs.world_position_ws - first_target;
-      const auto rhs_delta = rhs.world_position_ws - first_target;
-      return glm::dot(lhs_delta, lhs_delta) < glm::dot(rhs_delta, rhs_delta);
-    });
-  ASSERT_NE(second_target_it, probe_samples.end());
-  const auto second_target = second_target_it->world_position_ws;
+  const auto first_target = PrimarySpotTargetForTwoBoxScene(scene);
+  const auto second_target = SecondarySpotTargetForTwoBoxScene(scene);
 
   AttachSpotLightToTwoBoxScene(scene, camera_eye, first_target, 18.0F,
     glm::radians(30.0F), glm::radians(50.0F));
@@ -412,13 +360,10 @@ NOLINT_TEST_F(VsmMappedMipPropagationLiveSceneTest,
     oxygen::ShadowQualityTier::kHigh);
 
   const auto first_frame
-    = RunTwoBoxPageRequestBridge(*renderer, scene, vsm_renderer, resolved_view,
+    = PrimeTwoBoxExtractedFrame(*renderer, scene, vsm_renderer, resolved_view,
       kWidth, kHeight, kFirstSequence, kSlot, 0xA003ULL);
-  ASSERT_TRUE(
-    first_frame.prepared_products.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(
-    first_frame.prepared_products.virtual_frame.local_light_layouts.size(), 1U);
-  vsm_renderer.GetCacheManager().ExtractFrameData();
+  ASSERT_TRUE(first_frame.virtual_frame.directional_layouts.empty());
+  ASSERT_EQ(first_frame.virtual_frame.local_light_layouts.size(), 1U);
 
   AttachAdditionalSpotLightToTwoBoxScene(scene,
     camera_eye + glm::vec3 { 2.6F, 1.0F, -0.6F }, second_target, 20.0F,
