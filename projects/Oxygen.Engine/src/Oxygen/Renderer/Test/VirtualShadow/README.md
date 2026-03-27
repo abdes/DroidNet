@@ -1,6 +1,6 @@
 # Virtual Shadow Map Tests
 
-Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across ten test programs:
+Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across twelve test programs:
 
 - `VsmBasic`
 - `VsmBeginFrame`
@@ -9,6 +9,8 @@ Tests for the full VSM pipeline, from CPU cache and address-space logic through 
 - `VsmProjectionRecords`
 - `VsmPageRequests`
 - `VsmPageReuse`
+- `VsmAvailablePages`
+- `VsmPageMappings`
 - `VirtualShadows`
 - `VirtualShadowGpuLifecycle`
 - `Oxygen.Renderer.VirtualShadowSceneObserver.Tests`
@@ -21,9 +23,9 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 - Cross-cutting helper and unit suites are secondary contract coverage. They support stage suites, but they do not replace them.
 - Stage suites must reuse the shared stage harnesses in `VirtualShadowStageCpuHarness.h` and `VirtualShadowStageGpuHarness.h` instead of rebuilding bespoke setup paths.
 - Functional stage suites should prefer multi-page inputs, real geometry, real shadows, and assertions by behavior, virtual coordinate, or physical output rather than magic slot numbers.
-- The dedicated Stage 1-6 executables now also reuse `VirtualShadowLiveSceneHarness.h` for live real-scene validation on real geometry, real light data, and multi-page directional or local layouts.
+- The dedicated Stage 1-8 executables now also reuse `VirtualShadowLiveSceneHarness.h` for live real-scene validation on real geometry, real light data, and multi-page directional or local layouts.
 - One-page fixtures and direct slot assertions are acceptable only for narrow ABI checks, malformed-input checks, or other explicitly scoped negative tests.
-- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VsmRemap`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
+- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VsmRemap`, `VsmAvailablePages`, `VsmPageMappings`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
 - A passing helper suite is not evidence that a stage is complete. Completion claims require the dedicated stage suite, any required broader reruns, and explicit recorded evidence.
 - When correctness is in doubt, the AI agent working in this repository must check the UE5 reference implementation through a new or recycled subagent rather than reasoning from memory or local intuition alone.
 
@@ -47,6 +49,8 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 | `VsmProjectionRecords` | `Oxygen.Renderer.VsmProjectionRecords.Tests` / `bin/<Config>/Oxygen.Renderer.VsmProjectionRecords.Tests.exe` | Stage 4 only: real-scene projection-record construction and publication contracts for multi-page directional clipmaps and paged local spot lights when the D3D12 backend is available |
 | `VsmPageRequests` | `Oxygen.Renderer.VsmPageRequests.Tests` / `bin/<Config>/Oxygen.Renderer.VsmPageRequests.Tests.exe` | Stage 5 only: real-scene/live-shell directional request-flag validation plus dedicated real-depth multi-level local and directional clip-level request-flag validation |
 | `VsmPageReuse` | `Oxygen.Renderer.VsmPageReuse.Tests` / `bin/<Config>/Oxygen.Renderer.VsmPageReuse.Tests.exe` | Stage 6 only: real-scene reuse validation for stable directional reuse, directional clipmap pan reuse, moved-caster invalidation seeding, and retained unreferenced paged-spotlight continuity |
+| `VsmAvailablePages` | `Oxygen.Renderer.VsmAvailablePages.Tests` / `bin/<Config>/Oxygen.Renderer.VsmAvailablePages.Tests.exe` | Stage 7 only: real-scene available-page packing validation for stable directional reuse, clipmap pan release, and paged local-light continuity |
+| `VsmPageMappings` | `Oxygen.Renderer.VsmPageMappings.Tests` / `bin/<Config>/Oxygen.Renderer.VsmPageMappings.Tests.exe` | Stage 8 only: real-scene fresh-page mapping validation for moved-caster invalidation, mixed reuse plus fresh local-light allocation, and same-recorder invalidation-seed handoff |
 | `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, extraction, cache validity, invalidation, orchestration, helper contracts |
 | `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed stage and integration coverage beyond the dedicated Stage 5 executable: allocation passes, flag propagation, initialization, rasterizer, merge, HZB, projection, bridge, invalidation |
 | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe` | Scene observer → cache manager invalidation integration |
@@ -81,6 +85,12 @@ cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmPageRe
 # Stage 6 tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmPageReuse.Tests" --parallel 6
 
+# Stage 7 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmAvailablePages.Tests" --parallel 6
+
+# Stage 8 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmPageMappings.Tests" --parallel 6
+
 # All remaining CPU tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VirtualShadows.Tests" --parallel 6
 
@@ -107,6 +117,8 @@ For Release builds, substitute `Debug` with `Release` throughout. The executable
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmProjectionRecords.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmPageRequests.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmPageReuse.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmAvailablePages.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmPageMappings.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadows.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe
 ```
@@ -141,7 +153,7 @@ Useful verbosity levels:
 
 ```powershell
 ctest --test-dir out/build-ninja -C Debug --output-on-failure `
-    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VsmPageRequests|VsmPageReuse|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
+    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VsmPageRequests|VsmPageReuse|VsmAvailablePages|VsmPageMappings|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
 ```
 
 ---
@@ -211,8 +223,7 @@ Stage 6: reuse previous pages; Stage 7: pack available pages; Stage 8: allocate 
 | ---------- | ---- | --------- |
 | `VsmPageReuseLiveSceneTest` | `VsmPageReuse_test.cpp` | VsmPageReuse |
 | `VsmAvailablePagePackingLiveSceneTest` | `VsmAvailablePagePacking_test.cpp` | VsmAvailablePages |
-| `VsmNewPageMappingTest` | `VsmNewPageMapping_test.cpp` | VirtualShadowGpuLifecycle |
-| `VsmAllocateNewPagesGpuTest` | `VsmPageManagementPass_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmNewPageMappingLiveSceneTest` | `VsmNewPageMapping_test.cpp` | VsmPageMappings |
 | `VsmPhysicalPagePoolGpuLifecycleTest` | `VsmPhysicalPagePoolGpuLifecycle_test.cpp` | VirtualShadowGpuLifecycle |
 | `VsmCacheManagerGpuResourcesTest` | `VsmCacheManagerGpuResources_test.cpp` | VirtualShadowGpuLifecycle |
 | `VsmPageAllocationPlannerTest` | `VsmPageAllocationPlanner_test.cpp` | VirtualShadows |
@@ -325,7 +336,7 @@ All three are header-only, no backend dependency, no D3D12.
 
 `VsmStageCpuHarness` extends `VsmCacheManagerTestBase` and adds richer frame assembly:
 
-- `VirtualShadowLiveSceneHarness.h` — shared live-scene harness for the dedicated Stage 1-6 executables; builds the real two-box scene, attaches directional or spot lights with the engine’s `oxygen::space::move::Forward` basis, prepares the per-frame renderer data, exposes real depth-sample readback helpers, and executes the live shell or Stage 5-6 bridge up to the point each suite needs to inspect.
+- `VirtualShadowLiveSceneHarness.h` — shared live-scene harness for the dedicated Stage 1-8 executables; builds the real two-box scene, attaches directional or spot lights with the engine’s `oxygen::space::move::Forward` basis, prepares the per-frame renderer data, exposes real depth-sample readback helpers, and executes the live shell or Stage 5-8 bridge up to the point each suite needs to inspect.
 - `MakeFrame()` — builds a mixed `VsmVirtualAddressSpaceFrame` from directional and local-light descriptors so CPU stage suites can assert the published frame contract directly.
 - `MakeLocalFrame()` — builds a `VsmVirtualAddressSpaceFrame` from a list of `LocalStageLightSpec` descriptors (mix of single-page and multi-level local lights).
 - `MakeDirectionalFrame()` — builds a directional clipmap frame from `DirectionalStageClipmapSpec` descriptors.
