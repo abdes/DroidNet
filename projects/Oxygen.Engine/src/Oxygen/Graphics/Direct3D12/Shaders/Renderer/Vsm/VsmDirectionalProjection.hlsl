@@ -17,15 +17,16 @@ cbuffer RootConstants : register(b2, space0)
 
 struct VsmProjectionClearPassConstants
 {
+    uint directional_shadow_mask_uav_index;
     uint shadow_mask_uav_index;
     uint output_width;
     uint output_height;
-    uint _pad0;
 };
 
 struct VsmProjectionCompositePassConstants
 {
     uint scene_depth_srv_index;
+    uint directional_shadow_mask_uav_index;
     uint shadow_mask_uav_index;
     uint projection_buffer_srv_index;
     uint page_table_buffer_srv_index;
@@ -37,6 +38,9 @@ struct VsmProjectionCompositePassConstants
     uint page_size_texels;
     uint tiles_per_axis;
     uint dynamic_slice_index;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
     float4x4 inverse_view_projection;
 };
 
@@ -59,13 +63,20 @@ void CS_ClearShadowMask(uint3 dispatch_thread_id : SV_DispatchThreadID)
 {
     const VsmProjectionClearPassConstants pass_constants = LoadClearPassConstants();
     if (dispatch_thread_id.x >= pass_constants.output_width
-        || dispatch_thread_id.y >= pass_constants.output_height
-        || pass_constants.shadow_mask_uav_index == K_INVALID_BINDLESS_INDEX) {
+        || dispatch_thread_id.y >= pass_constants.output_height) {
         return;
     }
 
-    RWTexture2D<float> shadow_mask = ResourceDescriptorHeap[pass_constants.shadow_mask_uav_index];
-    shadow_mask[dispatch_thread_id.xy] = 1.0;
+    if (pass_constants.directional_shadow_mask_uav_index != K_INVALID_BINDLESS_INDEX) {
+        RWTexture2D<float> directional_shadow_mask =
+            ResourceDescriptorHeap[pass_constants.directional_shadow_mask_uav_index];
+        directional_shadow_mask[dispatch_thread_id.xy] = 1.0;
+    }
+
+    if (pass_constants.shadow_mask_uav_index != K_INVALID_BINDLESS_INDEX) {
+        RWTexture2D<float> shadow_mask = ResourceDescriptorHeap[pass_constants.shadow_mask_uav_index];
+        shadow_mask[dispatch_thread_id.xy] = 1.0;
+    }
 }
 
 [numthreads(VSM_PROJECTION_THREAD_GROUP_SIZE, VSM_PROJECTION_THREAD_GROUP_SIZE, 1)]
@@ -76,6 +87,7 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
         || dispatch_thread_id.y >= pass_constants.output_height
         || pass_constants.projection_count == 0u
         || pass_constants.scene_depth_srv_index == K_INVALID_BINDLESS_INDEX
+        || pass_constants.directional_shadow_mask_uav_index == K_INVALID_BINDLESS_INDEX
         || pass_constants.shadow_mask_uav_index == K_INVALID_BINDLESS_INDEX
         || pass_constants.projection_buffer_srv_index == K_INVALID_BINDLESS_INDEX
         || pass_constants.page_table_buffer_srv_index == K_INVALID_BINDLESS_INDEX
@@ -84,6 +96,8 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     Texture2D<float> scene_depth = ResourceDescriptorHeap[pass_constants.scene_depth_srv_index];
+    RWTexture2D<float> directional_shadow_mask =
+        ResourceDescriptorHeap[pass_constants.directional_shadow_mask_uav_index];
     RWTexture2D<float> shadow_mask = ResourceDescriptorHeap[pass_constants.shadow_mask_uav_index];
     StructuredBuffer<VsmPageRequestProjection> projections =
         ResourceDescriptorHeap[pass_constants.projection_buffer_srv_index];
@@ -121,12 +135,13 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         const float visibility = VsmSampleVisibilityPcf2x2(
             shadow_texture, sample.atlas_uv, sample.receiver_depth,
-            pass_constants.dynamic_slice_index);
+            sample.atlas_slice);
         if (projection.projection.clipmap_level < best_level) {
             best_level = projection.projection.clipmap_level;
             best_visibility = visibility;
         }
     }
 
+    directional_shadow_mask[dispatch_thread_id.xy] *= best_visibility;
     shadow_mask[dispatch_thread_id.xy] *= best_visibility;
 }

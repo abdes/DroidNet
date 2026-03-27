@@ -8,6 +8,7 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <thread>
@@ -347,6 +348,225 @@ namespace {
     return 3U;
   }
 
+  struct DirectionalFrustumContext {
+    std::array<glm::vec3, 4> near_corners_ws {};
+    std::array<glm::vec3, 4> far_corners_ws {};
+    std::array<glm::vec3, 4> near_corners_vs {};
+    std::array<glm::vec3, 4> far_corners_vs {};
+    float near_depth { 0.0F };
+    float far_depth { 0.0F };
+  };
+
+  struct DirectionalLightProjectionContext {
+    std::uint32_t shadow_resolution { 0U };
+    glm::vec3 light_dir_to_surface { 0.0F, -1.0F, 0.0F };
+    glm::vec3 light_dir_to_light { 0.0F, 1.0F, 0.0F };
+    glm::vec3 world_up { 0.0F, 0.0F, 1.0F };
+    glm::mat4 light_rotation { 1.0F };
+    glm::mat4 inv_light_rotation { 1.0F };
+  };
+
+  struct DirectionalClipLevelState {
+    glm::mat4 light_view { 1.0F };
+    glm::mat4 light_projection { 1.0F };
+    glm::vec4 view_origin_ws_pad { 0.0F };
+    glm::ivec2 page_grid_origin { 0, 0 };
+    float page_world_size { 1.0F };
+    float near_depth { 0.01F };
+    float far_depth { 1.0F };
+    float resolved_end_depth { 1.0F };
+  };
+
+  [[nodiscard]] auto BuildDirectionalFrustumContext(
+    const VsmShadowRenderer::PreparedViewState& prepared_view)
+    -> std::optional<DirectionalFrustumContext>
+  {
+    const auto view_matrix = prepared_view.view_constants_snapshot.view_matrix;
+    const auto projection_matrix
+      = prepared_view.view_constants_snapshot.projection_matrix;
+    const auto inv_view_proj = glm::inverse(projection_matrix * view_matrix);
+    const auto inv_proj = glm::inverse(projection_matrix);
+
+    constexpr std::array<glm::vec2, 4> clip_corners {
+      glm::vec2(-1.0F, -1.0F),
+      glm::vec2(1.0F, -1.0F),
+      glm::vec2(1.0F, 1.0F),
+      glm::vec2(-1.0F, 1.0F),
+    };
+
+    auto context = DirectionalFrustumContext {};
+    for (std::size_t i = 0; i < clip_corners.size(); ++i) {
+      context.near_corners_ws[i]
+        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
+      context.far_corners_ws[i]
+        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
+      context.near_corners_vs[i]
+        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
+      context.far_corners_vs[i]
+        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
+    }
+
+    for (std::size_t i = 0; i < context.near_corners_vs.size(); ++i) {
+      context.near_depth += std::max(0.0F, -context.near_corners_vs[i].z);
+      context.far_depth += std::max(0.0F, -context.far_corners_vs[i].z);
+    }
+    context.near_depth
+      /= static_cast<float>(context.near_corners_vs.size());
+    context.far_depth /= static_cast<float>(context.far_corners_vs.size());
+
+    if (context.far_depth <= context.near_depth + kMinCascadeSpan) {
+      return std::nullopt;
+    }
+
+    return context;
+  }
+
+  [[nodiscard]] auto BuildDirectionalLightProjectionContext(
+    const VsmShadowRenderer::PreparedViewState& prepared_view,
+    const engine::DirectionalShadowCandidate& candidate,
+    const oxygen::ShadowQualityTier quality_tier)
+    -> DirectionalLightProjectionContext
+  {
+    const auto light_dir_to_surface = NormalizeOrFallback(
+      candidate.direction_ws, glm::vec3(0.0F, -1.0F, 0.0F));
+    const auto light_dir_to_light = -light_dir_to_surface;
+    const auto world_up
+      = std::abs(glm::dot(light_dir_to_light, glm::vec3(0.0F, 0.0F, 1.0F)))
+        > 0.95F
+      ? glm::vec3(1.0F, 0.0F, 0.0F)
+      : NormalizeOrFallback(
+          candidate.basis_up_ws, glm::vec3(0.0F, 0.0F, 1.0F));
+    const auto light_rotation
+      = BuildDirectionalLightRotation(light_dir_to_surface, world_up);
+
+    return DirectionalLightProjectionContext {
+      .shadow_resolution = ApplyDirectionalShadowQualityTier(
+        ShadowResolutionFromHint(candidate.resolution_hint), quality_tier,
+        prepared_view.directional_shadow_candidates.size()),
+      .light_dir_to_surface = light_dir_to_surface,
+      .light_dir_to_light = light_dir_to_light,
+      .world_up = world_up,
+      .light_rotation = light_rotation,
+      .inv_light_rotation = glm::inverse(light_rotation),
+    };
+  }
+
+  [[nodiscard]] auto ComputeDirectionalClipLevelState(
+    const VsmShadowRenderer::PreparedViewState& prepared_view,
+    const DirectionalFrustumContext& frustum,
+    const DirectionalLightProjectionContext& light_context,
+    const engine::DirectionalShadowCandidate& candidate,
+    const std::uint32_t clip_index, const std::uint32_t pages_per_axis,
+    const float prev_depth) -> DirectionalClipLevelState
+  {
+    const auto end_depth = ResolveCascadeEndDepth(
+      candidate, clip_index, prev_depth, frustum.near_depth, frustum.far_depth);
+    const auto depth_range
+      = std::max(frustum.far_depth - frustum.near_depth, kMinCascadeSpan);
+    const auto t0 = std::clamp(
+      (prev_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
+    const auto t1 = std::clamp(
+      (end_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
+
+    std::array<glm::vec3, 8> slice_corners_ws {};
+    std::array<glm::vec3, 8> slice_corners_vs {};
+    for (std::size_t corner = 0; corner < frustum.near_corners_ws.size();
+      ++corner) {
+      slice_corners_ws[corner] = glm::mix(
+        frustum.near_corners_ws[corner], frustum.far_corners_ws[corner], t0);
+      slice_corners_ws[corner + frustum.near_corners_ws.size()] = glm::mix(
+        frustum.near_corners_ws[corner], frustum.far_corners_ws[corner], t1);
+      slice_corners_vs[corner] = glm::mix(
+        frustum.near_corners_vs[corner], frustum.far_corners_vs[corner], t0);
+      slice_corners_vs[corner + frustum.near_corners_vs.size()] = glm::mix(
+        frustum.near_corners_vs[corner], frustum.far_corners_vs[corner], t1);
+    }
+
+    auto slice_center_ws = glm::vec3(0.0F);
+    auto view_slice_center = glm::vec3(0.0F);
+    for (std::size_t i = 0; i < slice_corners_ws.size(); ++i) {
+      slice_center_ws += slice_corners_ws[i];
+      view_slice_center += slice_corners_vs[i];
+    }
+    slice_center_ws /= static_cast<float>(slice_corners_ws.size());
+    view_slice_center /= static_cast<float>(slice_corners_vs.size());
+
+    auto sphere_radius = 0.0F;
+    for (const auto& corner : slice_corners_vs) {
+      sphere_radius
+        = std::max(sphere_radius, glm::length(corner - view_slice_center));
+    }
+
+    const auto base_half_extent
+      = std::max(std::ceil(sphere_radius * 16.0F) * (1.0F / 16.0F), 1.0F);
+    const auto padded_half_extent_x = ComputePaddedHalfExtent(
+      base_half_extent, light_context.shadow_resolution);
+    const auto padded_half_extent_y = ComputePaddedHalfExtent(
+      base_half_extent, light_context.shadow_resolution);
+    const auto slice_center_ls = glm::vec3(
+      light_context.light_rotation * glm::vec4(slice_center_ws, 1.0F));
+    const auto snapped_center_ls = SnapLightSpaceCenter(slice_center_ls,
+      padded_half_extent_x, padded_half_extent_y,
+      light_context.shadow_resolution);
+    const auto snapped_center_ws = glm::vec3(
+      light_context.inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
+
+    const auto page_world_size_x
+      = (2.0F * padded_half_extent_x) / static_cast<float>(pages_per_axis);
+    const auto page_world_size_y
+      = (2.0F * padded_half_extent_y) / static_cast<float>(pages_per_axis);
+    if (std::abs(page_world_size_x - page_world_size_y) > 1.0e-4F) {
+      DLOG_F(2,
+        "VsmShadowRenderer: directional clip level {} has non-uniform page "
+        "world size x={} y={}; using max for clipmap metadata",
+        clip_index, page_world_size_x, page_world_size_y);
+    }
+    const auto clip_min_corner_ls = glm::vec2(snapped_center_ls)
+      - glm::vec2(padded_half_extent_x, padded_half_extent_y);
+    const auto page_grid_origin = glm::ivec2 {
+      static_cast<std::int32_t>(
+        std::floor(clip_min_corner_ls.x / page_world_size_x)),
+      static_cast<std::int32_t>(
+        std::floor(clip_min_corner_ls.y / page_world_size_y)),
+    };
+
+    const auto pullback_extent = std::max(
+      std::max(padded_half_extent_x, padded_half_extent_y), sphere_radius);
+    const auto light_eye = snapped_center_ws
+      + light_context.light_dir_to_light
+        * (pullback_extent + kLightPullbackPadding);
+    const auto light_view
+      = glm::lookAtRH(light_eye, snapped_center_ws, light_context.world_up);
+
+    auto max_depth
+      = -(pullback_extent + kLightPullbackPadding) + sphere_radius;
+    auto min_depth
+      = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
+    static_cast<void>(TightenDepthRangeWithShadowCasters(
+      prepared_view.shadow_caster_bounds, light_view, padded_half_extent_x,
+      padded_half_extent_y, min_depth, max_depth));
+
+    const auto depth_padding = std::max(kMinShadowDepthPadding,
+      std::max(padded_half_extent_x, padded_half_extent_y) * 0.1F);
+    const auto near_plane = std::max(0.1F, -max_depth - depth_padding);
+    const auto far_plane
+      = std::max(near_plane + 1.0F, -min_depth + depth_padding);
+    const auto light_projection = glm::orthoRH_ZO(-padded_half_extent_x,
+      padded_half_extent_x, -padded_half_extent_y, padded_half_extent_y,
+      near_plane, far_plane);
+
+    return DirectionalClipLevelState {
+      .light_view = light_view,
+      .light_projection = light_projection,
+      .view_origin_ws_pad = glm::vec4(light_eye, 0.0F),
+      .page_grid_origin = page_grid_origin,
+      .page_world_size = std::max(page_world_size_x, page_world_size_y),
+      .near_depth = std::max(prev_depth, 0.01F),
+      .far_depth = end_depth,
+      .resolved_end_depth = end_depth,
+    };
+  }
+
   auto ShouldUseSinglePageLocalLayout(const engine::PositionalLightData& light,
     const VsmShadowRenderer::PreparedViewState& prepared_view) -> bool
   {
@@ -360,6 +580,7 @@ namespace {
   }
 
   auto BuildDirectionalClipmapDesc(
+    const VsmShadowRenderer::PreparedViewState& prepared_view,
     const engine::DirectionalShadowCandidate& candidate,
     const oxygen::ShadowQualityTier quality_tier) -> VsmDirectionalClipmapDesc
   {
@@ -373,22 +594,46 @@ namespace {
           + std::string(nostd::to_string(candidate.node_handle.Index()))
         : "vsm-directional-invalid",
     };
-    desc.page_grid_origin.resize(clip_level_count, glm::ivec2 { 0, 0 });
+    desc.page_grid_origin.reserve(clip_level_count);
     desc.page_world_size.reserve(clip_level_count);
     desc.near_depth.reserve(clip_level_count);
     desc.far_depth.reserve(clip_level_count);
 
-    auto previous_far = 0.0F;
+    const auto frustum_context = BuildDirectionalFrustumContext(prepared_view);
+    if (!frustum_context.has_value()) {
+      LOG_F(WARNING,
+        "VsmShadowRenderer: falling back to synthetic directional clipmap "
+        "layout for node_handle={} because the camera depth span is invalid",
+        candidate.node_handle);
+      auto previous_far = 0.0F;
+      for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
+        ++clip_index) {
+        const auto current_far = glm::max(
+          candidate.cascade_distances[clip_index], previous_far + 1.0F);
+        const auto clip_extent_world = glm::max(current_far * 2.0F, 1.0F);
+        desc.page_grid_origin.push_back(glm::ivec2 { 0, 0 });
+        desc.page_world_size.push_back(
+          clip_extent_world / static_cast<float>(desc.pages_per_axis));
+        desc.near_depth.push_back(glm::max(previous_far, 0.01F));
+        desc.far_depth.push_back(current_far);
+        previous_far = current_far;
+      }
+      return desc;
+    }
+
+    const auto light_context = BuildDirectionalLightProjectionContext(
+      prepared_view, candidate, quality_tier);
+    auto prev_depth = std::max(frustum_context->near_depth, 0.0F);
     for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
       ++clip_index) {
-      const auto current_far = glm::max(
-        candidate.cascade_distances[clip_index], previous_far + 1.0F);
-      const auto clip_extent_world = glm::max(current_far * 2.0F, 1.0F);
-      desc.page_world_size.push_back(
-        clip_extent_world / static_cast<float>(desc.pages_per_axis));
-      desc.near_depth.push_back(glm::max(previous_far, 0.01F));
-      desc.far_depth.push_back(current_far);
-      previous_far = current_far;
+      const auto clip_state = ComputeDirectionalClipLevelState(prepared_view,
+        *frustum_context, light_context, candidate, clip_index,
+        desc.pages_per_axis, prev_depth);
+      desc.page_grid_origin.push_back(clip_state.page_grid_origin);
+      desc.page_world_size.push_back(clip_state.page_world_size);
+      desc.near_depth.push_back(clip_state.near_depth);
+      desc.far_depth.push_back(clip_state.far_depth);
+      prev_depth = clip_state.resolved_end_depth;
     }
 
     return desc;
@@ -460,48 +705,12 @@ namespace {
       return;
     }
 
-    const auto view_matrix = prepared_view.view_constants_snapshot.view_matrix;
-    const auto projection_matrix
-      = prepared_view.view_constants_snapshot.projection_matrix;
-    const auto inv_view_proj = glm::inverse(projection_matrix * view_matrix);
-    const auto inv_proj = glm::inverse(projection_matrix);
-
-    std::array<glm::vec3, 4> near_corners {};
-    std::array<glm::vec3, 4> far_corners {};
-    std::array<glm::vec3, 4> view_near_corners {};
-    std::array<glm::vec3, 4> view_far_corners {};
-    constexpr std::array<glm::vec2, 4> clip_corners {
-      glm::vec2(-1.0F, -1.0F),
-      glm::vec2(1.0F, -1.0F),
-      glm::vec2(1.0F, 1.0F),
-      glm::vec2(-1.0F, 1.0F),
-    };
-
-    for (std::size_t i = 0; i < clip_corners.size(); ++i) {
-      near_corners[i]
-        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
-      far_corners[i]
-        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
-      view_near_corners[i]
-        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
-      view_far_corners[i]
-        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
-    }
-
-    auto near_depth = 0.0F;
-    auto far_depth = 0.0F;
-    for (std::size_t i = 0; i < view_near_corners.size(); ++i) {
-      near_depth += std::max(0.0F, -view_near_corners[i].z);
-      far_depth += std::max(0.0F, -view_far_corners[i].z);
-    }
-    near_depth /= static_cast<float>(view_near_corners.size());
-    far_depth /= static_cast<float>(view_far_corners.size());
-    if (far_depth <= near_depth + kMinCascadeSpan) {
+    const auto frustum_context = BuildDirectionalFrustumContext(prepared_view);
+    if (!frustum_context.has_value()) {
       LOG_F(WARNING,
         "VsmShadowRenderer: skipping directional projection records because "
-        "the "
-        "camera depth span is invalid (near_depth={} far_depth={})",
-        near_depth, far_depth);
+        "the camera depth span is invalid for view {}",
+        prepared_view.view_id.get());
       return;
     }
 
@@ -522,107 +731,33 @@ namespace {
         std::max(1U,
           std::min(
             candidate.cascade_count, oxygen::scene::kMaxShadowCascades)));
-      const auto directional_shadow_resolution
-        = ApplyDirectionalShadowQualityTier(
-          ShadowResolutionFromHint(candidate.resolution_hint), quality_tier,
-          prepared_view.directional_shadow_candidates.size());
-
-      auto prev_depth = std::max(near_depth, 0.0F);
-      const auto light_dir_to_surface = NormalizeOrFallback(
-        candidate.direction_ws, glm::vec3(0.0F, -1.0F, 0.0F));
-      const auto light_dir_to_light = -light_dir_to_surface;
-      const auto world_up
-        = std::abs(glm::dot(light_dir_to_light, glm::vec3(0.0F, 0.0F, 1.0F)))
-          > 0.95F
-        ? glm::vec3(1.0F, 0.0F, 0.0F)
-        : NormalizeOrFallback(
-            candidate.basis_up_ws, glm::vec3(0.0F, 0.0F, 1.0F));
-      const auto light_rotation
-        = BuildDirectionalLightRotation(light_dir_to_surface, world_up);
-      const auto inv_light_rotation = glm::inverse(light_rotation);
+      const auto light_context = BuildDirectionalLightProjectionContext(
+        prepared_view, candidate, quality_tier);
+      auto prev_depth = std::max(frustum_context->near_depth, 0.0F);
 
       for (std::uint32_t clip_index = 0U; clip_index < cascade_count;
         ++clip_index) {
-        const auto end_depth = ResolveCascadeEndDepth(
-          candidate, clip_index, prev_depth, near_depth, far_depth);
-        const auto depth_range
-          = std::max(far_depth - near_depth, kMinCascadeSpan);
-        const auto t0
-          = std::clamp((prev_depth - near_depth) / depth_range, 0.0F, 1.0F);
-        const auto t1
-          = std::clamp((end_depth - near_depth) / depth_range, 0.0F, 1.0F);
-
-        std::array<glm::vec3, 8> slice_corners {};
-        std::array<glm::vec3, 8> view_slice_corners {};
-        for (std::size_t corner = 0; corner < near_corners.size(); ++corner) {
-          slice_corners[corner]
-            = glm::mix(near_corners[corner], far_corners[corner], t0);
-          slice_corners[corner + near_corners.size()]
-            = glm::mix(near_corners[corner], far_corners[corner], t1);
-          view_slice_corners[corner]
-            = glm::mix(view_near_corners[corner], view_far_corners[corner], t0);
-          view_slice_corners[corner + near_corners.size()]
-            = glm::mix(view_near_corners[corner], view_far_corners[corner], t1);
-        }
-
-        auto slice_center_ws = glm::vec3(0.0F);
-        auto view_slice_center = glm::vec3(0.0F);
-        for (std::size_t i = 0; i < slice_corners.size(); ++i) {
-          slice_center_ws += slice_corners[i];
-          view_slice_center += view_slice_corners[i];
-        }
-        slice_center_ws /= static_cast<float>(slice_corners.size());
-        view_slice_center /= static_cast<float>(view_slice_corners.size());
-
-        auto sphere_radius = 0.0F;
-        for (const auto& corner : view_slice_corners) {
-          sphere_radius
-            = std::max(sphere_radius, glm::length(corner - view_slice_center));
-        }
-
-        const auto base_half_extent
-          = std::max(std::ceil(sphere_radius * 16.0F) * (1.0F / 16.0F), 1.0F);
-        const auto padded_half_extent_x = ComputePaddedHalfExtent(
-          base_half_extent, directional_shadow_resolution);
-        const auto padded_half_extent_y = ComputePaddedHalfExtent(
-          base_half_extent, directional_shadow_resolution);
-        const auto slice_center_ls
-          = glm::vec3(light_rotation * glm::vec4(slice_center_ws, 1.0F));
-        const auto snapped_center_ls
-          = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
-            padded_half_extent_y, directional_shadow_resolution);
-        const auto snapped_center_ws
-          = glm::vec3(inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
-
-        const auto pullback_extent = std::max(
-          std::max(padded_half_extent_x, padded_half_extent_y), sphere_radius);
-        const auto light_eye = snapped_center_ws
-          + light_dir_to_light * (pullback_extent + kLightPullbackPadding);
-        const auto light_view
-          = glm::lookAtRH(light_eye, snapped_center_ws, world_up);
-
-        auto max_depth
-          = -(pullback_extent + kLightPullbackPadding) + sphere_radius;
-        auto min_depth
-          = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
-        static_cast<void>(TightenDepthRangeWithShadowCasters(
-          prepared_view.shadow_caster_bounds, light_view, padded_half_extent_x,
-          padded_half_extent_y, min_depth, max_depth));
-
-        const auto depth_padding = std::max(kMinShadowDepthPadding,
-          std::max(padded_half_extent_x, padded_half_extent_y) * 0.1F);
-        const auto near_plane = std::max(0.1F, -max_depth - depth_padding);
-        const auto far_plane
-          = std::max(near_plane + 1.0F, -min_depth + depth_padding);
-        const auto light_projection
-          = glm::orthoRH_ZO(-padded_half_extent_x, padded_half_extent_x,
-            -padded_half_extent_y, padded_half_extent_y, near_plane, far_plane);
+        const auto clip_state = ComputeDirectionalClipLevelState(prepared_view,
+          *frustum_context, light_context, candidate, clip_index,
+          layout.pages_per_axis, prev_depth);
+        CHECK_EQ_F(layout.page_grid_origin[clip_index].x,
+          clip_state.page_grid_origin.x,
+          "VsmShadowRenderer directional layout clip {} x-origin {} must "
+          "match projection-state x-origin {}",
+          clip_index, layout.page_grid_origin[clip_index].x,
+          clip_state.page_grid_origin.x);
+        CHECK_EQ_F(layout.page_grid_origin[clip_index].y,
+          clip_state.page_grid_origin.y,
+          "VsmShadowRenderer directional layout clip {} y-origin {} must "
+          "match projection-state y-origin {}",
+          clip_index, layout.page_grid_origin[clip_index].y,
+          clip_state.page_grid_origin.y);
 
         projection_records.push_back(VsmPageRequestProjection {
         .projection = VsmProjectionData {
-          .view_matrix = light_view,
-          .projection_matrix = light_projection,
-          .view_origin_ws_pad = glm::vec4(light_eye, 0.0F),
+          .view_matrix = clip_state.light_view,
+          .projection_matrix = clip_state.light_projection,
+          .view_origin_ws_pad = clip_state.view_origin_ws_pad,
           .clipmap_corner_offset = layout.page_grid_origin[clip_index],
           .clipmap_level = clip_index,
           .light_type = static_cast<std::uint32_t>(
@@ -636,11 +771,11 @@ namespace {
         .pages_y = layout.pages_per_axis,
         .page_offset_x = 0U,
         .page_offset_y = 0U,
-        .level_count = 1U,
+        .level_count = layout.clip_level_count,
         .coarse_level = 0U,
       });
 
-        prev_depth = end_depth;
+        prev_depth = clip_state.resolved_end_depth;
       }
     }
   }
@@ -1098,7 +1233,7 @@ auto VsmShadowRenderer::BuildCurrentVirtualFrame(
 
   for (const auto& candidate : prepared_view.directional_shadow_candidates) {
     virtual_address_space_.AllocateDirectionalClipmap(
-      BuildDirectionalClipmapDesc(candidate, quality_tier_));
+      BuildDirectionalClipmapDesc(prepared_view, candidate, quality_tier_));
   }
 
   for (const auto& candidate : prepared_view.positional_shadow_candidates) {
@@ -1357,6 +1492,9 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
     render_context.GetRenderer().UpdateCurrentViewVirtualShadowFrameBindings(
       render_context,
       engine::VsmFrameBindings {
+        .directional_shadow_mask_slot = projection_output.available
+          ? projection_output.directional_shadow_mask_srv_index
+          : kInvalidShaderVisibleIndex,
         .screen_shadow_mask_slot = projection_output.available
           ? projection_output.shadow_mask_srv_index
           : kInvalidShaderVisibleIndex,

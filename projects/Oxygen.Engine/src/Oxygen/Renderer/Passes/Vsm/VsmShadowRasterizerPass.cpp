@@ -48,6 +48,10 @@ using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
 
 namespace {
 
+constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
+constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
+constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0025F;
+
 constexpr std::uint32_t kInstanceCullingThreadGroupSize = 64U;
 constexpr std::uint32_t kInstanceCullingConstantsStride
   = oxygen::packing::kConstantBufferAlignment;
@@ -1977,6 +1981,16 @@ auto VsmShadowRasterizerPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   return DepthPrePass::CreatePipelineStateDesc();
 }
 
+auto VsmShadowRasterizerPass::BuildRasterizerStateDesc(
+  const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
+{
+  auto desc = DepthPrePass::BuildRasterizerStateDesc(cull_mode);
+  desc.depth_bias = kDirectionalShadowRasterDepthBias;
+  desc.depth_bias_clamp = kDirectionalShadowRasterDepthBiasClamp;
+  desc.slope_scaled_depth_bias = kDirectionalShadowRasterSlopeBias;
+  return desc;
+}
+
 auto VsmShadowRasterizerPass::UsesFramebufferDepthAttachment() const -> bool
 {
   return false;
@@ -2260,6 +2274,7 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
         SelectPipelineStateForPartition(partition.pass_mask));
       RebindCommonRootParameters(recorder);
       impl_->BindJobViewConstants(recorder, Context(), local_page_index);
+      recorder.SetMarker("VsmShadowRasterizerPass.ExecuteIndirectCounted");
       recorder.ExecuteIndirectCounted(*state.command_buffer,
         MakePartitionCommandOffset(
           local_page_index, state.max_commands_per_page),

@@ -11,20 +11,20 @@
 
 struct VsmFrameBindings
 {
+    uint directional_shadow_mask_slot;
     uint screen_shadow_mask_slot;
     uint _pad_to_16_0;
     uint _pad_to_16_1;
-    uint _pad_to_16_2;
 };
 
 static VsmFrameBindings LoadVsmFrameBindings(uint slot)
 {
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         VsmFrameBindings invalid_bindings;
+        invalid_bindings.directional_shadow_mask_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings.screen_shadow_mask_slot = K_INVALID_BINDLESS_INDEX;
         invalid_bindings._pad_to_16_0 = 0u;
         invalid_bindings._pad_to_16_1 = 0u;
-        invalid_bindings._pad_to_16_2 = 0u;
         return invalid_bindings;
     }
 

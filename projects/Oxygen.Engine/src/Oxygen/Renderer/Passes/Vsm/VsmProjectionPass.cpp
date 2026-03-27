@@ -61,10 +61,12 @@ namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VsmProjectionClearPassConstants {
+    ShaderVisibleIndex directional_shadow_mask_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex shadow_mask_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t output_width { 0U };
     std::uint32_t output_height { 0U };
-    std::uint32_t _pad0 { 0U };
   };
   static_assert(
     sizeof(VsmProjectionClearPassConstants) % packing::kShaderDataFieldAlignment
@@ -73,6 +75,9 @@ namespace {
   struct alignas(packing::kShaderDataFieldAlignment)
     VsmProjectionCompositePassConstants {
     ShaderVisibleIndex scene_depth_srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex directional_shadow_mask_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex shadow_mask_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex projection_buffer_srv_index {
       kInvalidShaderVisibleIndex
@@ -88,6 +93,9 @@ namespace {
     std::uint32_t page_size_texels { 0U };
     std::uint32_t tiles_per_axis { 0U };
     std::uint32_t dynamic_slice_index { 0U };
+    std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
     glm::mat4 inverse_view_projection { 1.0F };
   };
   static_assert(sizeof(VsmProjectionCompositePassConstants)
@@ -115,16 +123,47 @@ namespace {
   [[nodiscard]] auto DepthSrvDesc(const graphics::Texture& texture)
     -> graphics::TextureViewDescription
   {
+    auto format = texture.GetDescriptor().format;
+    switch (format) {
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32Stencil8:
+      format = oxygen::Format::kR32Float;
+      break;
+    case oxygen::Format::kDepth16:
+      format = oxygen::Format::kR16UNorm;
+      break;
+    default:
+      break;
+    }
+
     return graphics::TextureViewDescription {
       .view_type = ResourceViewType::kTexture_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = texture.GetDescriptor().format == oxygen::Format::kDepth32
-        ? oxygen::Format::kR32Float
-        : texture.GetDescriptor().format,
+      .format = format,
       .dimension = texture.GetDescriptor().texture_type,
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
       .is_read_only_dsv = false,
     };
+  }
+
+  [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
+    -> ResourceStates
+  {
+    const auto initial_state = texture.GetDescriptor().initial_state;
+    if (initial_state != ResourceStates::kUnknown
+      && initial_state != ResourceStates::kUndefined) {
+      return initial_state;
+    }
+    switch (texture.GetDescriptor().format) {
+    case oxygen::Format::kDepth16:
+    case oxygen::Format::kDepth24Stencil8:
+    case oxygen::Format::kDepth32:
+    case oxygen::Format::kDepth32Stencil8:
+      return ResourceStates::kDepthWrite;
+    default:
+      return ResourceStates::kCommon;
+    }
   }
 
   [[nodiscard]] auto WholeShadowTextureSrvDesc(const oxygen::Format format)
@@ -224,6 +263,13 @@ namespace {
 
 struct VsmProjectionPass::Impl {
   struct ViewState {
+    std::shared_ptr<Texture> directional_shadow_mask_texture {};
+    ShaderVisibleIndex directional_shadow_mask_srv_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex directional_shadow_mask_uav_index {
+      kInvalidShaderVisibleIndex
+    };
     std::shared_ptr<Texture> shadow_mask_texture {};
     ShaderVisibleIndex shadow_mask_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex shadow_mask_uav_index { kInvalidShaderVisibleIndex };
@@ -290,6 +336,7 @@ struct VsmProjectionPass::Impl {
 
     for (auto& [view_id, view_state] : view_states) {
       static_cast<void>(view_id);
+      UnregisterResourceIfPresent(*gfx, view_state.directional_shadow_mask_texture);
       UnregisterResourceIfPresent(*gfx, view_state.shadow_mask_texture);
     }
     UnregisterResourceIfPresent(*gfx, projection_upload_buffer);
@@ -422,33 +469,46 @@ struct VsmProjectionPass::Impl {
     const std::uint32_t height) -> ViewState&
   {
     auto& state = view_states[view_id];
-    if (state.shadow_mask_texture && state.width == width
+    if (state.directional_shadow_mask_texture && state.shadow_mask_texture
+      && state.width == width
       && state.height == height) {
       return state;
     }
 
+    UnregisterResourceIfPresent(*gfx, state.directional_shadow_mask_texture);
     UnregisterResourceIfPresent(*gfx, state.shadow_mask_texture);
     state = {};
 
-    auto desc = graphics::TextureDesc {};
-    desc.width = width;
-    desc.height = height;
-    desc.format = oxygen::Format::kR32Float;
-    desc.texture_type = oxygen::TextureType::kTexture2D;
-    desc.is_shader_resource = true;
-    desc.is_uav = true;
-    desc.initial_state = ResourceStates::kCommon;
-    desc.debug_name
-      = config->debug_name + ".ShadowMask.View" + std::to_string(view_id.get());
-    state.shadow_mask_texture = gfx->CreateTexture(desc);
-    CHECK_NOTNULL_F(state.shadow_mask_texture.get(),
-      "Failed to create VSM projection shadow-mask texture");
-    RegisterResourceIfNeeded(*gfx, state.shadow_mask_texture);
+    auto make_mask_texture = [&](const std::string& suffix) {
+      auto desc = graphics::TextureDesc {};
+      desc.width = width;
+      desc.height = height;
+      desc.format = oxygen::Format::kR32Float;
+      desc.texture_type = oxygen::TextureType::kTexture2D;
+      desc.is_shader_resource = true;
+      desc.is_uav = true;
+      desc.initial_state = ResourceStates::kCommon;
+      desc.debug_name = config->debug_name + suffix
+        + ".View" + std::to_string(view_id.get());
+      auto texture = gfx->CreateTexture(desc);
+      CHECK_NOTNULL_F(texture.get(),
+        "Failed to create VSM projection mask texture");
+      RegisterResourceIfNeeded(*gfx, texture);
+      return texture;
+    };
 
-    state.shadow_mask_srv_index
-      = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskSrvDesc());
-    state.shadow_mask_uav_index
-      = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskUavDesc());
+    state.directional_shadow_mask_texture
+      = make_mask_texture(".DirectionalShadowMask");
+    state.shadow_mask_texture = make_mask_texture(".ShadowMask");
+
+    state.directional_shadow_mask_srv_index = EnsureTextureViewIndex(
+      *state.directional_shadow_mask_texture, ShadowMaskSrvDesc());
+    state.directional_shadow_mask_uav_index = EnsureTextureViewIndex(
+      *state.directional_shadow_mask_texture, ShadowMaskUavDesc());
+    state.shadow_mask_srv_index = EnsureTextureViewIndex(
+      *state.shadow_mask_texture, ShadowMaskSrvDesc());
+    state.shadow_mask_uav_index = EnsureTextureViewIndex(
+      *state.shadow_mask_texture, ShadowMaskUavDesc());
     state.width = width;
     state.height = height;
     return state;
@@ -543,6 +603,10 @@ auto VsmProjectionPass::GetCurrentOutput(const ViewId view_id) const
   }
 
   return ViewOutput {
+    .directional_shadow_mask_texture
+    = it->second.directional_shadow_mask_texture,
+    .directional_shadow_mask_srv_index
+    = it->second.directional_shadow_mask_srv_index,
     .shadow_mask_texture = it->second.shadow_mask_texture,
     .shadow_mask_srv_index = it->second.shadow_mask_srv_index,
     .width = it->second.width,
@@ -661,13 +725,18 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
 
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Texture>(input.scene_depth_texture),
-    ResourceStates::kCommon, true);
+    DepthTextureInitialState(*input.scene_depth_texture), true);
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
     ResourceStates::kCommon, true);
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Buffer>(input.frame.page_table_buffer),
     ResourceStates::kCommon, true);
+  recorder.BeginTrackingResourceState(
+    *view_state.directional_shadow_mask_texture,
+    view_state.has_current_output ? ResourceStates::kShaderResource
+                                  : ResourceStates::kCommon,
+    true);
   recorder.BeginTrackingResourceState(*view_state.shadow_mask_texture,
     view_state.has_current_output ? ResourceStates::kShaderResource
                                   : ResourceStates::kCommon,
@@ -709,10 +778,15 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   const auto dispatch_y = MakeDispatchGroups(output_height);
 
   auto clear_constants = VsmProjectionClearPassConstants {
+    .directional_shadow_mask_uav_index
+    = impl_->active_view_state->directional_shadow_mask_uav_index,
     .shadow_mask_uav_index = impl_->active_view_state->shadow_mask_uav_index,
     .output_width = output_width,
     .output_height = output_height,
   };
+  recorder.RequireResourceState(
+    *impl_->active_view_state->directional_shadow_mask_texture,
+    ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(*impl_->active_view_state->shadow_mask_texture,
     ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
@@ -736,6 +810,8 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   auto projection_constants = VsmProjectionCompositePassConstants {
     .scene_depth_srv_index = impl_->scene_depth_srv_index,
+    .directional_shadow_mask_uav_index
+    = impl_->active_view_state->directional_shadow_mask_uav_index,
     .shadow_mask_uav_index = impl_->active_view_state->shadow_mask_uav_index,
     .projection_buffer_srv_index = impl_->projection_buffer_srv_index,
     .page_table_buffer_srv_index = impl_->page_table_srv_index,
@@ -762,6 +838,9 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     recorder.RequireResourceState(
       *std::const_pointer_cast<Buffer>(input.frame.page_table_buffer),
       ResourceStates::kGenericRead);
+    recorder.RequireResourceState(
+      *impl_->active_view_state->directional_shadow_mask_texture,
+      ResourceStates::kUnorderedAccess);
     recorder.RequireResourceState(
       *impl_->active_view_state->shadow_mask_texture,
       ResourceStates::kUnorderedAccess);
@@ -798,6 +877,9 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     recorder.Dispatch(dispatch_x, dispatch_y, 1U);
   }
 
+  recorder.RequireResourceStateFinal(
+    *impl_->active_view_state->directional_shadow_mask_texture,
+    ResourceStates::kShaderResource);
   recorder.RequireResourceStateFinal(
     *impl_->active_view_state->shadow_mask_texture,
     ResourceStates::kShaderResource);

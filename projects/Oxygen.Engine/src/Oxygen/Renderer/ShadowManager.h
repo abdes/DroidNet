@@ -27,6 +27,7 @@
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -98,6 +99,13 @@ public:
     -> observer_ptr<vsm::VsmShadowRenderer>;
 
 private:
+  struct VirtualViewCacheEntry {
+    std::vector<engine::ShadowInstanceMetadata> shadow_instances {};
+    ShadowFramePublication frame_publication {};
+  };
+
+  using BufferT = engine::upload::TransientStructuredBuffer;
+
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
   observer_ptr<CoordinatorT> inline_transfers_;
@@ -109,6 +117,8 @@ private:
   };
   std::unordered_map<std::uint64_t, engine::ShadowImplementationKind>
     last_view_directional_implementation_;
+  BufferT vsm_shadow_instance_buffer_;
+  std::unordered_map<ViewId, VirtualViewCacheEntry> virtual_view_cache_;
 
   std::unique_ptr<internal::ConventionalShadowBackend> conventional_backend_;
   std::unique_ptr<vsm::VsmShadowRenderer> vsm_shadow_renderer_;

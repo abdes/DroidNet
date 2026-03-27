@@ -35,8 +35,8 @@ struct VsmHzbSelectPagesPassConstants
     uint selected_page_count_uav_index;
     uint physical_page_count;
     uint force_rebuild_all_allocated_pages;
-    uint _pad0;
-    uint _pad1;
+    uint tiles_per_axis;
+    uint dynamic_slice_index;
 };
 
 struct VsmHzbScratchInitPassConstants
@@ -64,6 +64,14 @@ struct VsmHzbPerPageBuildPassConstants
     uint _pad0;
     uint _pad1;
     uint _pad2;
+};
+
+struct VsmHzbPrepareDispatchArgsPassConstants
+{
+    uint selected_page_count_srv_index;
+    uint dispatch_args_uav_index;
+    uint thread_group_count_x;
+    uint thread_group_count_y;
 };
 
 struct VsmHzbTopBuildPassConstants
@@ -114,6 +122,15 @@ void CS_SelectPages(uint3 dispatch_thread_id : SV_DispatchThreadID)
     RWStructuredBuffer<uint> selected_page_count
         = ResourceDescriptorHeap[pass_constants.selected_page_count_uav_index];
 
+    const uint tiles_per_slice = pass_constants.tiles_per_axis * pass_constants.tiles_per_axis;
+    if (tiles_per_slice == 0u) {
+        return;
+    }
+    const uint page_slice = physical_page_index / tiles_per_slice;
+    if (page_slice != pass_constants.dynamic_slice_index) {
+        return;
+    }
+
     const uint dirty_bits = dirty_flags[physical_page_index];
     VsmPhysicalPageMeta meta = physical_meta[physical_page_index];
     const bool force_rebuild = pass_constants.force_rebuild_all_allocated_pages != 0u;
@@ -135,6 +152,34 @@ void CS_SelectPages(uint3 dispatch_thread_id : SV_DispatchThreadID)
     uint selected_page_list_index = 0u;
     InterlockedAdd(selected_page_count[0], 1u, selected_page_list_index);
     selected_pages[selected_page_list_index] = physical_page_index;
+}
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void CS_PrepareDispatchArgs(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    if (!BX_IsValidSlot(g_PassConstantsIndex)) {
+        return;
+    }
+    if (dispatch_thread_id.x != 0u || dispatch_thread_id.y != 0u || dispatch_thread_id.z != 0u) {
+        return;
+    }
+
+    ConstantBuffer<VsmHzbPrepareDispatchArgsPassConstants> pass_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    if (!BX_IsValidSlot(pass_constants.selected_page_count_srv_index)
+        || !BX_IsValidSlot(pass_constants.dispatch_args_uav_index)) {
+        return;
+    }
+
+    StructuredBuffer<uint> selected_page_count
+        = ResourceDescriptorHeap[pass_constants.selected_page_count_srv_index];
+    RWStructuredBuffer<uint> dispatch_args
+        = ResourceDescriptorHeap[pass_constants.dispatch_args_uav_index];
+
+    dispatch_args[0] = pass_constants.thread_group_count_x;
+    dispatch_args[1] = pass_constants.thread_group_count_y;
+    dispatch_args[2] = selected_page_count[0];
 }
 
 [shader("compute")]

@@ -812,9 +812,9 @@ The split below does not reduce automated validation requirements. It only makes
       - focused validation:
         - `cmake --build out/build-ninja --config Debug --target oxygen-renderer Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests oxygen-examples-renderscene --parallel 8`
         - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.*:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
-    - the remaining K-a.6 manual diagnostic checkpoint was revalidated on 2026-03-27 and now closes the K-a exit gate
+    - the previous 2026-03-27 manual diagnostic acceptance was invalidated later the same day after the user reported that the Stage 15 mask and the corresponding forward VSM shadows were wrong; that acceptance must not be counted as completion evidence
 
-- [x] `K-a.6` Stage 15 diagnostic publication
+- [ ] `K-a.6` Stage 15 diagnostic publication
   - Hook points:
     - `src/Oxygen/Renderer/Renderer.cpp`
     - `Renderer::UpdateCurrentViewVirtualShadowFrameBindings(...)`
@@ -865,6 +865,8 @@ The split below does not reduce automated validation requirements. It only makes
       - `src/Oxygen/Renderer/Passes/Vsm/VsmPageInitializationPass.cpp` now bounds Stage 11 depth-clear submissions to fixed-size rect batches (`kMaxClearRectsPerCall = 64`) instead of emitting one scene-scale `ClearDepthStencilView` rect array, because live engine runs showed a size-dependent driver-side stack-cookie / buffer-overrun failure after large request bursts; this keeps the architecture unchanged while removing the oversized single-call contract
       - `src/Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationPlanner.cpp` is now explicitly slice-aware: dynamic requests allocate and reuse only dynamic-slice physical pages, static-only requests allocate and reuse the static slice when it exists, and legacy previous-frame mappings that point a dynamic request at the static slice are evicted and reallocated into the dynamic slice instead of being silently carried forward into Stage 12/15
       - `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.cpp` is now capacity-aware for live scene growth: the projection buffer/upload buffer and request-flags buffer/clear buffer are re-created when `max_projection_count` or `max_virtual_page_count` grows, instead of continuing to record GPU copies into stale undersized allocations after a smaller-scene run
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp` now publishes directional projection records with the full directional clipmap `level_count` instead of hard-coding `1`, matching the tested projection-record contract and allowing Stage 15 to sample non-zero directional clip levels in the live renderer
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp` now applies the same directional shadow raster depth-bias policy used by the conventional directional path instead of inheriting the zero-bias `DepthPrePass` defaults, because renewed live evidence showed the Stage 15 mask and forward VSM shadows were still wrong even after the directional `level_count` fix
     - targeted validation added:
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
@@ -891,22 +893,72 @@ The split below does not reduce automated validation requirements. It only makes
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsOnlySelectedDynamicPages`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageInitializationGpuTest.InitializationPassClearsLargeRectBatchesWithoutTouchingUntargetedPages`
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=\"VsmPageRequestGeneratorGpuTest.ExecuteReallocatesProjectionAndRequestBuffersWhenSceneCapacityGrows\"`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmPageRequestGeneratorGpuTest.ExecutePublishesExpectedMultiPageFlagsForARealDepthField`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassMapsDistinctPagesToExpectedScreenQuadrants`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassSamplesNonZeroClipLevelWhenProjectionCarriesFullLevelCount`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+      - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.PrepareResourcesBuildsPreparedPagesAndRegistersPass:VsmShadowRasterizerPassGpuTest.ExecuteCompactsOpaqueShadowCasterDrawsPerPageAndRasterizesExpectedPages:VsmShadowRasterizerPassGpuTest.ExecuteRoutesSharedMapPointLightFacesToMatchingProjectionView`
       - `cmake --build out/build-ninja --config Debug --target oxygen-renderer oxygen-examples-renderscene --parallel 8`
     - attempted but not counted as validation evidence:
       - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRemainsStableAcrossManyConsecutiveFrames`
       - this long-running stability test was blocked/killed and is not part of the completion evidence
-    - manual engine validation on 2026-03-27:
-      - the user reran the engine successfully after the prior live-shell stability fixes and reported that scenes are working again
-      - in the simple two-cube-over-floor checkpoint scene, the user provided both a normal render and the `Virtual Shadow Mask` diagnostic with the sun coming from the top left
-      - the mask matched the expected Stage 15 visibility semantics:
-        - white for sun-visible receiver regions
-        - black for shadowed and self-shadowed regions
-        - whole-surface receiver coverage rather than only the shadow footprints
-      - the floor shadow direction in the normal render and the black visibility regions in the diagnostic both projected down-right, matching the reported light direction
-    - completion note:
-      - no remaining K-a.6 validation gap is open
-      - all `K-a.1` through `K-a.6` tasks are now checked
-      - Phase K-a is complete; subsequent work starts at Phase K-b
+    - invalidated manual checkpoint on 2026-03-27:
+      - the earlier acceptance of the simple two-cube `Virtual Shadow Mask` checkpoint was wrong
+      - the user later reported, correctly, that the Stage 15 mask was semantically wrong and that the forward VSM shadows matched that wrong mask
+      - this invalidates the earlier manual acceptance for both `K-a.6` and any downstream `K-b` manual evidence derived from that same result
+    - corrected status on 2026-03-27 after further live verification:
+      - the later `level_count` runtime fix in `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp` was real, but it did not resolve the live directional-mask bug in the engine
+      - the earlier focused Stage 15 GPU tests were too synthetic to refute the user's live evidence because they mostly exercised identity or single-page routing and did not validate multi-page directional projection against a known world-space shadow footprint
+      - the Stage 5 page-request GPU coverage had the same weakness: it proved single-sample publication and growth/light-grid contracts, but it did not yet validate a multi-pixel depth field against a known multi-page request footprint
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneratorPass_test.cpp` now contains `ExecutePublishesExpectedMultiPageFlagsForARealDepthField`, which validates the Stage 5 GPU request generator against a 4x4 depth field and a known 2x2 page layout using the CPU page-request builder as the reference model
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp` now contains `DirectionalProjectionPassMapsDistinctPagesToExpectedScreenQuadrants`, a stronger regression that verifies Stage 15 directional mask output across four distinct mapped pages in a known 2x2 directional layout instead of a single-page synthetic setup
+      - focused rasterizer tests still pass after the directional depth-bias correction above, so the runtime fix did not regress the Stage 12 page-preparation contract
+      - those stronger isolated tests were still not enough: they did not exercise the full renderer-owned shell with real page-request generation, page management, and projection publication for the same scene that is wrong in the engine
+      - current correction in progress on 2026-03-27:
+        - the first real depth-backed Stage 5/15 shell regression also exposed a D3D12 scene-depth contract bug: the test helper and the main renderer view depth target were both creating `Format::kDepth32` textures with `is_shader_resource = true` but without `is_typeless = true`
+        - both `VsmPageRequestGeneratorPass` and `VsmProjectionPass` bind that depth as an SRV (`R32Float` or depth-derived SRV format), so a non-typeless depth resource can fail or behave incorrectly on the real depth-backed path even while `R32Float` stand-in tests pass
+        - the fix being applied is to make sampled depth targets typeless at creation and to keep the VSM depth-SRV view selection explicit per depth format before rerunning the two-box live-shell regression
+    - real live-shell regression added on 2026-03-27:
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp` now contains `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+      - this regression uses a perspective two-box-over-floor scene, a real renderer-owned `DepthPrePass`, the full `VsmShadowRenderer` shell, analytic CPU visibility / ray-cast classification, and runtime-extracted projection records
+      - it intentionally asserts both a Stage 5 contract and a Stage 15 contract for the same live-shell frame instead of asserting only endpoint availability
+      - focused validation run:
+        - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=\"VsmShadowRendererBridgeGpuTest.*AnalyticFloor*\"`
+      - compile verification update on 2026-03-27:
+        - after the bridge test’s DRED diagnostics were rewritten to use the local `LogDredReport(...)` helper instead of the unresolved `oxygen::graphics::d3d12::DebugLayer::PrintDredReport(...)` reference, a full clean rebuild of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` completed successfully
+        - command used: `cmake --build out/build-ninja --config Debug --clean-first --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+        - this confirms the current worktree no longer has the reported bridge-test compile blocker; the remaining failures are runtime/behavioral, not a stale compiler error
+      - runtime root-cause fixes applied on 2026-03-27:
+        - `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`: `SetRenderTargets(...)` was taking the address of a block-local DSV handle and then calling `OMSetRenderTargets(...)` with a dangling pointer; this was a real backend bug and the focused live-shell device removal stopped reproducing after fixing it
+        - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp`: the two-box bridge repro itself had also been allocating transient worlds / draw metadata / per-view bindings before `renderer->BeginOffscreenFrame(...)`, which let `BeginFrameServices(...)` reset the same staging provider and corrupt those uploads before the Stage 12 counted indirect draws; moving the offscreen-frame begin earlier removed that bridge-specific hang path and let the test reach its real functional assertions
+        - `src/Oxygen/Graphics/Direct3D12/Texture.cpp`: typeless depth resources now resolve `TextureViewDescription.format == Format::kUnknown` back to the texture’s typed depth format before creating a DSV, which is required for `R32_TYPELESS` forward / VSM depth resources and matches the existing SRV / RTV fallback behavior
+        - `src/Oxygen/Renderer/Passes/LightCullingPass.cpp`, `src/Oxygen/Renderer/Passes/ScreenHzbBuildPass.cpp`, `src/Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.cpp`, and `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.cpp` now honor `texture.GetDescriptor().initial_state` before falling back to a format-based depth-state heuristic, avoiding the forward renderer `ResourceStateTracker::BeginTrackingResourceState(...)` mismatch where the main scene depth texture was already tracked as `kCommon`
+      - focused validation after those fixes:
+        - `cmake --build out/build-ninja --config Debug --target Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=\"VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes\"`
+        - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 3 --gtest_filter=\"VsmPageRequestGeneratorGpuTest.LightGridPruningKeepsOnlyRequestsForClusterVisibleLocalLights:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellProjectsLocalizedDirectionalMaskForRasterizedCasters:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRemainsStableAcrossManyConsecutiveFrames\"`
+        - pass results after the fixes:
+          - `VsmPageRequestGeneratorGpuTest.LightGridPruningKeepsOnlyRequestsForClusterVisibleLocalLights`
+          - `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellProjectsLocalizedDirectionalMaskForRasterizedCasters`
+          - `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame`
+          - `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRemainsStableAcrossManyConsecutiveFrames`
+      - current result:
+        - the focused two-box live-shell regression no longer device-removes the GPU and now runs through to its real assertions
+        - FAILS at Stage 5, but the failure is now narrow and concrete: the bridge replay and the live shell both publish one unexpected extra request at page-table index `54`; the remaining expected non-zero indices are `6, 7, 22, 23, 39, 40, 55, 56, 69, 70, 71, 72, 73, 85, 86, 87, 88, 89, 104, 105, 106, 121, 122, 137, 138`
+        - FAILS at Stage 15: the live shell still keeps shadowed floor probes fully lit, now reproducing on samples near world-space points `(2.5371408, 0.0, -4.4765062)`, `(2.5846176, 0.0, -4.4486732)`, `(2.6320949, 0.0, -4.4208431)`, and `(2.6795731, 0.0, -4.3930125)` with mask samples of `1.0`
+      - interpretation:
+        - the current live renderer path is still wrong
+        - the hang-class failures that prevented real diagnosis are fixed enough for the focused bridge repro and adjacent GPU regressions to run stably
+        - the remaining functional failure is no longer “no requests at all”; it is now an evidence-backed Stage 5 semantic mismatch (an extra page-table request at `54`) plus a downstream wrong Stage 15 mask for known floor probes
+      - Phase `K-a.6` therefore remains `in_progress`
+    - remaining gap:
+      - continue the stage-by-stage validation sweep from the beginning of the live VSM chain instead of relying on endpoint-only confidence:
+        - Stage 5 now has a real failing live-shell regression, but it still needs to be split into narrower pass-level checks so the exact Stage 5 contract breach is isolated from downstream failures
+        - Stages 6-14 still need equivalent known-input/known-output coverage where current tests are mostly lifecycle, allocation, or metadata oriented
+      - do not count any manual `Virtual Shadow Mask` rerun as completion evidence until the new two-box live-shell regression is green
+      - after the Stage 5+15 live-shell regression is green, rerun the manual `Virtual Shadow Mask` checkpoint against the previously wrong simple directional scene and at least one larger directional scene
+      - if live evidence still disagrees after the new Stage 5-focused fixes, continue auditing the remaining directional projection/routing math used by the full shell instead of adding more synthetic-only endpoint tests
 
 **Recommended implementation order:**
 
@@ -933,10 +985,93 @@ Do not start later tasks by broad codebase exploration alone. Each task above al
 
 **Deliverables:**
 
-- [ ] Wire the directional-light output of `VsmProjectionPass` into the normal forward-lighting shader inputs
-- [ ] Route the directional/sun shadow path in forward lighting through VSM when the VSM policy is selected
-- [ ] Keep the conventional directional path intact when VSM is not selected
+- [x] Wire the directional-light output of `VsmProjectionPass` into the normal forward-lighting shader inputs
+- [x] Route the directional/sun shadow path in forward lighting through VSM when the VSM policy is selected
+- [x] Keep the conventional directional path intact when VSM is not selected
 - [ ] Preserve or improve the existing directional-light diagnostic modes so directional VSM regressions are inspectable in-engine
+
+- [ ] `K-b` Directional-light VSM forward-lighting integration
+  - Primary files:
+    - `src/Oxygen/Renderer/ShadowManager.h`
+    - `src/Oxygen/Renderer/ShadowManager.cpp`
+    - `src/Oxygen/Renderer/Types/ShadowFramePublication.h`
+    - `src/Oxygen/Renderer/Types/VsmFrameBindings.h`
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.h`
+    - `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.cpp`
+    - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/VsmFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+    - `src/Oxygen/Renderer/Test/ShadowManager_policy_test.cpp`
+    - `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp`
+  - Required outcome:
+    - when the renderer directional policy is `vsm`, directional/sun lighting in the normal forward shader consumes a directional-only Stage 15 VSM visibility mask instead of conventional CSM metadata
+    - the Stage 15 diagnostic publication remains available for the existing `Virtual Shadow Mask` debug mode
+    - the conventional directional shadow publication / rasterization / shading path remains unchanged when the renderer directional policy is `conventional`
+    - local-light VSM output is not consumed by the normal forward path until Phase `K-c`
+    - current validated implementation scope is the primary directional candidate only on the VSM policy path; additional directional candidates are still published in candidate order but remain `implementation_kind = kNone` until follow-up work expands multi-directional VSM shading intentionally
+  - Task checklist:
+    - [x] publish a directional-only Stage 15 VSM shadow mask separately from the existing diagnostic screen-shadow mask so `K-b` can route directional lighting without pulling in local-light visibility early
+    - [x] extend the per-view VSM bindings ABI so the forward shader can access both the directional lighting mask and the existing diagnostic mask
+    - [ ] publish directional `ShadowInstanceMetadata` with `implementation_kind = kVirtual` in `LightManager` candidate order when the VSM policy is selected
+    - [x] switch `ShadowManager` view publication to the VSM directional shadow product under the VSM policy and stop relying on conventional directional raster plans on that policy path
+    - [x] route forward directional shadow visibility through the VSM directional mask for `implementation_kind = kVirtual`, while preserving the current conventional path for `implementation_kind = kConventional`
+    - [ ] keep directional debug modes (`DirectLightingFull`, `DirectLightGates`, `DirectBrdfCore`) working and inspectable under both policies
+    - [x] add focused tests for VSM directional publication/routing and the split Stage 15 output contract
+  - Required evidence:
+    - targeted build
+    - focused automated tests for `ShadowManager` directional publication routing
+    - focused GPU tests for the split VSM projection output contract
+    - manual engine validation for both `vsm` and `conventional` directional policies
+  - Validation evidence on 2026-03-27:
+    - code changes landed in:
+      - `src/Oxygen/Renderer/Types/VsmFrameBindings.h`
+      - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/VsmFrameBindings.hlsli`
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.h`
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.cpp`
+      - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmDirectionalProjection.hlsl`
+      - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmLocalLightProjectionPerLight.hlsl`
+      - `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp`
+      - `src/Oxygen/Renderer/ShadowManager.h`
+      - `src/Oxygen/Renderer/ShadowManager.cpp`
+      - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli`
+      - `src/Oxygen/Renderer/Renderer.cpp`
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp`
+      - `src/Oxygen/Renderer/Test/ShadowManager_policy_test.cpp`
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp`
+    - targeted build:
+      - `cmake --build out/build-ninja --config Debug --target oxygen-examples-renderscene Oxygen.Renderer.ShadowManagerPolicy.Tests Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests --parallel 8`
+    - focused automated tests:
+      - `out\build-ninja\bin\Debug\Oxygen.Renderer.ShadowManagerPolicy.Tests.exe -v 9 --gtest_filter="ShadowManagerPolicyTest.ConventionalPolicyPublishesConventionalDirectionalProductsAndRasterPlan:ShadowManagerPolicyTest.VsmPublishCapturesPerViewInputsIntoPreparedState"`
+      - `out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter="VsmProjectionPassGpuTest.DirectionalProjectionPassBuildsScreenShadowMaskFromMappedVirtualPage:VsmProjectionPassGpuTest.LocalProjectionPerLightPassBuildsScreenShadowMaskFromMappedVirtualPage:VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellRunsStageSixThroughProjectionAndExtractsReadyFrame"`
+      - `out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassMapsDistinctPagesToExpectedScreenQuadrants`
+      - `out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassSamplesNonZeroClipLevelWhenProjectionCarriesFullLevelCount`
+      - `out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmShadowRasterizerPassGpuTest.PrepareResourcesBuildsPreparedPagesAndRegistersPass:VsmShadowRasterizerPassGpuTest.ExecuteCompactsOpaqueShadowCasterDrawsPerPageAndRasterizesExpectedPages:VsmShadowRasterizerPassGpuTest.ExecuteRoutesSharedMapPointLightFacesToMatchingProjectionView`
+    - invalidated manual evidence:
+      - the earlier manual claim that the `Virtual Shadow Mask` diagnostic matched the visible sun-shadow pattern was wrong and must not be counted
+      - the corresponding manual claim that the forward VSM directional result was therefore correct must also not be counted
+    - root-cause correction landed:
+      - the live renderer directional projection-record builder in `src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp` had been publishing `level_count = 1` even for higher directional clip levels, while the tested projection-record contract and Stage 15 helper path require the full clipmap level count so non-zero directional clip levels remain valid during sampling
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp` now asserts the live extracted directional projection records carry a level count greater than their clipmap level
+      - `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp` now applies the same directional shadow raster depth-bias policy as the conventional directional path instead of inheriting zero-bias `DepthPrePass` defaults, because the user-provided live capture still showed a semantically wrong Stage 15 mask and matching wrong forward VSM shadows after the `level_count` fix
+    - corrected status on 2026-03-27 after renewed user feedback:
+      - the `level_count` correction above was necessary but not sufficient; live engine output still showed a semantically wrong directional mask and correspondingly wrong forward VSM shadows
+      - the earlier Stage 15 directional tests were not strong enough to refute that live evidence because they did not validate multi-page directional projection against a known expected mask footprint
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmProjectionPass_test.cpp` now provides that stronger multi-page directional regression, and `src/Oxygen/Renderer/Test/VirtualShadow/VsmPageRequestGeneratorPass_test.cpp` now provides the matching stronger Stage 5 multi-page request-footprint regression, but those isolated tests still do not cover the full renderer-owned shell
+      - `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp` now contains the first real live-shell directional regression for this bug class, `ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`, and it currently FAILS in the full shell with:
+        - Stage 5 request flags mismatch (`actual non-zero flags: <none>`)
+        - Stage 15 shadowed floor probes still lit
+  - Remaining gap before Phase `K-b` can be checked complete:
+    - fix the failing full-shell Stage 5 regression before treating any Stage 15 or forward-lighting result as trustworthy
+    - continue the stage-by-stage validation sweep so the live directional path is covered by expectation-driven regressions from Stage 5 through Stage 15, not only by endpoint or lifecycle checks
+    - only after the new two-box live-shell regression is green, rerun and record the previously wrong simple directional scene plus a larger directional scene to confirm the Stage 15 directional mask and forward VSM shadows now match expected lighting
+    - if live evidence still disagrees after the Stage 5-focused fixes, continue auditing the remaining directional projection/routing math instead of reopening synthetic-only test loops
+    - expand or explicitly approve the current primary-directional-only VSM publication behavior if multi-directional VSM shading is required for this phase
+    - run/record an explicit manual checkpoint for directional debug modes under both `vsm` and `conventional` directional policies
+  - Stop condition:
+    - with `--directional-shadows vsm`, the normal forward result shows directional/sun shadows from VSM rather than only through the diagnostic view
+    - with `--directional-shadows conventional`, the existing directional result remains intact
+    - `Virtual Shadow Mask` remains available as a diagnostic and Phase `K-c` remains the first phase allowed to consume local-light VSM output in normal forward shading
 
 **Dependencies:** Phase K-a
 

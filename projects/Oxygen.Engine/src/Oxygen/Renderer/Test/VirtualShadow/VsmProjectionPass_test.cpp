@@ -13,7 +13,9 @@
 #include <string_view>
 #include <vector>
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Testing/GTest.h>
@@ -131,6 +133,35 @@ protected:
     };
   }
 
+  [[nodiscard]] static auto MakeShadowPoolConfig(const std::uint32_t page_size,
+    const std::uint32_t physical_tile_capacity, const char* debug_name)
+    -> VsmPhysicalPoolConfig
+  {
+    return VsmPhysicalPoolConfig {
+      .page_size_texels = page_size,
+      .physical_tile_capacity = physical_tile_capacity,
+      .array_slice_count = 1U,
+      .depth_format = Format::kDepth32,
+      .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth },
+      .debug_name = debug_name,
+    };
+  }
+
+  [[nodiscard]] static auto MakeStaticDynamicShadowPoolConfig(
+    const std::uint32_t page_size, const std::uint32_t physical_tile_capacity,
+    const char* debug_name) -> VsmPhysicalPoolConfig
+  {
+    return VsmPhysicalPoolConfig {
+      .page_size_texels = page_size,
+      .physical_tile_capacity = physical_tile_capacity,
+      .array_slice_count = 2U,
+      .depth_format = Format::kDepth32,
+      .slice_roles = { VsmPhysicalPoolSliceRole::kDynamicDepth,
+        VsmPhysicalPoolSliceRole::kStaticDepth },
+      .debug_name = debug_name,
+    };
+  }
+
   static auto CommitFrame(VsmCacheManager& manager)
     -> const VsmPageAllocationFrame&
   {
@@ -140,9 +171,24 @@ protected:
 
   [[nodiscard]] static auto MakeDirectionalFrame(
     const std::uint64_t frame_generation, const std::uint32_t first_virtual_id,
-    const char* frame_name)
+    const char* frame_name, const std::uint32_t clip_level_count = 1U,
+    const std::uint32_t pages_per_axis = 1U)
     -> oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame
   {
+    auto page_grid_origin = std::vector<glm::ivec2>(clip_level_count);
+    auto page_world_size = std::vector<float> {};
+    auto near_depth = std::vector<float> {};
+    auto far_depth = std::vector<float> {};
+    page_world_size.reserve(clip_level_count);
+    near_depth.reserve(clip_level_count);
+    far_depth.reserve(clip_level_count);
+    for (std::uint32_t clip_level = 0U; clip_level < clip_level_count;
+      ++clip_level) {
+      page_world_size.push_back(1.0F + static_cast<float>(clip_level));
+      near_depth.push_back(static_cast<float>(clip_level));
+      far_depth.push_back(static_cast<float>(clip_level + 1U));
+    }
+
     auto address_space = VsmVirtualAddressSpace {};
     address_space.BeginFrame(
       VsmVirtualAddressSpaceConfig {
@@ -152,33 +198,70 @@ protected:
       frame_generation);
     address_space.AllocateDirectionalClipmap(VsmDirectionalClipmapDesc {
       .remap_key = "directional-0",
-      .clip_level_count = 1U,
-      .pages_per_axis = 1U,
-      .page_grid_origin = { glm::ivec2 { 0, 0 } },
-      .page_world_size = { 1.0F },
-      .near_depth = { 0.0F },
-      .far_depth = { 1.0F },
+      .clip_level_count = clip_level_count,
+      .pages_per_axis = pages_per_axis,
+      .page_grid_origin = std::move(page_grid_origin),
+      .page_world_size = std::move(page_world_size),
+      .near_depth = std::move(near_depth),
+      .far_depth = std::move(far_depth),
       .debug_name = "directional-0",
     });
     return address_space.DescribeFrame();
   }
 
   [[nodiscard]] static auto MakeDirectionalProjectionRecord(
-    const oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame& frame)
+    const oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame& frame,
+    const std::uint32_t clip_level = 0U)
     -> VsmPageRequestProjection
   {
     const auto& layout = frame.directional_layouts[0];
+    CHECK_LT_F(clip_level, layout.clip_level_count,
+      "directional clip level {} exceeds layout clip level count {}",
+      clip_level, layout.clip_level_count);
     return VsmPageRequestProjection {
       .projection = VsmProjectionData {
         .view_matrix = glm::mat4 { 1.0F },
         .projection_matrix = glm::mat4 { 1.0F },
         .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 0.0F },
         .clipmap_corner_offset = { 0, 0 },
-        .clipmap_level = 0U,
+        .clipmap_level = clip_level,
         .light_type = static_cast<std::uint32_t>(
           VsmProjectionLightType::kDirectional),
       },
-      .map_id = layout.first_id,
+      .map_id = layout.first_id + clip_level,
+      .first_page_table_entry = layout.first_page_table_entry,
+      .map_pages_x = layout.pages_per_axis,
+      .map_pages_y = layout.pages_per_axis,
+      .pages_x = layout.pages_per_axis,
+      .pages_y = layout.pages_per_axis,
+      .page_offset_x = 0U,
+      .page_offset_y = 0U,
+      .level_count = layout.clip_level_count,
+      .coarse_level = 0U,
+    };
+  }
+
+  [[nodiscard]] static auto MakeDirectionalProjectionRecordWithMatrices(
+    const oxygen::renderer::vsm::VsmVirtualAddressSpaceFrame& frame,
+    const glm::mat4& view_matrix, const glm::mat4& projection_matrix,
+    const glm::ivec2 clipmap_corner_offset,
+    const std::uint32_t clip_level = 0U) -> VsmPageRequestProjection
+  {
+    const auto& layout = frame.directional_layouts[0];
+    CHECK_LT_F(clip_level, layout.clip_level_count,
+      "directional clip level {} exceeds layout clip level count {}",
+      clip_level, layout.clip_level_count);
+    return VsmPageRequestProjection {
+      .projection = VsmProjectionData {
+        .view_matrix = view_matrix,
+        .projection_matrix = projection_matrix,
+        .view_origin_ws_pad = { 0.0F, 0.0F, 0.0F, 0.0F },
+        .clipmap_corner_offset = clipmap_corner_offset,
+        .clipmap_level = clip_level,
+        .light_type = static_cast<std::uint32_t>(
+          VsmProjectionLightType::kDirectional),
+      },
+      .map_id = layout.first_id + clip_level,
       .first_page_table_entry = layout.first_page_table_entry,
       .map_pages_x = layout.pages_per_axis,
       .map_pages_y = layout.pages_per_axis,
@@ -229,6 +312,7 @@ protected:
     desc.texture_type = TextureType::kTexture2D;
     desc.is_shader_resource = true;
     desc.is_render_target = true;
+    desc.is_typeless = true;
     desc.use_clear_value = true;
     desc.clear_value = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
     desc.initial_state = ResourceStates::kCommon;
@@ -298,7 +382,8 @@ protected:
   }
 
   auto UploadShadowSlice(const std::shared_ptr<const Texture>& texture,
-    const std::vector<float>& values, std::string_view debug_name) -> void
+    const std::vector<float>& values, std::string_view debug_name,
+    const std::uint32_t array_slice = 0U) -> void
   {
     CHECK_NOTNULL_F(texture.get(), "Cannot upload into a null shadow texture");
     const auto width = texture->GetDescriptor().width;
@@ -352,7 +437,13 @@ protected:
             .height = height,
             .depth = 1U,
             .mip_level = 0U,
-            .array_slice = 0U,
+             .array_slice = array_slice,
+           },
+          .dst_subresources = {
+            .base_mip_level = 0U,
+            .num_mip_levels = 1U,
+            .base_array_slice = array_slice,
+            .num_array_slices = 1U,
           },
         },
         *writable_texture);
@@ -509,13 +600,410 @@ NOLINT_TEST_F(VsmProjectionPassGpuTest,
 
   const auto output = pass.GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
+  ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
   ASSERT_NE(output.shadow_mask_texture, nullptr);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 1U,
+                "phase-i-directional-directional-left"),
+    0.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 1U,
+                "phase-i-directional-directional-right"),
+    1.0F, 1.0e-4F);
   EXPECT_NEAR(ReadOutputTexel(
                 output.shadow_mask_texture, 0U, 1U, "phase-i-directional-left"),
     0.0F, 1.0e-4F);
   EXPECT_NEAR(ReadOutputTexel(output.shadow_mask_texture, 3U, 1U,
                 "phase-i-directional-right"),
     1.0F, 1.0e-4F);
+}
+
+NOLINT_TEST_F(VsmProjectionPassGpuTest,
+  DirectionalProjectionPassMapsDistinctPagesToExpectedScreenQuadrants)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeShadowPoolConfig(
+              4U, 4U, "phase-i-directional-quadrants-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto virtual_frame = MakeDirectionalFrame(
+    9ULL, 29U, "phase-i-directional-quadrants-frame", 1U, 2U);
+  auto manager = VsmCacheManager(&Backend());
+  manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
+    VsmCacheManagerFrameConfig {
+      .debug_name = "phase-i-directional-quadrants-frame",
+    });
+  static_cast<void>(CommitFrame(manager));
+  manager.PublishProjectionRecords(std::array {
+    MakeDirectionalProjectionRecord(virtual_frame),
+  });
+  auto frame = *manager.GetCurrentFrame();
+
+  ASSERT_GE(frame.snapshot.page_table.size(), 4U);
+  frame.snapshot.page_table[0] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 0U },
+  };
+  frame.snapshot.page_table[1] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 1U },
+  };
+  frame.snapshot.page_table[2] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 2U },
+  };
+  frame.snapshot.page_table[3] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 3U },
+  };
+
+  auto shader_page_table = std::vector<VsmShaderPageTableEntry>(
+    frame.snapshot.page_table.size(), MakeUnmappedShaderPageTableEntry());
+  shader_page_table[0]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 0U });
+  shader_page_table[1]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 1U });
+  shader_page_table[2]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 2U });
+  shader_page_table[3]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 3U });
+  UploadBufferBytes(std::const_pointer_cast<Buffer>(frame.page_table_buffer),
+    shader_page_table.data(),
+    shader_page_table.size() * sizeof(VsmShaderPageTableEntry),
+    "phase-i-directional-quadrants.page-table");
+
+  auto depth_texture
+    = CreateDepthTexture(4U, 4U, "phase-i-directional-quadrants.depth");
+  UploadDepth(depth_texture, std::vector<float>(16U, 0.5F),
+    "phase-i-directional-quadrants.depth");
+  UploadShadowSlice(pool_manager.GetShadowPoolSnapshot().shadow_texture,
+    {
+      0.25F, 0.25F, 0.25F, 0.25F, 0.75F, 0.75F, 0.75F, 0.75F,
+      0.25F, 0.25F, 0.25F, 0.25F, 0.75F, 0.75F, 0.75F, 0.75F,
+      0.25F, 0.25F, 0.25F, 0.25F, 0.75F, 0.75F, 0.75F, 0.75F,
+      0.25F, 0.25F, 0.25F, 0.25F, 0.75F, 0.75F, 0.75F, 0.75F,
+      0.75F, 0.75F, 0.75F, 0.75F, 0.25F, 0.25F, 0.25F, 0.25F,
+      0.75F, 0.75F, 0.75F, 0.75F, 0.25F, 0.25F, 0.25F, 0.25F,
+      0.75F, 0.75F, 0.75F, 0.75F, 0.25F, 0.25F, 0.25F, 0.25F,
+      0.75F, 0.75F, 0.75F, 0.75F, 0.25F, 0.25F, 0.25F, 0.25F,
+    },
+    "phase-i-directional-quadrants.shadow");
+
+  auto pass = VsmProjectionPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
+      .debug_name = "phase-i-directional-quadrants-pass",
+    }));
+  ExecutePass(pass,
+    VsmProjectionPassInput {
+      .frame = frame,
+      .physical_pool = pool_manager.GetShadowPoolSnapshot(),
+      .scene_depth_texture = depth_texture,
+    },
+    "phase-i-directional-quadrants-pass");
+
+  const auto output = pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(output.available);
+  ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
+  ASSERT_NE(output.shadow_mask_texture, nullptr);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 0U,
+                "phase-i-directional-quadrants.top-left"),
+    0.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 0U,
+                "phase-i-directional-quadrants.top-right"),
+    1.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 3U,
+                "phase-i-directional-quadrants.bottom-left"),
+    1.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 3U,
+                "phase-i-directional-quadrants.bottom-right"),
+    0.0F, 1.0e-4F);
+}
+
+NOLINT_TEST_F(VsmProjectionPassGpuTest,
+  DirectionalProjectionPassSamplesMappedPhysicalSliceInsteadOfGlobalDynamicSlice)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeStaticDynamicShadowPoolConfig(
+              4U, 2U, "phase-i-directional-static-slice-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto virtual_frame = MakeDirectionalFrame(
+    11ULL, 41U, "phase-i-directional-static-slice-frame");
+  auto manager = VsmCacheManager(&Backend());
+  manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
+    VsmCacheManagerFrameConfig {
+      .debug_name = "phase-i-directional-static-slice-frame",
+    });
+  static_cast<void>(CommitFrame(manager));
+  manager.PublishProjectionRecords(std::array {
+    MakeDirectionalProjectionRecord(virtual_frame),
+  });
+  auto frame = *manager.GetCurrentFrame();
+
+  ASSERT_FALSE(frame.snapshot.page_table.empty());
+  frame.snapshot.page_table[0] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 1U },
+  };
+  auto shader_page_table = std::vector<VsmShaderPageTableEntry>(
+    frame.snapshot.page_table.size(), MakeUnmappedShaderPageTableEntry());
+  shader_page_table[0]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 1U });
+  UploadBufferBytes(std::const_pointer_cast<Buffer>(frame.page_table_buffer),
+    shader_page_table.data(),
+    shader_page_table.size() * sizeof(VsmShaderPageTableEntry),
+    "phase-i-directional-static-slice.page-table");
+
+  auto depth_texture
+    = CreateDepthTexture(4U, 4U, "phase-i-directional-static-slice.depth");
+  UploadDepth(depth_texture, std::vector<float>(16U, 0.5F),
+    "phase-i-directional-static-slice.depth");
+  UploadShadowSlice(pool_manager.GetShadowPoolSnapshot().shadow_texture,
+    std::vector<float>(16U, 0.0F),
+    "phase-i-directional-static-slice.shadow-dynamic", 0U);
+  UploadShadowSlice(pool_manager.GetShadowPoolSnapshot().shadow_texture,
+    std::vector<float>(16U, 1.0F),
+    "phase-i-directional-static-slice.shadow-static", 1U);
+
+  auto pass = VsmProjectionPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
+      .debug_name = "phase-i-directional-static-slice-pass",
+    }));
+  ExecutePass(pass,
+    VsmProjectionPassInput {
+      .frame = frame,
+      .physical_pool = pool_manager.GetShadowPoolSnapshot(),
+      .scene_depth_texture = depth_texture,
+    },
+    "phase-i-directional-static-slice-pass");
+
+  const auto output = pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(output.available);
+  ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
+  ASSERT_NE(output.shadow_mask_texture, nullptr);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 1U, 1U,
+                "phase-i-directional-static-slice.directional"),
+    1.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.shadow_mask_texture, 1U, 1U,
+                "phase-i-directional-static-slice.composite"),
+    1.0F, 1.0e-4F);
+}
+
+NOLINT_TEST_F(VsmProjectionPassGpuTest,
+  DirectionalProjectionPassSamplesNonZeroClipLevelWhenProjectionCarriesFullLevelCount)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(
+              MakeSmallShadowPoolConfig("phase-i-directional-clip1-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto virtual_frame = MakeDirectionalFrame(
+    3ULL, 19U, "phase-i-directional-clip1-frame", 2U);
+  auto manager = VsmCacheManager(&Backend());
+  manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
+    VsmCacheManagerFrameConfig { .debug_name = "phase-i-directional-clip1-frame" });
+  static_cast<void>(CommitFrame(manager));
+  manager.PublishProjectionRecords(std::array {
+    MakeDirectionalProjectionRecord(virtual_frame, 1U),
+  });
+  auto frame = *manager.GetCurrentFrame();
+
+  const auto& layout = virtual_frame.directional_layouts[0];
+  const auto second_level_page_table_index
+    = layout.first_page_table_entry + layout.pages_per_axis * layout.pages_per_axis;
+  ASSERT_LT(second_level_page_table_index, frame.snapshot.page_table.size());
+  frame.snapshot.page_table[second_level_page_table_index] = {
+    .is_mapped = true,
+    .physical_page = VsmPhysicalPageIndex { .value = 0U },
+  };
+  auto shader_page_table = std::vector<VsmShaderPageTableEntry>(
+    frame.snapshot.page_table.size(), MakeUnmappedShaderPageTableEntry());
+  shader_page_table[second_level_page_table_index]
+    = MakeMappedShaderPageTableEntry(VsmPhysicalPageIndex { .value = 0U });
+  UploadBufferBytes(std::const_pointer_cast<Buffer>(frame.page_table_buffer),
+    shader_page_table.data(),
+    shader_page_table.size() * sizeof(VsmShaderPageTableEntry),
+    "phase-i-directional-clip1.page-table");
+
+  auto depth_texture
+    = CreateDepthTexture(4U, 4U, "phase-i-directional-clip1.depth");
+  UploadDepth(depth_texture, std::vector<float>(16U, 0.5F),
+    "phase-i-directional-clip1.depth");
+  UploadShadowSlice(pool_manager.GetShadowPoolSnapshot().shadow_texture,
+    {
+      0.25F,
+      0.25F,
+      0.75F,
+      0.75F,
+      0.25F,
+      0.25F,
+      0.75F,
+      0.75F,
+      0.25F,
+      0.25F,
+      0.75F,
+      0.75F,
+      0.25F,
+      0.25F,
+      0.75F,
+      0.75F,
+    },
+    "phase-i-directional-clip1.shadow");
+
+  auto pass = VsmProjectionPass(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
+      .debug_name = "phase-i-directional-clip1-pass",
+    }));
+  ExecutePass(pass,
+    VsmProjectionPassInput {
+      .frame = frame,
+      .physical_pool = pool_manager.GetShadowPoolSnapshot(),
+      .scene_depth_texture = depth_texture,
+    },
+    "phase-i-directional-clip1-pass");
+
+  const auto output = pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(output.available);
+  ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
+  ASSERT_NE(output.shadow_mask_texture, nullptr);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 1U,
+                "phase-i-directional-clip1-directional-left"),
+    0.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 1U,
+                "phase-i-directional-clip1-directional-right"),
+    1.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(
+                output.shadow_mask_texture, 0U, 1U, "phase-i-directional-clip1-left"),
+    0.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.shadow_mask_texture, 3U, 1U,
+                "phase-i-directional-clip1-right"),
+    1.0F, 1.0e-4F);
+}
+
+NOLINT_TEST_F(VsmProjectionPassGpuTest,
+  DirectionalProjectionPassPreservesOverlapAcrossPageAlignedPan)
+{
+  auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
+  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeShadowPoolConfig(
+              4U, 4U, "phase-i-directional-pan-shadow")),
+    VsmPhysicalPoolChangeResult::kCreated);
+
+  const auto virtual_frame
+    = MakeDirectionalFrame(13ULL, 61U, "phase-i-directional-pan-frame", 1U, 2U);
+
+  auto build_frame = [&](const VsmPageRequestProjection& projection,
+                       const std::array<std::uint32_t, 4U>& physical_pages,
+                       std::string_view debug_name) {
+    auto manager = VsmCacheManager(&Backend());
+    manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
+      VsmCacheManagerFrameConfig { .debug_name = std::string(debug_name) });
+    static_cast<void>(CommitFrame(manager));
+    manager.PublishProjectionRecords(std::array { projection });
+    auto frame = *manager.GetCurrentFrame();
+
+    CHECK_GE_F(frame.snapshot.page_table.size(), physical_pages.size(),
+      "directional pan test requires at least {} page-table entries, got {}",
+      physical_pages.size(), frame.snapshot.page_table.size());
+    auto shader_page_table = std::vector<VsmShaderPageTableEntry>(
+      frame.snapshot.page_table.size(), MakeUnmappedShaderPageTableEntry());
+    for (std::uint32_t index = 0U; index < physical_pages.size(); ++index) {
+      frame.snapshot.page_table[index] = {
+        .is_mapped = true,
+        .physical_page = VsmPhysicalPageIndex { .value = physical_pages[index] },
+      };
+      shader_page_table[index] = MakeMappedShaderPageTableEntry(
+        VsmPhysicalPageIndex { .value = physical_pages[index] });
+    }
+    UploadBufferBytes(std::const_pointer_cast<Buffer>(frame.page_table_buffer),
+      shader_page_table.data(),
+      shader_page_table.size() * sizeof(VsmShaderPageTableEntry),
+      std::string(debug_name) + ".page-table");
+    return frame;
+  };
+
+  auto build_shadow_values = [&]() {
+    auto values = std::vector<float>(64U, 1.0F);
+    constexpr std::uint32_t kTileSize = 4U;
+    constexpr std::uint32_t kAtlasWidth = 8U;
+    for (std::uint32_t tile_y = 0U; tile_y < 2U; ++tile_y) {
+      for (std::uint32_t tile_x = 0U; tile_x < 2U; ++tile_x) {
+        const auto value = tile_x == 0U ? 0.25F : 0.75F;
+        for (std::uint32_t y = 0U; y < kTileSize; ++y) {
+          for (std::uint32_t x = 0U; x < kTileSize; ++x) {
+            const auto atlas_x = tile_x * kTileSize + x;
+            const auto atlas_y = tile_y * kTileSize + y;
+            values[atlas_y * kAtlasWidth + atlas_x] = value;
+          }
+        }
+      }
+    }
+    return values;
+  };
+
+  auto sample_mask = [&](const VsmPageAllocationFrame& frame,
+                       std::string_view debug_name) {
+    auto depth_texture
+      = CreateDepthTexture(4U, 4U, std::string(debug_name) + ".depth");
+    UploadDepth(depth_texture, std::vector<float>(16U, 0.5F),
+      std::string(debug_name) + ".depth");
+    UploadShadowSlice(pool_manager.GetShadowPoolSnapshot().shadow_texture,
+      build_shadow_values(), std::string(debug_name) + ".shadow");
+
+    auto pass = VsmProjectionPass(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      std::make_shared<VsmProjectionPassConfig>(VsmProjectionPassConfig {
+        .debug_name = std::string(debug_name),
+      }));
+    ExecutePass(pass,
+      VsmProjectionPassInput {
+        .frame = frame,
+        .physical_pool = pool_manager.GetShadowPoolSnapshot(),
+        .scene_depth_texture = depth_texture,
+      },
+      debug_name);
+
+    const auto output = pass.GetCurrentOutput(kTestViewId);
+    EXPECT_TRUE(output.available);
+    EXPECT_NE(output.directional_shadow_mask_texture, nullptr);
+    return std::array<float, 4U> {
+      ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 0U,
+        std::string(debug_name) + ".x0y0"),
+      ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 0U,
+        std::string(debug_name) + ".x3y0"),
+      ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 3U,
+        std::string(debug_name) + ".x0y3"),
+      ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 3U,
+        std::string(debug_name) + ".x3y3"),
+    };
+  };
+
+  const auto base_projection = MakeDirectionalProjectionRecordWithMatrices(
+    virtual_frame, glm::mat4 { 1.0F }, glm::mat4 { 1.0F }, { 0, 0 });
+  const auto panned_projection = MakeDirectionalProjectionRecordWithMatrices(
+    virtual_frame,
+    glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -1.0F, 0.0F, 0.0F }),
+    glm::mat4 { 1.0F }, { 1, 0 });
+
+  const auto base_frame = build_frame(
+    base_projection, { 0U, 1U, 2U, 3U }, "phase-i-directional-pan.base");
+  const auto panned_frame = build_frame(
+    panned_projection, { 1U, 0U, 3U, 2U }, "phase-i-directional-pan.panned");
+
+  const auto base_samples
+    = sample_mask(base_frame, "phase-i-directional-pan.base");
+  const auto panned_samples
+    = sample_mask(panned_frame, "phase-i-directional-pan.panned");
+
+  EXPECT_NEAR(base_samples[0], 0.0F, 1.0e-4F);
+  EXPECT_NEAR(base_samples[1], 1.0F, 1.0e-4F);
+  EXPECT_NEAR(base_samples[2], 0.0F, 1.0e-4F);
+  EXPECT_NEAR(base_samples[3], 1.0F, 1.0e-4F);
+
+  EXPECT_NEAR(panned_samples[0], 1.0F, 1.0e-4F);
+  EXPECT_NEAR(panned_samples[1], 1.0F, 1.0e-4F);
+  EXPECT_NEAR(panned_samples[2], 1.0F, 1.0e-4F);
+  EXPECT_NEAR(panned_samples[3], 1.0F, 1.0e-4F);
 }
 
 NOLINT_TEST_F(VsmProjectionPassGpuTest,
@@ -599,7 +1087,14 @@ NOLINT_TEST_F(VsmProjectionPassGpuTest,
 
   const auto output = pass.GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
+  ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
   ASSERT_NE(output.shadow_mask_texture, nullptr);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 0U, 1U,
+                "phase-i-local-directional-left"),
+    1.0F, 1.0e-4F);
+  EXPECT_NEAR(ReadOutputTexel(output.directional_shadow_mask_texture, 3U, 1U,
+                "phase-i-local-directional-right"),
+    1.0F, 1.0e-4F);
   EXPECT_NEAR(
     ReadOutputTexel(output.shadow_mask_texture, 0U, 1U, "phase-i-local-left"),
     0.0F, 1.0e-4F);

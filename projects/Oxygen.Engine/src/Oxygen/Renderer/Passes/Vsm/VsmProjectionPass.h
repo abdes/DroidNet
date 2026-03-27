@@ -53,6 +53,10 @@ public:
   using Config = VsmProjectionPassConfig;
 
   struct ViewOutput {
+    std::shared_ptr<const graphics::Texture> directional_shadow_mask_texture {};
+    ShaderVisibleIndex directional_shadow_mask_srv_index {
+      kInvalidShaderVisibleIndex
+    };
     std::shared_ptr<const graphics::Texture> shadow_mask_texture {};
     ShaderVisibleIndex shadow_mask_srv_index { kInvalidShaderVisibleIndex };
     std::uint32_t width { 0U };

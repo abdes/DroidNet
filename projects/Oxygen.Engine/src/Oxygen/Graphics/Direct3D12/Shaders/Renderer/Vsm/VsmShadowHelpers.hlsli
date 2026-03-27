@@ -15,6 +15,7 @@ struct VsmProjectedShadowSample
     float2 atlas_uv;
     float receiver_depth;
     uint physical_page_index;
+    uint atlas_slice;
     bool valid;
 };
 
@@ -30,6 +31,7 @@ static bool VsmTryProjectMappedSample(
     sample.atlas_uv = 0.0.xx;
     sample.receiver_depth = 1.0;
     sample.physical_page_index = 0u;
+    sample.atlas_slice = 0u;
     sample.valid = false;
 
     if (projection.map_id == 0u || projection.pages_x == 0u || projection.pages_y == 0u
@@ -81,6 +83,7 @@ static bool VsmTryProjectMappedSample(
 
     const uint physical_page_index = VsmDecodePageTablePhysicalPage(entry);
     const uint tiles_per_slice = tiles_per_axis * tiles_per_axis;
+    const uint atlas_slice = physical_page_index / tiles_per_slice;
     const uint in_slice_index = physical_page_index % tiles_per_slice;
     const uint tile_x = in_slice_index % tiles_per_axis;
     const uint tile_y = in_slice_index / tiles_per_axis;
@@ -93,6 +96,7 @@ static bool VsmTryProjectMappedSample(
         + page_uv * (float)page_size_texels) / atlas_extent;
     sample.receiver_depth = ndc.z;
     sample.physical_page_index = physical_page_index;
+    sample.atlas_slice = atlas_slice;
     sample.valid = true;
     return true;
 }
