@@ -51,6 +51,7 @@ public:
   enum class IndirectCommandLayout : uint8_t {
     kDraw,
     kDrawWithRootConstant,
+    kDispatch,
   };
 
   //=== Lifecycle ===-------------------------------------------------------//
