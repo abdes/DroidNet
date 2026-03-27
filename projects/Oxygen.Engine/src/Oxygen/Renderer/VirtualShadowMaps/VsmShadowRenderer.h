@@ -96,10 +96,21 @@ public:
     bool has_virtual_shadow_work { false };
   };
 
+  struct PreparedViewProducts {
+    VsmVirtualAddressSpaceFrame virtual_frame {};
+    VsmCacheManagerSeam seam {};
+    std::vector<VsmPageRequestProjection> projection_records {};
+  };
+
   OXGN_RNDR_API VsmShadowRenderer(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> inline_transfers,
     oxygen::ShadowQualityTier quality_tier);
+  OXGN_RNDR_API VsmShadowRenderer(observer_ptr<Graphics> gfx,
+    observer_ptr<ProviderT> staging_provider,
+    observer_ptr<CoordinatorT> inline_transfers,
+    oxygen::ShadowQualityTier quality_tier,
+    VsmCacheManagerConfig cache_manager_config);
   OXGN_RNDR_API ~VsmShadowRenderer();
 
   OXYGEN_MAKE_NON_COPYABLE(VsmShadowRenderer)
@@ -130,6 +141,8 @@ public:
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetPreparedViewState(
     ViewId view_id) const noexcept -> const PreparedViewState*;
+  [[nodiscard]] OXGN_RNDR_API auto BuildPreparedViewProducts(ViewId view_id)
+    -> std::optional<PreparedViewProducts>;
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetCacheManager() noexcept
     -> VsmCacheManager&;

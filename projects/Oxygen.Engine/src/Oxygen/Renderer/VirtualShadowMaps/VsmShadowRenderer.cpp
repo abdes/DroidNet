@@ -410,8 +410,7 @@ namespace {
       context.near_depth += std::max(0.0F, -context.near_corners_vs[i].z);
       context.far_depth += std::max(0.0F, -context.far_corners_vs[i].z);
     }
-    context.near_depth
-      /= static_cast<float>(context.near_corners_vs.size());
+    context.near_depth /= static_cast<float>(context.near_corners_vs.size());
     context.far_depth /= static_cast<float>(context.far_corners_vs.size());
 
     if (context.far_depth <= context.near_depth + kMinCascadeSpan) {
@@ -434,8 +433,7 @@ namespace {
       = std::abs(glm::dot(light_dir_to_light, glm::vec3(0.0F, 0.0F, 1.0F)))
         > 0.95F
       ? glm::vec3(1.0F, 0.0F, 0.0F)
-      : NormalizeOrFallback(
-          candidate.basis_up_ws, glm::vec3(0.0F, 0.0F, 1.0F));
+      : NormalizeOrFallback(candidate.basis_up_ws, glm::vec3(0.0F, 0.0F, 1.0F));
     const auto light_rotation
       = BuildDirectionalLightRotation(light_dir_to_surface, world_up);
 
@@ -463,10 +461,10 @@ namespace {
       candidate, clip_index, prev_depth, frustum.near_depth, frustum.far_depth);
     const auto depth_range
       = std::max(frustum.far_depth - frustum.near_depth, kMinCascadeSpan);
-    const auto t0 = std::clamp(
-      (prev_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
-    const auto t1 = std::clamp(
-      (end_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
+    const auto t0
+      = std::clamp((prev_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
+    const auto t1
+      = std::clamp((end_depth - frustum.near_depth) / depth_range, 0.0F, 1.0F);
 
     std::array<glm::vec3, 8> slice_corners_ws {};
     std::array<glm::vec3, 8> slice_corners_vs {};
@@ -505,9 +503,9 @@ namespace {
       base_half_extent, light_context.shadow_resolution);
     const auto slice_center_ls = glm::vec3(
       light_context.light_rotation * glm::vec4(slice_center_ws, 1.0F));
-    const auto snapped_center_ls = SnapLightSpaceCenter(slice_center_ls,
-      padded_half_extent_x, padded_half_extent_y,
-      light_context.shadow_resolution);
+    const auto snapped_center_ls
+      = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
+        padded_half_extent_y, light_context.shadow_resolution);
     const auto snapped_center_ws = glm::vec3(
       light_context.inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
 
@@ -538,10 +536,8 @@ namespace {
     const auto light_view
       = glm::lookAtRH(light_eye, snapped_center_ws, light_context.world_up);
 
-    auto max_depth
-      = -(pullback_extent + kLightPullbackPadding) + sphere_radius;
-    auto min_depth
-      = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
+    auto max_depth = -(pullback_extent + kLightPullbackPadding) + sphere_radius;
+    auto min_depth = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
     static_cast<void>(TightenDepthRangeWithShadowCasters(
       prepared_view.shadow_caster_bounds, light_view, padded_half_extent_x,
       padded_half_extent_y, min_depth, max_depth));
@@ -551,9 +547,9 @@ namespace {
     const auto near_plane = std::max(0.1F, -max_depth - depth_padding);
     const auto far_plane
       = std::max(near_plane + 1.0F, -min_depth + depth_padding);
-    const auto light_projection = glm::orthoRH_ZO(-padded_half_extent_x,
-      padded_half_extent_x, -padded_half_extent_y, padded_half_extent_y,
-      near_plane, far_plane);
+    const auto light_projection
+      = glm::orthoRH_ZO(-padded_half_extent_x, padded_half_extent_x,
+        -padded_half_extent_y, padded_half_extent_y, near_plane, far_plane);
 
     return DirectionalClipLevelState {
       .light_view = light_view,
@@ -1091,13 +1087,22 @@ VsmShadowRenderer::VsmShadowRenderer(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> staging_provider,
   const observer_ptr<CoordinatorT> inline_transfers,
   const oxygen::ShadowQualityTier quality_tier)
+  : VsmShadowRenderer(gfx, staging_provider, inline_transfers, quality_tier,
+      VsmCacheManagerConfig { .debug_name = "VsmShadowRenderer.CacheManager" })
+{
+}
+
+VsmShadowRenderer::VsmShadowRenderer(const observer_ptr<Graphics> gfx,
+  const observer_ptr<ProviderT> staging_provider,
+  const observer_ptr<CoordinatorT> inline_transfers,
+  const oxygen::ShadowQualityTier quality_tier,
+  VsmCacheManagerConfig cache_manager_config)
   : gfx_(gfx)
   , staging_provider_(staging_provider)
   , inline_transfers_(inline_transfers)
   , quality_tier_(quality_tier)
   , physical_page_pool_manager_(gfx_.get())
-  , cache_manager_(gfx_.get(),
-      VsmCacheManagerConfig { .debug_name = "VsmShadowRenderer.CacheManager" })
+  , cache_manager_(gfx_.get(), std::move(cache_manager_config))
   , page_request_generator_config_(
       std::make_shared<engine::VsmPageRequestGeneratorPassConfig>())
   , invalidation_pass_config_(
@@ -1351,8 +1356,12 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
 #endif // !defined(NDEBUG)
 
   invalidation_coordinator_.SyncObservedScene(prepared_view->active_scene);
-  const auto& current_virtual_frame = BuildCurrentVirtualFrame(*prepared_view);
-  auto seam = BuildCurrentSeam(current_virtual_frame);
+  const auto prepared_products = BuildPreparedViewProducts(view_id);
+  CHECK_F(prepared_products.has_value(),
+    "VsmShadowRenderer::ExecutePreparedViewShell requires prepared products "
+    "for the active view");
+  const auto current_virtual_frame = prepared_products->virtual_frame;
+  auto seam = prepared_products->seam;
   auto scene_light_remap_bindings
     = BuildSceneLightRemapBindings(*prepared_view, current_virtual_frame);
   invalidation_coordinator_.PublishSceneLightRemapBindings(
@@ -1390,8 +1399,8 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
       invalidation_pass_->ResetInput();
     }
 
-    const auto current_projection_records = BuildCurrentProjectionRecords(
-      *prepared_view, current_virtual_frame, quality_tier_);
+    const auto& current_projection_records
+      = prepared_products->projection_records;
     const auto invalidation_metadata_seed_buffer
       = invalidation_pass_->GetCurrentOutputPhysicalMetadataBuffer();
     const auto has_page_requests
@@ -1718,6 +1727,23 @@ auto VsmShadowRenderer::TryGetPreparedViewState(
 {
   const auto it = prepared_views_.find(view_id);
   return it != prepared_views_.end() ? &it->second : nullptr;
+}
+
+auto VsmShadowRenderer::BuildPreparedViewProducts(const ViewId view_id)
+  -> std::optional<PreparedViewProducts>
+{
+  const auto* prepared_view = TryGetPreparedViewState(view_id);
+  if (prepared_view == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto& current_virtual_frame = BuildCurrentVirtualFrame(*prepared_view);
+  return PreparedViewProducts {
+    .virtual_frame = current_virtual_frame,
+    .seam = BuildCurrentSeam(current_virtual_frame),
+    .projection_records = BuildCurrentProjectionRecords(
+      *prepared_view, current_virtual_frame, quality_tier_),
+  };
 }
 
 auto VsmShadowRenderer::GetCacheManager() noexcept -> VsmCacheManager&

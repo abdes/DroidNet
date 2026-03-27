@@ -60,6 +60,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `Oxygen.Renderer.VsmPageRequests.Tests` program so real-data request-flag validation is
     isolated from later GPU lifecycle stages and from the CPU helper-policy coverage in
     `Oxygen.Renderer.VsmBasic.Tests`
+  - Stage 6 physical-page reuse coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmPageReuse.Tests` program so real-scene reuse contracts are isolated from
+    the later GPU lifecycle suites that still own stages 7-15
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
@@ -68,7 +71,11 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     published snapshots after real construction
   - the shared live-scene harness now lives in
     `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-    two-box lighting scenes through the dedicated Stage 1-4 executables
+    two-box lighting scenes through the dedicated Stage 1-6 executables
+  - the shared live-scene harness now aligns light targeting with the engine's
+    `oxygen::space::move::Forward` transform basis and exposes real depth-sample readback helpers
+    so local-light live-scene suites are validated against the engine's actual geometry and view
+    conventions rather than ad hoc target math
   - the dedicated Stage 1-4 executables now each include live real-scene validation:
     Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
     multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -103,17 +110,19 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
   - renderer test `CMakeLists.txt` now uses logical target names
     `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`,
-    `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+    `VsmPageReuse`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)`
+    expands them to
     `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
     `Oxygen.Renderer.VsmRemap.Tests`,
     `Oxygen.Renderer.VsmProjectionRecords.Tests`,
     `Oxygen.Renderer.VsmPageRequests.Tests`,
+    `Oxygen.Renderer.VsmPageReuse.Tests`,
     `Oxygen.Renderer.VirtualShadows.Tests`, and
     `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`, `Oxygen.Renderer.VsmProjectionRecords.Tests`,
-  `Oxygen.Renderer.VsmPageRequests.Tests`, `Oxygen.Renderer.VirtualShadows.Tests`, and
-  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
+  `Oxygen.Renderer.VsmPageRequests.Tests`, `Oxygen.Renderer.VsmPageReuse.Tests`,
+  `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
   - validation snapshot on `2026-03-27`:
@@ -122,6 +131,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - `Oxygen.Renderer.VsmRemap.Tests` passes with `29 tests from 5 test suites`
     - `Oxygen.Renderer.VsmProjectionRecords.Tests` passes with `2 tests from 1 test suite`
     - `Oxygen.Renderer.VsmPageRequests.Tests` passes with `3 tests from 1 test suite`
+    - `Oxygen.Renderer.VsmPageReuse.Tests` passes with `4 tests from 1 test suite`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
     - `VsmPageRequestPolicyTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
