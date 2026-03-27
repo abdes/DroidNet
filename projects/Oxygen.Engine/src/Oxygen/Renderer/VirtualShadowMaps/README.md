@@ -62,7 +62,10 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `Oxygen.Renderer.VsmBasic.Tests`
   - Stage 6 physical-page reuse coverage now lives in the dedicated
     `Oxygen.Renderer.VsmPageReuse.Tests` program so real-scene reuse contracts are isolated from
-    the later GPU lifecycle suites that still own stages 7-15
+    the later GPU lifecycle suites that still own stages 8-15
+  - Stage 7 available-page packing coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmAvailablePages.Tests` program so real-scene packing contracts are isolated
+    from the later GPU lifecycle suites that still own stages 8-15
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
@@ -71,7 +74,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     published snapshots after real construction
   - the shared live-scene harness now lives in
     `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-    two-box lighting scenes through the dedicated Stage 1-6 executables
+    two-box lighting scenes through the dedicated Stage 1-7 executables
   - the shared live-scene harness now aligns light targeting with the engine's
     `oxygen::space::move::Forward` transform basis and exposes real depth-sample readback helpers
     so local-light live-scene suites are validated against the engine's actual geometry and view
