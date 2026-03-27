@@ -4,422 +4,785 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Renderer/Passes/Vsm/VsmPageInitializationPass.h>
-#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 
-#include "VirtualShadowStageGpuHarness.h"
+#include "VirtualShadowLiveSceneHarness.h"
 
 namespace {
 
+using oxygen::engine::DrawPrimitiveFlagBits;
+using oxygen::frame::SequenceNumber;
+using oxygen::frame::Slot;
+using oxygen::renderer::vsm::DecodePhysicalPageIndex;
+using oxygen::renderer::vsm::IsMapped;
 using oxygen::renderer::vsm::TryConvertToCoord;
 using oxygen::renderer::vsm::VsmCacheInvalidationReason;
 using oxygen::renderer::vsm::VsmCacheInvalidationScope;
-using oxygen::renderer::vsm::VsmCacheManager;
-using oxygen::renderer::vsm::VsmCacheManagerFrameConfig;
 using oxygen::renderer::vsm::VsmPageAllocationFrame;
 using oxygen::renderer::vsm::VsmPageInitializationAction;
-using oxygen::renderer::vsm::VsmPageRequest;
 using oxygen::renderer::vsm::VsmPhysicalPageIndex;
-using oxygen::renderer::vsm::VsmVirtualPageCoord;
-using oxygen::renderer::vsm::testing::VsmStageGpuHarness;
+using oxygen::renderer::vsm::VsmPhysicalPageMeta;
+using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
+using oxygen::renderer::vsm::VsmShaderPageFlags;
+using oxygen::renderer::vsm::VsmShaderPageTableEntry;
+using oxygen::renderer::vsm::testing::TwoBoxPageFlagPropagationResult;
+using oxygen::renderer::vsm::testing::TwoBoxShadowSceneData;
+using oxygen::renderer::vsm::testing::VsmLiveSceneHarness;
 
-class VsmSelectivePageInitializationTest : public VsmStageGpuHarness { };
+struct StageBuffers {
+  std::vector<VsmShaderPageTableEntry> page_table {};
+  std::vector<VsmShaderPageFlags> page_flags {};
+  std::vector<VsmPhysicalPageMeta> physical_metadata {};
+};
 
-[[nodiscard]] auto MakePagedRequests(const std::uint32_t map_id)
-  -> std::array<VsmPageRequest, 2>
-{
-  return std::array {
-    VsmPageRequest {
-      .map_id = map_id,
-      .page = VsmVirtualPageCoord { .level = 0U, .page_x = 0U, .page_y = 0U },
-    },
-    VsmPageRequest {
-      .map_id = map_id,
-      .page = VsmVirtualPageCoord { .level = 0U, .page_x = 1U, .page_y = 0U },
-    },
-  };
-}
+struct PageSample {
+  VsmPhysicalPageIndex physical_page {};
+  std::uint32_t x { 0U };
+  std::uint32_t y { 0U };
+  float value { 1.0F };
+};
 
-[[nodiscard]] auto FindUntouchedPhysicalPage(
-  const VsmPageAllocationFrame& frame) -> VsmPhysicalPageIndex
-{
-  for (std::uint32_t candidate = 0U;; ++candidate) {
-    auto used = false;
-    for (const auto& work_item : frame.plan.initialization_work) {
-      if (work_item.physical_page.value == candidate) {
-        used = true;
-        break;
+struct CopySample {
+  VsmPhysicalPageIndex physical_page {};
+  std::uint32_t x { 0U };
+  std::uint32_t y { 0U };
+  float dynamic_before { 1.0F };
+  float static_before { 1.0F };
+};
+
+struct ShadowSliceSnapshot {
+  std::uint32_t width { 0U };
+  std::uint32_t height { 0U };
+  std::vector<float> values {};
+
+  [[nodiscard]] auto At(const std::uint32_t x, const std::uint32_t y) const
+    -> float
+  {
+    return values.at(static_cast<std::size_t>(y) * width + x);
+  }
+};
+
+class VsmSelectivePageInitializationLiveSceneTest : public VsmLiveSceneHarness {
+protected:
+  static constexpr auto kShadowThreshold = 0.99F;
+  static constexpr auto kCopyEpsilon = 1.0e-4F;
+
+  [[nodiscard]] static auto FindSliceIndex(
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const VsmPhysicalPoolSliceRole role) -> std::optional<std::uint32_t>
+  {
+    for (std::uint32_t i = 0U; i < pool.slice_roles.size(); ++i) {
+      if (pool.slice_roles[i] == role) {
+        return i;
       }
     }
-    if (!used) {
-      return VsmPhysicalPageIndex { .value = candidate };
+    return std::nullopt;
+  }
+
+  static auto MoveBox(TwoBoxShadowSceneData& scene_data,
+    const std::size_t index, oxygen::scene::SceneNode& node,
+    const glm::vec3& translation, const glm::vec3& scale) -> void
+  {
+    scene_data.world_matrices[index]
+      = glm::translate(glm::mat4 { 1.0F }, translation)
+      * glm::scale(glm::mat4 { 1.0F }, scale);
+
+    const auto radius = scale.y > 2.0F ? 1.75F : 0.95F;
+    scene_data.draw_bounds[index]
+      = glm::vec4 { translation.x, scale.y * 0.5F, translation.z, radius };
+    scene_data.shadow_caster_bounds[index - 1U] = scene_data.draw_bounds[index];
+    scene_data.rendered_items[index].world_bounding_sphere
+      = scene_data.draw_bounds[index];
+
+    ASSERT_TRUE(node.GetTransform().SetLocalPosition(translation));
+    auto impl = node.GetImpl();
+    ASSERT_TRUE(impl.has_value());
+    impl->get().UpdateTransforms(*scene_data.scene);
+    scene_data.scene->Update();
+  }
+
+  static auto MoveTallBox(
+    TwoBoxShadowSceneData& scene_data, const glm::vec3& translation) -> void
+  {
+    MoveBox(scene_data, 1U, scene_data.tall_box_node, translation,
+      glm::vec3 { 0.8F, 3.2F, 0.8F });
+  }
+
+  static auto MoveShortBox(
+    TwoBoxShadowSceneData& scene_data, const glm::vec3& translation) -> void
+  {
+    MoveBox(scene_data, 2U, scene_data.short_box_node, translation,
+      glm::vec3 { 0.8F, 1.1F, 0.8F });
+  }
+
+  static auto MarkTallBoxStaticShadowCaster(TwoBoxShadowSceneData& scene_data)
+    -> void
+  {
+    scene_data.rendered_items[1].static_shadow_caster = true;
+    scene_data.draw_records[1].primitive_flags
+      |= static_cast<std::uint32_t>(DrawPrimitiveFlagBits::kStaticShadowCaster);
+  }
+
+  auto CaptureStageBuffers(const VsmPageAllocationFrame& frame,
+    std::string_view debug_name) -> StageBuffers
+  {
+    return StageBuffers {
+      .page_table = ReadBufferAs<VsmShaderPageTableEntry>(
+        *frame.page_table_buffer, frame.snapshot.page_table.size(),
+        std::string(debug_name) + ".page-table"),
+      .page_flags = ReadBufferAs<VsmShaderPageFlags>(*frame.page_flags_buffer,
+        frame.snapshot.page_table.size(),
+        std::string(debug_name) + ".page-flags"),
+      .physical_metadata = ReadBufferAs<VsmPhysicalPageMeta>(
+        *frame.physical_page_meta_buffer, frame.snapshot.physical_pages.size(),
+        std::string(debug_name) + ".physical-meta"),
+    };
+  }
+
+  auto ExpectStageBuffersUnchanged(const VsmPageAllocationFrame& frame,
+    const StageBuffers& before, std::string_view debug_name) -> void
+  {
+    const auto after = CaptureStageBuffers(frame, debug_name);
+    EXPECT_EQ(after.page_table, before.page_table);
+    EXPECT_EQ(after.page_flags, before.page_flags);
+    EXPECT_EQ(after.physical_metadata, before.physical_metadata);
+  }
+
+  auto ReadShadowSlice(
+    const std::shared_ptr<const oxygen::graphics::Texture>& texture,
+    const std::uint32_t slice, std::string_view debug_name)
+    -> ShadowSliceSnapshot
+  {
+    CHECK_NOTNULL_F(texture.get(), "Cannot read from a null shadow texture");
+
+    const auto& texture_desc = texture->GetDescriptor();
+    auto float_texture
+      = CreateSingleChannelTexture2D(texture_desc.width, texture_desc.height,
+        oxygen::Format::kR32Float, std::string(debug_name) + ".slice-copy");
+    CHECK_NOTNULL_F(float_texture.get(),
+      "Failed to create float slice copy for `{}`", debug_name);
+
+    {
+      auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
+      CHECK_NOTNULL_F(recorder.get(),
+        "Failed to acquire shadow-slice copy recorder for `{}`", debug_name);
+      EnsureTracked(*recorder,
+        std::const_pointer_cast<oxygen::graphics::Texture>(texture),
+        oxygen::graphics::ResourceStates::kCommon);
+      EnsureTracked(
+        *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->RequireResourceState(
+        *texture, oxygen::graphics::ResourceStates::kCopySource);
+      recorder->RequireResourceState(
+        *float_texture, oxygen::graphics::ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyTexture(*texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture_desc.width,
+          .height = texture_desc.height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = slice,
+        },
+        oxygen::graphics::TextureSubResourceSet {
+          .base_mip_level = 0U,
+          .num_mip_levels = 1U,
+          .base_array_slice = slice,
+          .num_array_slices = 1U,
+        },
+        *float_texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture_desc.width,
+          .height = texture_desc.height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture());
+      recorder->RequireResourceStateFinal(
+        *float_texture, oxygen::graphics::ResourceStates::kCommon);
     }
-  }
-}
+    WaitForQueueIdle();
 
-NOLINT_TEST_F(VsmSelectivePageInitializationTest,
-  ClearsOnlyTargetedDynamicPagesWithoutTouchingNeighbors)
-{
-  auto pool_manager
-    = oxygen::renderer::vsm::VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(
-    pool_manager.EnsureShadowPool(oxygen::renderer::vsm::VsmPhysicalPoolConfig {
-      .page_size_texels = 128U,
-      .physical_tile_capacity = 256U,
-      .array_slice_count = 1U,
-      .depth_format = oxygen::Format::kDepth32,
-      .slice_roles
-      = { oxygen::renderer::vsm::VsmPhysicalPoolSliceRole::kDynamicDepth },
-      .debug_name = "vsm-selective-page-initialization.clear-shadow",
-    }),
-    oxygen::renderer::vsm::VsmPhysicalPoolChangeResult::kCreated);
+    const auto readback = GetReadbackManager()->ReadTextureNow(*float_texture,
+      oxygen::graphics::TextureReadbackRequest {
+        .src_slice = {},
+        .aspects = oxygen::graphics::ClearFlags::kColor,
+      },
+      true);
+    CHECK_F(readback.has_value(),
+      "Failed to read back shadow slice copy for `{}`", debug_name);
 
-  auto manager = VsmCacheManager(&Backend());
-  const auto virtual_frame = MakeSinglePageLocalFrame(
-    1ULL, 10U, "vsm-selective-page-initialization.clear");
-  const auto request = VsmPageRequest {
-    .map_id = virtual_frame.local_light_layouts[0].id,
-    .page = {},
-  };
+    auto values
+      = std::vector<float>(texture_desc.width * texture_desc.height, 1.0F);
+    for (std::uint32_t y = 0U; y < texture_desc.height; ++y) {
+      const auto* row = readback->bytes.data()
+        + static_cast<std::size_t>(y) * readback->layout.row_pitch.get();
+      for (std::uint32_t x = 0U; x < texture_desc.width; ++x) {
+        std::memcpy(
+          &values[static_cast<std::size_t>(y) * texture_desc.width + x],
+          row + static_cast<std::size_t>(x) * sizeof(float), sizeof(float));
+      }
+    }
 
-  manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.clear" });
-  manager.SetPageRequests({ &request, 1U });
-  const auto& frame = CommitFrame(manager);
-
-  ASSERT_EQ(frame.plan.initialization_work.size(), 1U);
-  EXPECT_EQ(frame.plan.initialization_work[0].action,
-    VsmPageInitializationAction::kClearDepth);
-
-  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
-  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
-  const auto coord = TryConvertToCoord(
-    frame.plan.initialization_work[0].physical_page, shadow_pool.tile_capacity,
-    shadow_pool.tiles_per_axis, shadow_pool.slice_count);
-  ASSERT_TRUE(coord.has_value());
-  const auto neighbor_tile_x
-    = (coord->tile_x + 1U) % shadow_pool.tiles_per_axis;
-
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    coord->tile_x, coord->tile_y, 0U, 0.25F,
-    "vsm-selective-page-initialization.clear-target");
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    neighbor_tile_x, coord->tile_y, 0U, 0.25F,
-    "vsm-selective-page-initialization.clear-neighbor");
-
-  ExecuteInitializationPass(
-    oxygen::engine::VsmPageInitializationPassInput {
-      .frame = frame, .physical_pool = shadow_pool },
-    "vsm-selective-page-initialization.clear-execute");
-
-  const auto target_x = coord->tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto target_y = coord->tile_y * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto neighbor_x = neighbor_tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, target_x, target_y, 0U,
-      "vsm-selective-page-initialization.clear-target-readback"),
-    1.0F);
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, neighbor_x, target_y, 0U,
-      "vsm-selective-page-initialization.clear-neighbor-readback"),
-    0.25F);
-}
-
-NOLINT_TEST_F(VsmSelectivePageInitializationTest,
-  CopiesStaticSliceIntoDynamicSliceWhenOnlyDynamicStateWasInvalidated)
-{
-  auto pool_manager
-    = oxygen::renderer::vsm::VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeShadowPoolConfig(
-              "vsm-selective-page-initialization.copy-shadow")),
-    oxygen::renderer::vsm::VsmPhysicalPoolChangeResult::kCreated);
-
-  auto manager = VsmCacheManager(&Backend());
-  const auto previous_frame = MakeSinglePageLocalFrame(
-    1ULL, 10U, "vsm-selective-page-initialization.copy-prev");
-  const auto previous_request = VsmPageRequest {
-    .map_id = previous_frame.local_light_layouts[0].id,
-    .page = {},
-  };
-
-  manager.BeginFrame(MakeSeam(pool_manager, previous_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.copy-prev" });
-  manager.SetPageRequests({ &previous_request, 1U });
-  static_cast<void>(CommitFrame(manager));
-  manager.ExtractFrameData();
-
-  manager.InvalidateLocalLights({ "local-0" },
-    VsmCacheInvalidationScope::kDynamicOnly,
-    VsmCacheInvalidationReason::kTargetedInvalidate);
-
-  const auto current_frame = MakeSinglePageLocalFrame(
-    2ULL, 20U, "vsm-selective-page-initialization.copy-current");
-  const auto current_request = VsmPageRequest {
-    .map_id = current_frame.local_light_layouts[0].id,
-    .page = {},
-  };
-
-  manager.BeginFrame(MakeSeam(pool_manager, current_frame, &previous_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.copy-current" });
-  manager.SetPageRequests({ &current_request, 1U });
-  const auto& frame = CommitFrame(manager);
-
-  ASSERT_EQ(frame.plan.initialization_work.size(), 1U);
-  EXPECT_EQ(frame.plan.initialization_work[0].action,
-    VsmPageInitializationAction::kCopyStaticSlice);
-
-  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
-  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
-  const auto coord = TryConvertToCoord(
-    frame.plan.initialization_work[0].physical_page, shadow_pool.tile_capacity,
-    shadow_pool.tiles_per_axis, shadow_pool.slice_count);
-  ASSERT_TRUE(coord.has_value());
-  const auto neighbor_tile_x
-    = (coord->tile_x + 1U) % shadow_pool.tiles_per_axis;
-
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    coord->tile_x, coord->tile_y, 0U, 0.20F,
-    "vsm-selective-page-initialization.copy-dynamic-target");
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    neighbor_tile_x, coord->tile_y, 0U, 0.20F,
-    "vsm-selective-page-initialization.copy-dynamic-neighbor");
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    coord->tile_x, coord->tile_y, 1U, 0.75F,
-    "vsm-selective-page-initialization.copy-static-target");
-
-  ExecuteInitializationPass(
-    oxygen::engine::VsmPageInitializationPassInput {
-      .frame = frame, .physical_pool = shadow_pool },
-    "vsm-selective-page-initialization.copy-execute");
-
-  const auto target_x = coord->tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto target_y = coord->tile_y * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto neighbor_x = neighbor_tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, target_x, target_y, 0U,
-      "vsm-selective-page-initialization.copy-target-readback"),
-    0.75F);
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, neighbor_x, target_y, 0U,
-      "vsm-selective-page-initialization.copy-neighbor-readback"),
-    0.20F);
-}
-
-NOLINT_TEST_F(VsmSelectivePageInitializationTest,
-  ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages)
-{
-  auto pool_manager
-    = oxygen::renderer::vsm::VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeSingleSliceShadowPoolConfig(128U,
-              256U, "vsm-selective-page-initialization.multi-clear-shadow")),
-    oxygen::renderer::vsm::VsmPhysicalPoolChangeResult::kCreated);
-
-  auto manager = VsmCacheManager(&Backend());
-  const auto virtual_frame = MakeMultiLevelLocalFrame(1ULL, 10U, "hero", 1U, 2U,
-    1U, "vsm-selective-page-initialization.multi-clear");
-  const auto requests
-    = MakePagedRequests(virtual_frame.local_light_layouts[0].id);
-
-  manager.BeginFrame(MakeSeam(pool_manager, virtual_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.multi-clear",
-    });
-  manager.SetPageRequests(requests);
-  const auto& frame = CommitFrame(manager);
-
-  ASSERT_EQ(frame.plan.initialization_work.size(), requests.size());
-  EXPECT_EQ(frame.plan.initialization_work[0].action,
-    VsmPageInitializationAction::kClearDepth);
-  EXPECT_EQ(frame.plan.initialization_work[1].action,
-    VsmPageInitializationAction::kClearDepth);
-
-  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
-  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
-
-  std::array<oxygen::renderer::vsm::VsmPhysicalPageCoord, 2> target_coords {};
-  for (std::size_t i = 0; i < frame.plan.initialization_work.size(); ++i) {
-    const auto coord
-      = TryConvertToCoord(frame.plan.initialization_work[i].physical_page,
-        shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
-        shadow_pool.slice_count);
-    ASSERT_TRUE(coord.has_value());
-    target_coords[i] = *coord;
-    SeedShadowPageValue(shadow_pool.shadow_texture,
-      shadow_pool.page_size_texels, coord->tile_x, coord->tile_y, 0U, 0.25F,
-      i == 0U ? "vsm-selective-page-initialization.multi-clear.target0"
-              : "vsm-selective-page-initialization.multi-clear.target1");
+    return ShadowSliceSnapshot {
+      .width = texture_desc.width,
+      .height = texture_desc.height,
+      .values = std::move(values),
+    };
   }
 
-  const auto untouched_physical_page = FindUntouchedPhysicalPage(frame);
-  const auto untouched_coord
-    = TryConvertToCoord(untouched_physical_page, shadow_pool.tile_capacity,
-      shadow_pool.tiles_per_axis, shadow_pool.slice_count);
-  ASSERT_TRUE(untouched_coord.has_value());
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    untouched_coord->tile_x, untouched_coord->tile_y, 0U, 0.25F,
-    "vsm-selective-page-initialization.multi-clear.untouched");
+  template <typename Predicate>
+  auto FindPageSampleIf(
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const ShadowSliceSnapshot& slice_snapshot,
+    const VsmPhysicalPageIndex physical_page, std::string_view debug_name,
+    Predicate&& predicate, const std::uint32_t grid_size = 5U)
+    -> std::optional<PageSample>
+  {
+    static_cast<void>(debug_name);
 
-  ExecuteInitializationPass(
-    oxygen::engine::VsmPageInitializationPassInput {
-      .frame = frame,
-      .physical_pool = shadow_pool,
-    },
-    "vsm-selective-page-initialization.multi-clear-execute");
+    const auto coord = TryConvertToCoord(
+      physical_page, pool.tile_capacity, pool.tiles_per_axis, pool.slice_count);
+    EXPECT_TRUE(coord.has_value());
+    if (!coord.has_value()) {
+      return std::nullopt;
+    }
 
-  for (std::size_t i = 0; i < target_coords.size(); ++i) {
-    const auto center_x = target_coords[i].tile_x * shadow_pool.page_size_texels
-      + shadow_pool.page_size_texels / 2U;
-    const auto center_y = target_coords[i].tile_y * shadow_pool.page_size_texels
-      + shadow_pool.page_size_texels / 2U;
-    EXPECT_FLOAT_EQ(
-      ReadShadowDepthTexel(shadow_pool.shadow_texture, center_x, center_y, 0U,
-        i == 0U
-          ? "vsm-selective-page-initialization.multi-clear.target0-readback"
-          : "vsm-selective-page-initialization.multi-clear.target1-readback"),
-      1.0F);
+    if (grid_size == 0U) {
+      const auto base_x = coord->tile_x * pool.page_size_texels;
+      const auto base_y = coord->tile_y * pool.page_size_texels;
+      for (std::uint32_t local_y = 0U; local_y < pool.page_size_texels;
+        ++local_y) {
+        for (std::uint32_t local_x = 0U; local_x < pool.page_size_texels;
+          ++local_x) {
+          const auto x = base_x + local_x;
+          const auto y = base_y + local_y;
+          const auto value = slice_snapshot.At(x, y);
+          if (predicate(value)) {
+            return PageSample {
+              .physical_page = physical_page,
+              .x = x,
+              .y = y,
+              .value = value,
+            };
+          }
+        }
+      }
+      return std::nullopt;
+    }
+
+    for (std::uint32_t grid_y = 0U; grid_y < grid_size; ++grid_y) {
+      for (std::uint32_t grid_x = 0U; grid_x < grid_size; ++grid_x) {
+        const auto x = coord->tile_x * pool.page_size_texels
+          + ((2U * grid_x + 1U) * pool.page_size_texels) / (2U * grid_size);
+        const auto y = coord->tile_y * pool.page_size_texels
+          + ((2U * grid_y + 1U) * pool.page_size_texels) / (2U * grid_size);
+        const auto value = slice_snapshot.At(x, y);
+        if (predicate(value)) {
+          return PageSample {
+            .physical_page = physical_page,
+            .x = x,
+            .y = y,
+            .value = value,
+          };
+        }
+      }
+    }
+
+    return std::nullopt;
   }
 
-  const auto untouched_x
-    = untouched_coord->tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto untouched_y
-    = untouched_coord->tile_y * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, untouched_x, untouched_y,
-      0U, "vsm-selective-page-initialization.multi-clear.untouched-readback"),
-    0.25F);
-}
+  auto FindShadowedMappedPageSample(
+    const std::vector<VsmShaderPageTableEntry>& page_table,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const ShadowSliceSnapshot& dynamic_slice,
+    const std::vector<std::uint32_t>& excluded_physical_pages,
+    std::string_view debug_name) -> std::optional<PageSample>
+  {
+    for (const auto& entry : page_table) {
+      if (!IsMapped(entry)) {
+        continue;
+      }
+      const auto physical_page = DecodePhysicalPageIndex(entry).value;
+      if (std::find(excluded_physical_pages.begin(),
+            excluded_physical_pages.end(), physical_page)
+        != excluded_physical_pages.end()) {
+        continue;
+      }
 
-NOLINT_TEST_F(VsmSelectivePageInitializationTest,
-  CopiesStaticSliceIntoMultipleDynamicPagesAfterDynamicOnlyInvalidation)
+      const auto sample = FindPageSampleIf(pool, dynamic_slice,
+        VsmPhysicalPageIndex { .value = physical_page },
+        std::string(debug_name) + ".page-" + std::to_string(physical_page),
+        [](const float value) { return value < kShadowThreshold; });
+      if (sample.has_value()) {
+        return sample;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  auto FindClearTargetSample(const VsmPageAllocationFrame& frame,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const ShadowSliceSnapshot& dynamic_slice, std::string_view debug_name)
+    -> std::optional<PageSample>
+  {
+    for (const auto& work_item : frame.plan.initialization_work) {
+      if (work_item.action != VsmPageInitializationAction::kClearDepth) {
+        continue;
+      }
+
+      const auto sample = FindPageSampleIf(
+        pool, dynamic_slice, work_item.physical_page,
+        std::string(debug_name) + ".clear-"
+          + std::to_string(work_item.physical_page.value),
+        [](const float value) { return value < kShadowThreshold; }, 0U);
+      if (sample.has_value()) {
+        return sample;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  auto FindMappedPageSample(
+    const std::vector<VsmShaderPageTableEntry>& page_table,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const ShadowSliceSnapshot& dynamic_slice,
+    const std::vector<std::uint32_t>& excluded_physical_pages,
+    std::string_view debug_name) -> std::optional<PageSample>
+  {
+    for (const auto& entry : page_table) {
+      if (!IsMapped(entry)) {
+        continue;
+      }
+      const auto physical_page = DecodePhysicalPageIndex(entry).value;
+      if (std::find(excluded_physical_pages.begin(),
+            excluded_physical_pages.end(), physical_page)
+        != excluded_physical_pages.end()) {
+        continue;
+      }
+
+      const auto sample = FindPageSampleIf(
+        pool, dynamic_slice, VsmPhysicalPageIndex { .value = physical_page },
+        std::string(debug_name) + ".page-" + std::to_string(physical_page),
+        [](const float) { return true; }, 1U);
+      if (sample.has_value()) {
+        return sample;
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  auto FindCopyTargetSample(const VsmPageAllocationFrame& frame,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const ShadowSliceSnapshot& dynamic_slice,
+    const ShadowSliceSnapshot& static_slice, std::string_view debug_name)
+    -> std::optional<CopySample>
+  {
+    static_cast<void>(debug_name);
+
+    for (const auto& work_item : frame.plan.initialization_work) {
+      if (work_item.action != VsmPageInitializationAction::kCopyStaticSlice) {
+        continue;
+      }
+
+      const auto coord = TryConvertToCoord(work_item.physical_page,
+        pool.tile_capacity, pool.tiles_per_axis, pool.slice_count);
+      EXPECT_TRUE(coord.has_value());
+      if (!coord.has_value()) {
+        continue;
+      }
+
+      constexpr auto kGrid = 5U;
+      for (std::uint32_t grid_y = 0U; grid_y < kGrid; ++grid_y) {
+        for (std::uint32_t grid_x = 0U; grid_x < kGrid; ++grid_x) {
+          const auto x = coord->tile_x * pool.page_size_texels
+            + ((2U * grid_x + 1U) * pool.page_size_texels) / (2U * kGrid);
+          const auto y = coord->tile_y * pool.page_size_texels
+            + ((2U * grid_y + 1U) * pool.page_size_texels) / (2U * kGrid);
+          const auto dynamic_before = dynamic_slice.At(x, y);
+          const auto static_before = static_slice.At(x, y);
+          if (static_before < kShadowThreshold
+            && std::abs(dynamic_before - static_before) > kCopyEpsilon) {
+            return CopySample {
+              .physical_page = work_item.physical_page,
+              .x = x,
+              .y = y,
+              .dynamic_before = dynamic_before,
+              .static_before = static_before,
+            };
+          }
+        }
+      }
+    }
+
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static auto CollectInitializationPages(
+    const VsmPageAllocationFrame& frame) -> std::vector<std::uint32_t>
+  {
+    auto pages = std::vector<std::uint32_t> {};
+    pages.reserve(frame.plan.initialization_work.size());
+    for (const auto& work_item : frame.plan.initialization_work) {
+      pages.push_back(work_item.physical_page.value);
+    }
+    std::sort(pages.begin(), pages.end());
+    pages.erase(std::unique(pages.begin(), pages.end()), pages.end());
+    return pages;
+  }
+};
+
+NOLINT_TEST_F(VsmSelectivePageInitializationLiveSceneTest,
+  StableDirectionalCachedFrameLeavesStageUntouched)
 {
-  auto pool_manager
-    = oxygen::renderer::vsm::VsmPhysicalPagePoolManager(&Backend());
-  ASSERT_EQ(pool_manager.EnsureShadowPool(MakeShadowPoolConfig(
-              "vsm-selective-page-initialization.multi-copy-shadow")),
-    oxygen::renderer::vsm::VsmPhysicalPoolChangeResult::kCreated);
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kFirstSequence = SequenceNumber { 131U };
+  constexpr auto kSecondSequence = SequenceNumber { 132U };
+  constexpr auto kThirdSequence = SequenceNumber { 133U };
 
-  auto manager = VsmCacheManager(&Backend());
-  const auto previous_frame = MakeMultiLevelLocalFrame(1ULL, 10U, "hero", 1U,
-    2U, 1U, "vsm-selective-page-initialization.multi-copy-prev");
-  const auto previous_requests
-    = MakePagedRequests(previous_frame.local_light_layouts[0].id);
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+  const auto resolved_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
 
-  manager.BeginFrame(MakeSeam(pool_manager, previous_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.multi-copy-prev",
-    });
-  manager.SetPageRequests(previous_requests);
-  static_cast<void>(CommitFrame(manager));
-  manager.ExtractFrameData();
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
+  auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &renderer->GetStagingProvider() },
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
 
-  manager.InvalidateLocalLights({ "hero" },
-    VsmCacheInvalidationScope::kDynamicOnly,
-    VsmCacheInvalidationReason::kTargetedInvalidate);
+  const auto first_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kFirstSequence, kSlot, 0xB001ULL);
+  ASSERT_NE(first_frame.extracted_frame, nullptr);
+  ASSERT_EQ(first_frame.virtual_frame.directional_layouts.size(), 1U);
+  EXPECT_GT(
+    first_frame.virtual_frame.directional_layouts.front().pages_per_axis, 1U);
 
-  const auto current_frame = MakeMultiLevelLocalFrame(2ULL, 20U, "hero", 1U, 2U,
-    1U, "vsm-selective-page-initialization.multi-copy-current");
-  const auto current_requests
-    = MakePagedRequests(current_frame.local_light_layouts[0].id);
+  const auto second_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kSecondSequence, kSlot, 0xB001ULL);
+  ASSERT_NE(second_frame.extracted_frame, nullptr);
 
-  manager.BeginFrame(MakeSeam(pool_manager, current_frame, &previous_frame),
-    VsmCacheManagerFrameConfig {
-      .debug_name = "vsm-selective-page-initialization.multi-copy-current",
-    });
-  manager.SetPageRequests(current_requests);
-  const auto& frame = CommitFrame(manager);
+  const auto propagated
+    = RunTwoBoxPageFlagPropagationStage(*renderer, scene, vsm_renderer,
+      resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xB001ULL);
+  const auto& frame = propagated.mapping.bridge.committed_frame;
+  const auto pool
+    = vsm_renderer.GetPhysicalPagePoolManager().GetShadowPoolSnapshot();
 
-  ASSERT_EQ(frame.plan.initialization_work.size(), current_requests.size());
-  EXPECT_EQ(frame.plan.initialization_work[0].action,
-    VsmPageInitializationAction::kCopyStaticSlice);
-  EXPECT_EQ(frame.plan.initialization_work[1].action,
-    VsmPageInitializationAction::kCopyStaticSlice);
+  ASSERT_TRUE(frame.plan.initialization_work.empty());
+  ASSERT_TRUE(pool.is_available);
+  ASSERT_NE(pool.shadow_texture, nullptr);
+  const auto dynamic_slice
+    = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kDynamicDepth);
+  ASSERT_TRUE(dynamic_slice.has_value());
+  const auto dynamic_slice_snapshot = ReadShadowSlice(
+    pool.shadow_texture, *dynamic_slice, "stage-eleven.stable.dynamic");
 
-  const auto shadow_pool = pool_manager.GetShadowPoolSnapshot();
-  ASSERT_NE(shadow_pool.shadow_texture, nullptr);
+  const auto shadowed_sample
+    = FindShadowedMappedPageSample(propagated.page_table, pool,
+      dynamic_slice_snapshot, {}, "stage-eleven.stable");
+  ASSERT_TRUE(shadowed_sample.has_value());
 
-  constexpr std::array<float, 2> kDynamicSeeds { 0.20F, 0.30F };
-  constexpr std::array<float, 2> kStaticSeeds { 0.75F, 0.65F };
-
-  for (std::size_t i = 0; i < frame.plan.initialization_work.size(); ++i) {
-    const auto coord
-      = TryConvertToCoord(frame.plan.initialization_work[i].physical_page,
-        shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
-        shadow_pool.slice_count);
-    ASSERT_TRUE(coord.has_value());
-    SeedShadowPageValue(shadow_pool.shadow_texture,
-      shadow_pool.page_size_texels, coord->tile_x, coord->tile_y, 0U,
-      kDynamicSeeds[i],
-      i == 0U ? "vsm-selective-page-initialization.multi-copy.dynamic0"
-              : "vsm-selective-page-initialization.multi-copy.dynamic1");
-    SeedShadowPageValue(shadow_pool.shadow_texture,
-      shadow_pool.page_size_texels, coord->tile_x, coord->tile_y, 1U,
-      kStaticSeeds[i],
-      i == 0U ? "vsm-selective-page-initialization.multi-copy.static0"
-              : "vsm-selective-page-initialization.multi-copy.static1");
-  }
-
-  const auto untouched_physical_page = FindUntouchedPhysicalPage(frame);
-  const auto untouched_coord
-    = TryConvertToCoord(untouched_physical_page, shadow_pool.tile_capacity,
-      shadow_pool.tiles_per_axis, shadow_pool.slice_count);
-  ASSERT_TRUE(untouched_coord.has_value());
-  SeedShadowPageValue(shadow_pool.shadow_texture, shadow_pool.page_size_texels,
-    untouched_coord->tile_x, untouched_coord->tile_y, 0U, 0.10F,
-    "vsm-selective-page-initialization.multi-copy.untouched");
-
+  const auto buffers_before
+    = CaptureStageBuffers(frame, "stage-eleven.stable.before");
   ExecuteInitializationPass(
     oxygen::engine::VsmPageInitializationPassInput {
       .frame = frame,
-      .physical_pool = shadow_pool,
+      .physical_pool = pool,
     },
-    "vsm-selective-page-initialization.multi-copy-execute");
+    "stage-eleven.stable.initialize");
 
-  for (std::size_t i = 0; i < frame.plan.initialization_work.size(); ++i) {
-    const auto coord
-      = TryConvertToCoord(frame.plan.initialization_work[i].physical_page,
-        shadow_pool.tile_capacity, shadow_pool.tiles_per_axis,
-        shadow_pool.slice_count);
-    ASSERT_TRUE(coord.has_value());
-    const auto center_x = coord->tile_x * shadow_pool.page_size_texels
-      + shadow_pool.page_size_texels / 2U;
-    const auto center_y = coord->tile_y * shadow_pool.page_size_texels
-      + shadow_pool.page_size_texels / 2U;
-    EXPECT_FLOAT_EQ(
-      ReadShadowDepthTexel(shadow_pool.shadow_texture, center_x, center_y, 0U,
-        i == 0U
-          ? "vsm-selective-page-initialization.multi-copy.dynamic0-readback"
-          : "vsm-selective-page-initialization.multi-copy.dynamic1-readback"),
-      kStaticSeeds[i]);
+  const auto dynamic_after = ReadShadowSlice(
+    pool.shadow_texture, *dynamic_slice, "stage-eleven.stable.after");
+  EXPECT_NEAR(dynamic_after.At(shadowed_sample->x, shadowed_sample->y),
+    shadowed_sample->value, 1.0e-5F);
+  ExpectStageBuffersUnchanged(frame, buffers_before, "stage-eleven.stable");
+}
+
+NOLINT_TEST_F(VsmSelectivePageInitializationLiveSceneTest,
+  DirectionalClipmapPanClearsFreshPagesWithoutTouchingReusedPages)
+{
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kFirstSequence = SequenceNumber { 134U };
+  constexpr auto kSecondSequence = SequenceNumber { 135U };
+  constexpr auto kThirdSequence = SequenceNumber { 136U };
+  constexpr auto kFourthSequence = SequenceNumber { 137U };
+
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+  const auto first_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
+  const auto candidate_multipliers
+    = std::array { 2.0F, 3.0F, 4.0F, -1.0F, -2.0F, -3.0F };
+  auto failure_details = std::string {};
+
+  for (const auto multiplier : candidate_multipliers) {
+    auto renderer = MakeRenderer();
+    ASSERT_NE(renderer, nullptr);
+    auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
+    auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      oxygen::observer_ptr { &renderer->GetStagingProvider() },
+      oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+      oxygen::ShadowQualityTier::kHigh);
+
+    const auto first_frame
+      = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, first_view,
+        kWidth, kHeight, kFirstSequence, kSlot, 0xB002ULL);
+    ASSERT_NE(first_frame.extracted_frame, nullptr);
+    ASSERT_EQ(first_frame.virtual_frame.directional_layouts.size(), 1U);
+
+    const auto second_frame
+      = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, first_view,
+        kWidth, kHeight, kSecondSequence, kSlot, 0xB002ULL);
+    ASSERT_NE(second_frame.extracted_frame, nullptr);
+    ASSERT_EQ(second_frame.virtual_frame.directional_layouts.size(), 1U);
+    const auto& first_layout
+      = second_frame.virtual_frame.directional_layouts.front();
+
+    const auto first_projection
+      = std::find_if(second_frame.extracted_frame->projection_records.begin(),
+        second_frame.extracted_frame->projection_records.end(),
+        [](const auto& record) {
+          return record.projection.light_type
+            == static_cast<std::uint32_t>(
+              oxygen::renderer::vsm::VsmProjectionLightType::kDirectional);
+        });
+    ASSERT_NE(
+      first_projection, second_frame.extracted_frame->projection_records.end());
+
+    const auto light_space_page_shift_ws = glm::vec3(
+      glm::inverse(first_projection->projection.view_matrix)
+      * glm::vec4 { first_layout.page_world_size[0] * 1.5F, 0.0F, 0.0F, 0.0F });
+    const auto precondition_view
+      = MakeLookAtResolvedView(camera_eye + light_space_page_shift_ws,
+        camera_target + light_space_page_shift_ws, kWidth, kHeight);
+    const auto candidate_view = MakeLookAtResolvedView(
+      camera_eye + light_space_page_shift_ws * multiplier,
+      camera_target + light_space_page_shift_ws * multiplier, kWidth, kHeight);
+
+    const auto precondition_frame
+      = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer,
+        precondition_view, kWidth, kHeight, kThirdSequence, kSlot, 0xB003ULL);
+    ASSERT_NE(precondition_frame.extracted_frame, nullptr);
+
+    const auto propagated
+      = RunTwoBoxPageFlagPropagationStage(*renderer, scene, vsm_renderer,
+        candidate_view, kWidth, kHeight, kFourthSequence, kSlot, 0xB006ULL);
+    const auto& frame = propagated.mapping.bridge.committed_frame;
+    const auto& layout = propagated.mapping.bridge.prepared_products
+                           .virtual_frame.directional_layouts.front();
+    const auto pool
+      = vsm_renderer.GetPhysicalPagePoolManager().GetShadowPoolSnapshot();
+
+    ASSERT_TRUE(pool.is_available);
+    ASSERT_NE(pool.shadow_texture, nullptr);
+    const auto dynamic_slice
+      = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kDynamicDepth);
+    ASSERT_TRUE(dynamic_slice.has_value());
+    const auto dynamic_before
+      = ReadShadowSlice(pool.shadow_texture, *dynamic_slice,
+        "stage-eleven.clear.dynamic-before."
+          + std::to_string(static_cast<int>(multiplier * 10.0F)));
+
+    const auto clear_count = static_cast<std::size_t>(
+      std::count_if(frame.plan.initialization_work.begin(),
+        frame.plan.initialization_work.end(), [](const auto& item) {
+          return item.action == VsmPageInitializationAction::kClearDepth;
+        }));
+    if (layout.pages_per_axis <= 1U || frame.plan.allocated_page_count == 0U
+      || clear_count <= 1U) {
+      failure_details += " multiplier=" + std::to_string(multiplier)
+        + " clear_count=" + std::to_string(clear_count)
+        + " allocated=" + std::to_string(frame.plan.allocated_page_count)
+        + " pages_per_axis=" + std::to_string(layout.pages_per_axis);
+      continue;
+    }
+
+    const auto clear_target = FindClearTargetSample(frame, pool, dynamic_before,
+      "stage-eleven.clear."
+        + std::to_string(static_cast<int>(multiplier * 10.0F)));
+    if (!clear_target.has_value()) {
+      failure_details += " multiplier=" + std::to_string(multiplier)
+        + " stale_clear_target=none";
+      continue;
+    }
+
+    const auto control_sample = FindMappedPageSample(propagated.page_table,
+      pool, dynamic_before, CollectInitializationPages(frame),
+      "stage-eleven.clear.control."
+        + std::to_string(static_cast<int>(multiplier * 10.0F)));
+    if (!control_sample.has_value()) {
+      failure_details
+        += " multiplier=" + std::to_string(multiplier) + " control_sample=none";
+      continue;
+    }
+
+    const auto buffers_before
+      = CaptureStageBuffers(frame, "stage-eleven.clear.before");
+    ExecuteInitializationPass(
+      oxygen::engine::VsmPageInitializationPassInput {
+        .frame = frame,
+        .physical_pool = pool,
+      },
+      "stage-eleven.clear.initialize");
+
+    const auto dynamic_after = ReadShadowSlice(
+      pool.shadow_texture, *dynamic_slice, "stage-eleven.clear.dynamic-after");
+    EXPECT_NEAR(
+      dynamic_after.At(clear_target->x, clear_target->y), 1.0F, 1.0e-5F);
+    EXPECT_NEAR(dynamic_after.At(control_sample->x, control_sample->y),
+      control_sample->value, 1.0e-5F);
+    ExpectStageBuffersUnchanged(frame, buffers_before, "stage-eleven.clear");
+    return;
   }
 
-  const auto untouched_x
-    = untouched_coord->tile_x * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  const auto untouched_y
-    = untouched_coord->tile_y * shadow_pool.page_size_texels
-    + shadow_pool.page_size_texels / 2U;
-  EXPECT_FLOAT_EQ(
-    ReadShadowDepthTexel(shadow_pool.shadow_texture, untouched_x, untouched_y,
-      0U, "vsm-selective-page-initialization.multi-copy.untouched-readback"),
-    0.10F);
+  FAIL() << "No real clear scenario with stale page data found across "
+            "candidate page pans."
+         << failure_details;
+}
+
+NOLINT_TEST_F(VsmSelectivePageInitializationLiveSceneTest,
+  DynamicOnlyInvalidationCopiesStaticSliceIntoRealDirectionalPages)
+{
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kFirstSequence = SequenceNumber { 137U };
+  constexpr auto kSecondSequence = SequenceNumber { 138U };
+  constexpr auto kThirdSequence = SequenceNumber { 139U };
+
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+  const auto resolved_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
+  MarkTallBoxStaticShadowCaster(scene);
+  MoveShortBox(scene, glm::vec3 { 1.20F, 0.0F, -0.05F });
+
+  auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &renderer->GetStagingProvider() },
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
+
+  const auto first_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kFirstSequence, kSlot, 0xB004ULL);
+  ASSERT_NE(first_frame.extracted_frame, nullptr);
+
+  const auto second_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kSecondSequence, kSlot, 0xB004ULL);
+  ASSERT_NE(second_frame.extracted_frame, nullptr);
+  ASSERT_EQ(second_frame.virtual_frame.directional_layouts.size(), 1U);
+  const auto directional_key
+    = second_frame.virtual_frame.directional_layouts.front().remap_key;
+  vsm_renderer.GetCacheManager().InvalidateDirectionalClipmaps(
+    { directional_key }, VsmCacheInvalidationScope::kDynamicOnly,
+    VsmCacheInvalidationReason::kTargetedInvalidate);
+
+  const auto propagated
+    = RunTwoBoxPageFlagPropagationStage(*renderer, scene, vsm_renderer,
+      resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xB005ULL);
+  const auto& frame = propagated.mapping.bridge.committed_frame;
+  const auto& layout = propagated.mapping.bridge.prepared_products.virtual_frame
+                         .directional_layouts.front();
+  const auto pool
+    = vsm_renderer.GetPhysicalPagePoolManager().GetShadowPoolSnapshot();
+
+  ASSERT_TRUE(pool.is_available);
+  ASSERT_NE(pool.shadow_texture, nullptr);
+  const auto dynamic_slice
+    = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kDynamicDepth);
+  const auto static_slice
+    = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kStaticDepth);
+  ASSERT_TRUE(dynamic_slice.has_value());
+  ASSERT_TRUE(static_slice.has_value());
+  const auto dynamic_before = ReadShadowSlice(
+    pool.shadow_texture, *dynamic_slice, "stage-eleven.copy.dynamic-before");
+  const auto static_before = ReadShadowSlice(
+    pool.shadow_texture, *static_slice, "stage-eleven.copy.static-before");
+
+  const auto copy_count = static_cast<std::size_t>(
+    std::count_if(frame.plan.initialization_work.begin(),
+      frame.plan.initialization_work.end(), [](const auto& item) {
+        return item.action == VsmPageInitializationAction::kCopyStaticSlice;
+      }));
+  EXPECT_GT(layout.pages_per_axis, 1U);
+  EXPECT_GT(copy_count, 0U);
+
+  const auto copy_target = FindCopyTargetSample(
+    frame, pool, dynamic_before, static_before, "stage-eleven.copy");
+  ASSERT_TRUE(copy_target.has_value());
+  EXPECT_GT(std::abs(copy_target->dynamic_before - copy_target->static_before),
+    kCopyEpsilon);
+
+  const auto buffers_before
+    = CaptureStageBuffers(frame, "stage-eleven.copy.before");
+  ExecuteInitializationPass(
+    oxygen::engine::VsmPageInitializationPassInput {
+      .frame = frame,
+      .physical_pool = pool,
+    },
+    "stage-eleven.copy.initialize");
+
+  const auto static_after = ReadShadowSlice(
+    pool.shadow_texture, *static_slice, "stage-eleven.copy.static-after");
+  const auto dynamic_after = ReadShadowSlice(
+    pool.shadow_texture, *dynamic_slice, "stage-eleven.copy.dynamic-after");
+  EXPECT_NEAR(static_after.At(copy_target->x, copy_target->y),
+    copy_target->static_before, 1.0e-5F);
+  EXPECT_NEAR(dynamic_after.At(copy_target->x, copy_target->y),
+    copy_target->static_before, 1.0e-5F);
+  ExpectStageBuffersUnchanged(frame, buffers_before, "stage-eleven.copy");
 }
 
 } // namespace

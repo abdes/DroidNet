@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Forward.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerSeam.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageAllocationPlanner.h>
@@ -57,6 +58,8 @@ public:
     -> const VsmInvalidationWorkload&;
 
   OXGN_RNDR_API auto AbortFrame() -> void;
+  OXGN_RNDR_API auto QueueFrameExtraction(graphics::CommandRecorder& recorder)
+    -> void;
   OXGN_RNDR_API auto ExtractFrameData() -> void;
   OXGN_RNDR_API auto InvalidateAll(VsmCacheInvalidationReason reason) -> void;
   OXGN_RNDR_API auto InvalidateLocalLights(const VsmRemapKeyList& remap_keys,
@@ -100,6 +103,15 @@ private:
     std::shared_ptr<graphics::Buffer> page_rect_bounds_buffer {};
   };
 
+  struct PendingFrameExtraction {
+    std::shared_ptr<graphics::GpuBufferReadback> physical_page_meta_readback {};
+    graphics::ReadbackTicket physical_page_meta_ticket {};
+    std::size_t physical_page_count { 0 };
+    std::shared_ptr<graphics::GpuBufferReadback> page_table_readback {};
+    graphics::ReadbackTicket page_table_ticket {};
+    std::size_t page_table_entry_count { 0 };
+  };
+
   struct RuntimeState {
     VsmCacheDataState cache_data_state { VsmCacheDataState::kUnavailable };
     VsmCacheBuildState build_state { VsmCacheBuildState::kIdle };
@@ -123,6 +135,7 @@ private:
     // the previous extracted frame so GetPreviousFrame() remains the canonical
     // extracted snapshot until the next ExtractFrameData().
     std::vector<PendingInvalidation> pending_invalidations {};
+    std::optional<PendingFrameExtraction> pending_frame_extraction {};
     FrameWorkingSetResources working_set_resources {};
   };
 
@@ -137,6 +150,9 @@ private:
     -> void;
   auto ApplyRetainedEntryContinuity(const VsmCacheManagerSeam& seam,
     VsmPageAllocationPlan& plan, VsmPageAllocationSnapshot& snapshot) -> void;
+  auto FinalizePendingFrameExtraction() -> void;
+  auto TrySynchronizeSnapshotFromGpu(const VsmPageAllocationFrame& frame,
+    VsmPageAllocationSnapshot& snapshot) const -> bool;
   auto EnsureWorkingSetResources(const VsmPageAllocationSnapshot& snapshot)
     -> const FrameWorkingSetResources&;
   auto ClearInFlightFrameState() -> void;

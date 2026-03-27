@@ -1509,7 +1509,7 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
           : kInvalidShaderVisibleIndex,
       });
 
-    cache_manager_.ExtractFrameData();
+    cache_manager_.QueueFrameExtraction(recorder);
     frame_open = false;
 
     LOG_F(INFO,
