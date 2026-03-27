@@ -302,6 +302,10 @@ component wraps this with appropriate lifecycle management.
 - Synchronization: implement robust CPU-side fences and GPU timeline support for
   `CommandQueue::Signal`/`Wait` and the `CommandQueue::GetCompletedValue`
   semantics.
+  - `CommandQueue::GetCurrentValue()` must reflect submit-time CPU signal
+    reservations, not only completed GPU work. Readback deadlock detection
+    relies on `current < ticket.fence` meaning "this signal was never
+    submitted".
 - Resource transitions: follow the engine's `ResourceStates` mapping; implement
   barriers carefully and minimize redundant barriers for performance.
 - Debugging: provide helpful debug-name support for native objects (use the name
@@ -346,6 +350,14 @@ component wraps this with appropriate lifecycle management.
 - Run unit tests under `Graphics/Common/Test` where applicable and add
   backend-specific tests to validate native views, descriptor copying, barrier
   behavior, and command submission modes.
+- Validate readback misuse explicitly:
+  - blocking `ReadbackManager::Await(...)` must warn and return
+    `ReadbackError::kWouldDeadlock` when a caller awaits a ticket whose signal
+    has not been submitted yet.
+  - blocking `ReadbackManager::Await(...)` must warn and return
+    `ReadbackError::kShutdown` when the manager has already entered shutdown.
+  - long tracker waits should emit periodic warnings so hangs are diagnosable
+    from logs instead of failing silently.
 
 ## Next steps / further reading
 

@@ -59,6 +59,14 @@ auto CommandQueue::SignalImmediate(const uint64_t value) const -> void
   cv_.notify_all();
 }
 
+auto CommandQueue::NoteSubmittedSignal(const uint64_t value) const -> void
+{
+  std::lock_guard lk(mutex_);
+  if (value > current_value_) {
+    current_value_ = value;
+  }
+}
+
 auto CommandQueue::QueueWaitImmediate(const uint64_t value) const -> void
 {
   Wait(value);
@@ -137,6 +145,15 @@ auto CommandQueue::Submit(
     } catch (const std::exception& e) {
       LOG_F(ERROR, "Submit: failed to steal commands: {}", e.what());
       submission_chunks.emplace_back();
+    }
+  }
+
+  for (const auto& chunk : submission_chunks) {
+    for (const auto& action : chunk.submit_actions) {
+      if (action.kind
+        == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+        NoteSubmittedSignal(action.value);
+      }
     }
   }
 

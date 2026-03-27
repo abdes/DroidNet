@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -46,6 +47,7 @@ using oxygen::graphics::ReadbackTicket;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::d3d12::testing::ReadbackTestFixture;
 using oxygen::graphics::d3d12::testing::TransferQueueReadbackTestFixture;
+using oxygen::testing::ScopedLogCapture;
 
 auto MakePatternBytes(const size_t size, const uint8_t seed = 0x10)
   -> std::vector<std::byte>
@@ -581,6 +583,65 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
   const auto ready = readback->IsReady();
   ASSERT_TRUE(ready.has_value());
   EXPECT_TRUE(*ready);
+}
+
+NOLINT_TEST_F(BufferReadbackManagerTest,
+  ManagerAwaitWarnsAndReturnsWouldDeadlockWhenTicketSignalWasNeverSubmitted)
+{
+  const auto source_bytes = MakePatternBytes(52, 0x91);
+  auto source
+    = CreateInitializedDeviceBuffer(source_bytes, "await-deadlock-source");
+  auto readback = CreateBufferReadback("await-deadlock-readback");
+
+  const auto ticket = EnqueueReadback(readback, source, BufferRange { 8, 20 },
+    "buffer-readback-await-deadlock", oxygen::graphics::QueueRole::kGraphics,
+    false);
+
+  ScopedLogCapture capture { "D3D12ReadbackAwaitWouldDeadlock",
+    loguru::Verbosity_WARNING };
+  const auto awaited = AwaitReadback(ticket);
+
+  ASSERT_FALSE(awaited.has_value());
+  EXPECT_EQ(awaited.error(), ReadbackError::kWouldDeadlock);
+  EXPECT_TRUE(capture.Contains("would deadlock"));
+  EXPECT_TRUE(
+    capture.Contains("Submit the command recorder before awaiting the ticket"));
+
+  const auto cancelled = CancelReadback(ticket);
+  ASSERT_TRUE(cancelled.has_value());
+  EXPECT_TRUE(*cancelled);
+}
+
+NOLINT_TEST_F(BufferReadbackManagerTest,
+  ManagerAwaitWarnsAndReturnsShutdownWhenManagerWasAlreadyShutDown)
+{
+  GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
+
+  const auto source_bytes = MakePatternBytes(48, 0xA3);
+  auto source
+    = CreateInitializedDeviceBuffer(source_bytes, "await-shutdown-source");
+  auto readback = CreateBufferReadback("await-shutdown-readback");
+
+  const auto ticket = EnqueueReadback(readback, source, BufferRange { 6, 18 },
+    "buffer-readback-await-shutdown", oxygen::graphics::QueueRole::kGraphics,
+    false);
+
+  const auto shutdown_result
+    = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
+  ASSERT_FALSE(shutdown_result.has_value());
+  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
+
+  ScopedLogCapture capture { "D3D12ReadbackAwaitShutdown",
+    loguru::Verbosity_WARNING };
+  const auto awaited = AwaitReadback(ticket);
+
+  ASSERT_FALSE(awaited.has_value());
+  EXPECT_EQ(awaited.error(), ReadbackError::kShutdown);
+  EXPECT_TRUE(capture.Contains("shutting down"));
+
+  const auto cancelled = CancelReadback(ticket);
+  ASSERT_TRUE(cancelled.has_value());
+  EXPECT_TRUE(*cancelled);
 }
 
 NOLINT_TEST_F(BufferReadbackFrameLifecycleTest,
