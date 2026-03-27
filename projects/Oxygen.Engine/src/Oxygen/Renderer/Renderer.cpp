@@ -615,8 +615,11 @@ Renderer::OffscreenFrameSession::OffscreenFrameSession(
   OffscreenFrameSession&& other) noexcept
   : renderer_(std::exchange(other.renderer_, nullptr))
   , render_context_(std::move(other.render_context_))
+  , current_resolved_view_(std::move(other.current_resolved_view_))
+  , current_prepared_frame_(std::move(other.current_prepared_frame_))
   , active_(std::exchange(other.active_, false))
 {
+  RebindCurrentViewPointers();
 }
 
 auto Renderer::OffscreenFrameSession::operator=(
@@ -629,7 +632,10 @@ auto Renderer::OffscreenFrameSession::operator=(
   Release();
   renderer_ = std::exchange(other.renderer_, nullptr);
   render_context_ = std::move(other.render_context_);
+  current_resolved_view_ = std::move(other.current_resolved_view_);
+  current_prepared_frame_ = std::move(other.current_prepared_frame_);
   active_ = std::exchange(other.active_, false);
+  RebindCurrentViewPointers();
   return *this;
 }
 
@@ -642,10 +648,13 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
   CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
     "Renderer offscreen frame requires ViewConstantsManager");
 
+  current_resolved_view_ = resolved_view;
+  current_prepared_frame_ = prepared_frame;
+
   render_context_.current_view = {};
   render_context_.current_view.view_id = view_id;
-  render_context_.current_view.resolved_view.reset(&resolved_view);
-  render_context_.current_view.prepared_frame.reset(&prepared_frame);
+  render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
+  render_context_.current_view.prepared_frame.reset(&*current_prepared_frame_);
 
   renderer_->UpdateViewConstantsFromView(resolved_view);
   renderer_->view_const_cpu_
@@ -692,6 +701,23 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
   renderer_->WireContext(render_context_, buffer_info.buffer);
 }
 
+auto Renderer::OffscreenFrameSession::RebindCurrentViewPointers() noexcept
+  -> void
+{
+  if (!current_resolved_view_.has_value()) {
+    render_context_.current_view.resolved_view.reset();
+  } else {
+    render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
+  }
+
+  if (!current_prepared_frame_.has_value()) {
+    render_context_.current_view.prepared_frame.reset();
+  } else {
+    render_context_.current_view.prepared_frame.reset(
+      &*current_prepared_frame_);
+  }
+}
+
 auto Renderer::OffscreenFrameSession::Release() noexcept -> void
 {
   if (!active_) {
@@ -700,6 +726,9 @@ auto Renderer::OffscreenFrameSession::Release() noexcept -> void
   if (renderer_ != nullptr) {
     renderer_->EndOffscreenFrame();
   }
+  render_context_.current_view = {};
+  current_resolved_view_.reset();
+  current_prepared_frame_.reset();
   renderer_ = nullptr;
   active_ = false;
 }

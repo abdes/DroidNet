@@ -110,7 +110,6 @@ m_gtest_program(
     "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
     "VirtualShadow/VsmShaderTypes_test.cpp"
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
-    "VirtualShadow/VsmShadowRasterJobs_test.cpp"
 )
 
 gtest_program(
@@ -210,6 +209,18 @@ if(TARGET oxygen::graphics-direct3d12)
       oxygen::graphics-direct3d12
   )
 
+  m_gtest_program(
+    VsmShadowRasterization
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmShadowRasterJobs_test.cpp"
+      "VirtualShadow/VsmShadowRasterizationLiveScene_test.cpp"
+      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
   target_sources(
     Oxygen.Renderer.VsmBeginFrame.Tests
     PRIVATE
@@ -268,7 +279,6 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VsmProjectionPass_test.cpp"
       "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
       "VirtualShadow/VsmStaticDynamicMergePass_test.cpp"
-      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
       DEPS
       oxygen::graphics-direct3d12
   )

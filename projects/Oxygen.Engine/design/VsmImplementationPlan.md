@@ -602,10 +602,16 @@ Validation evidence on 2026-03-25:
 
 **Architecture ref:** §3.6, §12, stage 12
 
+**Status:** in_progress on `2026-03-28`.
+
 **Execution note:** this phase is now decomposed in
-`VsmShadowRasterizerImplementationPlan.md`. That sub-plan is now complete:
-`F0` through `F4` have validation evidence on `2026-03-26`, so parent Phase F
-is complete. Full renderer-wide VSM orchestration remains parent Phase `K`.
+`VsmShadowRasterizerImplementationPlan.md`. The dedicated Stage 12 executable
+and the `F0` through `F4` slices have focused validation evidence, but parent
+Phase F is not closed yet: a live renderer capture still shows semantically
+wrong page-aligned floor shadow artifacts in the downstream Stage 12→15 path,
+and the fully stage-fed live static-recache producer chain is still only
+partially proven at the Stage 12 boundary. Full renderer-wide VSM
+orchestration remains parent Phase `K`.
 
 **Deliverables:**
 
@@ -690,8 +696,46 @@ Validation evidence through `F4` on `2026-03-26`:
   `ScreenHzbBuildGpuTest.PreviousFrameOutputTracksPriorPyramidAcrossFrames`
   still throws an SEH access violation during its own seed-depth setup when run
   directly at `-v 9`, so it is not being used as Phase F evidence
-- Phase F exit gate is now satisfied; broader forward-pipeline VSM integration
-  is still deferred to parent Phase `K`
+- corrective status update on `2026-03-28`:
+  - Stage 12 ownership now lives in the dedicated
+    `Oxygen.Renderer.VsmShadowRasterization.Tests` executable through
+    `VsmShadowRasterJobs_test.cpp`,
+    `VsmShadowRasterizationLiveScene_test.cpp`, and
+    `VsmShadowRasterizerPass_test.cpp`
+  - the first live Stage 12 refactor was too broad: it tried to prove current
+    Stage 12 behavior by reading `GetPreviousFrame()` after
+    `ExecutePreparedViewShell(...)`, which is the wrong boundary because
+    extraction happens later
+  - the current dedicated Stage 12 suite now stops at Stage 12 through
+    `RunTwoBoxShadowRasterizationStage(...)` and reads current-frame dirty
+    flags, physical metadata, rasterized depth, visible primitive history, and
+    static feedback directly
+  - ASan then exposed a real engine-side offscreen-view lifetime defect:
+    `Renderer::OffscreenFrameSession::SetCurrentView(...)` stored raw pointers
+    to caller-owned `ResolvedView` temporaries, and
+    `VsmProjectionPass` could resume against dead stack memory in
+    `VsmShadowRasterizerPassGpuTest.ExecuteRasterizedDirectionalPagesProjectLocalizedShadowMaskInsteadOfPageWideDarkening`
+  - `Renderer::OffscreenFrameSession` now owns copies of the active resolved
+    and prepared view snapshots and rebinds those pointers after moves
+  - recorded evidence in `out/build-ninja`:
+    - built `Oxygen.Renderer.VsmShadowRasterization.Tests`
+    - ran `Oxygen.Renderer.VsmShadowRasterization.Tests.exe` with
+      `13 tests from 3 test suites` passing
+    - ran
+      `Oxygen.Renderer.VsmShadowRasterization.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.ExecuteRasterizedDirectionalPagesProjectLocalizedShadowMaskInsteadOfPageWideDarkening --gtest_repeat=5`
+      and all `5/5` executions passed
+    - built `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
+    - ran
+      `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
+      and it passed
+    - ran
+      `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellProjectsLocalizedDirectionalMaskForRasterizedCasters`
+      and it passed
+  - remaining validation delta:
+    - the fully stage-fed live static-recache producer chain is still not
+      proven at the Stage 12 boundary
+    - the user-provided live renderer capture still shows incorrect final floor
+      shadows, so Phase F remains `in_progress`
 
 ---
 
