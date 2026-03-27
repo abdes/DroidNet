@@ -471,7 +471,7 @@ class VsmPageFlagPropagationGpuTest : public VsmPageLifecycleGpuTestBase { };
 class VsmPageInitializationGpuTest : public VsmPageLifecycleGpuTestBase { };
 
 NOLINT_TEST_F(VsmPageFlagPropagationGpuTest,
-  PropagationPassBuildsHierarchicalFlagsAndMappedDescendants)
+  PropagationPassBuildsMappedDescendantsForAllocatedAncestorPages)
 {
   auto pool_manager = VsmPhysicalPagePoolManager(&Backend());
   ASSERT_EQ(
@@ -499,31 +499,14 @@ NOLINT_TEST_F(VsmPageFlagPropagationGpuTest,
       frame.snapshot.page_table.size(), "vsm-phase-e-page-flags");
   ASSERT_EQ(page_flags.size(), 6U);
 
-  const auto allocated_bit
-    = static_cast<std::uint32_t>(VsmShaderPageFlagBits::kAllocated);
-  const auto dynamic_uncached_bit
-    = static_cast<std::uint32_t>(VsmShaderPageFlagBits::kDynamicUncached);
-  const auto static_uncached_bit
-    = static_cast<std::uint32_t>(VsmShaderPageFlagBits::kStaticUncached);
   const auto mapped_descendant_bit
     = static_cast<std::uint32_t>(VsmShaderPageFlagBits::kMappedDescendant);
 
-  EXPECT_EQ(page_flags[0].bits, 0U);
-  EXPECT_EQ(page_flags[2].bits, 0U);
-  EXPECT_EQ(page_flags[4].bits, 0U);
+  EXPECT_EQ(page_flags[0].bits & mapped_descendant_bit, 0U);
+  EXPECT_EQ(page_flags[2].bits & mapped_descendant_bit, 0U);
+  EXPECT_EQ(page_flags[4].bits & mapped_descendant_bit, 0U);
 
-  EXPECT_NE(page_flags[1].bits & allocated_bit, 0U);
-  EXPECT_NE(page_flags[1].bits & dynamic_uncached_bit, 0U);
-  EXPECT_NE(page_flags[1].bits & static_uncached_bit, 0U);
-
-  EXPECT_NE(page_flags[3].bits & allocated_bit, 0U);
-  EXPECT_NE(page_flags[3].bits & dynamic_uncached_bit, 0U);
-  EXPECT_NE(page_flags[3].bits & static_uncached_bit, 0U);
   EXPECT_NE(page_flags[3].bits & mapped_descendant_bit, 0U);
-
-  EXPECT_NE(page_flags[5].bits & allocated_bit, 0U);
-  EXPECT_NE(page_flags[5].bits & dynamic_uncached_bit, 0U);
-  EXPECT_NE(page_flags[5].bits & static_uncached_bit, 0U);
   EXPECT_NE(page_flags[5].bits & mapped_descendant_bit, 0U);
 }
 

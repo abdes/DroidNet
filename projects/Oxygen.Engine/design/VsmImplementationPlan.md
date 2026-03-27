@@ -59,7 +59,7 @@ Stage-suite refactor status on `2026-03-27`:
   only malformed-input rejection tests mutate those published snapshots after real construction
 - the shared live-scene harness now lives in
   `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-  two-box lighting scenes through the dedicated Stage 1-8 executables
+  two-box lighting scenes through the dedicated Stage 1-9 executables
 - the shared live-scene harness now rotates test lights from the engine's
   `oxygen::space::move::Forward` basis instead of an ad hoc `-Z` basis, so
   spotlight and directional live-scene targets match engine transform reality
@@ -80,6 +80,8 @@ Stage-suite refactor status on `2026-03-27`:
 - Stage 7 available-page packing coverage now lives in the dedicated `VsmAvailablePages` test
   program
 - Stage 8 new-page-mapping coverage now lives in the dedicated `VsmPageMappings` test program
+- Stage 9 hierarchical-flag coverage now lives in the dedicated `VsmHierarchicalFlags` test
+  program
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -89,6 +91,14 @@ Stage-suite refactor status on `2026-03-27`:
   stable directional reuse, directional clipmap pan reuse, moved-caster invalidation seeding,
   and retained unreferenced paged-spotlight continuity using a real depth-derived spotlight
   target and a Stage 5 CPU oracle configured to match the no-light-culling bridge path
+- the dedicated Stage 9 executable now includes live real-scene validation for:
+  fresh directional clipmap propagation, mixed paged-local-light propagation across two real spot
+  lights, and moved-caster directional refresh propagation; those tests compare the Stage 9
+  hierarchical bits against a CPU model built from the actual Stage 8 outputs
+- Stage 9 review found one upstream non-Stage-9 validation gap: `detail_geometry` still has no
+  real-input producer in Oxygen, so the dedicated Stage 9 live-scene suite validates exact
+  propagation of the real Stage 8 leaf-state bits currently produced today rather than a dormant
+  synthetic-only bit path
 - dedicated semantic stage suites now exist for begin-frame, virtual-address allocation,
   remap construction, projection-record publication, page-request generation, physical-page reuse,
   available-page packing, new-page mapping, hierarchical page flags, mapped-mip propagation,
@@ -96,7 +106,8 @@ Stage-suite refactor status on `2026-03-27`:
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
   `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VsmAvailablePages`,
-  `VsmPageMappings`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
+  `VsmPageMappings`, `VsmHierarchicalFlags`, `VirtualShadows`, and
+  `VirtualShadowGpuLifecycle`;
   `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`,
@@ -105,6 +116,7 @@ Stage-suite refactor status on `2026-03-27`:
   `Oxygen.Renderer.VsmPageReuse.Tests`,
   `Oxygen.Renderer.VsmAvailablePages.Tests`,
   `Oxygen.Renderer.VsmPageMappings.Tests`,
+  `Oxygen.Renderer.VsmHierarchicalFlags.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
@@ -158,6 +170,15 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 8 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageMappings.Tests.exe`
   and `3 tests from 1 test suite` passed
+- Stage 9 review and boundary rewrite used the UE5 reference-comparison rule through a subagent
+  audit before moving Stage 9 ownership into its dedicated executable
+- built `Oxygen.Renderer.VsmHierarchicalFlags.Tests` in `out/build-ninja` (`Debug`)
+- reran the dedicated Stage 9 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe`
+  and `3 tests from 1 test suite` passed
+- reran focused neighboring propagation coverage with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmPageFlagPropagationGpuTest.*:VsmMappedMipPropagationTest.*`
+  and `2 tests from 2 test suites` passed
 - reran the shared-harness Stage 4 executable after the light-orientation harness fix:
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmProjectionRecords.Tests.exe`
   and `2 tests from 1 test suite` passed
@@ -229,14 +250,12 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 10 suite with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmMappedMipPropagationTest.*`
   and `1 test from 1 test suite` passed
-- strengthened the Stage 9 dedicated suite so
+- historical evidence before the Stage 9 executable split:
   `VsmHierarchicalPageFlagsTest.BuildsAllocatedAndUncachedFlagsAcrossRequestedLeafAndAncestorPages`
-  now proves hierarchical allocated/dynamic-uncached/static-uncached propagation across the same
-  three-level multi-page paged-light scenario through the shared GPU harness request/index helpers
-  instead of hardcoded page-table slots
-- reran the dedicated Stage 9 suite with
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmHierarchicalPageFlagsTest.*`
-  and `1 test from 1 test suite` passed
+  passed in the lifecycle binary and originally proved hierarchical
+  allocated/dynamic-uncached/static-uncached propagation across a three-level paged-light
+  scenario through the shared GPU harness request/index helpers instead of hardcoded page-table
+  slots
 - reran focused bottom-stage GPU validation with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmProjectionPassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmShadowRasterizerPassGpuTest.*:VsmPageRequestGeneratorGpuTest.*`
   and `29 tests from 5 test suites` passed
@@ -449,6 +468,11 @@ Validation evidence on 2026-03-24:
   `Oxygen.Renderer.VsmPageMappings.Tests` executable with live-scene validation and the old
   synthetic `VsmAllocateNewPagesGpuTest` ownership was removed along with
   `VsmPageManagementPass_test.cpp`
+- Stage 9 ownership was later moved onto the dedicated
+  `Oxygen.Renderer.VsmHierarchicalFlags.Tests` executable with live-scene validation and the old
+  lifecycle-binary `VsmHierarchicalPageFlagsTest` ownership was removed; the remaining
+  `VsmPageFlagPropagationGpuTest` coverage in `VsmPageLifecyclePasses_test.cpp` now validates
+  mapped-descendant propagation only and no longer counts as Stage 9 ownership evidence
 
 ---
 

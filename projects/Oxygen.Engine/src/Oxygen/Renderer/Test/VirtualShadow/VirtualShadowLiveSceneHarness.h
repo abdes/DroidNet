@@ -156,6 +156,12 @@ struct TwoBoxNewPageMappingResult {
   std::uint32_t available_page_count { 0U };
 };
 
+struct TwoBoxPageFlagPropagationResult {
+  TwoBoxNewPageMappingResult mapping {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry> page_table {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags {};
+};
+
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
 protected:
   using EventLoop = oxygen::co::testing::TestEventLoop;
@@ -1604,6 +1610,45 @@ protected:
       .seed_metadata = std::move(seed_metadata),
       .available_pages = std::move(available_pages),
       .available_page_count = available_count[0],
+    };
+  }
+
+  auto RunTwoBoxPageFlagPropagationStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxPageFlagPropagationResult
+  {
+    auto mapping = RunTwoBoxNewPageMappingStage(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, primitive_invalidations_override,
+      require_virtual_shadow_work);
+
+    ExecutePropagationPass(
+      mapping.bridge.committed_frame, "stage-nine-two-box.propagation");
+
+    const auto page_table
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        mapping.bridge.committed_frame.page_table_buffer,
+        mapping.bridge.committed_frame.snapshot.page_table.size(),
+        "stage-nine-two-box.page-table");
+    const auto page_flags
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        mapping.bridge.committed_frame.page_flags_buffer,
+        mapping.bridge.committed_frame.snapshot.page_table.size(),
+        "stage-nine-two-box.page-flags");
+
+    return TwoBoxPageFlagPropagationResult {
+      .mapping = std::move(mapping),
+      .page_table = std::move(page_table),
+      .page_flags = std::move(page_flags),
     };
   }
 };
