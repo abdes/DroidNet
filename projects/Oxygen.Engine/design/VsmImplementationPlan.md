@@ -70,6 +70,9 @@ Stage-suite refactor status on `2026-03-27`:
 - Stage 4 projection-record publication coverage now lives in the dedicated
   `VsmProjectionRecords` test program; shader ABI and cache lifecycle helpers remain outside the
   Stage 4 executable
+- Stage 5 page-request generation coverage now lives in the dedicated `VsmPageRequests` test
+  program; CPU-side request-routing and request-merging policy coverage now lives in `VsmBasic`
+  and does not count as Stage 5 completion evidence
 - the dedicated Stage 1-4 executables now each include live real-scene validation:
   Stage 1 checks frame-start/reset behavior against extracted real-scene history; Stage 2 checks
   multi-page directional clipmap publication from the real scene; Stage 3 checks exact
@@ -81,11 +84,13 @@ Stage-suite refactor status on `2026-03-27`:
   selective page initialization, shadow rasterization, static/dynamic merge, HZB update,
   projection/composite, frame extraction, and cache validity
 - renderer test `CMakeLists.txt` now uses logical target names `VsmVirtualAddressSpace`,
-  `VsmRemap`, `VsmProjectionRecords`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`;
+  `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VirtualShadows`, and
+  `VirtualShadowGpuLifecycle`;
   `m_gtest_program(...)` expands them to
   `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`,
   `Oxygen.Renderer.VsmProjectionRecords.Tests`,
+  `Oxygen.Renderer.VsmPageRequests.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 
@@ -108,9 +113,26 @@ Validation evidence on `2026-03-27`:
 - reran the dedicated Stage 4 executable
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmProjectionRecords.Tests.exe`
   and `2 tests from 1 test suite` passed
+- Stage 5 review and boundary rewrite used the UE5 reference-comparison rule through a subagent
+  audit before moving Stage 5 ownership into its dedicated executable
 - reran the supporting helper coverage moved out of Stage 2 with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBasic.Tests.exe --gtest_filter=VsmVirtualAddressSpaceTypesTest.*`
   and `2 tests from 1 test suite` passed
+- built `Oxygen.Renderer.VsmPageRequests.Tests`, `Oxygen.Renderer.VsmBasic.Tests`,
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`, and
+  `Oxygen.Renderer.VirtualShadows.Tests` in `out/build-ninja` (`Debug`) after the Stage 5
+  executable split
+- reran the Stage 5 helper-policy coverage moved out of functional ownership with
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmBasic.Tests.exe --gtest_filter=VsmPageRequestPolicyTest.*`
+  and `7 tests from 1 test suite` passed
+- reran the dedicated Stage 5 executable
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmPageRequests.Tests.exe`
+  and it currently reports `3 tests from 1 test suite`, `2 passed / 1 failed`
+- the dedicated Stage 5 executable now contains:
+  - a real two-box directional live-scene regression that takes input through Stages 1-5 and
+    asserts uploaded projection records plus decoded request flags from the runtime GPU path
+  - a real-depth multi-level local-light request-footprint regression
+  - a real-depth directional clip-level request-footprint regression
 - built `Oxygen.Renderer.VirtualShadows.Tests` and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja` (`Debug`)
 - Stage 3 review and rewrite used the UE5 reference-comparison rule through a subagent audit
@@ -125,7 +147,7 @@ Validation evidence on `2026-03-27`:
   - `VsmHzbUpdaterPassGpuTest.*`
   - `VsmStaticDynamicMergePassGpuTest.*`
   - `VsmShadowRasterizerPassGpuTest.*`
-  - `VsmPageRequestGeneratorGpuTest.*`
+  - `VsmPageRequestGeneratorGpuTest.*` (historical evidence before the Stage 5 executable split)
 - strengthened the Stage 15 dedicated suite so
   `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
   now drives projection from a rasterized two-page directional scene with real geometry through the
@@ -172,13 +194,21 @@ Validation evidence on `2026-03-27`:
 - reran focused bottom-stage GPU validation with
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmProjectionPassGpuTest.*:VsmHzbUpdaterPassGpuTest.*:VsmStaticDynamicMergePassGpuTest.*:VsmShadowRasterizerPassGpuTest.*:VsmPageRequestGeneratorGpuTest.*`
   and `29 tests from 5 test suites` passed
+- reran the focused bridge regression
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+  after removing embedded Stage 5 assertions from that test, and the remaining failure is now
+  isolated to Stage 15 floor probes that remain lit
 - reran the full GPU binary `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
   and it still reports exactly one failure out of `75 tests from 20 test suites`:
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+- Stage 5 completion evidence is still blocked by the known live-scene directional regression
+  `VsmPageRequestLiveSceneTest.DirectionalTwoBoxScenePublishesUploadedProjectionRecordsAndExpectedRequestFlags`;
+  the runtime still emits one extra request at page-table index `54`, so the Stage 5 slice remains
+  `in_progress`
 - full GPU validation is still blocked by the known live-shell failure
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
-  that test still reports one extra Stage 5 request at page-table index `54` and Stage 15 floor
-  probes that remain lit, so the test-refactor slice cannot be marked complete yet
+  after removing embedded Stage 5 assertions from that bridge test, the remaining failure is Stage
+  15 floor probes that remain lit, so the overall test-refactor slice cannot be marked complete yet
 
 The remaining phases below explicitly own the current forward gaps from the
 implemented cache/allocation slice:

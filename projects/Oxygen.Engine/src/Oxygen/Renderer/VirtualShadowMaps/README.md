@@ -56,6 +56,10 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `Oxygen.Renderer.VsmProjectionRecords.Tests` program so real-scene directional clipmap and
     paged local-spot projection publication is isolated from cache lifecycle helpers and shader ABI
     checks
+  - Stage 5 request-generation coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmPageRequests.Tests` program so real-data request-flag validation is
+    isolated from later GPU lifecycle stages and from the CPU helper-policy coverage in
+    `Oxygen.Renderer.VsmBasic.Tests`
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
@@ -76,8 +80,10 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - the shared GPU harness now exposes `MakePageRequests(...)` and
     `ResolvePageTableEntryIndex(...)` so paged-light stage suites can assemble real multi-page
     inputs and assert by virtual coordinate instead of by magic slot number
-  - the Stage 5 dedicated suite now reuses the shared GPU harness float-texture upload and
-    mip-readback helpers instead of carrying a private request-generation upload path
+  - the Stage 5 dedicated suite now reuses the shared live-scene and GPU harnesses:
+    `VsmPageRequestLiveSceneTest` validates a real two-box directional live-shell request-flag
+    regression, and the same executable also validates multi-level local fine/coarse requests and
+    directional clip-level requests from real depth fields
   - the Stage 11 dedicated suite now includes multi-page paged-light clear/copy coverage through
     `VsmSelectivePageInitializationTest.ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages`
     and
@@ -96,16 +102,17 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - the Stage 14 dedicated suite now includes a rasterized multi-page real-geometry proof through
     `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
   - renderer test `CMakeLists.txt` now uses logical target names
-    `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VirtualShadows`, and
-    `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+    `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`,
+    `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
     `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
     `Oxygen.Renderer.VsmRemap.Tests`,
     `Oxygen.Renderer.VsmProjectionRecords.Tests`,
+    `Oxygen.Renderer.VsmPageRequests.Tests`,
     `Oxygen.Renderer.VirtualShadows.Tests`, and
     `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
   `Oxygen.Renderer.VsmRemap.Tests`, `Oxygen.Renderer.VsmProjectionRecords.Tests`,
-  `Oxygen.Renderer.VirtualShadows.Tests`, and
+  `Oxygen.Renderer.VsmPageRequests.Tests`, `Oxygen.Renderer.VirtualShadows.Tests`, and
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
@@ -114,14 +121,17 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` passes with `8 tests from 4 test suites`
     - `Oxygen.Renderer.VsmRemap.Tests` passes with `29 tests from 5 test suites`
     - `Oxygen.Renderer.VsmProjectionRecords.Tests` passes with `2 tests from 1 test suite`
+    - `Oxygen.Renderer.VsmPageRequests.Tests` currently reports `3 tests from 1 test suite`,
+      `2 passed / 1 failed`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
+    - `VsmPageRequestPolicyTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
+      `7 tests from 1 test suite`
     - `Oxygen.Renderer.VirtualShadows.Tests` passes with `63 tests from 14 test suites`
-    - focused stage-owned suites pass for request generation, page reuse/packing/allocation,
+    - focused stage-owned suites pass for page reuse/packing/allocation,
       hierarchical page flags, mapped-mip propagation, selective initialization, shadow
       rasterization, static/dynamic merge, HZB update, projection/composite, extraction,
       and cache validity
-    - `VsmPageRequestGeneratorGpuTest.*` passes with `9 tests from 1 test suite`
     - `VsmHierarchicalPageFlagsTest.*` passes with `1 test from 1 test suite`
     - `VsmMappedMipPropagationTest.*` passes with `1 test from 1 test suite`
     - `VsmSelectivePageInitializationTest.*` passes with `4 tests from 1 test suite`
@@ -132,10 +142,13 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - a full rerun of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` now reports
       `75 tests from 20 test suites`, `74 passed / 1 failed`; the only failing case remains the
       analytic-floor bridge test below
+    - `Oxygen.Renderer.VsmPageRequests.Tests` currently has one known Stage 5 live-shell failure in
+      `VsmPageRequestLiveSceneTest.DirectionalTwoBoxScenePublishesUploadedProjectionRecordsAndExpectedRequestFlags`;
+      the runtime still emits one extra request at page-table index `54`
     - `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` still has one known live-shell failure in
       `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`;
-      Stage 5 emits one extra request at page-table index `54`, and the Stage 15 mask keeps
-      several shadowed floor probes lit
+      after removing the embedded Stage 5 assertions from that bridge test, the remaining failure
+      is purely Stage 15: several shadowed floor probes remain lit
 
 ## Known Forward Gaps
 

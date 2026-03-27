@@ -1,12 +1,13 @@
 # Virtual Shadow Map Tests
 
-Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across eight test programs:
+Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across nine test programs:
 
 - `VsmBasic`
 - `VsmBeginFrame`
 - `VsmVirtualAddressSpace`
 - `VsmRemap`
 - `VsmProjectionRecords`
+- `VsmPageRequests`
 - `VirtualShadows`
 - `VirtualShadowGpuLifecycle`
 - `Oxygen.Renderer.VirtualShadowSceneObserver.Tests`
@@ -43,8 +44,9 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 | `VsmVirtualAddressSpace` | `Oxygen.Renderer.VsmVirtualAddressSpace.Tests` / `bin/<Config>/Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe` | Stage 2 only: frame-local virtual layout allocation/publication contracts for directional clipmaps and local lights, plus a dedicated live two-box directional real-scene validation when the D3D12 backend is available |
 | `VsmRemap` | `Oxygen.Renderer.VsmRemap.Tests` / `bin/<Config>/Oxygen.Renderer.VsmRemap.Tests.exe` | Stage 3 only: previous-driven remap construction, stable-key matching, clipmap reuse offsets, explicit reuse-rejection contracts, and a dedicated live two-box directional real-scene validation when the D3D12 backend is available |
 | `VsmProjectionRecords` | `Oxygen.Renderer.VsmProjectionRecords.Tests` / `bin/<Config>/Oxygen.Renderer.VsmProjectionRecords.Tests.exe` | Stage 4 only: real-scene projection-record construction and publication contracts for multi-page directional clipmaps and paged local spot lights when the D3D12 backend is available |
+| `VsmPageRequests` | `Oxygen.Renderer.VsmPageRequests.Tests` / `bin/<Config>/Oxygen.Renderer.VsmPageRequests.Tests.exe` | Stage 5 only: real-scene/live-shell directional request-flag validation plus dedicated real-depth multi-level local and directional clip-level request-flag validation |
 | `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, extraction, cache validity, invalidation, orchestration, helper contracts |
-| `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed stage and integration coverage: request generation, allocation passes, flag propagation, initialization, rasterizer, merge, HZB, projection, bridge, invalidation |
+| `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed stage and integration coverage beyond the dedicated Stage 5 executable: allocation passes, flag propagation, initialization, rasterizer, merge, HZB, projection, bridge, invalidation |
 | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe` | Scene observer → cache manager invalidation integration |
 
 **All manual testing uses the `build-ninja` tree only.** Visual Studio build trees are not used for running tests by hand.
@@ -71,6 +73,9 @@ cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmRemap.
 # Stage 4 tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmProjectionRecords.Tests" --parallel 6
 
+# Stage 5 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmPageRequests.Tests" --parallel 6
+
 # All remaining CPU tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VirtualShadows.Tests" --parallel 6
 
@@ -95,6 +100,7 @@ For Release builds, substitute `Debug` with `Release` throughout. The executable
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmVirtualAddressSpace.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmRemap.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmProjectionRecords.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmPageRequests.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadows.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe
 ```
@@ -103,7 +109,7 @@ For Release builds, substitute `Debug` with `Release` throughout. The executable
 
 ```powershell
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe `
-    --gtest_filter="VsmPageRequestGeneratorGpuTest.*"
+    --gtest_filter="VsmPageRequestLiveSceneTest.*"
 ```
 
 ### Run a single test with high logging verbosity
@@ -129,7 +135,7 @@ Useful verbosity levels:
 
 ```powershell
 ctest --test-dir out/build-ninja -C Debug --output-on-failure `
-    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
+    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VsmPageRequests|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
 ```
 
 ---
@@ -185,12 +191,11 @@ Per-map projection records are built from the prepared scene plus the current vi
 
 ### Stage 5 — Page Request Generation
 
-GBuffer is sampled to determine which virtual pages are requested.
+Visible scene depth is sampled to determine which virtual pages are requested. The dedicated Stage 5 executable now owns the real-data functional proof for this boundary. CPU request-merging policy remains helper coverage in `VsmBasic` and does not count as Stage 5 completion evidence.
 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
-| `VsmPageRequestGenerationTest` | `VsmPageRequestGeneration_test.cpp` | VirtualShadows |
-| `VsmPageRequestGeneratorGpuTest` | `VsmPageRequestGeneratorPass_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmPageRequestLiveSceneTest` | `VsmPageRequests_test.cpp` | VsmPageRequests |
 
 ### Stages 6–8 — Physical Page Allocation GPU Passes
 
@@ -260,6 +265,7 @@ All tests live in the dedicated `VsmBasic` CMake program, which produces the `Ox
 | Test suite | File | What it covers |
 | ---------- | ---- | -------------- |
 | `VsmCacheManagerTypesTest` | `VsmCacheManagerTypes_test.cpp` | Copy-constructibility of all cache-manager value types; `to_string` surface of every enum; config-must-not-mirror-seam domain-ownership contract; `IsValid`/`Validate` on `VsmPageRequest` and `VsmRemapKeyList`; field round-trip fidelity for `VsmPageAllocationPlan`, `VsmPageAllocationSnapshot`, `VsmLightCacheEntryState`, `VsmPhysicalPageMeta`, and related types |
+| `VsmPageRequestPolicyTest` | `VsmPageRequestPolicy_test.cpp` | CPU-side request routing/merging helper coverage: fine/coarse request policy, light-grid pruning policy, malformed-projection rejection, and projection-routing edge cases. This is supporting helper coverage, not Stage 5 functional ownership. |
 | `VsmVirtualAddressSpaceTypesTest` | `VsmVirtualAddressSpaceTypes_test.cpp` | Supporting type-contract coverage for virtual-layout value types and stable `VsmReuseRejectionReason` string surfaces; this is helper coverage, not Stage 2 functional proof |
 
 ### Cross-cutting — Shader ABI Contracts

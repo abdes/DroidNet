@@ -6,10 +6,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <cmath>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -42,8 +42,8 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmPageRequestGeneratorPass.h>
@@ -53,20 +53,20 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
-#include <Oxygen/Renderer/Types/DrawFrameBindings.h>
-#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
+#include <Oxygen/Renderer/Types/DrawFrameBindings.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageRequestGeneration.h>
-#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionRouting.h>
-#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -118,7 +118,8 @@ auto DredOpName(const D3D12_AUTO_BREADCRUMB_OP op) -> const char*
 auto LogDredReport(ID3D12Device* device) -> void
 {
   Microsoft::WRL::ComPtr<ID3D12DeviceRemovedExtendedData1> dred;
-  if (device == nullptr || FAILED(device->QueryInterface(IID_PPV_ARGS(&dred)))) {
+  if (device == nullptr
+    || FAILED(device->QueryInterface(IID_PPV_ARGS(&dred)))) {
     LOG_F(WARNING, "DRED query unavailable");
     return;
   }
@@ -131,37 +132,35 @@ auto LogDredReport(ID3D12Device* device) -> void
   }
 
   LOG_F(ERROR, "DRED breadcrumbs:");
-  for (const auto* node = breadcrumbs.pHeadAutoBreadcrumbNode;
-    node != nullptr; node = node->pNext) {
-    const auto* command_list_name
-      = node->pCommandListDebugNameA != nullptr ? node->pCommandListDebugNameA
-                                                : "Unnamed";
+  for (const auto* node = breadcrumbs.pHeadAutoBreadcrumbNode; node != nullptr;
+    node = node->pNext) {
+    const auto* command_list_name = node->pCommandListDebugNameA != nullptr
+      ? node->pCommandListDebugNameA
+      : "Unnamed";
     auto last_breadcrumb = std::uint32_t { 0U };
     if (node->pLastBreadcrumbValue != nullptr) {
       last_breadcrumb = *node->pLastBreadcrumbValue;
     }
     auto last_op = "Unknown";
     if (node->pCommandHistory != nullptr && node->BreadcrumbCount > 0U) {
-      const auto history_index = std::min<std::uint32_t>(
-        last_breadcrumb, node->BreadcrumbCount - 1U);
+      const auto history_index
+        = std::min<std::uint32_t>(last_breadcrumb, node->BreadcrumbCount - 1U);
       last_op = DredOpName(node->pCommandHistory[history_index]);
     }
 
-    LOG_F(ERROR,
-      "  CommandList={} breadcrumbs={} last_index={} last_op={}",
+    LOG_F(ERROR, "  CommandList={} breadcrumbs={} last_index={} last_op={}",
       command_list_name, node->BreadcrumbCount, last_breadcrumb, last_op);
     if (node->pBreadcrumbContexts != nullptr) {
-      const auto contexts = std::span(
-        node->pBreadcrumbContexts, node->BreadcrumbContextsCount);
+      const auto contexts
+        = std::span(node->pBreadcrumbContexts, node->BreadcrumbContextsCount);
       for (const auto& context : contexts) {
         if (context.pContextString == nullptr) {
           continue;
         }
         auto utf8_context = std::string {};
-        oxygen::string_utils::WideToUtf8(
-          context.pContextString, utf8_context);
-        LOG_F(ERROR, "    Context[{}]={}", context.BreadcrumbIndex,
-          utf8_context);
+        oxygen::string_utils::WideToUtf8(context.pContextString, utf8_context);
+        LOG_F(
+          ERROR, "    Context[{}]={}", context.BreadcrumbIndex, utf8_context);
       }
     }
   }
@@ -305,8 +304,7 @@ auto BuildExpectedRequestFlags(
 
     flags[*index].bits
       |= static_cast<std::uint32_t>(VsmShaderPageRequestFlagBits::kRequired);
-    const auto is_directional
-      = matched_projection->projection.light_type
+    const auto is_directional = matched_projection->projection.light_type
       == static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional);
     if (!is_directional && request.page.level != 0U) {
       flags[*index].bits
@@ -325,9 +323,8 @@ protected:
     return (value + alignment - 1U) / alignment * alignment;
   }
 
-  [[nodiscard]] static auto MakeResolvedView(
-    const glm::vec3 camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F })
-    -> ResolvedView
+  [[nodiscard]] static auto MakeResolvedView(const glm::vec3 camera_position
+    = glm::vec3 { 0.0F, 0.0F, 0.0F }) -> ResolvedView
   {
     const auto view_matrix = glm::lookAtRH(camera_position,
       camera_position + glm::vec3 { 0.0F, 0.0F, -1.0F },
@@ -385,9 +382,8 @@ protected:
     return ResolvedView(ResolvedView::Params {
       .view_config = view_config,
       .view_matrix = glm::lookAtRH(eye, target, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-      .proj_matrix = glm::perspectiveRH_ZO(
-        fov_y_radians, static_cast<float>(width) / static_cast<float>(height),
-        0.1F, 100.0F),
+      .proj_matrix = glm::perspectiveRH_ZO(fov_y_radians,
+        static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F),
       .camera_position = eye,
       .depth_range = NdcDepthRange::ZeroToOne,
       .near_plane = 0.1F,
@@ -395,8 +391,8 @@ protected:
     });
   }
 
-  [[nodiscard]] static auto RotationFromForwardTo(
-    const glm::vec3 direction) -> glm::quat
+  [[nodiscard]] static auto RotationFromForwardTo(const glm::vec3 direction)
+    -> glm::quat
   {
     const auto start = glm::normalize(glm::vec3 { 0.0F, 0.0F, -1.0F });
     const auto dest = glm::normalize(direction);
@@ -421,9 +417,10 @@ protected:
     });
   }
 
-  [[nodiscard]] static auto ProjectWorldToPixel(const ResolvedView& resolved_view,
-    const glm::vec3 world_position, const std::uint32_t width,
-    const std::uint32_t height) -> std::optional<glm::uvec2>
+  [[nodiscard]] static auto ProjectWorldToPixel(
+    const ResolvedView& resolved_view, const glm::vec3 world_position,
+    const std::uint32_t width, const std::uint32_t height)
+    -> std::optional<glm::uvec2>
   {
     const auto clip = resolved_view.ProjectionMatrix()
       * resolved_view.ViewMatrix() * glm::vec4(world_position, 1.0F);
@@ -437,12 +434,12 @@ protected:
       return std::nullopt;
     }
 
-    const auto pixel_x = static_cast<std::uint32_t>(std::clamp(
-      (ndc.x * 0.5F + 0.5F) * static_cast<float>(width), 0.0F,
-      static_cast<float>(width - 1U)));
-    const auto pixel_y = static_cast<std::uint32_t>(std::clamp(
-      (1.0F - (ndc.y * 0.5F + 0.5F)) * static_cast<float>(height), 0.0F,
-      static_cast<float>(height - 1U)));
+    const auto pixel_x = static_cast<std::uint32_t>(
+      std::clamp((ndc.x * 0.5F + 0.5F) * static_cast<float>(width), 0.0F,
+        static_cast<float>(width - 1U)));
+    const auto pixel_y = static_cast<std::uint32_t>(
+      std::clamp((1.0F - (ndc.y * 0.5F + 0.5F)) * static_cast<float>(height),
+        0.0F, static_cast<float>(height - 1U)));
     return glm::uvec2 { pixel_x, pixel_y };
   }
 
@@ -590,10 +587,11 @@ protected:
       .memory = BufferMemory::kUpload,
       .debug_name = std::string(debug_name) + ".Upload",
     });
-    CHECK_NOTNULL_F(upload.get(), "Failed to create upload buffer `{}`",
-      debug_name);
+    CHECK_NOTNULL_F(
+      upload.get(), "Failed to create upload buffer `{}`", debug_name);
 
-    auto upload_bytes = std::vector<std::byte>(row_pitch * height, std::byte { 0 });
+    auto upload_bytes
+      = std::vector<std::byte>(row_pitch * height, std::byte { 0 });
     for (std::uint32_t y = 0U; y < height; ++y) {
       for (std::uint32_t x = 0U; x < width; ++x) {
         std::memcpy(upload_bytes.data()
@@ -649,7 +647,8 @@ protected:
     texture_desc.is_render_target = true;
     texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
-    texture_desc.clear_value = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+    texture_desc.clear_value
+      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
@@ -669,7 +668,8 @@ protected:
       .debug_name = std::string(debug_name),
     });
     CHECK_NOTNULL_F(buffer.get(), "Failed to create buffer `{}`", debug_name);
-    UploadBufferBytes(buffer, elements.data(), elements.size_bytes(), debug_name);
+    UploadBufferBytes(
+      buffer, elements.data(), elements.size_bytes(), debug_name);
 
     auto& allocator
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
@@ -716,8 +716,8 @@ protected:
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
     auto handle = allocator.Allocate(ResourceViewType::kRawBuffer_SRV,
       oxygen::graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(), "Failed to allocate raw SRV for `{}`",
-      debug_name);
+    CHECK_F(
+      handle.IsValid(), "Failed to allocate raw SRV for `{}`", debug_name);
 
     const auto slot = allocator.GetShaderVisibleIndex(handle);
     const oxygen::graphics::BufferViewDescription view_desc {
@@ -733,15 +733,14 @@ protected:
 
     auto view = Backend().GetResourceRegistry().RegisterView(
       *buffer, std::move(handle), view_desc);
-    CHECK_F(view->IsValid(), "Failed to register raw SRV for `{}`",
-      debug_name);
+    CHECK_F(view->IsValid(), "Failed to register raw SRV for `{}`", debug_name);
 
     return ShaderVisibleBuffer { .buffer = std::move(buffer), .slot = slot };
   }
 
   auto ReadOutputTexel(const std::shared_ptr<const Texture>& texture,
-    const std::uint32_t x, const std::uint32_t y,
-    std::string_view debug_name) -> float
+    const std::uint32_t x, const std::uint32_t y, std::string_view debug_name)
+    -> float
   {
     CHECK_NOTNULL_F(texture.get(), "Cannot read a null output texture");
 
@@ -756,8 +755,8 @@ protected:
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + ".Probe");
       CHECK_NOTNULL_F(recorder.get(), "Failed to acquire probe recorder");
-      EnsureTracked(
-        *recorder, std::const_pointer_cast<Texture>(texture), ResourceStates::kCommon);
+      EnsureTracked(*recorder, std::const_pointer_cast<Texture>(texture),
+        ResourceStates::kCommon);
       EnsureTracked(*recorder, readback, ResourceStates::kCopyDest);
       recorder->RequireResourceState(*texture, ResourceStates::kCopySource);
       recorder->RequireResourceState(*readback, ResourceStates::kCopyDest);
@@ -781,8 +780,8 @@ protected:
     WaitForQueueIdle();
 
     auto value = 0.0F;
-    const auto* mapped
-      = static_cast<const std::byte*>(readback->Map(0U, kTextureUploadRowPitch));
+    const auto* mapped = static_cast<const std::byte*>(
+      readback->Map(0U, kTextureUploadRowPitch));
     CHECK_NOTNULL_F(mapped, "Failed to map readback buffer");
     std::memcpy(&value, mapped, sizeof(value));
     readback->UnMap();
@@ -935,9 +934,8 @@ protected:
     });
     const auto completed_value = WaitForQueueIdle();
     if (completed_value.get() == std::numeric_limits<std::uint64_t>::max()) {
-      auto* device
-        = const_cast<oxygen::graphics::d3d12::dx::IDevice*>(
-          Backend().GetCurrentDevice());
+      auto* device = const_cast<oxygen::graphics::d3d12::dx::IDevice*>(
+        Backend().GetCurrentDevice());
       ASSERT_NE(device, nullptr);
       const auto reason = device->GetDeviceRemovedReason();
       LOG_F(ERROR,
@@ -1225,8 +1223,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
 
   auto vertex_buffer = CreateStructuredSrvBuffer<TestVertex>(
     vertices, "phase-k-shell-localized.vertices");
-  auto index_buffer = CreateUIntIndexBuffer(
-    kIndices, "phase-k-shell-localized.indices");
+  auto index_buffer
+    = CreateUIntIndexBuffer(kIndices, "phase-k-shell-localized.indices");
 
   auto world_buffer = TransientStructuredBuffer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
@@ -1416,14 +1414,15 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   static_cast<void>(CollectDirectionalLight(lights, sun_node));
 
   vsm_renderer.OnFrameStart(
-    oxygen::renderer::internal::RendererTagFactory::Get(),
-    kFrameSequence, kFrameSlot);
+    oxygen::renderer::internal::RendererTagFactory::Get(), kFrameSequence,
+    kFrameSlot);
   static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
-    MakeViewConstants(resolved_view, kFrameSequence, kFrameSlot, view_frame_slot),
+    MakeViewConstants(
+      resolved_view, kFrameSequence, kFrameSlot, view_frame_slot),
     lights, oxygen::observer_ptr<Scene> { scene.get() },
     static_cast<float>(kOutputWidth), std::span(rendered_items),
-    std::span(draw_bounds),
-    std::span(receiver_bounds), std::chrono::milliseconds { 16 }, 0xCA57ULL));
+    std::span(draw_bounds), std::span(receiver_bounds),
+    std::chrono::milliseconds { 16 }, 0xCA57ULL));
   ExecutePreparedViewShell(vsm_renderer, render_context,
     oxygen::observer_ptr<const Texture> { depth_texture.get() });
 
@@ -1431,26 +1430,27 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     = vsm_renderer.GetShadowRasterizerPass()->GetVisibleShadowPrimitives();
   EXPECT_EQ(visible_primitives.size(), rendered_items.size());
 
-  const auto output = vsm_renderer.GetProjectionPass()->GetCurrentOutput(
-    kTestViewId);
+  const auto output
+    = vsm_renderer.GetProjectionPass()->GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
   ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
 
-  const auto left_center = ReadOutputTexel(output.directional_shadow_mask_texture,
-    24U, 32U, "phase-k-shell-localized.mask.left-center");
-  const auto right_center = ReadOutputTexel(
-    output.directional_shadow_mask_texture, 40U, 32U,
-    "phase-k-shell-localized.mask.right-center");
+  const auto left_center
+    = ReadOutputTexel(output.directional_shadow_mask_texture, 24U, 32U,
+      "phase-k-shell-localized.mask.left-center");
+  const auto right_center
+    = ReadOutputTexel(output.directional_shadow_mask_texture, 40U, 32U,
+      "phase-k-shell-localized.mask.right-center");
   const auto left_edge = ReadOutputTexel(output.directional_shadow_mask_texture,
     6U, 32U, "phase-k-shell-localized.mask.left-edge");
-  const auto right_edge = ReadOutputTexel(
-    output.directional_shadow_mask_texture, 58U, 32U,
-    "phase-k-shell-localized.mask.right-edge");
+  const auto right_edge
+    = ReadOutputTexel(output.directional_shadow_mask_texture, 58U, 32U,
+      "phase-k-shell-localized.mask.right-edge");
   const auto top_left = ReadOutputTexel(output.directional_shadow_mask_texture,
     6U, 6U, "phase-k-shell-localized.mask.top-left");
-  const auto bottom_right = ReadOutputTexel(
-    output.directional_shadow_mask_texture, 58U, 58U,
-    "phase-k-shell-localized.mask.bottom-right");
+  const auto bottom_right
+    = ReadOutputTexel(output.directional_shadow_mask_texture, 58U, 58U,
+      "phase-k-shell-localized.mask.bottom-right");
 
   EXPECT_LT(left_center, 0.1F);
   EXPECT_LT(right_center, 0.1F);
@@ -1481,8 +1481,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     camera_eye, camera_target, kOutputWidth, kOutputHeight);
   const auto sun_direction
     = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
-  const auto inverse_view_projection
-    = glm::inverse(resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
+  const auto inverse_view_projection = glm::inverse(
+    resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -1532,7 +1532,12 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     make_vertex(glm::vec3 { -4.5F, 0.0F, 4.5F }),
   };
   constexpr std::array<std::uint32_t, 6> kFloorIndices {
-    0U, 2U, 1U, 0U, 3U, 2U,
+    0U,
+    2U,
+    1U,
+    0U,
+    3U,
+    2U,
   };
 
   const std::array<TestVertex, 8> cube_vertices {
@@ -1546,12 +1551,42 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     make_vertex(glm::vec3 { -0.5F, 1.0F, 0.5F }),
   };
   constexpr std::array<std::uint32_t, 36> kCubeIndices {
-    0U, 1U, 2U, 0U, 2U, 3U,
-    4U, 6U, 5U, 4U, 7U, 6U,
-    0U, 4U, 5U, 0U, 5U, 1U,
-    1U, 5U, 6U, 1U, 6U, 2U,
-    2U, 6U, 7U, 2U, 7U, 3U,
-    3U, 7U, 4U, 3U, 4U, 0U,
+    0U,
+    1U,
+    2U,
+    0U,
+    2U,
+    3U,
+    4U,
+    6U,
+    5U,
+    4U,
+    7U,
+    6U,
+    0U,
+    4U,
+    5U,
+    0U,
+    5U,
+    1U,
+    1U,
+    5U,
+    6U,
+    1U,
+    6U,
+    2U,
+    2U,
+    6U,
+    7U,
+    2U,
+    7U,
+    3U,
+    3U,
+    7U,
+    4U,
+    3U,
+    4U,
+    0U,
   };
 
   auto floor_vertex_buffer = CreateStructuredSrvBuffer<TestVertex>(
@@ -1560,8 +1595,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     kFloorIndices, "phase-k-two-box-floor.floor.indices");
   auto cube_vertex_buffer = CreateStructuredSrvBuffer<TestVertex>(
     cube_vertices, "phase-k-two-box-floor.cube.vertices");
-  auto cube_index_buffer = CreateUIntIndexBuffer(
-    kCubeIndices, "phase-k-two-box-floor.cube.indices");
+  auto cube_index_buffer
+    = CreateUIntIndexBuffer(kCubeIndices, "phase-k-two-box-floor.cube.indices");
 
   auto frame_config = Renderer::OffscreenFrameConfig {
     .frame_slot = kFrameSlot,
@@ -1581,11 +1616,11 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   ASSERT_TRUE(world_allocation->IsValid(kFrameSequence));
 
   const auto floor_world = glm::mat4 { 1.0F };
-  const auto tall_box_world = glm::translate(glm::mat4 { 1.0F },
-                               glm::vec3 { 0.95F, 0.0F, -0.25F })
+  const auto tall_box_world
+    = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { 0.95F, 0.0F, -0.25F })
     * glm::scale(glm::mat4 { 1.0F }, glm::vec3 { 0.8F, 3.2F, 0.8F });
-  const auto short_box_world = glm::translate(glm::mat4 { 1.0F },
-                                glm::vec3 { -0.55F, 0.0F, 0.65F })
+  const auto short_box_world
+    = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -0.55F, 0.0F, 0.65F })
     * glm::scale(glm::mat4 { 1.0F }, glm::vec3 { 0.8F, 1.1F, 0.8F });
   const std::array<glm::mat4, 3> world_matrices {
     floor_world,
@@ -1669,8 +1704,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<std::uint32_t>(draw_records.size()));
   ASSERT_TRUE(draw_allocation.has_value());
   ASSERT_TRUE(draw_allocation->IsValid(kFrameSequence));
-  std::memcpy(draw_allocation->mapped_ptr, draw_records.data(),
-    sizeof(draw_records));
+  std::memcpy(
+    draw_allocation->mapped_ptr, draw_records.data(), sizeof(draw_records));
 
   const AxisAlignedBox tall_box {
     .min = glm::vec3 { 0.55F, 0.0F, -0.65F },
@@ -1785,7 +1820,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     world_matrix_floats.data(), world_matrix_floats.size());
   prepared_frame.partitions = std::span(partitions);
   prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
-  prepared_frame.shadow_caster_bounding_spheres = std::span(shadow_caster_bounds);
+  prepared_frame.shadow_caster_bounding_spheres
+    = std::span(shadow_caster_bounds);
   prepared_frame.visible_receiver_bounding_spheres = std::span(receiver_bounds);
   prepared_frame.bindless_worlds_slot = world_allocation->srv;
   prepared_frame.bindless_draw_metadata_slot = draw_allocation->srv;
@@ -1804,8 +1840,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   auto depth_texture = CreateDepthTexture2D(
     kOutputWidth, kOutputHeight, "phase-k-two-box-floor.depth");
   ASSERT_NE(depth_texture, nullptr);
-  auto depth_pass = DepthPrePass(std::make_shared<DepthPrePass::Config>(
-    DepthPrePass::Config {
+  auto depth_pass
+    = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
       .depth_texture = depth_texture,
       .debug_name = "phase-k-two-box-floor.depth-pass",
     }));
@@ -1828,10 +1864,11 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   static_cast<void>(CollectDirectionalLight(lights, sun_node));
 
   vsm_renderer.OnFrameStart(
-    oxygen::renderer::internal::RendererTagFactory::Get(),
-    kFrameSequence, kFrameSlot);
+    oxygen::renderer::internal::RendererTagFactory::Get(), kFrameSequence,
+    kFrameSlot);
   static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
-    MakeViewConstants(resolved_view, kFrameSequence, kFrameSlot, view_frame_slot),
+    MakeViewConstants(
+      resolved_view, kFrameSequence, kFrameSlot, view_frame_slot),
     lights, oxygen::observer_ptr<Scene> { scene.get() },
     static_cast<float>(kOutputWidth), std::span(rendered_items),
     std::span(shadow_caster_bounds), std::span(receiver_bounds),
@@ -1839,113 +1876,72 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   ExecutePreparedViewShell(vsm_renderer, render_context,
     oxygen::observer_ptr<const Texture> { depth_texture.get() });
 
-  auto raycast_distance_to_aabb =
-    [](const glm::vec3 origin, const glm::vec3 direction,
-      const AxisAlignedBox& box) -> std::optional<float> {
-        auto t_min = 0.0F;
-        auto t_max = std::numeric_limits<float>::infinity();
-        for (auto axis = 0; axis < 3; ++axis) {
-          const auto dir = direction[axis];
-          if (std::abs(dir) < 1.0e-6F) {
-            if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) {
-              return std::nullopt;
-            }
-            continue;
-          }
-
-          auto t0 = (box.min[axis] - origin[axis]) / dir;
-          auto t1 = (box.max[axis] - origin[axis]) / dir;
-          if (t0 > t1) {
-            std::swap(t0, t1);
-          }
-          t_min = std::max(t_min, t0);
-          t_max = std::min(t_max, t1);
-          if (t_min > t_max) {
-            return std::nullopt;
-          }
-        }
-
-        return t_max >= t_min ? std::optional<float> { t_min } : std::nullopt;
-      };
-  auto raycast_distance_to_floor =
-    [&](const glm::vec3 origin, const glm::vec3 direction)
-      -> std::optional<float> {
-        if (std::abs(direction.y) < 1.0e-6F) {
+  auto raycast_distance_to_aabb
+    = [](const glm::vec3 origin, const glm::vec3 direction,
+        const AxisAlignedBox& box) -> std::optional<float> {
+    auto t_min = 0.0F;
+    auto t_max = std::numeric_limits<float>::infinity();
+    for (auto axis = 0; axis < 3; ++axis) {
+      const auto dir = direction[axis];
+      if (std::abs(dir) < 1.0e-6F) {
+        if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) {
           return std::nullopt;
         }
-        const auto distance = -origin.y / direction.y;
-        if (distance <= 0.0F) {
-          return std::nullopt;
-        }
-        const auto hit = origin + direction * distance;
-        if (hit.x < floor_bounds.min.x || hit.x > floor_bounds.max.x
-          || hit.z < floor_bounds.min.z || hit.z > floor_bounds.max.z) {
-          return std::nullopt;
-        }
-        return distance;
-      };
-  auto pixel_center_ray =
-    [&](const std::uint32_t x, const std::uint32_t y) -> std::pair<glm::vec3, glm::vec3> {
-        const auto ndc_x
-          = (2.0F * (static_cast<float>(x) + 0.5F) / static_cast<float>(kOutputWidth))
-          - 1.0F;
-        const auto ndc_y
-          = 1.0F
-          - (2.0F * (static_cast<float>(y) + 0.5F)
-               / static_cast<float>(kOutputHeight));
-        auto near_point = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
-        auto far_point = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 1.0F, 1.0F };
-        near_point /= near_point.w;
-        far_point /= far_point.w;
-        const auto origin = glm::vec3 { near_point };
-        const auto direction = glm::normalize(glm::vec3 { far_point - near_point });
-        return { origin, direction };
-      };
+        continue;
+      }
 
-  const auto* extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame();
-  ASSERT_NE(extracted_frame, nullptr);
-  ASSERT_FALSE(extracted_frame->projection_records.empty());
+      auto t0 = (box.min[axis] - origin[axis]) / dir;
+      auto t1 = (box.max[axis] - origin[axis]) / dir;
+      if (t0 > t1) {
+        std::swap(t0, t1);
+      }
+      t_min = std::max(t_min, t0);
+      t_max = std::min(t_max, t1);
+      if (t_min > t_max) {
+        return std::nullopt;
+      }
+    }
 
-  const auto virtual_page_count
-    = static_cast<std::uint32_t>(extracted_frame->page_table.size());
-  auto replay_request_pass = oxygen::engine::VsmPageRequestGeneratorPass(
-    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-    std::make_shared<oxygen::engine::VsmPageRequestGeneratorPassConfig>(
-      oxygen::engine::VsmPageRequestGeneratorPassConfig {
-        .max_projection_count
-        = static_cast<std::uint32_t>(extracted_frame->projection_records.size()),
-        .max_virtual_page_count = virtual_page_count,
-        .enable_coarse_pages = false,
-        .enable_light_grid_pruning = false,
-        .debug_name = "phase-k-two-box-floor.bridge-replay-request",
-      }));
-  replay_request_pass.SetFrameInputs(
-    { extracted_frame->projection_records.begin(),
-      extracted_frame->projection_records.end() },
-    virtual_page_count);
-  {
-    auto recorder
-      = AcquireRecorder("phase-k-two-box-floor.bridge-replay-request");
-    ASSERT_NE(recorder, nullptr);
-    RunPass(replay_request_pass, render_context, *recorder);
-  }
-  WaitForQueueIdle();
-  const auto replay_request_flags_buffer
-    = std::const_pointer_cast<Buffer>(replay_request_pass.GetPageRequestFlagsBuffer());
-  ASSERT_NE(replay_request_flags_buffer, nullptr);
-  const auto replay_request_bytes = ReadBufferBytes(replay_request_flags_buffer,
-    static_cast<std::size_t>(virtual_page_count)
-      * sizeof(VsmShaderPageRequestFlags),
-    "phase-k-two-box-floor.bridge-replay-request-flags");
-  ASSERT_EQ(replay_request_bytes.size(),
-    static_cast<std::size_t>(virtual_page_count)
-      * sizeof(VsmShaderPageRequestFlags));
-  const auto* replay_actual_flags
-    = reinterpret_cast<const VsmShaderPageRequestFlags*>(replay_request_bytes.data());
+    return t_max >= t_min ? std::optional<float> { t_min } : std::nullopt;
+  };
+  auto raycast_distance_to_floor
+    = [&](const glm::vec3 origin,
+        const glm::vec3 direction) -> std::optional<float> {
+    if (std::abs(direction.y) < 1.0e-6F) {
+      return std::nullopt;
+    }
+    const auto distance = -origin.y / direction.y;
+    if (distance <= 0.0F) {
+      return std::nullopt;
+    }
+    const auto hit = origin + direction * distance;
+    if (hit.x < floor_bounds.min.x || hit.x > floor_bounds.max.x
+      || hit.z < floor_bounds.min.z || hit.z > floor_bounds.max.z) {
+      return std::nullopt;
+    }
+    return distance;
+  };
+  auto pixel_center_ray
+    = [&](const std::uint32_t x,
+        const std::uint32_t y) -> std::pair<glm::vec3, glm::vec3> {
+    const auto ndc_x = (2.0F * (static_cast<float>(x) + 0.5F)
+                         / static_cast<float>(kOutputWidth))
+      - 1.0F;
+    const auto ndc_y = 1.0F
+      - (2.0F * (static_cast<float>(y) + 0.5F)
+        / static_cast<float>(kOutputHeight));
+    auto near_point
+      = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
+    auto far_point
+      = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 1.0F, 1.0F };
+    near_point /= near_point.w;
+    far_point /= far_point.w;
+    const auto origin = glm::vec3 { near_point };
+    const auto direction = glm::normalize(glm::vec3 { far_point - near_point });
+    return { origin, direction };
+  };
 
-  auto visible_samples = std::vector<VsmVisiblePixelSample> {};
   auto visible_floor_pixels = std::vector<ProbeSample> {};
-  visible_samples.reserve(kOutputWidth * kOutputHeight);
   visible_floor_pixels.reserve(kOutputWidth * kOutputHeight);
   for (std::uint32_t y = 0U; y < kOutputHeight; ++y) {
     for (std::uint32_t x = 0U; x < kOutputWidth; ++x) {
@@ -1955,21 +1951,21 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       auto hit_floor = false;
 
       if (const auto floor_distance
-          = raycast_distance_to_floor(ray_origin, ray_direction);
+        = raycast_distance_to_floor(ray_origin, ray_direction);
         floor_distance.has_value() && *floor_distance < nearest_distance) {
         nearest_distance = *floor_distance;
         hit_point = ray_origin + ray_direction * *floor_distance;
         hit_floor = true;
       }
       if (const auto tall_distance
-          = raycast_distance_to_aabb(ray_origin, ray_direction, tall_box);
+        = raycast_distance_to_aabb(ray_origin, ray_direction, tall_box);
         tall_distance.has_value() && *tall_distance < nearest_distance) {
         nearest_distance = *tall_distance;
         hit_point = ray_origin + ray_direction * *tall_distance;
         hit_floor = false;
       }
       if (const auto short_distance
-          = raycast_distance_to_aabb(ray_origin, ray_direction, short_box);
+        = raycast_distance_to_aabb(ray_origin, ray_direction, short_box);
         short_distance.has_value() && *short_distance < nearest_distance) {
         nearest_distance = *short_distance;
         hit_point = ray_origin + ray_direction * *short_distance;
@@ -1977,8 +1973,6 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       }
 
       if (hit_point.has_value()) {
-        visible_samples.push_back(
-          VsmVisiblePixelSample { .world_position_ws = *hit_point });
         if (hit_floor) {
           visible_floor_pixels.push_back(
             ProbeSample { .point_ws = *hit_point, .pixel = { x, y } });
@@ -1987,169 +1981,16 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     }
   }
 
-  ASSERT_FALSE(visible_samples.empty());
   ASSERT_FALSE(visible_floor_pixels.empty());
-
-  constexpr auto kStandaloneMapPages = 8U;
-  constexpr auto kStandaloneVirtualPageCount
-    = kStandaloneMapPages * kStandaloneMapPages;
-  auto standalone_request_pass = oxygen::engine::VsmPageRequestGeneratorPass(
-    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-    std::make_shared<oxygen::engine::VsmPageRequestGeneratorPassConfig>(
-      oxygen::engine::VsmPageRequestGeneratorPassConfig {
-        .max_projection_count = 1U,
-        .max_virtual_page_count = kStandaloneVirtualPageCount,
-        .enable_coarse_pages = false,
-        .enable_light_grid_pruning = false,
-        .debug_name = "phase-k-two-box-floor.standalone-request",
-      }));
-  const auto standalone_projections = std::vector<VsmPageRequestProjection> {
-    VsmPageRequestProjection {
-      .projection = VsmProjectionData {
-        .view_matrix = resolved_view.ViewMatrix(),
-        .projection_matrix = resolved_view.ProjectionMatrix(),
-        .view_origin_ws_pad = glm::vec4 { 0.0F, 0.0F, 0.0F, 0.0F },
-        .clipmap_corner_offset = { 0, 0 },
-        .clipmap_level = 0U,
-        .light_type
-        = static_cast<std::uint32_t>(VsmProjectionLightType::kLocal),
-      },
-      .map_id = 501U,
-      .first_page_table_entry = 0U,
-      .map_pages_x = kStandaloneMapPages,
-      .map_pages_y = kStandaloneMapPages,
-      .pages_x = kStandaloneMapPages,
-      .pages_y = kStandaloneMapPages,
-      .page_offset_x = 0U,
-      .page_offset_y = 0U,
-      .level_count = 1U,
-      .coarse_level = 0U,
-      .light_index = kVsmInvalidLightIndex,
-    },
-  };
-  standalone_request_pass.SetFrameInputs(
-    standalone_projections, kStandaloneVirtualPageCount);
-  {
-    auto recorder
-      = AcquireRecorder("phase-k-two-box-floor.standalone-request");
-    ASSERT_NE(recorder, nullptr);
-    RunPass(standalone_request_pass, render_context, *recorder);
-  }
-  WaitForQueueIdle();
-
-  const auto standalone_request_flags_buffer
-    = std::const_pointer_cast<Buffer>(
-      standalone_request_pass.GetPageRequestFlagsBuffer());
-  ASSERT_NE(standalone_request_flags_buffer, nullptr);
-  const auto standalone_request_bytes = ReadBufferBytes(
-    standalone_request_flags_buffer,
-    static_cast<std::size_t>(kStandaloneVirtualPageCount)
-      * sizeof(VsmShaderPageRequestFlags),
-    "phase-k-two-box-floor.standalone-request-flags");
-  ASSERT_EQ(standalone_request_bytes.size(),
-    static_cast<std::size_t>(kStandaloneVirtualPageCount)
-      * sizeof(VsmShaderPageRequestFlags));
-  const auto* standalone_actual_flags
-    = reinterpret_cast<const VsmShaderPageRequestFlags*>(
-      standalone_request_bytes.data());
-  const auto standalone_expected_flags = BuildExpectedRequestFlags(
-    standalone_projections, visible_samples, kStandaloneVirtualPageCount);
-  if (!std::equal(standalone_actual_flags,
-        standalone_actual_flags + kStandaloneVirtualPageCount,
-        standalone_expected_flags.begin(), standalone_expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
-    ADD_FAILURE()
-      << "Standalone Stage 5 request generation mismatched before the live VSM "
-         "bridge. actual non-zero flags: "
-      << DescribeNonZeroRequestFlags(
-           standalone_actual_flags, kStandaloneVirtualPageCount)
-      << ", expected non-zero flags: "
-      << DescribeNonZeroRequestFlags(standalone_expected_flags.data(),
-           static_cast<std::uint32_t>(standalone_expected_flags.size()));
-  }
-  for (std::uint32_t index = 0U; index < kStandaloneVirtualPageCount; ++index) {
-    EXPECT_EQ(standalone_actual_flags[index].bits,
-      standalone_expected_flags[index].bits)
-      << "Standalone Stage 5 request flag mismatch at page-table index "
-      << index;
-  }
-
-  const auto request_generator_pass = vsm_renderer.GetPageRequestGeneratorPass();
-  ASSERT_NE(request_generator_pass, nullptr);
-  const auto projection_buffer
-    = std::const_pointer_cast<Buffer>(request_generator_pass->GetProjectionBuffer());
-  ASSERT_NE(projection_buffer, nullptr);
-  const auto request_flags_buffer
-    = std::const_pointer_cast<Buffer>(request_generator_pass->GetPageRequestFlagsBuffer());
-  ASSERT_NE(request_flags_buffer, nullptr);
-
-  const auto projection_bytes = ReadBufferBytes(projection_buffer,
-    extracted_frame->projection_records.size() * sizeof(VsmPageRequestProjection),
-    "phase-k-two-box-floor.projections");
-  ASSERT_EQ(projection_bytes.size(),
-    extracted_frame->projection_records.size() * sizeof(VsmPageRequestProjection));
-  const auto* uploaded_projection_records
-    = reinterpret_cast<const VsmPageRequestProjection*>(projection_bytes.data());
-  for (std::size_t i = 0; i < extracted_frame->projection_records.size(); ++i) {
-    EXPECT_EQ(uploaded_projection_records[i], extracted_frame->projection_records[i])
-      << "Stage 5 projection upload mismatch at record " << i;
-  }
-
-  const auto replay_expected_flags = BuildExpectedRequestFlags(
-    extracted_frame->projection_records, visible_samples, virtual_page_count);
-  if (!std::equal(replay_actual_flags,
-        replay_actual_flags + virtual_page_count,
-        replay_expected_flags.begin(), replay_expected_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
-    ADD_FAILURE()
-      << "Stage 5 replay with the bridge-published projection records "
-         "mismatched before reading the live bridge buffer. actual non-zero "
-         "flags: "
-      << DescribeNonZeroRequestFlags(replay_actual_flags, virtual_page_count)
-      << ", expected non-zero flags: "
-      << DescribeNonZeroRequestFlags(replay_expected_flags.data(),
-           static_cast<std::uint32_t>(replay_expected_flags.size()));
-  }
-  for (std::uint32_t index = 0U; index < virtual_page_count; ++index) {
-    EXPECT_EQ(replay_actual_flags[index].bits, replay_expected_flags[index].bits)
-      << "Stage 5 replay request flag mismatch at page-table index " << index;
-  }
-
-  const auto request_flag_bytes = ReadBufferBytes(request_flags_buffer,
-    static_cast<std::size_t>(virtual_page_count)
-      * sizeof(VsmShaderPageRequestFlags),
-    "phase-k-two-box-floor.request-flags");
-  ASSERT_EQ(request_flag_bytes.size(),
-    static_cast<std::size_t>(virtual_page_count)
-      * sizeof(VsmShaderPageRequestFlags));
-
-  const auto* actual_request_flags
-    = reinterpret_cast<const VsmShaderPageRequestFlags*>(request_flag_bytes.data());
-  const auto expected_request_flags = BuildExpectedRequestFlags(
-    extracted_frame->projection_records, visible_samples, virtual_page_count);
-  if (!std::equal(actual_request_flags,
-        actual_request_flags + virtual_page_count,
-        expected_request_flags.begin(), expected_request_flags.end(),
-        [](const auto& lhs, const auto& rhs) { return lhs.bits == rhs.bits; })) {
-    ADD_FAILURE()
-      << "Stage 5 request flags mismatch for the two-box live shell. actual non-zero flags: "
-      << DescribeNonZeroRequestFlags(actual_request_flags, virtual_page_count)
-      << ", expected non-zero flags: "
-      << DescribeNonZeroRequestFlags(expected_request_flags.data(),
-           static_cast<std::uint32_t>(expected_request_flags.size()));
-  }
-  for (std::uint32_t index = 0U; index < virtual_page_count; ++index) {
-    EXPECT_EQ(actual_request_flags[index].bits, expected_request_flags[index].bits)
-      << "Stage 5 request flag mismatch at page-table index " << index;
-  }
 
   auto is_visible_from_camera = [&](const glm::vec3 point) {
     const auto ray = point - camera_eye;
     const auto distance = glm::length(ray);
     const auto direction = ray / distance;
     constexpr auto kVisibilityBias = 0.02F;
-    return !RayIntersectsAabb(camera_eye + direction * kVisibilityBias, direction,
-             tall_box.min, tall_box.max, distance - 2.0F * kVisibilityBias)
+    return !RayIntersectsAabb(camera_eye + direction * kVisibilityBias,
+             direction, tall_box.min, tall_box.max,
+             distance - 2.0F * kVisibilityBias)
       && !RayIntersectsAabb(camera_eye + direction * kVisibilityBias, direction,
         short_box.min, short_box.max, distance - 2.0F * kVisibilityBias);
   };
@@ -2184,20 +2025,19 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   ASSERT_GE(shadow_probes.size(), 2U);
   ASSERT_GE(lit_probes.size(), 2U);
 
-  auto reconstruct_world_from_depth =
-    [&](const glm::uvec2 pixel, const float depth) {
-      const auto ndc_x
-        = (2.0F * (static_cast<float>(pixel.x) + 0.5F)
-            / static_cast<float>(kOutputWidth))
-        - 1.0F;
-      const auto ndc_y
-        = 1.0F
-        - (2.0F * (static_cast<float>(pixel.y) + 0.5F)
-             / static_cast<float>(kOutputHeight));
-      auto world = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, depth, 1.0F };
-      world /= world.w;
-      return glm::vec3 { world };
-    };
+  auto reconstruct_world_from_depth
+    = [&](const glm::uvec2 pixel, const float depth) {
+        const auto ndc_x = (2.0F * (static_cast<float>(pixel.x) + 0.5F)
+                             / static_cast<float>(kOutputWidth))
+          - 1.0F;
+        const auto ndc_y = 1.0F
+          - (2.0F * (static_cast<float>(pixel.y) + 0.5F)
+            / static_cast<float>(kOutputHeight));
+        auto world
+          = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, depth, 1.0F };
+        world /= world.w;
+        return glm::vec3 { world };
+      };
 
   for (const auto& probe : { shadow_probes.front(), lit_probes.front() }) {
     const auto sampled_depth = ReadOutputTexel(depth_texture, probe.pixel.x,
@@ -2205,20 +2045,21 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     EXPECT_LT(sampled_depth, 1.0F)
       << "Depth pre-pass left a visible probe at clear depth for pixel ("
       << probe.pixel.x << ", " << probe.pixel.y << ")";
-    const auto reconstructed = reconstruct_world_from_depth(probe.pixel, sampled_depth);
+    const auto reconstructed
+      = reconstruct_world_from_depth(probe.pixel, sampled_depth);
     EXPECT_NEAR(reconstructed.x, probe.point_ws.x, 0.2F)
-      << "Reconstructed depth-sample world X mismatched at pixel (" << probe.pixel.x
-      << ", " << probe.pixel.y << ")";
+      << "Reconstructed depth-sample world X mismatched at pixel ("
+      << probe.pixel.x << ", " << probe.pixel.y << ")";
     EXPECT_NEAR(reconstructed.y, probe.point_ws.y, 0.2F)
-      << "Reconstructed depth-sample world Y mismatched at pixel (" << probe.pixel.x
-      << ", " << probe.pixel.y << ")";
+      << "Reconstructed depth-sample world Y mismatched at pixel ("
+      << probe.pixel.x << ", " << probe.pixel.y << ")";
     EXPECT_NEAR(reconstructed.z, probe.point_ws.z, 0.2F)
-      << "Reconstructed depth-sample world Z mismatched at pixel (" << probe.pixel.x
-      << ", " << probe.pixel.y << ")";
+      << "Reconstructed depth-sample world Z mismatched at pixel ("
+      << probe.pixel.x << ", " << probe.pixel.y << ")";
   }
 
-  const auto output = vsm_renderer.GetProjectionPass()->GetCurrentOutput(
-    kTestViewId);
+  const auto output
+    = vsm_renderer.GetProjectionPass()->GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
   ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
 
@@ -2239,10 +2080,9 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       "phase-k-two-box-floor.lit-sample");
     EXPECT_GT(sample, 0.65F)
       << "Stage 15 mask darkened a lit floor probe at world point ("
-      << lit_probes[i].point_ws.x << ", " << lit_probes[i].point_ws.y
-      << ", " << lit_probes[i].point_ws.z << ") screen pixel ("
-      << lit_probes[i].pixel.x << ", " << lit_probes[i].pixel.y
-      << ") with sample " << sample;
+      << lit_probes[i].point_ws.x << ", " << lit_probes[i].point_ws.y << ", "
+      << lit_probes[i].point_ws.z << ") screen pixel (" << lit_probes[i].pixel.x
+      << ", " << lit_probes[i].pixel.y << ") with sample " << sample;
   }
 }
 
@@ -2251,8 +2091,8 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
 {
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
-  auto depth_texture = UploadSingleChannelTexture(
-    0.5F, "phase-ka-live-pan.depth");
+  auto depth_texture
+    = UploadSingleChannelTexture(0.5F, "phase-ka-live-pan.depth");
 
   auto scene = std::make_shared<Scene>("phase-ka-live-pan-scene", 32);
   const auto sun_flags
@@ -2277,75 +2117,81 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
       oxygen::ShadowQualityTier::kHigh);
 
-  auto run_frame_for_view
-    = [&](const ResolvedView& view, const SequenceNumber sequence) {
-        auto frame_config = Renderer::OffscreenFrameConfig {
-          .frame_slot = Slot { 0U },
-          .frame_sequence = sequence,
-          .scene = oxygen::observer_ptr<Scene> { scene.get() },
-        };
-        auto offscreen = renderer->BeginOffscreenFrame(frame_config);
-        auto prepared_frame = PreparedSceneFrame {};
-        offscreen.SetCurrentView(kTestViewId, view, prepared_frame);
+  auto run_frame_for_view = [&](const ResolvedView& view,
+                              const SequenceNumber sequence) {
+    auto frame_config = Renderer::OffscreenFrameConfig {
+      .frame_slot = Slot { 0U },
+      .frame_sequence = sequence,
+      .scene = oxygen::observer_ptr<Scene> { scene.get() },
+    };
+    auto offscreen = renderer->BeginOffscreenFrame(frame_config);
+    auto prepared_frame = PreparedSceneFrame {};
+    offscreen.SetCurrentView(kTestViewId, view, prepared_frame);
 
-        auto depth_pass = DepthPrePass(std::make_shared<DepthPrePass::Config>(
-          DepthPrePass::Config { .depth_texture = depth_texture }));
-        auto& render_context = offscreen.GetRenderContext();
-        render_context.RegisterPass(&depth_pass);
+    auto depth_pass = DepthPrePass(std::make_shared<DepthPrePass::Config>(
+      DepthPrePass::Config { .depth_texture = depth_texture }));
+    auto& render_context = offscreen.GetRenderContext();
+    render_context.RegisterPass(&depth_pass);
 
-        auto lights = LightManager(
-          oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-          oxygen::observer_ptr { &renderer->GetStagingProvider() },
-          oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() });
-        lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
-          sequence, Slot { 0U });
-        static_cast<void>(CollectDirectionalLight(lights, sun_node));
-        vsm_renderer.OnFrameStart(
-          oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
-          Slot { 0U });
-        static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
-          MakeViewConstants(view, sequence, Slot { 0U }), lights,
-          oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
-        ExecutePreparedViewShell(vsm_renderer, render_context,
-          oxygen::observer_ptr<const Texture> { depth_texture.get() });
-        const auto* extracted_frame
-          = vsm_renderer.GetCacheManager().GetPreviousFrame();
-        CHECK_NOTNULL_F(extracted_frame,
-          "directional clipmap pan test requires an extracted previous frame");
-        return extracted_frame->virtual_frame;
-      };
+    auto lights
+      = LightManager(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+        oxygen::observer_ptr { &renderer->GetStagingProvider() },
+        oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() });
+    lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+      sequence, Slot { 0U });
+    static_cast<void>(CollectDirectionalLight(lights, sun_node));
+    vsm_renderer.OnFrameStart(
+      oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
+      Slot { 0U });
+    static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
+      MakeViewConstants(view, sequence, Slot { 0U }), lights,
+      oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
+    ExecutePreparedViewShell(vsm_renderer, render_context,
+      oxygen::observer_ptr<const Texture> { depth_texture.get() });
+    const auto* extracted_frame
+      = vsm_renderer.GetCacheManager().GetPreviousFrame();
+    CHECK_NOTNULL_F(extracted_frame,
+      "directional clipmap pan test requires an extracted previous frame");
+    return extracted_frame->virtual_frame;
+  };
 
   const auto first_view = MakeResolvedView(glm::vec3 { 0.0F, 0.0F, 0.0F });
-  const auto first_frame = run_frame_for_view(first_view, SequenceNumber { 10U });
-  const auto* first_extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame();
+  const auto first_frame
+    = run_frame_for_view(first_view, SequenceNumber { 10U });
+  const auto* first_extracted_frame
+    = vsm_renderer.GetCacheManager().GetPreviousFrame();
   ASSERT_NE(first_extracted_frame, nullptr);
   ASSERT_FALSE(first_frame.directional_layouts.empty());
   ASSERT_FALSE(first_frame.directional_layouts[0].page_world_size.empty());
   ASSERT_FALSE(first_frame.directional_layouts[0].page_grid_origin.empty());
   ASSERT_FALSE(first_extracted_frame->projection_records.empty());
 
-  const auto page_world_size = first_frame.directional_layouts[0].page_world_size[0];
+  const auto page_world_size
+    = first_frame.directional_layouts[0].page_world_size[0];
   ASSERT_GT(page_world_size, 0.0F);
-  const auto first_origin = first_frame.directional_layouts[0].page_grid_origin[0];
-  const auto first_projection_it = std::find_if(
-    first_extracted_frame->projection_records.begin(),
-    first_extracted_frame->projection_records.end(), [](const auto& projection) {
-      return projection.projection.light_type
-        == static_cast<std::uint32_t>(
-          oxygen::renderer::vsm::VsmProjectionLightType::kDirectional);
-    });
-  ASSERT_NE(first_projection_it, first_extracted_frame->projection_records.end());
+  const auto first_origin
+    = first_frame.directional_layouts[0].page_grid_origin[0];
+  const auto first_projection_it
+    = std::find_if(first_extracted_frame->projection_records.begin(),
+      first_extracted_frame->projection_records.end(),
+      [](const auto& projection) {
+        return projection.projection.light_type
+          == static_cast<std::uint32_t>(
+            oxygen::renderer::vsm::VsmProjectionLightType::kDirectional);
+      });
+  ASSERT_NE(
+    first_projection_it, first_extracted_frame->projection_records.end());
 
-  const auto light_space_page_shift_ws = glm::vec3(
-    glm::inverse(first_projection_it->projection.view_matrix)
-    * glm::vec4 { page_world_size * 2.5F, 0.0F, 0.0F, 0.0F });
+  const auto light_space_page_shift_ws
+    = glm::vec3(glm::inverse(first_projection_it->projection.view_matrix)
+      * glm::vec4 { page_world_size * 2.5F, 0.0F, 0.0F, 0.0F });
 
-  const auto translated_view = MakeResolvedView(
-    light_space_page_shift_ws);
+  const auto translated_view = MakeResolvedView(light_space_page_shift_ws);
   const auto translated_frame
     = run_frame_for_view(translated_view, SequenceNumber { 11U });
   ASSERT_FALSE(translated_frame.directional_layouts.empty());
-  ASSERT_FALSE(translated_frame.directional_layouts[0].page_grid_origin.empty());
+  ASSERT_FALSE(
+    translated_frame.directional_layouts[0].page_grid_origin.empty());
 
   EXPECT_NE(
     translated_frame.directional_layouts[0].page_grid_origin[0], first_origin);
