@@ -72,6 +72,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - Stage 9 hierarchical-flag coverage now lives in the dedicated
     `Oxygen.Renderer.VsmHierarchicalFlags.Tests` program so real-scene flag propagation contracts
     are isolated from the later GPU lifecycle suites that still own stages 10-15
+  - Stage 10 mapped-mip coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmMappedMips.Tests` program so real-scene mapped-descendant propagation
+    contracts are isolated from the later GPU lifecycle suites that still own stages 11-15
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
@@ -80,7 +83,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     published snapshots after real construction
   - the shared live-scene harness now lives in
     `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h` and drives real
-    two-box lighting scenes through the dedicated Stage 1-9 executables
+    two-box lighting scenes through the dedicated Stage 1-10 executables
   - the shared live-scene harness now aligns light targeting with the engine's
     `oxygen::space::move::Forward` transform basis and exposes real depth-sample readback helpers
     so local-light live-scene suites are validated against the engine's actual geometry and view
@@ -104,16 +107,22 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `VsmSelectivePageInitializationTest.ClearsMultipleRequestedPagesForPagedLightsWithoutTouchingUntargetedPages`
     and
     `VsmSelectivePageInitializationTest.CopiesStaticSliceIntoMultipleDynamicPagesAfterDynamicOnlyInvalidation`
-  - the Stage 10 dedicated suite now proves mapped-descendant propagation across a three-level
-    paged-light scenario with two requested leaf pages and one directly requested parent page
-    through
+  - historical evidence before the Stage 10 executable split:
     `VsmMappedMipPropagationTest.MarksMappedDescendantsAcrossRequestedLeafAndParentPages`
+    passed in the lifecycle binary and originally proved mapped-descendant propagation across a
+    three-level paged-light scenario with two requested leaf pages and one directly requested
+    parent page
   - the Stage 9 dedicated suite now proves hierarchical allocated/dynamic-uncached/static-uncached
     propagation from real Stage 8 outputs through
     `VsmHierarchicalPageFlagsLiveSceneTest.*`
   - the Stage 9 dedicated suite currently validates exact hierarchical propagation for the real
     Stage 8 leaf-state bits the runtime produces today; `detail_geometry` still has no real-input
     producer in Oxygen, so that specific flag is not yet exercised by a real-scene regression
+  - the Stage 10 dedicated suite now proves mapped-descendant propagation from real Stage 8 page
+    tables and flags through `VsmMappedMipPropagationLiveSceneTest.*`, while also asserting that
+    the propagation pass leaves the page table unchanged and matches a CPU model across
+    directional, mixed directional-plus-local, mixed-local, reuse-only, and invalidated-refresh
+    scenes
   - the Stage 12 rasterization suite now consumes the shared GPU harness buffer, texture, mip
     readback, and raw-buffer readback helpers instead of carrying a private duplicate fixture layer
   - the Stage 15 dedicated suite now includes a rasterized multi-page real-geometry proof through
@@ -123,6 +132,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - renderer test `CMakeLists.txt` now uses logical target names
     `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`,
     `VsmPageReuse`, `VsmAvailablePages`, `VsmPageMappings`, `VsmHierarchicalFlags`,
+    `VsmMappedMips`,
     `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
     `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
     `Oxygen.Renderer.VsmRemap.Tests`,
@@ -132,6 +142,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `Oxygen.Renderer.VsmAvailablePages.Tests`,
     `Oxygen.Renderer.VsmPageMappings.Tests`,
     `Oxygen.Renderer.VsmHierarchicalFlags.Tests`,
+    `Oxygen.Renderer.VsmMappedMips.Tests`,
     `Oxygen.Renderer.VirtualShadows.Tests`, and
     `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
@@ -139,6 +150,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   `Oxygen.Renderer.VsmPageRequests.Tests`, `Oxygen.Renderer.VsmPageReuse.Tests`,
   `Oxygen.Renderer.VsmAvailablePages.Tests`, `Oxygen.Renderer.VsmPageMappings.Tests`,
   `Oxygen.Renderer.VsmHierarchicalFlags.Tests`,
+  `Oxygen.Renderer.VsmMappedMips.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Backend-backed dedicated coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that dedicated bucket now covers physical-pool ABI publication, request generation, invalidation readback contracts, page-management stage readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, and screen-HZB history/readback contracts
@@ -152,6 +164,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - `Oxygen.Renderer.VsmAvailablePages.Tests` passes with `3 tests from 1 test suite`
     - `Oxygen.Renderer.VsmPageMappings.Tests` passes with `3 tests from 1 test suite`
     - `Oxygen.Renderer.VsmHierarchicalFlags.Tests` passes with `3 tests from 1 test suite`
+    - `Oxygen.Renderer.VsmMappedMips.Tests` passes with `5 tests from 1 test suite`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
     - `VsmPageRequestPolicyTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
@@ -162,8 +175,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
       rasterization, static/dynamic merge, HZB update, projection/composite, extraction,
       and cache validity
     - `VsmPageFlagPropagationGpuTest.*` now remains as supporting mapped-descendant coverage only;
-      Stage 9 ownership moved into `Oxygen.Renderer.VsmHierarchicalFlags.Tests`
-    - `VsmMappedMipPropagationTest.*` passes with `1 test from 1 test suite`
+      Stage 9 and Stage 10 ownership moved into
+      `Oxygen.Renderer.VsmHierarchicalFlags.Tests` and
+      `Oxygen.Renderer.VsmMappedMips.Tests`
     - `VsmSelectivePageInitializationTest.*` passes with `4 tests from 1 test suite`
     - `VsmShadowRasterizerPassGpuTest.*` passes with `7 tests from 1 test suite`
     - the bottom-stage GPU filter for request generation plus stages 12-15 passes with

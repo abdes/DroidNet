@@ -1632,18 +1632,18 @@ protected:
       require_virtual_shadow_work);
 
     ExecutePropagationPass(
-      mapping.bridge.committed_frame, "stage-nine-two-box.propagation");
+      mapping.bridge.committed_frame, "stage-propagation-two-box.propagation");
 
     const auto page_table
       = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
         mapping.bridge.committed_frame.page_table_buffer,
         mapping.bridge.committed_frame.snapshot.page_table.size(),
-        "stage-nine-two-box.page-table");
+        "stage-propagation-two-box.page-table");
     const auto page_flags
       = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
         mapping.bridge.committed_frame.page_flags_buffer,
         mapping.bridge.committed_frame.snapshot.page_table.size(),
-        "stage-nine-two-box.page-flags");
+        "stage-propagation-two-box.page-flags");
 
     return TwoBoxPageFlagPropagationResult {
       .mapping = std::move(mapping),
