@@ -1,6 +1,6 @@
 # Virtual Shadow Map Tests
 
-Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across fifteen test programs:
+Tests for the full VSM pipeline, from CPU cache and address-space logic through all GPU rendering passes. The coverage is currently spread across twenty test programs:
 
 - `VsmBasic`
 - `VsmBeginFrame`
@@ -14,6 +14,11 @@ Tests for the full VSM pipeline, from CPU cache and address-space logic through 
 - `VsmHierarchicalFlags`
 - `VsmMappedMips`
 - `VsmPageInitialization`
+- `VsmShadowRasterization`
+- `VsmStaticDynamicMerge`
+- `VsmShadowHzb`
+- `VsmShadowProjection`
+- `VsmFrameExtraction`
 - `VirtualShadows`
 - `VirtualShadowGpuLifecycle`
 - `Oxygen.Renderer.VirtualShadowSceneObserver.Tests`
@@ -22,13 +27,13 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 
 ## Philosophy
 
-- Stage-owned suites are the primary functional regression gate for stages 1-17.
+- Stage-owned suites are the primary functional regression gate. Stages 1-16 now have dedicated executables; Stage 17 is still pending its final dedicated split.
 - Cross-cutting helper and unit suites are secondary contract coverage. They support stage suites, but they do not replace them.
 - Stage suites must reuse the shared stage harnesses in `VirtualShadowStageCpuHarness.h` and `VirtualShadowStageGpuHarness.h` instead of rebuilding bespoke setup paths.
 - Functional stage suites should prefer multi-page inputs, real geometry, real shadows, and assertions by behavior, virtual coordinate, or physical output rather than magic slot numbers.
-- The dedicated Stage 1-12 executables now also reuse `VirtualShadowLiveSceneHarness.h` for live real-scene validation on real geometry, real light data, and multi-page directional or local layouts.
+- The dedicated Stage 1-16 executables now also reuse `VirtualShadowLiveSceneHarness.h` for live real-scene validation on real geometry, real light data, and multi-page directional or local layouts.
 - One-page fixtures and direct slot assertions are acceptable only for narrow ABI checks, malformed-input checks, or other explicitly scoped negative tests.
-- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VsmAvailablePages`, `VsmPageMappings`, `VsmHierarchicalFlags`, `VsmMappedMips`, `VsmPageInitialization`, `VsmShadowRasterization`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
+- In `src/Oxygen/Renderer/Test/CMakeLists.txt`, use the concise `m_gtest_program(...)` names such as `VsmBeginFrame`, `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`, `VsmPageReuse`, `VsmAvailablePages`, `VsmPageMappings`, `VsmHierarchicalFlags`, `VsmMappedMips`, `VsmPageInitialization`, `VsmShadowRasterization`, `VsmStaticDynamicMerge`, `VsmShadowHzb`, `VsmShadowProjection`, `VsmFrameExtraction`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`. The macro generates the fully qualified build target and binary names.
 - A passing helper suite is not evidence that a stage is complete. Completion claims require the dedicated stage suite, any required broader reruns, and explicit recorded evidence.
 - When correctness is in doubt, the AI agent working in this repository must check the UE5 reference implementation through a new or recycled subagent rather than reasoning from memory or local intuition alone.
 
@@ -61,7 +66,8 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 | `VsmStaticDynamicMerge` | `Oxygen.Renderer.VsmStaticDynamicMerge.Tests` / `bin/<Config>/Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe` | Stage 13 only: real-scene static-into-dynamic merge validation for directional and local lights, including dynamic-only invalidation and static-invalidated continuity contracts |
 | `VsmShadowHzb` | `Oxygen.Renderer.VsmShadowHzb.Tests` / `bin/<Config>/Oxygen.Renderer.VsmShadowHzb.Tests.exe` | Stage 14 only: real-scene shadow-space HZB validation from real Stage 13 inputs for directional and local scenes, including exact HZB mip-chain reconstruction, dirty-state folding, and preserved-HZB continuity across reused frames |
 | `VsmShadowProjection` | `Oxygen.Renderer.VsmShadowProjection.Tests` / `bin/<Config>/Oxygen.Renderer.VsmShadowProjection.Tests.exe` | Stage 15 only: real Stage 1-14 directional and paged-local projection/composite validation, including isolated-vs-live-shell comparison and analytic floor-band regression probes |
-| `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, extraction, cache validity, invalidation, orchestration, helper contracts |
+| `VsmFrameExtraction` | `Oxygen.Renderer.VsmFrameExtraction.Tests` / `bin/<Config>/Oxygen.Renderer.VsmFrameExtraction.Tests.exe` | Stage 16 only: real live-shell extraction/finalization validation for reusable extracted snapshots, static continuity retention, paged local-light extraction, and next-frame finalization of queued readback |
+| `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, cache validity, invalidation, orchestration, helper contracts |
 | `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed integration and supporting pass coverage beyond the dedicated stage executables: physical-pool lifecycle, cache-resource publication, propagation smoke, bridge/orchestration, and invalidation |
 | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe` | Scene observer → cache manager invalidation integration |
 
@@ -138,7 +144,20 @@ fix:
 - `Oxygen.Renderer.VsmShadowRasterization.Tests.exe`: `13 tests from 3 test suites` passed
 - `Oxygen.Renderer.VsmShadowRasterization.Tests.exe --gtest_filter=VsmShadowRasterizerPassGpuTest.ExecuteRasterizedDirectionalPagesProjectLocalizedShadowMaskInsteadOfPageWideDarkening --gtest_repeat=5`: all `5/5` executions passed
 - `Oxygen.Renderer.VsmShadowProjection.Tests.exe`: `4 tests from 1 test suite` passed
-- `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`: `24 tests from 5 test suites`, still red on `VsmShadowRendererBridgeGpuTest.PrepareViewPublishesDirectionalClipmapPanAfterCameraTranslation` with `buffer readback await failed ... error=kTicketNotFound`
+- `Oxygen.Renderer.VsmFrameExtraction.Tests.exe`: `4 tests from 1 test suite` passed
+
+Additional corrective note on `2026-03-28` for Stage 16: the first dedicated extraction rewrite
+compiled against the wrong directional-layout field and then exposed a real bridge/readback
+lifetime defect in the shared readback subsystem. `ReadbackTracker::OnFrameStart(...)` was
+retiring same-slot tickets before Stage 16 finalization consumed them, and completed tickets had
+no owner-driven release path. The tracker now retains same-slot tracked tickets until the owning
+readback object resets, and D3D12/headless readback objects explicitly forget completed tickets on
+reset. Recorded evidence in `out/build-ninja` after the Stage 16 ownership split plus the
+readback-lifetime fix:
+- `Oxygen.Graphics.Common.ReadbackTracker.Tests.exe`: `13 tests from 1 test suite` passed
+- `Oxygen.Graphics.Headless.ReadbackManager.Tests.exe`: `24 tests from 12 test suites` passed
+- `Oxygen.Renderer.VsmFrameExtraction.Tests.exe`: `4 tests from 1 test suite` passed
+- `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`: `24 tests from 5 test suites` passed
 
 This does not close the broader visual gap: a user-provided live renderer capture still shows
 incorrect final floor-shadow continuity, so Stage 12 remains `in_progress` until the Stage 12→15
@@ -202,6 +221,9 @@ cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmShadow
 # Stage 15 tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmShadowProjection.Tests" --parallel 6
 
+# Stage 16 tests
+cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VsmFrameExtraction.Tests" --parallel 6
+
 # All remaining CPU tests
 cmake --build out/build-ninja --config Debug --target "Oxygen.Renderer.VirtualShadows.Tests" --parallel 6
 
@@ -237,6 +259,7 @@ For Release builds, substitute `Debug` with `Release` throughout. The executable
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmShadowHzb.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmShadowProjection.Tests.exe
+.\out\build-ninja\bin\Debug\Oxygen.Renderer.VsmFrameExtraction.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadows.Tests.exe
 .\out\build-ninja\bin\Debug\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe
 ```
@@ -271,7 +294,7 @@ Useful verbosity levels:
 
 ```powershell
 ctest --test-dir out/build-ninja -C Debug --output-on-failure `
-    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VsmPageRequests|VsmPageReuse|VsmAvailablePages|VsmPageMappings|VsmHierarchicalFlags|VsmMappedMips|VsmPageInitialization|VsmShadowRasterization|VsmStaticDynamicMerge|VsmShadowHzb|VsmShadowProjection|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
+    -R "Oxygen\.Renderer\.(VsmBasic|VsmBeginFrame|VsmVirtualAddressSpace|VsmRemap|VsmProjectionRecords|VsmPageRequests|VsmPageReuse|VsmAvailablePages|VsmPageMappings|VsmHierarchicalFlags|VsmMappedMips|VsmPageInitialization|VsmShadowRasterization|VsmStaticDynamicMerge|VsmShadowHzb|VsmShadowProjection|VsmFrameExtraction|VirtualShadows|VirtualShadowGpuLifecycle|VirtualShadowSceneObserver)\.Tests"
 ```
 
 ---
@@ -407,6 +430,16 @@ Screen-space shadow factors are generated for directional and local lights.
 lives in the dedicated `VsmShadowProjection` executable; the lifecycle binary keeps only
 supporting bridge/orchestration coverage.
 
+### Stage 16 — Frame Extraction
+
+The extracted ready frame is finalized and published for Stage 17 and next-frame reuse. Stage 16
+must prove real extracted page-table, physical-page metadata, projection records, visible
+primitive continuity, static feedback retention, and next-frame finalization of queued readback.
+
+| Test suite | File | Executable |
+| ---------- | ---- | --------- |
+| `VsmFrameExtractionLiveSceneTest` | `VsmFrameExtraction_test.cpp` | VsmFrameExtraction |
+
 ### Cross-cutting — Basic Type Contracts
 
 Tests the shared DTO and value-type layer in `VsmCacheManagerTypes.h`. Exercises types across all pipeline stages but has no runtime dependency on the cache manager or any backend.
@@ -448,7 +481,6 @@ These suites exercise cache state transitions, orchestration across multiple fra
 | `VsmCacheManagerRetentionTest` | `VsmCacheManagerRetention_test.cpp` | VirtualShadows |
 | `VsmCacheManagerInvalidationTest` | `VsmCacheManagerInvalidation_test.cpp` | VirtualShadows |
 | `VsmInvalidationPassGpuTest` | `VsmInvalidationPass_test.cpp` | VirtualShadowGpuLifecycle |
-| `VsmFrameExtractionTest` | `VsmFrameExtraction_test.cpp` | VirtualShadows |
 | `VsmSceneInvalidationCollectorTest` | `VsmSceneInvalidationCollector_test.cpp` | VirtualShadows |
 | `VsmSceneObserverIntegrationTest` | `VsmSceneObserverIntegration_test.cpp` | VirtualShadowSceneObserver |
 
