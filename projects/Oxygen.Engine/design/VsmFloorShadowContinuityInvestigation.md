@@ -10,6 +10,13 @@ The remaining real VSM runtime defect is the directional floor-shadow continuity
 
 This is not a completed investigation. The bug is still open.
 
+## Current Live Validation Blocker
+
+- As of `2026-03-28`, live renderer validation is temporarily blocked by a GPU device-removal crash before the scene can be used as trustworthy evidence for the floor-shadow defect.
+- The D3D12 runtime path is now being instrumented so the first device-removed boundary logs the failing `HRESULT`, `GetDeviceRemovedReason()`, and the DRED breadcrumb/page-fault report.
+- Later downstream COM failures after device removal are not treated as useful root-cause evidence on their own.
+- Status remains `in_progress` until a real live run captures the first removal boundary and its DRED output.
+
 ## User-Visible Symptom
 
 - In the live renderer capture, the floor shadow is visibly discontinuous and page-like.
@@ -133,13 +140,14 @@ An existing subagent was reused during this investigation to compare Oxygen’s 
 
 - `src/Oxygen/Renderer/Test/VirtualShadow/UE5-VSM-Source-Analysis.md`
 
-The strongest mismatches it reported were:
+The earlier summary from that comparison is no longer taken at face value.
+Direct UE5 source review after the handoff showed an important correction:
 
-1. Missing or insufficient explicit handling of UE5-style directional clipmap `relative corner offset`.
-2. Remaining sub-page texel-center mismatch between Stage 12 crop and Stage 15 sampling.
-3. Potential page-border filtering mismatch because Oxygen clamps Stage 15 PCF taps within the current physical page.
+1. UE5 `ClipmapCornerRelativeOffset` is an integer `int2`, not a float sub-page phase term.
+2. UE5 uses that metadata for clipmap-relative page transforms and coarser-clipmap fallback, not for a fractional Stage 12 vs. Stage 15 raster/sample alignment patch.
+3. The remaining plausible Stage 15 issue is therefore missing or insufficient coarser-clipmap fallback and/or border behavior, not a float `relative_corner_offset` fix.
 
-The subagent also concluded that a pure “wrong page index” bug is less likely than a sub-page phase or border-filtering mismatch.
+That means the specific suggestion to add a float2 `relative_corner_offset` and use it as a shared raster/sample phase correction is not aligned with UE5.
 
 ## Current Hypotheses
 
@@ -238,23 +246,22 @@ Key functions to inspect:
 - `IsShadowedByAnalyticBoxes(...)`
 - `SelectStableAnalyticFloorProbes(...)`
 
-### 2. Compute and log per-cascade relative corner phase
+### 2. Verify directional coarser-clipmap fallback behavior in the live path
 
-The next engine-side analysis should compute and log:
+The next engine-side analysis should confirm, for failing floor probes:
 
-- exact `clip_min_corner_ls / page_world_size`
-- integer `page_grid_origin`
-- residual fractional phase
-
-for the failing cascade levels.
+- which directional clipmap level is selected first
+- whether that level's page is unmapped
+- whether a coarser directional level contains a valid mapped page for the same world-space sample
 
 Goal:
 
-- prove or disprove the missing `relative corner offset` hypothesis
+- prove or disprove the missing coarser-clipmap fallback hypothesis in the real runtime path
 
 Most relevant code:
 
-- [src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp](/H:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.cpp)
+- [src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmDirectionalProjection.hlsl](/H:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmDirectionalProjection.hlsl)
+- [src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmShadowHelpers.hlsli](/H:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vsm/VsmShadowHelpers.hlsli)
 
 ### 3. Compare rasterized page coverage against expected world footprint
 

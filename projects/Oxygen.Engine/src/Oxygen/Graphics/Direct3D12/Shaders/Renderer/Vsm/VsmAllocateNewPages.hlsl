@@ -6,10 +6,9 @@
 
 // Stage 8 fresh page allocation.
 //
-// The CPU planner remains authoritative for allocation order. Stage 7 provides
-// the compact GPU-side available-page stack, and this pass consumes the stack
-// slot referenced by each allocation record to rebuild the current-frame
-// mapping and metadata products.
+// The CPU planner remains authoritative for fresh allocation targets. Stage 7
+// still produces the compact GPU-side available-page stack for diagnostics and
+// validation, but stage 8 applies the planned physical-page mapping directly.
 
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
@@ -38,7 +37,7 @@ struct VsmAllocateNewPagesPassConstants
     uint metadata_uav_index;
     uint allocation_decision_count;
     uint virtual_page_count;
-    uint _pad0;
+    uint physical_page_count;
     uint _pad1;
     uint _pad2;
 };
@@ -82,14 +81,13 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     const VsmShaderPageAllocationDecision decision
         = allocation_decisions[decision_index];
-    const uint available_page_count_value = available_page_count[0];
     if (decision.page_table_index >= pass_constants.virtual_page_count
-        || decision.available_page_list_index >= available_page_count_value) {
+        || decision.physical_page_index >= pass_constants.physical_page_count) {
         return;
     }
 
-    const uint physical_page_index
-        = available_pages[decision.available_page_list_index];
+    const uint physical_page_index = decision.physical_page_index;
+
     VsmPhysicalPageMeta merged_meta = decision.physical_meta;
     if (BX_IsValidSlot(pass_constants.metadata_seed_srv_index)) {
         StructuredBuffer<VsmPhysicalPageMeta> metadata_seed

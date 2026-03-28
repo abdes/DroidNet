@@ -31,7 +31,7 @@ struct VsmShaderPageReuseDecision
 struct VsmShaderPageAllocationDecision
 {
     uint page_table_index;
-    uint available_page_list_index;
+    uint physical_page_index;
     VsmShaderPageFlags page_flags;
     uint _pad0;
     VsmPhysicalPageMeta physical_meta;

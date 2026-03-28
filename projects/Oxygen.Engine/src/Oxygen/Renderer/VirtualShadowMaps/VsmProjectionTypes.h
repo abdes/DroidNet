@@ -27,7 +27,11 @@ struct VsmProjectionData {
   glm::mat4 view_matrix { 1.0F };
   glm::mat4 projection_matrix { 1.0F };
   glm::vec4 view_origin_ws_pad { 0.0F, 0.0F, 0.0F, 0.0F };
+  // XY: directional receiver-depth interval in main-view space.
+  // ZW: authored shadow bias / normal bias carried into projection.
   glm::vec4 receiver_depth_range_pad { 0.0F, 0.0F, 0.0F, 0.0F };
+  // Directional clipmap corner metadata in integer page units. This must not
+  // be interpreted as a fractional raster/sample phase offset.
   glm::ivec2 clipmap_corner_offset { 0, 0 };
   std::uint32_t clipmap_level { 0U };
   std::uint32_t light_type { static_cast<std::uint32_t>(

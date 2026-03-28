@@ -1430,6 +1430,9 @@ The split below does not reduce automated validation requirements. It only makes
         - the focused two-box live-shell regression no longer device-removes the GPU and now runs through to its real assertions
         - FAILS at Stage 5, but the failure is now narrow and concrete: the bridge replay and the live shell both publish one unexpected extra request at page-table index `54`; the remaining expected non-zero indices are `6, 7, 22, 23, 39, 40, 55, 56, 69, 70, 71, 72, 73, 85, 86, 87, 88, 89, 104, 105, 106, 121, 122, 137, 138`
         - FAILS at Stage 15: the live shell still keeps shadowed floor probes fully lit, now reproducing on samples near world-space points `(2.5371408, 0.0, -4.4765062)`, `(2.5846176, 0.0, -4.4486732)`, `(2.6320949, 0.0, -4.4208431)`, and `(2.6795731, 0.0, -4.3930125)` with mask samples of `1.0`
+      - scope correction on 2026-03-28:
+        - direct UE5 source review showed that `ClipmapCornerRelativeOffset` is integer clipmap metadata used for clipmap-relative page transforms / coarser fallback, not a float sub-page raster/sample phase alignment term
+        - the live runtime path should therefore be corrected by restoring directional coarser-clipmap fallback behavior, not by introducing a float `relative_corner_offset` into the projection ABI
       - interpretation:
         - the current live renderer path is still wrong
         - the hang-class failures that prevented real diagnosis are fixed enough for the focused bridge repro and adjacent GPU regressions to run stably
@@ -1549,6 +1552,8 @@ Do not start later tasks by broad codebase exploration alone. Each task above al
     - continue the stage-by-stage validation sweep so the live directional path is covered by expectation-driven regressions from Stage 5 through Stage 15, not only by endpoint or lifecycle checks
     - only after the new two-box live-shell regression is green, rerun and record the previously wrong simple directional scene plus a larger directional scene to confirm the Stage 15 directional mask and forward VSM shadows now match expected lighting
     - if live evidence still disagrees after the Stage 5-focused fixes, continue auditing the remaining directional projection/routing math instead of reopening synthetic-only test loops
+    - live validation is currently blocked by a GPU device-removal crash in the engine path; the D3D12 backend diagnostic scope is now the first failing queue/list/swapchain boundary plus a one-shot DRED breadcrumb/page-fault dump, not the later cascade of downstream post-removal COM failures
+    - rerun the live renderer with the hardened DRED logging and capture the first failing `HRESULT`, `GetDeviceRemovedReason()`, and breadcrumb chain before making further runtime root-cause claims about the crash
     - expand or explicitly approve the current primary-directional-only VSM publication behavior if multi-directional VSM shading is required for this phase
     - run/record an explicit manual checkpoint for directional debug modes under both `vsm` and `conventional` directional policies
   - Stop condition:

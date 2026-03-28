@@ -10,7 +10,7 @@
 #include "Renderer/Vsm/VsmPageRequestProjection.hlsli"
 #include "Renderer/Vsm/VsmPageTable.hlsli"
 
-static const float VSM_SHADOW_COMPARE_BIAS = 0.0;
+static const float VSM_MIN_RECEIVER_DEPTH_BIAS = 0.0005;
 
 struct VsmProjectedShadowSample
 {
@@ -21,6 +21,11 @@ struct VsmProjectedShadowSample
     uint2 atlas_texel_origin;
     bool valid;
 };
+
+static float VsmReceiverDepthBias(VsmProjectionData projection)
+{
+    return max(projection.receiver_depth_range_pad.z, VSM_MIN_RECEIVER_DEPTH_BIAS);
+}
 
 static bool VsmTryProjectMappedSample(
     VsmPageRequestProjection projection,
@@ -99,12 +104,62 @@ static bool VsmTryProjectMappedSample(
     const float atlas_extent = (float)(tiles_per_axis * page_size_texels);
     sample.atlas_uv = (float2(tile_x, tile_y) * (float)page_size_texels
         + page_uv * (float)page_size_texels) / atlas_extent;
-    sample.receiver_depth = ndc.z;
+    sample.receiver_depth = saturate(ndc.z - VsmReceiverDepthBias(projection.projection));
     sample.physical_page_index = physical_page_index;
     sample.atlas_slice = atlas_slice;
     sample.atlas_texel_origin = atlas_texel_origin;
     sample.valid = true;
     return true;
+}
+
+static bool VsmTryProjectDirectionalSampleWithFallback(
+    StructuredBuffer<VsmPageRequestProjection> projections,
+    uint projection_count,
+    StructuredBuffer<VsmShaderPageTableEntry> page_table,
+    uint page_table_entry_count,
+    float3 world_position_ws,
+    float receiver_view_depth,
+    uint tiles_per_axis,
+    uint page_size_texels,
+    out VsmProjectedShadowSample sample)
+{
+    sample.atlas_uv = 0.0.xx;
+    sample.receiver_depth = 1.0;
+    sample.physical_page_index = 0u;
+    sample.atlas_slice = 0u;
+    sample.atlas_texel_origin = 0u.xx;
+    sample.valid = false;
+
+    uint finest_level = 0xffffffffu;
+    bool found_mapped_projection = false;
+
+    [loop]
+    for (uint i = 0u; i < projection_count; ++i) {
+        const VsmPageRequestProjection projection = projections[i];
+        if (projection.projection.light_type != VSM_PROJECTION_LIGHT_TYPE_DIRECTIONAL) {
+            continue;
+        }
+        if (receiver_view_depth + 1.0e-3 < projection.projection.receiver_depth_range_pad.x
+            || receiver_view_depth - 1.0e-3 > projection.projection.receiver_depth_range_pad.y) {
+            continue;
+        }
+
+        VsmProjectedShadowSample candidate_sample;
+        if (!VsmTryProjectMappedSample(projection, page_table,
+                page_table_entry_count, world_position_ws, tiles_per_axis,
+                page_size_texels, candidate_sample)) {
+            continue;
+        }
+
+        if (!found_mapped_projection
+            || projection.projection.clipmap_level < finest_level) {
+            sample = candidate_sample;
+            finest_level = projection.projection.clipmap_level;
+            found_mapped_projection = true;
+        }
+    }
+
+    return found_mapped_projection;
 }
 
 static float VsmSampleVisibilityPcf2x2(
@@ -138,7 +193,7 @@ static float VsmSampleVisibilityPcf2x2(
         for (int x = 0; x < 2; ++x) {
             const int2 coord = clamp(base + int2(x, y), min_coord, max_coord);
             const float stored_depth = shadow_texture.Load(int4(coord, (int)atlas_slice, 0));
-            visibility += receiver_depth <= stored_depth + VSM_SHADOW_COMPARE_BIAS ? 1.0 : 0.0;
+            visibility += receiver_depth <= stored_depth ? 1.0 : 0.0;
         }
     }
 

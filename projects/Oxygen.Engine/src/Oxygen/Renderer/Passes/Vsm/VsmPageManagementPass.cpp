@@ -98,7 +98,7 @@ namespace {
     ShaderVisibleIndex metadata_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t allocation_decision_count { 0U };
     std::uint32_t virtual_page_count { 0U };
-    std::uint32_t _pad0 { 0U };
+    std::uint32_t physical_page_count { 0U };
     std::uint32_t _pad1 { 0U };
     std::uint32_t _pad2 { 0U };
   };
@@ -513,7 +513,6 @@ auto VsmPageManagementPass::Impl::BuildStageUploads() -> void
       renderer::vsm::TotalPageCount(retained_layout));
   }
 
-  std::uint32_t next_available_page_list_index = 0U;
   for (const auto& decision : frame_input->plan.decisions) {
     switch (decision.action) {
     case VsmAllocationAction::kReuseExisting:
@@ -558,7 +557,7 @@ auto VsmPageManagementPass::Impl::BuildStageUploads() -> void
 
       allocation_decisions.push_back(VsmShaderPageAllocationDecision {
         .page_table_index = *page_table_index,
-        .available_page_list_index = next_available_page_list_index++,
+        .physical_page_index = decision.current_physical_page.value,
         .page_flags = BuildLeafPageFlags(decision),
         .physical_meta = frame_input->snapshot
           .physical_pages[decision.current_physical_page.value],
@@ -847,6 +846,8 @@ auto VsmPageManagementPass::DoPrepareResources(CommandRecorder& recorder)
     = static_cast<std::uint32_t>(impl_->allocation_decisions.size()),
     .virtual_page_count = static_cast<std::uint32_t>(
       impl_->frame_input->snapshot.page_table.size()),
+    .physical_page_count = static_cast<std::uint32_t>(
+      impl_->frame_input->snapshot.physical_pages.size()),
   };
   std::memcpy(impl_->allocate_constants_ptr, &allocate_constants,
     sizeof(allocate_constants));
