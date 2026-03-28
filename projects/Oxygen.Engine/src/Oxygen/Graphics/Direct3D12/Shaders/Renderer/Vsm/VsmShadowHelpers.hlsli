@@ -10,12 +10,15 @@
 #include "Renderer/Vsm/VsmPageRequestProjection.hlsli"
 #include "Renderer/Vsm/VsmPageTable.hlsli"
 
+static const float VSM_SHADOW_COMPARE_BIAS = 0.0;
+
 struct VsmProjectedShadowSample
 {
     float2 atlas_uv;
     float receiver_depth;
     uint physical_page_index;
     uint atlas_slice;
+    uint2 atlas_texel_origin;
     bool valid;
 };
 
@@ -32,6 +35,7 @@ static bool VsmTryProjectMappedSample(
     sample.receiver_depth = 1.0;
     sample.physical_page_index = 0u;
     sample.atlas_slice = 0u;
+    sample.atlas_texel_origin = 0u.xx;
     sample.valid = false;
 
     if (projection.map_id == 0u || projection.pages_x == 0u || projection.pages_y == 0u
@@ -87,6 +91,7 @@ static bool VsmTryProjectMappedSample(
     const uint in_slice_index = physical_page_index % tiles_per_slice;
     const uint tile_x = in_slice_index % tiles_per_axis;
     const uint tile_y = in_slice_index / tiles_per_axis;
+    const uint2 atlas_texel_origin = uint2(tile_x, tile_y) * page_size_texels;
 
     const float2 page_uv = frac(float2(
         uv.x * (float)projection.pages_x,
@@ -97,6 +102,7 @@ static bool VsmTryProjectMappedSample(
     sample.receiver_depth = ndc.z;
     sample.physical_page_index = physical_page_index;
     sample.atlas_slice = atlas_slice;
+    sample.atlas_texel_origin = atlas_texel_origin;
     sample.valid = true;
     return true;
 }
@@ -105,28 +111,34 @@ static float VsmSampleVisibilityPcf2x2(
     Texture2DArray<float> shadow_texture,
     float2 atlas_uv,
     float receiver_depth,
-    uint atlas_slice)
+    uint atlas_slice,
+    uint2 atlas_texel_origin,
+    uint page_size_texels)
 {
     uint width = 0u;
     uint height = 0u;
     uint layers = 0u;
     shadow_texture.GetDimensions(width, height, layers);
-    if (width == 0u || height == 0u || atlas_slice >= layers) {
+    if (width == 0u || height == 0u || atlas_slice >= layers
+        || page_size_texels == 0u) {
         return 1.0;
     }
 
     const float2 pixel = atlas_uv * float2(width, height);
-    const int2 center = int2(pixel);
-    const int2 max_coord = int2((int)width - 1, (int)height - 1);
+    const int2 base = int2(floor(pixel - 0.5.xx));
+    const int2 min_coord = int2(atlas_texel_origin);
+    const int2 max_coord = min(
+        min_coord + int2((int)page_size_texels - 1, (int)page_size_texels - 1),
+        int2((int)width - 1, (int)height - 1));
 
     float visibility = 0.0;
     [unroll]
     for (int y = 0; y < 2; ++y) {
         [unroll]
         for (int x = 0; x < 2; ++x) {
-            const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
+            const int2 coord = clamp(base + int2(x, y), min_coord, max_coord);
             const float stored_depth = shadow_texture.Load(int4(coord, (int)atlas_slice, 0));
-            visibility += receiver_depth <= stored_depth + 0.0005 ? 1.0 : 0.0;
+            visibility += receiver_depth <= stored_depth + VSM_SHADOW_COMPARE_BIAS ? 1.0 : 0.0;
         }
     }
 

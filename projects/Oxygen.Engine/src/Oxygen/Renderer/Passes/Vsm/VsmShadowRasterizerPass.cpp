@@ -48,9 +48,12 @@ using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
 
 namespace {
 
-constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
-constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
-constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0025F;
+// VSM page projections already compare against normalized per-page depths in
+// Stage 15. Keeping the conventional shadow-map bias values here produced
+// visible peter-panning on interior floor receivers in the live two-box scene.
+constexpr float kDirectionalShadowRasterDepthBias = 0.0F;
+constexpr float kDirectionalShadowRasterSlopeBias = 0.0F;
+constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0F;
 
 constexpr std::uint32_t kInstanceCullingThreadGroupSize = 64U;
 constexpr std::uint32_t kInstanceCullingConstantsStride

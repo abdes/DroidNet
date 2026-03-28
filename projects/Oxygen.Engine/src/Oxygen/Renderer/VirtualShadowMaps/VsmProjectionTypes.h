@@ -27,6 +27,7 @@ struct VsmProjectionData {
   glm::mat4 view_matrix { 1.0F };
   glm::mat4 projection_matrix { 1.0F };
   glm::vec4 view_origin_ws_pad { 0.0F, 0.0F, 0.0F, 0.0F };
+  glm::vec4 receiver_depth_range_pad { 0.0F, 0.0F, 0.0F, 0.0F };
   glm::ivec2 clipmap_corner_offset { 0, 0 };
   std::uint32_t clipmap_level { 0U };
   std::uint32_t light_type { static_cast<std::uint32_t>(
@@ -35,13 +36,14 @@ struct VsmProjectionData {
   auto operator==(const VsmProjectionData&) const -> bool = default;
 };
 static_assert(std::is_standard_layout_v<VsmProjectionData>);
-static_assert(sizeof(VsmProjectionData) == 160U);
+static_assert(sizeof(VsmProjectionData) == 176U);
 static_assert(offsetof(VsmProjectionData, view_matrix) == 0U);
 static_assert(offsetof(VsmProjectionData, projection_matrix) == 64U);
 static_assert(offsetof(VsmProjectionData, view_origin_ws_pad) == 128U);
-static_assert(offsetof(VsmProjectionData, clipmap_corner_offset) == 144U);
-static_assert(offsetof(VsmProjectionData, clipmap_level) == 152U);
-static_assert(offsetof(VsmProjectionData, light_type) == 156U);
+static_assert(offsetof(VsmProjectionData, receiver_depth_range_pad) == 144U);
+static_assert(offsetof(VsmProjectionData, clipmap_corner_offset) == 160U);
+static_assert(offsetof(VsmProjectionData, clipmap_level) == 168U);
+static_assert(offsetof(VsmProjectionData, light_type) == 172U);
 
 inline constexpr std::uint32_t kVsmInvalidLightIndex = 0xffffffffU;
 inline constexpr std::uint32_t kVsmInvalidCubeFaceIndex = 0xffffffffU;
@@ -65,20 +67,20 @@ struct VsmPageRequestProjection {
   auto operator==(const VsmPageRequestProjection&) const -> bool = default;
 };
 static_assert(std::is_standard_layout_v<VsmPageRequestProjection>);
-static_assert(sizeof(VsmPageRequestProjection) == 208U);
+static_assert(sizeof(VsmPageRequestProjection) == 224U);
 static_assert(offsetof(VsmPageRequestProjection, projection) == 0U);
-static_assert(offsetof(VsmPageRequestProjection, map_id) == 160U);
+static_assert(offsetof(VsmPageRequestProjection, map_id) == 176U);
 static_assert(
-  offsetof(VsmPageRequestProjection, first_page_table_entry) == 164U);
-static_assert(offsetof(VsmPageRequestProjection, map_pages_x) == 168U);
-static_assert(offsetof(VsmPageRequestProjection, map_pages_y) == 172U);
-static_assert(offsetof(VsmPageRequestProjection, pages_x) == 176U);
-static_assert(offsetof(VsmPageRequestProjection, pages_y) == 180U);
-static_assert(offsetof(VsmPageRequestProjection, page_offset_x) == 184U);
-static_assert(offsetof(VsmPageRequestProjection, page_offset_y) == 188U);
-static_assert(offsetof(VsmPageRequestProjection, level_count) == 192U);
-static_assert(offsetof(VsmPageRequestProjection, coarse_level) == 196U);
-static_assert(offsetof(VsmPageRequestProjection, light_index) == 200U);
-static_assert(offsetof(VsmPageRequestProjection, cube_face_index) == 204U);
+  offsetof(VsmPageRequestProjection, first_page_table_entry) == 180U);
+static_assert(offsetof(VsmPageRequestProjection, map_pages_x) == 184U);
+static_assert(offsetof(VsmPageRequestProjection, map_pages_y) == 188U);
+static_assert(offsetof(VsmPageRequestProjection, pages_x) == 192U);
+static_assert(offsetof(VsmPageRequestProjection, pages_y) == 196U);
+static_assert(offsetof(VsmPageRequestProjection, page_offset_x) == 200U);
+static_assert(offsetof(VsmPageRequestProjection, page_offset_y) == 204U);
+static_assert(offsetof(VsmPageRequestProjection, level_count) == 208U);
+static_assert(offsetof(VsmPageRequestProjection, coarse_level) == 212U);
+static_assert(offsetof(VsmPageRequestProjection, light_index) == 216U);
+static_assert(offsetof(VsmPageRequestProjection, cube_face_index) == 220U);
 
 } // namespace oxygen::renderer::vsm

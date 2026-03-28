@@ -178,6 +178,10 @@ struct TwoBoxPageInitializationResult {
 struct TwoBoxShadowRasterizationResult {
   TwoBoxPageInitializationResult initialization {};
   std::vector<oxygen::renderer::vsm::VsmShadowRasterPageJob> prepared_pages {};
+  std::vector<std::uint32_t> indirect_command_counts {};
+  std::vector<oxygen::renderer::vsm::VsmShaderIndirectDrawCommand>
+    indirect_commands {};
+  std::uint32_t max_indirect_commands_per_page { 0U };
   std::vector<oxygen::renderer::vsm::VsmPrimitiveIdentity>
     visible_shadow_primitives {};
   std::vector<oxygen::renderer::vsm::VsmRenderedPrimitiveHistoryRecord>
@@ -2055,6 +2059,30 @@ protected:
       initialized.propagation.mapping.bridge.committed_frame.snapshot
         .physical_pages.size(),
       "stage-twelve-two-box.dirty-flags");
+    auto indirect_command_counts = std::vector<std::uint32_t> {};
+    auto indirect_commands
+      = std::vector<oxygen::renderer::vsm::VsmShaderIndirectDrawCommand> {};
+    auto max_indirect_commands_per_page = 0U;
+    const auto indirect_partitions
+      = rasterizer_pass->GetIndirectPartitionsForInspection();
+    if (!indirect_partitions.empty()
+      && indirect_partitions.front().count_buffer != nullptr) {
+      max_indirect_commands_per_page
+        = indirect_partitions.front().max_commands_per_page;
+      indirect_command_counts
+        = ReadBufferAs<std::uint32_t>(*indirect_partitions.front().count_buffer,
+          rasterizer_pass->GetPreparedPages().size(),
+          "stage-twelve-two-box.command-counts");
+      if (indirect_partitions.front().command_buffer != nullptr
+        && max_indirect_commands_per_page != 0U) {
+        indirect_commands
+          = ReadBufferAs<oxygen::renderer::vsm::VsmShaderIndirectDrawCommand>(
+            *indirect_partitions.front().command_buffer,
+            static_cast<std::size_t>(rasterizer_pass->GetPreparedPages().size())
+              * max_indirect_commands_per_page,
+            "stage-twelve-two-box.indirect-commands");
+      }
+    }
     const auto physical_metadata
       = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
         initialized.propagation.mapping.bridge.committed_frame
@@ -2067,6 +2095,9 @@ protected:
       .initialization = std::move(initialized),
       .prepared_pages = { rasterizer_pass->GetPreparedPages().begin(),
         rasterizer_pass->GetPreparedPages().end() },
+      .indirect_command_counts = std::move(indirect_command_counts),
+      .indirect_commands = std::move(indirect_commands),
+      .max_indirect_commands_per_page = max_indirect_commands_per_page,
       .visible_shadow_primitives
       = { rasterizer_pass->GetVisibleShadowPrimitives().begin(),
         rasterizer_pass->GetVisibleShadowPrimitives().end() },

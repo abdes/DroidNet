@@ -151,6 +151,11 @@ NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
     EXPECT_NE(projection.projection.view_matrix, glm::mat4 { 1.0F });
     EXPECT_NE(projection.projection.projection_matrix, glm::mat4 { 1.0F });
     EXPECT_EQ(projection.projection.view_origin_ws_pad.w, 0.0F);
+    EXPECT_GT(projection.projection.receiver_depth_range_pad.y,
+      projection.projection.receiver_depth_range_pad.x);
+    EXPECT_GE(projection.projection.receiver_depth_range_pad.x, 0.0F);
+    EXPECT_EQ(projection.projection.receiver_depth_range_pad.z, 0.0F);
+    EXPECT_EQ(projection.projection.receiver_depth_range_pad.w, 0.0F);
 
     ExpectFiniteMat4(projection.projection.view_matrix);
     ExpectFiniteMat4(projection.projection.projection_matrix);
@@ -161,6 +166,64 @@ NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
     ExpectVec3Near(
       glm::vec3 { projection.projection.view_origin_ws_pad }, light_origin);
   }
+}
+
+NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
+  RealSingleCascadeDirectionalSceneCoversVisibleFloorReceiverDepthRange)
+{
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kSequence = SequenceNumber { 63U };
+
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { 0.40558F, -0.40558F, -0.819152F });
+  const auto resolved_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene = CreateTwoBoxShadowScene(sun_direction, 1U);
+  auto vsm_renderer
+    = VsmShadowRenderer(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      oxygen::observer_ptr { &renderer->GetStagingProvider() },
+      oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+      oxygen::ShadowQualityTier::kHigh);
+
+  const auto result = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer,
+    resolved_view, kWidth, kHeight, kSequence, kSlot, 0x4003ULL);
+  ASSERT_NE(result.extracted_frame, nullptr);
+  ASSERT_NE(result.scene_depth_texture, nullptr);
+  ASSERT_EQ(result.extracted_frame->projection_records.size(), 1U);
+
+  const auto projection_it
+    = FindProjectionRecord(result.extracted_frame->projection_records,
+      VsmProjectionLightType::kDirectional, 0U);
+  ASSERT_NE(projection_it, nullptr);
+
+  const auto samples = ReadDepthTextureSamples(*result.scene_depth_texture,
+    resolved_view, "stage-four.projection-records.single-cascade.floor-depth");
+
+  auto farthest_visible_floor_depth = 0.0F;
+  for (const auto& sample : samples) {
+    if (std::abs(sample.world_position_ws.y) > 0.05F
+      || sample.world_position_ws.x < -4.5F || sample.world_position_ws.x > 4.5F
+      || sample.world_position_ws.z < -4.5F
+      || sample.world_position_ws.z > 4.5F) {
+      continue;
+    }
+
+    const auto receiver_view
+      = resolved_view.ViewMatrix() * glm::vec4(sample.world_position_ws, 1.0F);
+    farthest_visible_floor_depth
+      = std::max(farthest_visible_floor_depth, -receiver_view.z);
+  }
+
+  ASSERT_GT(farthest_visible_floor_depth, 0.0F);
+  EXPECT_GE(projection_it->projection.receiver_depth_range_pad.y + 1.0e-3F,
+    farthest_visible_floor_depth);
 }
 
 NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
@@ -249,6 +312,7 @@ NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
   EXPECT_EQ(projection.projection.clipmap_corner_offset, kZeroOffset);
   EXPECT_EQ(projection.projection.clipmap_level, 0U);
   EXPECT_EQ(projection.projection.view_origin_ws_pad.w, 0.0F);
+  EXPECT_EQ(projection.projection.receiver_depth_range_pad, glm::vec4 { 0.0F });
 
   ExpectFiniteMat4(projection.projection.view_matrix);
   ExpectFiniteMat4(projection.projection.projection_matrix);
