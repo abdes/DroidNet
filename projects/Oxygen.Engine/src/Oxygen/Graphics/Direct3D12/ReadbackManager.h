@@ -78,6 +78,7 @@ private:
   auto TrackCancellationHandler(
     graphics::ReadbackTicketId id, std::function<void()> handler) -> void;
   auto UntrackCancellationHandler(graphics::ReadbackTicketId id) -> void;
+  auto ForgetTicket(graphics::ReadbackTicketId id) -> void;
 
   Graphics& graphics_;
   mutable std::mutex mutex_;

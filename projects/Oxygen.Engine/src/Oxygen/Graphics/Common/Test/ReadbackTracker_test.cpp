@@ -97,20 +97,23 @@ NOLINT_TEST_F(ReadbackTrackerTest, Cancel_MarksTicketCancelled)
   EXPECT_FALSE(tracker.HasPending());
 }
 
-NOLINT_TEST_F(ReadbackTrackerTest, OnFrameStart_RemovesCurrentFrameEntries)
+NOLINT_TEST_F(
+  ReadbackTrackerTest, OnFrameStart_RetainsTrackedEntriesForOwnerRelease)
 {
   tracker.OnFrameStart(oxygen::frame::Slot { 1 });
   const auto ticket
     = tracker.Register(FenceValue { 1 }, SizeBytes { 8 }, "frame scoped");
+  tracker.MarkFenceCompleted(FenceValue { 1 });
 
   EXPECT_TRUE(tracker.IsComplete(ticket.id).has_value());
   tracker.OnFrameStart(oxygen::frame::Slot { 1 });
 
   const auto is_complete = tracker.IsComplete(ticket.id);
   const auto result = tracker.TryGetResult(ticket.id);
-  EXPECT_FALSE(is_complete.has_value());
-  EXPECT_EQ(is_complete.error(), ReadbackError::kTicketNotFound);
-  EXPECT_FALSE(result.has_value());
+  ASSERT_TRUE(is_complete.has_value());
+  EXPECT_TRUE(*is_complete);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->ticket.id.get(), ticket.id.get());
 }
 
 NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllPending_WaitsForCompletion)
@@ -169,7 +172,7 @@ NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllWaitsForRequestedTickets)
 }
 
 NOLINT_TEST_F(
-  ReadbackTrackerTest, AwaitReturnsNotFoundWhenTicketIsRetiredWhileWaiting)
+  ReadbackTrackerTest, AwaitSurvivesSameSlotReuseUntilPendingTicketCompletes)
 {
   tracker.OnFrameStart(oxygen::frame::Slot { 2 });
   const auto ticket = tracker.Register(
@@ -182,10 +185,15 @@ NOLINT_TEST_F(
     std::future_status::timeout);
 
   tracker.OnFrameStart(oxygen::frame::Slot { 2 });
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
+    std::future_status::timeout);
+
+  tracker.MarkFenceCompleted(FenceValue { 52 });
 
   const auto result = future.get();
-  ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), ReadbackError::kTicketNotFound);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->ticket.id.get(), ticket.id.get());
+  EXPECT_EQ(result->bytes_copied.get(), 20U);
 }
 
 NOLINT_TEST_F(ReadbackTrackerTest, CancelMissingTicketReturnsNotFound)
@@ -194,6 +202,23 @@ NOLINT_TEST_F(ReadbackTrackerTest, CancelMissingTicketReturnsNotFound)
     = tracker.Cancel(oxygen::graphics::ReadbackTicketId { 999 });
   ASSERT_FALSE(cancelled.has_value());
   EXPECT_EQ(cancelled.error(), ReadbackError::kTicketNotFound);
+}
+
+NOLINT_TEST_F(ReadbackTrackerTest, ForgetRemovesTrackedTicket)
+{
+  tracker.OnFrameStart(oxygen::frame::Slot { 1 });
+  const auto ticket
+    = tracker.Register(FenceValue { 15 }, SizeBytes { 8 }, "forget me");
+  tracker.MarkFenceCompleted(FenceValue { 15 });
+
+  const auto forgotten = tracker.Forget(ticket.id);
+  ASSERT_TRUE(forgotten.has_value());
+  EXPECT_TRUE(*forgotten);
+
+  const auto is_complete = tracker.IsComplete(ticket.id);
+  EXPECT_FALSE(is_complete.has_value());
+  EXPECT_EQ(is_complete.error(), ReadbackError::kTicketNotFound);
+  EXPECT_FALSE(tracker.TryGetResult(ticket.id).has_value());
 }
 
 NOLINT_TEST_F(ReadbackTrackerTest, CompletedFenceTracksLatestCompletedFence)
