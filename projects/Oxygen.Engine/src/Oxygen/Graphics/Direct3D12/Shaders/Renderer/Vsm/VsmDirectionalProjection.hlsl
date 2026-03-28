@@ -42,6 +42,7 @@ struct VsmProjectionCompositePassConstants
     uint _pad1;
     uint _pad2;
     float4x4 inverse_view_projection;
+    float4x4 main_view_matrix;
 };
 
 static VsmProjectionClearPassConstants LoadClearPassConstants()
@@ -115,6 +116,8 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
         / float2(pass_constants.output_width, pass_constants.output_height);
     const float3 world_position_ws = VsmReconstructWorldPosition(
         screen_uv, depth, pass_constants.inverse_view_projection);
+    const float receiver_view_depth
+        = -mul(pass_constants.main_view_matrix, float4(world_position_ws, 1.0)).z;
 
     float best_visibility = 1.0;
     uint best_level = 0xffffffffu;
@@ -123,6 +126,10 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
     for (uint i = 0u; i < pass_constants.projection_count; ++i) {
         const VsmPageRequestProjection projection = projections[i];
         if (projection.projection.light_type != VSM_PROJECTION_LIGHT_TYPE_DIRECTIONAL) {
+            continue;
+        }
+        if (receiver_view_depth + 1.0e-3 < projection.projection.receiver_depth_range_pad.x
+            || receiver_view_depth - 1.0e-3 > projection.projection.receiver_depth_range_pad.y) {
             continue;
         }
 
@@ -135,7 +142,8 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         const float visibility = VsmSampleVisibilityPcf2x2(
             shadow_texture, sample.atlas_uv, sample.receiver_depth,
-            sample.atlas_slice);
+            sample.atlas_slice, sample.atlas_texel_origin,
+            pass_constants.page_size_texels);
         if (projection.projection.clipmap_level < best_level) {
             best_level = projection.projection.clipmap_level;
             best_visibility = visibility;

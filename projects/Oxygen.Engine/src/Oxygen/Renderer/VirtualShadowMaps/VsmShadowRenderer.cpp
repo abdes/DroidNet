@@ -53,6 +53,7 @@ namespace {
   constexpr float kMinShadowDepthPadding = 8.0F;
   constexpr float kDirectionalShadowKernelPaddingTexels = 3.0F;
   constexpr float kDirectionalShadowSnapPaddingTexels = 1.0F;
+  constexpr std::uint32_t kVsmShadowPoolPageSizeTexels = 128U;
   constexpr auto kPageRequestReadbackWaitBudget
     = std::chrono::milliseconds { 250 };
   constexpr auto kPageRequestReadbackPollInterval
@@ -140,6 +141,10 @@ namespace {
   {
     const auto cascade_count = std::max(
       1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
+    if (cascade_index + 1U >= cascade_count) {
+      return std::max(prev_depth + kMinCascadeSpan, far_depth);
+    }
+
     const float authored_end = candidate.cascade_distances[cascade_index];
     if (authored_end > prev_depth + kMinCascadeSpan) {
       return std::min(authored_end, far_depth);
@@ -358,7 +363,6 @@ namespace {
   };
 
   struct DirectionalLightProjectionContext {
-    std::uint32_t shadow_resolution { 0U };
     glm::vec3 light_dir_to_surface { 0.0F, -1.0F, 0.0F };
     glm::vec3 light_dir_to_light { 0.0F, 1.0F, 0.0F };
     glm::vec3 world_up { 0.0F, 0.0F, 1.0F };
@@ -438,9 +442,6 @@ namespace {
       = BuildDirectionalLightRotation(light_dir_to_surface, world_up);
 
     return DirectionalLightProjectionContext {
-      .shadow_resolution = ApplyDirectionalShadowQualityTier(
-        ShadowResolutionFromHint(candidate.resolution_hint), quality_tier,
-        prepared_view.directional_shadow_candidates.size()),
       .light_dir_to_surface = light_dir_to_surface,
       .light_dir_to_light = light_dir_to_light,
       .world_up = world_up,
@@ -455,7 +456,8 @@ namespace {
     const DirectionalLightProjectionContext& light_context,
     const engine::DirectionalShadowCandidate& candidate,
     const std::uint32_t clip_index, const std::uint32_t pages_per_axis,
-    const float prev_depth) -> DirectionalClipLevelState
+    const std::uint32_t virtual_resolution, const float prev_depth)
+    -> DirectionalClipLevelState
   {
     const auto end_depth = ResolveCascadeEndDepth(
       candidate, clip_index, prev_depth, frustum.near_depth, frustum.far_depth);
@@ -497,15 +499,14 @@ namespace {
 
     const auto base_half_extent
       = std::max(std::ceil(sphere_radius * 16.0F) * (1.0F / 16.0F), 1.0F);
-    const auto padded_half_extent_x = ComputePaddedHalfExtent(
-      base_half_extent, light_context.shadow_resolution);
-    const auto padded_half_extent_y = ComputePaddedHalfExtent(
-      base_half_extent, light_context.shadow_resolution);
+    const auto padded_half_extent_x
+      = ComputePaddedHalfExtent(base_half_extent, virtual_resolution);
+    const auto padded_half_extent_y
+      = ComputePaddedHalfExtent(base_half_extent, virtual_resolution);
     const auto slice_center_ls = glm::vec3(
       light_context.light_rotation * glm::vec4(slice_center_ws, 1.0F));
-    const auto snapped_center_ls
-      = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
-        padded_half_extent_y, light_context.shadow_resolution);
+    const auto snapped_center_ls = SnapLightSpaceCenter(slice_center_ls,
+      padded_half_extent_x, padded_half_extent_y, virtual_resolution);
     const auto snapped_center_ws = glm::vec3(
       light_context.inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
 
@@ -619,12 +620,14 @@ namespace {
 
     const auto light_context = BuildDirectionalLightProjectionContext(
       prepared_view, candidate, quality_tier);
+    const auto virtual_resolution
+      = std::max(1U, desc.pages_per_axis) * kVsmShadowPoolPageSizeTexels;
     auto prev_depth = std::max(frustum_context->near_depth, 0.0F);
     for (std::uint32_t clip_index = 0U; clip_index < clip_level_count;
       ++clip_index) {
       const auto clip_state = ComputeDirectionalClipLevelState(prepared_view,
         *frustum_context, light_context, candidate, clip_index,
-        desc.pages_per_axis, prev_depth);
+        desc.pages_per_axis, virtual_resolution, prev_depth);
       desc.page_grid_origin.push_back(clip_state.page_grid_origin);
       desc.page_world_size.push_back(clip_state.page_world_size);
       desc.near_depth.push_back(clip_state.near_depth);
@@ -729,13 +732,15 @@ namespace {
             candidate.cascade_count, oxygen::scene::kMaxShadowCascades)));
       const auto light_context = BuildDirectionalLightProjectionContext(
         prepared_view, candidate, quality_tier);
+      const auto virtual_resolution
+        = std::max(1U, layout.pages_per_axis) * kVsmShadowPoolPageSizeTexels;
       auto prev_depth = std::max(frustum_context->near_depth, 0.0F);
 
       for (std::uint32_t clip_index = 0U; clip_index < cascade_count;
         ++clip_index) {
         const auto clip_state = ComputeDirectionalClipLevelState(prepared_view,
           *frustum_context, light_context, candidate, clip_index,
-          layout.pages_per_axis, prev_depth);
+          layout.pages_per_axis, virtual_resolution, prev_depth);
         CHECK_EQ_F(layout.page_grid_origin[clip_index].x,
           clip_state.page_grid_origin.x,
           "VsmShadowRenderer directional layout clip {} x-origin {} must "
@@ -754,6 +759,8 @@ namespace {
           .view_matrix = clip_state.light_view,
           .projection_matrix = clip_state.light_projection,
           .view_origin_ws_pad = clip_state.view_origin_ws_pad,
+          .receiver_depth_range_pad
+          = glm::vec4(prev_depth, clip_state.resolved_end_depth, 0.0F, 0.0F),
           .clipmap_corner_offset = layout.page_grid_origin[clip_index],
           .clipmap_level = clip_index,
           .light_type = static_cast<std::uint32_t>(
@@ -900,7 +907,7 @@ namespace {
   {
     static_cast<void>(quality_tier);
     return VsmPhysicalPoolConfig {
-      .page_size_texels = 128U,
+      .page_size_texels = kVsmShadowPoolPageSizeTexels,
       .physical_tile_capacity
       = ComputeRequestedShadowPoolTileCapacity(current_frame, previous_frame),
       .array_slice_count = 2U,

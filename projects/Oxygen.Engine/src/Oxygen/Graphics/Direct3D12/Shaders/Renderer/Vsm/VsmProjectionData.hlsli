@@ -28,6 +28,9 @@ struct VsmProjectionData
     float4x4 projection_matrix;
     // Light/view origin in world space. W is padding for 16-byte alignment.
     float4 view_origin_ws_pad;
+    // Directional receiver-depth interval in main-view space. XY are valid;
+    // ZW are padding. Local lights ignore this payload.
+    float4 receiver_depth_range_pad;
     // Page-space clipmap pan offset. Meaningful for directional clipmaps only.
     int2 clipmap_corner_offset;
     // Directional clipmap level. Ignored for local lights.

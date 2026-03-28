@@ -97,6 +97,7 @@ namespace {
     std::uint32_t _pad1 { 0U };
     std::uint32_t _pad2 { 0U };
     glm::mat4 inverse_view_projection { 1.0F };
+    glm::mat4 main_view_matrix { 1.0F };
   };
   static_assert(sizeof(VsmProjectionCompositePassConstants)
       % packing::kShaderDataFieldAlignment
@@ -336,7 +337,8 @@ struct VsmProjectionPass::Impl {
 
     for (auto& [view_id, view_state] : view_states) {
       static_cast<void>(view_id);
-      UnregisterResourceIfPresent(*gfx, view_state.directional_shadow_mask_texture);
+      UnregisterResourceIfPresent(
+        *gfx, view_state.directional_shadow_mask_texture);
       UnregisterResourceIfPresent(*gfx, view_state.shadow_mask_texture);
     }
     UnregisterResourceIfPresent(*gfx, projection_upload_buffer);
@@ -470,8 +472,7 @@ struct VsmProjectionPass::Impl {
   {
     auto& state = view_states[view_id];
     if (state.directional_shadow_mask_texture && state.shadow_mask_texture
-      && state.width == width
-      && state.height == height) {
+      && state.width == width && state.height == height) {
       return state;
     }
 
@@ -488,11 +489,11 @@ struct VsmProjectionPass::Impl {
       desc.is_shader_resource = true;
       desc.is_uav = true;
       desc.initial_state = ResourceStates::kCommon;
-      desc.debug_name = config->debug_name + suffix
-        + ".View" + std::to_string(view_id.get());
+      desc.debug_name
+        = config->debug_name + suffix + ".View" + std::to_string(view_id.get());
       auto texture = gfx->CreateTexture(desc);
-      CHECK_NOTNULL_F(texture.get(),
-        "Failed to create VSM projection mask texture");
+      CHECK_NOTNULL_F(
+        texture.get(), "Failed to create VSM projection mask texture");
       RegisterResourceIfNeeded(*gfx, texture);
       return texture;
     };
@@ -505,10 +506,10 @@ struct VsmProjectionPass::Impl {
       *state.directional_shadow_mask_texture, ShadowMaskSrvDesc());
     state.directional_shadow_mask_uav_index = EnsureTextureViewIndex(
       *state.directional_shadow_mask_texture, ShadowMaskUavDesc());
-    state.shadow_mask_srv_index = EnsureTextureViewIndex(
-      *state.shadow_mask_texture, ShadowMaskSrvDesc());
-    state.shadow_mask_uav_index = EnsureTextureViewIndex(
-      *state.shadow_mask_texture, ShadowMaskUavDesc());
+    state.shadow_mask_srv_index
+      = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskSrvDesc());
+    state.shadow_mask_uav_index
+      = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskUavDesc());
     state.width = width;
     state.height = height;
     return state;
@@ -826,6 +827,7 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     .dynamic_slice_index = *impl_->active_dynamic_slice_index,
     .inverse_view_projection
     = Context().current_view.resolved_view->InverseViewProjection(),
+    .main_view_matrix = Context().current_view.resolved_view->ViewMatrix(),
   };
 
   if (impl_->active_directional_projection_count > 0U) {

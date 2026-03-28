@@ -34,6 +34,7 @@ struct VsmProjectionCompositePassConstants
     uint _pad1;
     uint _pad2;
     float4x4 inverse_view_projection;
+    float4x4 main_view_matrix;
 };
 
 static VsmProjectionCompositePassConstants LoadCompositePassConstants()
@@ -95,7 +96,8 @@ void CS_ProjectLocalLights(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
         accumulated_visibility *= VsmSampleVisibilityPcf2x2(
             shadow_texture, sample.atlas_uv, sample.receiver_depth,
-            sample.atlas_slice);
+            sample.atlas_slice, sample.atlas_texel_origin,
+            pass_constants.page_size_texels);
     }
 
     shadow_mask[dispatch_thread_id.xy] *= accumulated_visibility;

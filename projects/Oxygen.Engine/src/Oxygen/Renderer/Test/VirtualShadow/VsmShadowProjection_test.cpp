@@ -12,6 +12,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -48,6 +49,8 @@ using oxygen::renderer::vsm::testing::TwoBoxShadowProjectionResult;
 using oxygen::renderer::vsm::testing::TwoBoxShadowSceneData;
 using oxygen::renderer::vsm::testing::VsmLiveSceneHarness;
 
+constexpr auto kShadowCompareBias = 0.0F;
+
 struct AxisAlignedBox {
   glm::vec3 min {};
   glm::vec3 max {};
@@ -63,12 +66,54 @@ struct CpuProjectedSample {
   float receiver_depth { 1.0F };
   std::uint32_t physical_page_index { 0U };
   std::uint32_t atlas_slice { 0U };
+  glm::uvec2 atlas_texel_origin { 0U, 0U };
 };
 
 struct CpuProjectionVisibility {
   float directional { 1.0F };
   float composite { 1.0F };
   bool has_directional_sample { false };
+};
+
+struct CpuDirectionalRouteDebug {
+  float visibility { 1.0F };
+  float dynamic_before_visibility { 1.0F };
+  float static_before_visibility { 1.0F };
+  float dynamic_after_visibility { 1.0F };
+  float receiver_depth { 1.0F };
+  std::array<float, 4> tap_depths { 1.0F, 1.0F, 1.0F, 1.0F };
+  float tall_box_min_depth { 1.0F };
+  float tall_box_max_depth { 1.0F };
+  std::uint32_t level { std::numeric_limits<std::uint32_t>::max() };
+  std::uint32_t page_table_index { std::numeric_limits<std::uint32_t>::max() };
+  std::uint32_t physical_page_index {
+    std::numeric_limits<std::uint32_t>::max()
+  };
+  std::uint32_t indirect_command_count { 0U };
+  std::array<std::uint32_t, 4> indirect_draw_indices {
+    std::numeric_limits<std::uint32_t>::max(),
+    std::numeric_limits<std::uint32_t>::max(),
+    std::numeric_limits<std::uint32_t>::max(),
+    std::numeric_limits<std::uint32_t>::max(),
+  };
+  std::uint32_t covered_texel_count { 0U };
+  float page_min_depth { 1.0F };
+  glm::uvec2 sample_texel { 0U, 0U };
+  glm::uvec2 covered_min { 0U, 0U };
+  glm::uvec2 covered_max { 0U, 0U };
+  glm::uvec2 page { 0U, 0U };
+  bool has_sample { false };
+};
+
+struct CpuDirectionalRouteCandidate {
+  std::uint32_t level { std::numeric_limits<std::uint32_t>::max() };
+  std::uint32_t page_table_index { std::numeric_limits<std::uint32_t>::max() };
+  std::uint32_t physical_page_index {
+    std::numeric_limits<std::uint32_t>::max()
+  };
+  float visibility { 1.0F };
+  float receiver_depth { 1.0F };
+  std::array<float, 4> tap_depths { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 
 class VsmShadowProjectionLiveSceneTest : public VsmLiveSceneHarness {
@@ -87,7 +132,7 @@ protected:
 
   [[nodiscard]] static auto MakeDirectionalSunDirection() -> glm::vec3
   {
-    return glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+    return glm::normalize(glm::vec3 { 0.40558F, -0.40558F, -0.819152F });
   }
 
   [[nodiscard]] static auto ComputeWorldAabb(const glm::mat4& world,
@@ -110,9 +155,9 @@ protected:
     return world_bounds;
   }
 
-  [[nodiscard]] static auto RayIntersectsAabb(const glm::vec3 origin,
+  [[nodiscard]] static auto RayAabbIntersectionLength(const glm::vec3 origin,
     const glm::vec3 direction, const glm::vec3 box_min, const glm::vec3 box_max,
-    const float max_distance = std::numeric_limits<float>::infinity()) -> bool
+    const float max_distance = std::numeric_limits<float>::infinity()) -> float
   {
     auto t_min = 0.0F;
     auto t_max = max_distance;
@@ -120,7 +165,7 @@ protected:
       const auto dir = direction[axis];
       if (std::abs(dir) < 1.0e-6F) {
         if (origin[axis] < box_min[axis] || origin[axis] > box_max[axis]) {
-          return false;
+          return 0.0F;
         }
         continue;
       }
@@ -133,11 +178,13 @@ protected:
       t_min = std::max(t_min, t0);
       t_max = std::min(t_max, t1);
       if (t_min > t_max) {
-        return false;
+        return 0.0F;
       }
     }
 
-    return t_max >= t_min && t_min <= max_distance;
+    return t_max >= t_min && t_min <= max_distance
+      ? std::max(0.0F, t_max - t_min)
+      : 0.0F;
   }
 
   static auto DisableDirectionalShadowCasts(TwoBoxShadowSceneData& scene_data)
@@ -151,9 +198,38 @@ protected:
     UpdateTransforms(*scene_data.scene, scene_data.sun_node);
   }
 
+  [[nodiscard]] static auto AnalyticShadowPenetrationLength(
+    const TwoBoxShadowSceneData& scene_data, const glm::vec3& point_ws) -> float
+  {
+    const auto tall_box_bounds = AxisAlignedBox {
+      .min = glm::vec3 { 0.55F, 0.0F, -0.65F },
+      .max = glm::vec3 { 1.35F, 3.2F, 0.15F },
+    };
+    const auto short_box_bounds = AxisAlignedBox {
+      .min = glm::vec3 { -0.95F, 0.0F, 0.25F },
+      .max = glm::vec3 { -0.15F, 1.1F, 1.05F },
+    };
+
+    constexpr auto kShadowBias = 0.02F;
+    const auto toward_light = -scene_data.sun_direction_ws;
+    const auto origin = point_ws + toward_light * kShadowBias;
+    return std::max(RayAabbIntersectionLength(origin, toward_light,
+                      tall_box_bounds.min, tall_box_bounds.max),
+      RayAabbIntersectionLength(
+        origin, toward_light, short_box_bounds.min, short_box_bounds.max));
+  }
+
+  [[nodiscard]] static auto IsShadowedByAnalyticBoxes(
+    const TwoBoxShadowSceneData& scene_data, const glm::vec3& point_ws) -> bool
+  {
+    return AnalyticShadowPenetrationLength(scene_data, point_ws) > 0.0F;
+  }
+
   [[nodiscard]] auto SelectAnalyticFloorProbes(
     const TwoBoxShadowSceneData& scene_data,
-    const oxygen::ResolvedView& resolved_view) const
+    const oxygen::ResolvedView& resolved_view,
+    const std::size_t max_shadow_count = 4U,
+    const std::size_t max_lit_count = 4U) const
     -> std::pair<std::vector<ProbeSample>, std::vector<ProbeSample>>
   {
     const auto tall_box_bounds = AxisAlignedBox {
@@ -164,10 +240,12 @@ protected:
       .min = glm::vec3 { -0.95F, 0.0F, 0.25F },
       .max = glm::vec3 { -0.15F, 1.1F, 1.05F },
     };
-    const auto floor_bounds = AxisAlignedBox {
-      .min = glm::vec3 { -4.5F, -0.01F, -4.5F },
-      .max = glm::vec3 { 4.5F, 0.01F, 4.5F },
+    constexpr auto kFloorLocalBounds = AxisAlignedBox {
+      .min = glm::vec3 { -4.5F, 0.0F, -4.5F },
+      .max = glm::vec3 { 4.5F, 0.0F, 4.5F },
     };
+    const auto floor_bounds
+      = ComputeWorldAabb(scene_data.world_matrices[0], kFloorLocalBounds);
     const auto inverse_view_projection = glm::inverse(
       resolved_view.ProjectionMatrix() * resolved_view.ViewMatrix());
 
@@ -236,16 +314,6 @@ protected:
         = glm::normalize(glm::vec3 { far_point - near_point });
       return { origin, direction };
     };
-    const auto sun_direction = scene_data.sun_direction_ws;
-    auto is_shadowed_by_boxes = [&](const glm::vec3 point) {
-      constexpr auto kShadowBias = 0.02F;
-      const auto origin = point + sun_direction * kShadowBias;
-      return RayIntersectsAabb(
-               origin, sun_direction, tall_box_bounds.min, tall_box_bounds.max)
-        || RayIntersectsAabb(
-          origin, sun_direction, short_box_bounds.min, short_box_bounds.max);
-    };
-
     auto visible_floor_pixels = std::vector<ProbeSample> {};
     visible_floor_pixels.reserve(kOutputWidth * kOutputHeight);
     for (std::uint32_t y = 0U; y < kOutputHeight; ++y) {
@@ -292,15 +360,16 @@ protected:
         continue;
       }
 
-      if (is_shadowed_by_boxes(probe.point_ws)) {
-        if (shadow_probes.size() < 4U) {
+      if (IsShadowedByAnalyticBoxes(scene_data, probe.point_ws)) {
+        if (shadow_probes.size() < max_shadow_count) {
           shadow_probes.push_back(probe);
         }
-      } else if (lit_probes.size() < 4U) {
+      } else if (lit_probes.size() < max_lit_count) {
         lit_probes.push_back(probe);
       }
 
-      if (shadow_probes.size() >= 4U && lit_probes.size() >= 4U) {
+      if (shadow_probes.size() >= max_shadow_count
+        && lit_probes.size() >= max_lit_count) {
         break;
       }
     }
@@ -360,11 +429,171 @@ protected:
     return selected;
   }
 
+  [[nodiscard]] auto SelectStableAnalyticFloorProbes(
+    const TwoBoxShadowSceneData& scene_data,
+    const oxygen::graphics::Texture& scene_depth_texture,
+    const oxygen::ResolvedView& resolved_view,
+    const std::size_t max_shadow_count, const std::size_t max_lit_count,
+    const std::uint32_t neighborhood_radius = 1U)
+    -> std::pair<std::vector<ProbeSample>, std::vector<ProbeSample>>
+  {
+    constexpr auto kFloorLocalBounds = AxisAlignedBox {
+      .min = glm::vec3 { -4.5F, 0.0F, -4.5F },
+      .max = glm::vec3 { 4.5F, 0.0F, 4.5F },
+    };
+    const auto floor_bounds
+      = ComputeWorldAabb(scene_data.world_matrices[0], kFloorLocalBounds);
+    const auto samples = ReadDepthTextureSamples(scene_depth_texture,
+      resolved_view, "stage-fifteen-two-box.analytic-floor-selection");
+
+    struct StableProbeCandidate {
+      ProbeSample probe {};
+      std::optional<bool> analytically_shadowed;
+      float analytic_shadow_penetration { 0.0F };
+      float receiver_view_depth { 0.0F };
+    };
+
+    auto candidates = std::vector<std::optional<StableProbeCandidate>>(
+      kOutputWidth * kOutputHeight);
+    for (const auto& sample : samples) {
+      const auto clip = resolved_view.ProjectionMatrix()
+        * resolved_view.ViewMatrix()
+        * glm::vec4(sample.world_position_ws, 1.0F);
+      if (std::abs(clip.w) <= 1.0e-6F) {
+        continue;
+      }
+      const auto ndc = glm::vec3(clip) / clip.w;
+      const auto pixel = glm::uvec2 {
+        static_cast<std::uint32_t>(
+          std::clamp((ndc.x * 0.5F + 0.5F) * static_cast<float>(kOutputWidth),
+            0.0F, static_cast<float>(kOutputWidth - 1U))),
+        static_cast<std::uint32_t>(
+          std::clamp((0.5F - ndc.y * 0.5F) * static_cast<float>(kOutputHeight),
+            0.0F, static_cast<float>(kOutputHeight - 1U))),
+      };
+      if (std::abs(sample.world_position_ws.y - floor_bounds.min.y) > 0.05F
+        || sample.world_position_ws.x < floor_bounds.min.x
+        || sample.world_position_ws.x > floor_bounds.max.x
+        || sample.world_position_ws.z < floor_bounds.min.z
+        || sample.world_position_ws.z > floor_bounds.max.z) {
+        continue;
+      }
+      if (pixel.x < 12U || pixel.x > (kOutputWidth - 13U) || pixel.y < 12U
+        || pixel.y > (kOutputHeight - 13U)) {
+        continue;
+      }
+
+      const auto receiver_view = resolved_view.ViewMatrix()
+        * glm::vec4(sample.world_position_ws, 1.0F);
+      const auto analytic_shadow_penetration
+        = AnalyticShadowPenetrationLength(scene_data, sample.world_position_ws);
+
+      std::optional<bool> analytically_shadowed;
+      if (analytic_shadow_penetration > 0.35F) {
+        analytically_shadowed = true;
+      } else if (analytic_shadow_penetration == 0.0F) {
+        analytically_shadowed = false;
+      }
+
+      candidates[pixel.y * kOutputWidth + pixel.x]
+        = StableProbeCandidate {
+          .probe = ProbeSample {
+            .point_ws = sample.world_position_ws,
+            .pixel = pixel,
+          },
+          .analytically_shadowed = analytically_shadowed,
+          .analytic_shadow_penetration = analytic_shadow_penetration,
+          .receiver_view_depth = -receiver_view.z,
+        };
+    }
+
+    const auto has_stable_neighborhood
+      = [&](const std::uint32_t x, const std::uint32_t y,
+          const bool analytically_shadowed) {
+          for (auto offset_y = -static_cast<int>(neighborhood_radius);
+            offset_y <= static_cast<int>(neighborhood_radius); ++offset_y) {
+            for (auto offset_x = -static_cast<int>(neighborhood_radius);
+              offset_x <= static_cast<int>(neighborhood_radius); ++offset_x) {
+              const auto neighbor_x = static_cast<int>(x) + offset_x;
+              const auto neighbor_y = static_cast<int>(y) + offset_y;
+              if (neighbor_x < 0 || neighbor_x >= static_cast<int>(kOutputWidth)
+                || neighbor_y < 0
+                || neighbor_y >= static_cast<int>(kOutputHeight)) {
+                return false;
+              }
+
+              const auto& neighbor
+                = candidates[static_cast<std::size_t>(neighbor_y) * kOutputWidth
+                  + static_cast<std::size_t>(neighbor_x)];
+              if (!neighbor.has_value()
+                || !neighbor->analytically_shadowed.has_value()
+                || neighbor->analytically_shadowed.value()
+                  != analytically_shadowed) {
+                return false;
+              }
+            }
+          }
+          return true;
+        };
+
+    auto stable_shadow = std::vector<StableProbeCandidate> {};
+    auto stable_lit = std::vector<StableProbeCandidate> {};
+    stable_shadow.reserve(max_shadow_count * 4U);
+    stable_lit.reserve(max_lit_count * 4U);
+    for (std::uint32_t y = 12U; y < kOutputHeight - 12U; ++y) {
+      for (std::uint32_t x = 12U; x < kOutputWidth - 12U; ++x) {
+        const auto& candidate = candidates[y * kOutputWidth + x];
+        if (!candidate.has_value()
+          || !candidate->analytically_shadowed.has_value()
+          || !has_stable_neighborhood(
+            x, y, candidate->analytically_shadowed.value())) {
+          continue;
+        }
+
+        if (candidate->analytically_shadowed.value()) {
+          stable_shadow.push_back(*candidate);
+        } else {
+          stable_lit.push_back(*candidate);
+        }
+      }
+    }
+
+    std::sort(stable_shadow.begin(), stable_shadow.end(),
+      [](const auto& lhs, const auto& rhs) {
+        if (lhs.analytic_shadow_penetration
+          != rhs.analytic_shadow_penetration) {
+          return lhs.analytic_shadow_penetration
+            > rhs.analytic_shadow_penetration;
+        }
+        return lhs.receiver_view_depth > rhs.receiver_view_depth;
+      });
+    std::sort(stable_lit.begin(), stable_lit.end(),
+      [](const auto& lhs, const auto& rhs) {
+        return lhs.receiver_view_depth > rhs.receiver_view_depth;
+      });
+
+    auto shadow_probes = std::vector<ProbeSample> {};
+    auto lit_probes = std::vector<ProbeSample> {};
+    shadow_probes.reserve(max_shadow_count);
+    lit_probes.reserve(max_lit_count);
+    for (std::size_t i = 0;
+      i < (std::min)(max_shadow_count, stable_shadow.size()); ++i) {
+      shadow_probes.push_back(stable_shadow[i].probe);
+    }
+    for (std::size_t i = 0; i < (std::min)(max_lit_count, stable_lit.size());
+      ++i) {
+      lit_probes.push_back(stable_lit[i].probe);
+    }
+
+    return { shadow_probes, lit_probes };
+  }
+
   [[nodiscard]] static auto TryProjectMappedSampleCpu(
     const VsmPageRequestProjection& projection,
     const std::span<const VsmShaderPageTableEntry> page_table,
-    const glm::vec3& world_position_ws, const std::uint32_t tiles_per_axis,
-    const std::uint32_t page_size_texels) -> std::optional<CpuProjectedSample>
+    const glm::vec3& world_position_ws, const glm::mat4& main_view_matrix,
+    const std::uint32_t tiles_per_axis, const std::uint32_t page_size_texels)
+    -> std::optional<CpuProjectedSample>
   {
     if (projection.map_id == 0U || projection.pages_x == 0U
       || projection.pages_y == 0U || projection.map_pages_x == 0U
@@ -380,6 +609,20 @@ protected:
       || projection.pages_y
         > projection.map_pages_y - projection.page_offset_y) {
       return std::nullopt;
+    }
+
+    if (projection.projection.light_type
+      == static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional)) {
+      const auto receiver_view
+        = main_view_matrix * glm::vec4(world_position_ws, 1.0F);
+      const auto receiver_view_depth = -receiver_view.z;
+      const auto min_depth
+        = projection.projection.receiver_depth_range_pad.x - 1.0e-3F;
+      const auto max_depth
+        = projection.projection.receiver_depth_range_pad.y + 1.0e-3F;
+      if (receiver_view_depth < min_depth || receiver_view_depth > max_depth) {
+        return std::nullopt;
+      }
     }
 
     const auto world = glm::vec4(world_position_ws, 1.0F);
@@ -427,6 +670,10 @@ protected:
     const auto in_slice_index = physical_page_index % tiles_per_slice;
     const auto tile_x = in_slice_index % tiles_per_axis;
     const auto tile_y = in_slice_index / tiles_per_axis;
+    const auto atlas_texel_origin = glm::uvec2 {
+      tile_x * page_size_texels,
+      tile_y * page_size_texels,
+    };
     const auto page_uv = glm::fract(glm::vec2 {
       uv.x * static_cast<float>(projection.pages_x),
       uv.y * static_cast<float>(projection.pages_y),
@@ -443,30 +690,44 @@ protected:
       .receiver_depth = ndc.z,
       .physical_page_index = physical_page_index,
       .atlas_slice = atlas_slice,
+      .atlas_texel_origin = atlas_texel_origin,
     };
   }
 
   [[nodiscard]] static auto SampleVisibilityPcf2x2(
     const HarnessShadowSliceSnapshot& slice, const glm::vec2 atlas_uv,
-    const float receiver_depth) -> float
+    const float receiver_depth, const glm::uvec2 atlas_texel_origin,
+    const std::uint32_t page_size_texels) -> float
   {
+    if (page_size_texels == 0U) {
+      return 1.0F;
+    }
+
     const auto pixel = atlas_uv
       * glm::vec2 { static_cast<float>(slice.width),
           static_cast<float>(slice.height) };
-    const auto center = glm::ivec2 { pixel };
+    const auto base
+      = glm::ivec2 { glm::floor(pixel - glm::vec2 { 0.5F, 0.5F }) };
+    const auto min_coord = glm::ivec2 {
+      static_cast<int>(atlas_texel_origin.x),
+      static_cast<int>(atlas_texel_origin.y),
+    };
     const auto max_coord = glm::ivec2 {
-      static_cast<int>(slice.width) - 1,
-      static_cast<int>(slice.height) - 1,
+      (std::min)(static_cast<int>(slice.width) - 1,
+        static_cast<int>(atlas_texel_origin.x + page_size_texels - 1U)),
+      (std::min)(static_cast<int>(slice.height) - 1,
+        static_cast<int>(atlas_texel_origin.y + page_size_texels - 1U)),
     };
 
     auto visibility = 0.0F;
     for (auto y = 0; y < 2; ++y) {
       for (auto x = 0; x < 2; ++x) {
-        const auto coord = glm::clamp(
-          center + glm::ivec2 { x, y }, glm::ivec2 { 0, 0 }, max_coord);
+        const auto coord
+          = glm::clamp(base + glm::ivec2 { x, y }, min_coord, max_coord);
         const auto stored_depth = slice.At(static_cast<std::uint32_t>(coord.x),
           static_cast<std::uint32_t>(coord.y));
-        visibility += receiver_depth <= stored_depth + 0.0005F ? 1.0F : 0.0F;
+        visibility
+          += receiver_depth <= stored_depth + kShadowCompareBias ? 1.0F : 0.0F;
       }
     }
 
@@ -494,7 +755,8 @@ protected:
 
   [[nodiscard]] auto ComputeCpuVisibility(
     const TwoBoxShadowProjectionResult& result,
-    const glm::vec3& world_position_ws) const -> CpuProjectionVisibility
+    const glm::mat4& main_view_matrix, const glm::vec3& world_position_ws) const
+    -> CpuProjectionVisibility
   {
     const auto& frame = result.hzb.merge.rasterization.initialization
                           .propagation.mapping.bridge.committed_frame;
@@ -506,8 +768,9 @@ protected:
     auto visibility = CpuProjectionVisibility {};
     auto best_level = std::numeric_limits<std::uint32_t>::max();
     for (const auto& projection : projections) {
-      const auto sample = TryProjectMappedSampleCpu(projection, page_table,
-        world_position_ws, pool.tiles_per_axis, pool.page_size_texels);
+      const auto sample
+        = TryProjectMappedSampleCpu(projection, page_table, world_position_ws,
+          main_view_matrix, pool.tiles_per_axis, pool.page_size_texels);
       if (!sample.has_value()) {
         continue;
       }
@@ -517,8 +780,9 @@ protected:
         continue;
       }
 
-      const auto sample_visibility = SampleVisibilityPcf2x2(
-        *slice, sample->atlas_uv, sample->receiver_depth);
+      const auto sample_visibility = SampleVisibilityPcf2x2(*slice,
+        sample->atlas_uv, sample->receiver_depth, sample->atlas_texel_origin,
+        pool.page_size_texels);
       if (projection.projection.light_type
         == static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional)) {
         if (projection.projection.clipmap_level < best_level) {
@@ -536,6 +800,351 @@ protected:
       visibility.composite *= visibility.directional;
     }
     return visibility;
+  }
+
+  [[nodiscard]] static auto ComputeProjectedDepthRange(
+    const glm::mat4& view_matrix, const glm::mat4& projection_matrix,
+    const glm::mat4& world_matrix, const AxisAlignedBox& local_bounds)
+    -> std::pair<float, float>
+  {
+    auto min_depth = std::numeric_limits<float>::max();
+    auto max_depth = std::numeric_limits<float>::lowest();
+    for (std::uint32_t mask = 0U; mask < 8U; ++mask) {
+      const auto local_corner = glm::vec3 {
+        (mask & 1U) != 0U ? local_bounds.max.x : local_bounds.min.x,
+        (mask & 2U) != 0U ? local_bounds.max.y : local_bounds.min.y,
+        (mask & 4U) != 0U ? local_bounds.max.z : local_bounds.min.z,
+      };
+      const auto world_corner = world_matrix * glm::vec4(local_corner, 1.0F);
+      const auto view_corner = view_matrix * world_corner;
+      const auto clip_corner = projection_matrix * view_corner;
+      if (std::abs(clip_corner.w) <= 1.0e-6F) {
+        continue;
+      }
+      const auto ndc_z = clip_corner.z / clip_corner.w;
+      min_depth = (std::min)(min_depth, ndc_z);
+      max_depth = (std::max)(max_depth, ndc_z);
+    }
+    if (min_depth == std::numeric_limits<float>::max()) {
+      return { 1.0F, 1.0F };
+    }
+    return { min_depth, max_depth };
+  }
+
+  [[nodiscard]] auto ComputeDirectionalRouteDebug(
+    const TwoBoxShadowProjectionResult& result,
+    const TwoBoxShadowSceneData& scene_data, const glm::mat4& main_view_matrix,
+    const glm::vec3& world_position_ws) const -> CpuDirectionalRouteDebug
+  {
+    const auto& frame = result.hzb.merge.rasterization.initialization
+                          .propagation.mapping.bridge.committed_frame;
+    const auto& projections = frame.snapshot.projection_records;
+    const auto& page_table = result.hzb.page_table_after;
+    const auto& pool
+      = result.hzb.merge.rasterization.initialization.physical_pool;
+
+    auto best = CpuDirectionalRouteDebug {};
+    for (const auto& projection : projections) {
+      if (projection.projection.light_type
+        != static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional)) {
+        continue;
+      }
+
+      const auto sample
+        = TryProjectMappedSampleCpu(projection, page_table, world_position_ws,
+          main_view_matrix, pool.tiles_per_axis, pool.page_size_texels);
+      if (!sample.has_value()) {
+        continue;
+      }
+
+      const auto world = glm::vec4(world_position_ws, 1.0F);
+      const auto view = projection.projection.view_matrix * world;
+      const auto clip = projection.projection.projection_matrix * view;
+      if (std::abs(clip.w) <= 1.0e-6F || clip.w < 0.0F) {
+        continue;
+      }
+
+      const auto ndc = glm::vec3(clip) / clip.w;
+      const auto uv = glm::vec2 {
+        ndc.x * 0.5F + 0.5F,
+        0.5F - ndc.y * 0.5F,
+      };
+      const auto local_page_x
+        = (std::min)(static_cast<std::uint32_t>(uv.x * projection.pages_x),
+          projection.pages_x - 1U);
+      const auto local_page_y
+        = (std::min)(static_cast<std::uint32_t>(uv.y * projection.pages_y),
+          projection.pages_y - 1U);
+      const auto page_x = projection.page_offset_x + local_page_x;
+      const auto page_y = projection.page_offset_y + local_page_y;
+      const auto pages_per_level
+        = projection.map_pages_x * projection.map_pages_y;
+      const auto page_table_index = projection.first_page_table_entry
+        + projection.projection.clipmap_level * pages_per_level
+        + page_y * projection.map_pages_x + page_x;
+
+      const auto* slice = SelectShadowSlice(result, sample->atlas_slice);
+      if (slice == nullptr) {
+        continue;
+      }
+
+      const auto dynamic_after_visibility = SampleVisibilityPcf2x2(*slice,
+        sample->atlas_uv, sample->receiver_depth, sample->atlas_texel_origin,
+        pool.page_size_texels);
+      const auto dynamic_before_visibility
+        = SampleVisibilityPcf2x2(result.hzb.merge.dynamic_before,
+          sample->atlas_uv, sample->receiver_depth, sample->atlas_texel_origin,
+          pool.page_size_texels);
+      const auto static_before_visibility
+        = SampleVisibilityPcf2x2(result.hzb.merge.static_before,
+          sample->atlas_uv, sample->receiver_depth, sample->atlas_texel_origin,
+          pool.page_size_texels);
+      auto indirect_command_count = 0U;
+      auto indirect_draw_indices = std::array<std::uint32_t, 4> {
+        std::numeric_limits<std::uint32_t>::max(),
+        std::numeric_limits<std::uint32_t>::max(),
+        std::numeric_limits<std::uint32_t>::max(),
+        std::numeric_limits<std::uint32_t>::max(),
+      };
+      const auto& rasterization = result.hzb.merge.rasterization;
+      if (!rasterization.indirect_command_counts.empty()) {
+        const auto job_it = std::find_if(rasterization.prepared_pages.begin(),
+          rasterization.prepared_pages.end(), [&](const auto& prepared_page) {
+            return prepared_page.page_table_index == page_table_index;
+          });
+        if (job_it != rasterization.prepared_pages.end()) {
+          const auto job_index = static_cast<std::size_t>(
+            std::distance(rasterization.prepared_pages.begin(), job_it));
+          if (job_index < rasterization.indirect_command_counts.size()) {
+            indirect_command_count
+              = rasterization.indirect_command_counts[job_index];
+          }
+          if (!rasterization.indirect_commands.empty()
+            && rasterization.max_indirect_commands_per_page != 0U) {
+            const auto command_base
+              = job_index * rasterization.max_indirect_commands_per_page;
+            const auto copy_count
+              = (std::min)(static_cast<std::size_t>(indirect_command_count),
+                indirect_draw_indices.size());
+            for (std::size_t i = 0; i < copy_count; ++i) {
+              const auto command_index = command_base + i;
+              if (command_index < rasterization.indirect_commands.size()) {
+                indirect_draw_indices[i]
+                  = rasterization.indirect_commands[command_index].draw_index;
+              }
+            }
+          }
+        }
+      }
+      if (!best.has_sample
+        || projection.projection.clipmap_level < best.level) {
+        auto covered_texel_count = 0U;
+        auto page_min_depth = 1.0F;
+        auto tap_depths = std::array<float, 4> { 1.0F, 1.0F, 1.0F, 1.0F };
+        constexpr auto kLocalCubeBounds = AxisAlignedBox {
+          .min = glm::vec3 { -0.5F, 0.0F, -0.5F },
+          .max = glm::vec3 { 0.5F, 1.0F, 0.5F },
+        };
+        const auto [tall_box_min_depth, tall_box_max_depth]
+          = ComputeProjectedDepthRange(projection.projection.view_matrix,
+            projection.projection.projection_matrix,
+            scene_data.world_matrices[1], kLocalCubeBounds);
+        const auto sample_pixel = sample->atlas_uv
+          * glm::vec2 { static_cast<float>(slice->width),
+              static_cast<float>(slice->height) };
+        auto sample_texel = glm::uvec2 {
+          static_cast<std::uint32_t>(sample_pixel.x)
+            - sample->atlas_texel_origin.x,
+          static_cast<std::uint32_t>(sample_pixel.y)
+            - sample->atlas_texel_origin.y,
+        };
+        auto covered_min
+          = glm::uvec2 { pool.page_size_texels, pool.page_size_texels };
+        auto covered_max = glm::uvec2 { 0U, 0U };
+        const auto base = glm::ivec2 {
+          glm::floor(sample_pixel - glm::vec2 { 0.5F, 0.5F }),
+        };
+        const auto min_coord = glm::ivec2 {
+          static_cast<int>(sample->atlas_texel_origin.x),
+          static_cast<int>(sample->atlas_texel_origin.y),
+        };
+        const auto max_coord = glm::ivec2 {
+          (std::min)(static_cast<int>(slice->width) - 1,
+            static_cast<int>(
+              sample->atlas_texel_origin.x + pool.page_size_texels - 1U)),
+          (std::min)(static_cast<int>(slice->height) - 1,
+            static_cast<int>(
+              sample->atlas_texel_origin.y + pool.page_size_texels - 1U)),
+        };
+        for (auto y = 0; y < 2; ++y) {
+          for (auto x = 0; x < 2; ++x) {
+            const auto coord
+              = glm::clamp(base + glm::ivec2 { x, y }, min_coord, max_coord);
+            tap_depths[static_cast<std::size_t>(y * 2 + x)]
+              = slice->At(static_cast<std::uint32_t>(coord.x),
+                static_cast<std::uint32_t>(coord.y));
+          }
+        }
+        for (auto y = 0U; y < pool.page_size_texels; ++y) {
+          for (auto x = 0U; x < pool.page_size_texels; ++x) {
+            const auto depth = slice->At(sample->atlas_texel_origin.x + x,
+              sample->atlas_texel_origin.y + y);
+            page_min_depth = (std::min)(page_min_depth, depth);
+            if (depth < 0.9999F) {
+              ++covered_texel_count;
+              covered_min = glm::min(covered_min, glm::uvec2 { x, y });
+              covered_max = glm::max(covered_max, glm::uvec2 { x, y });
+            }
+          }
+        }
+        if (covered_texel_count == 0U) {
+          covered_min = glm::uvec2 { 0U, 0U };
+          covered_max = glm::uvec2 { 0U, 0U };
+        }
+        best = CpuDirectionalRouteDebug {
+          .visibility = dynamic_after_visibility,
+          .dynamic_before_visibility = dynamic_before_visibility,
+          .static_before_visibility = static_before_visibility,
+          .dynamic_after_visibility = dynamic_after_visibility,
+          .receiver_depth = sample->receiver_depth,
+          .tap_depths = tap_depths,
+          .tall_box_min_depth = tall_box_min_depth,
+          .tall_box_max_depth = tall_box_max_depth,
+          .level = projection.projection.clipmap_level,
+          .page_table_index = page_table_index,
+          .physical_page_index = sample->physical_page_index,
+          .indirect_command_count = indirect_command_count,
+          .indirect_draw_indices = indirect_draw_indices,
+          .covered_texel_count = covered_texel_count,
+          .page_min_depth = page_min_depth,
+          .sample_texel = sample_texel,
+          .covered_min = covered_min,
+          .covered_max = covered_max,
+          .page = { page_x, page_y },
+          .has_sample = true,
+        };
+      }
+    }
+
+    return best;
+  }
+
+  [[nodiscard]] auto SummarizeDirectionalRouteCandidates(
+    const TwoBoxShadowProjectionResult& result,
+    const glm::mat4& main_view_matrix, const glm::vec3& world_position_ws) const
+    -> std::string
+  {
+    const auto& frame = result.hzb.merge.rasterization.initialization
+                          .propagation.mapping.bridge.committed_frame;
+    const auto& projections = frame.snapshot.projection_records;
+    const auto& page_table = result.hzb.page_table_after;
+    const auto& pool
+      = result.hzb.merge.rasterization.initialization.physical_pool;
+
+    auto candidates = std::vector<CpuDirectionalRouteCandidate> {};
+    for (const auto& projection : projections) {
+      if (projection.projection.light_type
+        != static_cast<std::uint32_t>(VsmProjectionLightType::kDirectional)) {
+        continue;
+      }
+
+      const auto sample
+        = TryProjectMappedSampleCpu(projection, page_table, world_position_ws,
+          main_view_matrix, pool.tiles_per_axis, pool.page_size_texels);
+      if (!sample.has_value()) {
+        continue;
+      }
+
+      const auto* slice = SelectShadowSlice(result, sample->atlas_slice);
+      if (slice == nullptr) {
+        continue;
+      }
+
+      const auto pixel = sample->atlas_uv
+        * glm::vec2 { static_cast<float>(slice->width),
+            static_cast<float>(slice->height) };
+      const auto base
+        = glm::ivec2 { glm::floor(pixel - glm::vec2 { 0.5F, 0.5F }) };
+      const auto min_coord = glm::ivec2 {
+        static_cast<int>(sample->atlas_texel_origin.x),
+        static_cast<int>(sample->atlas_texel_origin.y),
+      };
+      const auto max_coord = glm::ivec2 {
+        (std::min)(static_cast<int>(slice->width) - 1,
+          static_cast<int>(
+            sample->atlas_texel_origin.x + pool.page_size_texels - 1U)),
+        (std::min)(static_cast<int>(slice->height) - 1,
+          static_cast<int>(
+            sample->atlas_texel_origin.y + pool.page_size_texels - 1U)),
+      };
+      auto tap_depths = std::array<float, 4> { 1.0F, 1.0F, 1.0F, 1.0F };
+      for (auto y = 0; y < 2; ++y) {
+        for (auto x = 0; x < 2; ++x) {
+          const auto coord
+            = glm::clamp(base + glm::ivec2 { x, y }, min_coord, max_coord);
+          tap_depths[static_cast<std::size_t>(y * 2 + x)]
+            = slice->At(static_cast<std::uint32_t>(coord.x),
+              static_cast<std::uint32_t>(coord.y));
+        }
+      }
+
+      const auto world = glm::vec4(world_position_ws, 1.0F);
+      const auto view = projection.projection.view_matrix * world;
+      const auto clip = projection.projection.projection_matrix * view;
+      const auto ndc = glm::vec3(clip) / clip.w;
+      const auto uv = glm::vec2 {
+        ndc.x * 0.5F + 0.5F,
+        0.5F - ndc.y * 0.5F,
+      };
+      const auto local_page_x
+        = (std::min)(static_cast<std::uint32_t>(uv.x * projection.pages_x),
+          projection.pages_x - 1U);
+      const auto local_page_y
+        = (std::min)(static_cast<std::uint32_t>(uv.y * projection.pages_y),
+          projection.pages_y - 1U);
+      const auto page_x = projection.page_offset_x + local_page_x;
+      const auto page_y = projection.page_offset_y + local_page_y;
+      const auto pages_per_level
+        = projection.map_pages_x * projection.map_pages_y;
+      const auto page_table_index = projection.first_page_table_entry
+        + projection.projection.clipmap_level * pages_per_level
+        + page_y * projection.map_pages_x + page_x;
+
+      candidates.push_back(CpuDirectionalRouteCandidate {
+        .level = projection.projection.clipmap_level,
+        .page_table_index = page_table_index,
+        .physical_page_index = sample->physical_page_index,
+        .visibility = SampleVisibilityPcf2x2(*slice, sample->atlas_uv,
+          sample->receiver_depth, sample->atlas_texel_origin,
+          pool.page_size_texels),
+        .receiver_depth = sample->receiver_depth,
+        .tap_depths = tap_depths,
+      });
+    }
+
+    if (candidates.empty()) {
+      return "none";
+    }
+
+    std::ranges::sort(candidates,
+      [](const auto& lhs, const auto& rhs) { return lhs.level < rhs.level; });
+
+    auto stream = std::ostringstream {};
+    for (std::size_t i = 0; i < candidates.size(); ++i) {
+      const auto& candidate = candidates[i];
+      if (i != 0U) {
+        stream << " | ";
+      }
+      stream << "level=" << candidate.level
+             << " page_table_index=" << candidate.page_table_index
+             << " physical_page=" << candidate.physical_page_index
+             << " visibility=" << candidate.visibility
+             << " receiver_depth=" << candidate.receiver_depth
+             << " tap_depths=[" << candidate.tap_depths[0] << ", "
+             << candidate.tap_depths[1] << ", " << candidate.tap_depths[2]
+             << ", " << candidate.tap_depths[3] << "]";
+    }
+    return stream.str();
   }
 
   static auto ExpectMaskMatchesCpuProjection(
@@ -607,6 +1216,39 @@ protected:
     readback->UnMap();
     return value;
   }
+
+  [[nodiscard]] auto SummarizeDarkestVisibleFloorProbes(
+    const TwoBoxShadowSceneData& scene_data,
+    const oxygen::graphics::Texture& scene_depth_texture,
+    const oxygen::ResolvedView& resolved_view,
+    const HarnessSingleChannelTextureSnapshot& mask,
+    const std::size_t candidate_count = 128U,
+    const std::size_t darkest_count = 8U) -> std::string
+  {
+    auto probes = SelectInteriorVisibleFloorProbes(
+      scene_data, scene_depth_texture, resolved_view, candidate_count);
+    std::sort(probes.begin(), probes.end(),
+      [&](const ProbeSample& lhs, const ProbeSample& rhs) {
+        return mask.At(lhs.pixel.x, lhs.pixel.y)
+          < mask.At(rhs.pixel.x, rhs.pixel.y);
+      });
+
+    std::ostringstream stream;
+    const auto count = (std::min)(darkest_count, probes.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto& probe = probes[i];
+      if (i != 0U) {
+        stream << " | ";
+      }
+      stream << "pixel=(" << probe.pixel.x << "," << probe.pixel.y << ")"
+             << " world=(" << probe.point_ws.x << "," << probe.point_ws.y << ","
+             << probe.point_ws.z << ")"
+             << " sample=" << mask.At(probe.pixel.x, probe.pixel.y)
+             << " analytic="
+             << (IsShadowedByAnalyticBoxes(scene_data, probe.point_ws) ? 1 : 0);
+    }
+    return stream.str();
+  }
 };
 
 NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
@@ -638,11 +1280,15 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
 
   ExpectMaskMatchesCpuProjection(result.output.directional_shadow_mask, probes,
     [&](const ProbeSample& probe) {
-      return ComputeCpuVisibility(result, probe.point_ws).directional;
+      return ComputeCpuVisibility(
+        result, resolved_view.ViewMatrix(), probe.point_ws)
+        .directional;
     });
   ExpectMaskMatchesCpuProjection(
     result.output.shadow_mask, probes, [&](const ProbeSample& probe) {
-      return ComputeCpuVisibility(result, probe.point_ws).composite;
+      return ComputeCpuVisibility(
+        result, resolved_view.ViewMatrix(), probe.point_ws)
+        .composite;
     });
 }
 
@@ -703,26 +1349,18 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
 }
 
 NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
-  DirectionalTwoBoxLiveShellDarkensKnownAnalyticShadowBand)
+  DirectionalSingleCascadeLiveShellDarkensStableFarAnalyticShadowProbes)
 {
-  constexpr std::array<ProbeSample, 4> kKnownShadowBand {
-    ProbeSample {
-      .point_ws = glm::vec3 { 2.5371408F, 0.0F, -4.4765062F },
-      .pixel = { 123U, 108U },
-    },
-    ProbeSample {
-      .point_ws = glm::vec3 { 2.5846176F, 0.0F, -4.4486732F },
-      .pixel = { 124U, 108U },
-    },
-    ProbeSample {
-      .point_ws = glm::vec3 { 2.6320949F, 0.0F, -4.4208431F },
-      .pixel = { 125U, 108U },
-    },
-    ProbeSample {
-      .point_ws = glm::vec3 { 2.6795731F, 0.0F, -4.3930125F },
-      .pixel = { 126U, 108U },
-    },
-  };
+  auto isolated_renderer = MakeRenderer();
+  ASSERT_NE(isolated_renderer, nullptr);
+  auto isolated_scene
+    = CreateTwoBoxShadowScene(MakeDirectionalSunDirection(), 1U);
+  auto isolated_vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &isolated_renderer->GetStagingProvider() },
+    oxygen::observer_ptr {
+      &isolated_renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -732,25 +1370,195 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
     oxygen::observer_ptr { &renderer->GetStagingProvider() },
     oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
     oxygen::ShadowQualityTier::kHigh);
-
-  static_cast<void>(RunTwoBoxLiveShellProjectionFrame(*renderer, scene_data,
-    vsm_renderer, MakeDirectionalView(), kOutputWidth, kOutputHeight,
-    SequenceNumber { 31U }, Slot { 0U }, kShadowCasterContentHash));
+  const auto resolved_view = MakeDirectionalView();
+  const auto isolated_result
+    = RunTwoBoxShadowProjectionStage(*isolated_renderer, isolated_scene,
+      isolated_vsm_renderer, resolved_view, kOutputWidth, kOutputHeight,
+      SequenceNumber { 31U }, Slot { 0U }, kShadowCasterContentHash);
+  const auto result = RunTwoBoxLiveShellProjectionFrame(*renderer, scene_data,
+    vsm_renderer, resolved_view, kOutputWidth, kOutputHeight,
+    SequenceNumber { 31U }, Slot { 0U }, kShadowCasterContentHash);
 
   const auto output
     = vsm_renderer.GetProjectionPass()->GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
   ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
+  const auto [shadow_probes, lit_probes] = SelectStableAnalyticFloorProbes(
+    scene_data, *result.live_frame.scene_depth_texture, resolved_view, 8U, 8U);
+  ASSERT_GE(shadow_probes.size(), 4U);
+  ASSERT_GE(lit_probes.size(), 4U);
+  SCOPED_TRACE("Darkest visible floor probes: "
+    + SummarizeDarkestVisibleFloorProbes(scene_data,
+      *result.live_frame.scene_depth_texture, resolved_view,
+      result.output.directional_shadow_mask));
 
-  for (const auto& probe : kKnownShadowBand) {
+  for (const auto& probe : shadow_probes) {
     const auto sample
       = ReadOutputTexelDirect(output.directional_shadow_mask_texture,
         probe.pixel.x, probe.pixel.y, "stage-fifteen-two-box.shadow-band");
+    const auto isolated_sample
+      = isolated_result.output.directional_shadow_mask.At(
+        probe.pixel.x, probe.pixel.y);
+    const auto debug = ComputeDirectionalRouteDebug(
+      isolated_result, scene_data, resolved_view.ViewMatrix(), probe.point_ws);
+    const auto route_candidates = SummarizeDirectionalRouteCandidates(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
     EXPECT_LT(sample, 0.35F)
       << "Stage 15 mask kept a shadowed floor probe lit at world point ("
       << probe.point_ws.x << ", " << probe.point_ws.y << ", "
       << probe.point_ws.z << ") screen pixel (" << probe.pixel.x << ", "
+      << probe.pixel.y << ") with sample " << sample
+      << " isolated_sample=" << isolated_sample << " level=" << debug.level
+      << " page=(" << debug.page.x << ", " << debug.page.y << ")"
+      << " page_table_index=" << debug.page_table_index
+      << " physical_page=" << debug.physical_page_index
+      << " receiver_depth=" << debug.receiver_depth << " tap_depths=["
+      << debug.tap_depths[0] << ", " << debug.tap_depths[1] << ", "
+      << debug.tap_depths[2] << ", " << debug.tap_depths[3] << "]"
+      << " covered_texels=" << debug.covered_texel_count << " covered_bounds=("
+      << debug.covered_min.x << ", " << debug.covered_min.y << ")-("
+      << debug.covered_max.x << ", " << debug.covered_max.y << ")"
+      << " cpu_visibility=" << debug.visibility
+      << " route_candidates=" << route_candidates;
+  }
+  for (const auto& probe : lit_probes) {
+    const auto sample
+      = ReadOutputTexelDirect(output.directional_shadow_mask_texture,
+        probe.pixel.x, probe.pixel.y, "stage-fifteen-two-box.shadow-band");
+    EXPECT_GT(sample, 0.65F)
+      << "Stage 15 mask darkened a stably lit floor probe at world point ("
+      << probe.point_ws.x << ", " << probe.point_ws.y << ", "
+      << probe.point_ws.z << ") screen pixel (" << probe.pixel.x << ", "
       << probe.pixel.y << ") with sample " << sample;
+  }
+}
+
+NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
+  DirectionalFourCascadeLiveShellMatchesAnalyticFloorClassificationAcrossDenseVisibleProbes)
+{
+  auto isolated_renderer = MakeRenderer();
+  ASSERT_NE(isolated_renderer, nullptr);
+  auto isolated_scene
+    = CreateTwoBoxShadowScene(MakeDirectionalSunDirection(), 4U);
+  auto isolated_vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &isolated_renderer->GetStagingProvider() },
+    oxygen::observer_ptr {
+      &isolated_renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene_data = CreateTwoBoxShadowScene(MakeDirectionalSunDirection(), 4U);
+  auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &renderer->GetStagingProvider() },
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
+  const auto resolved_view = MakeDirectionalView();
+  const auto isolated_result
+    = RunTwoBoxShadowProjectionStage(*isolated_renderer, isolated_scene,
+      isolated_vsm_renderer, resolved_view, kOutputWidth, kOutputHeight,
+      SequenceNumber { 61U }, Slot { 0U }, kShadowCasterContentHash);
+
+  const auto result = RunTwoBoxLiveShellProjectionFrame(*renderer, scene_data,
+    vsm_renderer, resolved_view, kOutputWidth, kOutputHeight,
+    SequenceNumber { 61U }, Slot { 0U }, kShadowCasterContentHash);
+
+  const auto [shadow_probes, lit_probes]
+    = SelectStableAnalyticFloorProbes(scene_data,
+      *result.live_frame.scene_depth_texture, resolved_view, 64U, 64U);
+  ASSERT_GE(shadow_probes.size(), 32U);
+  ASSERT_GE(lit_probes.size(), 32U);
+  SCOPED_TRACE("Darkest visible floor probes: "
+    + SummarizeDarkestVisibleFloorProbes(scene_data,
+      *result.live_frame.scene_depth_texture, resolved_view,
+      result.output.directional_shadow_mask));
+
+  for (const auto& probe : shadow_probes) {
+    const auto sample
+      = result.output.directional_shadow_mask.At(probe.pixel.x, probe.pixel.y);
+    const auto isolated_sample
+      = isolated_result.output.directional_shadow_mask.At(
+        probe.pixel.x, probe.pixel.y);
+    const auto debug = ComputeDirectionalRouteDebug(
+      isolated_result, scene_data, resolved_view.ViewMatrix(), probe.point_ws);
+    const auto route_candidates = SummarizeDirectionalRouteCandidates(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    EXPECT_LT(sample, 0.45F)
+      << "four-cascade directional projection kept an analytically shadowed "
+         "floor probe too bright at pixel=("
+      << probe.pixel.x << ", " << probe.pixel.y << ") world=("
+      << probe.point_ws.x << ", " << probe.point_ws.y << ", "
+      << probe.point_ws.z << ") sample=" << sample << " level=" << debug.level
+      << " page=(" << debug.page.x << ", " << debug.page.y << ")"
+      << " page_table_index=" << debug.page_table_index
+      << " physical_page=" << debug.physical_page_index
+      << " indirect_commands=" << debug.indirect_command_count
+      << " draw_indices=[" << debug.indirect_draw_indices[0] << ", "
+      << debug.indirect_draw_indices[1] << ", "
+      << debug.indirect_draw_indices[2] << ", "
+      << debug.indirect_draw_indices[3] << "]"
+      << " covered_texels=" << debug.covered_texel_count
+      << " page_min_depth=" << debug.page_min_depth
+      << " receiver_depth=" << debug.receiver_depth << " tap_depths=["
+      << debug.tap_depths[0] << ", " << debug.tap_depths[1] << ", "
+      << debug.tap_depths[2] << ", " << debug.tap_depths[3] << "]"
+      << " tall_box_depth_range=[" << debug.tall_box_min_depth << ", "
+      << debug.tall_box_max_depth << "]"
+      << " sample_texel=(" << debug.sample_texel.x << ", "
+      << debug.sample_texel.y << ")"
+      << " covered_bounds=(" << debug.covered_min.x << ", "
+      << debug.covered_min.y << ")-(" << debug.covered_max.x << ", "
+      << debug.covered_max.y << ")"
+      << " dynamic_before=" << debug.dynamic_before_visibility
+      << " static_before=" << debug.static_before_visibility
+      << " dynamic_after=" << debug.dynamic_after_visibility
+      << " cpu_visibility=" << debug.visibility
+      << " isolated_sample=" << isolated_sample
+      << " route_candidates=" << route_candidates;
+  }
+  for (const auto& probe : lit_probes) {
+    const auto sample
+      = result.output.directional_shadow_mask.At(probe.pixel.x, probe.pixel.y);
+    const auto isolated_sample
+      = isolated_result.output.directional_shadow_mask.At(
+        probe.pixel.x, probe.pixel.y);
+    const auto debug = ComputeDirectionalRouteDebug(
+      isolated_result, scene_data, resolved_view.ViewMatrix(), probe.point_ws);
+    const auto route_candidates = SummarizeDirectionalRouteCandidates(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    EXPECT_GT(sample, 0.65F)
+      << "four-cascade directional projection darkened an analytically lit "
+         "floor probe at pixel=("
+      << probe.pixel.x << ", " << probe.pixel.y << ") world=("
+      << probe.point_ws.x << ", " << probe.point_ws.y << ", "
+      << probe.point_ws.z << ") sample=" << sample << " level=" << debug.level
+      << " page=(" << debug.page.x << ", " << debug.page.y << ")"
+      << " page_table_index=" << debug.page_table_index
+      << " physical_page=" << debug.physical_page_index
+      << " indirect_commands=" << debug.indirect_command_count
+      << " draw_indices=[" << debug.indirect_draw_indices[0] << ", "
+      << debug.indirect_draw_indices[1] << ", "
+      << debug.indirect_draw_indices[2] << ", "
+      << debug.indirect_draw_indices[3] << "]"
+      << " covered_texels=" << debug.covered_texel_count
+      << " page_min_depth=" << debug.page_min_depth
+      << " receiver_depth=" << debug.receiver_depth << " tap_depths=["
+      << debug.tap_depths[0] << ", " << debug.tap_depths[1] << ", "
+      << debug.tap_depths[2] << ", " << debug.tap_depths[3] << "]"
+      << " tall_box_depth_range=[" << debug.tall_box_min_depth << ", "
+      << debug.tall_box_max_depth << "]"
+      << " sample_texel=(" << debug.sample_texel.x << ", "
+      << debug.sample_texel.y << ")"
+      << " covered_bounds=(" << debug.covered_min.x << ", "
+      << debug.covered_min.y << ")-(" << debug.covered_max.x << ", "
+      << debug.covered_max.y << ")"
+      << " dynamic_before=" << debug.dynamic_before_visibility
+      << " static_before=" << debug.static_before_visibility
+      << " dynamic_after=" << debug.dynamic_after_visibility
+      << " cpu_visibility=" << debug.visibility
+      << " isolated_sample=" << isolated_sample
+      << " route_candidates=" << route_candidates;
   }
 }
 
@@ -784,7 +1592,9 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
 
   ExpectMaskMatchesCpuProjection(
     result.output.shadow_mask, probes, [&](const ProbeSample& probe) {
-      return ComputeCpuVisibility(result, probe.point_ws).composite;
+      return ComputeCpuVisibility(
+        result, resolved_view.ViewMatrix(), probe.point_ws)
+        .composite;
     });
 }
 
