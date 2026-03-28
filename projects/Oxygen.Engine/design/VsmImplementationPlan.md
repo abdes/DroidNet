@@ -903,6 +903,43 @@ Validation evidence on 2026-03-26:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.LocalProjectionPerLightPassBuildsScreenShadowMaskFromMappedVirtualPage`
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmProjectionPassGpuTest.*`
 
+Stage-suite refactor evidence on 2026-03-28:
+
+- added dedicated Stage 15 executable `VsmShadowProjection` in
+  `src/Oxygen/Renderer/Test/CMakeLists.txt`
+- added dedicated live-scene Stage 15 suite
+  `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowProjection_test.cpp`
+  with:
+  - `DirectionalTwoBoxSceneMatchesCpuProjectionFromRealStageInputs`
+  - `DirectionalTwoBoxLiveShellMatchesIsolatedProjectionAtAnalyticFloorProbes`
+  - `DirectionalTwoBoxLiveShellDarkensKnownAnalyticShadowBand`
+  - `PagedSpotLightTwoBoxSceneMatchesCpuProjectionFromRealStageInputs`
+- extended
+  `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h`
+  with Stage 15 real-input helpers so the dedicated suite consumes actual
+  Stage 1-14 products instead of seeded projection/page-table data
+- removed stale Stage 15 analytic/mask ownership from
+  `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowRendererBridge_test.cpp`;
+  `VirtualShadowGpuLifecycle` now keeps supporting bridge/orchestrator coverage
+  instead of duplicating Stage 15 correctness oracles
+- built `Oxygen.Renderer.VsmShadowProjection.Tests` and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmShadowProjection.Tests.exe`
+  with `4 tests from 1 test suite` passing
+- ran full
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
+  and observed `24 tests from 5 test suites`; remaining non-Stage-15 failure:
+  `VsmShadowRendererBridgeGpuTest.PrepareViewPublishesDirectionalClipmapPanAfterCameraTranslation`
+  aborting with `buffer readback await failed ... error=kTicketNotFound`
+
+Corrective status note on 2026-03-28:
+
+- Stage 15 dedicated coverage is now green under its own executable, but the
+  broader VSM refactor remains `in_progress` because the lifecycle binary still
+  has the unrelated bridge/readback failure above, and the user-provided live
+  renderer capture still shows incorrect final floor-shadow continuity across
+  the Stage 12→15 path
+
 ---
 
 ### Phase J — Scene Invalidation Integration
