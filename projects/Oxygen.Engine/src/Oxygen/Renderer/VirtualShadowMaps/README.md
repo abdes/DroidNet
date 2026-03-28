@@ -102,10 +102,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     multi-page directional clipmap publication from the real scene; Stage 3 checks exact
     previous-driven clipmap remap offsets across a real camera pan; Stage 4 checks scene-derived
     projection-record publication for directional clipmaps and paged local spot lights
-  - dedicated semantic suites now cover stages 1-16 at the stage-owned level; stages 5 and 9-15
+  - dedicated semantic suites now cover stages 1-17 at the stage-owned level; stages 5 and 9-15
     now execute through the shared GPU harness path or shared GPU harness helpers instead of
-    standalone fixture-only setup or hardcoded page-table slots, while Stage 17 remains pending
-    its final dedicated split
+    standalone fixture-only setup or hardcoded page-table slots
   - the shared GPU harness now exposes `MakePageRequests(...)` and
     `ResolvePageTableEntryIndex(...)` so paged-light stage suites can assemble real multi-page
     inputs and assert by virtual coordinate instead of by magic slot number
@@ -164,12 +163,18 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `VsmFrameExtractionLiveSceneTest.*`, which validates real live-shell extraction of reusable
     page tables, physical metadata, projection records, visible-primitive continuity, static
     feedback retention, and next-`BeginFrame()` finalization of queued readback
+  - Stage 17 cache-validity coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmCacheValidity.Tests` program through
+    `VsmCacheValidityLiveSceneTest.*`, which validates no-validity-before-extraction, directional
+    and local next-frame reuse after real extraction, and invalidation clearing plus recovery
+    through a fresh extraction
   - renderer test `CMakeLists.txt` now uses logical target names
     `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`,
     `VsmPageReuse`, `VsmAvailablePages`, `VsmPageMappings`, `VsmHierarchicalFlags`,
     `VsmMappedMips`, `VsmPageInitialization`, `VsmShadowRasterization`,
     `VsmStaticDynamicMerge`, `VsmShadowHzb`, `VsmShadowProjection`, `VsmFrameExtraction`,
-    `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)` expands them to
+    `VsmCacheValidity`, `VirtualShadows`, and `VirtualShadowGpuLifecycle`; `m_gtest_program(...)`
+    expands them to
     `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
     `Oxygen.Renderer.VsmRemap.Tests`,
     `Oxygen.Renderer.VsmProjectionRecords.Tests`,
@@ -185,6 +190,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     `Oxygen.Renderer.VsmShadowHzb.Tests`,
     `Oxygen.Renderer.VsmShadowProjection.Tests`,
     `Oxygen.Renderer.VsmFrameExtraction.Tests`,
+    `Oxygen.Renderer.VsmCacheValidity.Tests`,
     `Oxygen.Renderer.VirtualShadows.Tests`, and
     `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`
 - Frequently run coverage lives under `Oxygen.Renderer.VsmVirtualAddressSpace.Tests`,
@@ -199,6 +205,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   `Oxygen.Renderer.VsmShadowHzb.Tests`,
   `Oxygen.Renderer.VsmShadowProjection.Tests`,
   `Oxygen.Renderer.VsmFrameExtraction.Tests`,
+  `Oxygen.Renderer.VsmCacheValidity.Tests`,
   `Oxygen.Renderer.VirtualShadows.Tests`, and `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Additional backend-backed integration coverage lives under `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
   - that integration bucket now covers physical-pool ABI publication, cache-resource publication, propagation smoke, invalidation readback contracts, static/dynamic merge readback contracts, VSM HZB update readback contracts, Stage 15 projection readback contracts, Stage 16 extraction/finalization readback contracts, bridge/orchestrator behavior, and screen-HZB history/readback contracts
@@ -219,6 +226,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - `Oxygen.Renderer.VsmShadowHzb.Tests` passes with `3 tests from 1 test suite`
     - `Oxygen.Renderer.VsmShadowProjection.Tests` passes with `4 tests from 1 test suite`
     - `Oxygen.Renderer.VsmFrameExtraction.Tests` passes with `4 tests from 1 test suite`
+    - `Oxygen.Renderer.VsmCacheValidity.Tests` passes with `4 tests from 1 test suite`
     - `VsmVirtualAddressSpaceTypesTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
       `2 tests from 1 test suite`
     - `VsmPageRequestPolicyTest.*` passes in `Oxygen.Renderer.VsmBasic.Tests` with
@@ -295,6 +303,18 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     - after that Stage 16 corrective fix, a full rerun of
       `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` on `2026-03-28` reports
       `24 tests from 5 test suites` passed
+    - Stage 17 cache-validity ownership now lives only in
+      `Oxygen.Renderer.VsmCacheValidity.Tests`; the old synthetic CPU-only ownership was removed
+      from `VirtualShadows`
+    - the dedicated Stage 17 executable now proves:
+      - a real page-request bridge does not publish cache validity before extraction
+      - a real Stage 16 extraction enables next-frame reuse for directional and local lights
+      - explicit `InvalidateAll(...)` clears reuse validity until a fresh extraction restores it
+    - recorded Stage 17 evidence in `out/build-ninja`:
+      - `Oxygen.Renderer.VsmCacheValidity.Tests.exe`: `4 tests from 1 test suite` passed
+      - `Oxygen.Renderer.VsmCacheValidity.Tests.exe --gtest_repeat=3`: all `12/12` executions passed
+      - `Oxygen.Renderer.VirtualShadows.Tests.exe`: `49 tests from 10 test suites` passed
+      - `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`: `24 tests from 5 test suites` passed
     - corrective scope note on `2026-03-28`: despite the focused Stage 12 and Stage 15 passes
       above, a user-provided live renderer capture still shows semantically wrong page-aligned
       floor shadow artifacts, so the broader Stage 12→15 path remains `in_progress`
