@@ -48,6 +48,7 @@
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmHzbUpdaterPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmProjectionPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -239,6 +240,21 @@ struct TwoBoxShadowHzbResult {
   std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags_after {};
   std::vector<HarnessSingleChannelTextureSnapshot> hzb_before_mips {};
   std::vector<HarnessSingleChannelTextureSnapshot> hzb_after_mips {};
+};
+
+struct TwoBoxProjectionOutputSnapshots {
+  HarnessSingleChannelTextureSnapshot directional_shadow_mask {};
+  HarnessSingleChannelTextureSnapshot shadow_mask {};
+};
+
+struct TwoBoxShadowProjectionResult {
+  TwoBoxShadowHzbResult hzb {};
+  TwoBoxProjectionOutputSnapshots output {};
+};
+
+struct TwoBoxLiveShellProjectionResult {
+  TwoBoxLiveFrameResult live_frame {};
+  TwoBoxProjectionOutputSnapshots output {};
 };
 
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
@@ -2160,7 +2176,10 @@ protected:
   auto ReadSingleChannelTextureMipSnapshot(
     const std::shared_ptr<const oxygen::graphics::Texture>& texture,
     const std::uint32_t mip_level, std::string_view debug_name,
-    const std::uint32_t array_slice = 0U) -> HarnessSingleChannelTextureSnapshot
+    const std::uint32_t array_slice = 0U,
+    const oxygen::graphics::ResourceStates source_state_before_copy
+    = oxygen::graphics::ResourceStates::kCommon)
+    -> HarnessSingleChannelTextureSnapshot
   {
     CHECK_NOTNULL_F(
       texture.get(), "Cannot read from a null single-channel texture");
@@ -2177,9 +2196,8 @@ protected:
       auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
       CHECK_NOTNULL_F(recorder.get(),
         "Failed to acquire mip copy recorder for `{}`", debug_name);
-      EnsureTracked(*recorder,
-        std::const_pointer_cast<oxygen::graphics::Texture>(texture),
-        oxygen::graphics::ResourceStates::kCommon);
+      recorder->BeginTrackingResourceState(
+        *texture, source_state_before_copy, true);
       EnsureTracked(
         *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
       recorder->RequireResourceState(
@@ -2461,6 +2479,115 @@ protected:
       .page_flags_after = std::move(page_flags_after),
       .hzb_before_mips = std::move(hzb_before_mips),
       .hzb_after_mips = std::move(hzb_after_mips),
+    };
+  }
+
+  auto ReadProjectionOutputSnapshots(
+    const oxygen::observer_ptr<oxygen::engine::VsmProjectionPass>
+      projection_pass,
+    std::string_view debug_name) -> TwoBoxProjectionOutputSnapshots
+  {
+    CHECK_NOTNULL_F(projection_pass.get(),
+      "Projection pass is unavailable for `{}`", debug_name);
+    const auto output = projection_pass->GetCurrentOutput(kTestViewId);
+    CHECK_F(output.available, "Projection output is unavailable for `{}`",
+      debug_name);
+    CHECK_NOTNULL_F(output.directional_shadow_mask_texture.get(),
+      "Directional shadow mask is null for `{}`", debug_name);
+    CHECK_NOTNULL_F(output.shadow_mask_texture.get(),
+      "Composite shadow mask is null for `{}`", debug_name);
+
+    return TwoBoxProjectionOutputSnapshots {
+      .directional_shadow_mask = ReadSingleChannelTextureMipSnapshot(
+        output.directional_shadow_mask_texture, 0U,
+        std::string(debug_name) + ".directional-shadow-mask", 0U,
+        oxygen::graphics::ResourceStates::kShaderResource),
+      .shadow_mask
+      = ReadSingleChannelTextureMipSnapshot(output.shadow_mask_texture, 0U,
+        std::string(debug_name) + ".shadow-mask", 0U,
+        oxygen::graphics::ResourceStates::kShaderResource),
+    };
+  }
+
+  auto RunTwoBoxShadowProjectionStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxShadowProjectionResult
+  {
+    auto hzb = RunTwoBoxShadowHzbStage(renderer, scene_data, vsm_renderer,
+      resolved_view, width, height, sequence, slot, shadow_caster_content_hash,
+      primitive_invalidations_override, require_virtual_shadow_work);
+
+    const auto frame_slot = ResolveHarnessFrameSlot(sequence, slot);
+    auto frame_config = oxygen::engine::Renderer::OffscreenFrameConfig {
+      .frame_slot = frame_slot,
+      .frame_sequence = sequence,
+      .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
+        scene_data.scene.get(),
+      },
+    };
+    auto offscreen = renderer.BeginOffscreenFrame(frame_config);
+
+    auto prepared_frame = oxygen::engine::PreparedSceneFrame {};
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
+      MakeViewConstants(resolved_view, sequence, frame_slot));
+    auto& render_context = offscreen.GetRenderContext();
+
+    auto projection_pass = oxygen::engine::VsmProjectionPass(
+      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      std::make_shared<oxygen::engine::VsmProjectionPassConfig>(
+        oxygen::engine::VsmProjectionPassConfig {
+          .debug_name = "stage-fifteen-two-box.projection",
+        }));
+    projection_pass.SetInput(oxygen::engine::VsmProjectionPassInput {
+      .frame = hzb.merge.rasterization.initialization.propagation.mapping.bridge
+        .committed_frame,
+      .physical_pool = hzb.merge.rasterization.initialization.physical_pool,
+      .scene_depth_texture = hzb.merge.rasterization.initialization.propagation
+        .mapping.bridge.scene_depth_texture,
+    });
+
+    {
+      auto recorder = AcquireRecorder("stage-fifteen-two-box.projection");
+      CHECK_NOTNULL_F(recorder.get(),
+        "Failed to acquire projection recorder for the two-box Stage 15 "
+        "harness");
+      RunPass(projection_pass, render_context, *recorder);
+    }
+    WaitForQueueIdle();
+
+    return TwoBoxShadowProjectionResult {
+      .hzb = std::move(hzb),
+      .output = ReadProjectionOutputSnapshots(
+        oxygen::observer_ptr { &projection_pass }, "stage-fifteen-two-box"),
+    };
+  }
+
+  auto RunTwoBoxLiveShellProjectionFrame(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const bool enable_light_culling = false) -> TwoBoxLiveShellProjectionResult
+  {
+    auto live_frame = RunTwoBoxLiveShellFrame(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, enable_light_culling);
+
+    return TwoBoxLiveShellProjectionResult {
+      .live_frame = std::move(live_frame),
+      .output = ReadProjectionOutputSnapshots(
+        vsm_renderer.GetProjectionPass(), "stage-fifteen-two-box.live-shell"),
     };
   }
 };
