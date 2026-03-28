@@ -98,7 +98,6 @@ m_gtest_program(
   SOURCES
     "VirtualShadow/VirtualShadowTestFixtures.h"
     "VirtualShadow/VirtualShadowStageCpuHarness.h"
-    "VirtualShadow/VsmFrameExtraction_test.cpp"
     "VirtualShadow/VsmCacheValidity_test.cpp"
     "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
     "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
@@ -248,6 +247,16 @@ if(TARGET oxygen::graphics-direct3d12)
       "VirtualShadow/VirtualShadowStageGpuHarness.h"
       "VirtualShadow/VirtualShadowLiveSceneHarness.h"
       "VirtualShadow/VsmShadowProjection_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmFrameExtraction
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmFrameExtraction_test.cpp"
       DEPS
       oxygen::graphics-direct3d12
   )

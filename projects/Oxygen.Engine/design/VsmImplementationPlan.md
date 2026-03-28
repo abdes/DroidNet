@@ -926,18 +926,42 @@ Stage-suite refactor evidence on 2026-03-28:
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja`
 - ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmShadowProjection.Tests.exe`
   with `4 tests from 1 test suite` passing
-- ran full
-  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
-  and observed `24 tests from 5 test suites`; remaining non-Stage-15 failure:
+- added dedicated Stage 16 executable `VsmFrameExtraction` in
+  `src/Oxygen/Renderer/Test/CMakeLists.txt`
+- added dedicated live-scene Stage 16 suite
+  `src/Oxygen/Renderer/Test/VirtualShadow/VsmFrameExtraction_test.cpp`
+  with:
+  - `DirectionalTwoBoxLiveShellPublishesReusableExtractedSnapshot`
+  - `StaticDirectionalContinuityPersistsAcrossConsecutiveExtractedFrames`
+  - `PagedSpotLightLiveShellExtractsLocalProjectionAndMappedPages`
+  - `NextBridgeBeginFrameFinalizesQueuedExtractionWithoutDroppingPreviousSnapshot`
+- built `Oxygen.Renderer.VsmFrameExtraction.Tests`,
+  `Oxygen.Graphics.Common.ReadbackTracker.Tests`,
+  `Oxygen.Graphics.Headless.ReadbackManager.Tests`, and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmFrameExtraction.Tests.exe`
+  with `4 tests from 1 test suite` passing
+- the first full lifecycle rerun after the Stage 16 split exposed a real shared readback-lifetime
+  defect rather than a Stage 16 oracle problem:
   `VsmShadowRendererBridgeGpuTest.PrepareViewPublishesDirectionalClipmapPanAfterCameraTranslation`
-  aborting with `buffer readback await failed ... error=kTicketNotFound`
+  aborted with `buffer readback await failed ... error=kTicketNotFound`
+- fixed that defect in the shared readback path:
+  - `ReadbackTracker::OnFrameStart(...)` no longer retires same-slot tracked tickets before the
+    owning readback object releases them
+  - D3D12 and headless readback managers now explicitly forget completed tickets on reset
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Graphics.Common.ReadbackTracker.Tests.exe`
+  with `13 tests from 1 test suite` passing
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Graphics.Headless.ReadbackManager.Tests.exe`
+  with `24 tests from 12 test suites` passing
+- reran full
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
+  and observed `24 tests from 5 test suites` passing
 
 Corrective status note on 2026-03-28:
 
-- Stage 15 dedicated coverage is now green under its own executable, but the
-  broader VSM refactor remains `in_progress` because the lifecycle binary still
-  has the unrelated bridge/readback failure above, and the user-provided live
-  renderer capture still shows incorrect final floor-shadow continuity across
+- Stage 15 and Stage 16 dedicated coverage are now green under their own executables, but the
+  broader VSM refactor remains `in_progress` because Stage 17 is still pending and the
+  user-provided live renderer capture still shows incorrect final floor-shadow continuity across
   the Stage 12→15 path
 
 ---
