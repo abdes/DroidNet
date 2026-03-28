@@ -956,13 +956,33 @@ Stage-suite refactor evidence on 2026-03-28:
 - reran full
   `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
   and observed `24 tests from 5 test suites` passing
+- added dedicated Stage 17 executable `VsmCacheValidity` in
+  `src/Oxygen/Renderer/Test/CMakeLists.txt`
+- replaced the old synthetic CPU-only Stage 17 ownership in
+  `src/Oxygen/Renderer/Test/VirtualShadow/VsmCacheValidity_test.cpp`
+  with the dedicated live-scene suite:
+  - `PageRequestBridgeLeavesCacheUnavailableUntilExtractionCompletes`
+  - `DirectionalExtractionMarksCacheValidAndEnablesNextFrameReuse`
+  - `ExplicitInvalidateClearsCacheValidityUntilFreshExtractionRestoresIt`
+  - `PagedSpotLightExtractionMarksCacheValidAndEnablesLocalReuse`
+- built `Oxygen.Renderer.VsmCacheValidity.Tests`,
+  `Oxygen.Renderer.VirtualShadows.Tests`, and
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` in `out/build-ninja`
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmCacheValidity.Tests.exe`
+  with `4 tests from 1 test suite` passing
+- ran
+  `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmCacheValidity.Tests.exe --gtest_repeat=3`
+  with all `12/12` executions passing
+- reran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadows.Tests.exe`
+  with `49 tests from 10 test suites` passing
+- reran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe`
+  with `24 tests from 5 test suites` passing
 
 Corrective status note on 2026-03-28:
 
-- Stage 15 and Stage 16 dedicated coverage are now green under their own executables, but the
-  broader VSM refactor remains `in_progress` because Stage 17 is still pending and the
-  user-provided live renderer capture still shows incorrect final floor-shadow continuity across
-  the Stage 12→15 path
+- Stages 15, 16, and 17 dedicated coverage are now green under their own executables, but the
+  broader VSM refactor remains `in_progress` because the user-provided live renderer capture still
+  shows incorrect final floor-shadow continuity across the Stage 12→15 path
 
 ---
 
