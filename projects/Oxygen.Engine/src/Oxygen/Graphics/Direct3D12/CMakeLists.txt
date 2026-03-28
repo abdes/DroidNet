@@ -34,6 +34,12 @@ set(
   CACHE PATH
   "Optional root directory containing RenderDoc package files (Include/Bin)."
 )
+set(
+  OXYGEN_AFTERMATH_DIR
+  ""
+  CACHE PATH
+  "Optional root directory containing Nsight Aftermath SDK (Include/Lib/Bin)."
+)
 
 # ==============================================================================
 # Build instructions
@@ -108,6 +114,8 @@ set(
   "Detail/WindowSurface.h"
   "Devices/DebugLayer.cpp"
   "Devices/DebugLayer.h"
+  "Devices/AftermathTracker.cpp"
+  "Devices/AftermathTracker.h"
   "Devices/DeviceManager.cpp"
   "Graphics.cpp"
   "ReadbackManager.cpp"
@@ -185,7 +193,10 @@ target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 set(OXYGEN_D3D12_PIX_ENABLED OFF)
 set(OXYGEN_D3D12_RENDERDOC_ENABLED OFF)
 set(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE OFF)
+set(OXYGEN_D3D12_AFTERMATH_ENABLED OFF)
+set(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE OFF)
 set(OXYGEN_RENDERDOC_INCLUDE_DIR "")
+set(OXYGEN_AFTERMATH_INCLUDE_DIR "")
 
 if(WIN32)
   # WinPixEventRuntime discovery is intentionally restricted to project-local
@@ -371,6 +382,127 @@ if(WIN32)
   if(OXYGEN_RENDERDOC_INCLUDE_DIR AND OXYGEN_RENDERDOC_DLL)
     set(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE ON)
   endif()
+
+  # Nsight Aftermath discovery checks default Windows install locations first,
+  # then project-local packages.
+  # Preferred install path is via either:
+  #  - GetAftermath.bat
+  #  - GetAftermath.ps1
+  # Both scripts install to packages/NsightAftermath by default.
+  set(_oxygen_aftermath_hint_paths)
+
+  # Common Nsight Aftermath SDK install locations on Windows.
+  list(
+    APPEND _oxygen_aftermath_hint_paths
+    "C:/Program Files/NVIDIA Corporation/Nsight Aftermath SDK"
+    "C:/Program Files/NVIDIA Corporation/NVIDIA Nsight Aftermath SDK"
+    "C:/Program Files (x86)/NVIDIA Corporation/Nsight Aftermath SDK"
+  )
+
+  if(OXYGEN_AFTERMATH_DIR)
+    list(
+      APPEND _oxygen_aftermath_hint_paths
+      "${OXYGEN_AFTERMATH_DIR}"
+    )
+  endif()
+
+  # Repo-local package layout (downloaded by GetAftermath.bat/.ps1).
+  if(DEFINED OXYGEN_SOURCE_DIR)
+    list(
+      APPEND _oxygen_aftermath_hint_paths
+      "${OXYGEN_SOURCE_DIR}/packages/NsightAftermath"
+    )
+  endif()
+  list(
+    APPEND _oxygen_aftermath_hint_paths
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/NsightAftermath"
+  )
+
+  unset(OXYGEN_AFTERMATH_HEADER CACHE)
+  unset(OXYGEN_AFTERMATH_LIBRARY CACHE)
+  unset(OXYGEN_AFTERMATH_DLL CACHE)
+  unset(OXYGEN_AFTERMATH_INCLUDE_DIR CACHE)
+
+  find_file(
+    OXYGEN_AFTERMATH_HEADER
+    NAMES
+      GFSDK_Aftermath_DX12.h
+      GFSDK_Aftermath.h
+    PATHS
+      ${_oxygen_aftermath_hint_paths}
+  )
+
+  if(NOT OXYGEN_AFTERMATH_HEADER)
+    find_file(
+      OXYGEN_AFTERMATH_HEADER
+      NAMES
+        GFSDK_Aftermath_DX12.h
+        GFSDK_Aftermath.h
+      PATHS
+        ${_oxygen_aftermath_hint_paths}
+      PATH_SUFFIXES
+        Include
+        include
+        sdk
+        include/Aftermath
+    )
+  endif()
+
+  find_library(
+    OXYGEN_AFTERMATH_LIBRARY
+    NAMES
+      GFSDK_Aftermath_Lib.x64
+      GFSDK_Aftermath_Lib
+    PATHS
+      ${_oxygen_aftermath_hint_paths}
+    PATH_SUFFIXES
+      Lib/x64
+      lib/x64
+      Lib
+      lib
+      .
+  )
+
+  find_file(
+    OXYGEN_AFTERMATH_DLL
+    NAMES
+      GFSDK_Aftermath_Lib.x64.dll
+      GFSDK_Aftermath_Lib.dll
+    PATHS
+      ${_oxygen_aftermath_hint_paths}
+    PATH_SUFFIXES
+      Bin/x64
+      bin/x64
+      Bin
+      bin
+      .
+  )
+
+  if(OXYGEN_AFTERMATH_HEADER)
+    get_filename_component(
+      OXYGEN_AFTERMATH_INCLUDE_DIR
+      "${OXYGEN_AFTERMATH_HEADER}"
+      DIRECTORY
+    )
+    set(
+      OXYGEN_AFTERMATH_INCLUDE_DIR
+      "${OXYGEN_AFTERMATH_INCLUDE_DIR}"
+      CACHE PATH
+      "Resolved directory containing GFSDK_Aftermath headers"
+      FORCE
+    )
+  endif()
+
+  if(
+    OXYGEN_AFTERMATH_INCLUDE_DIR
+    AND
+      OXYGEN_AFTERMATH_LIBRARY
+    AND
+      OXYGEN_AFTERMATH_DLL
+  )
+    set(OXYGEN_D3D12_AFTERMATH_ENABLED ON)
+    set(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE ON)
+  endif()
 endif()
 
 if(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE)
@@ -379,6 +511,15 @@ if(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE)
     TO_CMAKE_PATH
     "${_oxygen_renderdoc_dll_path_literal}"
     _oxygen_renderdoc_dll_path_literal
+  )
+endif()
+
+if(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE)
+  set(_oxygen_aftermath_dll_path_literal "${OXYGEN_AFTERMATH_DLL}")
+  file(
+    TO_CMAKE_PATH
+    "${_oxygen_aftermath_dll_path_literal}"
+    _oxygen_aftermath_dll_path_literal
   )
 endif()
 
@@ -391,6 +532,8 @@ target_compile_definitions(
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_ENABLED}>>:USE_PIX>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_ENABLED}>>:USE_RENDERDOC>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE}>>:OXYGEN_RENDERDOC_DLL_PATH="${_oxygen_renderdoc_dll_path_literal}">
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_AFTERMATH_ENABLED}>>:USE_AFTERMATH>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE}>>:OXYGEN_AFTERMATH_DLL_PATH="${_oxygen_aftermath_dll_path_literal}">
 )
 
 target_link_libraries(
@@ -516,6 +659,82 @@ if(WIN32)
       "(it installs to packages/RenderDoc by default)."
       "\n  - Alternative: set OXYGEN_RENDERDOC_DIR to a folder containing "
       "Include/renderdoc_app.h and optionally Bin/x64/renderdoc.dll."
+    )
+  endif()
+
+  if(OXYGEN_D3D12_AFTERMATH_ENABLED)
+    target_include_directories(
+      ${META_MODULE_TARGET}
+      PRIVATE
+        "${OXYGEN_AFTERMATH_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(
+      ${META_MODULE_TARGET}
+      PRIVATE
+        "${OXYGEN_AFTERMATH_LIBRARY}"
+    )
+
+    if(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE)
+      if(CMAKE_CONFIGURATION_TYPES)
+        set(
+          _oxygen_aftermath_runtime_bin_dir
+          "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>"
+        )
+      else()
+        set(
+          _oxygen_aftermath_runtime_bin_dir
+          "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+        )
+      endif()
+
+      # Ensure the Nsight Aftermath runtime DLL is available next to built
+      # binaries and in the build tree runtime bin directory used by executables.
+      add_custom_command(
+        TARGET ${META_MODULE_TARGET}
+        POST_BUILD
+        COMMAND
+          ${CMAKE_COMMAND} -E make_directory
+          "${_oxygen_aftermath_runtime_bin_dir}"
+        COMMAND
+          ${CMAKE_COMMAND} -E copy_if_different "${OXYGEN_AFTERMATH_DLL}"
+          "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+        COMMAND
+          ${CMAKE_COMMAND} -E copy_if_different "${OXYGEN_AFTERMATH_DLL}"
+          "${_oxygen_aftermath_runtime_bin_dir}"
+        VERBATIM
+      )
+
+      # Install the runtime DLL alongside executables.
+      if(DEFINED OXYGEN_INSTALL_BIN)
+        install(
+          FILES
+            "${OXYGEN_AFTERMATH_DLL}"
+          DESTINATION ${OXYGEN_INSTALL_BIN}
+          COMPONENT "${META_MODULE_NAME}_runtime"
+        )
+      endif()
+
+      message(
+        STATUS
+        "Nsight Aftermath enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_AFTERMATH_INCLUDE_DIR}"
+      )
+      message(
+        STATUS
+        "Nsight Aftermath runtime deployment enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_AFTERMATH_DLL}"
+      )
+    endif()
+  elseif(DEFINED USE_AFTERMATH AND USE_AFTERMATH)
+    message(
+      WARNING
+      "USE_AFTERMATH is ON but Nsight Aftermath SDK artifacts were not found. "
+      "\n  - Recommended: run GetAftermath.bat or GetAftermath.ps1 from the repo root "
+      "(it installs to packages/NsightAftermath by default)."
+      "\n  - Alternative: set OXYGEN_AFTERMATH_DIR to a folder containing "
+      "GFSDK_Aftermath.h (or GFSDK_Aftermath_DX12.h), GFSDK_Aftermath_Lib.x64.lib, and "
+      "GFSDK_Aftermath_Lib.x64.dll."
     )
   endif()
 endif()

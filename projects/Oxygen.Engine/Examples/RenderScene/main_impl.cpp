@@ -211,6 +211,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool enable_vsync = true;
   bool verify_hashes = false;
   bool hot_reload = true;
+  bool enable_renderdoc = false;
+  bool enable_pix = false;
   std::string directional_shadows = "conventional";
   std::string cvars_archive_path;
   oxygen::examples::DemoAppContext app {};
@@ -270,6 +272,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
+    default_command.WithOption(Option::WithKey("renderdoc")
+        .About("Request RenderDoc capture tooling when available")
+        .Long("renderdoc")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&enable_renderdoc)
+        .Build());
+    default_command.WithOption(Option::WithKey("pix")
+        .About("Request PIX markers/capture tooling when available")
+        .Long("pix")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&enable_pix)
+        .Build());
     default_command.WithOption(Option::WithKey("directional-shadows")
         .About("Directional shadow backend policy: conventional.")
         .Long("directional-shadows")
@@ -309,6 +327,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
+    LOG_F(INFO, "Parsed renderdoc option = {}", enable_renderdoc);
+    LOG_F(INFO, "Parsed pix option = {}", enable_pix);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
@@ -348,6 +368,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
+      .enable_aftermath = true,
+      .enable_renderdoc = enable_renderdoc,
+      .enable_pix = enable_pix,
       .preferred_card_name = std::nullopt,
       .headless = app.headless,
       .enable_vsync = enable_vsync,

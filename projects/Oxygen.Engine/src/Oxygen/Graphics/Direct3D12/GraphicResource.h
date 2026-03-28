@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 
 // ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
@@ -35,10 +36,12 @@ public:
   {
     assert(resource_);
     SetName(debug_name);
+    DebugLayer::RegisterAftermathResource(resource_);
   }
 
   ~GraphicResource() noexcept override
   {
+    DebugLayer::UnregisterAftermathResource(resource_);
     ObjectRelease(resource_);
     ObjectRelease(allocation_);
   }

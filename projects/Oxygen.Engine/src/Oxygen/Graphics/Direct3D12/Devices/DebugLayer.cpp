@@ -23,6 +23,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/AftermathTracker.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 
 #if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
@@ -32,11 +33,79 @@
 using oxygen::graphics::d3d12::DebugLayer;
 using oxygen::windows::ThrowOnFailed;
 
-DebugLayer::DebugLayer(const bool enable_validation) noexcept
+namespace {
+
+struct ToolingPolicy {
+  bool requested_aftermath { true };
+  bool requested_renderdoc { false };
+  bool requested_pix { false };
+  bool renderdoc_bootstrap_attempted { false };
+  bool renderdoc_api_initialized { false };
+  bool renderdoc_enabled { false };
+  bool pix_enabled { false };
+  bool aftermath_enabled { false };
+};
+
+ToolingPolicy g_tooling_policy;
+
+constexpr auto IsRenderDocBuildAvailable() noexcept -> bool
 {
-  InitializeDebugLayer(enable_validation);
-  InitializeDred();
-  InitializeRenderDoc();
+#if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
+  return true;
+#else
+  return false;
+#endif
+}
+
+constexpr auto IsPixBuildAvailable() noexcept -> bool
+{
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+  return true;
+#else
+  return false;
+#endif
+}
+
+constexpr auto IsAftermathBuildAvailable() noexcept -> bool
+{
+#if defined(USE_AFTERMATH)
+  return true;
+#else
+  return false;
+#endif
+}
+
+auto RefreshToolingPolicy() noexcept -> void
+{
+  g_tooling_policy.renderdoc_enabled = g_tooling_policy.requested_renderdoc
+    && g_tooling_policy.renderdoc_api_initialized;
+  g_tooling_policy.pix_enabled
+    = g_tooling_policy.requested_pix && IsPixBuildAvailable();
+  g_tooling_policy.aftermath_enabled = g_tooling_policy.requested_aftermath
+    && IsAftermathBuildAvailable() && !g_tooling_policy.renderdoc_enabled
+    && !g_tooling_policy.pix_enabled;
+}
+
+auto IsRenderDocActive() noexcept -> bool
+{
+#if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
+  return ::GetModuleHandleA("renderdoc.dll") != nullptr;
+#else
+  return false;
+#endif
+}
+
+} // namespace
+
+DebugLayer::DebugLayer(
+  const bool enable_debug, const bool enable_validation) noexcept
+{
+  BootstrapRenderDoc();
+  InitializeDebugLayer(enable_debug, enable_validation);
+  if (enable_debug) {
+    InitializeDred();
+  }
+  InitializeAftermath();
 }
 
 DebugLayer::~DebugLayer() noexcept
@@ -53,10 +122,51 @@ DebugLayer::~DebugLayer() noexcept
   ObjectRelease(dxgi_info_queue_);
   ObjectRelease(dxgi_debug_);
   ObjectRelease(dred_settings_);
+
+  AftermathTracker::Instance().DisableCrashDumps();
 }
 
-void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
+void DebugLayer::ConfigureTooling(const bool enable_aftermath,
+  const bool enable_renderdoc, const bool enable_pix) noexcept
 {
+  g_tooling_policy = ToolingPolicy { .requested_aftermath = enable_aftermath,
+    .requested_renderdoc = enable_renderdoc,
+    .requested_pix = enable_pix };
+  RefreshToolingPolicy();
+
+  LOG_F(INFO,
+    "D3D12 tooling policy requested: aftermath={} renderdoc={} pix={}",
+    enable_aftermath, enable_renderdoc, enable_pix);
+
+  if (enable_aftermath && !IsAftermathBuildAvailable()) {
+    LOG_F(INFO,
+      "Aftermath requested by GraphicsConfig, but the backend was built "
+      "without Nsight Aftermath support");
+  }
+  if (enable_renderdoc && !IsRenderDocBuildAvailable()) {
+    LOG_F(INFO,
+      "RenderDoc requested by GraphicsConfig, but the backend was built "
+      "without RenderDoc support");
+  }
+  if (enable_pix && !IsPixBuildAvailable()) {
+    LOG_F(INFO,
+      "PIX requested by GraphicsConfig, but the backend was built without "
+      "PIX support");
+  }
+}
+
+auto DebugLayer::IsPixEnabled() noexcept -> bool
+{
+  return g_tooling_policy.pix_enabled;
+}
+
+void DebugLayer::InitializeDebugLayer(
+  const bool enable_debug, const bool enable_validation) noexcept
+{
+  if (!enable_debug) {
+    return;
+  }
+
   // Enable the Direct3D12 debug layer
   if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&d3d12_debug_)))) {
     d3d12_debug_->EnableDebugLayer();
@@ -100,9 +210,46 @@ void DebugLayer::InitializeDred() noexcept
   }
 }
 
-void DebugLayer::InitializeRenderDoc() noexcept
+void DebugLayer::InitializeAftermath() noexcept
 {
+  if (!g_tooling_policy.requested_aftermath) {
+    LOG_F(INFO, "Aftermath integration disabled by GraphicsConfig");
+    return;
+  }
+
+  if (g_tooling_policy.renderdoc_enabled) {
+    LOG_F(INFO,
+      "Aftermath integration disabled because RenderDoc is explicitly "
+      "enabled in GraphicsConfig");
+    return;
+  }
+
+  if (g_tooling_policy.pix_enabled) {
+    LOG_F(INFO,
+      "Aftermath integration disabled because PIX is explicitly enabled in "
+      "GraphicsConfig");
+    return;
+  }
+
+  if (!g_tooling_policy.aftermath_enabled) {
+    return;
+  }
+
+  AftermathTracker::Instance().EnableCrashDumps();
+}
+
+void DebugLayer::BootstrapRenderDoc() noexcept
+{
+  if (!g_tooling_policy.requested_renderdoc) {
+    return;
+  }
+
 #if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
+  if (g_tooling_policy.renderdoc_bootstrap_attempted) {
+    return;
+  }
+  g_tooling_policy.renderdoc_bootstrap_attempted = true;
+
   auto* renderdoc_module = ::GetModuleHandleA("renderdoc.dll");
   if (renderdoc_module == nullptr) {
     renderdoc_module = ::LoadLibraryA("renderdoc.dll");
@@ -116,8 +263,8 @@ void DebugLayer::InitializeRenderDoc() noexcept
 
   if (renderdoc_module == nullptr) {
     LOG_F(INFO,
-      "RenderDoc integration enabled at build-time, but renderdoc.dll is "
-      "not available in process path; continuing without RenderDoc API");
+      "RenderDoc was requested by GraphicsConfig, but renderdoc.dll is not "
+      "available in process path; continuing without RenderDoc API");
     return;
   }
 
@@ -138,17 +285,24 @@ void DebugLayer::InitializeRenderDoc() noexcept
     return;
   }
 
-  LOG_F(INFO, "RenderDoc API initialized successfully");
-#else
-  LOG_F(1,
-    "RenderDoc integration is not enabled for this build (missing "
-    "USE_RENDERDOC or renderdoc_app.h)");
+  g_tooling_policy.renderdoc_api_initialized = true;
+  RefreshToolingPolicy();
+
+  LOG_F(
+    INFO, "RenderDoc API initialized successfully before DXGI/D3D12 startup");
 #endif
 }
 
 void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
 {
   if (device == nullptr) {
+    return;
+  }
+
+  if (IsRenderDocActive()) {
+    LOG_F(1,
+      "Skipping D3D12 info queue configuration because RenderDoc is "
+      "wrapping the device");
     return;
   }
 
@@ -180,6 +334,55 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
   if (FAILED(info_queue->PushStorageFilter(&filter))) {
     LOG_F(WARNING, "Failed to apply D3D12 info queue storage filter");
   }
+}
+
+void DebugLayer::ConfigureAftermathForDevice(
+  dx::IDevice* device, const uint32_t vendor_id) noexcept
+{
+  if (!g_tooling_policy.aftermath_enabled) {
+    return;
+  }
+
+  AftermathTracker::Instance().InitializeDevice(device, vendor_id);
+}
+
+void DebugLayer::NotifyDeviceRemoved() noexcept
+{
+  AftermathTracker::Instance().WaitForCrashDumpCompletion();
+}
+
+void DebugLayer::RegisterAftermathResource(ID3D12Resource* resource) noexcept
+{
+  AftermathTracker::Instance().RegisterResource(resource);
+}
+
+void DebugLayer::UnregisterAftermathResource(ID3D12Resource* resource) noexcept
+{
+  AftermathTracker::Instance().UnregisterResource(resource);
+}
+
+void DebugLayer::SetAftermathMarker(ID3D12GraphicsCommandList* command_list,
+  const std::string_view marker) noexcept
+{
+  AftermathTracker::Instance().SetMarker(command_list, marker);
+}
+
+void DebugLayer::PushAftermathMarker(ID3D12GraphicsCommandList* command_list,
+  const std::string_view marker) noexcept
+{
+  AftermathTracker::Instance().PushMarker(command_list, marker);
+}
+
+void DebugLayer::PopAftermathMarker(
+  ID3D12GraphicsCommandList* command_list) noexcept
+{
+  AftermathTracker::Instance().PopMarker(command_list);
+}
+
+void DebugLayer::SetAftermathDeviceRemovalContext(
+  const std::string_view context_info) noexcept
+{
+  AftermathTracker::Instance().NotifyDeviceRemovalContext(context_info);
 }
 
 void DebugLayer::PrintLiveObjectsReport() noexcept

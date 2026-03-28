@@ -17,12 +17,13 @@ namespace oxygen::graphics::d3d12 {
 
 namespace dx {
   using IFactory = IDXGIFactory7;
+  using ISwapChain = IDXGISwapChain1;
   using IDevice = ID3D12Device9;
   using IGraphicsCommandList = ID3D12GraphicsCommandList7;
   using ICommandQueue = ID3D12CommandQueue;
   using IDescriptorHeap = ID3D12DescriptorHeap;
   using IFence = ID3D12Fence;
-  using IDebug = ID3D12Debug6;
+  using IDebug = ID3D12Debug1;
   using IPipelineState = ID3D12PipelineState;
   using IRootSignature = ID3D12RootSignature;
 } // namespace dx

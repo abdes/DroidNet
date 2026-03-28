@@ -7,6 +7,20 @@ hierarchy, and renders it using the standard single-view example pipeline.
 
 The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 
+## Runtime Tooling Flags
+
+RenderScene can opt into GPU tooling directly from the command line when the
+backend was built with support for that tool:
+
+- `--renderdoc true` requests RenderDoc.
+- `--pix true` requests PIX.
+- `--frames 10` is useful for short validation runs.
+
+These switches feed `GraphicsConfig` directly. By default the sample leaves
+RenderDoc and PIX disabled, which keeps Nsight Aftermath enabled when it is
+available. When either tool is requested from the CLI, the backend disables
+Aftermath only if that requested tool is actually available for the run.
+
 ## Content Source Behavior (PAK vs Loose Cooked)
 
 The demo supports loading scenes from multiple cooked sources (PAK files and

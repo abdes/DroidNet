@@ -310,6 +310,15 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_validation")) {
     desc.enable_validation = jsonConfig["enable_validation"].get<bool>();
   }
+  if (jsonConfig.contains("enable_aftermath")) {
+    desc.enable_aftermath = jsonConfig["enable_aftermath"].get<bool>();
+  }
+  if (jsonConfig.contains("enable_renderdoc")) {
+    desc.enable_renderdoc = jsonConfig["enable_renderdoc"].get<bool>();
+  }
+  if (jsonConfig.contains("enable_pix")) {
+    desc.enable_pix = jsonConfig["enable_pix"].get<bool>();
+  }
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
   }
@@ -448,6 +457,10 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   auto surface = std::make_unique<detail::WindowSurface>(
     window_weak, queue->GetCommandQueue(), this);
+  if (!surface->GetComponent<detail::SwapChain>().IsValid()) {
+    throw std::runtime_error(
+      "Failed to create D3D12 window surface swap chain");
+  }
   // Implicit upcast: unique_ptr<WindowSurface> → unique_ptr<Surface>
   return std::unique_ptr<Surface>(std::move(surface));
 }
@@ -468,6 +481,10 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   const auto surface = std::make_shared<detail::CompositionSurface>(
     queue->GetCommandQueue(), const_cast<Graphics*>(this));
+  if (!surface->GetComponent<detail::CompositionSwapChain>().IsValid()) {
+    throw std::runtime_error(
+      "Failed to create D3D12 composition surface swap chain");
+  }
   CHECK_NOTNULL_F(surface, "Failed to create composition surface");
   return std::static_pointer_cast<Surface>(surface);
 }

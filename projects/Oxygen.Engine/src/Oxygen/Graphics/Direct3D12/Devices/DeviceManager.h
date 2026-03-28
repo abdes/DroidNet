@@ -112,6 +112,9 @@ struct DeviceManagerDesc {
 #endif
   };
   bool enable_validation { false };
+  bool enable_aftermath { true };
+  bool enable_renderdoc { false };
+  bool enable_pix { false };
   bool require_display { true };
   bool auto_select_adapter { true };
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };

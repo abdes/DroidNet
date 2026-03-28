@@ -46,8 +46,8 @@ public:
     }
     if (path_finder_config.json_data != nullptr
       && path_finder_config.size > 0) {
-      path_finder_json_copy = std::string(
-        path_finder_config.json_data, path_finder_config.size);
+      path_finder_json_copy
+        = std::string(path_finder_config.json_data, path_finder_config.size);
     }
   }
 
@@ -164,8 +164,7 @@ protected:
   private:
     // Static callback for CreateBackend
     static auto CreateBackendStatic(const SerializedBackendConfig& config,
-      const SerializedPathFinderConfig& path_finder_config)
-      -> void*
+      const SerializedPathFinderConfig& path_finder_config) -> void*
     {
       auto& instance = GetInstance();
       if (instance.mock_graphics == nullptr) {
@@ -258,8 +257,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendFromMainModule)
 
   // This should succeed
   oxygen::GraphicsConfig config;
-  auto backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(backend.expired());
 }
 // Test unloading a backend
@@ -270,8 +269,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, UnloadBackendFromMainModule)
 
   // Load a backend first
   oxygen::GraphicsConfig config;
-  auto backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(backend.expired());
 
   // Expect CloseModule to be called exactly once
@@ -291,8 +290,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, GetBackendAfterLoading)
 
   // Load a backend
   oxygen::GraphicsConfig config;
-  auto loaded_backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto loaded_backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
 
   // GetBackend should return the same backend
   auto retrieved_backend = loader.GetBackend();
@@ -309,10 +308,10 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendTwiceReturnsSameInstance)
 
   // Load a backend twice
   oxygen::GraphicsConfig config;
-  auto first_backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
-  auto second_backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto first_backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto second_backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
 
   // Should be the same instance
   EXPECT_EQ(first_backend.lock().get(), second_backend.lock().get());
@@ -355,9 +354,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendErrorHandling)
     .WillOnce(testing::Throw(std::runtime_error("Module loading failed")));
 
   oxygen::GraphicsConfig config;
-  EXPECT_THROW(auto _
-    = loader.LoadBackend(
-      oxygen::graphics::BackendType::kDirect3D12, config, {}),
+  EXPECT_THROW(auto _ = loader.LoadBackend(
+                 oxygen::graphics::BackendType::kDirect3D12, config, {}),
     std::runtime_error);
 }
 
@@ -368,8 +366,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendAfterUnload)
 
   // Load a backend
   oxygen::GraphicsConfig config;
-  auto first_backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto first_backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(first_backend.expired());
 
   // Unload it
@@ -379,8 +377,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendAfterUnload)
   testing::Mock::VerifyAndClearExpectations(platform.get());
 
   // Load another backend
-  auto second_backend
-    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto second_backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(second_backend.expired());
 
   // Should be a different instance than the first
@@ -395,8 +393,8 @@ NOLINT_TEST_F(
 
   // Load a backend to verify state transition
   oxygen::GraphicsConfig config;
-  auto backend
-    = loader1.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto backend = loader1.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
 
   // Reset the loader
   auto& loader2 = oxygen::GraphicsBackendLoader::GetInstance(platform);
@@ -406,8 +404,8 @@ NOLINT_TEST_F(
   EXPECT_NE(&loader1, &loader2);
 
   // Should be able to load a new backend using the new platform services
-  auto new_backend
-    = loader2.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {});
+  auto new_backend = loader2.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
   EXPECT_FALSE(new_backend.expired());
 }
 
@@ -419,6 +417,9 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   oxygen::GraphicsConfig config;
   config.enable_debug = true;
   config.enable_validation = true;
+  config.enable_aftermath = true;
+  config.enable_renderdoc = false;
+  config.enable_pix = true;
   config.headless = false;
   config.enable_imgui = true;
   config.preferred_card_name = "Test GPU";
@@ -431,9 +432,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
                              .Build();
 
   // Load backend with our config
-  auto backend
-    = loader.LoadBackend(
-      oxygen::graphics::BackendType::kDirect3D12, config, path_config);
+  auto backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, path_config);
   EXPECT_FALSE(backend.expired());
 
   // Get access to the MockGraphics to verify the serialized config
@@ -452,6 +452,11 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   EXPECT_TRUE(json_str.find(R"("enable_debug": true)") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("enable_validation": true)") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("enable_aftermath": true)") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("enable_renderdoc": false)") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("enable_pix": true)") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("headless": false)") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("enable_imgui": true)") != std::string::npos);
   EXPECT_TRUE(
@@ -463,9 +468,10 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   EXPECT_TRUE(json_str.find(R"("another_key": 42)") != std::string::npos);
 
   const std::string path_json(captured_mock->GetPathFinderJsonData());
-  EXPECT_TRUE(path_json.find(R"("workspace_root_path": "F:/ws")")
-    != std::string::npos);
-  EXPECT_TRUE(path_json.find(R"("shader_library_path": "bin/Oxygen/shaders.bin")")
+  EXPECT_TRUE(
+    path_json.find(R"("workspace_root_path": "F:/ws")") != std::string::npos);
+  EXPECT_TRUE(
+    path_json.find(R"("shader_library_path": "bin/Oxygen/shaders.bin")")
     != std::string::npos);
   EXPECT_TRUE(path_json.find(R"("cvars_archive_path": "bin/Oxygen/cvars.json")")
     != std::string::npos);
