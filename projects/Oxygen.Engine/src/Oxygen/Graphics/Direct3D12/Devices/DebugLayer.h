@@ -27,6 +27,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
   OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
+  static auto ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept -> void;
   static auto PrintDredReport(dx::IDevice* device) noexcept -> void;
 
 private:

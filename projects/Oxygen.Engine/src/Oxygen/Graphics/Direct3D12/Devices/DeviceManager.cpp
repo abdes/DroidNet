@@ -250,6 +250,10 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     ThrowOnFailed(D3D12CreateDevice(context.adapter.Get(),
       props_.minFeatureLevel, IID_PPV_ARGS(&context.device)));
 
+    if (props_.enable_debug) {
+      DebugLayer::ConfigureDeviceInfoQueue(context.device.Get());
+    }
+
     // Initialize the allocator
     LOG_F(INFO, "Memory Allocator");
     D3D12MA::ALLOCATOR_DESC allocatorDesc = {};
