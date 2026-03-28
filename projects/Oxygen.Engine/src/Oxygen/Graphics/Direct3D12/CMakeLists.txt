@@ -28,6 +28,12 @@ set(
   CACHE PATH
   "Optional root directory containing WinPixEventRuntime (Include/Lib)."
 )
+set(
+  OXYGEN_RENDERDOC_DIR
+  ""
+  CACHE PATH
+  "Optional root directory containing RenderDoc package files (Include/Bin)."
+)
 
 # ==============================================================================
 # Build instructions
@@ -177,6 +183,9 @@ endif()
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 
 set(OXYGEN_D3D12_PIX_ENABLED OFF)
+set(OXYGEN_D3D12_RENDERDOC_ENABLED OFF)
+set(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE OFF)
+set(OXYGEN_RENDERDOC_INCLUDE_DIR "")
 
 if(WIN32)
   # WinPixEventRuntime discovery is intentionally restricted to project-local
@@ -251,6 +260,126 @@ if(WIN32)
   )
     set(OXYGEN_D3D12_PIX_ENABLED ON)
   endif()
+
+  # RenderDoc discovery checks default Windows install locations first, then
+  # project-local packages.
+  # Preferred install path is via either:
+  #  - GetRenderDoc.bat
+  #  - GetRenderDoc.ps1
+  # Both scripts install to packages/RenderDoc by default.
+  set(_oxygen_renderdoc_hint_paths)
+
+  # Common RenderDoc default install locations on Windows.
+  list(
+    APPEND _oxygen_renderdoc_hint_paths
+    "C:/Program Files/RenderDoc"
+    "C:/Program Files (x86)/RenderDoc"
+  )
+
+  if(OXYGEN_RENDERDOC_DIR)
+    list(
+      APPEND _oxygen_renderdoc_hint_paths
+      "${OXYGEN_RENDERDOC_DIR}"
+    )
+  endif()
+
+  # Repo-local package layout (downloaded by GetRenderDoc.bat/.ps1).
+  if(DEFINED OXYGEN_SOURCE_DIR)
+    list(
+      APPEND _oxygen_renderdoc_hint_paths
+      "${OXYGEN_SOURCE_DIR}/packages/RenderDoc"
+    )
+  endif()
+  list(
+    APPEND _oxygen_renderdoc_hint_paths
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../packages/RenderDoc"
+  )
+
+  # Reset cached discovery values so updates to probing logic are honored on
+  # subsequent re-configures in existing build directories.
+  unset(OXYGEN_RENDERDOC_HEADER CACHE)
+  unset(OXYGEN_RENDERDOC_DLL CACHE)
+  unset(OXYGEN_RENDERDOC_INCLUDE_DIR CACHE)
+
+  # Prefer the install root first (for example C:/Program Files/RenderDoc),
+  # then common include layouts.
+  find_file(
+    OXYGEN_RENDERDOC_HEADER
+    NAMES
+      renderdoc_app.h
+    PATHS
+      ${_oxygen_renderdoc_hint_paths}
+  )
+
+  if(NOT OXYGEN_RENDERDOC_HEADER)
+    find_file(
+      OXYGEN_RENDERDOC_HEADER
+      NAMES
+        renderdoc_app.h
+      PATHS
+        ${_oxygen_renderdoc_hint_paths}
+      PATH_SUFFIXES
+        Include
+        include
+        api/app
+        renderdoc/api/app
+    )
+  endif()
+
+  # Prefer 64-bit/default runtime DLL locations, then fall back to x86.
+  find_file(
+    OXYGEN_RENDERDOC_DLL
+    NAMES
+      renderdoc.dll
+    PATHS
+      ${_oxygen_renderdoc_hint_paths}
+  )
+
+  if(NOT OXYGEN_RENDERDOC_DLL)
+    find_file(
+      OXYGEN_RENDERDOC_DLL
+      NAMES
+        renderdoc.dll
+      PATHS
+        ${_oxygen_renderdoc_hint_paths}
+      PATH_SUFFIXES
+        x64
+        Bin/x64
+        bin/x64
+        Bin
+        bin
+        x86
+    )
+  endif()
+
+  if(OXYGEN_RENDERDOC_HEADER)
+    get_filename_component(
+      OXYGEN_RENDERDOC_INCLUDE_DIR
+      "${OXYGEN_RENDERDOC_HEADER}"
+      DIRECTORY
+    )
+    set(
+      OXYGEN_RENDERDOC_INCLUDE_DIR
+      "${OXYGEN_RENDERDOC_INCLUDE_DIR}"
+      CACHE PATH
+      "Resolved directory containing renderdoc_app.h"
+      FORCE
+    )
+    set(OXYGEN_D3D12_RENDERDOC_ENABLED ON)
+  endif()
+
+  if(OXYGEN_RENDERDOC_INCLUDE_DIR AND OXYGEN_RENDERDOC_DLL)
+    set(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE ON)
+  endif()
+endif()
+
+if(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE)
+  set(_oxygen_renderdoc_dll_path_literal "${OXYGEN_RENDERDOC_DLL}")
+  file(
+    TO_CMAKE_PATH
+    "${_oxygen_renderdoc_dll_path_literal}"
+    _oxygen_renderdoc_dll_path_literal
+  )
 endif()
 
 target_compile_definitions(
@@ -260,6 +389,8 @@ target_compile_definitions(
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_ENABLED}>>:USE_PIX>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_ENABLED}>>:USE_RENDERDOC>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE}>>:OXYGEN_RENDERDOC_DLL_PATH="${_oxygen_renderdoc_dll_path_literal}">
 )
 
 target_link_libraries(
@@ -328,6 +459,63 @@ if(WIN32)
       "\n  - Alternative: set OXYGEN_WINPIXEVENTRUNTIME_DIR to a folder "
       "containing Include/pix3.h, Lib/x64/WinPixEventRuntime.lib, and "
       "Bin/x64/WinPixEventRuntime.dll."
+    )
+  endif()
+
+  if(OXYGEN_D3D12_RENDERDOC_ENABLED)
+    target_include_directories(
+      ${META_MODULE_TARGET}
+      PRIVATE
+        "${OXYGEN_RENDERDOC_INCLUDE_DIR}"
+    )
+
+    if(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE)
+      # Ensure the RenderDoc runtime DLL is available next to built binaries.
+      add_custom_command(
+        TARGET ${META_MODULE_TARGET}
+        POST_BUILD
+        COMMAND
+          ${CMAKE_COMMAND} -E copy_if_different "${OXYGEN_RENDERDOC_DLL}"
+          "$<TARGET_FILE_DIR:${META_MODULE_TARGET}>"
+        VERBATIM
+      )
+
+      # Install the RenderDoc runtime DLL alongside executables.
+      if(DEFINED OXYGEN_INSTALL_BIN)
+        install(
+          FILES
+            "${OXYGEN_RENDERDOC_DLL}"
+          DESTINATION ${OXYGEN_INSTALL_BIN}
+          COMPONENT "${META_MODULE_NAME}_runtime"
+        )
+      endif()
+
+      message(
+        STATUS
+        "RenderDoc API enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_RENDERDOC_INCLUDE_DIR}"
+      )
+      message(
+        STATUS
+        "RenderDoc runtime deployment enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_RENDERDOC_DLL}"
+      )
+    else()
+      message(
+        STATUS
+        "RenderDoc API enabled for ${META_MODULE_NAME}, but renderdoc.dll "
+        "was not found in package paths. Runtime loading will still be "
+        "optional and non-fatal."
+      )
+    endif()
+  elseif(DEFINED USE_RENDERDOC AND USE_RENDERDOC)
+    message(
+      WARNING
+      "USE_RENDERDOC is ON but renderdoc_app.h was not found. "
+      "\n  - Recommended: run GetRenderDoc.bat or GetRenderDoc.ps1 from the repo root "
+      "(it installs to packages/RenderDoc by default)."
+      "\n  - Alternative: set OXYGEN_RENDERDOC_DIR to a folder containing "
+      "Include/renderdoc_app.h and optionally Bin/x64/renderdoc.dll."
     )
   endif()
 endif()
