@@ -307,6 +307,9 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_debug")) {
     desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
   }
+  if (jsonConfig.contains("enable_validation")) {
+    desc.enable_validation = jsonConfig["enable_validation"].get<bool>();
+  }
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
   }
