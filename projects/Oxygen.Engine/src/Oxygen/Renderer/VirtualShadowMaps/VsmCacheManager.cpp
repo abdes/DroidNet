@@ -350,6 +350,260 @@ namespace {
     }
   }
 
+  auto ComparePrimitiveIdentity(const VsmPrimitiveIdentity& lhs,
+    const VsmPrimitiveIdentity& rhs) noexcept -> bool
+  {
+    return std::tie(lhs.transform_index, lhs.transform_generation,
+             lhs.submesh_index, lhs.primitive_flags)
+      < std::tie(rhs.transform_index, rhs.transform_generation,
+        rhs.submesh_index, rhs.primitive_flags);
+  }
+
+  auto CompareRenderedPrimitiveHistory(
+    const VsmRenderedPrimitiveHistoryRecord& lhs,
+    const VsmRenderedPrimitiveHistoryRecord& rhs) noexcept -> bool
+  {
+    return std::tie(lhs.map_id, lhs.primitive.transform_index,
+             lhs.primitive.transform_generation, lhs.primitive.submesh_index,
+             lhs.primitive.primitive_flags)
+      < std::tie(rhs.map_id, rhs.primitive.transform_index,
+        rhs.primitive.transform_generation, rhs.primitive.submesh_index,
+        rhs.primitive.primitive_flags);
+  }
+
+  auto CompareStaticPrimitiveFeedback(
+    const VsmStaticPrimitivePageFeedbackRecord& lhs,
+    const VsmStaticPrimitivePageFeedbackRecord& rhs) noexcept -> bool
+  {
+    return std::tie(lhs.page_table_index, lhs.primitive.transform_index,
+             lhs.primitive.transform_generation, lhs.primitive.submesh_index,
+             lhs.primitive.primitive_flags)
+      < std::tie(rhs.page_table_index, rhs.primitive.transform_index,
+        rhs.primitive.transform_generation, rhs.primitive.submesh_index,
+        rhs.primitive.primitive_flags);
+  }
+
+  [[nodiscard]] auto TryFindRemapEntry(const VsmVirtualRemapTable& remap_table,
+    const VsmVirtualShadowMapId previous_map_id) noexcept
+    -> const VsmVirtualRemapEntry*
+  {
+    const auto remap_it = std::ranges::find_if(
+      remap_table.entries, [previous_map_id](const auto& entry) {
+        return entry.previous_id == previous_map_id;
+      });
+    return remap_it != remap_table.entries.end() ? &*remap_it : nullptr;
+  }
+
+  [[nodiscard]] auto TryResolveSnapshotPageTableEntryIndex(
+    const VsmPageAllocationSnapshot& snapshot,
+    const VsmVirtualShadowMapId map_id,
+    const VsmVirtualPageCoord& virtual_page) noexcept
+    -> std::optional<std::uint32_t>;
+
+  [[nodiscard]] auto TryTranslateCurrentMapId(const VsmCacheManagerSeam& seam,
+    const VsmPageAllocationSnapshot& snapshot,
+    const VsmVirtualShadowMapId previous_map_id) noexcept
+    -> std::optional<VsmVirtualShadowMapId>
+  {
+    if (const auto* remap_entry
+      = TryFindRemapEntry(seam.previous_to_current_remap, previous_map_id);
+      remap_entry != nullptr && remap_entry->current_id != 0U
+      && remap_entry->rejection_reason == VsmReuseRejectionReason::kNone) {
+      return remap_entry->current_id;
+    }
+
+    if (TryResolveSnapshotPageTableEntryIndex(
+          snapshot, previous_map_id, VsmVirtualPageCoord {})
+          .has_value()) {
+      return previous_map_id;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto TryTranslateCurrentPage(const VsmCacheManagerSeam& seam,
+    const VsmPageAllocationSnapshot& snapshot,
+    const VsmVirtualShadowMapId previous_map_id,
+    const VsmVirtualPageCoord& previous_page) noexcept
+    -> std::optional<VsmPageRequest>
+  {
+    if (const auto* remap_entry
+      = TryFindRemapEntry(seam.previous_to_current_remap, previous_map_id);
+      remap_entry != nullptr) {
+      if (remap_entry->current_id == 0U
+        || remap_entry->rejection_reason != VsmReuseRejectionReason::kNone) {
+        return std::nullopt;
+      }
+
+      const auto translated_x = static_cast<std::int64_t>(previous_page.page_x)
+        - remap_entry->page_offset.x;
+      const auto translated_y = static_cast<std::int64_t>(previous_page.page_y)
+        - remap_entry->page_offset.y;
+      if (translated_x < 0 || translated_y < 0) {
+        return std::nullopt;
+      }
+
+      auto request = VsmPageRequest {
+        .map_id = remap_entry->current_id,
+        .page
+        = {
+            .level = previous_page.level,
+            .page_x = static_cast<std::uint32_t>(translated_x),
+            .page_y = static_cast<std::uint32_t>(translated_y),
+          },
+      };
+      return TryResolveSnapshotPageTableEntryIndex(
+               snapshot, request.map_id, request.page)
+               .has_value()
+        ? std::optional<VsmPageRequest> { request }
+        : std::nullopt;
+    }
+
+    return TryResolveSnapshotPageTableEntryIndex(
+             snapshot, previous_map_id, previous_page)
+        .has_value()
+      ? std::optional<VsmPageRequest> {
+          VsmPageRequest { .map_id = previous_map_id, .page = previous_page },
+        }
+      : std::nullopt;
+  }
+
+  [[nodiscard]] auto TryResolveSnapshotPageTableEntryIndex(
+    const VsmPageAllocationSnapshot& snapshot,
+    const VsmVirtualShadowMapId map_id,
+    const VsmVirtualPageCoord& virtual_page) noexcept
+    -> std::optional<std::uint32_t>
+  {
+    for (const auto& layout : snapshot.virtual_frame.local_light_layouts) {
+      if (layout.id == map_id) {
+        return TryGetPageTableEntryIndex(layout, virtual_page);
+      }
+    }
+    for (const auto& layout : snapshot.retained_local_light_layouts) {
+      if (layout.id == map_id) {
+        return TryGetPageTableEntryIndex(layout, virtual_page);
+      }
+    }
+    for (const auto& layout : snapshot.virtual_frame.directional_layouts) {
+      if (virtual_page.level < layout.clip_level_count
+        && map_id == layout.first_id + virtual_page.level) {
+        return TryGetPageTableEntryIndex(layout, virtual_page);
+      }
+    }
+    for (const auto& layout : snapshot.retained_directional_layouts) {
+      if (virtual_page.level < layout.clip_level_count
+        && map_id == layout.first_id + virtual_page.level) {
+        return TryGetPageTableEntryIndex(layout, virtual_page);
+      }
+    }
+    return std::nullopt;
+  }
+
+  auto CarryForwardContinuityPublications(const VsmCacheManagerSeam& seam,
+    const VsmExtractedCacheFrame& previous_snapshot,
+    VsmPageAllocationSnapshot& current_snapshot) -> void
+  {
+    auto current_visible = current_snapshot.visible_shadow_primitives;
+    std::sort(
+      current_visible.begin(), current_visible.end(), ComparePrimitiveIdentity);
+    current_visible.erase(
+      std::unique(current_visible.begin(), current_visible.end()),
+      current_visible.end());
+
+    auto merged_history = current_snapshot.rendered_primitive_history;
+    for (const auto& history : previous_snapshot.rendered_primitive_history) {
+      if (!current_visible.empty()
+        && !std::binary_search(current_visible.begin(), current_visible.end(),
+          history.primitive, ComparePrimitiveIdentity)) {
+        continue;
+      }
+
+      const auto current_map_id
+        = TryTranslateCurrentMapId(seam, current_snapshot, history.map_id);
+      if (!current_map_id.has_value()) {
+        continue;
+      }
+
+      merged_history.push_back(VsmRenderedPrimitiveHistoryRecord {
+        .primitive = history.primitive,
+        .map_id = *current_map_id,
+      });
+    }
+    std::sort(merged_history.begin(), merged_history.end(),
+      CompareRenderedPrimitiveHistory);
+    merged_history.erase(
+      std::unique(merged_history.begin(), merged_history.end()),
+      merged_history.end());
+
+    auto merged_feedback = current_snapshot.static_primitive_page_feedback;
+    for (const auto& feedback :
+      previous_snapshot.static_primitive_page_feedback) {
+      if (feedback.valid == 0U) {
+        continue;
+      }
+
+      const auto translated_request = TryTranslateCurrentPage(
+        seam, current_snapshot, feedback.map_id, feedback.virtual_page);
+      if (!translated_request.has_value()) {
+        continue;
+      }
+
+      const auto page_table_index = TryResolveSnapshotPageTableEntryIndex(
+        current_snapshot, translated_request->map_id, translated_request->page);
+      if (!page_table_index.has_value()
+        || *page_table_index >= current_snapshot.page_table.size()) {
+        continue;
+      }
+
+      const auto& page_table_entry
+        = current_snapshot.page_table[*page_table_index];
+      if (!page_table_entry.is_mapped
+        || page_table_entry.physical_page.value
+          >= current_snapshot.physical_pages.size()) {
+        continue;
+      }
+
+      const auto& physical_page
+        = current_snapshot.physical_pages[page_table_entry.physical_page.value];
+      if (!physical_page.is_allocated || physical_page.static_invalidated
+        || physical_page.owner_id != translated_request->map_id
+        || physical_page.owner_page != translated_request->page) {
+        continue;
+      }
+
+      merged_feedback.push_back(VsmStaticPrimitivePageFeedbackRecord {
+        .primitive = feedback.primitive,
+        .page_table_index = *page_table_index,
+        .physical_page = page_table_entry.physical_page,
+        .map_id = translated_request->map_id,
+        .virtual_page = translated_request->page,
+        .valid = 1U,
+      });
+    }
+    std::sort(merged_feedback.begin(), merged_feedback.end(),
+      CompareStaticPrimitiveFeedback);
+    merged_feedback.erase(
+      std::unique(merged_feedback.begin(), merged_feedback.end()),
+      merged_feedback.end());
+
+    if (merged_history.size()
+        != current_snapshot.rendered_primitive_history.size()
+      || merged_feedback.size()
+        != current_snapshot.static_primitive_page_feedback.size()) {
+      DLOG_F(2,
+        "carried continuity publications generation={} rendered_history={}=>{} "
+        "static_feedback={}=>{}",
+        current_snapshot.frame_generation,
+        current_snapshot.rendered_primitive_history.size(),
+        merged_history.size(),
+        current_snapshot.static_primitive_page_feedback.size(),
+        merged_feedback.size());
+    }
+
+    current_snapshot.rendered_primitive_history = std::move(merged_history);
+    current_snapshot.static_primitive_page_feedback
+      = std::move(merged_feedback);
+  }
+
 } // namespace
 
 VsmCacheManager::VsmCacheManager(
@@ -811,6 +1065,11 @@ auto VsmCacheManager::QueueFrameExtraction(graphics::CommandRecorder& recorder)
     "QueueFrameExtraction requires no pending extraction");
 
   auto extracted_snapshot = runtime_state_.current_frame->snapshot;
+  if (runtime_state_.captured_seam.has_value()
+    && runtime_state_.previous_frame.has_value()) {
+    CarryForwardContinuityPublications(*runtime_state_.captured_seam,
+      *runtime_state_.previous_frame, extracted_snapshot);
+  }
   auto queued_readback = std::optional<PendingFrameExtraction> {};
 
   const auto readback_manager = gfx_ != nullptr
@@ -892,6 +1151,11 @@ auto VsmCacheManager::ExtractFrameData() -> void
     "ExtractFrameData requires a committed current frame");
 
   auto extracted_snapshot = runtime_state_.current_frame->snapshot;
+  if (runtime_state_.captured_seam.has_value()
+    && runtime_state_.previous_frame.has_value()) {
+    CarryForwardContinuityPublications(*runtime_state_.captured_seam,
+      *runtime_state_.previous_frame, extracted_snapshot);
+  }
   static_cast<void>(TrySynchronizeSnapshotFromGpu(
     *runtime_state_.current_frame, extracted_snapshot));
 

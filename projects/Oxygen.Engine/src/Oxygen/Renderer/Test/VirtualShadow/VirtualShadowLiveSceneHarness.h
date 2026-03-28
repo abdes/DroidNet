@@ -48,6 +48,7 @@
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -185,9 +186,47 @@ struct TwoBoxShadowRasterizationResult {
   std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta> physical_metadata {};
 };
 
+struct HarnessShadowSliceSnapshot {
+  std::uint32_t width { 0U };
+  std::uint32_t height { 0U };
+  std::vector<float> values {};
+
+  [[nodiscard]] auto At(const std::uint32_t x, const std::uint32_t y) const
+    -> float
+  {
+    return values.at(static_cast<std::size_t>(y) * width + x);
+  }
+};
+
+struct TwoBoxStaticDynamicMergeResult {
+  TwoBoxShadowRasterizationResult rasterization {};
+  HarnessShadowSliceSnapshot dynamic_before {};
+  HarnessShadowSliceSnapshot static_before {};
+  HarnessShadowSliceSnapshot dynamic_after {};
+  HarnessShadowSliceSnapshot static_after {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry>
+    page_table_after {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags_after {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta>
+    physical_metadata_after {};
+};
+
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
 protected:
   using EventLoop = oxygen::co::testing::TestEventLoop;
+
+  [[nodiscard]] static auto FindSliceIndex(
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSliceRole role)
+    -> std::optional<std::uint32_t>
+  {
+    for (std::uint32_t i = 0U; i < pool.slice_roles.size(); ++i) {
+      if (pool.slice_roles[i] == role) {
+        return i;
+      }
+    }
+    return std::nullopt;
+  }
 
   [[nodiscard]] static auto ResolveHarnessFrameSlot(
     const oxygen::frame::SequenceNumber sequence,
@@ -1225,10 +1264,27 @@ protected:
         depth_texture.get(),
       });
 
+    const auto* extracted_frame
+      = vsm_renderer.GetCacheManager().GetPreviousFrame();
+    DLOG_F(2,
+      "RunTwoBoxLiveShellFrame result generation={} extracted_generation={} "
+      "visible={} rendered_history={} static_feedback={}",
+      sequence.get(),
+      extracted_frame != nullptr ? extracted_frame->frame_generation : 0ULL,
+      extracted_frame != nullptr
+        ? extracted_frame->visible_shadow_primitives.size()
+        : 0U,
+      extracted_frame != nullptr
+        ? extracted_frame->rendered_primitive_history.size()
+        : 0U,
+      extracted_frame != nullptr
+        ? extracted_frame->static_primitive_page_feedback.size()
+        : 0U);
+
     return TwoBoxLiveFrameResult {
       .virtual_frame = vsm_renderer.GetVirtualAddressSpace().DescribeFrame(),
       .prepared_view = vsm_renderer.TryGetPreparedViewState(kTestViewId),
-      .extracted_frame = vsm_renderer.GetCacheManager().GetPreviousFrame(),
+      .extracted_frame = extracted_frame,
       .scene_depth_texture = depth_texture,
     };
   }
@@ -1441,7 +1497,8 @@ protected:
       prepared_view->scene_primitive_history);
     auto invalidation_inputs = invalidation_coordinator.DrainFrameInputs();
     if (!primitive_invalidations_override.empty()) {
-      invalidation_inputs.primitive_invalidations.assign(
+      invalidation_inputs.primitive_invalidations.insert(
+        invalidation_inputs.primitive_invalidations.end(),
         primitive_invalidations_override.begin(),
         primitive_invalidations_override.end());
     }
@@ -1975,6 +2032,191 @@ protected:
         rasterizer_pass->GetStaticPageFeedback().end() },
       .dirty_flags = std::move(dirty_flags),
       .physical_metadata = std::move(physical_metadata),
+    };
+  }
+
+  auto ReadShadowSliceSnapshot(
+    const std::shared_ptr<const oxygen::graphics::Texture>& texture,
+    const std::uint32_t slice, std::string_view debug_name)
+    -> HarnessShadowSliceSnapshot
+  {
+    CHECK_NOTNULL_F(texture.get(), "Cannot read from a null shadow texture");
+
+    const auto& texture_desc = texture->GetDescriptor();
+    auto float_texture
+      = CreateSingleChannelTexture2D(texture_desc.width, texture_desc.height,
+        oxygen::Format::kR32Float, std::string(debug_name) + ".slice-copy");
+    CHECK_NOTNULL_F(float_texture.get(),
+      "Failed to create float slice copy for `{}`", debug_name);
+
+    {
+      auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
+      CHECK_NOTNULL_F(recorder.get(),
+        "Failed to acquire shadow-slice copy recorder for `{}`", debug_name);
+      EnsureTracked(*recorder,
+        std::const_pointer_cast<oxygen::graphics::Texture>(texture),
+        oxygen::graphics::ResourceStates::kCommon);
+      EnsureTracked(
+        *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->RequireResourceState(
+        *texture, oxygen::graphics::ResourceStates::kCopySource);
+      recorder->RequireResourceState(
+        *float_texture, oxygen::graphics::ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyTexture(*texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture_desc.width,
+          .height = texture_desc.height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = slice,
+        },
+        oxygen::graphics::TextureSubResourceSet {
+          .base_mip_level = 0U,
+          .num_mip_levels = 1U,
+          .base_array_slice = slice,
+          .num_array_slices = 1U,
+        },
+        *float_texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = texture_desc.width,
+          .height = texture_desc.height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet::EntireTexture());
+      recorder->RequireResourceStateFinal(
+        *float_texture, oxygen::graphics::ResourceStates::kCommon);
+    }
+    WaitForQueueIdle();
+
+    const auto readback = GetReadbackManager()->ReadTextureNow(*float_texture,
+      oxygen::graphics::TextureReadbackRequest {
+        .src_slice = {},
+        .aspects = oxygen::graphics::ClearFlags::kColor,
+      },
+      true);
+    CHECK_F(readback.has_value(),
+      "Failed to read back shadow slice copy for `{}`", debug_name);
+
+    const auto& data = *readback;
+    auto values
+      = std::vector<float>(texture_desc.width * texture_desc.height, 1.0F);
+    for (std::uint32_t y = 0U; y < texture_desc.height; ++y) {
+      const auto* row = data.bytes.data()
+        + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
+      for (std::uint32_t x = 0U; x < texture_desc.width; ++x) {
+        auto value = 1.0F;
+        std::memcpy(&value, row + static_cast<std::size_t>(x) * sizeof(float),
+          sizeof(value));
+        values[static_cast<std::size_t>(y) * texture_desc.width + x] = value;
+      }
+    }
+
+    return HarnessShadowSliceSnapshot {
+      .width = texture_desc.width,
+      .height = texture_desc.height,
+      .values = std::move(values),
+    };
+  }
+
+  auto RunTwoBoxStaticDynamicMergeStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true)
+    -> TwoBoxStaticDynamicMergeResult
+  {
+    auto rasterization = RunTwoBoxShadowRasterizationStage(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, primitive_invalidations_override,
+      require_virtual_shadow_work);
+
+    const auto& pool = rasterization.initialization.physical_pool;
+    const auto dynamic_slice = FindSliceIndex(
+      pool, oxygen::renderer::vsm::VsmPhysicalPoolSliceRole::kDynamicDepth);
+    const auto static_slice = FindSliceIndex(
+      pool, oxygen::renderer::vsm::VsmPhysicalPoolSliceRole::kStaticDepth);
+    CHECK_F(dynamic_slice.has_value(),
+      "Stage 13 requires a dynamic slice in the physical pool");
+    CHECK_F(static_slice.has_value(),
+      "Stage 13 requires a static slice in the physical pool");
+    CHECK_NOTNULL_F(pool.shadow_texture.get(),
+      "Stage 13 requires a valid physical shadow texture");
+
+    const auto dynamic_before = ReadShadowSliceSnapshot(pool.shadow_texture,
+      *dynamic_slice, "stage-thirteen-two-box.dynamic-before");
+    const auto static_before = ReadShadowSliceSnapshot(pool.shadow_texture,
+      *static_slice, "stage-thirteen-two-box.static-before");
+
+    auto prepared_frame = oxygen::engine::PreparedSceneFrame {};
+    auto offscreen = renderer.BeginOffscreenFrame(
+      { .frame_slot = ResolveHarnessFrameSlot(sequence, slot),
+        .frame_sequence = sequence,
+        .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
+          scene_data.scene.get(),
+        } });
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
+    auto& render_context = offscreen.GetRenderContext();
+
+    const auto merge_pass = vsm_renderer.GetStaticDynamicMergePass();
+    CHECK_NOTNULL_F(
+      merge_pass.get(), "VSM static/dynamic merge pass is unavailable");
+    merge_pass->SetInput(oxygen::engine::VsmStaticDynamicMergePassInput {
+      .frame
+      = rasterization.initialization.propagation.mapping.bridge.committed_frame,
+      .physical_pool = pool,
+    });
+
+    {
+      auto recorder = AcquireRecorder("stage-thirteen-two-box.merge");
+      CHECK_NOTNULL_F(
+        recorder.get(), "Failed to acquire static/dynamic merge recorder");
+      RunPass(*merge_pass, render_context, *recorder);
+    }
+    WaitForQueueIdle();
+
+    const auto dynamic_after = ReadShadowSliceSnapshot(pool.shadow_texture,
+      *dynamic_slice, "stage-thirteen-two-box.dynamic-after");
+    const auto static_after = ReadShadowSliceSnapshot(pool.shadow_texture,
+      *static_slice, "stage-thirteen-two-box.static-after");
+    const auto& frame
+      = rasterization.initialization.propagation.mapping.bridge.committed_frame;
+    const auto page_table
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        frame.page_table_buffer, frame.snapshot.page_table.size(),
+        "stage-thirteen-two-box.page-table");
+    const auto page_flags
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        frame.page_flags_buffer, frame.snapshot.page_table.size(),
+        "stage-thirteen-two-box.page-flags");
+    const auto physical_metadata
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        frame.physical_page_meta_buffer, frame.snapshot.physical_pages.size(),
+        "stage-thirteen-two-box.physical-meta");
+
+    return TwoBoxStaticDynamicMergeResult {
+      .rasterization = std::move(rasterization),
+      .dynamic_before = std::move(dynamic_before),
+      .static_before = std::move(static_before),
+      .dynamic_after = std::move(dynamic_after),
+      .static_after = std::move(static_after),
+      .page_table_after = std::move(page_table),
+      .page_flags_after = std::move(page_flags),
+      .physical_metadata_after = std::move(physical_metadata),
     };
   }
 };

@@ -104,6 +104,7 @@
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
+#include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
@@ -581,9 +582,13 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
-  inline_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16,
-      upload::kDefaultRingBufferStagingSlack, "Renderer.InlineStaging");
+  // Inline staging is retired by InlineTransfersCoordinator, not by the upload
+  // queue fence path. Keep it out of UploadCoordinator provider retirement so
+  // its partition reuse bookkeeping stays on the correct fence timeline.
+  inline_staging_provider_ = std::make_shared<upload::RingBufferStaging>(
+    upload::internal::UploaderTagFactory::Get(), observer_ptr { gfx.get() },
+    frame::kFramesInFlight, 16, upload::kDefaultRingBufferStagingSlack,
+    "Renderer.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   // Initialize the render-context pool helper used to claim per-frame

@@ -288,10 +288,13 @@ inline auto RingBufferStaging::SetActivePartition(frame::Slot slot) noexcept
       && heads_[active_partition_] > 0ULL && capacity_per_partition_ > 0ULL;
     if (had_prior_allocations && last_seen == retire_count_) {
       LOG_F(WARNING,
-        "Reusing partition {} without observed retirement; overwriting "
-        "staging data. head={} cap_per_partition={}",
-        active_partition_, heads_.empty() ? 0ULL : heads_[active_partition_],
-        capacity_per_partition_);
+        "Reusing staging buffer '{}' partition {} without observed "
+        "retirement; overwriting staging data. head={} cap_per_partition={} "
+        "retire_count={} last_seen_retire_count={} last_completed_fence={}",
+        debug_name_, active_partition_,
+        heads_.empty() ? 0ULL : heads_[active_partition_],
+        capacity_per_partition_, retire_count_, last_seen,
+        last_completed_fence_.get());
     }
   }
 

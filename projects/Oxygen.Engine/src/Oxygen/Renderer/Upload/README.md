@@ -279,6 +279,12 @@ sequenceDiagram
 
 **Critical Invariant:** Always call `OnFrameStart(slot)` before submitting uploads for that frame. Providers like `RingBufferStaging` depend on this to advance partitions and prevent overwrites.
 
+**Critical Invariant:** Do not retire one `RingBufferStaging` instance from unrelated fence
+timelines. Inline staging rings that back `TransientStructuredBuffer` and per-view publishers must
+be retired by `InlineTransfersCoordinator`; upload-copy staging rings must be retired by
+`UploadCoordinator`. Mixing both retire paths on one provider turns the partition-reuse warning into
+noise because the provider no longer sees a coherent completion timeline.
+
 ## Architecture Rationale
 
 ### Why Separate Providers?

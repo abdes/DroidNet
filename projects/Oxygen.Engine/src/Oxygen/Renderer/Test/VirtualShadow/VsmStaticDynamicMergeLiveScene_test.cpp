@@ -7,14 +7,18 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <vector>
+
 #include <glm/ext/matrix_transform.hpp>
-#include <glm/geometric.hpp>
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h>
 
 #include "VirtualShadowLiveSceneHarness.h"
 
@@ -31,7 +35,7 @@ using oxygen::renderer::vsm::testing::TwoBoxShadowSceneData;
 using oxygen::renderer::vsm::testing::TwoBoxStaticDynamicMergeResult;
 using oxygen::renderer::vsm::testing::VsmLiveSceneHarness;
 
-class VsmStaticDynamicMergeLocalLiveSceneTest : public VsmLiveSceneHarness {
+class VsmStaticDynamicMergeLiveSceneTest : public VsmLiveSceneHarness {
 protected:
   static constexpr auto kDifferenceEpsilon = 1.0e-4F;
 
@@ -43,23 +47,28 @@ protected:
     std::size_t dynamic_dominates_static_sample_count { 0U };
   };
 
-  static auto DisableDirectionalShadowCasts(TwoBoxShadowSceneData& scene_data)
-    -> void
-  {
-    auto sun_impl = scene_data.sun_node.GetImpl();
-    ASSERT_TRUE(sun_impl.has_value());
-    auto& sun_light
-      = sun_impl->get().GetComponent<oxygen::scene::DirectionalLight>();
-    sun_light.Common().casts_shadows = false;
-    UpdateTransforms(*scene_data.scene, scene_data.sun_node);
-  }
-
   static auto MarkTallBoxStaticShadowCaster(TwoBoxShadowSceneData& scene_data)
     -> void
   {
     scene_data.rendered_items[1].static_shadow_caster = true;
     scene_data.draw_records[1].primitive_flags
       |= static_cast<std::uint32_t>(DrawPrimitiveFlagBits::kStaticShadowCaster);
+  }
+
+  static auto DisableTallBoxShadowCaster(TwoBoxShadowSceneData& scene_data)
+    -> void
+  {
+    scene_data.rendered_items[1].cast_shadows = false;
+    scene_data.draw_records[1].flags.Unset(PassMaskBit::kShadowCaster);
+    scene_data.shadow_caster_bounds[0].w = 0.0F;
+  }
+
+  static auto ClearTallBoxStaticShadowCaster(TwoBoxShadowSceneData& scene_data)
+    -> void
+  {
+    scene_data.rendered_items[1].static_shadow_caster = false;
+    scene_data.draw_records[1].primitive_flags &= ~static_cast<std::uint32_t>(
+      DrawPrimitiveFlagBits::kStaticShadowCaster);
   }
 
   static auto DisableShortBoxShadowCaster(TwoBoxShadowSceneData& scene_data)
@@ -102,6 +111,13 @@ protected:
     ASSERT_TRUE(impl.has_value());
     impl->get().UpdateTransforms(*scene_data.scene);
     scene_data.scene->Update();
+  }
+
+  static auto MoveTallBox(
+    TwoBoxShadowSceneData& scene_data, const glm::vec3& translation) -> void
+  {
+    MoveBox(scene_data, 1U, scene_data.tall_box_node, translation,
+      glm::vec3 { 0.8F, 3.2F, 0.8F });
   }
 
   static auto MoveShortBox(
@@ -244,17 +260,18 @@ protected:
   }
 };
 
-NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
-  StableSpotLightStaticContinuityPersistsAcrossFullyReusedLiveFrame)
+NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
+  StableDirectionalCachedFrameLeavesSlicesUntouchedWhenNoMergeWorkIsProduced)
 {
-  constexpr auto kWidth = 1024U;
-  constexpr auto kHeight = 1024U;
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
   constexpr auto kSlot = Slot { 0U };
-  constexpr auto kFirstSequence = SequenceNumber { 418U };
-  constexpr auto kSecondSequence = SequenceNumber { 419U };
+  constexpr auto kFirstSequence = SequenceNumber { 301U };
+  constexpr auto kSecondSequence = SequenceNumber { 302U };
+  constexpr auto kThirdSequence = SequenceNumber { 303U };
 
-  const auto camera_eye = glm::vec3 { -2.4F, 2.8F, 4.8F };
-  const auto camera_target = glm::vec3 { 0.1F, 0.9F, 0.1F };
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
   const auto sun_direction
     = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
   const auto resolved_view
@@ -263,13 +280,6 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
   auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
-  DisableDirectionalShadowCasts(scene);
-  MarkTallBoxStaticShadowCaster(scene);
-  DisableShortBoxShadowCaster(scene);
-  AttachSpotLightToTwoBoxScene(scene, camera_eye,
-    PrimarySpotTargetForTwoBoxScene(scene), 18.0F, glm::radians(30.0F),
-    glm::radians(44.0F));
-
   auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
     oxygen::observer_ptr { &renderer->GetStagingProvider() },
@@ -278,19 +288,72 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   const auto first_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kFirstSequence, kSlot, 0xD134AULL);
+      kWidth, kHeight, kFirstSequence, kSlot, 0xD130ULL);
   ASSERT_NE(first_frame.extracted_frame, nullptr);
-  ASSERT_TRUE(first_frame.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(first_frame.virtual_frame.local_light_layouts.size(), 1U);
+
+  const auto second_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kSecondSequence, kSlot, 0xD130ULL);
+  ASSERT_NE(second_frame.extracted_frame, nullptr);
+
+  const auto result
+    = RunTwoBoxStaticDynamicMergeStage(*renderer, scene, vsm_renderer,
+      resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xD130ULL);
+
+  EXPECT_TRUE(result.rasterization.prepared_pages.empty());
+  EXPECT_TRUE(std::all_of(result.rasterization.dirty_flags.begin(),
+    result.rasterization.dirty_flags.end(),
+    [](const std::uint32_t flags) { return flags == 0U; }));
+  EXPECT_EQ(
+    result.page_table_after, result.rasterization.initialization.page_table);
+  EXPECT_EQ(
+    result.page_flags_after, result.rasterization.initialization.page_flags);
+  EXPECT_EQ(
+    result.physical_metadata_after, result.rasterization.physical_metadata);
+  EXPECT_EQ(result.dynamic_after.values, result.dynamic_before.values);
+  EXPECT_EQ(result.static_after.values, result.static_before.values);
+}
+
+NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
+  StableDirectionalStaticContinuityPersistsAcrossFullyReusedLiveFrame)
+{
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kFirstSequence = SequenceNumber { 304U };
+  constexpr auto kSecondSequence = SequenceNumber { 305U };
+
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+  const auto resolved_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
+  MarkTallBoxStaticShadowCaster(scene);
+  DisableShortBoxShadowCaster(scene);
+  auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &renderer->GetStagingProvider() },
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
+
+  const auto first_frame
+    = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kFirstSequence, kSlot, 0xD130AULL);
+  ASSERT_NE(first_frame.extracted_frame, nullptr);
+  ASSERT_EQ(first_frame.virtual_frame.directional_layouts.size(), 1U);
   ASSERT_FALSE(first_frame.extracted_frame->rendered_primitive_history.empty());
   ExpectValidExtractedStaticFeedback(*first_frame.extracted_frame);
 
   const auto second_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kSecondSequence, kSlot, 0xD134AULL);
+      kWidth, kHeight, kSecondSequence, kSlot, 0xD130AULL);
   ASSERT_NE(second_frame.extracted_frame, nullptr);
-  ASSERT_TRUE(second_frame.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(second_frame.virtual_frame.local_light_layouts.size(), 1U);
+  ASSERT_EQ(second_frame.virtual_frame.directional_layouts.size(), 1U);
   EXPECT_EQ(second_frame.extracted_frame->rendered_primitive_history.size(),
     first_frame.extracted_frame->rendered_primitive_history.size());
   EXPECT_EQ(second_frame.extracted_frame->static_primitive_page_feedback.size(),
@@ -298,18 +361,18 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   ExpectValidExtractedStaticFeedback(*second_frame.extracted_frame);
 }
 
-NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
-  DynamicOnlyInvalidatedSpotLightSceneSatisfiesStaticIntoDynamicMergeContractOnDirtyPages)
+NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
+  DynamicOnlyInvalidatedDirectionalSceneSatisfiesStaticIntoDynamicMergeContractOnDirtyPages)
 {
-  constexpr auto kWidth = 1024U;
-  constexpr auto kHeight = 1024U;
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
   constexpr auto kSlot = Slot { 0U };
-  constexpr auto kFirstSequence = SequenceNumber { 421U };
-  constexpr auto kSecondSequence = SequenceNumber { 422U };
-  constexpr auto kThirdSequence = SequenceNumber { 423U };
+  constexpr auto kFirstSequence = SequenceNumber { 311U };
+  constexpr auto kSecondSequence = SequenceNumber { 312U };
+  constexpr auto kThirdSequence = SequenceNumber { 313U };
 
-  const auto camera_eye = glm::vec3 { -2.4F, 2.8F, 4.8F };
-  const auto camera_target = glm::vec3 { 0.1F, 0.9F, 0.1F };
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
   const auto sun_direction
     = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
   const auto resolved_view
@@ -318,13 +381,8 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
   auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
-  DisableDirectionalShadowCasts(scene);
   MarkTallBoxStaticShadowCaster(scene);
   DisableShortBoxShadowCaster(scene);
-  AttachSpotLightToTwoBoxScene(scene, camera_eye,
-    PrimarySpotTargetForTwoBoxScene(scene), 18.0F, glm::radians(30.0F),
-    glm::radians(44.0F));
-
   auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
     oxygen::observer_ptr { &renderer->GetStagingProvider() },
@@ -333,16 +391,14 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   const auto first_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kFirstSequence, kSlot, 0xD134ULL);
+      kWidth, kHeight, kFirstSequence, kSlot, 0xD131ULL);
   ASSERT_NE(first_frame.extracted_frame, nullptr);
-  ASSERT_TRUE(first_frame.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(first_frame.virtual_frame.local_light_layouts.size(), 1U);
 
   const auto second_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kSecondSequence, kSlot, 0xD134ULL);
+      kWidth, kHeight, kSecondSequence, kSlot, 0xD131ULL);
   ASSERT_NE(second_frame.extracted_frame, nullptr);
-  ASSERT_EQ(second_frame.virtual_frame.local_light_layouts.size(), 1U);
+  ASSERT_EQ(second_frame.virtual_frame.directional_layouts.size(), 1U);
   ASSERT_FALSE(
     second_frame.extracted_frame->static_primitive_page_feedback.empty());
   ASSERT_FALSE(
@@ -350,17 +406,16 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   EnableShortBoxShadowCaster(scene);
   MoveShortBox(scene, glm::vec3 { 1.20F, 0.0F, -0.10F });
-  const auto local_key
-    = second_frame.virtual_frame.local_light_layouts.front().remap_key;
-  vsm_renderer.GetCacheManager().InvalidateLocalLights({ local_key },
-    VsmCacheInvalidationScope::kDynamicOnly,
+  const auto directional_key
+    = second_frame.virtual_frame.directional_layouts.front().remap_key;
+  vsm_renderer.GetCacheManager().InvalidateDirectionalClipmaps(
+    { directional_key }, VsmCacheInvalidationScope::kDynamicOnly,
     VsmCacheInvalidationReason::kTargetedInvalidate);
 
   const auto result
     = RunTwoBoxStaticDynamicMergeStage(*renderer, scene, vsm_renderer,
-      resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xD135ULL);
+      resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xD132ULL);
 
-  ASSERT_FALSE(result.rasterization.prepared_pages.empty());
   EXPECT_EQ(
     result.page_table_after, result.rasterization.initialization.page_table);
   EXPECT_EQ(
@@ -368,6 +423,7 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   EXPECT_EQ(
     result.physical_metadata_after, result.rasterization.physical_metadata);
   EXPECT_EQ(result.static_after.values, result.static_before.values);
+  ASSERT_FALSE(result.rasterization.prepared_pages.empty());
 
   const auto stats = ExpectDynamicMergeContract(result);
   EXPECT_GT(stats.eligible_page_count, 0U);
@@ -375,18 +431,18 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   EXPECT_GT(stats.static_shadow_sample_count, 0U);
 }
 
-NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
-  StaticInvalidatedSpotLightSceneLeavesDynamicSliceUnchangedAcrossDirtyPages)
+NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
+  StaticInvalidatedDirectionalSceneLeavesDynamicSliceUnchangedAcrossDirtyPages)
 {
-  constexpr auto kWidth = 1024U;
-  constexpr auto kHeight = 1024U;
+  constexpr auto kWidth = 256U;
+  constexpr auto kHeight = 256U;
   constexpr auto kSlot = Slot { 0U };
-  constexpr auto kFirstSequence = SequenceNumber { 424U };
-  constexpr auto kSecondSequence = SequenceNumber { 425U };
-  constexpr auto kThirdSequence = SequenceNumber { 426U };
+  constexpr auto kFirstSequence = SequenceNumber { 341U };
+  constexpr auto kSecondSequence = SequenceNumber { 342U };
+  constexpr auto kThirdSequence = SequenceNumber { 343U };
 
-  const auto camera_eye = glm::vec3 { -2.4F, 2.8F, 4.8F };
-  const auto camera_target = glm::vec3 { 0.1F, 0.9F, 0.1F };
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
   const auto sun_direction
     = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
   const auto resolved_view
@@ -395,13 +451,8 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
   auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
-  DisableDirectionalShadowCasts(scene);
   MarkTallBoxStaticShadowCaster(scene);
   DisableShortBoxShadowCaster(scene);
-  AttachSpotLightToTwoBoxScene(scene, camera_eye,
-    PrimarySpotTargetForTwoBoxScene(scene), 18.0F, glm::radians(30.0F),
-    glm::radians(44.0F));
-
   auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
     oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
     oxygen::observer_ptr { &renderer->GetStagingProvider() },
@@ -410,25 +461,22 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   const auto first_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kFirstSequence, kSlot, 0xD135AULL);
+      kWidth, kHeight, kFirstSequence, kSlot, 0xD136ULL);
   ASSERT_NE(first_frame.extracted_frame, nullptr);
-  ASSERT_TRUE(first_frame.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(first_frame.virtual_frame.local_light_layouts.size(), 1U);
 
   const auto second_frame
     = RunTwoBoxLiveShellFrame(*renderer, scene, vsm_renderer, resolved_view,
-      kWidth, kHeight, kSecondSequence, kSlot, 0xD135AULL);
+      kWidth, kHeight, kSecondSequence, kSlot, 0xD136ULL);
   ASSERT_NE(second_frame.extracted_frame, nullptr);
-  ASSERT_TRUE(second_frame.virtual_frame.directional_layouts.empty());
-  ASSERT_EQ(second_frame.virtual_frame.local_light_layouts.size(), 1U);
+  ASSERT_EQ(second_frame.virtual_frame.directional_layouts.size(), 1U);
   ASSERT_FALSE(
     second_frame.extracted_frame->static_primitive_page_feedback.empty());
   ASSERT_FALSE(
     second_frame.extracted_frame->rendered_primitive_history.empty());
 
   const auto previous_tall_bounds = scene.draw_bounds[1];
-  const auto local_key
-    = second_frame.virtual_frame.local_light_layouts.front().remap_key;
+  const auto directional_key
+    = second_frame.virtual_frame.directional_layouts.front().remap_key;
   const auto previous_tall_history = std::find_if(
     second_frame.extracted_frame->rendered_primitive_history.begin(),
     second_frame.extracted_frame->rendered_primitive_history.end(),
@@ -441,8 +489,8 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   EnableShortBoxShadowCaster(scene);
   MoveShortBox(scene, glm::vec3 { 1.20F, 0.0F, -0.10F });
-  vsm_renderer.GetCacheManager().InvalidateLocalLights({ local_key },
-    VsmCacheInvalidationScope::kDynamicOnly,
+  vsm_renderer.GetCacheManager().InvalidateDirectionalClipmaps(
+    { directional_key }, VsmCacheInvalidationScope::kDynamicOnly,
     VsmCacheInvalidationReason::kTargetedInvalidate);
 
   const auto manual_invalidations = std::array {
@@ -456,7 +504,7 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
 
   const auto result = RunTwoBoxStaticDynamicMergeStage(*renderer, scene,
     vsm_renderer, resolved_view, kWidth, kHeight, kThirdSequence, kSlot,
-    0xD135BULL, manual_invalidations);
+    0xD137ULL, manual_invalidations);
   const auto& committed_frame = result.rasterization.initialization.propagation
                                   .mapping.bridge.committed_frame;
   const auto& primitive_invalidations
@@ -504,9 +552,34 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   EXPECT_FALSE(result.rasterization.static_page_feedback.empty());
 
   const auto stats = ExpectNoStaleStaticMergeContract(result);
-  EXPECT_GT(stats.eligible_page_count, 0U);
-  EXPECT_GT(stats.sampled_texel_count, 0U);
-  EXPECT_GT(stats.static_shadow_sample_count, 0U);
+  const auto allocated_prepared_pages
+    = std::count_if(result.rasterization.prepared_pages.begin(),
+      result.rasterization.prepared_pages.end(), [&](const auto& job) {
+        return job.physical_page.value
+          < result.rasterization.physical_metadata.size()
+          && static_cast<bool>(
+            result.rasterization.physical_metadata[job.physical_page.value]
+              .is_allocated);
+      });
+  const auto dirty_prepared_pages
+    = std::count_if(result.rasterization.prepared_pages.begin(),
+      result.rasterization.prepared_pages.end(), [&](const auto& job) {
+        return job.physical_page.value < result.rasterization.dirty_flags.size()
+          && result.rasterization.dirty_flags[job.physical_page.value] != 0U;
+      });
+  if (stats.eligible_page_count == 0U || stats.sampled_texel_count == 0U
+    || stats.static_shadow_sample_count == 0U) {
+    FAIL() << "prepared_pages=" << result.rasterization.prepared_pages.size()
+           << " allocated_prepared_pages=" << allocated_prepared_pages
+           << " dirty_prepared_pages=" << dirty_prepared_pages
+           << " eligible_pages=" << stats.eligible_page_count
+           << " sampled_texels=" << stats.sampled_texel_count
+           << " static_shadow_samples=" << stats.static_shadow_sample_count
+           << " dynamic_dominates_static="
+           << stats.dynamic_dominates_static_sample_count
+           << " static_dominates_dynamic="
+           << stats.static_dominates_dynamic_sample_count;
+  }
   EXPECT_EQ(stats.static_dominates_dynamic_sample_count, 0U);
 }
 

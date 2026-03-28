@@ -773,6 +773,29 @@ Validation evidence on 2026-03-26:
   - `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe -v 9 --gtest_filter=VsmStaticDynamicMergePassGpuTest.*`
 - ran `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R "Oxygen\\.Renderer\\.Oxygen\\.Renderer\\.VirtualShadows\\.Tests\\.Tests|Oxygen\\.Renderer\\.VirtualShadowGpuLifecycle\\.Tests"` with `100% tests passed, 0 tests failed out of 2`
 
+Stage-suite refactor evidence on 2026-03-28:
+
+- dedicated Stage 13 ownership now lives in `src/Oxygen/Renderer/Test/VirtualShadow/VsmStaticDynamicMergeLiveScene_test.cpp`
+  and `src/Oxygen/Renderer/Test/VirtualShadow/VsmStaticDynamicMergePass_test.cpp` through the
+  `VsmStaticDynamicMerge` executable declared in `src/Oxygen/Renderer/Test/CMakeLists.txt`
+- fixed a real Stage 13 continuity bug in `src/Oxygen/Renderer/VirtualShadowMaps/VsmCacheManager.cpp`:
+  fully reused extracted frames now carry forward `rendered_primitive_history` and
+  `static_primitive_page_feedback` so Stage 13 receives valid continuity inputs
+- fixed a real Stage 13 harness bug in
+  `src/Oxygen/Renderer/Test/VirtualShadow/VirtualShadowLiveSceneHarness.h`: manual primitive
+  invalidation overrides now append to scene-derived invalidations instead of replacing them
+- Stage 13 dedicated real-scene scenarios now cover:
+  - stable directional and local continuity across fully reused frames
+  - dynamic-only invalidation for directional and local lights with dirty-page min-depth merge
+  - static-invalidated directional and local frames where dirty pages must leave the dynamic slice unchanged
+- built `Oxygen.Renderer.VsmStaticDynamicMerge.Tests` in `out/build-ninja` (`Debug`)
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe` with
+  `7 tests from 2 suites` passed
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe --gtest_repeat=3`
+  with `21/21` test executions passed
+- ran `out\\build-ninja\\bin\\Debug\\Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe --gtest_filter=VsmStaticDynamicMergeLocalLiveSceneTest.StaticInvalidatedSpotLightSceneLeavesDynamicSliceUnchangedAcrossDirtyPages --gtest_repeat=5`
+  with `5/5` executions passed
+
 ---
 
 ### Phase H — HZB Updater Pass
