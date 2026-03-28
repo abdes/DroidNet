@@ -14,6 +14,7 @@
 #include <dxgi1_3.h>
 #include <dxgidebug.h>
 #include <fmt/format.h>
+#include <libloaderapi.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -24,6 +25,10 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 
+#if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
+#  include <renderdoc_app.h>
+#endif
+
 using oxygen::graphics::d3d12::DebugLayer;
 using oxygen::windows::ThrowOnFailed;
 
@@ -31,6 +36,7 @@ DebugLayer::DebugLayer(const bool enable_validation) noexcept
 {
   InitializeDebugLayer(enable_validation);
   InitializeDred();
+  InitializeRenderDoc();
 }
 
 DebugLayer::~DebugLayer() noexcept
@@ -92,6 +98,52 @@ void DebugLayer::InitializeDred() noexcept
   } else {
     LOG_F(WARNING, "Failed to enable DRED settings");
   }
+}
+
+void DebugLayer::InitializeRenderDoc() noexcept
+{
+#if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
+  auto* renderdoc_module = ::GetModuleHandleA("renderdoc.dll");
+  if (renderdoc_module == nullptr) {
+    renderdoc_module = ::LoadLibraryA("renderdoc.dll");
+  }
+
+#  if defined(OXYGEN_RENDERDOC_DLL_PATH)
+  if (renderdoc_module == nullptr) {
+    renderdoc_module = ::LoadLibraryA(OXYGEN_RENDERDOC_DLL_PATH);
+  }
+#  endif
+
+  if (renderdoc_module == nullptr) {
+    LOG_F(INFO,
+      "RenderDoc integration enabled at build-time, but renderdoc.dll is "
+      "not available in process path; continuing without RenderDoc API");
+    return;
+  }
+
+  const auto get_api = reinterpret_cast<pRENDERDOC_GetAPI>(
+    ::GetProcAddress(renderdoc_module, "RENDERDOC_GetAPI"));
+  if (get_api == nullptr) {
+    LOG_F(WARNING,
+      "renderdoc.dll loaded, but RENDERDOC_GetAPI symbol was not found");
+    return;
+  }
+
+  RENDERDOC_API_1_6_0* api = nullptr;
+  if (get_api(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1
+    || api == nullptr) {
+    LOG_F(WARNING,
+      "RenderDoc API negotiation failed for version 1.6.0; continuing "
+      "without in-app RenderDoc controls");
+    return;
+  }
+
+  LOG_F(INFO, "RenderDoc API initialized successfully");
+#else
+  LOG_F(1,
+    "RenderDoc integration is not enabled for this build (missing "
+    "USE_RENDERDOC or renderdoc_app.h)");
+#endif
 }
 
 void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept

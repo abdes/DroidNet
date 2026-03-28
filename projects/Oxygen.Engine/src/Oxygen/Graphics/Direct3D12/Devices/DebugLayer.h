@@ -33,6 +33,7 @@ public:
 private:
   auto InitializeDebugLayer(bool enable_validation) noexcept -> void;
   auto InitializeDred() noexcept -> void;
+  auto InitializeRenderDoc() noexcept -> void;
   auto PrintLiveObjectsReport() noexcept -> void;
 
   ID3D12Debug6* d3d12_debug_ {};

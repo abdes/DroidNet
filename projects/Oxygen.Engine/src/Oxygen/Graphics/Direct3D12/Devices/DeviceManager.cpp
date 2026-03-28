@@ -127,8 +127,8 @@ auto AdapterInfo::MemoryAsString() const -> std::string
 void DeviceManager::InitializeFactory()
 {
   if (props_.enable_debug) {
-    const auto hr = CreateDXGIFactory2(
-      DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory_));
+    const auto hr
+      = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory_));
     if (SUCCEEDED(hr)) {
       return;
     }
