@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
@@ -1176,8 +1177,16 @@ auto CommandRecorder::BeginEvent(const std::string_view name) -> void
   std::wstring name_w;
   oxygen::string_utils::Utf8ToWide(name, name_w);
 
+  DebugLayer::PushAftermathMarker(command_list, name);
+
 #if __has_include(<pix3.h>)
-  PIXBeginEvent(command_list, 0, L"%s", name_w.c_str());
+  if (DebugLayer::IsPixEnabled()) {
+    PIXBeginEvent(command_list, 0, L"%s", name_w.c_str());
+  } else {
+    const auto size_bytes
+      = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
+    command_list->BeginEvent(0, name_w.c_str(), size_bytes);
+  }
 #else
   const auto size_bytes
     = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
@@ -1192,8 +1201,14 @@ auto CommandRecorder::EndEvent() -> void
     return;
   }
 
+  DebugLayer::PopAftermathMarker(command_list);
+
 #if __has_include(<pix3.h>)
-  PIXEndEvent(command_list);
+  if (DebugLayer::IsPixEnabled()) {
+    PIXEndEvent(command_list);
+  } else {
+    command_list->EndEvent();
+  }
 #else
   command_list->EndEvent();
 #endif
@@ -1209,8 +1224,16 @@ auto CommandRecorder::SetMarker(const std::string_view name) -> void
   std::wstring name_w;
   oxygen::string_utils::Utf8ToWide(name, name_w);
 
+  DebugLayer::SetAftermathMarker(command_list, name);
+
 #if __has_include(<pix3.h>)
-  PIXSetMarker(command_list, 0, L"%s", name_w.c_str());
+  if (DebugLayer::IsPixEnabled()) {
+    PIXSetMarker(command_list, 0, L"%s", name_w.c_str());
+  } else {
+    const auto size_bytes
+      = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
+    command_list->SetMarker(0, name_w.c_str(), size_bytes);
+  }
 #else
   const auto size_bytes
     = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));

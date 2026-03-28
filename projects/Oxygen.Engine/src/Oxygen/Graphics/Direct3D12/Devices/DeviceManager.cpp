@@ -263,6 +263,8 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     if (props_.enable_debug) {
       DebugLayer::ConfigureDeviceInfoQueue(context.device.Get());
     }
+    DebugLayer::ConfigureAftermathForDevice(
+      context.device.Get(), context.info.VendorId());
 
     // Initialize the allocator
     LOG_F(INFO, "Memory Allocator");
@@ -339,6 +341,7 @@ auto DeviceManager::CheckForDeviceLoss(const Context& context) -> bool
   } catch (const oxygen::windows::ComError& ex) {
     LOG_F(ERROR, "Device removed: {}", ex.what());
     if (debug_layer_) {
+      DebugLayer::NotifyDeviceRemoved();
       DebugLayer::PrintDredReport(context.device.Get());
     }
     return true;
@@ -362,11 +365,21 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
 {
   LOG_SCOPE_F(INFO, "DeviceManager init");
 
+  DebugLayer::ConfigureTooling(
+    props_.enable_aftermath, props_.enable_renderdoc, props_.enable_pix);
+
+  // RenderDoc must be bootstrapped before any DXGI factory creation or
+  // D3D12 debug/device entry-point usage so its hooks can wrap the objects
+  // later passed into CreateSwapChainForHwnd. Moving this later can surface
+  // E_NOINTERFACE during swap-chain creation under RenderDoc.
+  DebugLayer::BootstrapRenderDoc();
   InitializeFactory();
 
-  if (props_.enable_debug) {
-    // Initialize the Debug Layer and GPU-based validation
-    debug_layer_ = std::make_unique<DebugLayer>(props_.enable_validation);
+  if (props_.enable_debug || props_.enable_aftermath || props_.enable_renderdoc
+    || props_.enable_pix) {
+    // The DebugLayer object also owns runtime debug-tool integration state.
+    debug_layer_ = std::make_unique<DebugLayer>(
+      props_.enable_debug, props_.enable_validation);
   }
 
   DiscoverAdapters();

@@ -137,6 +137,12 @@ auto SerializeConfigToJson(
     + std::string(config.enable_debug ? "true" : "false") + ",\n";
   json += "  \"enable_validation\": "
     + std::string(config.enable_validation ? "true" : "false") + ",\n";
+  json += "  \"enable_aftermath\": "
+    + std::string(config.enable_aftermath ? "true" : "false") + ",\n";
+  json += "  \"enable_renderdoc\": "
+    + std::string(config.enable_renderdoc ? "true" : "false") + ",\n";
+  json += "  \"enable_pix\": "
+    + std::string(config.enable_pix ? "true" : "false") + ",\n";
   json += "  \"headless\": " + std::string(config.headless ? "true" : "false")
     + ",\n";
   json += "  \"enable_imgui\": "

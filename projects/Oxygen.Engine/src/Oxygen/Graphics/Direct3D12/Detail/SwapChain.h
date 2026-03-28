@@ -9,7 +9,7 @@
 #include <cstdint>
 
 #include <d3d12.h>
-#include <dxgi1_5.h>
+#include <dxgi1_2.h>
 #include <dxgiformat.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -59,7 +59,7 @@ namespace detail {
     auto GetCurrentBackBufferIndex() const -> uint32_t
     {
       DCHECK_NOTNULL_F(swap_chain_);
-      return swap_chain_->GetCurrentBackBufferIndex();
+      return current_back_buffer_index_;
     }
 
     auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture>;
@@ -88,7 +88,11 @@ namespace detail {
     DXGI_FORMAT format_ { kDefaultBackBufferFormat };
     dx::ICommandQueue* command_queue_;
 
-    IDXGISwapChain4* swap_chain_ { nullptr };
+    dx::ISwapChain* swap_chain_ { nullptr };
+
+    UINT swap_chain_flags_ { 0 };
+
+    mutable uint32_t current_back_buffer_index_ { 0 };
 
     StaticVector<std::shared_ptr<Texture>, frame::kFramesInFlight.get()>
       render_targets_ {};

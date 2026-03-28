@@ -31,7 +31,9 @@ CompositionSwapChain::CompositionSwapChain(dx::ICommandQueue* command_queue,
   , graphics_(graphics)
 {
   CreateSwapChain();
-  CreateRenderTargets();
+  if (swap_chain_ != nullptr) {
+    CreateRenderTargets();
+  }
 }
 
 CompositionSwapChain::~CompositionSwapChain() noexcept { ReleaseSwapChain(); }
@@ -42,7 +44,8 @@ auto CompositionSwapChain::Present() const -> void
     DLOG_F(3, "CompositionSwapChain::Present swap_chain={} current_index={}",
       fmt::ptr(swap_chain_), current_back_buffer_index_);
     ThrowOnFailed(swap_chain_->Present(1, 0));
-    current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+    current_back_buffer_index_
+      = (current_back_buffer_index_ + 1U) % frame::kFramesInFlight.get();
   }
 }
 
@@ -66,14 +69,15 @@ auto CompositionSwapChain::CreateSwapChain() -> void
   swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
   swap_chain_desc.Flags = 0;
 
-  IDXGISwapChain1* swap_chain = nullptr;
+  dx::ISwapChain* swap_chain = nullptr;
   ThrowOnFailed(graphics_->GetFactory()->CreateSwapChainForComposition(
     command_queue_, &swap_chain_desc, nullptr, &swap_chain));
 
-  ThrowOnFailed(swap_chain->QueryInterface(IID_PPV_ARGS(&swap_chain_)));
+  swap_chain_ = swap_chain;
+  swap_chain = nullptr;
   ObjectRelease(swap_chain);
 
-  current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+  current_back_buffer_index_ = 0U;
 }
 
 auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
@@ -101,13 +105,14 @@ auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
     // DXGI resets the current back buffer to zero after ResizeBuffers. Keep the
     // cached index in sync so we target the correct render target on the next
     // frame and avoid executing command lists against stale buffers.
-    current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+    current_back_buffer_index_ = 0U;
     DLOG_F(2,
       "CompositionSwapChain::Resize completed new backbuffer_index={} for "
       "swap_chain={}",
       current_back_buffer_index_, fmt::ptr(swap_chain_));
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
+    return;
   }
 
   CreateRenderTargets();
@@ -211,7 +216,7 @@ auto CompositionSwapChain::ReleaseSwapChain() -> void
     return;
   }
 
-  // Defer releasing the IDXGISwapChain object via the DeferredReclaimer when
+  // Defer releasing the swap-chain COM object via the DeferredReclaimer when
   // possible so the final COM Release() happens only after the frame/timeline
   // indicates it is safe.
   if (graphics_ != nullptr) {

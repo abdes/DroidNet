@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include <d3d12.h>
 #include <dxgidebug.h>
 
@@ -21,22 +23,42 @@ class DebugLayer final : public Component {
   OXYGEN_COMPONENT(DebugLayer)
 
 public:
-  explicit DebugLayer(bool enable_validation) noexcept;
+  DebugLayer(bool enable_debug, bool enable_validation) noexcept;
   ~DebugLayer() noexcept override;
 
   OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
   OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
+  static auto ConfigureTooling(bool enable_aftermath, bool enable_renderdoc,
+    bool enable_pix) noexcept -> void;
+  static auto BootstrapRenderDoc() noexcept -> void;
+  [[nodiscard]] static auto IsPixEnabled() noexcept -> bool;
   static auto ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept -> void;
+  static auto ConfigureAftermathForDevice(
+    dx::IDevice* device, uint32_t vendor_id) noexcept -> void;
+  static auto NotifyDeviceRemoved() noexcept -> void;
+  static auto RegisterAftermathResource(ID3D12Resource* resource) noexcept
+    -> void;
+  static auto UnregisterAftermathResource(ID3D12Resource* resource) noexcept
+    -> void;
+  static auto SetAftermathMarker(ID3D12GraphicsCommandList* command_list,
+    std::string_view marker) noexcept -> void;
+  static auto PushAftermathMarker(ID3D12GraphicsCommandList* command_list,
+    std::string_view marker) noexcept -> void;
+  static auto PopAftermathMarker(
+    ID3D12GraphicsCommandList* command_list) noexcept -> void;
+  static auto SetAftermathDeviceRemovalContext(
+    std::string_view context_info) noexcept -> void;
   static auto PrintDredReport(dx::IDevice* device) noexcept -> void;
 
 private:
-  auto InitializeDebugLayer(bool enable_validation) noexcept -> void;
+  auto InitializeDebugLayer(bool enable_debug, bool enable_validation) noexcept
+    -> void;
   auto InitializeDred() noexcept -> void;
-  auto InitializeRenderDoc() noexcept -> void;
+  auto InitializeAftermath() noexcept -> void;
   auto PrintLiveObjectsReport() noexcept -> void;
 
-  ID3D12Debug6* d3d12_debug_ {};
+  dx::IDebug* d3d12_debug_ {};
   IDXGIDebug1* dxgi_debug_ {};
   IDXGIInfoQueue* dxgi_info_queue_ {};
   ID3D12DeviceRemovedExtendedDataSettings* dred_settings_ {};

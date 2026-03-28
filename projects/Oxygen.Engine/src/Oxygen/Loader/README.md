@@ -100,6 +100,9 @@ Below is an example of how the config data is setup on the application side:
 oxygen::GraphicsConfig config{};
 config.enable_debug = true;
 config.enable_validation = true;
+config.enable_aftermath = true;      // Default: prefer Aftermath when available
+config.enable_renderdoc = false;     // Opt-in RenderDoc integration
+config.enable_pix = false;           // Opt-in PIX marker emission
 config.enable_imgui = true;           // Example additional flag
 config.enable_vsync = true;           // VSync preference
 config.preferred_card_name = "NVIDIA";
@@ -127,6 +130,9 @@ producing an equivalent string as following:
   "backend_type": "Direct3D12",
   "enable_debug": true,
   "enable_validation": true,
+  "enable_aftermath": true,
+  "enable_renderdoc": false,
+  "enable_pix": false,
   "headless": false,
   "enable_imgui": true,
   "enable_vsync": true,

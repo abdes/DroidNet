@@ -28,6 +28,11 @@ using DeviceId = int64_t;
 struct GraphicsConfig {
   bool enable_debug { false }; //!< Enable the backend debug layer.
   bool enable_validation { false }; //!< Enable GPU validation.
+  bool enable_aftermath { true }; //!< Enable Nsight Aftermath when available.
+  bool enable_renderdoc {
+    false
+  }; //!< Enable RenderDoc integration when available.
+  bool enable_pix { false }; //!< Enable PIX markers when available.
 
   //! Device selection guidance.
   /*!
