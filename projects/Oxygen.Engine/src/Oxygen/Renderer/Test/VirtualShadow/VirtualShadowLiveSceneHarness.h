@@ -46,6 +46,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/Vsm/VsmHzbUpdaterPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h>
@@ -209,6 +210,35 @@ struct TwoBoxStaticDynamicMergeResult {
   std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags_after {};
   std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta>
     physical_metadata_after {};
+};
+
+struct HarnessSingleChannelTextureSnapshot {
+  std::uint32_t width { 0U };
+  std::uint32_t height { 0U };
+  std::vector<float> values {};
+
+  [[nodiscard]] auto At(const std::uint32_t x, const std::uint32_t y) const
+    -> float
+  {
+    return values.at(static_cast<std::size_t>(y) * width + x);
+  }
+};
+
+struct TwoBoxShadowHzbResult {
+  TwoBoxStaticDynamicMergeResult merge {};
+  oxygen::renderer::vsm::VsmHzbPoolSnapshot hzb_pool {};
+  bool can_preserve_existing_hzb_contents { false };
+  std::vector<std::uint32_t> dirty_flags_before {};
+  std::vector<std::uint32_t> dirty_flags_after {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta>
+    physical_metadata_before {};
+  std::vector<oxygen::renderer::vsm::VsmPhysicalPageMeta>
+    physical_metadata_after {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageTableEntry>
+    page_table_after {};
+  std::vector<oxygen::renderer::vsm::VsmShaderPageFlags> page_flags_after {};
+  std::vector<HarnessSingleChannelTextureSnapshot> hzb_before_mips {};
+  std::vector<HarnessSingleChannelTextureSnapshot> hzb_after_mips {};
 };
 
 class VsmLiveSceneHarness : public VsmStageGpuHarness {
@@ -2127,6 +2157,105 @@ protected:
     };
   }
 
+  auto ReadSingleChannelTextureMipSnapshot(
+    const std::shared_ptr<const oxygen::graphics::Texture>& texture,
+    const std::uint32_t mip_level, std::string_view debug_name,
+    const std::uint32_t array_slice = 0U) -> HarnessSingleChannelTextureSnapshot
+  {
+    CHECK_NOTNULL_F(
+      texture.get(), "Cannot read from a null single-channel texture");
+
+    const auto& texture_desc = texture->GetDescriptor();
+    const auto mip_width = std::max(1U, texture_desc.width >> mip_level);
+    const auto mip_height = std::max(1U, texture_desc.height >> mip_level);
+    auto float_texture = CreateSingleChannelTexture2D(mip_width, mip_height,
+      oxygen::Format::kR32Float, std::string(debug_name) + ".mip-copy");
+    CHECK_NOTNULL_F(float_texture.get(),
+      "Failed to create float mip copy for `{}`", debug_name);
+
+    {
+      auto recorder = AcquireRecorder(std::string(debug_name) + ".copy");
+      CHECK_NOTNULL_F(recorder.get(),
+        "Failed to acquire mip copy recorder for `{}`", debug_name);
+      EnsureTracked(*recorder,
+        std::const_pointer_cast<oxygen::graphics::Texture>(texture),
+        oxygen::graphics::ResourceStates::kCommon);
+      EnsureTracked(
+        *recorder, float_texture, oxygen::graphics::ResourceStates::kCommon);
+      recorder->RequireResourceState(
+        *texture, oxygen::graphics::ResourceStates::kCopySource);
+      recorder->RequireResourceState(
+        *float_texture, oxygen::graphics::ResourceStates::kCopyDest);
+      recorder->FlushBarriers();
+      recorder->CopyTexture(*texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = mip_width,
+          .height = mip_height,
+          .depth = 1U,
+          .mip_level = mip_level,
+          .array_slice = array_slice,
+        },
+        oxygen::graphics::TextureSubResourceSet {
+          .base_mip_level = mip_level,
+          .num_mip_levels = 1U,
+          .base_array_slice = array_slice,
+          .num_array_slices = 1U,
+        },
+        *float_texture,
+        oxygen::graphics::TextureSlice {
+          .x = 0U,
+          .y = 0U,
+          .z = 0U,
+          .width = mip_width,
+          .height = mip_height,
+          .depth = 1U,
+          .mip_level = 0U,
+          .array_slice = 0U,
+        },
+        oxygen::graphics::TextureSubResourceSet {
+          .base_mip_level = 0U,
+          .num_mip_levels = 1U,
+          .base_array_slice = 0U,
+          .num_array_slices = 1U,
+        });
+      recorder->RequireResourceStateFinal(
+        *float_texture, oxygen::graphics::ResourceStates::kCommon);
+    }
+    WaitForQueueIdle();
+
+    const auto readback = GetReadbackManager()->ReadTextureNow(*float_texture,
+      oxygen::graphics::TextureReadbackRequest {
+        .src_slice = {},
+        .aspects = oxygen::graphics::ClearFlags::kColor,
+      },
+      true);
+    CHECK_F(readback.has_value(),
+      "Failed to read back single-channel mip copy for `{}`", debug_name);
+
+    const auto& data = *readback;
+    auto values = std::vector<float>(
+      static_cast<std::size_t>(mip_width) * mip_height, 1.0F);
+    for (std::uint32_t y = 0U; y < mip_height; ++y) {
+      const auto* row = data.bytes.data()
+        + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
+      for (std::uint32_t x = 0U; x < mip_width; ++x) {
+        auto value = 1.0F;
+        std::memcpy(&value, row + static_cast<std::size_t>(x) * sizeof(float),
+          sizeof(value));
+        values[static_cast<std::size_t>(y) * mip_width + x] = value;
+      }
+    }
+
+    return HarnessSingleChannelTextureSnapshot {
+      .width = mip_width,
+      .height = mip_height,
+      .values = std::move(values),
+    };
+  }
+
   auto RunTwoBoxStaticDynamicMergeStage(oxygen::engine::Renderer& renderer,
     TwoBoxShadowSceneData& scene_data,
     oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
@@ -2217,6 +2346,121 @@ protected:
       .page_table_after = std::move(page_table),
       .page_flags_after = std::move(page_flags),
       .physical_metadata_after = std::move(physical_metadata),
+    };
+  }
+
+  auto RunTwoBoxShadowHzbStage(oxygen::engine::Renderer& renderer,
+    TwoBoxShadowSceneData& scene_data,
+    oxygen::renderer::vsm::VsmShadowRenderer& vsm_renderer,
+    const oxygen::ResolvedView& resolved_view, const std::uint32_t width,
+    const std::uint32_t height, const oxygen::frame::SequenceNumber sequence,
+    const oxygen::frame::Slot slot,
+    const std::uint64_t shadow_caster_content_hash,
+    const std::span<const oxygen::renderer::vsm::VsmPrimitiveInvalidationRecord>
+      primitive_invalidations_override
+    = {},
+    const bool require_virtual_shadow_work = true) -> TwoBoxShadowHzbResult
+  {
+    auto merge = RunTwoBoxStaticDynamicMergeStage(renderer, scene_data,
+      vsm_renderer, resolved_view, width, height, sequence, slot,
+      shadow_caster_content_hash, primitive_invalidations_override,
+      require_virtual_shadow_work);
+
+    const auto hzb_pool
+      = vsm_renderer.GetPhysicalPagePoolManager().GetHzbPoolSnapshot();
+    CHECK_F(hzb_pool.is_available,
+      "Stage 14 HZB pool must be available before update");
+    CHECK_NOTNULL_F(
+      hzb_pool.texture.get(), "Stage 14 requires a valid HZB texture");
+
+    const auto& frame = merge.rasterization.initialization.propagation.mapping
+                          .bridge.committed_frame;
+    const auto dirty_flags_before = ReadBufferAs<std::uint32_t>(
+      frame.dirty_flags_buffer, frame.snapshot.physical_pages.size(),
+      "stage-fourteen-two-box.dirty-before");
+    const auto physical_metadata_before
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        frame.physical_page_meta_buffer, frame.snapshot.physical_pages.size(),
+        "stage-fourteen-two-box.physical-meta-before");
+
+    auto hzb_before_mips = std::vector<HarnessSingleChannelTextureSnapshot> {};
+    hzb_before_mips.reserve(hzb_pool.mip_count);
+    for (std::uint32_t mip_level = 0U; mip_level < hzb_pool.mip_count;
+      ++mip_level) {
+      hzb_before_mips.push_back(
+        ReadSingleChannelTextureMipSnapshot(hzb_pool.texture, mip_level,
+          std::string("stage-fourteen-two-box.hzb-before.mip")
+            + std::to_string(mip_level)));
+    }
+
+    auto prepared_frame = oxygen::engine::PreparedSceneFrame {};
+    auto offscreen = renderer.BeginOffscreenFrame(
+      { .frame_slot = ResolveHarnessFrameSlot(sequence, slot),
+        .frame_sequence = sequence,
+        .scene = oxygen::observer_ptr<oxygen::scene::Scene> {
+          scene_data.scene.get(),
+        } });
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
+    auto& render_context = offscreen.GetRenderContext();
+
+    const auto can_preserve_existing_hzb_contents
+      = vsm_renderer.GetCacheManager().IsHzbDataAvailable();
+    const auto hzb_pass = vsm_renderer.GetHzbUpdaterPass();
+    CHECK_NOTNULL_F(hzb_pass.get(), "VSM HZB updater pass is unavailable");
+    hzb_pass->SetInput(oxygen::engine::VsmHzbUpdaterPassInput {
+      .frame = frame,
+      .physical_pool = merge.rasterization.initialization.physical_pool,
+      .hzb_pool = hzb_pool,
+      .can_preserve_existing_hzb_contents = can_preserve_existing_hzb_contents,
+      .force_rebuild_all_allocated_pages = false,
+    });
+
+    {
+      auto recorder = AcquireRecorder("stage-fourteen-two-box.hzb");
+      CHECK_NOTNULL_F(
+        recorder.get(), "Failed to acquire stage-fourteen HZB recorder");
+      RunPass(*hzb_pass, render_context, *recorder);
+    }
+    WaitForQueueIdle();
+
+    const auto dirty_flags_after = ReadBufferAs<std::uint32_t>(
+      frame.dirty_flags_buffer, frame.snapshot.physical_pages.size(),
+      "stage-fourteen-two-box.dirty-after");
+    const auto physical_metadata_after
+      = ReadBufferAs<oxygen::renderer::vsm::VsmPhysicalPageMeta>(
+        frame.physical_page_meta_buffer, frame.snapshot.physical_pages.size(),
+        "stage-fourteen-two-box.physical-meta-after");
+    const auto page_table_after
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageTableEntry>(
+        frame.page_table_buffer, frame.snapshot.page_table.size(),
+        "stage-fourteen-two-box.page-table-after");
+    const auto page_flags_after
+      = ReadBufferAs<oxygen::renderer::vsm::VsmShaderPageFlags>(
+        frame.page_flags_buffer, frame.snapshot.page_table.size(),
+        "stage-fourteen-two-box.page-flags-after");
+
+    auto hzb_after_mips = std::vector<HarnessSingleChannelTextureSnapshot> {};
+    hzb_after_mips.reserve(hzb_pool.mip_count);
+    for (std::uint32_t mip_level = 0U; mip_level < hzb_pool.mip_count;
+      ++mip_level) {
+      hzb_after_mips.push_back(
+        ReadSingleChannelTextureMipSnapshot(hzb_pool.texture, mip_level,
+          std::string("stage-fourteen-two-box.hzb-after.mip")
+            + std::to_string(mip_level)));
+    }
+
+    return TwoBoxShadowHzbResult {
+      .merge = std::move(merge),
+      .hzb_pool = hzb_pool,
+      .can_preserve_existing_hzb_contents = can_preserve_existing_hzb_contents,
+      .dirty_flags_before = std::move(dirty_flags_before),
+      .dirty_flags_after = std::move(dirty_flags_after),
+      .physical_metadata_before = std::move(physical_metadata_before),
+      .physical_metadata_after = std::move(physical_metadata_after),
+      .page_table_after = std::move(page_table_after),
+      .page_flags_after = std::move(page_flags_after),
+      .hzb_before_mips = std::move(hzb_before_mips),
+      .hzb_after_mips = std::move(hzb_after_mips),
     };
   }
 };

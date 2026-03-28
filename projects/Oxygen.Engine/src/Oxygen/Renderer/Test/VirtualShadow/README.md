@@ -58,8 +58,10 @@ Architecture reference: [`design/VirtualShadowMapArchitecture.md`](../../../../.
 | `VsmMappedMips` | `Oxygen.Renderer.VsmMappedMips.Tests` / `bin/<Config>/Oxygen.Renderer.VsmMappedMips.Tests.exe` | Stage 10 only: real-scene mapped-descendant propagation validated against a CPU model built from actual Stage 8 page tables and flags for directional clipmaps, mixed directional-plus-local layouts, mixed local layouts, reuse-only continuity, and invalidated refresh cases |
 | `VsmPageInitialization` | `Oxygen.Renderer.VsmPageInitialization.Tests` / `bin/<Config>/Oxygen.Renderer.VsmPageInitialization.Tests.exe` | Stage 11 only: real-scene selective page initialization validation for stable cached frames, clipmap-pan fresh-page clears, and static-slice copy into invalidated dynamic pages |
 | `VsmShadowRasterization` | `Oxygen.Renderer.VsmShadowRasterization.Tests` / `bin/<Config>/Oxygen.Renderer.VsmShadowRasterization.Tests.exe` | Stage 12 only: real-scene shadow-raster page-job and raster-output validation at the Stage 12 boundary, plus focused pass-level coverage for point-light routing, HZB culling, reveal forcing, and static-only slice routing |
+| `VsmStaticDynamicMerge` | `Oxygen.Renderer.VsmStaticDynamicMerge.Tests` / `bin/<Config>/Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe` | Stage 13 only: real-scene static-into-dynamic merge validation for directional and local lights, including dynamic-only invalidation and static-invalidated continuity contracts |
+| `VsmShadowHzb` | `Oxygen.Renderer.VsmShadowHzb.Tests` / `bin/<Config>/Oxygen.Renderer.VsmShadowHzb.Tests.exe` | Stage 14 only: real-scene shadow-space HZB validation from real Stage 13 inputs for directional and local scenes, including exact HZB mip-chain reconstruction, dirty-state folding, and preserved-HZB continuity across reused frames |
 | `VirtualShadows` | `Oxygen.Renderer.VirtualShadows.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadows.Tests.exe` | CPU-only stage and cross-cutting logic beyond the dedicated early-stage executables: planner, extraction, cache validity, invalidation, orchestration, helper contracts |
-| `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed integration and supporting pass coverage beyond the dedicated stage executables: physical-pool lifecycle, cache-resource publication, propagation smoke, rasterizer, merge, HZB, projection, bridge, invalidation |
+| `VirtualShadowGpuLifecycle` | `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe` | GPU-backed integration and supporting pass coverage beyond the dedicated stage executables: physical-pool lifecycle, cache-resource publication, propagation smoke, projection, bridge, and invalidation |
 | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` | `Oxygen.Renderer.VirtualShadowSceneObserver.Tests` / `bin/<Config>/Oxygen.Renderer.VirtualShadowSceneObserver.Tests.exe` | Scene observer → cache manager invalidation integration |
 
 **All manual testing uses the `build-ninja` tree only.** Visual Studio build trees are not used for running tests by hand.
@@ -372,11 +374,13 @@ dedicated `VsmStaticDynamicMerge` executable and covers:
 
 ### Stage 14 — HZB Update
 
-Per-page shadow-space HZB mip chain is rebuilt for dirty and newly allocated pages.
+Per-page shadow-space HZB mip chain is rebuilt from real Stage 13 shadow depth for selected
+dynamic pages. Stage 14 clears the remaining rebuild-selection state (`dirty` and `view_uncached`)
+after selection; invalidation flags are already consumed earlier when raster results are published.
 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
-| `VsmHzbUpdaterPassGpuTest` | `VsmHzbUpdaterPass_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmShadowHzbLiveSceneTest` | `VsmShadowHzb_test.cpp` | `VsmShadowHzb` |
 
 ### Stage 15 — Projection and Composite
 
