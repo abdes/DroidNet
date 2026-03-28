@@ -94,6 +94,46 @@ void DebugLayer::InitializeDred() noexcept
   }
 }
 
+void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
+{
+  if (device == nullptr) {
+    return;
+  }
+
+#if !defined(NDEBUG)
+  if (::IsDebuggerPresent() == 0) {
+    return;
+  }
+
+  Microsoft::WRL::ComPtr<ID3D12InfoQueue> info_queue;
+  if (!SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&info_queue)))) {
+    LOG_F(WARNING, "Failed to query ID3D12InfoQueue from device");
+    return;
+  }
+
+  if (FAILED(info_queue->SetBreakOnSeverity(
+        D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE))) {
+    LOG_F(WARNING, "Failed to set D3D12 break-on-corruption severity");
+  }
+  if (FAILED(
+        info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE))) {
+    LOG_F(WARNING, "Failed to set D3D12 break-on-error severity");
+  }
+
+  D3D12_MESSAGE_SEVERITY deny_severity[] = {
+    D3D12_MESSAGE_SEVERITY_INFO,
+  };
+  D3D12_INFO_QUEUE_FILTER filter = {};
+  filter.DenyList.NumSeverities = std::size(deny_severity);
+  filter.DenyList.pSeverityList = deny_severity;
+  if (FAILED(info_queue->PushStorageFilter(&filter))) {
+    LOG_F(WARNING, "Failed to apply D3D12 info queue storage filter");
+  }
+#else
+  (void)device;
+#endif
+}
+
 void DebugLayer::PrintLiveObjectsReport() noexcept
 {
   if (dxgi_debug_ == nullptr) {
