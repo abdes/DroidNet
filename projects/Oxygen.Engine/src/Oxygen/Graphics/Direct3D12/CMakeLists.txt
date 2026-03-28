@@ -175,35 +175,15 @@ if(MSVC)
 endif()
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
-target_compile_definitions(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
-    $<$<PLATFORM_ID:Windows>:NOMINMAX>
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
-    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${USE_PIX}>>:USE_PIX>
-)
 
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PUBLIC
-    oxygen::base
-    oxygen::platform
-    oxygen::core
-    oxygen::graphics-common
-    oxygen::imgui
-    glm::glm
-    nlohmann_json::nlohmann_json
-    d3dcompiler
-    d3d12
-    dxgi
-    dxguid
-)
+set(OXYGEN_D3D12_PIX_ENABLED OFF)
 
-if(WIN32 AND USE_PIX)
+if(WIN32)
   # WinPixEventRuntime discovery is intentionally restricted to project-local
-  # packages (downloaded by GetWinPixEvent.ps1), optionally overridden by an
-  # explicit path.
+  # packages. Preferred install path is via either:
+  #  - GetWinPixEvent.bat
+  #  - GetWinPixEvent.ps1
+  # Both scripts install to packages/WinPixEventRuntime by default.
   set(_oxygen_winpixeventruntime_hint_paths)
 
   if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
@@ -213,7 +193,7 @@ if(WIN32 AND USE_PIX)
     )
   endif()
 
-  # Repo-local package layout (downloaded by GetWinPixEvent.ps1).
+  # Repo-local package layout (downloaded by GetWinPixEvent.bat/.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
       APPEND _oxygen_winpixeventruntime_hint_paths
@@ -269,6 +249,39 @@ if(WIN32 AND USE_PIX)
     AND
       OXYGEN_WINPIXEVENTRUNTIME_DLL
   )
+    set(OXYGEN_D3D12_PIX_ENABLED ON)
+  endif()
+endif()
+
+target_compile_definitions(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_ENABLED}>>:USE_PIX>
+)
+
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PUBLIC
+    oxygen::base
+    oxygen::platform
+    oxygen::core
+    oxygen::graphics-common
+    oxygen::imgui
+    glm::glm
+    nlohmann_json::nlohmann_json
+    d3dcompiler
+    d3d12
+    dxgi
+    dxguid
+)
+
+if(WIN32)
+  if(
+    OXYGEN_D3D12_PIX_ENABLED
+  )
     target_include_directories(
       ${META_MODULE_TARGET}
       PRIVATE
@@ -306,11 +319,11 @@ if(WIN32 AND USE_PIX)
       "WinPixEventRuntime enabled for ${META_MODULE_NAME}: "
       "${OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR}"
     )
-  else()
+  elseif(DEFINED USE_PIX AND USE_PIX)
     message(
       WARNING
       "USE_PIX is ON but WinPixEventRuntime was not found. "
-      "\n  - Recommended: run GetWinPixEvent.bat from the repo root "
+      "\n  - Recommended: run GetWinPixEvent.bat or GetWinPixEvent.ps1 from the repo root "
       "(it installs to packages/WinPixEventRuntime by default)."
       "\n  - Alternative: set OXYGEN_WINPIXEVENTRUNTIME_DIR to a folder "
       "containing Include/pix3.h, Lib/x64/WinPixEventRuntime.lib, and "
