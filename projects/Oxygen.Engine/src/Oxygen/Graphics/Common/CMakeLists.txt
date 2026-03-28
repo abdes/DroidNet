@@ -68,6 +68,7 @@ set(
   "Detail/ResourceStateTracker.h"
   "ImGui/ImGuiGraphicsBackend.h"
   "Errors.h"
+  "FrameCaptureController.h"
   "Forward.h"
   "FrameCaptureController.h"
   "Framebuffer.h"

@@ -12,160 +12,29 @@ The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 `RenderScene` can configure backend frame capture at startup through the
 graphics backend load config.
 
-Default help keeps the capture surface short and user-facing:
+Supported flags:
 
-- `--capture-provider off|renderdoc|pix`
-
-Advanced and development-only flags are hidden from the default help. To show
-them, run:
-
-- `render-scene help-advanced`
-
-Advanced capture flags:
-
-- `--capture-load attached|search|path`
-- `--capture-library <path-to-renderdoc.dll-or-WinPixGpuCapturer.dll>`
-- `--capture-output <capture-file-template>`
-- `--capture-from-frame <frame-number>`
-- `--capture-frame-count <number-of-frames>`
-
-`--capture-from-frame` is zero-based. Frame `0` is the first rendered frame,
-so requesting frames `5` and `6` means `--capture-from-frame 5 --capture-frame-count 2`.
+- `--frame-capture-provider off|renderdoc`
+- `--frame-capture-init disabled|attached|search|path`
+- `--frame-capture-module <path-to-renderdoc.dll>`
+- `--frame-capture-file <capture-file-template>`
+- `--frame-capture-trigger none|next`
 
 Examples:
 
-- attach to an already running RenderDoc session and capture 3 frames starting at frame 120:
-  `render-scene --capture-provider renderdoc --capture-load attached --capture-from-frame 120 --capture-frame-count 3`
+- attach to an already running RenderDoc session and capture the next frame:
+  `render-scene --frame-capture-provider renderdoc --frame-capture-init attached --frame-capture-trigger next`
 - load `renderdoc.dll` from an explicit path:
-  `render-scene --capture-provider renderdoc --capture-load path --capture-library C:/Tools/RenderDoc/renderdoc.dll`
-- request a PIX startup capture using the installed PIX search path:
-  `render-scene --capture-provider pix --capture-load search --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene`
-- load `WinPixGpuCapturer.dll` from an explicit PIX install path:
-  `render-scene --capture-provider pix --capture-load path --capture-library "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll" --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene`
-- use PIX attached-only mode when the process was launched or attached through PIX already:
-  `render-scene --capture-provider pix --capture-load attached`
+  `render-scene --frame-capture-provider renderdoc --frame-capture-init path --frame-capture-module C:/Tools/RenderDoc/renderdoc.dll`
 
-For PIX, `--capture-output` is treated as a template prefix. The engine
-generates a `.wpix` filename such as `render_scene_frame_0001.wpix`.
-PIX startup frame-range capture also requires `--capture-from-frame > 0`.
-
-The runtime also exposes dev-console commands when a frame-capture provider is
-configured:
+The runtime also exposes dev-console commands:
 
 - `gfx.capture.status`
 - `gfx.capture.frame`
 - `gfx.capture.begin`
 - `gfx.capture.end`
-
-Provider-specific notes:
-
-- `gfx.capture.status` prints both a human-readable summary and the raw provider
-  state blob
-- `gfx.capture.discard` and `gfx.capture.open_ui` are currently RenderDoc-only
-- when PIX is active, unsupported commands return an explicit provider-specific
-  error instead of a generic failure
-
-## Using Python with RenderDoc
-
-RenderDoc exposes two Python surfaces:
-
-- `renderdoc`: the low-level replay API for opening captures, creating a `ReplayController`, and querying analysis data.
-- `qrenderdoc`: the UI API used by the RenderDoc application itself.
-
-For day-to-day capture analysis, the easiest path is to script the RenderDoc UI.
-In distributed RenderDoc builds, this is also the most practical path because the
-standalone `renderdoc` Python module is not normally shipped as a general-purpose
-system Python package.
-
-### Recommended workflow: script the RenderDoc UI
-
-1. Generate a capture from `RenderScene`.
-2. Write a small Python script.
-3. Launch `qrenderdoc.exe` with the script and the `.rdc` file.
-
-Example command on Windows:
-
-```powershell
-"C:/Program Files/RenderDoc/qrenderdoc.exe" --script .\analyze_capture.py .\capture_frame50.rdc
-```
-
-Inside a UI script, `renderdoc` and `qrenderdoc` are already available, and
-`pyrenderdoc` is a global `CaptureContext` object.
-
-Minimal example:
-
-```python
-filename = r"H:/captures/render_scene_frame50.rdc"
-
-def dump_capture(controller):
-  actions = controller.GetRootActions()
-  print(f"top-level actions: {len(actions)}")
-  for action in actions[:10]:
-    print(f"eventId={action.eventId} name={action.customName}")
-
-pyrenderdoc.LoadCapture(filename, renderdoc.ReplayOptions(), filename, False, True)
-pyrenderdoc.Replay().BlockInvoke(dump_capture)
-```
-
-Important detail: when scripting the UI, replay work happens on RenderDoc's
-replay thread, so use `BlockInvoke(...)` when you need access to the
-`ReplayController`.
-
-This style is a good fit for:
-
-- counting and traversing actions
-- locating passes of interest such as `View: Scene`, `LightCullingPass`, or `ToneMapPass`
-- inspecting resources after a capture is already open in the UI
-- building quick analysis helpers without reimplementing capture loading yourself
-
-### Lower-level workflow: use the base replay API directly
-
-If you have a compatible standalone `renderdoc` Python module available, you can
-open and replay captures directly from Python without the UI.
-
-```python
-import renderdoc as rd
-
-rd.InitialiseReplay(rd.GlobalEnvironment(), [])
-
-cap = rd.OpenCaptureFile()
-result = cap.OpenFile("render_scene_frame50.rdc", "", None)
-if result != rd.ResultCode.Succeeded:
-  raise RuntimeError(f"Couldn't open file: {result}")
-
-if not cap.LocalReplaySupport():
-  raise RuntimeError("Capture cannot be replayed on this machine")
-
-result, controller = cap.OpenCapture(rd.ReplayOptions(), None)
-if result != rd.ResultCode.Succeeded:
-  raise RuntimeError(f"Couldn't initialise replay: {result}")
-
-print(f"top-level actions: {len(controller.GetRootActions())}")
-
-controller.Shutdown()
-cap.Shutdown()
-rd.ShutdownReplay()
-```
-
-Use this lower-level path when you want fully scripted offline analysis, but be
-aware that the Python module version must match the RenderDoc build exactly.
-
-### Where to go next
-
-Once you can open a capture and access a `ReplayController`, the next useful
-automation steps are usually:
-
-- iterate the action tree to find the pass or draw of interest
-- inspect pipeline state around a chosen event
-- fetch GPU counters for suspicious passes
-- save textures or thumbnails to disk for regression checks
-
-The RenderDoc Python docs are the right next stop for those tasks:
-
-- `Getting Started (RenderDoc UI)`
-- `Getting Started (python)`
-- `Basic Interfaces`
-- `renderdoc Examples`
+- `gfx.capture.discard`
+- `gfx.capture.open_ui`
 
 ## Content Source Behavior (PAK vs Loose Cooked)
 

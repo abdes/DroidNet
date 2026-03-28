@@ -425,8 +425,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   config.frame_capture = {
     .provider = oxygen::FrameCaptureProvider::kRenderDoc,
     .init_mode = oxygen::FrameCaptureInitMode::kExplicitPath,
-    .from_frame = 120,
-    .frame_count = 3,
+    .startup_trigger = oxygen::FrameCaptureStartupTrigger::kNextFrame,
     .module_path = "C:/tools/renderdoc/renderdoc.dll",
     .capture_file_template = "captures/render_scene",
   };
@@ -468,8 +467,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
     json_str.find(R"("preferred_card_device_id": 1)") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("provider": "renderdoc")") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("init_mode": "path")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("from_frame": 120)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("frame_count": 3)") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("startup_trigger": "next")") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("module_path": "C:/tools/renderdoc/renderdoc.dll")")
     != std::string::npos);

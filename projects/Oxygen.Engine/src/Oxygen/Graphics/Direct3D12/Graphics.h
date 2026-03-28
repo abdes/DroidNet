@@ -45,7 +45,7 @@ public:
   OXGN_D3D12_API explicit Graphics(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& path_finder_config);
 
-  OXGN_D3D12_API ~Graphics() override = default;
+  OXGN_D3D12_API ~Graphics() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
   OXYGEN_MAKE_NON_MOVABLE(Graphics)
