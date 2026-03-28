@@ -586,6 +586,9 @@ auto D3D12BufferReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+    if (state_ != ReadbackState::kPending) {
+      manager_.ForgetTicket(ticket_->id);
+    }
   }
   if (state_ == ReadbackState::kPending) {
     LOG_F(WARNING,
@@ -1005,6 +1008,9 @@ auto D3D12TextureReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+    if (state_ != ReadbackState::kPending) {
+      manager_.ForgetTicket(ticket_->id);
+    }
   }
   if (state_ == ReadbackState::kPending) {
     LOG_F(WARNING,
@@ -1115,6 +1121,16 @@ auto D3D12ReadbackManager::UntrackCancellationHandler(const ReadbackTicketId id)
 {
   std::lock_guard lock(mutex_);
   cancellation_handlers_.erase(id);
+}
+
+auto D3D12ReadbackManager::ForgetTicket(const ReadbackTicketId id) -> void
+{
+  const auto forgotten = tracker_.Forget(id);
+  if (!forgotten.has_value()
+    && forgotten.error() != ReadbackError::kTicketNotFound) {
+    LOG_F(WARNING, "Failed to forget D3D12 readback ticket {}: {}", id.get(),
+      make_error_code(forgotten.error()).message());
+  }
 }
 
 auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)

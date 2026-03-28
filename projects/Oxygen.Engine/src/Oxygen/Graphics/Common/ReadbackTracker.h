@@ -52,6 +52,8 @@ public:
     -> std::expected<std::vector<ReadbackResult>, ReadbackError>;
   OXGN_GFX_API auto AwaitAllPending()
     -> std::expected<std::vector<ReadbackResult>, ReadbackError>;
+  OXGN_GFX_API auto Forget(ReadbackTicketId id)
+    -> std::expected<bool, ReadbackError>;
 
   [[nodiscard]] OXGN_GFX_API auto CompletedFence() const noexcept -> FenceValue;
   OXGN_GFX_API auto CompletedFenceValue() noexcept

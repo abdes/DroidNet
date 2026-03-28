@@ -162,6 +162,17 @@ auto ReadbackTracker::AwaitAll(const std::span<const ReadbackTicket> tickets)
   return results;
 }
 
+auto ReadbackTracker::Forget(const ReadbackTicketId id)
+  -> std::expected<bool, ReadbackError>
+{
+  std::lock_guard<std::mutex> lk(mu_);
+  if (const auto it = entries_.find(id); it != entries_.end()) {
+    entries_.erase(it);
+    return true;
+  }
+  return std::unexpected(ReadbackError::kTicketNotFound);
+}
+
 auto ReadbackTracker::CompletedFence() const noexcept -> FenceValue
 {
   return completed_fence_.Get();
@@ -220,8 +231,34 @@ auto ReadbackTracker::OnFrameStart(const frame::Slot slot) -> void
   std::lock_guard<std::mutex> lk(mu_);
   current_slot_ = slot;
 
-  std::erase_if(entries_,
-    [slot](const auto& pair) { return pair.second.creation_slot == slot; });
+  auto same_slot_count = std::size_t { 0U };
+  auto pending_same_slot_count = std::size_t { 0U };
+  auto oldest_same_slot_fence = FenceValue { 0U };
+  for (const auto& [id, entry] : entries_) {
+    static_cast<void>(id);
+    if (entry.creation_slot != slot) {
+      continue;
+    }
+    ++same_slot_count;
+    if (!entry.completed) {
+      ++pending_same_slot_count;
+    }
+    if (oldest_same_slot_fence.get() == 0U
+      || entry.ticket.fence < oldest_same_slot_fence) {
+      oldest_same_slot_fence = entry.ticket.fence;
+    }
+  }
+
+  if (same_slot_count > 0U) {
+    LOG_F(WARNING,
+      "ReadbackTracker::OnFrameStart re-entered frame slot {} while {} "
+      "readback ticket(s) from that slot are still tracked (pending={}); "
+      "retaining them until their owners release them. "
+      "oldest_same_slot_fence={} "
+      "completed_fence={}",
+      slot.get(), same_slot_count, pending_same_slot_count,
+      oldest_same_slot_fence.get(), completed_fence_.Get().get());
+  }
 }
 
 auto ReadbackTracker::AwaitAllPending()

@@ -634,6 +634,9 @@ auto HeadlessBufferReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+    if (state_ != ReadbackState::kPending) {
+      manager_.ForgetTicket(ticket_->id);
+    }
   }
   if (state_ == ReadbackState::kPending) {
     LOG_F(WARNING,
@@ -896,6 +899,9 @@ auto HeadlessTextureReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
+    if (state_ != ReadbackState::kPending) {
+      manager_.ForgetTicket(ticket_->id);
+    }
   }
   if (state_ == ReadbackState::kPending) {
     LOG_F(WARNING,
@@ -1006,6 +1012,16 @@ auto HeadlessReadbackManager::UntrackCancellationHandler(
 {
   std::lock_guard lock(mutex_);
   cancellation_handlers_.erase(id);
+}
+
+auto HeadlessReadbackManager::ForgetTicket(const ReadbackTicketId id) -> void
+{
+  const auto forgotten = tracker_.Forget(id);
+  if (!forgotten.has_value()
+    && forgotten.error() != ReadbackError::kTicketNotFound) {
+    LOG_F(WARNING, "Failed to forget headless readback ticket {}: {}", id.get(),
+      make_error_code(forgotten.error()).message());
+  }
 }
 
 auto HeadlessReadbackManager::Await(const ReadbackTicket ticket)
