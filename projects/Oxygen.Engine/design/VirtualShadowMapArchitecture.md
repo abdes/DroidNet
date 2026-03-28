@@ -420,7 +420,10 @@ This is the core cache reuse engine.
 ### Stage 14 — HZB Update
 
 - Select pages for HZB rebuild (dirty, newly allocated, or forced).
-- Fold dirty and invalidation flags into physical page metadata during selection.
+- Fold the remaining rebuild-selection state into physical page metadata during selection. In the
+  current Oxygen pipeline, invalidation flags are already reflected earlier when raster results are
+  published, so Stage 14 clears `dirty` / `view_uncached` rather than newly clearing invalidation
+  bits.
 - Build per-page HZB mip chain.
 
 ### Stage 15 — Projection and Composite

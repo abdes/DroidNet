@@ -256,6 +256,23 @@ Validation evidence on `2026-03-27`:
   `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
   now rebuilds page HZB data from rasterized multi-page directional geometry through the shared GPU
   harness instead of seeded shadow pages alone
+- corrective Stage 14 refactor update on `2026-03-28`:
+  - the stale synthetic `VsmHzbUpdaterPass_test.cpp` ownership suite was removed
+  - Stage 14 now lives in the dedicated executable
+    `Oxygen.Renderer.VsmShadowHzb.Tests`
+  - real Stage 14 ownership is now in
+    `src/Oxygen/Renderer/Test/VirtualShadow/VsmShadowHzb_test.cpp`
+  - the dedicated suite validates exact HZB mip-chain reconstruction from real Stage 13
+    directional and local-light inputs, plus preserved-HZB continuity on a reused frame
+  - UE5 reference comparison and local shader review confirmed that invalidation flags are already
+    consumed earlier by raster-result publication; Stage 14 itself clears the remaining
+    rebuild-selection state (`dirty` and `view_uncached`) rather than newly clearing invalidation
+    bits
+  - validation in `out\\build-ninja`:
+    - `Oxygen.Renderer.VsmShadowHzb.Tests.exe`: `3 tests from 1 test suite` passed
+    - `Oxygen.Renderer.VsmShadowHzb.Tests.exe --gtest_repeat=3`: `9/9` passed
+    - `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests.exe --gtest_filter=VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`:
+      `1/1` passed
 - tightened the Stage 5 dedicated suite so `VsmPageRequestGeneratorPass_test.cpp` now reuses the
   shared GPU harness float-texture upload and mip-readback helpers instead of carrying a private
   texture-upload path for request-generation depth inputs

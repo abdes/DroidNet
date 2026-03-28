@@ -152,8 +152,10 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
     session now owns the active resolved/prepared view snapshots and rebinds them after moves
   - the Stage 15 dedicated suite now includes a rasterized multi-page real-geometry proof through
     `VsmProjectionPassGpuTest.DirectionalProjectionPassCompositesRasterizedMultiPageShadowMaskFromRealGeometry`
-  - the Stage 14 dedicated suite now includes a rasterized multi-page real-geometry proof through
-    `VsmHzbUpdaterPassGpuTest.RebuildsDirtyPageMipsFromRasterizedMultiPageDirectionalScene`
+  - the Stage 14 dedicated suite now lives in `VsmShadowHzb_test.cpp` under
+    `Oxygen.Renderer.VsmShadowHzb.Tests` and validates the exact HZB mip chain from real Stage 13
+    directional and local-light inputs instead of mixing stage ownership with synthetic seeded HZB
+    data
   - renderer test `CMakeLists.txt` now uses logical target names
     `VsmVirtualAddressSpace`, `VsmRemap`, `VsmProjectionRecords`, `VsmPageRequests`,
     `VsmPageReuse`, `VsmAvailablePages`, `VsmPageMappings`, `VsmHierarchicalFlags`,
@@ -221,7 +223,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
       pass again in `out/build-ninja`
     - the bottom-stage GPU filter for request generation plus stages 12-15 passes with
       `29 tests from 5 test suites`, including the Stage 12 shared-harness refactor plus the
-      Stage 14 and Stage 15 rasterized multi-page proofs
+      Stage 15 rasterized multi-page proofs
     - a full rerun of `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` now reports
       `46 tests from 9 test suites`, `45 passed / 1 failed`; the only failing case remains the
       analytic-floor bridge test below
