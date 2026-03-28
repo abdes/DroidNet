@@ -126,12 +126,22 @@ auto AdapterInfo::MemoryAsString() const -> std::string
 
 void DeviceManager::InitializeFactory()
 {
-  UINT dxgi_factory_flags { 0 };
   if (props_.enable_debug) {
-    dxgi_factory_flags = DXGI_CREATE_FACTORY_DEBUG;
+    const auto hr = CreateDXGIFactory2(
+      DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory_));
+    if (SUCCEEDED(hr)) {
+      return;
+    }
+
+    // If debug factory creation fails (e.g. debug runtime not installed),
+    // gracefully continue without DXGI debug factory.
+    LOG_F(WARNING,
+      "Failed to create DXGI debug factory (hr=0x{:08X}), falling back to "
+      "non-debug factory",
+      static_cast<unsigned int>(hr));
   }
-  ThrowOnFailed(
-    CreateDXGIFactory2(dxgi_factory_flags, IID_PPV_ARGS(&factory_)));
+
+  ThrowOnFailed(CreateDXGIFactory2(0, IID_PPV_ARGS(&factory_)));
 }
 
 void DeviceManager::DiscoverAdapters()
@@ -354,12 +364,10 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
 
   InitializeFactory();
 
-#if defined(_DEBUG)
   if (props_.enable_debug) {
     // Initialize the Debug Layer and GPU-based validation
     debug_layer_ = std::make_unique<DebugLayer>(props_.enable_validation);
   }
-#endif
 
   DiscoverAdapters();
 

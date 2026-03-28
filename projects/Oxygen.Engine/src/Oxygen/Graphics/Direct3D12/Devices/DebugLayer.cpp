@@ -57,6 +57,8 @@ void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
     if (enable_validation) {
       d3d12_debug_->SetEnableGPUBasedValidation(TRUE);
     }
+    LOG_F(INFO, "D3D12 debug layer enabled (gpu_validation={})",
+      enable_validation ? "on" : "off");
   } else {
     LOG_F(WARNING, "Failed to enable the debug layer");
   }
@@ -66,7 +68,6 @@ void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
     dxgi_debug_->EnableLeakTrackingForThread();
 
     // Setup debugger breakpoints on errors and warnings
-#if !defined(NDEBUG)
     if ((::IsDebuggerPresent() != 0)
       && SUCCEEDED(
         DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgi_info_queue_)))) {
@@ -75,7 +76,6 @@ void DebugLayer::InitializeDebugLayer(const bool enable_validation) noexcept
       ThrowOnFailed(dxgi_info_queue_->SetBreakOnSeverity(
         DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, 1));
     }
-#endif
   } else {
     LOG_F(WARNING, "Failed to enable the DXGI debug layer");
   }
@@ -100,7 +100,6 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
     return;
   }
 
-#if !defined(NDEBUG)
   if (::IsDebuggerPresent() == 0) {
     return;
   }
@@ -129,9 +128,6 @@ void DebugLayer::ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept
   if (FAILED(info_queue->PushStorageFilter(&filter))) {
     LOG_F(WARNING, "Failed to apply D3D12 info queue storage filter");
   }
-#else
-  (void)device;
-#endif
 }
 
 void DebugLayer::PrintLiveObjectsReport() noexcept
