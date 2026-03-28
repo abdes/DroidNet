@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 #include <glm/geometric.hpp>
@@ -298,6 +299,58 @@ NOLINT_TEST_F(VsmAvailablePagePackingLiveSceneTest,
       << "reused local physical page " << page
       << " leaked into the Stage 7 available stack";
   }
+}
+
+NOLINT_TEST_F(VsmAvailablePagePackingLiveSceneTest,
+  StablePagedSpotLightSceneDoesNotWarnAboutInlineStagingPartitionReuse)
+{
+  constexpr auto kWidth = 1024U;
+  constexpr auto kHeight = 1024U;
+  constexpr auto kSlot = Slot { 0U };
+  constexpr auto kFirstSequence = SequenceNumber { 98U };
+  constexpr auto kSecondSequence = SequenceNumber { 99U };
+
+  const auto camera_eye = glm::vec3 { -3.2F, 3.4F, 5.8F };
+  const auto camera_target = glm::vec3 { 0.2F, 0.8F, 0.0F };
+  const auto spot_position = camera_eye;
+  const auto sun_direction
+    = glm::normalize(glm::vec3 { -0.40558F, 0.40558F, 0.819152F });
+  const auto resolved_view
+    = MakeLookAtResolvedView(camera_eye, camera_target, kWidth, kHeight);
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+  auto scene = CreateTwoBoxShadowScene(sun_direction, 4U);
+  auto sun_impl = scene.sun_node.GetImpl();
+  ASSERT_TRUE(sun_impl.has_value());
+  auto& sun_light
+    = sun_impl->get().GetComponent<oxygen::scene::DirectionalLight>();
+  sun_light.Common().casts_shadows = false;
+  UpdateTransforms(*scene.scene, scene.sun_node);
+  AttachSpotLightToTwoBoxScene(scene, spot_position,
+    PrimarySpotTargetForTwoBoxScene(scene), 18.0F, glm::radians(30.0F),
+    glm::radians(50.0F));
+
+  auto vsm_renderer = oxygen::renderer::vsm::VsmShadowRenderer(
+    oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+    oxygen::observer_ptr { &renderer->GetStagingProvider() },
+    oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+    oxygen::ShadowQualityTier::kHigh);
+
+  testing::internal::CaptureStderr();
+  const auto first_frame
+    = PrimeTwoBoxExtractedFrame(*renderer, scene, vsm_renderer, resolved_view,
+      kWidth, kHeight, kFirstSequence, kSlot, 0x7006ULL);
+  ASSERT_NE(first_frame.extracted_frame, nullptr);
+  const auto packed
+    = RunTwoBoxAvailablePagePackingStage(*renderer, scene, vsm_renderer,
+      resolved_view, kWidth, kHeight, kSecondSequence, kSlot, 0x7006ULL);
+  const auto captured_stderr = testing::internal::GetCapturedStderr();
+
+  ASSERT_EQ(first_frame.virtual_frame.local_light_layouts.size(), 1U);
+  EXPECT_GT(packed.bridge.committed_frame.plan.reused_page_count, 0U);
+  EXPECT_EQ(captured_stderr.find("Reusing staging buffer"), std::string::npos)
+    << captured_stderr;
 }
 
 } // namespace

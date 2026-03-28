@@ -78,6 +78,12 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - Stage 11 selective-page-initialization coverage now lives in the dedicated
     `Oxygen.Renderer.VsmPageInitialization.Tests` program so real-scene initialization contracts
     are isolated from the later GPU lifecycle suites that still own stages 12-15
+  - Stage 12 shadow-rasterization coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmShadowRasterization.Tests` program so real-scene raster jobs, depth
+    writes, and localized page coverage are validated outside the lifecycle bridge
+  - Stage 13 static/dynamic-merge coverage now lives in the dedicated
+    `Oxygen.Renderer.VsmStaticDynamicMerge.Tests` program so real-scene directional and local
+    dirty-page merge contracts are isolated from later HZB/projection stages
   - the shared CPU harness now exposes `MakeFrame(...)`, `ResolveLocalEntryIndex(...)`, and
     `ResolveDirectionalEntryIndex(...)` so Stage 2 suites assert mixed directional/local layout
     publication from real inputs instead of ad hoc setup or magic slot numbers
@@ -113,6 +119,9 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
   - `VsmCacheManager` now queues GPU-backed frame extraction and finalizes the readback at the
     next `BeginFrame()` so Stage 11 sees the real previous-frame physical-page metadata instead of
     stale CPU-only snapshot state; this fixes the stable-cached-frame false reinitialization bug
+  - `VsmCacheManager` now carries forward continuity publications for fully reused extracted
+    frames, which fixes the Stage 13 bug where static primitive page feedback and rendered
+    primitive history could disappear before the merge stage consumed them
   - historical evidence before the Stage 10 executable split:
     `VsmMappedMipPropagationTest.MarksMappedDescendantsAcrossRequestedLeafAndParentPages`
     passed in the lifecycle binary and originally proved mapped-descendant propagation across a

@@ -100,6 +100,16 @@ number. Recorded evidence after that fix in `out/build-ninja`:
 - `Oxygen.Renderer.VsmMappedMips.Tests.exe`: `5 tests from 1 test suite` passed
 - `Oxygen.Renderer.VsmPageInitialization.Tests.exe`: `3 tests from 1 test suite` passed
 - `Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_filter=VsmAvailablePagePackingLiveSceneTest.StablePagedSpotLightScenePacksOnlyUnusedPagesAfterLocalReuse --gtest_repeat=10`: all `10/10` iterations passed without `-v`
+
+Later on `2026-03-28`, the remaining `RingBufferStaging.cpp:294` warnings were traced to inline
+staging ownership, not to Stage 7/13 logic. `Renderer::GetStagingProvider()` returns the inline
+staging ring, and that ring must be retired only by `InlineTransfersCoordinator`. Registering the
+same provider with the upload-coordinator retire path mixes unrelated fence timelines and produces
+false partition-reuse warnings. The renderer now keeps `Renderer.InlineStaging` on the inline
+retirement path only. Recorded evidence after that fix in `out/build-ninja`:
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe`: `4 tests from 1 test suite` passed
+- `Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_filter=VsmAvailablePagePackingLiveSceneTest.StablePagedSpotLightSceneDoesNotWarnAboutInlineStagingPartitionReuse --gtest_repeat=5`: all `5/5` iterations passed
+- `Oxygen.Renderer.VsmStaticDynamicMerge.Tests.exe`: `7 tests from 2 test suites` passed
 - `Oxygen.Renderer.VsmAvailablePages.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
 - `Oxygen.Renderer.VsmHierarchicalFlags.Tests.exe --gtest_filter=VsmHierarchicalPageFlagsLiveSceneTest.AddedSpotLightsMatchCpuHierarchicalPropagationAcrossMixedLocalLayouts --gtest_repeat=10`: all `10/10` iterations passed without `-v`
 - `Oxygen.Renderer.VsmPageInitialization.Tests.exe --gtest_repeat=3`: all `9/9` executions passed as combined-suite runs
@@ -351,7 +361,14 @@ Dirty pages are composited from the static slice into the dynamic slice.
 
 | Test suite | File | Executable |
 | ---------- | ---- | --------- |
-| `VsmStaticDynamicMergePassGpuTest` | `VsmStaticDynamicMergePass_test.cpp` | VirtualShadowGpuLifecycle |
+| `VsmStaticDynamicMergeLiveSceneTest` | `VsmStaticDynamicMergeLiveScene_test.cpp` | VsmStaticDynamicMerge |
+| `VsmStaticDynamicMergeLocalLiveSceneTest` | `VsmStaticDynamicMergePass_test.cpp` | VsmStaticDynamicMerge |
+
+`VirtualShadowGpuLifecycle` no longer owns Stage 13. Stage 13 proof now lives in the
+dedicated `VsmStaticDynamicMerge` executable and covers:
+- stable directional and local fully reused frames that must leave continuity intact
+- dynamic-only invalidation where dirty pages must satisfy `dynamic_after = min(dynamic_before, static_before)`
+- static-invalidated directional and local frames where dirty pages must leave the dynamic slice unchanged
 
 ### Stage 14 — HZB Update
 
