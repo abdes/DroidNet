@@ -8,8 +8,8 @@
 //
 // Each thread tests one draw bound against one prepared raster page. Visible
 // draws append into a page-local indirect-command segment using a per-page GPU
-// counter. Previous-frame screen HZB is optional and acts as an additional
-// occlusion heuristic when available.
+// counter. Screen-space occlusion is intentionally not applied here: a shadow
+// caster occluded from the camera can still project onto a visible receiver.
 
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
@@ -277,33 +277,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
-    uint reveal_flag = 0u;
-    if (BX_IsValidSlot(pass_constants.reveal_flags_index)) {
-        StructuredBuffer<uint> reveal_flags
-            = ResourceDescriptorHeap[pass_constants.reveal_flags_index];
-        reveal_flag = reveal_flags[draw_index];
-    }
-    const bool reveal_forced = reveal_flag != 0u;
     const VsmClipSphere page_clip_sphere
         = VsmBuildClipSphere(page_job.view_projection_matrix, sphere_ws);
     if (!VsmIntersectsD3DClip(page_clip_sphere)) {
-        return;
-    }
-
-    bool occluded = false;
-    if (!reveal_forced && pass_constants.previous_frame_hzb_available != 0u
-        && BX_IsValidSlot(pass_constants.previous_frame_hzb_index)) {
-        Texture2D<float> previous_frame_hzb
-            = ResourceDescriptorHeap[pass_constants.previous_frame_hzb_index];
-        const float4x4 camera_view_projection
-            = mul(projection_matrix, view_matrix);
-        const VsmClipSphere camera_clip_sphere
-            = VsmBuildClipSphere(camera_view_projection, sphere_ws);
-        occluded = VsmIsOccludedByPreviousHzb(
-            previous_frame_hzb, camera_clip_sphere, pass_constants);
-    }
-
-    if (occluded) {
         return;
     }
 

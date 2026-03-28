@@ -119,37 +119,20 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const float receiver_view_depth
         = -mul(pass_constants.main_view_matrix, float4(world_position_ws, 1.0)).z;
 
-    float best_visibility = 1.0;
-    uint best_level = 0xffffffffu;
-
-    [loop]
-    for (uint i = 0u; i < pass_constants.projection_count; ++i) {
-        const VsmPageRequestProjection projection = projections[i];
-        if (projection.projection.light_type != VSM_PROJECTION_LIGHT_TYPE_DIRECTIONAL) {
-            continue;
-        }
-        if (receiver_view_depth + 1.0e-3 < projection.projection.receiver_depth_range_pad.x
-            || receiver_view_depth - 1.0e-3 > projection.projection.receiver_depth_range_pad.y) {
-            continue;
-        }
-
-        VsmProjectedShadowSample sample;
-        if (!VsmTryProjectMappedSample(projection, page_table,
-                pass_constants.page_table_entry_count, world_position_ws,
-                pass_constants.tiles_per_axis, pass_constants.page_size_texels, sample)) {
-            continue;
-        }
-
-        const float visibility = VsmSampleVisibilityPcf2x2(
-            shadow_texture, sample.atlas_uv, sample.receiver_depth,
-            sample.atlas_slice, sample.atlas_texel_origin,
-            pass_constants.page_size_texels);
-        if (projection.projection.clipmap_level < best_level) {
-            best_level = projection.projection.clipmap_level;
-            best_visibility = visibility;
-        }
+    VsmProjectedShadowSample sample;
+    if (!VsmTryProjectDirectionalSampleWithFallback(
+            projections, pass_constants.projection_count, page_table,
+            pass_constants.page_table_entry_count, world_position_ws,
+            receiver_view_depth, pass_constants.tiles_per_axis,
+            pass_constants.page_size_texels, sample)) {
+        return;
     }
 
-    directional_shadow_mask[dispatch_thread_id.xy] *= best_visibility;
-    shadow_mask[dispatch_thread_id.xy] *= best_visibility;
+    const float visibility = VsmSampleVisibilityPcf2x2(
+        shadow_texture, sample.atlas_uv, sample.receiver_depth,
+        sample.atlas_slice, sample.atlas_texel_origin,
+        pass_constants.page_size_texels);
+
+    directional_shadow_mask[dispatch_thread_id.xy] *= visibility;
+    shadow_mask[dispatch_thread_id.xy] *= visibility;
 }

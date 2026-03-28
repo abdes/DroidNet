@@ -143,7 +143,7 @@ static_assert(offsetof(VsmShaderPageReuseDecision, physical_meta) == 16U);
 // remains authoritative for the deterministic allocation order.
 struct VsmShaderPageAllocationDecision {
   std::uint32_t page_table_index { 0U };
-  std::uint32_t available_page_list_index { 0U };
+  std::uint32_t physical_page_index { 0U };
   VsmShaderPageFlags page_flags {};
   std::uint32_t _pad0 { 0U };
   VsmPhysicalPageMeta physical_meta {};
@@ -156,7 +156,7 @@ static_assert(sizeof(VsmShaderPageAllocationDecision) == 72U);
 static_assert(
   offsetof(VsmShaderPageAllocationDecision, page_table_index) == 0U);
 static_assert(
-  offsetof(VsmShaderPageAllocationDecision, available_page_list_index) == 4U);
+  offsetof(VsmShaderPageAllocationDecision, physical_page_index) == 4U);
 static_assert(offsetof(VsmShaderPageAllocationDecision, page_flags) == 8U);
 static_assert(offsetof(VsmShaderPageAllocationDecision, physical_meta) == 16U);
 

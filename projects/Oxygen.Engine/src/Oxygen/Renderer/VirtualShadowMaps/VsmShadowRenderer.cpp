@@ -235,6 +235,14 @@ namespace {
     return std::max(authored_resolution, preferred_candidate_resolution);
   }
 
+  [[nodiscard]] auto PagesPerAxisForVirtualResolution(
+    const std::uint32_t virtual_resolution) -> std::uint32_t
+  {
+    return std::max(1U,
+      (std::max(virtual_resolution, 1U) + kVsmShadowPoolPageSizeTexels - 1U)
+        / kVsmShadowPoolPageSizeTexels);
+  }
+
   auto BuildPrimitiveFlags(
     const engine::sceneprep::RenderItemData& item) noexcept -> std::uint32_t
   {
@@ -582,10 +590,15 @@ namespace {
     const oxygen::ShadowQualityTier quality_tier) -> VsmDirectionalClipmapDesc
   {
     const auto clip_level_count = std::max(1U, candidate.cascade_count);
+    const auto authored_resolution
+      = ShadowResolutionFromHint(candidate.resolution_hint);
+    const auto effective_resolution = ApplyDirectionalShadowQualityTier(
+      authored_resolution, quality_tier,
+      prepared_view.directional_shadow_candidates.size());
     auto desc = VsmDirectionalClipmapDesc {
       .remap_key = BuildDirectionalLightRemapKey(candidate.node_handle),
       .clip_level_count = clip_level_count,
-      .pages_per_axis = PagesPerAxisForQualityTier(quality_tier),
+      .pages_per_axis = PagesPerAxisForVirtualResolution(effective_resolution),
       .debug_name = candidate.node_handle.IsValid()
         ? std::string("vsm-directional-")
           + std::string(nostd::to_string(candidate.node_handle.Index()))
@@ -760,7 +773,9 @@ namespace {
           .projection_matrix = clip_state.light_projection,
           .view_origin_ws_pad = clip_state.view_origin_ws_pad,
           .receiver_depth_range_pad
-          = glm::vec4(prev_depth, clip_state.resolved_end_depth, 0.0F, 0.0F),
+          = glm::vec4(
+            prev_depth, clip_state.resolved_end_depth,
+            candidate.bias, candidate.normal_bias),
           .clipmap_corner_offset = layout.page_grid_origin[clip_index],
           .clipmap_level = clip_index,
           .light_type = static_cast<std::uint32_t>(
@@ -838,6 +853,8 @@ namespace {
         .view_matrix = light_view,
         .projection_matrix = light_projection,
         .view_origin_ws_pad = glm::vec4(light_position, 0.0F),
+        .receiver_depth_range_pad
+        = glm::vec4(0.0F, 0.0F, light.shadow_bias, light.shadow_normal_bias),
         .clipmap_corner_offset = { 0, 0 },
         .clipmap_level = 0U,
         .light_type = static_cast<std::uint32_t>(VsmProjectionLightType::kLocal),
