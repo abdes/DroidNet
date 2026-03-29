@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -13,6 +14,7 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
@@ -26,6 +28,7 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
+#include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
@@ -35,6 +38,87 @@
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+auto ParseFrameCaptureProvider(const std::string& value)
+  -> oxygen::FrameCaptureProvider
+{
+  if (value == "none" || value == "off") {
+    return oxygen::FrameCaptureProvider::kNone;
+  }
+  if (value == "renderdoc") {
+    return oxygen::FrameCaptureProvider::kRenderDoc;
+  }
+  if (value == "pix") {
+    return oxygen::FrameCaptureProvider::kPix;
+  }
+
+  throw std::runtime_error("unsupported frame_capture.provider: " + value);
+}
+
+auto ParseFrameCaptureInitMode(const std::string& value)
+  -> oxygen::FrameCaptureInitMode
+{
+  if (value == "disabled") {
+    return oxygen::FrameCaptureInitMode::kDisabled;
+  }
+  if (value == "attached") {
+    return oxygen::FrameCaptureInitMode::kAttachedOnly;
+  }
+  if (value == "search") {
+    return oxygen::FrameCaptureInitMode::kSearchPath;
+  }
+  if (value == "path") {
+    return oxygen::FrameCaptureInitMode::kExplicitPath;
+  }
+
+  throw std::runtime_error("unsupported frame_capture.init_mode: " + value);
+}
+
+auto ParseFrameCaptureStartupTrigger(const std::string& value)
+  -> oxygen::FrameCaptureStartupTrigger
+{
+  if (value == "none") {
+    return oxygen::FrameCaptureStartupTrigger::kNone;
+  }
+  if (value == "next") {
+    return oxygen::FrameCaptureStartupTrigger::kNextFrame;
+  }
+
+  throw std::runtime_error(
+    "unsupported frame_capture.startup_trigger: " + value);
+}
+
+auto ParseFrameCaptureConfig(const nlohmann::json& json_config)
+  -> oxygen::FrameCaptureConfig
+{
+  oxygen::FrameCaptureConfig config {};
+  if (!json_config.contains("frame_capture")) {
+    return config;
+  }
+
+  const auto& frame_capture = json_config["frame_capture"];
+  if (frame_capture.contains("provider")) {
+    config.provider
+      = ParseFrameCaptureProvider(frame_capture["provider"].get<std::string>());
+  }
+  if (frame_capture.contains("init_mode")) {
+    config.init_mode = ParseFrameCaptureInitMode(
+      frame_capture["init_mode"].get<std::string>());
+  }
+  if (frame_capture.contains("startup_trigger")) {
+    config.startup_trigger = ParseFrameCaptureStartupTrigger(
+      frame_capture["startup_trigger"].get<std::string>());
+  }
+  if (frame_capture.contains("module_path")) {
+    config.module_path = frame_capture["module_path"].get<std::string>();
+  }
+  if (frame_capture.contains("capture_file_template")) {
+    config.capture_file_template
+      = frame_capture["capture_file_template"].get<std::string>();
+  }
+  return config;
+}
+
 auto GetBackendInternal() -> std::shared_ptr<oxygen::graphics::d3d12::Graphics>&
 {
   static std::shared_ptr<oxygen::graphics::d3d12::Graphics> graphics;
@@ -246,6 +330,13 @@ auto Graphics::GetReadbackManager() const
   return observer_ptr<graphics::ReadbackManager>(readback_manager_.get());
 }
 
+auto Graphics::GetFrameCaptureController() const
+  -> observer_ptr<graphics::FrameCaptureController>
+{
+  return observer_ptr<graphics::FrameCaptureController>(
+    frame_capture_controller_.get());
+}
+
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*
 {
   auto* device = GetComponent<DeviceManager>().Device();
@@ -304,6 +395,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   }
 
   DeviceManagerDesc desc {};
+  const auto frame_capture_config = ParseFrameCaptureConfig(jsonConfig);
   if (jsonConfig.contains("enable_debug")) {
     desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
   }
@@ -313,14 +405,14 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_aftermath")) {
     desc.enable_aftermath = jsonConfig["enable_aftermath"].get<bool>();
   }
-  if (jsonConfig.contains("enable_renderdoc")) {
-    desc.enable_renderdoc = jsonConfig["enable_renderdoc"].get<bool>();
-  }
-  if (jsonConfig.contains("enable_pix")) {
-    desc.enable_pix = jsonConfig["enable_pix"].get<bool>();
-  }
+  desc.frame_capture_provider = frame_capture_config.provider;
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
+  }
+  if (frame_capture_config.provider
+    == oxygen::FrameCaptureProvider::kRenderDoc) {
+    frame_capture_controller_
+      = CreateRenderDocFrameCaptureController(*this, frame_capture_config);
   }
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));

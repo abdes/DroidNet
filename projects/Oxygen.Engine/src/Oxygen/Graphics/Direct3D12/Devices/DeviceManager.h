@@ -23,6 +23,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
@@ -113,8 +114,7 @@ struct DeviceManagerDesc {
   };
   bool enable_validation { false };
   bool enable_aftermath { true };
-  bool enable_renderdoc { false };
-  bool enable_pix { false };
+  FrameCaptureProvider frame_capture_provider { FrameCaptureProvider::kNone };
   bool require_display { true };
   bool auto_select_adapter { true };
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };

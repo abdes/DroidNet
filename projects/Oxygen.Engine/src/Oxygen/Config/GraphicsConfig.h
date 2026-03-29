@@ -23,16 +23,42 @@ namespace oxygen {
 */
 using DeviceId = int64_t;
 
+enum class FrameCaptureProvider : uint8_t {
+  kNone,
+  kRenderDoc,
+  kPix,
+};
+
+enum class FrameCaptureInitMode : uint8_t {
+  kDisabled,
+  kAttachedOnly,
+  kSearchPath,
+  kExplicitPath,
+};
+
+enum class FrameCaptureStartupTrigger : uint8_t { kNone, kNextFrame };
+
+//! Runtime frame-capture tool configuration.
+struct FrameCaptureConfig {
+  FrameCaptureProvider provider { FrameCaptureProvider::kNone };
+  FrameCaptureInitMode init_mode { FrameCaptureInitMode::kDisabled };
+  FrameCaptureStartupTrigger startup_trigger {
+    FrameCaptureStartupTrigger::kNone
+  };
+
+  //! Explicit module path used only with kExplicitPath.
+  std::string module_path {};
+
+  //! Optional capture file path template passed to the provider.
+  std::string capture_file_template {};
+};
+
 //! Graphics configuration data, serialized to JSON and used to configure the
 //! graphics backend module when being loaded.
 struct GraphicsConfig {
   bool enable_debug { false }; //!< Enable the backend debug layer.
   bool enable_validation { false }; //!< Enable GPU validation.
   bool enable_aftermath { true }; //!< Enable Nsight Aftermath when available.
-  bool enable_renderdoc {
-    false
-  }; //!< Enable RenderDoc integration when available.
-  bool enable_pix { false }; //!< Enable PIX markers when available.
 
   //! Device selection guidance.
   /*!
@@ -54,6 +80,7 @@ struct GraphicsConfig {
   bool headless { false }; //!< Run the engine without a window.
   bool enable_imgui { false }; //!< Enable ImGui integration.
   bool enable_vsync { true }; //!< Enable vertical synchronization.
+  FrameCaptureConfig frame_capture {};
 
   //! Backend-specific configuration as a JSON string.
   std::string extra = "{}";

@@ -48,6 +48,32 @@ struct ToolingPolicy {
 
 ToolingPolicy g_tooling_policy;
 
+auto IsRenderDocRequested(const oxygen::FrameCaptureProvider provider) noexcept
+  -> bool
+{
+  return provider == oxygen::FrameCaptureProvider::kRenderDoc;
+}
+
+auto IsPixRequested(const oxygen::FrameCaptureProvider provider) noexcept
+  -> bool
+{
+  return provider == oxygen::FrameCaptureProvider::kPix;
+}
+
+auto CaptureProviderText(const oxygen::FrameCaptureProvider provider) noexcept
+  -> const char*
+{
+  switch (provider) {
+  case oxygen::FrameCaptureProvider::kNone:
+    return "none";
+  case oxygen::FrameCaptureProvider::kRenderDoc:
+    return "renderdoc";
+  case oxygen::FrameCaptureProvider::kPix:
+    return "pix";
+  }
+  return "none";
+}
+
 constexpr auto IsRenderDocBuildAvailable() noexcept -> bool
 {
 #if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
@@ -127,31 +153,31 @@ DebugLayer::~DebugLayer() noexcept
 }
 
 void DebugLayer::ConfigureTooling(const bool enable_aftermath,
-  const bool enable_renderdoc, const bool enable_pix) noexcept
+  const oxygen::FrameCaptureProvider frame_capture_provider) noexcept
 {
   g_tooling_policy = ToolingPolicy { .requested_aftermath = enable_aftermath,
-    .requested_renderdoc = enable_renderdoc,
-    .requested_pix = enable_pix };
+    .requested_renderdoc = IsRenderDocRequested(frame_capture_provider),
+    .requested_pix = IsPixRequested(frame_capture_provider) };
   RefreshToolingPolicy();
 
   LOG_F(INFO,
-    "D3D12 tooling policy requested: aftermath={} renderdoc={} pix={}",
-    enable_aftermath, enable_renderdoc, enable_pix);
+    "D3D12 tooling policy requested: aftermath={} frame_capture_provider={}",
+    enable_aftermath, CaptureProviderText(frame_capture_provider));
 
   if (enable_aftermath && !IsAftermathBuildAvailable()) {
     LOG_F(INFO,
       "Aftermath requested by GraphicsConfig, but the backend was built "
       "without Nsight Aftermath support");
   }
-  if (enable_renderdoc && !IsRenderDocBuildAvailable()) {
+  if (g_tooling_policy.requested_renderdoc && !IsRenderDocBuildAvailable()) {
     LOG_F(INFO,
-      "RenderDoc requested by GraphicsConfig, but the backend was built "
-      "without RenderDoc support");
+      "RenderDoc frame capture requested by GraphicsConfig, but the backend "
+      "was built without RenderDoc support");
   }
-  if (enable_pix && !IsPixBuildAvailable()) {
+  if (g_tooling_policy.requested_pix && !IsPixBuildAvailable()) {
     LOG_F(INFO,
-      "PIX requested by GraphicsConfig, but the backend was built without "
-      "PIX support");
+      "PIX frame capture requested by GraphicsConfig, but the backend was "
+      "built without PIX support");
   }
 }
 
@@ -251,20 +277,12 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   g_tooling_policy.renderdoc_bootstrap_attempted = true;
 
   auto* renderdoc_module = ::GetModuleHandleA("renderdoc.dll");
-  if (renderdoc_module == nullptr) {
-    renderdoc_module = ::LoadLibraryA("renderdoc.dll");
-  }
-
-#  if defined(OXYGEN_RENDERDOC_DLL_PATH)
-  if (renderdoc_module == nullptr) {
-    renderdoc_module = ::LoadLibraryA(OXYGEN_RENDERDOC_DLL_PATH);
-  }
-#  endif
 
   if (renderdoc_module == nullptr) {
     LOG_F(INFO,
-      "RenderDoc was requested by GraphicsConfig, but renderdoc.dll is not "
-      "available in process path; continuing without RenderDoc API");
+      "RenderDoc frame capture was requested by GraphicsConfig, but "
+      "renderdoc.dll was not loaded before D3D12 startup; continuing "
+      "without RenderDoc API");
     return;
   }
 

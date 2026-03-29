@@ -47,6 +47,7 @@ Development and profiling tools.
 - **Core Responsibilities**:
   - **Performance Analysis**
     - D3D12: PIX integration
+    - D3D12: optional RenderDoc frame capture via `FrameCaptureController`
     - Vulkan: Validation layers
 
   - **Resource Tracking**
@@ -473,6 +474,24 @@ Resources creates descriptor views based on shader reflection data
 - Resource naming conventions
 - Performance counters
 - Validation layers
+
+## Frame Capture Integration
+
+Oxygen exposes backend-owned frame capture through the common
+`graphics::FrameCaptureController` service. The current implementation is
+D3D12-only and uses the RenderDoc in-application API when configured through
+`GraphicsConfig.frame_capture`.
+
+Current design constraints:
+
+- the service is optional and nullable
+- RenderDoc is loaded dynamically, never linked as a required dependency
+- renderer passes remain backend-agnostic and continue using existing GPU event
+  scopes
+- capture lifecycle is bracketed from `Graphics::BeginFrame()` /
+  `Graphics::EndFrame()`
+- PIX remains available as a tooling provider selection for marker emission, but
+  the runtime capture controller hooks are currently RenderDoc-only
 
 ## Design Patterns
 

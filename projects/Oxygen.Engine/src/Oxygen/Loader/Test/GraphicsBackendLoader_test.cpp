@@ -418,12 +418,17 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   config.enable_debug = true;
   config.enable_validation = true;
   config.enable_aftermath = true;
-  config.enable_renderdoc = false;
-  config.enable_pix = true;
   config.headless = false;
   config.enable_imgui = true;
   config.preferred_card_name = "Test GPU";
   config.preferred_card_device_id = 1;
+  config.frame_capture = {
+    .provider = oxygen::FrameCaptureProvider::kRenderDoc,
+    .init_mode = oxygen::FrameCaptureInitMode::kExplicitPath,
+    .startup_trigger = oxygen::FrameCaptureStartupTrigger::kNextFrame,
+    .module_path = "C:/tools/renderdoc/renderdoc.dll",
+    .capture_file_template = "captures/render_scene",
+  };
   config.extra = R"({"custom_key": "custom_value", "another_key": 42})";
   const auto path_config = oxygen::PathFinderConfig::Create()
                              .WithWorkspaceRoot("F:/ws")
@@ -454,15 +459,22 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
     json_str.find(R"("enable_validation": true)") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("enable_aftermath": true)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("enable_renderdoc": false)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("enable_pix": true)") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("headless": false)") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("enable_imgui": true)") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("preferred_card_name": "Test GPU")") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("preferred_card_device_id": 1)") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("provider": "renderdoc")") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("init_mode": "path")") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("startup_trigger": "next")") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("module_path": "C:/tools/renderdoc/renderdoc.dll")")
+    != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("capture_file_template": "captures/render_scene")")
+    != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("custom_key": "custom_value")") != std::string::npos);
   EXPECT_TRUE(json_str.find(R"("another_key": 42)") != std::string::npos);

@@ -197,6 +197,107 @@ auto ParseDirectionalShadowPolicy(std::string value)
                            "Expected one of: conventional");
 }
 
+auto NormalizeCliToken(std::string value) -> std::string
+{
+  std::ranges::transform(value, value.begin(),
+    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
+auto ParseFrameCaptureProvider(std::string value)
+  -> oxygen::FrameCaptureProvider
+{
+  value = NormalizeCliToken(std::move(value));
+
+  if (value == "off" || value == "none") {
+    return oxygen::FrameCaptureProvider::kNone;
+  }
+  if (value == "renderdoc") {
+    return oxygen::FrameCaptureProvider::kRenderDoc;
+  }
+  if (value == "pix") {
+    return oxygen::FrameCaptureProvider::kPix;
+  }
+
+  throw std::runtime_error("Invalid value for --frame-capture-provider. "
+                           "Expected one of: off, renderdoc, pix");
+}
+
+auto ParseFrameCaptureInitMode(std::string value)
+  -> oxygen::FrameCaptureInitMode
+{
+  value = NormalizeCliToken(std::move(value));
+
+  if (value == "disabled") {
+    return oxygen::FrameCaptureInitMode::kDisabled;
+  }
+  if (value == "attached") {
+    return oxygen::FrameCaptureInitMode::kAttachedOnly;
+  }
+  if (value == "search") {
+    return oxygen::FrameCaptureInitMode::kSearchPath;
+  }
+  if (value == "path") {
+    return oxygen::FrameCaptureInitMode::kExplicitPath;
+  }
+
+  throw std::runtime_error("Invalid value for --frame-capture-init. "
+                           "Expected one of: disabled, attached, search, "
+                           "path");
+}
+
+auto ParseFrameCaptureStartupTrigger(std::string value)
+  -> oxygen::FrameCaptureStartupTrigger
+{
+  value = NormalizeCliToken(std::move(value));
+
+  if (value == "none") {
+    return oxygen::FrameCaptureStartupTrigger::kNone;
+  }
+  if (value == "next") {
+    return oxygen::FrameCaptureStartupTrigger::kNextFrame;
+  }
+
+  throw std::runtime_error("Invalid value for --frame-capture-trigger. "
+                           "Expected one of: none, next");
+}
+
+auto BuildFrameCaptureConfig(const std::string& provider_text,
+  const std::string& init_mode_text, const std::string& trigger_text,
+  const std::string& module_path, const std::string& capture_file_template)
+  -> oxygen::FrameCaptureConfig
+{
+  const auto provider = ParseFrameCaptureProvider(provider_text);
+  if (provider == oxygen::FrameCaptureProvider::kNone) {
+    return {};
+  }
+  if (provider == oxygen::FrameCaptureProvider::kPix) {
+    if (!module_path.empty() || !capture_file_template.empty()
+      || NormalizeCliToken(trigger_text) != "none") {
+      throw std::runtime_error("--frame-capture-module, "
+                               "--frame-capture-file, and "
+                               "--frame-capture-trigger are currently "
+                               "supported only for RenderDoc");
+    }
+    return oxygen::FrameCaptureConfig { .provider = provider };
+  }
+
+  const auto init_mode = ParseFrameCaptureInitMode(init_mode_text);
+  if (init_mode == oxygen::FrameCaptureInitMode::kExplicitPath
+    && module_path.empty()) {
+    throw std::runtime_error(
+      "--frame-capture-module is required when --frame-capture-init=path");
+  }
+
+  return oxygen::FrameCaptureConfig {
+    .provider = provider,
+    .init_mode = init_mode,
+    .startup_trigger = ParseFrameCaptureStartupTrigger(trigger_text),
+    .module_path = module_path,
+    .capture_file_template = capture_file_template,
+  };
+}
+
 } // namespace
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
@@ -211,10 +312,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool enable_vsync = true;
   bool verify_hashes = false;
   bool hot_reload = true;
-  bool enable_renderdoc = false;
-  bool enable_pix = false;
   std::string directional_shadows = "conventional";
   std::string cvars_archive_path;
+  std::string frame_capture_provider = "off";
+  std::string frame_capture_init = "attached";
+  std::string frame_capture_module;
+  std::string frame_capture_file;
+  std::string frame_capture_trigger = "none";
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
 
@@ -272,21 +376,45 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
-    default_command.WithOption(Option::WithKey("renderdoc")
-        .About("Request RenderDoc capture tooling when available")
-        .Long("renderdoc")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("enabled")
-        .StoreTo(&enable_renderdoc)
+    default_command.WithOption(Option::WithKey("frame-capture-provider")
+        .About("Frame capture provider: off, renderdoc, pix.")
+        .Long("frame-capture-provider")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("off"))
+        .UserFriendlyName("provider")
+        .StoreTo(&frame_capture_provider)
         .Build());
-    default_command.WithOption(Option::WithKey("pix")
-        .About("Request PIX markers/capture tooling when available")
-        .Long("pix")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("enabled")
-        .StoreTo(&enable_pix)
+    default_command.WithOption(Option::WithKey("frame-capture-init")
+        .About("Frame capture initialization mode: disabled, attached, "
+               "search, path. RenderDoc only.")
+        .Long("frame-capture-init")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("attached"))
+        .UserFriendlyName("mode")
+        .StoreTo(&frame_capture_init)
+        .Build());
+    default_command.WithOption(Option::WithKey("frame-capture-module")
+        .About("Explicit frame capture module path used when "
+               "--frame-capture-init=path. RenderDoc only.")
+        .Long("frame-capture-module")
+        .WithValue<std::string>()
+        .UserFriendlyName("path")
+        .StoreTo(&frame_capture_module)
+        .Build());
+    default_command.WithOption(Option::WithKey("frame-capture-file")
+        .About("Optional RenderDoc capture file path template")
+        .Long("frame-capture-file")
+        .WithValue<std::string>()
+        .UserFriendlyName("template")
+        .StoreTo(&frame_capture_file)
+        .Build());
+    default_command.WithOption(Option::WithKey("frame-capture-trigger")
+        .About("Frame capture startup trigger: none, next. RenderDoc only.")
+        .Long("frame-capture-trigger")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("none"))
+        .UserFriendlyName("trigger")
+        .StoreTo(&frame_capture_trigger)
         .Build());
     default_command.WithOption(Option::WithKey("directional-shadows")
         .About("Directional shadow backend policy: conventional.")
@@ -327,8 +455,18 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
-    LOG_F(INFO, "Parsed renderdoc option = {}", enable_renderdoc);
-    LOG_F(INFO, "Parsed pix option = {}", enable_pix);
+    LOG_F(INFO, "Parsed frame-capture-provider option = {}",
+      frame_capture_provider);
+    LOG_F(INFO, "Parsed frame-capture-init option = {}", frame_capture_init);
+    LOG_F(
+      INFO, "Parsed frame-capture-trigger option = {}", frame_capture_trigger);
+    if (!frame_capture_module.empty()) {
+      LOG_F(
+        INFO, "Parsed frame-capture-module option = {}", frame_capture_module);
+    }
+    if (!frame_capture_file.empty()) {
+      LOG_F(INFO, "Parsed frame-capture-file option = {}", frame_capture_file);
+    }
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
@@ -365,15 +503,17 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
             .WithCVarsArchivePath(std::filesystem::path(cvars_archive_path));
     }
     const auto path_finder_config = std::move(path_finder_builder).Build();
+    const auto frame_capture_config
+      = BuildFrameCaptureConfig(frame_capture_provider, frame_capture_init,
+        frame_capture_trigger, frame_capture_module, frame_capture_file);
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
       .enable_aftermath = true,
-      .enable_renderdoc = enable_renderdoc,
-      .enable_pix = enable_pix,
       .preferred_card_name = std::nullopt,
       .headless = app.headless,
       .enable_vsync = enable_vsync,
+      .frame_capture = frame_capture_config,
       .extra = {},
     };
     const auto& loader = GraphicsBackendLoader::GetInstance();
