@@ -58,6 +58,26 @@ template <size_t E, size_t P = 0> struct ShaderFileSpec {
   }
 };
 
+//! Specification for a shader file with required defines plus optional boolean
+//! permutations.
+//!
+//! This is used when a shader family shares common optional toggles such as
+//! `ALPHA_TEST`, but each spec must always carry one or more discriminating
+//! defines such as a specific debug mode.
+template <size_t E, size_t R, size_t P = 0>
+struct RequiredDefineShaderFileSpec {
+  std::string_view path;
+  std::array<EntryPoint, E> entries;
+  std::array<std::string_view, R> required_defines;
+  std::array<std::string_view, P> permutations {};
+
+  //! Number of ShaderEntry variants this spec expands to.
+  [[nodiscard]] static consteval auto variant_count() -> size_t
+  {
+    return E * (size_t { 1 } << P);
+  }
+};
+
 // CTAD guides for clean syntax
 template <size_t E>
 ShaderFileSpec(std::string_view, std::array<EntryPoint, E>)
@@ -66,6 +86,15 @@ ShaderFileSpec(std::string_view, std::array<EntryPoint, E>)
 template <size_t E, size_t P>
 ShaderFileSpec(std::string_view, std::array<EntryPoint, E>,
   std::array<std::string_view, P>) -> ShaderFileSpec<E, P>;
+
+template <size_t E, size_t R>
+RequiredDefineShaderFileSpec(std::string_view, std::array<EntryPoint, E>,
+  std::array<std::string_view, R>) -> RequiredDefineShaderFileSpec<E, R, 0>;
+
+template <size_t E, size_t R, size_t P>
+RequiredDefineShaderFileSpec(std::string_view, std::array<EntryPoint, E>,
+  std::array<std::string_view, R>, std::array<std::string_view, P>)
+  -> RequiredDefineShaderFileSpec<E, R, P>;
 
 //! Computes total shader count for a list of specs.
 template <typename... Specs>
@@ -80,6 +109,8 @@ template <size_t E, size_t P, size_t N>
 consteval auto ExpandSpec(const ShaderFileSpec<E, P>& spec,
   std::array<ShaderEntry, N>& output, size_t index) -> size_t
 {
+  static_assert(P <= kMaxDefinesPerShader,
+    "shader permutation count exceeds ShaderEntry define capacity");
   constexpr size_t variant_count = size_t { 1 } << P;
 
   for (const auto& entry : spec.entries) {
@@ -92,6 +123,42 @@ consteval auto ExpandSpec(const ShaderFileSpec<E, P>& spec,
 
       // Build defines from permutation mask
       size_t define_idx = 0;
+      for (size_t i = 0; i < P; ++i) {
+        if (mask & (size_t { 1 } << i)) {
+          shader_entry.defines[define_idx++] = spec.permutations[i];
+        }
+      }
+      shader_entry.define_count = define_idx;
+
+      output[index++] = shader_entry;
+    }
+  }
+
+  return index;
+}
+
+//! Expands a spec with required defines into shader entries, writing to output
+//! starting at index.
+template <size_t E, size_t R, size_t P, size_t N>
+consteval auto ExpandSpec(const RequiredDefineShaderFileSpec<E, R, P>& spec,
+  std::array<ShaderEntry, N>& output, size_t index) -> size_t
+{
+  static_assert(R + P <= kMaxDefinesPerShader,
+    "required defines plus permutations exceed ShaderEntry define capacity");
+  constexpr size_t variant_count = size_t { 1 } << P;
+
+  for (const auto& entry : spec.entries) {
+    for (size_t mask = 0; mask < variant_count; ++mask) {
+      ShaderEntry shader_entry {
+        .type = entry.type,
+        .path = spec.path,
+        .entry_point = entry.name,
+      };
+
+      size_t define_idx = 0;
+      for (size_t i = 0; i < R; ++i) {
+        shader_entry.defines[define_idx++] = spec.required_defines[i];
+      }
       for (size_t i = 0; i < P; ++i) {
         if (mask & (size_t { 1 } << i)) {
           shader_entry.defines[define_idx++] = spec.permutations[i];

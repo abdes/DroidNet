@@ -23,6 +23,8 @@ asap_push_module("${META_MODULE_NAME}")
 # Dependencies
 # ------------------------------------------------------------------------------
 
+find_package(nlohmann_json CONFIG REQUIRED)
+
 # Define the path to the DXC compiler
 set(dxc_arch "")
 if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
@@ -49,14 +51,38 @@ set(dxc_bin_path "${CMAKE_SOURCE_DIR}/packages/DXC/bin/${dxc_arch}")
 
 add_executable(
   ${META_MODULE_TARGET}
+  "ActionKey.cpp"
+  "ActionKey.h"
   "Bake.cpp"
   "Bake.h"
+  "BuildPaths.cpp"
+  "BuildPaths.h"
+  "BuildState.cpp"
+  "BuildState.h"
+  "Catalog.cpp"
+  "Catalog.h"
+  "DirtyAnalysis.cpp"
+  "DirtyAnalysis.h"
   "DxcShaderCompiler.cpp"
   "DxcShaderCompiler.h"
+  "Execution.cpp"
+  "Execution.h"
+  "FileFingerprint.cpp"
+  "FileFingerprint.h"
+  "FinalArchivePack.cpp"
+  "FinalArchivePack.h"
   "Inspect.cpp"
   "Inspect.h"
+  "Manifest.cpp"
+  "Manifest.h"
+  "ModuleArtifact.cpp"
+  "ModuleArtifact.h"
   "Reflect.cpp"
   "Reflect.h"
+  "RequestCompilation.cpp"
+  "RequestCompilation.h"
+  "TrackingIncludeHandler.cpp"
+  "TrackingIncludeHandler.h"
   "main.cpp"
   "../../Shaders/EngineShaderCatalog.h"
   "../../Shaders/ShaderCatalogBuilder.h"
@@ -87,6 +113,8 @@ target_link_libraries(
   PRIVATE
     oxygen::graphics-common
     oxygen::clap
+    oxygen::serio
+    nlohmann_json::nlohmann_json
     dxcompiler
     dxil
 )

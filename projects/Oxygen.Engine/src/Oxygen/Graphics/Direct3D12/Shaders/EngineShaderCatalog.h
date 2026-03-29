@@ -66,41 +66,53 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3> { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT", "SKIP_BRDF_LUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DIRECT_LIGHTING_ONLY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_DIRECT_LIGHTING_ONLY" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_IBL_ONLY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_IBL_ONLY" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DIRECT_PLUS_IBL", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_DIRECT_PLUS_IBL" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DIRECT_LIGHTING_FULL", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_DIRECT_LIGHTING_FULL" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DIRECT_LIGHT_GATES", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_DIRECT_LIGHT_GATES" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  ShaderFileSpec {
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardMesh_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DIRECT_BRDF_CORE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1>
+      { "DEBUG_DIRECT_BRDF_CORE" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Wireframe pass pixel shader: ALPHA_TEST permutation
   ShaderFileSpec {
@@ -108,96 +120,122 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
-  // Forward pass pixel shader: DEBUG_LIGHT_HEATMAP with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_LIGHT_HEATMAP plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_LIGHT_HEATMAP", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_LIGHT_HEATMAP" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_DEPTH_SLICE with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_DEPTH_SLICE plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_DEPTH_SLICE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DEPTH_SLICE" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_CLUSTER_INDEX with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_CLUSTER_INDEX plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_CLUSTER_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_CLUSTER_INDEX" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_IBL_SPECULAR with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_IBL_SPECULAR plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_IBL_SPECULAR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_SPECULAR" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_IBL_RAW_SKY with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_IBL_RAW_SKY plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_IBL_RAW_SKY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_RAW_SKY" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_IBL_IRRADIANCE with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_IBL_IRRADIANCE plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_IBL_IRRADIANCE", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_IRRADIANCE" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_IBL_FACE_INDEX with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_IBL_FACE_INDEX plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_IBL_FACE_INDEX", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_IBL_FACE_INDEX" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_BASE_COLOR with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_BASE_COLOR plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_BASE_COLOR", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_BASE_COLOR" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_UV0 with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_UV0 plus ALPHA_TEST / HDR output
+  // permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_UV0", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_UV0" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_OPACITY with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_OPACITY plus ALPHA_TEST / HDR
+  // output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_OPACITY", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_OPACITY" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_WORLD_NORMALS with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_WORLD_NORMALS plus ALPHA_TEST /
+  // HDR output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_WORLD_NORMALS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_WORLD_NORMALS" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_ROUGHNESS with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_ROUGHNESS plus ALPHA_TEST / HDR
+  // output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_ROUGHNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_ROUGHNESS" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
-  // Forward pass pixel shader: DEBUG_METALNESS with ALPHA_TEST permutation
-  ShaderFileSpec {
+  // Forward pass pixel shader: required DEBUG_METALNESS plus ALPHA_TEST / HDR
+  // output permutations.
+  RequiredDefineShaderFileSpec<1, 1, 2> {
     .path="Forward/ForwardDebug_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 3>
-      { "DEBUG_METALNESS", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_METALNESS" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with alpha-test permutation
   ShaderFileSpec {
@@ -321,10 +359,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // Compile-time verification:
 // - ForwardMesh_VS: 1 entry
 // - ForwardMesh_PS base: 8 (ALPHA_TEST x OXYGEN_HDR_OUTPUT x SKIP_BRDF_LUT)
-// - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 8 each
+// - ForwardMesh_PS DEBUG_DIRECT_* / DEBUG_IBL_*: 4 each (required debug define
+//   x ALPHA_TEST x OXYGEN_HDR_OUTPUT)
 // - ForwardWireframe_PS base: 2 (with/without ALPHA_TEST)
-// - ForwardMesh_PS DEBUG_*: 8 each (debug define x ALPHA_TEST x
-// OXYGEN_HDR_OUTPUT)
+// - ForwardDebug_PS DEBUG_*: 4 each (required debug define x ALPHA_TEST x
+//   OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - LightCulling: 2 (1 entry x 2 permutations)
 // - TransmittanceLut_CS: 1 entry
@@ -341,8 +380,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ImGui: 2 entries
 // - Compositing: 2 entries
 // - ToneMap: 2 entries
-// - AutoExposure_Histogram_CS: 1 entry
+// - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 135
+// Total: 121
 
 } // namespace oxygen::graphics::d3d12

@@ -6,13 +6,28 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <vector>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
+enum class ShaderBakeCommand : uint8_t {
+  kUpdate,
+  kRebuild,
+  kCleanCache,
+};
+
+enum class ShaderBakeMode : uint8_t {
+  kDev,
+  kProduction,
+};
+
 struct BakeArgs {
+  ShaderBakeCommand command { ShaderBakeCommand::kUpdate };
+  ShaderBakeMode mode { ShaderBakeMode::kDev };
   std::filesystem::path workspace_root;
+  std::filesystem::path build_root;
   std::filesystem::path out_file;
   std::filesystem::path shader_source_root;
   std::filesystem::path oxygen_include_root;
