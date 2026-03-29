@@ -47,15 +47,20 @@ constexpr std::string_view kDefaultOxslOutputPath = "bin/Oxygen/shaders.bin";
 constexpr std::string_view kDefaultShaderSourceRoot
   = "src/Oxygen/Graphics/Direct3D12/Shaders";
 constexpr std::string_view kDefaultOxygenIncludeRoot = "src/Oxygen";
+constexpr std::string_view kLegacyBakeCommand = "bake";
 
 using oxygen::graphics::d3d12::tools::shader_bake::BakeArgs;
 using oxygen::graphics::d3d12::tools::shader_bake::InspectArgs;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeCommand;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
 
 struct BakeCliStorage {
   std::string workspace_root_string;
+  std::string build_root_string;
   std::string out_file_string;
   std::string shader_root_string;
   std::string oxygen_include_root_string;
+  std::string mode_string;
 };
 
 struct InspectCliStorage {
@@ -80,6 +85,13 @@ auto AddBakeOptions(
         .About("Workspace root (repo root).")
         .WithValue<std::string>()
         .StoreTo(&storage.workspace_root_string)
+        .Build())
+    .WithOption(OptionBuilder("build_root")
+        .Long("build-root")
+        .About("Build root for ShaderBake intermediary state (relative to "
+               "workspace root if relative).")
+        .WithValue<std::string>()
+        .StoreTo(&storage.build_root_string)
         .Build())
     .WithOption(OptionBuilder("shader_root")
         .Long("shader-root")
@@ -108,6 +120,12 @@ auto AddBakeOptions(
                "root if relative).")
         .WithValue<std::string>()
         .StoreTo(&storage.out_file_string)
+        .Build())
+    .WithOption(OptionBuilder("mode")
+        .Long("mode")
+        .About("ShaderBake policy mode: dev or production.")
+        .WithValue<std::string>()
+        .StoreTo(&storage.mode_string)
         .Build());
 }
 
@@ -176,16 +194,37 @@ auto AddInspectOptions(
       .Build());
 }
 
+auto ParseMode(const BakeCliStorage& storage) -> ShaderBakeMode
+{
+  if (storage.mode_string.empty() || storage.mode_string == "dev") {
+    return ShaderBakeMode::kDev;
+  }
+  if (storage.mode_string == "production") {
+    return ShaderBakeMode::kProduction;
+  }
+
+  throw std::runtime_error("--mode must be one of: dev, production");
+}
+
 auto ParseBakeArgs(const BakeCliStorage& storage,
-  const oxygen::clap::CommandLineContext& context) -> BakeArgs
+  const oxygen::clap::CommandLineContext& context,
+  const ShaderBakeCommand command) -> BakeArgs
 {
   std::filesystem::path workspace_root(storage.workspace_root_string);
+  std::filesystem::path build_root(storage.build_root_string);
   std::filesystem::path out_file(storage.out_file_string);
   std::filesystem::path shader_root(storage.shader_root_string);
   std::filesystem::path oxygen_include_root(storage.oxygen_include_root_string);
 
   if (workspace_root.empty()) {
     throw std::runtime_error("--workspace-root is required");
+  }
+
+  if (build_root.empty()) {
+    throw std::runtime_error("--build-root is required");
+  }
+  if (build_root.is_relative()) {
+    build_root = workspace_root / build_root;
   }
 
   if (shader_root.empty()) {
@@ -212,14 +251,21 @@ auto ParseBakeArgs(const BakeCliStorage& storage,
   }
 
   if (out_file.empty()) {
-    out_file = std::filesystem::path(kDefaultOxslOutputPath);
+    if (command == ShaderBakeCommand::kCleanCache) {
+      out_file = std::filesystem::path(kDefaultOxslOutputPath);
+    } else {
+      throw std::runtime_error("--out is required");
+    }
   }
   if (out_file.is_relative()) {
     out_file = workspace_root / out_file;
   }
 
   return BakeArgs {
+    .command = command,
+    .mode = ParseMode(storage),
     .workspace_root = std::move(workspace_root),
+    .build_root = std::move(build_root),
     .out_file = std::move(out_file),
     .shader_source_root = std::move(shader_root),
     .oxygen_include_root = std::move(oxygen_include_root),
@@ -227,10 +273,37 @@ auto ParseBakeArgs(const BakeCliStorage& storage,
   };
 }
 
+auto GetBakeCommand(const oxygen::clap::CommandLineContext& context)
+  -> ShaderBakeCommand
+{
+  if (context.active_command == nullptr
+    || context.active_command->IsDefault()) {
+    return ShaderBakeCommand::kUpdate;
+  }
+
+  const auto& path = context.active_command->Path();
+  if (path.empty()) {
+    return ShaderBakeCommand::kUpdate;
+  }
+
+  if (path.front() == "update" || path.front() == kLegacyBakeCommand) {
+    return ShaderBakeCommand::kUpdate;
+  }
+  if (path.front() == "rebuild") {
+    return ShaderBakeCommand::kRebuild;
+  }
+  if (path.front() == "clean-cache") {
+    return ShaderBakeCommand::kCleanCache;
+  }
+
+  throw std::runtime_error("unsupported ShaderBake build command");
+}
+
 auto RunBakeCommand(const oxygen::clap::CommandLineContext& context,
   const BakeCliStorage& storage) -> int
 {
-  const auto bake_args = ParseBakeArgs(storage, context);
+  const auto command = GetBakeCommand(context);
+  const auto bake_args = ParseBakeArgs(storage, context, command);
   return oxygen::graphics::d3d12::tools::shader_bake::BakeShaderLibrary(
     bake_args);
 }
@@ -281,12 +354,27 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
   BakeCliStorage bake_storage;
   InspectCliStorage inspect_storage;
 
-  oxygen::clap::CommandBuilder default_bake { oxygen::clap::Command::DEFAULT };
-  default_bake.About("Bake all engine shaders into shaders.bin");
-  AddBakeOptions(default_bake, bake_storage);
+  oxygen::clap::CommandBuilder default_update {
+    oxygen::clap::Command::DEFAULT
+  };
+  default_update.About(
+    "Incrementally update the engine shader archive (same as `update`).");
+  AddBakeOptions(default_update, bake_storage);
 
-  oxygen::clap::CommandBuilder bake { "bake" };
-  bake.About("Bake all engine shaders into shaders.bin");
+  oxygen::clap::CommandBuilder update { "update" };
+  update.About("Incrementally update the engine shader archive.");
+  AddBakeOptions(update, bake_storage);
+
+  oxygen::clap::CommandBuilder rebuild { "rebuild" };
+  rebuild.About("Rebuild the engine shader archive from scratch.");
+  AddBakeOptions(rebuild, bake_storage);
+
+  oxygen::clap::CommandBuilder clean_cache { "clean-cache" };
+  clean_cache.About("Delete ShaderBake intermediary state under --build-root.");
+  AddBakeOptions(clean_cache, bake_storage);
+
+  oxygen::clap::CommandBuilder bake { std::string(kLegacyBakeCommand) };
+  bake.About("Legacy alias for `update`.");
   AddBakeOptions(bake, bake_storage);
 
   oxygen::clap::CommandBuilder inspect { "inspect" };
@@ -299,7 +387,10 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
                .About("Build-time shader library producer (OXSL v1).")
                .WithHelpCommand()
                .WithVersionCommand()
-               .WithCommand(default_bake.Build())
+               .WithCommand(default_update.Build())
+               .WithCommand(update.Build())
+               .WithCommand(rebuild.Build())
+               .WithCommand(clean_cache.Build())
                .WithCommand(bake.Build())
                .WithCommand(inspect.Build())
                .Build();

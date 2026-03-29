@@ -30,6 +30,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 
 using Microsoft::WRL::ComPtr;
 using oxygen::ShaderType;
@@ -37,10 +38,12 @@ using oxygen::graphics::d3d12::tools::shader_bake::DxcShaderCompiler;
 
 namespace {
 
-void LogDxcDiagnostics(IDxcBlob* diagnostics_blob);
-
 struct DxcCompileArgs {
-  std::vector<std::wstring> argv_storage;
+  std::vector<std::wstring> option_storage;
+  std::vector<std::wstring> define_name_storage;
+  std::vector<std::wstring> define_value_storage;
+  std::vector<DxcDefine> defines;
+  ComPtr<IDxcCompilerArgs> compiler_args;
 };
 
 auto WideToUtf8String(std::wstring_view in) -> std::string
@@ -50,14 +53,16 @@ auto WideToUtf8String(std::wstring_view in) -> std::string
   return out;
 }
 
-auto JoinDxcArgsForLog(const DxcCompileArgs& args) -> std::string
+auto JoinDxcArgsForLog(IDxcCompilerArgs& args) -> std::string
 {
   std::string joined;
-  for (const auto& a : args.argv_storage) {
+  const auto argv = args.GetArguments();
+  const auto argc = args.GetCount();
+  for (uint32_t index = 0; index < argc; ++index) {
     if (!joined.empty()) {
       joined.push_back(' ');
     }
-    joined += WideToUtf8String(a);
+    joined += WideToUtf8String(argv[index]);
   }
   return joined;
 }
@@ -107,77 +112,59 @@ auto UniqueIncludeDirsForLog(std::span<const std::filesystem::path> dirs)
   return out;
 }
 
-void LogDxcFailureReport(const DxcFailureContext& ctx, std::string_view reason,
-  IDxcBlob* diagnostics_blob)
-{
-  LOG_SCOPE_F(ERROR, "DXC shader compilation failed");
-  LOG_F(ERROR, "reason: {}", std::string(reason));
+auto LogDxcFailureReport(const DxcFailureContext& ctx, std::string_view reason,
+  IDxcBlob* diagnostics_blob) -> std::string;
 
-  if (ctx.shader_identifier != nullptr) {
-    LOG_F(ERROR, "shader: {}", *ctx.shader_identifier);
-  }
-  if (ctx.profile_name != nullptr) {
-    LOG_F(ERROR, "profile: {}", WideToUtf8String(ctx.profile_name));
-  }
-  LOG_F(ERROR, "entry point: {}", std::string(ctx.entry_point_utf8));
-  LOG_F(ERROR, "args: {}", std::string(ctx.args_for_log));
-
-  const auto include_dirs_for_log = UniqueIncludeDirsForLog(ctx.include_dirs);
-  {
-    LOG_SCOPE_F(ERROR,
-      fmt::format("include dirs ({}):", include_dirs_for_log.size()).c_str());
-    for (const auto& dir : include_dirs_for_log) {
-      LOG_F(ERROR, "  - {}", dir);
-    }
-  }
-
-  LOG_F(ERROR, "source contains entry token: {}",
-    ContainsEntryPointToken(ctx.shader_source_utf8, ctx.entry_point_utf8));
-
-  LogDxcDiagnostics(diagnostics_blob);
-}
-
-auto MakeDxcArguments(const wchar_t* profile_name,
-  const std::string& entry_point_utf8,
+auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
+  const wchar_t* profile_name, const std::string& entry_point_utf8,
   std::span<const std::filesystem::path> include_dirs,
   const std::map<std::wstring, std::wstring>& global_defines,
   std::span<const oxygen::graphics::ShaderDefine> request_defines)
   -> DxcCompileArgs
 {
+  using oxygen::windows::ThrowOnFailed;
+
   DxcCompileArgs args {};
 
   std::wstring entry_point;
   oxygen::string_utils::Utf8ToWide(entry_point_utf8, entry_point);
 
-  args.argv_storage.reserve(16U + (include_dirs.size() * 2U)
-    + global_defines.size() + request_defines.size());
+  args.option_storage.reserve(12U + (include_dirs.size() * 2U));
 
-  args.argv_storage.emplace_back(L"-Ges");
-  args.argv_storage.emplace_back(L"-enable-16bit-types");
-  args.argv_storage.emplace_back(L"-HV");
-  args.argv_storage.emplace_back(L"2021");
-  args.argv_storage.emplace_back(L"-T");
-  args.argv_storage.emplace_back(profile_name);
+  args.option_storage.emplace_back(L"-Ges");
+  args.option_storage.emplace_back(L"-enable-16bit-types");
+  args.option_storage.emplace_back(L"-HV");
+  args.option_storage.emplace_back(L"2021");
   for (const auto& include_dir : include_dirs) {
     if (include_dir.empty()) {
       continue;
     }
-    args.argv_storage.emplace_back(L"-I");
-    args.argv_storage.emplace_back(include_dir.wstring());
+    args.option_storage.emplace_back(L"-I");
+    args.option_storage.emplace_back(include_dir.wstring());
   }
+
+  args.define_name_storage.reserve(
+    global_defines.size() + request_defines.size());
+  args.define_value_storage.reserve(request_defines.size());
+  args.defines.reserve(global_defines.size() + request_defines.size());
 
   for (const auto& [name, value] : global_defines) {
     if (name.empty()) {
       continue;
     }
-
-    std::wstring def_arg = L"-D";
-    def_arg += name;
+    args.define_name_storage.push_back(name);
     if (!value.empty()) {
-      def_arg += L"=";
-      def_arg += value;
+      args.define_value_storage.push_back(value);
+      args.defines.push_back(DxcDefine {
+        .Name = args.define_name_storage.back().c_str(),
+        .Value = args.define_value_storage.back().c_str(),
+      });
+    } else {
+      args.defines.push_back(DxcDefine {
+        .Name = args.define_name_storage.back().c_str(),
+        .Value = nullptr,
+      });
     }
-    args.argv_storage.emplace_back(std::move(def_arg));
   }
 
   for (const auto& def : request_defines) {
@@ -187,30 +174,41 @@ auto MakeDxcArguments(const wchar_t* profile_name,
 
     std::wstring name_w;
     oxygen::string_utils::Utf8ToWide(def.name, name_w);
-
-    std::wstring def_arg = L"-D";
-    def_arg += name_w;
-
+    args.define_name_storage.push_back(std::move(name_w));
     if (def.value.has_value()) {
       std::wstring value_w;
       oxygen::string_utils::Utf8ToWide(*def.value, value_w);
-      def_arg += L"=";
-      def_arg += value_w;
+      args.define_value_storage.push_back(std::move(value_w));
+      args.defines.push_back(DxcDefine {
+        .Name = args.define_name_storage.back().c_str(),
+        .Value = args.define_value_storage.back().c_str(),
+      });
+    } else {
+      args.defines.push_back(DxcDefine {
+        .Name = args.define_name_storage.back().c_str(),
+        .Value = nullptr,
+      });
     }
-
-    args.argv_storage.emplace_back(std::move(def_arg));
   }
 
 #if !defined(NDEBUG)
-  args.argv_storage.emplace_back(L"-Od");
-  args.argv_storage.emplace_back(L"-Zi");
-  args.argv_storage.emplace_back(L"-Qembed_debug");
+  args.option_storage.emplace_back(L"-Od");
+  args.option_storage.emplace_back(L"-Zi");
+  args.option_storage.emplace_back(L"-Qembed_debug");
 #else
-  args.argv_storage.emplace_back(L"-O3");
+  args.option_storage.emplace_back(L"-O3");
 #endif
 
-  args.argv_storage.emplace_back(L"-E");
-  args.argv_storage.emplace_back(std::move(entry_point));
+  std::vector<LPCWSTR> option_ptrs;
+  option_ptrs.reserve(args.option_storage.size());
+  for (const auto& option : args.option_storage) {
+    option_ptrs.push_back(option.c_str());
+  }
+
+  ThrowOnFailed(utils.BuildArguments(source_name_w.c_str(), entry_point.c_str(),
+    profile_name, option_ptrs.data(), static_cast<uint32_t>(option_ptrs.size()),
+    args.defines.data(), static_cast<uint32_t>(args.defines.size()),
+    args.compiler_args.GetAddressOf()));
 
   return args;
 }
@@ -220,11 +218,13 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   const std::string& shader_identifier, const wchar_t* profile_name,
   std::string_view entry_point_utf8, std::string_view shader_source_utf8,
   std::span<const std::filesystem::path> include_dirs)
-  -> std::unique_ptr<oxygen::graphics::IShaderByteCode>
+  -> DxcShaderCompiler::CompileResult
 {
   using oxygen::windows::ThrowOnFailed;
 
-  const auto args_for_log = JoinDxcArgsForLog(args);
+  auto* const compiler_args = args.compiler_args.Get();
+  DCHECK_NOTNULL_F(compiler_args);
+  const auto args_for_log = JoinDxcArgsForLog(*compiler_args);
   const DxcFailureContext ctx {
     .shader_identifier = &shader_identifier,
     .profile_name = profile_name,
@@ -235,19 +235,13 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   };
 
   ComPtr<IDxcResult> result;
-  std::vector<LPCWSTR> argv;
-  argv.reserve(args.argv_storage.size());
-  for (const auto& a : args.argv_storage) {
-    argv.emplace_back(a.c_str());
-  }
-
-  HRESULT hr = compiler.Compile(&source_buffer, argv.data(),
-    static_cast<uint32_t>(argv.size()), &include_handler,
-    IID_PPV_ARGS(&result));
+  HRESULT hr = compiler.Compile(&source_buffer, compiler_args->GetArguments(),
+    compiler_args->GetCount(), &include_handler, IID_PPV_ARGS(&result));
   if (FAILED(hr)) {
     LOG_F(ERROR, "DXC Compile call failed: {:x}", hr);
-    LogDxcFailureReport(ctx, "Compile call failed", nullptr);
-    return {};
+    return DxcShaderCompiler::CompileResult {
+      .diagnostics = LogDxcFailureReport(ctx, "Compile call failed", nullptr),
+    };
   }
   DCHECK_NOTNULL_F(result);
 
@@ -256,15 +250,20 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   if (FAILED(status)) {
     ComPtr<IDxcBlobEncoding> error_blob;
     hr = result->GetErrorBuffer(&error_blob);
-    LogDxcFailureReport(ctx, "Compilation failed", error_blob.Get());
-    return {};
+    return DxcShaderCompiler::CompileResult {
+      .diagnostics
+      = LogDxcFailureReport(ctx, "Compilation failed", error_blob.Get()),
+    };
   }
 
   ComPtr<IDxcBlob> output;
   ThrowOnFailed(result->GetResult(&output));
   if (output == nullptr) {
     LOG_F(ERROR, "GetResult returned null blob");
-    return {};
+    return DxcShaderCompiler::CompileResult {
+      .diagnostics
+      = LogDxcFailureReport(ctx, "GetResult returned null blob", nullptr),
+    };
   }
 
   const size_t size = output->GetBufferSize();
@@ -275,33 +274,46 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
       DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), &output_name_blob);
 
     auto* diagnostics_blob = (SUCCEEDED(hr) ? warning_blob.Get() : nullptr);
-    LogDxcFailureReport(ctx, "Empty bytecode", diagnostics_blob);
-    return {};
+    return DxcShaderCompiler::CompileResult {
+      .diagnostics
+      = LogDxcFailureReport(ctx, "Empty bytecode", diagnostics_blob),
+    };
   }
 
-  return std::make_unique<oxygen::graphics::ShaderByteCode<ComPtr<IDxcBlob>>>(
-    std::move(output));
+  auto& tracking_include_handler = static_cast<
+    oxygen::graphics::d3d12::tools::shader_bake::TrackingIncludeHandler&>(
+    include_handler);
+
+  return DxcShaderCompiler::CompileResult {
+    .bytecode
+    = std::make_unique<oxygen::graphics::ShaderByteCode<ComPtr<IDxcBlob>>>(
+      std::move(output)),
+    .dependencies = tracking_include_handler.Dependencies(),
+  };
 }
 
-void LogDxcDiagnostics(IDxcBlob* diagnostics_blob)
+auto DiagnosticsBlobToString(IDxcBlob* diagnostics_blob) -> std::string
 {
   if (diagnostics_blob == nullptr) {
-    return;
+    return {};
   }
-
-  LOG_SCOPE_F(ERROR, "DXC Diagnostics Report");
 
   const auto* const message
     = static_cast<const char*>(diagnostics_blob->GetBufferPointer());
   const size_t message_size = diagnostics_blob->GetBufferSize();
   if ((message == nullptr) || (message_size == 0U)) {
-    return;
+    return {};
   }
 
-  std::string_view diagnostics(message, message_size);
-  while (!diagnostics.empty()) {
-    const auto newline_pos = diagnostics.find('\n');
-    std::string_view line = diagnostics.substr(0, newline_pos);
+  return std::string(message, message_size);
+}
+
+void LogMultilineDiagnostics(std::string_view diagnostics)
+{
+  std::string_view remaining = diagnostics;
+  while (!remaining.empty()) {
+    const auto newline_pos = remaining.find('\n');
+    std::string_view line = remaining.substr(0, newline_pos);
     if (!line.empty() && (line.back() == '\r')) {
       line.remove_suffix(1);
     }
@@ -312,8 +324,45 @@ void LogDxcDiagnostics(IDxcBlob* diagnostics_blob)
     if (newline_pos == std::string_view::npos) {
       break;
     }
-    diagnostics.remove_prefix(newline_pos + 1);
+    remaining.remove_prefix(newline_pos + 1);
   }
+}
+
+auto LogDxcFailureReport(const DxcFailureContext& ctx, std::string_view reason,
+  IDxcBlob* diagnostics_blob) -> std::string
+{
+  auto report = fmt::format("reason: {}\n", reason);
+
+  if (ctx.shader_identifier != nullptr) {
+    report += fmt::format("shader: {}\n", *ctx.shader_identifier);
+  }
+  if (ctx.profile_name != nullptr) {
+    report += fmt::format("profile: {}\n", WideToUtf8String(ctx.profile_name));
+  }
+  report += fmt::format("entry point: {}\n", ctx.entry_point_utf8);
+  report += fmt::format("args: {}\n", ctx.args_for_log);
+
+  const auto include_dirs_for_log = UniqueIncludeDirsForLog(ctx.include_dirs);
+  report += fmt::format("include dirs ({}):\n", include_dirs_for_log.size());
+  for (const auto& dir : include_dirs_for_log) {
+    report += fmt::format("  - {}\n", dir);
+  }
+
+  report += fmt::format("source contains entry token: {}\n",
+    ContainsEntryPointToken(ctx.shader_source_utf8, ctx.entry_point_utf8));
+
+  const auto diagnostics = DiagnosticsBlobToString(diagnostics_blob);
+  if (!diagnostics.empty()) {
+    report += "DXC diagnostics:\n";
+    report += diagnostics;
+    if (report.back() != '\n') {
+      report.push_back('\n');
+    }
+  }
+
+  LOG_SCOPE_F(ERROR, "DXC shader compilation failed");
+  LogMultilineDiagnostics(report);
+  return report;
 }
 
 constexpr auto GetProfileForShaderType(const ShaderType type) -> const wchar_t*
@@ -350,34 +399,37 @@ DxcShaderCompiler::DxcShaderCompiler(Config config)
 
   ThrowOnFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils_)));
   ThrowOnFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler_)));
-  ThrowOnFailed(
-    utils_->CreateDefaultIncludeHandler(include_processor_.GetAddressOf()));
 }
 
 DxcShaderCompiler::~DxcShaderCompiler() = default;
 
 auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
   const ShaderInfo& shader_info, const CompileOptions& options) const
-  -> std::unique_ptr<IShaderByteCode>
+  -> CompileResult
 {
   using oxygen::windows::ThrowOnFailed;
 
   if (shader_source.empty()) {
     LOG_F(WARNING, "Attempt to compile a shader from empty source");
-    return {};
+    return CompileResult {
+      .diagnostics = "Attempt to compile a shader from empty source\n",
+    };
   }
 
   DCHECK_F(shader_source.size() < (std::numeric_limits<uint32_t>::max)());
 
   const auto* profile_name = GetProfileForShaderType(shader_info.type);
+  std::wstring source_name_w;
+  oxygen::string_utils::Utf8ToWide(shader_info.relative_path, source_name_w);
 
   ComPtr<IDxcBlobEncoding> src_blob;
   ThrowOnFailed(utils_->CreateBlob(shader_source.data(),
     static_cast<UINT32>(shader_source.size()), CP_UTF8,
     src_blob.GetAddressOf()));
 
-  auto args = MakeDxcArguments(profile_name, shader_info.entry_point,
-    options.include_dirs, config_.global_defines, options.defines);
+  auto args = MakeDxcArguments(*utils_.Get(), source_name_w, profile_name,
+    shader_info.entry_point, options.include_dirs, config_.global_defines,
+    options.defines);
 
   DxcBuffer source_buffer {
     .Ptr = src_blob->GetBufferPointer(),
@@ -386,14 +438,16 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
   };
 
   auto* const compiler = compiler_.Get();
-  auto* const include_handler = include_processor_.Get();
+  auto* const utils = utils_.Get();
   DCHECK_NOTNULL_F(compiler);
-  DCHECK_NOTNULL_F(include_handler);
+  DCHECK_NOTNULL_F(utils);
 
   const std::string shader_identifier
     = oxygen::graphics::FormatShaderLogKey(shader_info);
-
-  return CompileDxc(*compiler, *include_handler, source_buffer, args,
+  ComPtr<IDxcIncludeHandler> include_handler;
+  include_handler.Attach(new TrackingIncludeHandler(
+    *utils, options.workspace_root, options.include_dirs));
+  return CompileDxc(*compiler, *include_handler.Get(), source_buffer, args,
     shader_identifier, profile_name, shader_info.entry_point,
     std::string_view(reinterpret_cast<const char*>(shader_source.data()),
       shader_source.size()),

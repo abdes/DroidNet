@@ -16,18 +16,30 @@
 
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 
 struct IDxcCompiler3;
 struct IDxcUtils;
-struct IDxcIncludeHandler;
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
 class DxcShaderCompiler {
 public:
   struct CompileOptions {
+    std::filesystem::path workspace_root;
     std::vector<std::filesystem::path> include_dirs;
     std::vector<ShaderDefine> defines {};
+  };
+
+  struct CompileResult {
+    std::unique_ptr<IShaderByteCode> bytecode;
+    std::vector<DependencyFingerprint> dependencies;
+    std::string diagnostics;
+
+    [[nodiscard]] auto Succeeded() const noexcept -> bool
+    {
+      return bytecode != nullptr;
+    }
   };
 
   struct Config {
@@ -45,7 +57,7 @@ public:
 
   [[nodiscard]] auto CompileFromSource(const std::u8string& shader_source,
     const ShaderInfo& shader_info, const CompileOptions& options) const
-    -> std::unique_ptr<IShaderByteCode>;
+    -> CompileResult;
 
   [[nodiscard]] auto GetConfig() const noexcept -> const Config&
   {
@@ -57,7 +69,6 @@ private:
 
   Microsoft::WRL::ComPtr<IDxcCompiler3> compiler_;
   Microsoft::WRL::ComPtr<IDxcUtils> utils_;
-  Microsoft::WRL::ComPtr<IDxcIncludeHandler> include_processor_;
 };
 
 } // namespace oxygen::graphics::d3d12::tools::shader_bake

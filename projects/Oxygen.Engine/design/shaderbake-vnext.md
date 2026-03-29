@@ -1,11 +1,14 @@
 # ShaderBake vNext Design Specification (Spec-Locked)
 
-Status: `planned`
+Status: `in_progress`
+Implementation tracking: `design/shaderbake-vnext-implementation-plan.md`
+Implementation status note: canonical catalog expansion, deterministic request ordering, duplicate-request-key rejection, build-root layout ownership, manifest snapshot persistence, build-state index persistence with module-scan recovery, action-key calculation, request-local DXC include tracking, dependency fingerprint capture, sharded `.oxsm` artifact read/write, request-scoped compilation, final-archive packing, and request-level dirty analysis for `update` and `rebuild` are implemented. Current `.oxsm` files carry request identity, action key, toolchain hash, primary source hash, resolved include dependency fingerprints, DXIL, and reflection. `update` now reuses clean module artifacts, removes stale artifacts after successful runs, emits per-request dev-mode failure logs, and skips final repack when nothing changed; `rebuild` now recompiles the full catalog through the same vNext pipeline and preserves the last published final archive on failure. Ninja validation now covers selective recompiles, stale-request removal, `update`/`rebuild` archive parity, clean-cache behavior, working-directory independence, custom `--out`, and preserved `inspect` behavior. Remaining gap: the Visual Studio half of the generator matrix cannot be exercised on this machine because CMake cannot find any installed Visual Studio instance.
 Audience: engineers implementing the next ShaderBake iteration and its build integration
 Scope: build-time shader compilation, incremental rebuild behavior, intermediate artifact layout, and final OXSL archive emission for Oxygen D3D12 shaders
 
 Cross-references:
 
+- `design/shaderbake-vnext-implementation-plan.md` - implementation plan, task tracking, and validation evidence
 - `src/Oxygen/Renderer/Docs/shader-system.md` - runtime shader-system contract
 - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h` - engine shader source of truth
 - `src/Oxygen/Graphics/Common/Shaders.h/.cpp` - canonical shader request identity and keying

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <filesystem>
 #include <memory>
 #include <span>
 #include <string_view>
@@ -32,11 +33,12 @@ EngineShaders::EngineShaders(oxygen::PathFinderConfig path_finder_config)
     = std::make_shared<const oxygen::PathFinderConfig>(path_finder_config_);
   const oxygen::PathFinder path_finder(
     shared_config, std::filesystem::current_path());
-  const auto workspace_root = path_finder.WorkspaceRoot();
+  const auto shader_library_path = path_finder.ShaderLibraryPath();
 
   ShaderManager::Config shader_manager_config {
     .backend_name = "d3d12",
-    .archive_dir = workspace_root / "bin/Oxygen",
+    .archive_file_name = shader_library_path.filename().string(),
+    .archive_dir = shader_library_path.parent_path(),
   };
   shaders_ = std::make_unique<ShaderManager>(std::move(shader_manager_config));
 }
