@@ -477,4 +477,26 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
     != std::string::npos);
 }
 
+NOLINT_TEST_F(GraphicsBackendLoaderTest,
+  DefaultPathFinderConfigSerializationUsesBuildQualifiedShaderPath)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+
+  oxygen::GraphicsConfig config;
+  auto backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
+  EXPECT_FALSE(backend.expired());
+
+  auto* mock_graphics = MockBackend::GetMockGraphics();
+  ASSERT_NE(mock_graphics, nullptr);
+
+  const std::string path_json(mock_graphics->GetPathFinderJsonData());
+  const auto expected_shader_path
+    = oxygen::PathFinderConfig::DefaultShaderLibraryPathForCurrentBuild()
+        .generic_string();
+  EXPECT_TRUE(path_json.find(std::string(R"("shader_library_path": ")")
+                + expected_shader_path + "\"")
+    != std::string::npos);
+}
+
 } // namespace

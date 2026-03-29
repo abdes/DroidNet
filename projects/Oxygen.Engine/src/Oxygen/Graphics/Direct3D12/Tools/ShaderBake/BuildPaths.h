@@ -32,10 +32,17 @@ struct BuildRootLayout {
   const BuildRootLayout& layout, uint64_t request_key) -> std::filesystem::path;
 [[nodiscard]] auto GetRequestLogPath(
   const BuildRootLayout& layout, uint64_t request_key) -> std::filesystem::path;
+[[nodiscard]] auto GetRequestDxilPath(
+  const std::filesystem::path& final_archive_path, std::string_view source_path,
+  std::string_view entry_point, uint64_t request_key) -> std::filesystem::path;
+[[nodiscard]] auto GetRequestPdbPath(
+  const std::filesystem::path& final_archive_path, std::string_view source_path,
+  std::string_view entry_point, uint64_t request_key) -> std::filesystem::path;
 
 auto EnsureBuildRootLayout(const BuildRootLayout& layout) -> void;
 auto ResetTempDirectory(const BuildRootLayout& layout) -> void;
 auto ClearCache(const BuildRootLayout& layout) -> void;
+auto RemoveLegacyDebugExportTree(const BuildRootLayout& layout) -> void;
 
 [[nodiscard]] auto ToUtf8PathString(const std::filesystem::path& path)
   -> std::string;

@@ -1,14 +1,13 @@
 # ShaderBake vNext Design Specification (Spec-Locked)
 
 Status: `in_progress`
-Implementation tracking: `design/shaderbake-vnext-implementation-plan.md`
-Implementation status note: canonical catalog expansion, deterministic request ordering, duplicate-request-key rejection, build-root layout ownership, manifest snapshot persistence, build-state index persistence with module-scan recovery, action-key calculation, request-local DXC include tracking, dependency fingerprint capture, sharded `.oxsm` artifact read/write, request-scoped compilation, final-archive packing, and request-level dirty analysis for `update` and `rebuild` are implemented. Current `.oxsm` files carry request identity, action key, toolchain hash, primary source hash, resolved include dependency fingerprints, DXIL, and reflection. `update` now reuses clean module artifacts, removes stale artifacts after successful runs, emits per-request dev-mode failure logs, and skips final repack when nothing changed; `rebuild` now recompiles the full catalog through the same vNext pipeline and preserves the last published final archive on failure. Ninja validation now covers selective recompiles, stale-request removal, `update`/`rebuild` archive parity, clean-cache behavior, working-directory independence, custom `--out`, and preserved `inspect` behavior. Remaining gap: the Visual Studio half of the generator matrix cannot be exercised on this machine because CMake cannot find any installed Visual Studio instance.
+Implementation tracking: this design note plus validated code in `src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/`
+Implementation status note: canonical catalog expansion, deterministic request ordering, duplicate-request-key rejection, build-root layout ownership, manifest snapshot persistence, build-state index persistence with module-scan recovery, action-key calculation, request-local DXC include tracking, dependency fingerprint capture, sharded `.oxsm` artifact read/write, request-scoped compilation, final-archive packing, and request-level dirty analysis for `update` and `rebuild` are implemented. Current `.oxsm` files carry request identity, action key, toolchain hash, primary source hash, resolved include dependency fingerprints, DXIL, and reflection. ShaderBake now also publishes loose DXIL and PDB sidecars beside the final archive under `<out-parent>/dxil/<source-path>/<entry-point>__<request-key>.dxil` and `<out-parent>/pdb/<source-path>/<entry-point>__<request-key>.pdb`, uses external DXC PDB output instead of embedded debug info by default, reuses clean module artifacts, removes stale artifacts after successful runs, emits per-request dev-mode failure logs, and skips final repack when nothing changed. The default runtime output contract now resolves to `bin/Oxygen/<build-config>/<mode>/shaders.bin`. Ninja validation covers selective recompiles, stale-request removal, sidecar-PDB regeneration, `update`/`rebuild` archive parity, clean-cache behavior, working-directory independence, custom `--out`, and preserved `inspect` behavior. Remaining gap: the Visual Studio half of the generator matrix cannot be exercised on this machine because CMake cannot find any installed Visual Studio instance.
 Audience: engineers implementing the next ShaderBake iteration and its build integration
 Scope: build-time shader compilation, incremental rebuild behavior, intermediate artifact layout, and final OXSL archive emission for Oxygen D3D12 shaders
 
 Cross-references:
 
-- `design/shaderbake-vnext-implementation-plan.md` - implementation plan, task tracking, and validation evidence
 - `src/Oxygen/Renderer/Docs/shader-system.md` - runtime shader-system contract
 - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h` - engine shader source of truth
 - `src/Oxygen/Graphics/Common/Shaders.h/.cpp` - canonical shader request identity and keying
@@ -230,6 +229,21 @@ Rules:
 5. `logs/` is optional in production mode and required in dev mode for failed compiles.
 6. `temp/` contains transient files only and may be cleared at process start.
 
+Developer-facing loose shader artifacts are published beside the final archive at:
+
+```text
+<out-parent>/
+  shaders.bin
+  dxil/
+    <source-path>/
+      <entry-point>__<request-key-hex>.dxil
+  pdb/
+    <source-path>/
+      <entry-point>__<request-key-hex>.pdb
+```
+
+These files are intended for PIX, RenderDoc, Nsight, and similar tooling.
+
 ---
 
 ## 8. Request Identity Contract
@@ -437,8 +451,9 @@ For `update`, a request is dirty if any of the following is true:
 5. primary source file is missing,
 6. any dependency file is missing,
 7. any dependency content hash changed,
-8. the request existed previously but last compile did not produce a valid artifact,
-9. the request is new relative to the last successful manifest.
+8. an expected loose PDB sidecar beside the final archive is missing for the active build configuration,
+9. the request existed previously but last compile did not produce a valid artifact,
+10. the request is new relative to the last successful manifest.
 
 For catalog-level state, final repack is required if any of the following is true:
 
@@ -525,8 +540,8 @@ Required behavior:
 
 1. incremental `update` is the default expected command,
 2. failed compile diagnostics are written to `logs/`,
-3. existing debug-friendly DXC flags remain active when the build configuration requests them,
-4. stale module artifacts are removed on successful update.
+3. debug-capable builds emit loose PDB sidecars beside the final archive and do not use DXC embedded debug info by default,
+4. stale module artifacts and stale developer-facing debug exports are removed on successful update.
 
 ### 15.2 Production Mode
 
@@ -569,7 +584,7 @@ Optional resolved arguments may also be passed for shader root and include roots
 
 `--out` must be the deploy/runtime path chosen by build integration. For repo-local development this is typically:
 
-- `bin/Oxygen/shaders.bin`
+- `bin/Oxygen/<build-config>/<mode>/shaders.bin`
 
 If the application or packaging flow chooses a different runtime shader library path, the build must pass that path here.
 

@@ -24,6 +24,9 @@ For a given invocation, `ShaderBake` owns two output classes:
   - `modules/<xx>/<yy>/<request-key>.oxsm`
   - `logs/<request-key>.log` in `dev` mode for failed requests
   - `temp/` for atomic publication staging
+- Published developer-facing sidecars beside `shaders.bin`:
+  - `dxil/<source-path>/<entry-point>__<request-key>.dxil`
+  - `pdb/<source-path>/<entry-point>__<request-key>.pdb`
 
 The final archive is written atomically and contains exactly the current engine
 shader catalog membership.
@@ -52,6 +55,7 @@ Incremental build entry point.
 - Reuses clean `.oxsm` artifacts.
 - Recompiles only dirty requests.
 - Removes stale artifacts for requests no longer in the catalog.
+- Recompiles a request if an expected sidecar PDB was removed.
 - Repackages the final archive only if inputs or membership changed.
 
 ### `rebuild`
@@ -69,6 +73,7 @@ Removes ShaderBake-owned intermediary state under `--build-root`.
 
 - Deletes `state/`, `modules/`, `logs/`, and `temp/`.
 - Does not delete `--out`.
+- Does not delete published `dxil/` or `pdb/` sidecars beside `--out`.
 
 ### `inspect`
 
@@ -129,7 +134,7 @@ Incremental update:
 Oxygen.Graphics.Direct3D12.ShaderBake.exe update `
   --workspace-root <repo-root> `
   --build-root <build-dir>\shaderbake `
-  --out <repo-root>\bin\Oxygen\shaders.bin
+  --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
 ```
 
 Clean rebuild:
@@ -138,14 +143,14 @@ Clean rebuild:
 Oxygen.Graphics.Direct3D12.ShaderBake.exe rebuild `
   --workspace-root <repo-root> `
   --build-root <build-dir>\shaderbake `
-  --out <repo-root>\bin\Oxygen\shaders.bin
+  --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
 ```
 
 Inspect a baked archive:
 
 ```powershell
 Oxygen.Graphics.Direct3D12.ShaderBake.exe inspect `
-  --file <repo-root>\bin\Oxygen\shaders.bin `
+  --file <repo-root>\bin\Oxygen\Debug\dev\shaders.bin `
   --header true `
   --modules true
 ```
@@ -164,7 +169,7 @@ The engine's shader build integrates `ShaderBake` from
 `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` and currently invokes:
 
 ```text
-ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake --out <repo-root>/bin/Oxygen/shaders.bin
+ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake --out <repo-root>/bin/Oxygen/<build-config>/<mode>/shaders.bin
 ```
 
 That split is intentional:
@@ -177,6 +182,8 @@ That split is intentional:
 
 - A failed run never publishes a partial final archive.
 - Module artifacts are written only after a request compiles successfully.
+- Debug-capable builds publish loose DXIL and PDB sidecars beside `shaders.bin`.
+- ShaderBake uses external DXC PDB output for those sidecars rather than embedding debug info in the compiled DXIL by default.
 - In `dev` mode, failed requests write diagnostics to `logs/<request-key>.log`
   under `--build-root`.
 - In `production` mode, per-request failure logs are not emitted.
@@ -204,5 +211,4 @@ after build and fails configure early if the expected package files are missing.
 ## Related Documentation
 
 - [ShaderBake vNext design](../../../../../../design/shaderbake-vnext.md)
-- [ShaderBake implementation plan](../../../../../../design/shaderbake-vnext-implementation-plan.md)
 - [Shader system runtime contract](../../../../../../src/Oxygen/Renderer/Docs/shader-system.md)

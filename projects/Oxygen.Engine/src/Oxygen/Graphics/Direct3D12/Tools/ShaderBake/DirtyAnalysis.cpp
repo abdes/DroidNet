@@ -15,6 +15,7 @@
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -136,6 +137,7 @@ namespace {
     const std::unordered_map<uint64_t, BuildStateModuleRecord>&
       previous_modules,
     const BuildRootLayout& layout,
+    const std::filesystem::path& final_archive_path,
     const ExpandedShaderRequest& expanded_request) -> RequestDirtyAnalysis
   {
     RequestDirtyAnalysis analysis {
@@ -196,6 +198,16 @@ namespace {
       }
     }
 
+    if (IsExternalShaderDebugInfoEnabled()) {
+      std::error_code debug_ec;
+      const auto pdb_path = GetRequestPdbPath(final_archive_path,
+        expanded_request.request.source_path,
+        expanded_request.request.entry_point, expanded_request.request_key);
+      if (!std::filesystem::is_regular_file(pdb_path, debug_ec) || debug_ec) {
+        analysis.dirty_reasons.push_back(DirtyReason::kMissingDebugArtifact);
+      }
+    }
+
     if (!analysis.IsDirty()) {
       analysis.reusable_artifact = std::move(*artifact);
     }
@@ -229,9 +241,10 @@ auto AnalyzeDirtyRequests(const std::filesystem::path& workspace_root,
   result.requests.reserve(requests.size());
 
   for (const auto& request : requests) {
-    result.requests.push_back(AnalyzeOneRequest(workspace_root,
-      shader_source_root, include_dirs, previous_manifest.has_value(),
-      previous_manifest_keys, previous_modules, layout, request));
+    result.requests.push_back(
+      AnalyzeOneRequest(workspace_root, shader_source_root, include_dirs,
+        previous_manifest.has_value(), previous_manifest_keys, previous_modules,
+        layout, final_archive_path, request));
   }
 
   for (const auto& previous_module : previous_state.modules) {
@@ -272,6 +285,8 @@ auto DirtyReasonToString(const DirtyReason reason) -> const char*
     return "missing-dependency";
   case DirtyReason::kDependencyChanged:
     return "dependency-changed";
+  case DirtyReason::kMissingDebugArtifact:
+    return "missing-debug-artifact";
   case DirtyReason::kNewManifestMembership:
     return "new-manifest-membership";
   default:

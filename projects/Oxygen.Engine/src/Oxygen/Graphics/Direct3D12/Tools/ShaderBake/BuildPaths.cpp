@@ -69,6 +69,21 @@ namespace {
     }
   }
 
+  auto GetRequestPublishedArtifactPath(
+    const std::filesystem::path& final_archive_path, std::string_view category,
+    std::string_view source_path, std::string_view entry_point,
+    const uint64_t request_key, std::string_view extension)
+    -> std::filesystem::path
+  {
+    auto request_path = std::filesystem::path(std::string(source_path));
+    request_path = request_path.lexically_normal();
+
+    auto leaf_name = std::string(entry_point) + "__"
+      + RequestKeyToHex(request_key) + std::string(extension);
+    return final_archive_path.parent_path() / std::string(category)
+      / request_path / std::move(leaf_name);
+  }
+
 } // namespace
 
 auto GetBuildRootLayout(const std::filesystem::path& build_root)
@@ -105,6 +120,22 @@ auto GetRequestLogPath(const BuildRootLayout& layout,
   return layout.logs_dir / (RequestKeyToHex(request_key) + ".log");
 }
 
+auto GetRequestDxilPath(const std::filesystem::path& final_archive_path,
+  const std::string_view source_path, const std::string_view entry_point,
+  const uint64_t request_key) -> std::filesystem::path
+{
+  return GetRequestPublishedArtifactPath(
+    final_archive_path, "dxil", source_path, entry_point, request_key, ".dxil");
+}
+
+auto GetRequestPdbPath(const std::filesystem::path& final_archive_path,
+  const std::string_view source_path, const std::string_view entry_point,
+  const uint64_t request_key) -> std::filesystem::path
+{
+  return GetRequestPublishedArtifactPath(
+    final_archive_path, "pdb", source_path, entry_point, request_key, ".pdb");
+}
+
 auto EnsureBuildRootLayout(const BuildRootLayout& layout) -> void
 {
   std::filesystem::create_directories(layout.state_dir);
@@ -123,9 +154,15 @@ auto ClearCache(const BuildRootLayout& layout) -> void
 {
   RemovePathIfPresent(layout.state_dir);
   RemovePathIfPresent(layout.modules_dir);
+  RemovePathIfPresent(layout.root / "debug");
   RemovePathIfPresent(layout.logs_dir);
   RemovePathIfPresent(layout.temp_dir);
   std::filesystem::create_directories(layout.root);
+}
+
+auto RemoveLegacyDebugExportTree(const BuildRootLayout& layout) -> void
+{
+  RemovePathIfPresent(layout.root / "debug");
 }
 
 auto ToUtf8PathString(const std::filesystem::path& path) -> std::string

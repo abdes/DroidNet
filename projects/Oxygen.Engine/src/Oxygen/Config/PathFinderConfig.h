@@ -33,6 +33,34 @@ public:
 
   [[nodiscard]] static auto Create() -> Builder;
 
+  [[nodiscard]] static constexpr auto DefaultShaderBuildConfigName() noexcept
+    -> std::string_view
+  {
+#if !defined(NDEBUG)
+    return "Debug";
+#else
+    return "Release";
+#endif
+  }
+
+  [[nodiscard]] static constexpr auto DefaultShaderModeName() noexcept
+    -> std::string_view
+  {
+#if !defined(NDEBUG)
+    return "dev";
+#else
+    return "production";
+#endif
+  }
+
+  [[nodiscard]] static auto DefaultShaderLibraryPathForCurrentBuild()
+    -> std::filesystem::path
+  {
+    return std::filesystem::path(std::string("bin/Oxygen/")
+      + std::string(DefaultShaderBuildConfigName()) + "/"
+      + std::string(DefaultShaderModeName()) + "/shaders.bin");
+  }
+
   //! Constructs a default configuration.
   PathFinderConfig() = default;
 
@@ -75,10 +103,6 @@ public:
   }
 
 private:
-  //! Default shader library path for repo-local development.
-  static constexpr std::string_view kDefaultShaderLibraryPath
-    = "bin/Oxygen/shaders.bin";
-
   //! Default CVars archive path for repo-local development.
   static constexpr std::string_view kDefaultCVarsArchivePath
     = "bin/Oxygen/cvars.json";
@@ -93,7 +117,7 @@ private:
 
   std::filesystem::path workspace_root_path_;
   std::filesystem::path shader_library_path_ {
-    std::string(kDefaultShaderLibraryPath),
+    DefaultShaderLibraryPathForCurrentBuild(),
   };
   std::filesystem::path cvars_archive_path_ {
     std::string(kDefaultCVarsArchivePath),

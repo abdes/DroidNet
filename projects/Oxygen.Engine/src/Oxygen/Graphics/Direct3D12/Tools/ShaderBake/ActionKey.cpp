@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -88,26 +89,6 @@ namespace {
     return "unknown";
   }
 
-  constexpr auto GetActiveDxcMode() -> std::string_view
-  {
-#if !defined(NDEBUG)
-    return "Debug";
-#else
-    return "Release";
-#endif
-  }
-
-  auto GetFixedDxcArgumentSchema() -> std::string
-  {
-    std::string schema = "-Ges;-enable-16bit-types;-HV=2021;sm=6_6;";
-#if !defined(NDEBUG)
-    schema += "-Od;-Zi;-Qembed_debug;";
-#else
-    schema += "-O3;";
-#endif
-    return schema;
-  }
-
   auto NormalizeIncludeRoot(const std::filesystem::path& include_dir)
     -> std::string
   {
@@ -120,7 +101,7 @@ namespace {
     return seed ^ (value + kGoldenRatio + (seed << 6U) + (seed >> 2U));
   }
 
-  constexpr uint64_t kShaderBakeActionSchemaVersion = 2;
+  constexpr uint64_t kShaderBakeActionSchemaVersion = 3;
 
 } // namespace
 
@@ -128,8 +109,8 @@ auto ComputeToolchainHash() -> uint64_t
 {
   const std::string version = GetDxcVersionString();
   const std::string schema = std::string("dxc;") + "version=" + version + ";"
-    + GetFixedDxcArgumentSchema() + "mode=" + std::string(GetActiveDxcMode())
-    + ";";
+    + GetFixedDxcArgumentSchema()
+    + "mode=" + std::string(GetActiveShaderBuildConfigName()) + ";";
 
   return oxygen::ComputeFNV1a64(schema.data(), schema.size());
 }
@@ -169,7 +150,7 @@ auto ComputeShaderActionKey(const ShaderRequest& request,
   seed = HashCombine(
     seed, oxygen::ComputeFNV1a64(fixed_schema.data(), fixed_schema.size()));
 
-  constexpr auto build_mode = GetActiveDxcMode();
+  constexpr auto build_mode = GetActiveShaderBuildConfigName();
   seed = HashCombine(
     seed, oxygen::ComputeFNV1a64(build_mode.data(), build_mode.size()));
 

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -29,10 +30,13 @@ public:
     std::filesystem::path workspace_root;
     std::vector<std::filesystem::path> include_dirs;
     std::vector<ShaderDefine> defines {};
+    std::string object_output_name;
+    std::string debug_output_name;
   };
 
   struct CompileResult {
     std::unique_ptr<IShaderByteCode> bytecode;
+    std::vector<std::byte> pdb;
     std::vector<DependencyFingerprint> dependencies;
     std::string diagnostics;
 

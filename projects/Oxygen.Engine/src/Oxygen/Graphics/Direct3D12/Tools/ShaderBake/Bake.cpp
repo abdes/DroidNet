@@ -69,6 +69,7 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
 
   EnsureBuildRootLayout(layout);
   ResetTempDirectory(layout);
+  RemoveLegacyDebugExportTree(layout);
 
   LOG_F(INFO, "command={} mode={} build_root={} out={}",
     args.command == ShaderBakeCommand::kRebuild ? "rebuild" : "update",
