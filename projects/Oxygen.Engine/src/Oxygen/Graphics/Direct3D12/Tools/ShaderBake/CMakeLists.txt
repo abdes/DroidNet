@@ -61,6 +61,7 @@ add_executable(
   "BuildState.h"
   "Catalog.cpp"
   "Catalog.h"
+  "CompileProfile.h"
   "DirtyAnalysis.cpp"
   "DirtyAnalysis.h"
   "DxcShaderCompiler.cpp"

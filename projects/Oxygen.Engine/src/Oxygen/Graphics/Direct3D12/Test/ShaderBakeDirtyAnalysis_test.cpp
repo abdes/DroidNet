@@ -19,9 +19,11 @@
 
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
@@ -45,8 +47,12 @@ using oxygen::graphics::d3d12::tools::shader_bake::DirtyReason;
 using oxygen::graphics::d3d12::tools::shader_bake::ExpandedShaderRequest;
 using oxygen::graphics::d3d12::tools::shader_bake::GetBuildRootLayout;
 using oxygen::graphics::d3d12::tools::shader_bake::GetModuleArtifactPath;
+using oxygen::graphics::d3d12::tools::shader_bake::GetRequestPdbPath;
+using oxygen::graphics::d3d12::tools::shader_bake::
+  IsExternalShaderDebugInfoEnabled;
 using oxygen::graphics::d3d12::tools::shader_bake::ManifestSnapshot;
 using oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteBuildStateFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteManifestFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteModuleArtifactFile;
@@ -140,6 +146,17 @@ protected:
       BuildBuildStateSnapshot(workspace_root_, layout_, artifacts));
   }
 
+  auto WriteExpectedPdb(const ExpandedShaderRequest& request) -> void
+  {
+    if (!IsExternalShaderDebugInfoEnabled()) {
+      return;
+    }
+
+    WriteTextFile(GetRequestPdbPath(out_file_, request.request.source_path,
+                    request.request.entry_point, request.request_key),
+      "pdb");
+  }
+
   [[nodiscard]] static auto HasReason(
     const DirtyAnalysisResult& result, const DirtyReason reason) -> bool
   {
@@ -176,6 +193,7 @@ NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ReusesCleanArtifactWhenInputsMatch)
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });
+  WriteExpectedPdb(request);
   WriteTextFile(out_file_, "existing");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
@@ -282,4 +300,35 @@ NOLINT_TEST_F(
   ASSERT_EQ(analysis.stale_artifact_paths.size(), 1U);
   EXPECT_EQ(analysis.stale_artifact_paths.front(),
     GetModuleArtifactPath(layout_, stale_request.request_key));
+}
+
+NOLINT_TEST_F(
+  ShaderBakeDirtyAnalysisTest, MarksRequestDirtyWhenExpectedPdbIsMissing)
+{
+  if (!IsExternalShaderDebugInfoEnabled()) {
+    GTEST_SKIP() << "External shader PDBs are only expected in debug builds";
+  }
+
+  const auto request = MakeExpandedRequest(
+    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+  const auto source_file = shader_root_ / request.request.source_path;
+  WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
+
+  const std::array include_dirs { shader_root_ };
+  const auto artifact = MakeArtifact(
+    request, include_dirs, std::span<const std::filesystem::path> {});
+  WriteModuleArtifactFile(
+    GetModuleArtifactPath(layout_, request.request_key), artifact);
+  PersistState(std::array { request }, std::array { artifact });
+  WriteTextFile(out_file_, "existing");
+
+  const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
+    layout_, out_file_, std::array { request }, include_dirs);
+
+  EXPECT_TRUE(HasReason(analysis, DirtyReason::kMissingDebugArtifact));
+
+  const auto pdb_path
+    = GetRequestPdbPath(out_file_, request.request.source_path,
+      request.request.entry_point, request.request_key);
+  EXPECT_FALSE(std::filesystem::exists(pdb_path));
 }

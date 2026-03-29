@@ -15,7 +15,6 @@ file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
 # Shared include files (HLSL headers)
 file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
 
-set(SHADER_LIBRARY_OUTPUT "${CMAKE_SOURCE_DIR}/bin/Oxygen/shaders.bin")
 set(SHADERBAKE_BUILD_ROOT "${CMAKE_BINARY_DIR}/shaderbake")
 
 # The ShaderBake tool target name (executable)
@@ -27,6 +26,15 @@ set(_OXYGEN_IS_ASAN_BUILD OFF)
 if(CMAKE_BINARY_DIR MATCHES "asan")
   set(_OXYGEN_IS_ASAN_BUILD ON)
 endif()
+
+set(
+  SHADER_LIBRARY_OUTPUT
+  "${CMAKE_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>/shaders.bin"
+)
+set(
+  SHADER_LIBRARY_OUTPUT_DIR
+  "${CMAKE_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
+)
 
 set(
   _OXYGEN_DEPLOY_CONFIG
@@ -48,38 +56,19 @@ else()
   set(_OXYGEN_SHADERBAKE_ENV_ARGS "PATH=${_OXYGEN_DEPLOY_BIN_DIR}:$ENV{PATH}")
 endif()
 
-# Convert to native paths for the custom command to ensure robustness in Visual Studio/cmd.exe
-file(
-  TO_NATIVE_PATH
-  "${CMAKE_SOURCE_DIR}/bin/Oxygen"
-  _OXYGEN_BIN_DIR
-)
-file(
-  TO_NATIVE_PATH
-  "${SHADER_LIBRARY_OUTPUT}"
-  _SHADER_LIBRARY_OUTPUT_NATIVE
-)
-file(
-  TO_NATIVE_PATH
-  "${SHADERBAKE_BUILD_ROOT}"
-  _SHADERBAKE_BUILD_ROOT_NATIVE
-)
-file(
-  TO_NATIVE_PATH
-  "${CMAKE_SOURCE_DIR}"
-  _WORKSPACE_ROOT_NATIVE
-)
-
 add_custom_command(
   OUTPUT
     "${SHADER_LIBRARY_OUTPUT}"
   COMMAND
-    "${CMAKE_COMMAND}" -E make_directory "${_OXYGEN_BIN_DIR}"
+    "${CMAKE_COMMAND}" -E make_directory
+    "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT_DIR}>"
   COMMAND
     "${CMAKE_COMMAND}" -E env ${_OXYGEN_SHADERBAKE_ENV_ARGS}
     "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" update --workspace-root
-    "${_WORKSPACE_ROOT_NATIVE}" --build-root "${_SHADERBAKE_BUILD_ROOT_NATIVE}"
-    --out "${_SHADER_LIBRARY_OUTPUT_NATIVE}"
+    "$<SHELL_PATH:${CMAKE_SOURCE_DIR}>" --build-root
+    "$<SHELL_PATH:${SHADERBAKE_BUILD_ROOT}>" --out
+    "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT}>" --mode
+    "$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
   VERBATIM
   COMMENT "Baking shaders.bin (OXSL v1) ($<CONFIG> mode)"

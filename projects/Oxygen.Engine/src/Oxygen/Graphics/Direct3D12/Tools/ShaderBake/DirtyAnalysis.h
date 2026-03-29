@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
@@ -28,6 +29,7 @@ enum class DirtyReason : uint8_t {
   kPrimarySourceChanged,
   kMissingDependency,
   kDependencyChanged,
+  kMissingDebugArtifact,
   kNewManifestMembership,
 };
 

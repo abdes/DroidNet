@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 
@@ -91,6 +92,17 @@ namespace {
     return request_keys;
   }
 
+  auto ExtractTrackedRequestKeyHex(const std::filesystem::path& path)
+    -> std::string
+  {
+    const auto stem = path.stem().string();
+    if (stem.size() > 18 && stem[stem.size() - 18] == '_'
+      && stem[stem.size() - 17] == '_') {
+      return stem.substr(stem.size() - 16);
+    }
+    return stem;
+  }
+
   auto CollectPrunableFiles(const std::filesystem::path& root,
     std::string_view extension,
     const std::unordered_set<std::string>& live_request_keys)
@@ -121,8 +133,7 @@ namespace {
         continue;
       }
 
-      const auto stem = path.stem().string();
-      if (!live_request_keys.contains(stem)) {
+      if (!live_request_keys.contains(ExtractTrackedRequestKeyHex(path))) {
         paths.push_back(path);
       }
     }
@@ -139,6 +150,49 @@ namespace {
     std::sort(paths.begin(), paths.end());
     paths.erase(std::unique(paths.begin(), paths.end()), paths.end());
     return paths;
+  }
+
+  auto UpsertDeveloperArtifacts(const ExecutionOptions& options,
+    const ExpandedShaderRequest& request, const ModuleArtifact& artifact,
+    std::span<const std::byte> pdb_bytes, const bool force_write) -> void
+  {
+    const auto dxil_path = GetRequestDxilPath(options.final_archive_path,
+      request.request.source_path, request.request.entry_point,
+      request.request_key);
+
+    std::error_code ec;
+    const auto dxil_exists = std::filesystem::is_regular_file(dxil_path, ec);
+    if (force_write || !dxil_exists || ec) {
+      WriteBinaryFileAtomically(dxil_path, artifact.dxil);
+    }
+
+    if (pdb_bytes.empty()) {
+      return;
+    }
+
+    const auto pdb_path = GetRequestPdbPath(options.final_archive_path,
+      request.request.source_path, request.request.entry_point,
+      request.request_key);
+    WriteBinaryFileAtomically(pdb_path, pdb_bytes);
+  }
+
+  auto CollectStaleDeveloperArtifactPaths(const ExecutionOptions& options)
+    -> std::vector<std::filesystem::path>
+  {
+    const auto live_request_keys
+      = CollectTrackedRequestKeyHexes(options.requests);
+    auto dxil_paths
+      = CollectPrunableFiles(options.final_archive_path.parent_path() / "dxil",
+        ".dxil", live_request_keys);
+    auto pdb_paths
+      = CollectPrunableFiles(options.final_archive_path.parent_path() / "pdb",
+        ".pdb", live_request_keys);
+
+    dxil_paths.insert(dxil_paths.end(), pdb_paths.begin(), pdb_paths.end());
+    std::sort(dxil_paths.begin(), dxil_paths.end());
+    dxil_paths.erase(
+      std::unique(dxil_paths.begin(), dxil_paths.end()), dxil_paths.end());
+    return dxil_paths;
   }
 
   auto CollectUpdateStaleArtifactPaths(
@@ -212,6 +266,8 @@ auto ExecuteUpdate(const ExecutionOptions& options)
 
       WriteModuleArtifactFile(
         request_analysis.artifact_path, *compile_outcome.artifact);
+      UpsertDeveloperArtifacts(options, request_analysis.expanded_request,
+        *compile_outcome.artifact, compile_outcome.pdb, true);
       artifacts.push_back(*compile_outcome.artifact);
       ++compiled_count;
     } else {
@@ -222,6 +278,8 @@ auto ExecuteUpdate(const ExecutionOptions& options)
         throw std::runtime_error(
           "clean request is missing reusable module artifact");
       }
+      UpsertDeveloperArtifacts(options, request_analysis.expanded_request,
+        *request_analysis.reusable_artifact, {}, false);
       artifacts.push_back(std::move(*request_analysis.reusable_artifact));
       ++clean_count;
     }
@@ -231,6 +289,9 @@ auto ExecuteUpdate(const ExecutionOptions& options)
     = CollectUpdateStaleArtifactPaths(options, dirty_analysis);
   const auto removed_stale_artifacts
     = RemovePaths(stale_artifact_paths, "stale module");
+  const auto stale_developer_artifact_paths
+    = CollectStaleDeveloperArtifactPaths(options);
+  (void)RemovePaths(stale_developer_artifact_paths, "stale debug artifact");
   const auto stale_log_paths = CollectStaleLogPaths(options);
   (void)RemovePaths(stale_log_paths, "stale log");
 
@@ -283,6 +344,8 @@ auto ExecuteRebuild(const ExecutionOptions& options)
     WriteModuleArtifactFile(
       GetModuleArtifactPath(options.layout, request.request_key),
       *compile_outcome.artifact);
+    UpsertDeveloperArtifacts(
+      options, request, *compile_outcome.artifact, compile_outcome.pdb, true);
     artifacts.push_back(*compile_outcome.artifact);
   }
 
@@ -290,8 +353,11 @@ auto ExecuteRebuild(const ExecutionOptions& options)
     = CollectTrackedRequestKeyHexes(options.requests);
   const auto stale_artifact_paths = CollectPrunableFiles(
     options.layout.modules_dir, ".oxsm", live_request_keys);
+  const auto stale_developer_artifact_paths
+    = CollectStaleDeveloperArtifactPaths(options);
   const auto stale_log_paths = CollectStaleLogPaths(options);
   (void)RemovePaths(stale_artifact_paths, "stale module");
+  (void)RemovePaths(stale_developer_artifact_paths, "stale debug artifact");
   (void)RemovePaths(stale_log_paths, "stale log");
 
   PackFinalShaderArchive(options.final_archive_path, options.toolchain_hash,

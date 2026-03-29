@@ -26,6 +26,7 @@ struct RequestCompilerConfig {
 
 struct RequestCompileOutcome {
   std::optional<ModuleArtifact> artifact;
+  std::vector<std::byte> pdb;
   std::string diagnostics;
 };
 

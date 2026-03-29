@@ -43,7 +43,11 @@ namespace {
 
 auto RunShaderBakeCli(std::span<const char*> args) -> int;
 
-constexpr std::string_view kDefaultOxslOutputPath = "bin/Oxygen/shaders.bin";
+auto DefaultOxslOutputPath() -> std::filesystem::path
+{
+  return oxygen::PathFinderConfig::DefaultShaderLibraryPathForCurrentBuild();
+}
+
 constexpr std::string_view kDefaultShaderSourceRoot
   = "src/Oxygen/Graphics/Direct3D12/Shaders";
 constexpr std::string_view kDefaultOxygenIncludeRoot = "src/Oxygen";
@@ -252,7 +256,7 @@ auto ParseBakeArgs(const BakeCliStorage& storage,
 
   if (out_file.empty()) {
     if (command == ShaderBakeCommand::kCleanCache) {
-      out_file = std::filesystem::path(kDefaultOxslOutputPath);
+      out_file = DefaultOxslOutputPath();
     } else {
       throw std::runtime_error("--out is required");
     }

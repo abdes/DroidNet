@@ -20,6 +20,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 
@@ -70,6 +72,11 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
       .include_dirs = std::vector<std::filesystem::path>(
         config.include_dirs.begin(), config.include_dirs.end()),
       .defines = shader.defines,
+      .object_output_name
+      = RequestKeyToHex(expanded_request.request_key) + ".dxil",
+      .debug_output_name = IsExternalShaderDebugInfoEnabled()
+        ? RequestKeyToHex(expanded_request.request_key) + ".pdb"
+        : std::string {},
     };
 
     auto compile_result
@@ -115,6 +122,7 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
         .dxil = std::move(dxil),
         .reflection = std::move(reflection),
       },
+      .pdb = std::move(compile_result.pdb),
     };
   } catch (const std::exception& ex) {
     const auto diagnostics = fmt::format(

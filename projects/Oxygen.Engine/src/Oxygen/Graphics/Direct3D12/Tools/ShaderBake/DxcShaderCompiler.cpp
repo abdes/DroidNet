@@ -30,6 +30,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 
 using Microsoft::WRL::ComPtr;
@@ -119,7 +120,8 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
   const wchar_t* profile_name, const std::string& entry_point_utf8,
   std::span<const std::filesystem::path> include_dirs,
   const std::map<std::wstring, std::wstring>& global_defines,
-  std::span<const oxygen::graphics::ShaderDefine> request_defines)
+  std::span<const oxygen::graphics::ShaderDefine> request_defines,
+  std::string_view object_output_name, std::string_view debug_output_name)
   -> DxcCompileArgs
 {
   using oxygen::windows::ThrowOnFailed;
@@ -129,7 +131,7 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
   std::wstring entry_point;
   oxygen::string_utils::Utf8ToWide(entry_point_utf8, entry_point);
 
-  args.option_storage.reserve(12U + (include_dirs.size() * 2U));
+  args.option_storage.reserve(16U + (include_dirs.size() * 2U));
 
   args.option_storage.emplace_back(L"-Ges");
   args.option_storage.emplace_back(L"-enable-16bit-types");
@@ -141,6 +143,13 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
     }
     args.option_storage.emplace_back(L"-I");
     args.option_storage.emplace_back(include_dir.wstring());
+  }
+
+  if (!object_output_name.empty()) {
+    std::wstring object_output_name_w;
+    oxygen::string_utils::Utf8ToWide(object_output_name, object_output_name_w);
+    args.option_storage.emplace_back(L"-Fo");
+    args.option_storage.emplace_back(std::move(object_output_name_w));
   }
 
   args.define_name_storage.reserve(
@@ -194,7 +203,12 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
 #if !defined(NDEBUG)
   args.option_storage.emplace_back(L"-Od");
   args.option_storage.emplace_back(L"-Zi");
-  args.option_storage.emplace_back(L"-Qembed_debug");
+  if (!debug_output_name.empty()) {
+    std::wstring debug_output_name_w;
+    oxygen::string_utils::Utf8ToWide(debug_output_name, debug_output_name_w);
+    args.option_storage.emplace_back(L"-Fd");
+    args.option_storage.emplace_back(std::move(debug_output_name_w));
+  }
 #else
   args.option_storage.emplace_back(L"-O3");
 #endif
@@ -280,6 +294,26 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
     };
   }
 
+  std::vector<std::byte> pdb;
+  if (oxygen::graphics::d3d12::tools::shader_bake::
+        IsExternalShaderDebugInfoEnabled()) {
+    ComPtr<IDxcBlobWide> pdb_name_blob;
+    ComPtr<IDxcBlob> pdb_blob;
+    hr
+      = result->GetOutput(DXC_OUT_PDB, IID_PPV_ARGS(&pdb_blob), &pdb_name_blob);
+    if (FAILED(hr) || pdb_blob == nullptr
+      || pdb_blob->GetBufferPointer() == nullptr
+      || pdb_blob->GetBufferSize() == 0U) {
+      return DxcShaderCompiler::CompileResult {
+        .diagnostics = LogDxcFailureReport(ctx, "Missing PDB output", nullptr),
+      };
+    }
+
+    const auto* const pdb_begin
+      = static_cast<const std::byte*>(pdb_blob->GetBufferPointer());
+    pdb.assign(pdb_begin, pdb_begin + pdb_blob->GetBufferSize());
+  }
+
   auto& tracking_include_handler = static_cast<
     oxygen::graphics::d3d12::tools::shader_bake::TrackingIncludeHandler&>(
     include_handler);
@@ -288,6 +322,7 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
     .bytecode
     = std::make_unique<oxygen::graphics::ShaderByteCode<ComPtr<IDxcBlob>>>(
       std::move(output)),
+    .pdb = std::move(pdb),
     .dependencies = tracking_include_handler.Dependencies(),
   };
 }
@@ -429,7 +464,7 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
 
   auto args = MakeDxcArguments(*utils_.Get(), source_name_w, profile_name,
     shader_info.entry_point, options.include_dirs, config_.global_defines,
-    options.defines);
+    options.defines, options.object_output_name, options.debug_output_name);
 
   DxcBuffer source_buffer {
     .Ptr = src_blob->GetBufferPointer(),

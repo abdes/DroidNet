@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
@@ -49,11 +50,16 @@ using oxygen::graphics::d3d12::tools::shader_bake::ExecutionOptions;
 using oxygen::graphics::d3d12::tools::shader_bake::ExpandedShaderRequest;
 using oxygen::graphics::d3d12::tools::shader_bake::GetBuildRootLayout;
 using oxygen::graphics::d3d12::tools::shader_bake::GetModuleArtifactPath;
+using oxygen::graphics::d3d12::tools::shader_bake::GetRequestDxilPath;
 using oxygen::graphics::d3d12::tools::shader_bake::GetRequestLogPath;
+using oxygen::graphics::d3d12::tools::shader_bake::GetRequestPdbPath;
+using oxygen::graphics::d3d12::tools::shader_bake::
+  IsExternalShaderDebugInfoEnabled;
 using oxygen::graphics::d3d12::tools::shader_bake::PackFinalShaderArchive;
 using oxygen::graphics::d3d12::tools::shader_bake::ReadBuildStateFile;
 using oxygen::graphics::d3d12::tools::shader_bake::ReadManifestFile;
 using oxygen::graphics::d3d12::tools::shader_bake::RequestCompileOutcome;
+using oxygen::graphics::d3d12::tools::shader_bake::RequestKeyToHex;
 using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
 
 auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
@@ -153,6 +159,7 @@ public:
         .dxil = MakePayload(request.request_key, primary.content_hash),
         .reflection = MakePayload(dependency_seed, toolchain_hash_),
       },
+      .pdb = MakePayload(request.request_key, dependency_seed),
     };
   }
 
@@ -270,6 +277,32 @@ protected:
 
 } // namespace
 
+NOLINT_TEST_F(ShaderBakeExecutionTest,
+  PublishedDebugArtifactsUseEntryPointInFilenameInsteadOfDirectory)
+{
+  const auto request = MakeExpandedRequest(
+    "Atmosphere/MultiScatLut_CS.hlsl", "CS", ShaderType::kCompute);
+  const auto key_hex = RequestKeyToHex(request.request_key);
+
+  const auto dxil_path
+    = GetRequestDxilPath(out_file_, request.request.source_path,
+      request.request.entry_point, request.request_key);
+  const auto expected_dxil = out_file_.parent_path() / "dxil" / "Atmosphere"
+    / "MultiScatLut_CS.hlsl" / ("CS__" + key_hex + ".dxil");
+
+  EXPECT_EQ(dxil_path, expected_dxil);
+  EXPECT_EQ(dxil_path.parent_path().filename().generic_string(),
+    "MultiScatLut_CS.hlsl");
+  EXPECT_EQ(dxil_path.filename().generic_string(), "CS__" + key_hex + ".dxil");
+
+  const auto pdb_path
+    = GetRequestPdbPath(out_file_, request.request.source_path,
+      request.request.entry_point, request.request_key);
+  const auto expected_pdb = out_file_.parent_path() / "pdb" / "Atmosphere"
+    / "MultiScatLut_CS.hlsl" / ("CS__" + key_hex + ".pdb");
+  EXPECT_EQ(pdb_path, expected_pdb);
+}
+
 NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
 {
   const auto first
@@ -290,6 +323,19 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
   ASSERT_TRUE(first_run.has_value());
   EXPECT_EQ(first_run->compiled_request_count, 2U);
   EXPECT_EQ(first_run->clean_request_count, 0U);
+  EXPECT_TRUE(std::filesystem::exists(GetRequestDxilPath(out_file_,
+    first.request.source_path, first.request.entry_point, first.request_key)));
+  EXPECT_TRUE(std::filesystem::exists(
+    GetRequestDxilPath(out_file_, second.request.source_path,
+      second.request.entry_point, second.request_key)));
+  if (IsExternalShaderDebugInfoEnabled()) {
+    EXPECT_TRUE(std::filesystem::exists(
+      GetRequestPdbPath(out_file_, first.request.source_path,
+        first.request.entry_point, first.request_key)));
+    EXPECT_TRUE(std::filesystem::exists(
+      GetRequestPdbPath(out_file_, second.request.source_path,
+        second.request.entry_point, second.request_key)));
+  }
 
   WriteTextFile(shader_root_ / first.request.source_path,
     "float4 PS() : SV_Target { return 3; }\n");
@@ -301,6 +347,38 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
   EXPECT_EQ(compiler.CompileCount(first.request_key), 2U);
   EXPECT_EQ(compiler.CompileCount(second.request_key), 1U);
   EXPECT_EQ(ReadArchiveModuleCount(out_file_), 2U);
+}
+
+NOLINT_TEST_F(
+  ShaderBakeExecutionTest, UpdateRecompilesWhenExpectedPdbWasRemoved)
+{
+  if (!IsExternalShaderDebugInfoEnabled()) {
+    GTEST_SKIP() << "External shader PDBs are only expected in debug builds";
+  }
+
+  const auto request
+    = MakeExpandedRequest("Debug/Single_PS.hlsl", "PS", ShaderType::kPixel);
+  const std::array requests { request };
+
+  WriteTextFile(shader_root_ / request.request.source_path,
+    "float4 PS() : SV_Target { return 1; }\n");
+
+  FakeCompiler compiler(
+    workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
+  ASSERT_TRUE(ExecuteUpdate(MakeOptions(requests, compiler)).has_value());
+
+  const auto pdb_path
+    = GetRequestPdbPath(out_file_, request.request.source_path,
+      request.request.entry_point, request.request_key);
+  ASSERT_TRUE(std::filesystem::exists(pdb_path));
+  std::filesystem::remove(pdb_path);
+
+  const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
+  ASSERT_TRUE(second_run.has_value());
+  EXPECT_EQ(second_run->compiled_request_count, 1U);
+  EXPECT_EQ(second_run->clean_request_count, 0U);
+  EXPECT_EQ(compiler.CompileCount(request.request_key), 2U);
+  EXPECT_TRUE(std::filesystem::exists(pdb_path));
 }
 
 NOLINT_TEST_F(ShaderBakeExecutionTest,
@@ -375,6 +453,14 @@ NOLINT_TEST_F(
   EXPECT_EQ(second_run->stale_request_count, 1U);
   EXPECT_FALSE(std::filesystem::exists(stale_artifact_path));
   EXPECT_EQ(ReadArchiveModuleCount(out_file_), 1U);
+  EXPECT_FALSE(std::filesystem::exists(
+    GetRequestDxilPath(out_file_, second.request.source_path,
+      second.request.entry_point, second.request_key)));
+  if (IsExternalShaderDebugInfoEnabled()) {
+    EXPECT_FALSE(std::filesystem::exists(
+      GetRequestPdbPath(out_file_, second.request.source_path,
+        second.request.entry_point, second.request_key)));
+  }
 
   const auto manifest = ReadManifestFile(layout_.manifest_file);
   EXPECT_EQ(manifest.requests.size(), 1U);
@@ -528,6 +614,12 @@ NOLINT_TEST_F(
   WriteTextFile(layout_.build_state_file, "{}\n");
   WriteTextFile(layout_.manifest_file, "{}\n");
   WriteTextFile(layout_.modules_dir / "aa" / "bb" / "deadbeef.oxsm", "module");
+  WriteTextFile(
+    out_file_.parent_path() / "dxil" / "Foo.hlsl" / "PS" / "deadbeef.dxil",
+    "dxil");
+  WriteTextFile(
+    out_file_.parent_path() / "pdb" / "Foo.hlsl" / "PS" / "deadbeef.pdb",
+    "pdb");
   WriteTextFile(layout_.logs_dir / "deadbeef.log", "log");
   WriteTextFile(layout_.temp_dir / "scratch.tmp", "temp");
   WriteTextFile(out_file_, "final");
@@ -541,6 +633,10 @@ NOLINT_TEST_F(
   EXPECT_FALSE(std::filesystem::exists(layout_.logs_dir));
   EXPECT_FALSE(std::filesystem::exists(layout_.temp_dir));
   EXPECT_EQ(ReadFileBytes(out_file_), out_before);
+  EXPECT_TRUE(std::filesystem::exists(
+    out_file_.parent_path() / "dxil" / "Foo.hlsl" / "PS" / "deadbeef.dxil"));
+  EXPECT_TRUE(std::filesystem::exists(
+    out_file_.parent_path() / "pdb" / "Foo.hlsl" / "PS" / "deadbeef.pdb"));
 }
 
 NOLINT_TEST_F(ShaderBakeExecutionTest,
