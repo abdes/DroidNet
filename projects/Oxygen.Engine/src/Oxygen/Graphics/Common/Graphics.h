@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -39,6 +40,7 @@ namespace graphics {
   class CommandList;
   class CommandQueue;
   class CommandRecorder;
+  class FrameCaptureController;
   struct FramebufferDesc;
   class Framebuffer;
   class IShaderByteCode;
@@ -211,6 +213,9 @@ public:
 
   [[nodiscard]] OXGN_GFX_API virtual auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider>;
+
+  [[nodiscard]] OXGN_GFX_API virtual auto GetFrameCaptureController() const
+    -> observer_ptr<graphics::FrameCaptureController>;
 
   //! Register a surface for deferred release so the final release occurs
   //! inside the engine's render/frame timeline via DeferredReclaimer.

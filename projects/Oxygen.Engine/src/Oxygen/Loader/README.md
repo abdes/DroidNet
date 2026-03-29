@@ -101,13 +101,17 @@ oxygen::GraphicsConfig config{};
 config.enable_debug = true;
 config.enable_validation = true;
 config.enable_aftermath = true;      // Default: prefer Aftermath when available
-config.enable_renderdoc = false;     // Opt-in RenderDoc integration
-config.enable_pix = false;           // Opt-in PIX marker emission
-config.enable_imgui = true;           // Example additional flag
-config.enable_vsync = true;           // VSync preference
+config.enable_imgui = true;          // Example additional flag
+config.enable_vsync = true;          // VSync preference
 config.preferred_card_name = "NVIDIA";
 config.preferred_card_device_id = 123456789;
 config.headless = false;
+config.frame_capture = {
+  .provider = oxygen::FrameCaptureProvider::kRenderDoc,
+  .init_mode = oxygen::FrameCaptureInitMode::kAttachedOnly,
+  .startup_trigger = oxygen::FrameCaptureStartupTrigger::kNextFrame,
+  .capture_file_template = "captures/render_scene",
+};
 config.extra = R"({"custom_option": 42, "shader_cache": true})"; // Backend-specific JSON
 
 // Strict mode (engine runtime)
@@ -131,11 +135,16 @@ producing an equivalent string as following:
   "enable_debug": true,
   "enable_validation": true,
   "enable_aftermath": true,
-  "enable_renderdoc": false,
-  "enable_pix": false,
   "headless": false,
   "enable_imgui": true,
   "enable_vsync": true,
+  "frame_capture": {
+    "provider": "renderdoc",
+    "init_mode": "attached",
+    "startup_trigger": "next",
+    "module_path": "",
+    "capture_file_template": "captures/render_scene"
+  },
   "preferred_card_name": "NVIDIA",
   "preferred_card_device_id": 123456789,
   "custom_option": 42,
@@ -159,6 +168,9 @@ void* CreateBackend(const SerializedBackendConfig& config,
   // Example: read settings
   const bool enable_debug = parsed.value("enable_debug", false);
   const std::string backend = parsed.value("backend_type", "");
+  const auto frame_capture = parsed.value("frame_capture", nlohmann::json::object());
+  const std::string frame_capture_provider
+    = frame_capture.value("provider", "none");
   const std::string workspace_root
     = parsed_paths.value("workspace_root_path", "");
   // ... construct and return backend implementation instance ...

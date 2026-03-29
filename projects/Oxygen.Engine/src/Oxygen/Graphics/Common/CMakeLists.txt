@@ -69,6 +69,7 @@ set(
   "ImGui/ImGuiGraphicsBackend.h"
   "Errors.h"
   "Forward.h"
+  "FrameCaptureController.h"
   "Framebuffer.h"
   "GpuEventScope.h"
   "Graphics.h"

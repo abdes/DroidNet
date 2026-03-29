@@ -366,7 +366,7 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
   LOG_SCOPE_F(INFO, "DeviceManager init");
 
   DebugLayer::ConfigureTooling(
-    props_.enable_aftermath, props_.enable_renderdoc, props_.enable_pix);
+    props_.enable_aftermath, props_.frame_capture_provider);
 
   // RenderDoc must be bootstrapped before any DXGI factory creation or
   // D3D12 debug/device entry-point usage so its hooks can wrap the objects
@@ -375,8 +375,8 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
   DebugLayer::BootstrapRenderDoc();
   InitializeFactory();
 
-  if (props_.enable_debug || props_.enable_aftermath || props_.enable_renderdoc
-    || props_.enable_pix) {
+  if (props_.enable_debug || props_.enable_aftermath
+    || props_.frame_capture_provider != oxygen::FrameCaptureProvider::kNone) {
     // The DebugLayer object also owns runtime debug-tool integration state.
     debug_layer_ = std::make_unique<DebugLayer>(
       props_.enable_debug, props_.enable_validation);

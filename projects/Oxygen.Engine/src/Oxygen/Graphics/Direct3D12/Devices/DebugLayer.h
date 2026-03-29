@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 namespace oxygen::graphics::d3d12 {
@@ -29,8 +30,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
   OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
-  static auto ConfigureTooling(bool enable_aftermath, bool enable_renderdoc,
-    bool enable_pix) noexcept -> void;
+  static auto ConfigureTooling(bool enable_aftermath,
+    oxygen::FrameCaptureProvider frame_capture_provider) noexcept -> void;
   static auto BootstrapRenderDoc() noexcept -> void;
   [[nodiscard]] static auto IsPixEnabled() noexcept -> bool;
   static auto ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept -> void;

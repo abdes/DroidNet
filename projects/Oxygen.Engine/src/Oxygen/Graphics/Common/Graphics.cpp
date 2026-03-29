@@ -14,10 +14,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
@@ -39,6 +41,14 @@ using oxygen::graphics::internal::QueueManager;
 
 namespace {
 constexpr std::string_view kCVarGraphicsVsync = "gfx.vsync";
+constexpr std::string_view kCommandGraphicsCaptureStatus = "gfx.capture.status";
+constexpr std::string_view kCommandGraphicsCaptureFrame = "gfx.capture.frame";
+constexpr std::string_view kCommandGraphicsCaptureBegin = "gfx.capture.begin";
+constexpr std::string_view kCommandGraphicsCaptureEnd = "gfx.capture.end";
+constexpr std::string_view kCommandGraphicsCaptureDiscard
+  = "gfx.capture.discard";
+constexpr std::string_view kCommandGraphicsCaptureOpenUi
+  = "gfx.capture.open_ui";
 constexpr auto kReadbackShutdownTimeout = std::chrono::milliseconds { 3000 };
 
 class ResourceRegistryComponent : public oxygen::Component {
@@ -133,8 +143,8 @@ auto Graphics::Stop() -> void
   DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
-auto Graphics::BeginFrame(
-  frame::SequenceNumber /*frame_number*/, frame::Slot frame_slot) -> void
+auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
+  const frame::Slot frame_slot) -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
 
@@ -149,12 +159,20 @@ auto Graphics::BeginFrame(
 
   auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
   reclaimer.OnBeginFrame(frame_slot);
+
+  if (const auto frame_capture = GetFrameCaptureController();
+    frame_capture != nullptr) {
+    frame_capture->OnBeginFrame(frame_number, frame_slot);
+  }
 }
 
-auto Graphics::EndFrame([[maybe_unused]] frame::SequenceNumber frame_number,
-  [[maybe_unused]] frame::Slot frame_slot) -> void
+auto Graphics::EndFrame(const frame::SequenceNumber frame_number,
+  const frame::Slot frame_slot) -> void
 {
-  // TODO: Implement frame end logic
+  if (const auto frame_capture = GetFrameCaptureController();
+    frame_capture != nullptr) {
+    frame_capture->OnEndFrame(frame_number, frame_slot);
+  }
 }
 
 auto Graphics::PresentSurfaces(
@@ -186,6 +204,255 @@ auto Graphics::RegisterConsoleBindings(
     .help = "Enable graphics VSync",
     .default_value = true,
     .flags = console::CVarFlags::kArchive,
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureStatus),
+    .help = "Describe frame capture integration state",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.status",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kOk,
+          .exit_code = 0,
+          .output = "frame capture provider not configured",
+          .error = {},
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = frame_capture->DescribeState(),
+        .error = {},
+      };
+    },
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureFrame),
+    .help = "Capture the next rendered frame",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.frame",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "frame capture provider not configured",
+        };
+      }
+
+      if (!frame_capture->TriggerNextFrame()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "failed to arm next-frame capture",
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "next-frame capture armed",
+        .error = {},
+      };
+    },
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureBegin),
+    .help = "Begin a manual frame capture",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.begin",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "frame capture provider not configured",
+        };
+      }
+
+      if (!frame_capture->StartCapture()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "failed to begin frame capture",
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "frame capture started",
+        .error = {},
+      };
+    },
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureEnd),
+    .help = "End a manual frame capture",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.end",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "frame capture provider not configured",
+        };
+      }
+
+      if (!frame_capture->EndCapture()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "failed to end frame capture",
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "frame capture ended",
+        .error = {},
+      };
+    },
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureDiscard),
+    .help = "Discard an active frame capture",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.discard",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "frame capture provider not configured",
+        };
+      }
+
+      if (!frame_capture->DiscardCapture()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "failed to discard frame capture",
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "frame capture discarded",
+        .error = {},
+      };
+    },
+  });
+
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = std::string(kCommandGraphicsCaptureOpenUi),
+    .help = "Launch the capture provider replay UI",
+    .flags = console::CommandFlags::kDevOnly,
+    .handler = [this](const std::vector<std::string>& args,
+                 const console::CommandContext&) -> console::ExecutionResult {
+      if (!args.empty()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kInvalidArguments,
+          .exit_code = 2,
+          .output = {},
+          .error = "usage: gfx.capture.open_ui",
+        };
+      }
+
+      const auto frame_capture = GetFrameCaptureController();
+      if (frame_capture == nullptr) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "frame capture provider not configured",
+        };
+      }
+
+      if (!frame_capture->LaunchReplayUI()) {
+        return console::ExecutionResult {
+          .status = console::ExecutionStatus::kError,
+          .exit_code = 1,
+          .output = {},
+          .error = "failed to launch replay UI",
+        };
+      }
+
+      return console::ExecutionResult {
+        .status = console::ExecutionStatus::kOk,
+        .exit_code = 0,
+        .output = "replay UI launch requested",
+        .error = {},
+      };
+    },
   });
 }
 
@@ -322,6 +589,12 @@ auto Graphics::RegisterDeferredRelease(
 
 auto Graphics::GetTimestampQueryProvider() const
   -> observer_ptr<graphics::TimestampQueryProvider>
+{
+  return {};
+}
+
+auto Graphics::GetFrameCaptureController() const
+  -> observer_ptr<graphics::FrameCaptureController>
 {
   return {};
 }

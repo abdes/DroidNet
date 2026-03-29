@@ -78,6 +78,7 @@ set(
   "Devices/DeviceManager.h"
   "GraphicResource.h"
   "Graphics.h"
+  "RenderDocFrameCaptureController.h"
   "ReadbackManager.h"
   "Texture.h"
   "TimestampQueryBackend.h"
@@ -118,6 +119,7 @@ set(
   "Devices/AftermathTracker.h"
   "Devices/DeviceManager.cpp"
   "Graphics.cpp"
+  "RenderDocFrameCaptureController.cpp"
   "ReadbackManager.cpp"
   "ImGui/imgui_impl_dx12.cpp"
   "ImGui/imgui_impl_dx12.h"
@@ -288,10 +290,7 @@ if(WIN32)
   )
 
   if(OXYGEN_RENDERDOC_DIR)
-    list(
-      APPEND _oxygen_renderdoc_hint_paths
-      "${OXYGEN_RENDERDOC_DIR}"
-    )
+    list(APPEND _oxygen_renderdoc_hint_paths "${OXYGEN_RENDERDOC_DIR}")
   endif()
 
   # Repo-local package layout (downloaded by GetRenderDoc.bat/.ps1).
@@ -400,10 +399,7 @@ if(WIN32)
   )
 
   if(OXYGEN_AFTERMATH_DIR)
-    list(
-      APPEND _oxygen_aftermath_hint_paths
-      "${OXYGEN_AFTERMATH_DIR}"
-    )
+    list(APPEND _oxygen_aftermath_hint_paths "${OXYGEN_AFTERMATH_DIR}")
   endif()
 
   # Repo-local package layout (downloaded by GetAftermath.bat/.ps1).
@@ -553,9 +549,7 @@ target_link_libraries(
 )
 
 if(WIN32)
-  if(
-    OXYGEN_D3D12_PIX_ENABLED
-  )
+  if(OXYGEN_D3D12_PIX_ENABLED)
     target_include_directories(
       ${META_MODULE_TARGET}
       PRIVATE

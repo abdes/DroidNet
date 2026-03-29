@@ -23,6 +23,9 @@
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 
+using oxygen::FrameCaptureInitMode;
+using oxygen::FrameCaptureProvider;
+using oxygen::FrameCaptureStartupTrigger;
 using oxygen::GraphicsBackendLoader;
 using oxygen::GraphicsConfig;
 using oxygen::SerializedBackendConfig;
@@ -66,11 +69,51 @@ auto EscapeJsonString(std::string_view input) -> std::string
   return out;
 }
 
+auto ToJsonString(const FrameCaptureProvider provider) -> std::string_view
+{
+  switch (provider) {
+  case FrameCaptureProvider::kNone:
+    return "none";
+  case FrameCaptureProvider::kRenderDoc:
+    return "renderdoc";
+  case FrameCaptureProvider::kPix:
+    return "pix";
+  }
+  return "none";
+}
+
+auto ToJsonString(const FrameCaptureInitMode init_mode) -> std::string_view
+{
+  switch (init_mode) {
+  case FrameCaptureInitMode::kDisabled:
+    return "disabled";
+  case FrameCaptureInitMode::kAttachedOnly:
+    return "attached";
+  case FrameCaptureInitMode::kSearchPath:
+    return "search";
+  case FrameCaptureInitMode::kExplicitPath:
+    return "path";
+  }
+  return "disabled";
+}
+
+auto ToJsonString(const FrameCaptureStartupTrigger startup_trigger)
+  -> std::string_view
+{
+  switch (startup_trigger) {
+  case FrameCaptureStartupTrigger::kNone:
+    return "none";
+  case FrameCaptureStartupTrigger::kNextFrame:
+    return "next";
+  }
+  return "none";
+}
+
 //! Gets the DLL filename for a graphics backend module.
 /*!
- Constructs the appropriate DLL filename based on the backend type. The filename
- includes debug suffix for debug builds and uses the standard Oxygen.Graphics
- module naming convention.
+ Constructs the appropriate DLL filename based on the backend type. The
+ filename includes debug suffix for debug builds and uses the standard
+ Oxygen.Graphics module naming convention.
 
  @param backend The backend type to get the module name for.
  @return The DLL filename for the specified backend.
@@ -139,16 +182,24 @@ auto SerializeConfigToJson(
     + std::string(config.enable_validation ? "true" : "false") + ",\n";
   json += "  \"enable_aftermath\": "
     + std::string(config.enable_aftermath ? "true" : "false") + ",\n";
-  json += "  \"enable_renderdoc\": "
-    + std::string(config.enable_renderdoc ? "true" : "false") + ",\n";
-  json += "  \"enable_pix\": "
-    + std::string(config.enable_pix ? "true" : "false") + ",\n";
   json += "  \"headless\": " + std::string(config.headless ? "true" : "false")
     + ",\n";
   json += "  \"enable_imgui\": "
     + std::string(config.enable_imgui ? "true" : "false") + ",\n";
   json += "  \"enable_vsync\": "
     + std::string(config.enable_vsync ? "true" : "false") + ",\n";
+  json += "  \"frame_capture\": {\n";
+  json += R"(    "provider": ")"
+    + std::string(ToJsonString(config.frame_capture.provider)) + "\",\n";
+  json += R"(    "init_mode": ")"
+    + std::string(ToJsonString(config.frame_capture.init_mode)) + "\",\n";
+  json += R"(    "startup_trigger": ")"
+    + std::string(ToJsonString(config.frame_capture.startup_trigger)) + "\",\n";
+  json += R"(    "module_path": ")"
+    + EscapeJsonString(config.frame_capture.module_path) + "\",\n";
+  json += R"(    "capture_file_template": ")"
+    + EscapeJsonString(config.frame_capture.capture_file_template) + "\"\n";
+  json += "  },\n";
 
   // Add optional card name if present
   if (config.preferred_card_name.has_value()) {

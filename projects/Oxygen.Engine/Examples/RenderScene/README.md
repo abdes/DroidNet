@@ -7,19 +7,36 @@ hierarchy, and renders it using the standard single-view example pipeline.
 
 The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 
-## Runtime Tooling Flags
+## Frame Capture CLI
 
-RenderScene can opt into GPU tooling directly from the command line when the
-backend was built with support for that tool:
+`RenderScene` can configure backend frame capture at startup through the
+graphics backend load config.
 
-- `--renderdoc true` requests RenderDoc.
-- `--pix true` requests PIX.
-- `--frames 10` is useful for short validation runs.
+Supported flags:
 
-These switches feed `GraphicsConfig` directly. By default the sample leaves
-RenderDoc and PIX disabled, which keeps Nsight Aftermath enabled when it is
-available. When either tool is requested from the CLI, the backend disables
-Aftermath only if that requested tool is actually available for the run.
+- `--frame-capture-provider off|renderdoc|pix`
+- `--frame-capture-init disabled|attached|search|path`
+- `--frame-capture-module <path-to-renderdoc.dll>`
+- `--frame-capture-file <capture-file-template>`
+- `--frame-capture-trigger none|next`
+
+Examples:
+
+- attach to an already running RenderDoc session and capture the next frame:
+  `render-scene --frame-capture-provider renderdoc --frame-capture-init attached --frame-capture-trigger next`
+- load `renderdoc.dll` from an explicit path:
+  `render-scene --frame-capture-provider renderdoc --frame-capture-init path --frame-capture-module C:/Tools/RenderDoc/renderdoc.dll`
+- request PIX marker tooling:
+  `render-scene --frame-capture-provider pix`
+
+The runtime also exposes dev-console commands when using the RenderDoc provider:
+
+- `gfx.capture.status`
+- `gfx.capture.frame`
+- `gfx.capture.begin`
+- `gfx.capture.end`
+- `gfx.capture.discard`
+- `gfx.capture.open_ui`
 
 ## Content Source Behavior (PAK vs Loose Cooked)
 

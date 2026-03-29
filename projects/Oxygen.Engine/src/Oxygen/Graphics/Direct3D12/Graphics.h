@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
@@ -57,6 +58,9 @@ public:
 
   OXGN_D3D12_NDAPI auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager> override;
+
+  [[nodiscard]] OXGN_D3D12_NDAPI auto GetFrameCaptureController() const
+    -> observer_ptr<graphics::FrameCaptureController> override;
 
   //! Get the V-Sync setting.
   [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool
@@ -150,6 +154,8 @@ private:
   mutable std::unordered_map<ID3D12RootSignature*,
     Microsoft::WRL::ComPtr<ID3D12CommandSignature>>
     draw_root_constant_command_signatures_ {};
+  std::unique_ptr<graphics::FrameCaptureController>
+    frame_capture_controller_ {};
   std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_ {};
   std::unique_ptr<D3D12ReadbackManager> readback_manager_ {};
 };
