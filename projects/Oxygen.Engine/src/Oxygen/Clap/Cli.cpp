@@ -112,8 +112,6 @@ namespace {
 
 } // namespace
 
-CmdLineArgumentsError::~CmdLineArgumentsError() = default;
-
 auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
 {
   const Arguments cla { argc, argv };
