@@ -40,7 +40,7 @@ namespace {
 } // namespace
 
 // The real main entry point for the application.
-extern "C" auto MainImpl(std::span<const char*> args) -> void;
+extern "C" auto MainImpl(std::span<const char*> args) -> int;
 
 auto main(int argc, char** argv) noexcept -> int
 {
@@ -88,9 +88,8 @@ auto main(int argc, char** argv) noexcept -> int
     loguru::init(argc, const_cast<const char**>(argv));
     loguru::set_thread_name("main");
 
-    MainImpl(
+    exit_code = MainImpl(
       std::span(const_cast<const char**>(argv), static_cast<size_t>(argc)));
-    exit_code = EXIT_SUCCESS;
   } catch (const std::exception& ex) {
     try {
       LOG_F(ERROR, "Unhandled exception: {}", ex.what());

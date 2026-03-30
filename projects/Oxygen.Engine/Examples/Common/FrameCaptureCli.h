@@ -8,17 +8,19 @@
 
 #include <algorithm>
 #include <cctype>
-#include <memory>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Clap/Fluent/DSL.h>
-#include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
-#include <Oxygen/Clap/Option.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 
 namespace oxygen::examples::cli {
+
+class FrameCaptureCliError : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
 
 struct FrameCaptureCliState {
   std::string provider = "off";
@@ -74,70 +76,6 @@ inline auto ParseCaptureLoadMode(std::string value)
                            " attached, search, path");
 }
 
-inline auto MakeCaptureOptions(FrameCaptureCliState& state)
-  -> clap::Options::Ptr
-{
-  auto options = std::make_shared<clap::Options>("Capture options");
-  options->Add(clap::Option::WithKey("capture-provider")
-      .About("Frame capture provider to enable: off, renderdoc, or pix")
-      .Long("capture-provider")
-      .WithValue<std::string>()
-      .DefaultValue(std::string("off"))
-      .UserFriendlyName("provider")
-      .StoreTo(&state.provider)
-      .Build());
-  return options;
-}
-
-inline auto MakeAdvancedCaptureOptions(FrameCaptureCliState& state)
-  -> clap::Options::Ptr
-{
-  auto options = std::make_shared<clap::Options>("Advanced capture options");
-  options->Add(clap::Option::WithKey("capture-load")
-      .About("How to locate the capture runtime: attached, search, or path. "
-             "RenderDoc only for now.")
-      .Long("capture-load")
-      .WithValue<std::string>()
-      .DefaultValue(std::string("attached"))
-      .UserFriendlyName("mode")
-      .StoreTo(&state.load)
-      .Build());
-  options->Add(clap::Option::WithKey("capture-library")
-      .About("Explicit capture runtime library path used when "
-             "--capture-load=path. RenderDoc only for now.")
-      .Long("capture-library")
-      .WithValue<std::string>()
-      .UserFriendlyName("path")
-      .StoreTo(&state.library)
-      .Build());
-  options->Add(clap::Option::WithKey("capture-output")
-      .About("Capture file path template. RenderDoc only for now.")
-      .Long("capture-output")
-      .WithValue<std::string>()
-      .UserFriendlyName("template")
-      .StoreTo(&state.output)
-      .Build());
-  options->Add(clap::Option::WithKey("capture-from-frame")
-      .About("Zero-based first rendered frame to capture. Frame 0 is the "
-             "first rendered frame. RenderDoc only for now.")
-      .Long("capture-from-frame")
-      .WithValue<uint64_t>()
-      .DefaultValue(uint64_t { 0 })
-      .UserFriendlyName("frame")
-      .StoreTo(&state.from_frame)
-      .Build());
-  options->Add(clap::Option::WithKey("capture-frame-count")
-      .About("Number of consecutive frames to capture starting at "
-             "--capture-from-frame. RenderDoc only for now.")
-      .Long("capture-frame-count")
-      .WithValue<uint32_t>()
-      .DefaultValue(uint32_t { 0 })
-      .UserFriendlyName("count")
-      .StoreTo(&state.frame_count)
-      .Build());
-  return options;
-}
-
 inline auto BuildFrameCaptureConfig(const FrameCaptureCliState& state,
   const bool using_headless_backend = false) -> oxygen::FrameCaptureConfig
 {
@@ -147,32 +85,27 @@ inline auto BuildFrameCaptureConfig(const FrameCaptureCliState& state,
   }
 
   if (using_headless_backend) {
-    throw std::runtime_error("--capture-provider requires a Direct3D12 run. "
-                             "Disable --headless or set --capture-provider "
-                             "off.");
+    throw FrameCaptureCliError(
+      "--capture-provider requires a Direct3D12 run. Disable --headless or "
+      "set --capture-provider off.");
   }
 
   if (state.from_frame != 0 && state.frame_count == 0) {
-    throw std::runtime_error("--capture-frame-count must be greater than 0 "
-                             "when --capture-from-frame is set");
-  }
-
-  if (provider == oxygen::FrameCaptureProvider::kPix) {
-    if (NormalizeCliToken(state.load) != "attached" || !state.library.empty()
-      || !state.output.empty() || state.from_frame != 0
-      || state.frame_count != 0) {
-      throw std::runtime_error("--capture-load, --capture-library, "
-                               "--capture-output, --capture-from-frame, and "
-                               "--capture-frame-count are currently supported "
-                               "only for RenderDoc");
-    }
-    return oxygen::FrameCaptureConfig { .provider = provider };
+    throw FrameCaptureCliError(
+      "--capture-frame-count must be greater than 0 when "
+      "--capture-from-frame is set");
   }
 
   const auto init_mode = ParseCaptureLoadMode(state.load);
+  if (provider == oxygen::FrameCaptureProvider::kPix && state.frame_count > 0
+    && state.from_frame == 0) {
+    throw FrameCaptureCliError(
+      "--capture-from-frame must be greater than 0 when "
+      "--capture-provider=pix and --capture-frame-count is set");
+  }
   if (init_mode == oxygen::FrameCaptureInitMode::kExplicitPath
     && state.library.empty()) {
-    throw std::runtime_error(
+    throw FrameCaptureCliError(
       "--capture-library is required when --capture-load=path");
   }
 

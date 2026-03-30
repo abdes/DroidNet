@@ -101,6 +101,33 @@ constexpr auto IsPixBuildAvailable() noexcept -> bool
 #endif
 }
 
+constexpr auto IsPixGpuCaptureBuildAvailable() noexcept -> bool
+{
+#if defined(OXYGEN_PIX_GPU_CAPTURE_AVAILABLE)
+  return true;
+#else
+  return false;
+#endif
+}
+
+constexpr auto IsPixTimingCaptureBuildAvailable() noexcept -> bool
+{
+#if defined(OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE)
+  return true;
+#else
+  return false;
+#endif
+}
+
+constexpr auto IsPixUiBuildAvailable() noexcept -> bool
+{
+#if defined(OXYGEN_PIX_UI_AVAILABLE)
+  return true;
+#else
+  return false;
+#endif
+}
+
 auto IsAftermathBuildAvailable() noexcept -> bool
 {
   return oxygen::graphics::d3d12::AftermathTracker::IsSdkAvailable();
@@ -116,8 +143,7 @@ auto RefreshToolingPolicy() noexcept -> void
     || IsModuleLoaded(kPixGpuCapturerModuleName)
     || IsModuleLoaded(kPixTimingCapturerModuleName);
   g_tooling_policy.aftermath_enabled = g_tooling_policy.requested_aftermath
-    && IsAftermathBuildAvailable() && !g_tooling_policy.renderdoc_enabled
-    && !g_tooling_policy.pix_enabled && !capture_hooks_active;
+    && IsAftermathBuildAvailable() && !capture_hooks_active;
 }
 
 auto IsRenderDocActive() noexcept -> bool
@@ -224,6 +250,12 @@ void DebugLayer::ConfigureTooling(const bool enable_aftermath,
     LOG_F(INFO,
       "PIX frame capture requested by GraphicsConfig, but the backend was "
       "built without PIX support");
+  } else if (g_tooling_policy.requested_pix) {
+    LOG_F(INFO,
+      "PIX tooling support compiled in: markers={} gpu_capture={} "
+      "timing_capture={} ui={}",
+      IsPixBuildAvailable(), IsPixGpuCaptureBuildAvailable(),
+      IsPixTimingCaptureBuildAvailable(), IsPixUiBuildAvailable());
   }
 }
 
@@ -312,20 +344,6 @@ void DebugLayer::InitializeAftermath() noexcept
       "Aftermath integration disabled because {} capture hooks are active "
       "in this process",
       capture_tool);
-    return;
-  }
-
-  if (g_tooling_policy.renderdoc_enabled) {
-    LOG_F(INFO,
-      "Aftermath integration disabled because RenderDoc is explicitly "
-      "enabled in GraphicsConfig");
-    return;
-  }
-
-  if (g_tooling_policy.pix_enabled) {
-    LOG_F(INFO,
-      "Aftermath integration disabled because PIX is explicitly enabled in "
-      "GraphicsConfig");
     return;
   }
 

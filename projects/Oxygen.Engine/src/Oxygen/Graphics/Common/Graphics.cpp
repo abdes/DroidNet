@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
 #include <mutex>
 #include <ranges>
@@ -72,6 +73,100 @@ auto CaptureCommandOk(const std::string_view output)
     .output = std::string(output),
     .error = {},
   };
+}
+
+constexpr std::array kAllCaptureFeatures {
+  oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame,
+  oxygen::graphics::FrameCaptureFeature::kManualCapture,
+  oxygen::graphics::FrameCaptureFeature::kDiscardCapture,
+  oxygen::graphics::FrameCaptureFeature::kCaptureFileTemplate,
+  oxygen::graphics::FrameCaptureFeature::kReplayUI,
+};
+
+auto JoinCaptureFeatureNames(
+  const oxygen::observer_ptr<oxygen::graphics::FrameCaptureController>
+    frame_capture,
+  const bool supported) -> std::string
+{
+  std::string out;
+  for (const auto feature : kAllCaptureFeatures) {
+    if (frame_capture->SupportsFeature(feature) != supported) {
+      continue;
+    }
+    if (!out.empty()) {
+      out += ", ";
+    }
+    out += oxygen::graphics::to_string(feature);
+  }
+  if (out.empty()) {
+    return "none";
+  }
+  return out;
+}
+
+auto JoinCaptureCommandNames(const std::vector<std::string_view>& commands)
+  -> std::string
+{
+  std::string out;
+  for (const auto command : commands) {
+    if (!out.empty()) {
+      out += ", ";
+    }
+    out += command;
+  }
+  return out;
+}
+
+auto BuildCaptureStatusOutput(
+  const oxygen::observer_ptr<oxygen::graphics::FrameCaptureController>
+    frame_capture) -> std::string
+{
+  std::vector<std::string_view> meaningful_commands {
+    kCommandGraphicsCaptureStatus,
+  };
+  if (frame_capture->SupportsFeature(
+        oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame)) {
+    meaningful_commands.push_back(kCommandGraphicsCaptureFrame);
+  }
+  if (frame_capture->SupportsFeature(
+        oxygen::graphics::FrameCaptureFeature::kManualCapture)) {
+    meaningful_commands.push_back(kCommandGraphicsCaptureBegin);
+    meaningful_commands.push_back(kCommandGraphicsCaptureEnd);
+  }
+  if (frame_capture->SupportsFeature(
+        oxygen::graphics::FrameCaptureFeature::kDiscardCapture)) {
+    meaningful_commands.push_back(kCommandGraphicsCaptureDiscard);
+  }
+  if (frame_capture->SupportsFeature(
+        oxygen::graphics::FrameCaptureFeature::kReplayUI)) {
+    meaningful_commands.push_back(kCommandGraphicsCaptureOpenUi);
+  }
+
+  std::string output;
+  output += "provider: " + std::string(frame_capture->GetProviderName());
+  output += "\navailable: "
+    + std::string(frame_capture->IsAvailable() ? "yes" : "no");
+  output += "\ncapturing: "
+    + std::string(frame_capture->IsCapturing() ? "yes" : "no");
+  output
+    += "\nsupported features: " + JoinCaptureFeatureNames(frame_capture, true);
+  output += "\nunsupported features: "
+    + JoinCaptureFeatureNames(frame_capture, false);
+  output
+    += "\nmeaningful commands: " + JoinCaptureCommandNames(meaningful_commands);
+  if (frame_capture->SupportsFeature(
+        oxygen::graphics::FrameCaptureFeature::kCaptureFileTemplate)) {
+    output
+      += "\ncapture file template: use frame_capture.capture_file_template "
+         "or --capture-output";
+  }
+  if (!frame_capture->IsAvailable()) {
+    output += "\navailability note: provider is configured but not currently "
+              "ready; inspect the raw state below for the blocking reason";
+  }
+  output += "\nraw state:\n";
+  output += frame_capture->DescribeState();
+  return output;
 }
 
 template <typename TAction>
@@ -284,7 +379,7 @@ auto Graphics::RegisterConsoleBindings(
       return console::ExecutionResult {
         .status = console::ExecutionStatus::kOk,
         .exit_code = 0,
-        .output = frame_capture->DescribeState(),
+        .output = BuildCaptureStatusOutput(frame_capture),
         .error = {},
       };
     },

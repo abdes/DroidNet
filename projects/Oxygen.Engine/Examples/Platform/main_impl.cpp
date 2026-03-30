@@ -519,7 +519,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 
 } // namespace
 
-extern "C" void MainImpl(std::span<const char*> args)
+extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
@@ -555,7 +555,7 @@ extern "C" void MainImpl(std::span<const char*> args)
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return;
+      return EXIT_SUCCESS;
     }
 
     auto platform
@@ -566,11 +566,12 @@ extern "C" void MainImpl(std::span<const char*> args)
 
     // Explicit destruction order due to dependencies.
     platform.reset();
+    return EXIT_SUCCESS;
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "Platform CLI parse failed: {}", e.what());
-    std::exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Platform example failed: {}", e.what());
-    std::exit(EXIT_FAILURE);
+    return EXIT_FAILURE;
   }
 }

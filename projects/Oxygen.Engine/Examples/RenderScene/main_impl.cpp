@@ -44,7 +44,7 @@
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 #include "Common/DemoCli.h"
-#include "Common/FrameCaptureCli.h"
+#include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "RenderScene/MainModule.h"
@@ -208,7 +208,7 @@ auto NormalizeCliToken(std::string value) -> std::string
 
 } // namespace
 
-extern "C" auto MainImpl(std::span<const char*> args) -> void
+extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
@@ -282,7 +282,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return;
+      return EXIT_SUCCESS;
     }
 
     LOG_F(INFO, "Parsed frames option = {}", frames);
@@ -405,9 +405,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     app.platform.reset();
 
     LOG_F(INFO, "exit code: {}", rc);
+    return rc;
+  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
+    LOG_F(ERROR, "CLI parse error: {}", e.what());
+    return EXIT_FAILURE;
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
+    return EXIT_FAILURE;
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Unhandled exception: {}", e.what());
+    return EXIT_FAILURE;
   }
 }

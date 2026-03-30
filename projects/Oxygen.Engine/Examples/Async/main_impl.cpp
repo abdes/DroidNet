@@ -40,7 +40,7 @@
 
 #include "Async/MainModule.h"
 #include "Common/DemoCli.h"
-#include "Common/FrameCaptureCli.h"
+#include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 
@@ -189,7 +189,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
 }
 } // namespace
 
-extern "C" auto MainImpl(std::span<const char*> args) -> void
+extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
@@ -225,7 +225,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return;
+      return EXIT_SUCCESS;
     }
 
     LOG_F(INFO, "Parsed frames option = {}", frames);
@@ -314,13 +314,21 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     // external log collectors (or test harnesses) receive the final messages.
     loguru::flush();
     loguru::shutdown();
+    return rc;
+  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
+    LOG_F(ERROR, "CLI parse error: {}", e.what());
+    loguru::flush();
+    loguru::shutdown();
+    return EXIT_FAILURE;
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
     loguru::flush();
     loguru::shutdown();
+    return EXIT_FAILURE;
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Unhandled exception: {}", e.what());
     loguru::flush();
     loguru::shutdown();
+    return EXIT_FAILURE;
   }
 }

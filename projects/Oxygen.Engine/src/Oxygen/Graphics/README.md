@@ -492,9 +492,8 @@ A new developer should think of the tooling stack as separate layers:
   no capture hooks are already active in the process
 - RenderDoc provides the current in-app frame capture controller; it is
   optional and loaded dynamically, never linked as a hard runtime dependency
-- PIX provides marker/event integration through WinPixEventRuntime and can be
-  selected as the frame-capture provider, but the advanced in-app capture
-  controller flags are still RenderDoc-only
+- PIX provides both marker/event integration through WinPixEventRuntime and a
+  first-class in-app GPU capture controller for D3D12
 - Nsight Aftermath provides NVIDIA GPU crash dumps and, when fully initialized,
   DX12 markers, resource tracking, and shader error reporting
 
@@ -504,7 +503,8 @@ The D3D12 backend auto-discovers optional tooling packages on Windows. Repo
 helper scripts download the expected layouts into `packages/`:
 
 - `GetRenderDoc.bat` / `GetRenderDoc.ps1` -> `packages/RenderDoc`
-- `GetWinPixEvent.bat` / `GetWinPixEvent.ps1` -> `packages/WinPixEventRuntime`
+- `GetPIX.bat` / `GetPIX.ps1` -> `packages/WinPixEventRuntime` plus installed
+  PIX validation
 - `GetAftermath.bat` / `GetAftermath.ps1` -> `packages/NsightAftermath`
 
 If you keep the SDKs somewhere else, point CMake at them with cache variables:
@@ -568,15 +568,29 @@ Useful values:
 - `frame_capture.frame_count`: number of consecutive frames to capture; `0`
   disables configured startup capture
 - `frame_capture.module_path`: explicit DLL path used only with `init_mode=path`
-- `frame_capture.capture_file_template`: provider output template; currently
-  wired through RenderDoc
+- `frame_capture.capture_file_template`: provider output template; RenderDoc
+  forwards it directly and PIX expands it into `.wpix` capture file names
 
-RenderDoc init modes mean:
+Shared init mode meanings:
 
-- `attached`: only bind to an already-loaded `renderdoc.dll`
-- `search`: use an already-loaded `renderdoc.dll` first, otherwise load
-  `renderdoc.dll` through the normal DLL search path
-- `path`: load `renderdoc.dll` from `frame_capture.module_path`
+- `attached`: require the capture DLL to already be loaded in the process
+- `search`: use the provider's normal discovery path and local installation
+  search
+- `path`: load the capture DLL from `frame_capture.module_path`
+
+Provider notes:
+
+- RenderDoc:
+  - `attached`: only bind to an already-loaded `renderdoc.dll`
+  - `search`: use an already-loaded `renderdoc.dll` first, otherwise load
+    `renderdoc.dll` through the normal DLL search path
+  - `path`: load `renderdoc.dll` from `frame_capture.module_path`
+- PIX:
+  - `attached`: require `WinPixGpuCapturer.dll` to already be loaded, which is
+    what you get when launching/attaching through PIX
+  - `search`: call `PIXLoadLatestWinPixGpuCapturerLibrary()` before DXGI/D3D12
+    startup
+  - `path`: load `WinPixGpuCapturer.dll` from `frame_capture.module_path`
 
 ### Runtime Policy and Tool Interactions
 
@@ -588,6 +602,9 @@ The current policy is:
 
 - Oxygen logs both the requested frame-capture provider and the capture layer
   already active in the process
+- if PIX is selected, the D3D12 backend reports whether PIX markers, GPU
+  capture discovery, timing-capture discovery, and PIX UI discovery are built
+  into the current binary
 - if the D3D12 debug layer is enabled and no capture hooks are active, Oxygen
   forces DRED auto-breadcrumbs, page-fault reporting, and Watson dumps on
 - if RenderDoc or PIX capture hooks are already active in the process, Oxygen
@@ -604,12 +621,20 @@ The current policy is:
 
 Current known limitations:
 
-- the in-app `FrameCaptureController` is D3D12-only and currently implemented
-  only for RenderDoc
-- PIX provider selection enables PIX event/marker emission when
-  WinPixEventRuntime is built in, but `capture-load`, `capture-library`,
-  `capture-output`, `capture-from-frame`, and `capture-frame-count` are still
-  RenderDoc-only
+- the in-app `FrameCaptureController` is D3D12-only
+- PIX supports status, next-frame capture, manual begin/end capture, configured
+  frame-range capture, target-window tracking, and capture-file templates
+- PIX intentionally does not advertise `gfx.capture.discard` or
+  `gfx.capture.open_ui`; those commands remain RenderDoc-only and return an
+  explicit provider-specific unsupported-operation error when PIX is active
+- `gfx.capture.status` now prints both a human-readable summary and the raw
+  provider state blob; for PIX the raw state includes:
+  `markers_available`, `gpu_capture_available`,
+  `timing_capture_available`, `pix_ui_available`, `capturer_loaded`,
+  `attached`, and `capturing`
+- `frame_capture.init_mode=attached` for PIX is honest: if the PIX GPU capturer
+  is not already loaded, Oxygen leaves DRED/Aftermath available and reports the
+  missing capturer instead of forcing a false tooling conflict
 - with the current debug-layer configuration, Aftermath crash-dump collection
   can enable successfully while `GFSDK_Aftermath_DX12_Initialize` still fails
   with `D3DDebugLayerNotCompatible`; in that state you still get Aftermath
@@ -634,20 +659,29 @@ out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider ren
 ```
 
 ```powershell
-out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider pix
+out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider pix --capture-load search --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene
+```
+
+```powershell
+out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider pix --capture-load path --capture-library "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll" --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene
 ```
 
 Useful details:
 
 - `--capture-from-frame` is zero-based; frame `0` is the first rendered frame
-- `--capture-provider pix` is currently a tooling/marker selection; the
-  advanced capture flags above are rejected until PIX controller parity is
-  implemented
+- PIX startup frame-range capture requires `--capture-from-frame > 0`
+- PIX `--capture-output` is treated as a template prefix; the engine generates a
+  `.wpix` filename such as `render_scene_frame_0001.wpix`
+- PIX `--capture-load attached` expects the process to have been launched or
+  attached through PIX already
 - run `Oxygen.Examples.RenderScene.exe help-advanced` to see the hidden
   development-only capture flags
-- when the RenderDoc provider is active, the dev console exposes
+- when a frame-capture provider is active, the dev console exposes
   `gfx.capture.status`, `gfx.capture.frame`, `gfx.capture.begin`,
-  `gfx.capture.end`, `gfx.capture.discard`, and `gfx.capture.open_ui`
+  and `gfx.capture.end`
+- `gfx.capture.discard` and `gfx.capture.open_ui` remain RenderDoc-only
+- `gfx.capture.status` is the quickest way to see whether the provider is ready,
+  which features it supports, and the raw provider state blob
 - if you only want Aftermath diagnostics, leave `frame_capture.provider` at
   `none`; that lets Oxygen try DRED + Aftermath instead of disabling Aftermath
   for an active capture tool
@@ -670,10 +704,32 @@ Healthy startup under RenderDoc usually shows lines like:
 - `Skipping forced DRED configuration because RenderDoc capture hooks are active; leaving DRED at tool/OS defaults`
 - `Aftermath integration disabled because RenderDoc capture hooks are active in this process`
 
+Healthy startup under PIX search/path capture usually shows lines like:
+
+- `PIX frame capture controller ready: module='C:/Program Files/Microsoft PIX/.../WinPixGpuCapturer.dll' ...`
+- `D3D12 frame capture layer requested by GraphicsConfig: PIX`
+- `D3D12 frame capture layer active in this process: PIX`
+- `PIX tooling support compiled in: markers=true gpu_capture=true timing_capture=true ui=true`
+- `Skipping forced DRED configuration because PIX capture hooks are active; leaving DRED at tool/OS defaults`
+- `Aftermath integration disabled because PIX capture hooks are active in this process`
+- `PIX configured frame-range capture requested from frame 1 for 1 frame(s): ...render_scene_frame_0001.wpix`
+
+Healthy startup under PIX attached-only without an injected capturer usually
+shows lines like:
+
+- `PIX frame capture initialization failed: PIX GPU capturer is not loaded in this process`
+- `D3D12 frame capture layer requested by GraphicsConfig: PIX`
+- `Forced DRED enabled (auto-breadcrumbs, page faults, Watson dumps)`
+- `Aftermath integration enabled`
+- `PIX capture request rejected: PIX GPU capturer is not loaded in this process`
+
 Important troubleshooting messages:
 
 - `RenderDoc frame capture requested by GraphicsConfig, but the backend was built without RenderDoc support`
 - `PIX frame capture requested by GraphicsConfig, but the backend was built without PIX support`
+- `PIX frame capture initialization failed: PIX GPU capturer is not loaded in this process`
+- `PIX configured startup capture rejected: configured PIX startup capture requires from_frame > 0`
+- `PIX capture request rejected: PIX GPU capturer is not loaded in this process`
 - `Aftermath requested by GraphicsConfig, but the backend was built without Nsight Aftermath support`
 - `Aftermath: DX12_Initialize failed (D3DDebugLayerNotCompatible, ...)`
 - `No DRED data available`

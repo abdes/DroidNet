@@ -490,6 +490,43 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
     != std::string::npos);
 }
 
+NOLINT_TEST_F(GraphicsBackendLoaderTest, PixConfigSerialization)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+
+  oxygen::GraphicsConfig config;
+  config.enable_debug = true;
+  config.frame_capture = {
+    .provider = oxygen::FrameCaptureProvider::kPix,
+    .init_mode = oxygen::FrameCaptureInitMode::kSearchPath,
+    .from_frame = 1,
+    .frame_count = 1,
+    .module_path
+    = "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll",
+    .capture_file_template = "captures/pix/render_scene",
+  };
+
+  auto backend = loader.LoadBackend(
+    oxygen::graphics::BackendType::kDirect3D12, config, {});
+  EXPECT_FALSE(backend.expired());
+
+  auto* mock_graphics = MockBackend::GetMockGraphics();
+  ASSERT_NE(mock_graphics, nullptr);
+
+  const std::string json_str(mock_graphics->GetJsonData());
+  EXPECT_TRUE(json_str.find(R"("provider": "pix")") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("init_mode": "search")") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("from_frame": 1)") != std::string::npos);
+  EXPECT_TRUE(json_str.find(R"("frame_count": 1)") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(
+      R"("module_path": "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll")")
+    != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("capture_file_template": "captures/pix/render_scene")")
+    != std::string::npos);
+}
+
 NOLINT_TEST_F(GraphicsBackendLoaderTest,
   DefaultPathFinderConfigSerializationUsesBuildQualifiedShaderPath)
 {
