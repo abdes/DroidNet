@@ -40,6 +40,24 @@ set(
   CACHE PATH
   "Optional root directory containing Nsight Aftermath SDK (Include/Lib/Bin)."
 )
+set(
+  OXYGEN_PIX_DIR
+  ""
+  CACHE PATH
+  "Optional PIX install root used to locate WinPixGpuCapturer.dll and WinPixTimingCapturer.dll."
+)
+set(
+  OXYGEN_PIX_GPU_CAPTURER_DLL
+  ""
+  CACHE FILEPATH
+  "Optional explicit path to WinPixGpuCapturer.dll."
+)
+set(
+  OXYGEN_PIX_TIMING_CAPTURER_DLL
+  ""
+  CACHE FILEPATH
+  "Optional explicit path to WinPixTimingCapturer.dll."
+)
 
 # ==============================================================================
 # Build instructions
@@ -78,6 +96,7 @@ set(
   "Devices/DeviceManager.h"
   "GraphicResource.h"
   "Graphics.h"
+  "PixFrameCaptureController.h"
   "RenderDocFrameCaptureController.h"
   "ReadbackManager.h"
   "Texture.h"
@@ -119,6 +138,7 @@ set(
   "Devices/AftermathTracker.h"
   "Devices/DeviceManager.cpp"
   "Graphics.cpp"
+  "PixFrameCaptureController.cpp"
   "RenderDocFrameCaptureController.cpp"
   "ReadbackManager.cpp"
   "ImGui/imgui_impl_dx12.cpp"
@@ -192,20 +212,23 @@ endif()
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 
-set(OXYGEN_D3D12_PIX_ENABLED OFF)
+set(OXYGEN_D3D12_PIX_MARKERS_ENABLED OFF)
+set(OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE OFF)
+set(OXYGEN_D3D12_PIX_TIMING_CAPTURE_AVAILABLE OFF)
+set(OXYGEN_D3D12_PIX_UI_AVAILABLE OFF)
 set(OXYGEN_D3D12_RENDERDOC_ENABLED OFF)
 set(OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE OFF)
 set(OXYGEN_D3D12_AFTERMATH_ENABLED OFF)
 set(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE OFF)
 set(OXYGEN_RENDERDOC_INCLUDE_DIR "")
 set(OXYGEN_AFTERMATH_INCLUDE_DIR "")
+set(OXYGEN_PIX_INSTALL_ROOT_RESOLVED "")
 
 if(WIN32)
-  # WinPixEventRuntime discovery is intentionally restricted to project-local
-  # packages. Preferred install path is via either:
-  #  - GetWinPixEvent.bat
-  #  - GetWinPixEvent.ps1
-  # Both scripts install to packages/WinPixEventRuntime by default.
+  # PIX marker/runtime discovery prefers an explicit WinPixEventRuntime package
+  # root and then falls back to the repo-local package layout populated by:
+  #  - GetPIX.bat
+  #  - GetPIX.ps1
   set(_oxygen_winpixeventruntime_hint_paths)
 
   if(OXYGEN_WINPIXEVENTRUNTIME_DIR)
@@ -215,7 +238,7 @@ if(WIN32)
     )
   endif()
 
-  # Repo-local package layout (downloaded by GetWinPixEvent.bat/.ps1).
+  # Repo-local package layout (provisioned by GetPIX.bat/.ps1).
   if(DEFINED OXYGEN_SOURCE_DIR)
     list(
       APPEND _oxygen_winpixeventruntime_hint_paths
@@ -271,7 +294,128 @@ if(WIN32)
     AND
       OXYGEN_WINPIXEVENTRUNTIME_DLL
   )
-    set(OXYGEN_D3D12_PIX_ENABLED ON)
+    set(OXYGEN_D3D12_PIX_MARKERS_ENABLED ON)
+  endif()
+
+  # PIX GPU capture discovery prefers explicit DLL overrides, then an explicit
+  # PIX install root, then the common Program Files install roots.
+  set(_oxygen_pix_hint_paths)
+  if(OXYGEN_PIX_DIR)
+    list(APPEND _oxygen_pix_hint_paths "${OXYGEN_PIX_DIR}")
+  endif()
+  list(
+    APPEND _oxygen_pix_hint_paths
+    "C:/Program Files/Microsoft PIX"
+    "C:/Program Files (x86)/Microsoft PIX"
+  )
+
+  set(_oxygen_pix_install_hint_paths)
+  foreach(_oxygen_pix_hint IN LISTS _oxygen_pix_hint_paths)
+    if(EXISTS "${_oxygen_pix_hint}")
+      list(APPEND _oxygen_pix_install_hint_paths "${_oxygen_pix_hint}")
+      file(
+        GLOB _oxygen_pix_version_dirs
+        LIST_DIRECTORIES true
+        "${_oxygen_pix_hint}/*"
+      )
+      foreach(_oxygen_pix_version_dir IN LISTS _oxygen_pix_version_dirs)
+        if(IS_DIRECTORY "${_oxygen_pix_version_dir}")
+          list(
+            APPEND _oxygen_pix_install_hint_paths
+            "${_oxygen_pix_version_dir}"
+          )
+        endif()
+      endforeach()
+    endif()
+  endforeach()
+
+  unset(OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED)
+  unset(OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED)
+  unset(OXYGEN_PIX_UI_EXECUTABLE)
+  unset(OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED CACHE)
+  unset(OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED CACHE)
+  unset(OXYGEN_PIX_UI_EXECUTABLE CACHE)
+
+  if(OXYGEN_PIX_GPU_CAPTURER_DLL AND EXISTS "${OXYGEN_PIX_GPU_CAPTURER_DLL}")
+    set(
+      OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED
+      "${OXYGEN_PIX_GPU_CAPTURER_DLL}"
+      CACHE FILEPATH
+      "Resolved path to WinPixGpuCapturer.dll"
+      FORCE
+    )
+  else()
+    find_file(
+      OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED
+      NAMES
+        WinPixGpuCapturer.dll
+      PATHS
+        ${_oxygen_pix_install_hint_paths}
+    )
+  endif()
+
+  if(
+    OXYGEN_PIX_TIMING_CAPTURER_DLL
+    AND
+      EXISTS
+        "${OXYGEN_PIX_TIMING_CAPTURER_DLL}"
+  )
+    set(
+      OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED
+      "${OXYGEN_PIX_TIMING_CAPTURER_DLL}"
+      CACHE FILEPATH
+      "Resolved path to WinPixTimingCapturer.dll"
+      FORCE
+    )
+  else()
+    find_file(
+      OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED
+      NAMES
+        WinPixTimingCapturer.dll
+      PATHS
+        ${_oxygen_pix_install_hint_paths}
+    )
+  endif()
+
+  find_file(
+    OXYGEN_PIX_UI_EXECUTABLE
+    NAMES
+      pixtool.exe
+      PIX.exe
+    PATHS
+      ${_oxygen_pix_install_hint_paths}
+  )
+
+  if(OXYGEN_PIX_DIR AND EXISTS "${OXYGEN_PIX_DIR}")
+    set(OXYGEN_PIX_INSTALL_ROOT_RESOLVED "${OXYGEN_PIX_DIR}")
+  elseif(OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED)
+    get_filename_component(
+      OXYGEN_PIX_INSTALL_ROOT_RESOLVED
+      "${OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED}"
+      DIRECTORY
+    )
+  elseif(OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED)
+    get_filename_component(
+      OXYGEN_PIX_INSTALL_ROOT_RESOLVED
+      "${OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED}"
+      DIRECTORY
+    )
+  endif()
+
+  if(OXYGEN_D3D12_PIX_MARKERS_ENABLED AND OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED)
+    set(OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE ON)
+  endif()
+
+  if(
+    OXYGEN_D3D12_PIX_MARKERS_ENABLED
+    AND
+      OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED
+  )
+    set(OXYGEN_D3D12_PIX_TIMING_CAPTURE_AVAILABLE ON)
+  endif()
+
+  if(OXYGEN_PIX_UI_EXECUTABLE)
+    set(OXYGEN_D3D12_PIX_UI_AVAILABLE ON)
   endif()
 
   # RenderDoc discovery checks default Windows install locations first, then
@@ -519,13 +663,52 @@ if(OXYGEN_D3D12_AFTERMATH_DLL_DEPLOYABLE)
   )
 endif()
 
+if(OXYGEN_PIX_INSTALL_ROOT_RESOLVED)
+  set(_oxygen_pix_install_root_literal "${OXYGEN_PIX_INSTALL_ROOT_RESOLVED}")
+  file(
+    TO_CMAKE_PATH
+    "${_oxygen_pix_install_root_literal}"
+    _oxygen_pix_install_root_literal
+  )
+endif()
+
+if(OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED)
+  set(
+    _oxygen_pix_gpu_capturer_dll_literal
+    "${OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED}"
+  )
+  file(
+    TO_CMAKE_PATH
+    "${_oxygen_pix_gpu_capturer_dll_literal}"
+    _oxygen_pix_gpu_capturer_dll_literal
+  )
+endif()
+
+if(OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED)
+  set(
+    _oxygen_pix_timing_capturer_dll_literal
+    "${OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED}"
+  )
+  file(
+    TO_CMAKE_PATH
+    "${_oxygen_pix_timing_capturer_dll_literal}"
+    _oxygen_pix_timing_capturer_dll_literal
+  )
+endif()
+
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
-    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_ENABLED}>>:USE_PIX>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_MARKERS_ENABLED}>>:USE_PIX>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE}>>:OXYGEN_PIX_GPU_CAPTURE_AVAILABLE=1>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_TIMING_CAPTURE_AVAILABLE}>>:OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE=1>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_UI_AVAILABLE}>>:OXYGEN_PIX_UI_AVAILABLE=1>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_PIX_INSTALL_ROOT_RESOLVED}>>:OXYGEN_PIX_INSTALL_ROOT_PATH="${_oxygen_pix_install_root_literal}">
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED}>>:OXYGEN_PIX_GPU_CAPTURER_DLL_PATH="${_oxygen_pix_gpu_capturer_dll_literal}">
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED}>>:OXYGEN_PIX_TIMING_CAPTURER_DLL_PATH="${_oxygen_pix_timing_capturer_dll_literal}">
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_ENABLED}>>:USE_RENDERDOC>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_RENDERDOC_DLL_DEPLOYABLE}>>:OXYGEN_RENDERDOC_DLL_PATH="${_oxygen_renderdoc_dll_path_literal}">
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_AFTERMATH_ENABLED}>>:USE_AFTERMATH>
@@ -549,7 +732,7 @@ target_link_libraries(
 )
 
 if(WIN32)
-  if(OXYGEN_D3D12_PIX_ENABLED)
+  if(OXYGEN_D3D12_PIX_MARKERS_ENABLED)
     target_include_directories(
       ${META_MODULE_TARGET}
       PRIVATE
@@ -587,12 +770,33 @@ if(WIN32)
       "WinPixEventRuntime enabled for ${META_MODULE_NAME}: "
       "${OXYGEN_WINPIXEVENTRUNTIME_INCLUDE_DIR}"
     )
+    if(OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE)
+      message(
+        STATUS
+        "PIX GPU capture discovery enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_PIX_GPU_CAPTURER_DLL_RESOLVED}"
+      )
+    else()
+      message(
+        STATUS
+        "PIX markers enabled for ${META_MODULE_NAME}, but no PIX GPU capturer "
+        "was discovered at configure time. Attached-only runtime capture may "
+        "still work when PIX injects the capturer into the process."
+      )
+    endif()
+    if(OXYGEN_D3D12_PIX_TIMING_CAPTURE_AVAILABLE)
+      message(
+        STATUS
+        "PIX timing capturer discovery enabled for ${META_MODULE_NAME}: "
+        "${OXYGEN_PIX_TIMING_CAPTURER_DLL_RESOLVED}"
+      )
+    endif()
   elseif(DEFINED USE_PIX AND USE_PIX)
     message(
       WARNING
       "USE_PIX is ON but WinPixEventRuntime was not found. "
-      "\n  - Recommended: run GetWinPixEvent.bat or GetWinPixEvent.ps1 from the repo root "
-      "(it installs to packages/WinPixEventRuntime by default)."
+      "\n  - Recommended: run GetPIX.bat or GetPIX.ps1 from the repo root "
+      "(it provisions WinPixEventRuntime into packages/WinPixEventRuntime and validates the installed PIX tool)."
       "\n  - Alternative: set OXYGEN_WINPIXEVENTRUNTIME_DIR to a folder "
       "containing Include/pix3.h, Lib/x64/WinPixEventRuntime.lib, and "
       "Bin/x64/WinPixEventRuntime.dll."

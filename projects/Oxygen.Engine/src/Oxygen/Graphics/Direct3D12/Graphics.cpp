@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -401,6 +402,10 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     == oxygen::FrameCaptureProvider::kRenderDoc) {
     frame_capture_controller_
       = CreateRenderDocFrameCaptureController(*this, frame_capture_config);
+  } else if (frame_capture_config.provider
+    == oxygen::FrameCaptureProvider::kPix) {
+    frame_capture_controller_
+      = CreatePixFrameCaptureController(*this, frame_capture_config);
   }
   AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));

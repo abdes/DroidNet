@@ -92,6 +92,11 @@ m_gtest_program(
   SOURCES
     "FrameCaptureController_test.cpp"
 )
+m_gtest_program(
+  GraphicsCaptureConsole
+  SOURCES
+    "GraphicsCaptureConsole_test.cpp"
+)
 m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")

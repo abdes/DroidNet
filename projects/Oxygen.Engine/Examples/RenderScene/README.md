@@ -24,7 +24,7 @@ them, run:
 Advanced capture flags:
 
 - `--capture-load attached|search|path`
-- `--capture-library <path-to-renderdoc.dll>`
+- `--capture-library <path-to-renderdoc.dll-or-WinPixGpuCapturer.dll>`
 - `--capture-output <capture-file-template>`
 - `--capture-from-frame <frame-number>`
 - `--capture-frame-count <number-of-frames>`
@@ -38,22 +38,32 @@ Examples:
   `render-scene --capture-provider renderdoc --capture-load attached --capture-from-frame 120 --capture-frame-count 3`
 - load `renderdoc.dll` from an explicit path:
   `render-scene --capture-provider renderdoc --capture-load path --capture-library C:/Tools/RenderDoc/renderdoc.dll`
-- request PIX marker tooling:
-  `render-scene --capture-provider pix`
+- request a PIX startup capture using the installed PIX search path:
+  `render-scene --capture-provider pix --capture-load search --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene`
+- load `WinPixGpuCapturer.dll` from an explicit PIX install path:
+  `render-scene --capture-provider pix --capture-load path --capture-library "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll" --capture-from-frame 1 --capture-frame-count 1 --capture-output out/build-ninja/pix-captures/render_scene`
+- use PIX attached-only mode when the process was launched or attached through PIX already:
+  `render-scene --capture-provider pix --capture-load attached`
 
-At the moment, the advanced capture flags remain RenderDoc-only. Selecting PIX
-keeps the provider user-facing, but `--capture-load`, `--capture-library`,
-`--capture-output`, `--capture-from-frame`, and `--capture-frame-count` are
-still rejected until the PIX runtime parity work is implemented.
+For PIX, `--capture-output` is treated as a template prefix. The engine
+generates a `.wpix` filename such as `render_scene_frame_0001.wpix`.
+PIX startup frame-range capture also requires `--capture-from-frame > 0`.
 
-The runtime also exposes dev-console commands when using the RenderDoc provider:
+The runtime also exposes dev-console commands when a frame-capture provider is
+configured:
 
 - `gfx.capture.status`
 - `gfx.capture.frame`
 - `gfx.capture.begin`
 - `gfx.capture.end`
-- `gfx.capture.discard`
-- `gfx.capture.open_ui`
+
+Provider-specific notes:
+
+- `gfx.capture.status` prints both a human-readable summary and the raw provider
+  state blob
+- `gfx.capture.discard` and `gfx.capture.open_ui` are currently RenderDoc-only
+- when PIX is active, unsupported commands return an explicit provider-specific
+  error instead of a generic failure
 
 ## Using Python with RenderDoc
 

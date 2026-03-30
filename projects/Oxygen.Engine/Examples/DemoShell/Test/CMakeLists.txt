@@ -12,14 +12,12 @@ m_gtest_program(
     "SceneLoaderService_phase4_test.cpp"
 )
 
-m_gtest_program(
-  ConsoleDefaults
-  SOURCES
-    "DemoShellConsoleDefaults_test.cpp"
-)
+m_gtest_program(ConsoleDefaults SOURCES "DemoShellConsoleDefaults_test.cpp")
 
 m_gtest_program(
   EnvironmentSettingsService
   SOURCES
     "EnvironmentSettingsService_test.cpp"
 )
+
+m_gtest_program(FrameCaptureCli SOURCES "FrameCaptureCli_test.cpp")
