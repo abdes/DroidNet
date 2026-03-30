@@ -48,6 +48,13 @@ constexpr wchar_t kRenderDocModuleName[] = L"renderdoc.dll";
 
 enum class CaptureMode : uint8_t { kNone, kNextFrame, kManual };
 
+constexpr auto kRenderDocSupportedFeatures
+  = oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame
+  | oxygen::graphics::FrameCaptureFeature::kManualCapture
+  | oxygen::graphics::FrameCaptureFeature::kDiscardCapture
+  | oxygen::graphics::FrameCaptureFeature::kCaptureFileTemplate
+  | oxygen::graphics::FrameCaptureFeature::kReplayUI;
+
 struct RenderDocCaptureTarget {
   RENDERDOC_DevicePointer device { nullptr };
   RENDERDOC_WindowHandle window { nullptr };
@@ -105,6 +112,12 @@ public:
     return IsCapturingUnlocked();
   }
 
+  [[nodiscard]] auto GetSupportedFeatures() const noexcept
+    -> oxygen::graphics::FrameCaptureFeature override
+  {
+    return kRenderDocSupportedFeatures;
+  }
+
   [[nodiscard]] auto DescribeState() const -> std::string override
   {
     std::scoped_lock lock(mutex_);
@@ -114,6 +127,7 @@ public:
         << " available=" << (api_ != nullptr ? "true" : "false")
         << " capturing=" << (IsCapturingUnlocked() ? "true" : "false")
         << " next_frame_armed=" << (next_frame_requested_ ? "true" : "false")
+        << " features=" << DescribeSupportedFeatures()
         << " init_mode=" << InitModeText(config_.init_mode);
 
     if (!resolved_module_path_.empty()) {
@@ -129,7 +143,8 @@ public:
     return out.str();
   }
 
-  auto TriggerNextFrame() -> bool override
+private:
+  auto DoTriggerNextFrame() -> bool override
   {
     std::scoped_lock lock(mutex_);
 
@@ -148,7 +163,7 @@ public:
     return true;
   }
 
-  auto StartCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
+  auto DoStartCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
     -> bool override
   {
     std::scoped_lock lock(mutex_);
@@ -169,7 +184,7 @@ public:
     return true;
   }
 
-  auto EndCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
+  auto DoEndCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
     -> bool override
   {
     std::scoped_lock lock(mutex_);
@@ -189,7 +204,7 @@ public:
     return ended;
   }
 
-  auto DiscardCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
+  auto DoDiscardCapture(oxygen::observer_ptr<oxygen::graphics::Surface> surface)
     -> bool override
   {
     std::scoped_lock lock(mutex_);
@@ -220,7 +235,7 @@ public:
     return discarded;
   }
 
-  auto SetCaptureFileTemplate(const std::string_view path_template)
+  auto DoSetCaptureFileTemplate(const std::string_view path_template)
     -> bool override
   {
     std::scoped_lock lock(mutex_);
@@ -236,7 +251,7 @@ public:
     return true;
   }
 
-  auto LaunchReplayUI(const bool connect_target_control) -> bool override
+  auto DoLaunchReplayUI(const bool connect_target_control) -> bool override
   {
     std::scoped_lock lock(mutex_);
 
@@ -285,7 +300,6 @@ public:
     capture_mode_ = CaptureMode::kNone;
   }
 
-private:
   auto Initialize() -> void
   {
     if (config_.init_mode == oxygen::FrameCaptureInitMode::kDisabled) {
@@ -536,47 +550,55 @@ public:
     return false;
   }
 
+  [[nodiscard]] auto GetSupportedFeatures() const noexcept
+    -> oxygen::graphics::FrameCaptureFeature override
+  {
+    return kRenderDocSupportedFeatures;
+  }
+
   [[nodiscard]] auto DescribeState() const -> std::string override
   {
     std::ostringstream out;
-    out << "provider=RenderDoc available=false capturing=false init_mode="
-        << InitModeText(config_.init_mode);
+    out << "provider=RenderDoc available=false capturing=false features="
+        << DescribeSupportedFeatures()
+        << " init_mode=" << InitModeText(config_.init_mode);
     if (!status_message_.empty()) {
       out << " status=\"" << status_message_ << '"';
     }
     return out.str();
   }
 
-  auto TriggerNextFrame() -> bool override { return false; }
+private:
+  auto DoTriggerNextFrame() -> bool override { return false; }
 
-  auto StartCapture(
+  auto DoStartCapture(
     oxygen::observer_ptr<oxygen::graphics::Surface> /*surface*/ = {})
     -> bool override
   {
     return false;
   }
 
-  auto EndCapture(
+  auto DoEndCapture(
     oxygen::observer_ptr<oxygen::graphics::Surface> /*surface*/ = {})
     -> bool override
   {
     return false;
   }
 
-  auto DiscardCapture(
+  auto DoDiscardCapture(
     oxygen::observer_ptr<oxygen::graphics::Surface> /*surface*/ = {})
     -> bool override
   {
     return false;
   }
 
-  auto SetCaptureFileTemplate(std::string_view path_template) -> bool override
+  auto DoSetCaptureFileTemplate(std::string_view path_template) -> bool override
   {
     config_.capture_file_template = std::string(path_template);
     return false;
   }
 
-  auto LaunchReplayUI(bool /*connect_target_control*/ = true) -> bool override
+  auto DoLaunchReplayUI(bool /*connect_target_control*/ = true) -> bool override
   {
     return false;
   }
@@ -591,7 +613,6 @@ public:
   {
   }
 
-private:
   oxygen::FrameCaptureConfig config_;
   std::string status_message_ {};
 };

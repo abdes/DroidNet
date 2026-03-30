@@ -87,6 +87,11 @@ m_gtest_program(
     "ResourceRegistry_update_test.cpp"
 )
 m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
+m_gtest_program(
+  FrameCaptureController
+  SOURCES
+    "FrameCaptureController_test.cpp"
+)
 m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
