@@ -78,6 +78,7 @@ set(
   "Scripting/ScriptExecutable.h"
   "Meta/Scripting/ScriptCompileMode.h"
   "Types/Atmosphere.h"
+  "Types/Bool32.h"
   "Types/ByteUnits.h"
   "Types/ColorSpace.h"
   "Types/Epoch.h"

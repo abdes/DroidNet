@@ -388,6 +388,7 @@ private:
     if (api_ == nullptr || capture_mode_ != CaptureMode::kManual) {
       return;
     }
+
     static_cast<void>(frame_number);
   }
 

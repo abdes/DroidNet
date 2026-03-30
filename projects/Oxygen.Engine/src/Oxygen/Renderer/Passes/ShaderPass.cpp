@@ -436,6 +436,8 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
       return "DEBUG_DIRECT_LIGHT_GATES";
     case ShaderDebugMode::kDirectBrdfCore:
       return "DEBUG_DIRECT_BRDF_CORE";
+    case ShaderDebugMode::kVirtualShadowMask:
+      return "DEBUG_VIRTUAL_SHADOW_MASK";
     default:
       return nullptr;
     }

@@ -51,6 +51,20 @@ namespace oxygen::engine {
 
 namespace {
 
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
   //! Unified pass constants for all sky atmosphere LUT generation passes.
   /*!
    Layout must match `AtmospherePassConstants` in AtmospherePassConstants.hlsli.
@@ -358,7 +372,7 @@ struct SkyAtmosphereLutComputePass::Impl {
     mapped_constants
       = std::span(static_cast<std::byte*>(mapped), desc.size_bytes);
 
-    registry.Register(constants_cbv);
+    RegisterResourceIfNeeded(*gfx, constants_cbv);
 
     for (auto i = 0U; i < kNumAtmospherePasses; ++i) {
       graphics::BufferViewDescription cbv_view_desc;

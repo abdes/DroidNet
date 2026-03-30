@@ -374,6 +374,7 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
 
     state.CollectItem(RenderItemData {
       .submesh_index = index,
+      .node_handle = item.GetNodeHandle(),
       .geometry = std::move(geo_ref),
       .material = std::move(mat_ref),
       .material_handle = mat_handle,

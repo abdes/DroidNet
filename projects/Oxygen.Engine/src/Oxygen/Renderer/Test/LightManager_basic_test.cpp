@@ -65,18 +65,19 @@ protected:
     uploader_ = std::make_unique<UploadCoordinator>(
       observer_ptr { gfx_.get() }, DefaultUploadPolicy());
 
-    staging_provider_
-      = uploader_->CreateRingBufferStaging(oxygen::frame::SlotCount { 1 }, 256u);
+    staging_provider_ = uploader_->CreateRingBufferStaging(
+      oxygen::frame::SlotCount { 1 }, 256u);
 
-    inline_transfers_
-      = std::make_unique<InlineTransfersCoordinator>(observer_ptr { gfx_.get() });
+    inline_transfers_ = std::make_unique<InlineTransfersCoordinator>(
+      observer_ptr { gfx_.get() });
 
     manager_ = std::make_unique<LightManager>(observer_ptr { gfx_.get() },
       observer_ptr { staging_provider_.get() },
       observer_ptr { inline_transfers_.get() });
 
     static constexpr size_t kTestSceneCapacity = 64;
-    scene_ = std::make_shared<Scene>("LightManagerTestScene", kTestSceneCapacity);
+    scene_
+      = std::make_shared<Scene>("LightManagerTestScene", kTestSceneCapacity);
   }
 
   [[nodiscard]] auto Manager() const -> LightManager& { return *manager_; }
@@ -114,15 +115,17 @@ private:
 NOLINT_TEST_F(LightManagerTest, CollectFromNode_InvisibleNodeEmitsNoLights)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
-  auto node = CreateNode("invisible", /*visible=*/false, /*casts_shadows=*/true);
+  auto node
+    = CreateNode("invisible", /*visible=*/false, /*casts_shadows=*/true);
   auto impl = node.GetImpl();
   ASSERT_TRUE(impl.has_value());
   impl->get().AddComponent<oxygen::scene::DirectionalLight>();
   UpdateTransforms(node);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   EXPECT_TRUE(manager.GetDirectionalLights().empty());
   EXPECT_TRUE(manager.GetPositionalLights().empty());
@@ -131,7 +134,8 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_InvisibleNodeEmitsNoLights)
 NOLINT_TEST_F(LightManagerTest, CollectFromNode_AffectsWorldFalseEmitsNoLights)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
   auto impl = node.GetImpl();
@@ -141,7 +145,7 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_AffectsWorldFalseEmitsNoLights)
   light.Common().affects_world = false;
   UpdateTransforms(node);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   EXPECT_TRUE(manager.GetDirectionalLights().empty());
 }
@@ -149,7 +153,8 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_AffectsWorldFalseEmitsNoLights)
 NOLINT_TEST_F(LightManagerTest, CollectFromNode_BakedMobilityEmitsNoLights)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
   auto impl = node.GetImpl();
@@ -159,7 +164,7 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_BakedMobilityEmitsNoLights)
   light.Common().mobility = oxygen::scene::LightMobility::kBaked;
   UpdateTransforms(node);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   EXPECT_TRUE(manager.GetDirectionalLights().empty());
 }
@@ -168,7 +173,8 @@ NOLINT_TEST_F(
   LightManagerTest, CollectFromNode_ShadowEligibilityRequiresNodeFlag)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/false);
   auto impl = node.GetImpl();
@@ -178,7 +184,7 @@ NOLINT_TEST_F(
   light.Common().casts_shadows = true;
   UpdateTransforms(node);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   const auto lights = manager.GetDirectionalLights();
   ASSERT_EQ(lights.size(), 1U);
@@ -194,7 +200,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(LightManagerTest, CollectFromNode_DirectionUsesWorldRotation)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
   auto transform = node.GetTransform();
@@ -210,7 +217,7 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_DirectionUsesWorldRotation)
   const glm::vec3 expected_dir
     = glm::normalize(rotation * oxygen::space::move::Forward);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   const auto lights = manager.GetDirectionalLights();
   ASSERT_EQ(lights.size(), 1U);
@@ -222,7 +229,8 @@ NOLINT_TEST_F(LightManagerTest, CollectFromNode_DirectionUsesWorldRotation)
 NOLINT_TEST_F(LightManagerTest, EnsureFrameResources_NoLightsKeepsSrvInvalid)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   manager.EnsureFrameResources();
 
@@ -235,7 +243,8 @@ NOLINT_TEST_F(LightManagerTest,
   EnsureFrameResources_WithDirectionalAndPositionalLightsAllocatesSrvs)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto dir_node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
   auto dir_impl = dir_node.GetImpl();
@@ -244,24 +253,38 @@ NOLINT_TEST_F(LightManagerTest,
   dir_impl->get()
     .GetComponent<oxygen::scene::DirectionalLight>()
     .Common()
-    .casts_shadows = true;
+    .casts_shadows
+    = true;
   UpdateTransforms(dir_node);
 
-  auto point_node = CreateNode("point", /*visible=*/true, /*casts_shadows=*/true);
+  auto point_node
+    = CreateNode("point", /*visible=*/true, /*casts_shadows=*/true);
   auto point_impl = point_node.GetImpl();
   ASSERT_TRUE(point_impl.has_value());
   point_impl->get().AddComponent<oxygen::scene::PointLight>();
+  point_impl->get()
+    .GetComponent<oxygen::scene::PointLight>()
+    .Common()
+    .casts_shadows
+    = true;
   UpdateTransforms(point_node);
 
-  manager.CollectFromNode(dir_impl->get());
-  manager.CollectFromNode(point_impl->get());
+  manager.CollectFromNode(dir_node.GetHandle(), dir_impl->get());
+  manager.CollectFromNode(point_node.GetHandle(), point_impl->get());
   manager.EnsureFrameResources();
 
-  EXPECT_EQ(manager.GetDirectionalLights().size(), 1U);
-  EXPECT_EQ(manager.GetDirectionalShadowCandidates().size(), 1U);
-  EXPECT_EQ(manager.GetPositionalLights().size(), 1U);
+  ASSERT_EQ(manager.GetDirectionalLights().size(), 1U);
+  ASSERT_EQ(manager.GetDirectionalShadowCandidates().size(), 1U);
+  ASSERT_EQ(manager.GetPositionalLights().size(), 1U);
+  ASSERT_EQ(manager.GetPositionalShadowCandidates().size(), 1U);
   EXPECT_NE(manager.GetDirectionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
   EXPECT_NE(manager.GetPositionalLightsSrvIndex(), kInvalidShaderVisibleIndex);
+
+  EXPECT_EQ(manager.GetDirectionalShadowCandidates().front().node_handle,
+    dir_node.GetHandle());
+  EXPECT_EQ(manager.GetPositionalShadowCandidates().front().node_handle,
+    point_node.GetHandle());
+  EXPECT_EQ(manager.GetPositionalShadowCandidates().front().light_index, 0U);
 }
 
 NOLINT_TEST(LightCommonDefaultsTest,
@@ -280,7 +303,8 @@ NOLINT_TEST_F(LightManagerTest,
   CollectFromNode_DirectionalShadowCandidateCanonicalizesLegacyZeroCascadeSplits)
 {
   auto& manager = Manager();
-  manager.OnFrameStart(RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
 
   auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
   auto impl = node.GetImpl();
@@ -291,10 +315,11 @@ NOLINT_TEST_F(LightManagerTest,
   light.CascadedShadows().cascade_distances = { 0.0F, 0.0F, 0.0F, 0.0F };
   UpdateTransforms(node);
 
-  manager.CollectFromNode(impl->get());
+  manager.CollectFromNode(node.GetHandle(), impl->get());
 
   ASSERT_EQ(manager.GetDirectionalShadowCandidates().size(), 1U);
   const auto& candidate = manager.GetDirectionalShadowCandidates().front();
+  EXPECT_EQ(candidate.node_handle, node.GetHandle());
   EXPECT_EQ(candidate.cascade_count, oxygen::scene::kMaxShadowCascades);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[0], 8.0F);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[1], 24.0F);

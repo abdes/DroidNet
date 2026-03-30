@@ -119,6 +119,7 @@ void RenderingPanel::DrawDebugModes()
     || current_mode == ShaderDebugMode::kDirectLightingFull
     || current_mode == ShaderDebugMode::kDirectLightGates
     || current_mode == ShaderDebugMode::kDirectBrdfCore
+    || current_mode == ShaderDebugMode::kVirtualShadowMask
     || current_mode == ShaderDebugMode::kWorldNormals
     || current_mode == ShaderDebugMode::kRoughness
     || current_mode == ShaderDebugMode::kMetalness;
@@ -212,6 +213,11 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton(
         "Direct BRDF Core", current_mode == ShaderDebugMode::kDirectBrdfCore)) {
     vm_->SetDebugMode(ShaderDebugMode::kDirectBrdfCore);
+  }
+
+  if (ImGui::RadioButton("Virtual Shadow Mask",
+        current_mode == ShaderDebugMode::kVirtualShadowMask)) {
+    vm_->SetDebugMode(ShaderDebugMode::kVirtualShadowMask);
   }
 
   if (disable_debug_modes) {

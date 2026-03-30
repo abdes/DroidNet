@@ -185,25 +185,27 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
 
 namespace {
 
-auto ParseDirectionalShadowPolicy(std::string value)
-  -> oxygen::DirectionalShadowImplementationPolicy
-{
-  std::ranges::transform(value, value.begin(),
-    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-  if (value == "conventional" || value == "conventional-only") {
-    return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
-  }
-
-  throw std::runtime_error("Invalid value for --directional-shadows. "
-                           "Expected one of: conventional");
-}
-
 auto NormalizeCliToken(std::string value) -> std::string
 {
   std::ranges::transform(value, value.begin(),
     [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
+}
+
+auto ParseDirectionalShadowPolicy(std::string value)
+  -> oxygen::DirectionalShadowImplementationPolicy
+{
+  value = NormalizeCliToken(std::move(value));
+
+  if (value == "conventional" || value == "conventional-only") {
+    return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
+  }
+  if (value == "vsm" || value == "virtual-shadow-map") {
+    return oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap;
+  }
+
+  throw std::runtime_error("Invalid value for --directional-shadows. "
+                           "Expected one of: conventional, vsm");
 }
 
 } // namespace
@@ -245,6 +247,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
+    developer_options->Add(Option::WithKey("cvars-archive")
+        .About("Override the persisted CVar archive path for this run")
+        .Long("cvars-archive")
+        .WithValue<std::string>()
+        .UserFriendlyName("path")
+        .StoreTo(&cvars_archive_path)
+        .Build());
     developer_options->Add(Option::WithKey("directional-shadows")
         .About("Directional shadow backend policy")
         .Long("directional-shadows")
@@ -252,13 +261,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(std::string("conventional"))
         .UserFriendlyName("policy")
         .StoreTo(&directional_shadows)
-        .Build());
-    developer_options->Add(Option::WithKey("cvars-archive")
-        .About("Override the persisted CVar archive path for this run")
-        .Long("cvars-archive")
-        .WithValue<std::string>()
-        .UserFriendlyName("path")
-        .StoreTo(&cvars_archive_path)
         .Build());
 
     const Command::Ptr default_command
@@ -299,6 +301,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       frames, target_fps);
     app.directional_shadow_policy
       = ParseDirectionalShadowPolicy(directional_shadows);
+    LOG_F(INFO, "Resolved directional shadow policy = {}",
+      app.directional_shadow_policy);
 
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {

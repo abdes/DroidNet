@@ -25,6 +25,7 @@
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 namespace {
@@ -292,6 +293,17 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.transform_index = u_handle;
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
+    dm.transform_generation = item.transform_handle.GenerationValue().get();
+    dm.submesh_index = item.submesh_index;
+    dm.primitive_flags = 0U;
+    if (item.static_shadow_caster) {
+      dm.primitive_flags |= static_cast<uint32_t>(
+        oxygen::engine::DrawPrimitiveFlagBits::kStaticShadowCaster);
+    }
+    if (item.main_view_visible) {
+      dm.primitive_flags |= static_cast<uint32_t>(
+        oxygen::engine::DrawPrimitiveFlagBits::kMainViewVisible);
+    }
     dm.flags = ApplyMainViewPassRouting(
       ApplyShadowCasterPassRouting(
         ClassifyMaterialPassMask(item.material.resolved_asset.get()),

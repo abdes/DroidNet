@@ -340,6 +340,8 @@ auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
   return allocator;
 }
 
+Graphics::~Graphics() = default;
+
 Graphics::Graphics(const SerializedBackendConfig& config,
   const SerializedPathFinderConfig& path_finder_config)
   : Base("D3D12 Backend")

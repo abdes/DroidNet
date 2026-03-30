@@ -12,6 +12,8 @@ The renderer now supports one directional shadow implementation family:
 
 The active renderer exposes only the conventional directional shadow path.
 
+Greenfield VSM groundwork now exists under `src/Oxygen/Renderer/VirtualShadowMaps/`, but it is not yet the active runtime shadow backend. That module currently stabilizes physical-pool, virtual-address-space, and cache-manager seam contracts for later integration.
+
 ## Runtime Ownership
 
 - Scene-authored shadow intent remains owned by scene/light data.

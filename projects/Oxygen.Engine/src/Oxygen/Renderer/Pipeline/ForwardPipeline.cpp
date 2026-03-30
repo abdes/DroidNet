@@ -49,6 +49,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -248,6 +249,7 @@ namespace {
       case kDirectLightingFull:
       case kDirectLightGates:
       case kDirectBrdfCore:
+      case kVirtualShadowMask:
         return true;
       case kIblSpecular:
       case kIblRawSky:
@@ -528,6 +530,17 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await light_culling_pass->PrepareResources(rc, rec);
     co_await light_culling_pass->Execute(rc, rec);
     rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
+  }
+
+  if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
+    if (const auto vsm_shadow_renderer
+      = shadow_manager->GetVirtualShadowRenderer()) {
+      LOG_F(INFO,
+        "view={} executing VSM shell after screen-hzb and light-culling",
+        ctx.view->GetPublishedViewId());
+      co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
+        observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
+    }
   }
 
   if (shader_pass) {
