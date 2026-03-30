@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cwctype>
 #include <filesystem>
 #include <mutex>
 #include <sstream>
@@ -68,6 +69,29 @@ auto ToWidePath(const std::string_view path) -> std::wstring
 auto NarrowPath(const std::filesystem::path& path) -> std::string
 {
   return path.generic_string();
+}
+
+auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
+{
+  std::error_code error {};
+  path = std::filesystem::absolute(path, error);
+  if (error) {
+    error.clear();
+  }
+  path = path.lexically_normal();
+  auto normalized = path.native();
+  std::ranges::transform(normalized, normalized.begin(),
+    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  return normalized;
+}
+
+auto PathsEquivalent(
+  const std::filesystem::path& lhs, const std::filesystem::path& rhs) -> bool
+{
+  if (lhs.empty() || rhs.empty()) {
+    return false;
+  }
+  return NormalizePathForComparison(lhs) == NormalizePathForComparison(rhs);
 }
 
 auto LastErrorMessage(const std::string_view action) -> std::string
@@ -452,33 +476,38 @@ private:
       return false;
     }
     case oxygen::FrameCaptureInitMode::kSearchPath: {
-      if (const auto attached = ::GetModuleHandleW(kRenderDocModuleName);
-        attached != nullptr) {
-        return BindApi(attached, false, "attached RenderDoc module");
+      if (const auto module = ::GetModuleHandleW(kRenderDocModuleName);
+        module != nullptr) {
+        return BindApi(module, false, "bootstrapped RenderDoc module");
       }
-
-      const auto module = ::LoadLibraryW(kRenderDocModuleName);
-      if (module == nullptr) {
-        status_message_ = LastErrorMessage("LoadLibraryW(renderdoc.dll)");
-        return false;
-      }
-      return BindApi(module, true, "renderdoc.dll loaded from search path");
+      status_message_
+        = "RenderDoc search-path bootstrap did not load renderdoc.dll before "
+          "D3D12 startup";
+      return false;
     }
     case oxygen::FrameCaptureInitMode::kExplicitPath: {
       if (config_.module_path.empty()) {
         status_message_ = "explicit RenderDoc module path not provided";
         return false;
       }
-
-      const auto module
-        = ::LoadLibraryW(ToWidePath(config_.module_path).c_str());
-      if (module == nullptr) {
-        status_message_
-          = LastErrorMessage("LoadLibraryW(explicit RenderDoc module path)");
-        return false;
+      if (const auto module = ::GetModuleHandleW(kRenderDocModuleName);
+        module != nullptr) {
+        const auto loaded_module_path = ResolveModulePath(module);
+        const auto configured_module_path
+          = std::filesystem::path(config_.module_path);
+        if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
+          status_message_ = "bootstrapped RenderDoc module path '"
+            + NarrowPath(loaded_module_path)
+            + "' does not match configured explicit path '"
+            + NarrowPath(configured_module_path) + "'";
+          return false;
+        }
+        return BindApi(module, false, "bootstrapped RenderDoc module");
       }
-      return BindApi(
-        module, true, "RenderDoc module loaded from explicit path");
+      status_message_
+        = "RenderDoc explicit-path bootstrap did not load renderdoc.dll before "
+          "D3D12 startup";
+      return false;
     }
     }
 

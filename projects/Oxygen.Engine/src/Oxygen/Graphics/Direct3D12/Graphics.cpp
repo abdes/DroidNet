@@ -396,10 +396,11 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_aftermath")) {
     desc.enable_aftermath = jsonConfig["enable_aftermath"].get<bool>();
   }
-  desc.frame_capture_provider = frame_capture_config.provider;
+  desc.frame_capture = frame_capture_config;
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
   }
+  AddComponent<DeviceManager>(desc);
   if (frame_capture_config.provider
     == oxygen::FrameCaptureProvider::kRenderDoc) {
     frame_capture_controller_
@@ -409,7 +410,6 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     frame_capture_controller_
       = CreatePixFrameCaptureController(*this, frame_capture_config);
   }
-  AddComponent<DeviceManager>(desc);
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   AddComponent<detail::PipelineStateCache>(this);
