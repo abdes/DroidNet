@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cwctype>
 #include <exception>
+#include <filesystem>
 #include <span>
 #include <string>
 
@@ -30,6 +32,10 @@
 #  include <renderdoc_app.h>
 #endif
 
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+#  include <pix3.h>
+#endif
+
 using oxygen::graphics::d3d12::DebugLayer;
 using oxygen::windows::ThrowOnFailed;
 
@@ -43,7 +49,9 @@ struct ToolingPolicy {
   bool requested_aftermath { true };
   bool requested_renderdoc { false };
   bool requested_pix { false };
+  oxygen::FrameCaptureConfig frame_capture {};
   bool renderdoc_bootstrap_attempted { false };
+  bool pix_bootstrap_attempted { false };
   bool renderdoc_api_initialized { false };
   bool renderdoc_enabled { false };
   bool pix_enabled { false };
@@ -179,12 +187,51 @@ auto RequestedCaptureToolName() noexcept -> const char*
   return nullptr;
 }
 
+auto ToWidePath(const std::string_view path) -> std::wstring
+{
+  return std::filesystem::path(std::string(path)).wstring();
+}
+
+auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
+{
+  std::error_code error {};
+  path = std::filesystem::absolute(path, error);
+  if (error) {
+    error.clear();
+  }
+  path = path.lexically_normal();
+  auto normalized = path.native();
+  std::ranges::transform(normalized, normalized.begin(),
+    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  return normalized;
+}
+
+auto ResolveModulePath(HMODULE module) -> std::filesystem::path
+{
+  wchar_t buffer[MAX_PATH] {};
+  const auto length = ::GetModuleFileNameW(module, buffer, MAX_PATH);
+  if (length == 0U) {
+    return {};
+  }
+  return std::filesystem::path(buffer);
+}
+
+auto PathsEquivalent(
+  const std::filesystem::path& lhs, const std::filesystem::path& rhs) -> bool
+{
+  if (lhs.empty() || rhs.empty()) {
+    return false;
+  }
+  return NormalizePathForComparison(lhs) == NormalizePathForComparison(rhs);
+}
+
 } // namespace
 
 DebugLayer::DebugLayer(
   const bool enable_debug, const bool enable_validation) noexcept
 {
   BootstrapRenderDoc();
+  BootstrapPix();
   InitializeDebugLayer(enable_debug, enable_validation);
   if (enable_debug) {
     InitializeDred();
@@ -211,16 +258,17 @@ DebugLayer::~DebugLayer() noexcept
 }
 
 void DebugLayer::ConfigureTooling(const bool enable_aftermath,
-  const oxygen::FrameCaptureProvider frame_capture_provider) noexcept
+  const oxygen::FrameCaptureConfig& frame_capture_config) noexcept
 {
   g_tooling_policy = ToolingPolicy { .requested_aftermath = enable_aftermath,
-    .requested_renderdoc = IsRenderDocRequested(frame_capture_provider),
-    .requested_pix = IsPixRequested(frame_capture_provider) };
+    .requested_renderdoc = IsRenderDocRequested(frame_capture_config.provider),
+    .requested_pix = IsPixRequested(frame_capture_config.provider),
+    .frame_capture = frame_capture_config };
   RefreshToolingPolicy();
 
   LOG_F(INFO,
     "D3D12 tooling policy requested: aftermath={} frame_capture_provider={}",
-    enable_aftermath, CaptureProviderText(frame_capture_provider));
+    enable_aftermath, CaptureProviderText(frame_capture_config.provider));
 
   if (const auto* requested_capture = RequestedCaptureToolName();
     requested_capture != nullptr) {
@@ -368,13 +416,66 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   g_tooling_policy.renderdoc_bootstrap_attempted = true;
 
   auto* renderdoc_module = ::GetModuleHandleW(kRenderDocModuleName);
-
+  auto loaded_by_bootstrap = false;
   if (renderdoc_module == nullptr) {
-    LOG_F(INFO,
-      "RenderDoc frame capture was requested by GraphicsConfig, but "
-      "renderdoc.dll was not loaded before D3D12 startup; continuing "
-      "without RenderDoc API");
-    return;
+    switch (g_tooling_policy.frame_capture.init_mode) {
+    case oxygen::FrameCaptureInitMode::kDisabled:
+      LOG_F(INFO,
+        "RenderDoc frame capture initialization is disabled; continuing "
+        "without RenderDoc API");
+      return;
+    case oxygen::FrameCaptureInitMode::kAttachedOnly:
+      LOG_F(INFO,
+        "RenderDoc frame capture was requested by GraphicsConfig, but "
+        "renderdoc.dll was not already loaded before D3D12 startup; "
+        "continuing without RenderDoc API");
+      return;
+    case oxygen::FrameCaptureInitMode::kSearchPath:
+      renderdoc_module = ::LoadLibraryW(kRenderDocModuleName);
+      if (renderdoc_module == nullptr) {
+        LOG_F(WARNING,
+          "RenderDoc frame capture requested search-path bootstrap before "
+          "D3D12 startup, but LoadLibraryW(renderdoc.dll) failed with Win32 "
+          "error {}",
+          ::GetLastError());
+        return;
+      }
+      loaded_by_bootstrap = true;
+      break;
+    case oxygen::FrameCaptureInitMode::kExplicitPath:
+      if (g_tooling_policy.frame_capture.module_path.empty()) {
+        LOG_F(WARNING,
+          "RenderDoc frame capture requested explicit-path bootstrap before "
+          "D3D12 startup, but no module path was configured");
+        return;
+      }
+      renderdoc_module = ::LoadLibraryW(
+        ToWidePath(g_tooling_policy.frame_capture.module_path).c_str());
+      if (renderdoc_module == nullptr) {
+        LOG_F(WARNING,
+          "RenderDoc frame capture requested explicit-path bootstrap before "
+          "D3D12 startup, but LoadLibraryW({}) failed with Win32 error {}",
+          g_tooling_policy.frame_capture.module_path, ::GetLastError());
+        return;
+      }
+      loaded_by_bootstrap = true;
+      break;
+    }
+  } else if (g_tooling_policy.frame_capture.init_mode
+    == oxygen::FrameCaptureInitMode::kExplicitPath) {
+    const auto loaded_module_path = ResolveModulePath(renderdoc_module);
+    const auto configured_module_path
+      = std::filesystem::path(g_tooling_policy.frame_capture.module_path);
+    if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
+      LOG_F(WARNING,
+        "RenderDoc explicit-path bootstrap requested '{}', but "
+        "renderdoc.dll was already loaded from '{}'; refusing to mix "
+        "different RenderDoc modules",
+        g_tooling_policy.frame_capture.module_path,
+        loaded_module_path.empty() ? "<unknown>"
+                                   : loaded_module_path.generic_string());
+      return;
+    }
   }
 
   const auto get_api = reinterpret_cast<pRENDERDOC_GetAPI>(
@@ -382,6 +483,9 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   if (get_api == nullptr) {
     LOG_F(WARNING,
       "renderdoc.dll loaded, but RENDERDOC_GetAPI symbol was not found");
+    if (loaded_by_bootstrap) {
+      ::FreeLibrary(renderdoc_module);
+    }
     return;
   }
 
@@ -391,6 +495,9 @@ void DebugLayer::BootstrapRenderDoc() noexcept
     LOG_F(WARNING,
       "RenderDoc API negotiation failed for version 1.6.0; continuing "
       "without in-app RenderDoc controls");
+    if (loaded_by_bootstrap) {
+      ::FreeLibrary(renderdoc_module);
+    }
     return;
   }
 
@@ -399,6 +506,85 @@ void DebugLayer::BootstrapRenderDoc() noexcept
 
   LOG_F(
     INFO, "RenderDoc API initialized successfully before DXGI/D3D12 startup");
+#endif
+}
+
+void DebugLayer::BootstrapPix() noexcept
+{
+  if (!g_tooling_policy.requested_pix) {
+    return;
+  }
+
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+  if (g_tooling_policy.pix_bootstrap_attempted) {
+    return;
+  }
+  g_tooling_policy.pix_bootstrap_attempted = true;
+
+  auto* pix_module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+  if (pix_module == nullptr) {
+    switch (g_tooling_policy.frame_capture.init_mode) {
+    case oxygen::FrameCaptureInitMode::kDisabled:
+      LOG_F(INFO,
+        "PIX GPU capture initialization is disabled; continuing without "
+        "loading the PIX GPU capturer");
+      return;
+    case oxygen::FrameCaptureInitMode::kAttachedOnly:
+      LOG_F(INFO,
+        "PIX GPU capture was requested by GraphicsConfig, but "
+        "WinPixGpuCapturer.dll was not already loaded before D3D12 startup; "
+        "continuing without PIX GPU capture");
+      return;
+    case oxygen::FrameCaptureInitMode::kSearchPath:
+      pix_module = PIXLoadLatestWinPixGpuCapturerLibrary();
+      if (pix_module == nullptr) {
+        LOG_F(WARNING,
+          "PIX GPU capture requested search-path bootstrap before D3D12 "
+          "startup, but PIXLoadLatestWinPixGpuCapturerLibrary failed with "
+          "Win32 error {}",
+          ::GetLastError());
+        return;
+      }
+      break;
+    case oxygen::FrameCaptureInitMode::kExplicitPath:
+      if (g_tooling_policy.frame_capture.module_path.empty()) {
+        LOG_F(WARNING,
+          "PIX GPU capture requested explicit-path bootstrap before D3D12 "
+          "startup, but no module path was configured");
+        return;
+      }
+      pix_module = ::LoadLibraryW(
+        ToWidePath(g_tooling_policy.frame_capture.module_path).c_str());
+      if (pix_module == nullptr) {
+        LOG_F(WARNING,
+          "PIX GPU capture requested explicit-path bootstrap before D3D12 "
+          "startup, but LoadLibraryW({}) failed with Win32 error {}",
+          g_tooling_policy.frame_capture.module_path, ::GetLastError());
+        return;
+      }
+      break;
+    }
+  } else if (g_tooling_policy.frame_capture.init_mode
+    == oxygen::FrameCaptureInitMode::kExplicitPath) {
+    const auto loaded_module_path = ResolveModulePath(pix_module);
+    const auto configured_module_path
+      = std::filesystem::path(g_tooling_policy.frame_capture.module_path);
+    if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
+      LOG_F(WARNING,
+        "PIX explicit-path bootstrap requested '{}', but "
+        "WinPixGpuCapturer.dll was already loaded from '{}'; refusing to mix "
+        "different PIX GPU capturer modules",
+        g_tooling_policy.frame_capture.module_path,
+        loaded_module_path.empty() ? "<unknown>"
+                                   : loaded_module_path.generic_string());
+      return;
+    }
+  }
+
+  LOG_F(INFO,
+    "PIX GPU capturer initialized successfully before DXGI/D3D12 startup: "
+    "module='{}'",
+    ResolveModulePath(pix_module).generic_string());
 #endif
 }
 

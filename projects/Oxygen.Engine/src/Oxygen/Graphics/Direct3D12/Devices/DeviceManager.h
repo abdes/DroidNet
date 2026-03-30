@@ -114,7 +114,7 @@ struct DeviceManagerDesc {
   };
   bool enable_validation { false };
   bool enable_aftermath { true };
-  FrameCaptureProvider frame_capture_provider { FrameCaptureProvider::kNone };
+  FrameCaptureConfig frame_capture {};
   bool require_display { true };
   bool auto_select_adapter { true };
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };

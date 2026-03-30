@@ -31,8 +31,9 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
   static auto ConfigureTooling(bool enable_aftermath,
-    oxygen::FrameCaptureProvider frame_capture_provider) noexcept -> void;
+    const oxygen::FrameCaptureConfig& frame_capture_config) noexcept -> void;
   static auto BootstrapRenderDoc() noexcept -> void;
+  static auto BootstrapPix() noexcept -> void;
   [[nodiscard]] static auto IsPixEnabled() noexcept -> bool;
   static auto ConfigureDeviceInfoQueue(dx::IDevice* device) noexcept -> void;
   static auto ConfigureAftermathForDevice(

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cctype>
+#include <cwctype>
 #include <filesystem>
 #include <mutex>
 #include <sstream>
@@ -98,12 +99,6 @@ auto PixInstallRoot() -> std::string_view
 #endif
 }
 
-auto LastErrorMessage(const std::string_view action) -> std::string
-{
-  return std::string(action) + " failed with Win32 error "
-    + std::to_string(::GetLastError());
-}
-
 auto HResultMessage(const std::string_view action, const HRESULT hr)
   -> std::string
 {
@@ -111,14 +106,32 @@ auto HResultMessage(const std::string_view action, const HRESULT hr)
     "{} failed (hr=0x{:08X})", action, static_cast<unsigned int>(hr));
 }
 
-auto ToWidePath(const std::string_view path) -> std::wstring
-{
-  return std::filesystem::path(std::string(path)).wstring();
-}
-
 auto NarrowPath(const std::filesystem::path& path) -> std::string
 {
   return path.generic_string();
+}
+
+auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
+{
+  std::error_code error {};
+  path = std::filesystem::absolute(path, error);
+  if (error) {
+    error.clear();
+  }
+  path = path.lexically_normal();
+  auto normalized = path.native();
+  std::ranges::transform(normalized, normalized.begin(),
+    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  return normalized;
+}
+
+auto PathsEquivalent(
+  const std::filesystem::path& lhs, const std::filesystem::path& rhs) -> bool
+{
+  if (lhs.empty() || rhs.empty()) {
+    return false;
+  }
+  return NormalizePathForComparison(lhs) == NormalizePathForComparison(rhs);
 }
 
 auto ToEngineFrameSequence(const uint64_t zero_based_frame_index) -> uint64_t
@@ -167,14 +180,6 @@ public:
     , config_(std::move(config))
   {
     Initialize();
-  }
-
-  ~PixFrameCaptureController() override
-  {
-    if (owns_module_ && module_handle_ != nullptr) {
-      ::FreeLibrary(module_handle_);
-      module_handle_ = nullptr;
-    }
   }
 
   [[nodiscard]] auto GetProviderName() const noexcept
@@ -431,14 +436,7 @@ private:
 
   auto EnsureGpuCaptureReadyUnlocked() -> bool
   {
-    if (HasLoadedCapturerUnlocked()) {
-      if (module_handle_ == nullptr) {
-        if (const auto attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
-          attached != nullptr) {
-          return BindCapturerModuleUnlocked(
-            attached, false, "attached PIX GPU capturer");
-        }
-      }
+    if (module_handle_ != nullptr) {
       return true;
     }
 
@@ -450,45 +448,47 @@ private:
       if (const auto attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
         attached != nullptr) {
         return BindCapturerModuleUnlocked(
-          attached, false, "attached PIX GPU capturer");
+          attached, "attached PIX GPU capturer");
       }
       status_message_ = "PIX GPU capturer is not loaded in this process";
       return false;
     }
     case oxygen::FrameCaptureInitMode::kSearchPath: {
-      if (const auto attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
-        attached != nullptr) {
+      if (const auto module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+        module != nullptr) {
         return BindCapturerModuleUnlocked(
-          attached, false, "attached PIX GPU capturer");
+          module, "bootstrapped PIX GPU capturer");
       }
-      const auto module = PIXLoadLatestWinPixGpuCapturerLibrary();
-      if (module == nullptr) {
-        status_message_
-          = LastErrorMessage("PIXLoadLatestWinPixGpuCapturerLibrary");
-        return false;
-      }
-      return BindCapturerModuleUnlocked(
-        module, true, "PIX GPU capturer loaded from installed PIX search path");
+      status_message_
+        = "PIX search-path bootstrap did not load WinPixGpuCapturer.dll before "
+          "D3D12 startup";
+      return false;
     }
     case oxygen::FrameCaptureInitMode::kExplicitPath: {
-      if (const auto attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
-        attached != nullptr) {
-        return BindCapturerModuleUnlocked(
-          attached, false, "attached PIX GPU capturer");
-      }
       if (config_.module_path.empty()) {
         status_message_ = "explicit PIX GPU capturer path not provided";
         return false;
       }
-      const auto module
-        = ::LoadLibraryW(ToWidePath(config_.module_path).c_str());
-      if (module == nullptr) {
-        status_message_
-          = LastErrorMessage("LoadLibraryW(explicit PIX GPU capturer path)");
-        return false;
+      if (const auto module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+        module != nullptr) {
+        const auto loaded_module_path
+          = std::filesystem::path(ResolveModulePath(module));
+        const auto configured_module_path
+          = std::filesystem::path(config_.module_path);
+        if (!PathsEquivalent(loaded_module_path, configured_module_path)) {
+          status_message_ = "bootstrapped PIX GPU capturer path '"
+            + NarrowPath(loaded_module_path)
+            + "' does not match configured explicit path '"
+            + NarrowPath(configured_module_path) + "'";
+          return false;
+        }
+        return BindCapturerModuleUnlocked(
+          module, "bootstrapped PIX GPU capturer");
       }
-      return BindCapturerModuleUnlocked(
-        module, true, "PIX GPU capturer loaded from explicit path");
+      status_message_
+        = "PIX explicit-path bootstrap did not load WinPixGpuCapturer.dll "
+          "before D3D12 startup";
+      return false;
     }
     }
 
@@ -496,8 +496,8 @@ private:
     return false;
   }
 
-  auto BindCapturerModuleUnlocked(HMODULE module, const bool owns_module,
-    const std::string_view source) -> bool
+  auto BindCapturerModuleUnlocked(HMODULE module, const std::string_view source)
+    -> bool
   {
     if (module == nullptr) {
       status_message_ = "PIX GPU capturer module handle is null";
@@ -505,7 +505,6 @@ private:
     }
 
     module_handle_ = module;
-    owns_module_ = owns_module;
     resolved_module_path_ = ResolveModulePath(module);
     status_message_ = std::string(source) + " ready";
 
@@ -652,7 +651,6 @@ private:
   oxygen::graphics::d3d12::Graphics& graphics_;
   oxygen::FrameCaptureConfig config_;
   HMODULE module_handle_ { nullptr };
-  bool owns_module_ { false };
   bool manual_capture_active_ { false };
   std::string resolved_module_path_ {};
   std::string status_message_ {};

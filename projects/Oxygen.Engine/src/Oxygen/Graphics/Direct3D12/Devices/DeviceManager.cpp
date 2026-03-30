@@ -365,18 +365,18 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
 {
   LOG_SCOPE_F(INFO, "DeviceManager init");
 
-  DebugLayer::ConfigureTooling(
-    props_.enable_aftermath, props_.frame_capture_provider);
+  DebugLayer::ConfigureTooling(props_.enable_aftermath, props_.frame_capture);
 
   // RenderDoc must be bootstrapped before any DXGI factory creation or
   // D3D12 debug/device entry-point usage so its hooks can wrap the objects
   // later passed into CreateSwapChainForHwnd. Moving this later can surface
   // E_NOINTERFACE during swap-chain creation under RenderDoc.
   DebugLayer::BootstrapRenderDoc();
+  DebugLayer::BootstrapPix();
   InitializeFactory();
 
   if (props_.enable_debug || props_.enable_aftermath
-    || props_.frame_capture_provider != oxygen::FrameCaptureProvider::kNone) {
+    || props_.frame_capture.provider != oxygen::FrameCaptureProvider::kNone) {
     // The DebugLayer object also owns runtime debug-tool integration state.
     debug_layer_ = std::make_unique<DebugLayer>(
       props_.enable_debug, props_.enable_validation);
