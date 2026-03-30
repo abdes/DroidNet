@@ -104,6 +104,7 @@
 #include <Oxygen/Renderer/Types/ViewFrameBindings.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
+#include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
@@ -581,9 +582,13 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
-  inline_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16,
-      upload::kDefaultRingBufferStagingSlack, "Renderer.InlineStaging");
+  // Inline staging is retired by InlineTransfersCoordinator, not by the upload
+  // queue fence path. Keep it out of UploadCoordinator provider retirement so
+  // its partition reuse bookkeeping stays on the correct fence timeline.
+  inline_staging_provider_ = std::make_shared<upload::RingBufferStaging>(
+    upload::internal::UploaderTagFactory::Get(), observer_ptr { gfx.get() },
+    frame::kFramesInFlight, 16, upload::kDefaultRingBufferStagingSlack,
+    "Renderer.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   // Initialize the render-context pool helper used to claim per-frame
@@ -615,8 +620,11 @@ Renderer::OffscreenFrameSession::OffscreenFrameSession(
   OffscreenFrameSession&& other) noexcept
   : renderer_(std::exchange(other.renderer_, nullptr))
   , render_context_(std::move(other.render_context_))
+  , current_resolved_view_(std::move(other.current_resolved_view_))
+  , current_prepared_frame_(std::move(other.current_prepared_frame_))
   , active_(std::exchange(other.active_, false))
 {
+  RebindCurrentViewPointers();
 }
 
 auto Renderer::OffscreenFrameSession::operator=(
@@ -629,7 +637,10 @@ auto Renderer::OffscreenFrameSession::operator=(
   Release();
   renderer_ = std::exchange(other.renderer_, nullptr);
   render_context_ = std::move(other.render_context_);
+  current_resolved_view_ = std::move(other.current_resolved_view_);
+  current_prepared_frame_ = std::move(other.current_prepared_frame_);
   active_ = std::exchange(other.active_, false);
+  RebindCurrentViewPointers();
   return *this;
 }
 
@@ -642,10 +653,13 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
   CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
     "Renderer offscreen frame requires ViewConstantsManager");
 
+  current_resolved_view_ = resolved_view;
+  current_prepared_frame_ = prepared_frame;
+
   render_context_.current_view = {};
   render_context_.current_view.view_id = view_id;
-  render_context_.current_view.resolved_view.reset(&resolved_view);
-  render_context_.current_view.prepared_frame.reset(&prepared_frame);
+  render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
+  render_context_.current_view.prepared_frame.reset(&*current_prepared_frame_);
 
   renderer_->UpdateViewConstantsFromView(resolved_view);
   renderer_->view_const_cpu_
@@ -665,6 +679,50 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
   renderer_->WireContext(render_context_, buffer_info.buffer);
 }
 
+auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
+  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
+  const ViewConstants& view_constants) -> void
+{
+  SetCurrentView(view_id, resolved_view, prepared_frame);
+
+  CHECK_F(active_ && renderer_ != nullptr,
+    "OffscreenFrameSession::SetCurrentView called on an inactive session");
+  CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
+    "Renderer offscreen frame requires ViewConstantsManager");
+
+  auto override_constants = view_constants;
+  override_constants
+    .SetTimeSeconds(renderer_->last_frame_dt_seconds_, ViewConstants::kRenderer)
+    .SetFrameSlot(renderer_->frame_slot_, ViewConstants::kRenderer)
+    .SetFrameSequenceNumber(renderer_->frame_seq_num, ViewConstants::kRenderer);
+
+  const auto& snapshot = override_constants.GetSnapshot();
+  auto buffer_info = renderer_->view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(snapshot));
+  CHECK_F(buffer_info.buffer != nullptr,
+    "Renderer offscreen frame failed to override ViewConstants for view {}",
+    view_id.get());
+
+  renderer_->WireContext(render_context_, buffer_info.buffer);
+}
+
+auto Renderer::OffscreenFrameSession::RebindCurrentViewPointers() noexcept
+  -> void
+{
+  if (!current_resolved_view_.has_value()) {
+    render_context_.current_view.resolved_view.reset();
+  } else {
+    render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
+  }
+
+  if (!current_prepared_frame_.has_value()) {
+    render_context_.current_view.prepared_frame.reset();
+  } else {
+    render_context_.current_view.prepared_frame.reset(
+      &*current_prepared_frame_);
+  }
+}
+
 auto Renderer::OffscreenFrameSession::Release() noexcept -> void
 {
   if (!active_) {
@@ -673,6 +731,9 @@ auto Renderer::OffscreenFrameSession::Release() noexcept -> void
   if (renderer_ != nullptr) {
     renderer_->EndOffscreenFrame();
   }
+  render_context_.current_view = {};
+  current_resolved_view_.reset();
+  current_prepared_frame_.reset();
   renderer_ = nullptr;
   active_ = false;
 }
@@ -721,6 +782,13 @@ auto Renderer::EnsureOffscreenFrameServicesInitialized() -> void
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "LightingFrameBindings");
   }
+
+  if (!vsm_frame_bindings_publisher_) {
+    vsm_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<VsmFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
+  }
 }
 
 auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
@@ -761,6 +829,9 @@ auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
     lighting_frame_bindings_publisher_->OnFrameStart(
       frame_sequence, frame_slot);
   }
+  if (vsm_frame_bindings_publisher_) {
+    vsm_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
   if (shadow_manager_) {
     shadow_manager_->OnFrameStart(tag, frame_sequence, frame_slot);
   }
@@ -800,6 +871,10 @@ auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
 
 auto Renderer::EndOffscreenFrame() noexcept -> void
 {
+  if (auto gfx = gfx_weak_.lock();
+    gfx != nullptr && frame_slot_ != frame::kInvalidSlot) {
+    gfx->EndFrame(frame_seq_num, frame_slot_);
+  }
   offscreen_frame_active_ = false;
 }
 
@@ -956,6 +1031,10 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       internal::PerViewStructuredPublisher<LightingFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "LightingFrameBindings");
+    vsm_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<VsmFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
     shadow_frame_bindings_publisher_ = std::make_unique<
       internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
@@ -1279,6 +1358,7 @@ auto Renderer::OnShutdown() noexcept -> void
   view_color_data_publisher_.reset();
   debug_frame_bindings_publisher_.reset();
   lighting_frame_bindings_publisher_.reset();
+  vsm_frame_bindings_publisher_.reset();
   shadow_manager_.reset();
   shadow_frame_bindings_publisher_.reset();
   environment_view_data_publisher_.reset();
@@ -1557,6 +1637,14 @@ auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
     }
   }
 
+  auto gfx = gfx_weak_.lock();
+  CHECK_F(gfx != nullptr,
+    "Renderer::BeginOffscreenFrame requires a live Graphics backend");
+
+  // Offscreen frames must advance the graphics frame lifecycle too. Without
+  // this, readback retirement and deferred reclamation never move forward for
+  // explicit test/tool frames, which can turn timing into hangs.
+  gfx->BeginFrame(config.frame_sequence, config.frame_slot);
   BeginFrameServices(config.frame_slot, config.frame_sequence);
   offscreen_frame_active_ = true;
   return OffscreenFrameSession(*this, config);
@@ -1606,7 +1694,7 @@ auto Renderer::OnPreRender(observer_ptr<FrameContext> context) -> co::Co<>
     render_context_->SetRenderer(this, graphics_p.get());
   }
 
-  render_context_->scene = observer_ptr<const scene::Scene> {
+  render_context_->scene = observer_ptr<scene::Scene> {
     context->GetScene().get(),
   };
 
@@ -2429,9 +2517,10 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
   const auto& resolved = *render_context.current_view.resolved_view;
   const auto& prepared = *render_context.current_view.prepared_frame;
   auto& runtime_state = per_view_runtime_state_[view_id];
-  const bool lighting_only = mode == ViewBindingRepublishMode::kLightingOnly;
+  const bool dynamic_system_bindings_only
+    = mode == ViewBindingRepublishMode::kDynamicSystemBindings;
   const bool can_reuse_cached_view_bindings
-    = lighting_only && runtime_state.has_published_view_bindings;
+    = dynamic_system_bindings_only && runtime_state.has_published_view_bindings;
 
   ViewConstants view_constants = view_const_cpu_;
 
@@ -2557,6 +2646,26 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
         lighting_bindings.sun.direction_ws_illuminance.z);
     }
 
+    if (vsm_frame_bindings_publisher_) {
+      view_bindings.virtual_shadow_frame_slot
+        = vsm_frame_bindings_publisher_->Publish(
+          view_id, runtime_state.virtual_shadow);
+    }
+
+    if (!can_reuse_cached_view_bindings) {
+      const auto provisional_view_bindings_slot
+        = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
+      if (provisional_view_bindings_slot == kInvalidShaderVisibleIndex) {
+        LOG_F(ERROR,
+          "Renderer: failed to publish provisional view bindings for view {}",
+          view_id.get());
+        return false;
+      }
+      view_constants.SetBindlessViewFrameBindingsSlot(
+        BindlessViewFrameBindingsSlot(provisional_view_bindings_slot),
+        ViewConstants::kRenderer);
+    }
+
     if (!can_reuse_cached_view_bindings && shadow_frame_bindings_publisher_
       && shadow_manager_) {
       auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
@@ -2592,11 +2701,14 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           alpha_test_material_state.alpha_test_material_count,
           alpha_test_material_state.pending_alpha_test_material_count,
           alpha_test_material_state.alpha_test_domain_mismatch_count);
-        const auto shadow_view
-          = shadow_manager_->PublishForView(view_id, view_constants,
-            *light_manager, std::max(1.0F, resolved.Viewport().width),
-            shadow_caster_bounds, visible_receiver_bounds,
-            frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
+        const auto shadow_view = shadow_manager_->PublishForView(view_id,
+          view_constants, *light_manager, render_context.GetSceneMutable(),
+          std::max(1.0F, resolved.Viewport().width),
+          scene_prep_state_ != nullptr
+            ? scene_prep_state_->CollectedItems()
+            : std::span<const sceneprep::RenderItemData> {},
+          shadow_caster_bounds, visible_receiver_bounds,
+          frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot
           = shadow_view.shadow_instance_metadata_srv;
         directional_shadow_metadata_slot
@@ -2681,11 +2793,17 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
     runtime_state.has_published_view_bindings = true;
     LOG_F(INFO,
       "Renderer: frame={} view={} republish mode={} cached_view_bindings={} "
-      "view_frame_slot={} shadow_frame_slot={} lighting_frame_slot={}",
+      "view_frame_slot={} shadow_frame_slot={} lighting_frame_slot={} "
+      "virtual_shadow_frame_slot={} directional_shadow_mask_slot={} "
+      "screen_shadow_mask_slot={}",
       render_context.frame_sequence.get(), view_id.get(),
-      lighting_only ? "lighting-only" : "full", can_reuse_cached_view_bindings,
-      view_bindings_slot, view_bindings.shadow_frame_slot.get(),
-      view_bindings.lighting_frame_slot.get());
+      dynamic_system_bindings_only ? "dynamic-system-bindings" : "full",
+      can_reuse_cached_view_bindings, view_bindings_slot,
+      view_bindings.shadow_frame_slot.get(),
+      view_bindings.lighting_frame_slot.get(),
+      view_bindings.virtual_shadow_frame_slot.get(),
+      runtime_state.virtual_shadow.directional_shadow_mask_slot.get(),
+      runtime_state.virtual_shadow.screen_shadow_mask_slot.get());
     view_constants.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot(view_bindings_slot),
       ViewConstants::kRenderer);
@@ -2818,10 +2936,30 @@ auto Renderer::UpdateCurrentViewLightCullingConfig(
 
   per_view_runtime_state_[view_id].light_culling = config;
   if (!RepublishCurrentViewBindings(
-        render_context, ViewBindingRepublishMode::kLightingOnly)) {
+        render_context, ViewBindingRepublishMode::kDynamicSystemBindings)) {
     LOG_F(ERROR,
       "Renderer: failed to republish current-view bindings after light "
       "culling update for view {}",
+      view_id.get());
+  }
+}
+
+auto Renderer::UpdateCurrentViewVirtualShadowFrameBindings(
+  const RenderContext& render_context, const VsmFrameBindings& bindings) -> void
+{
+  const auto view_id = render_context.current_view.view_id;
+  if (view_id == ViewId {}) {
+    LOG_F(ERROR,
+      "Renderer: cannot update virtual-shadow bindings for invalid view id");
+    return;
+  }
+
+  per_view_runtime_state_[view_id].virtual_shadow = bindings;
+  if (!RepublishCurrentViewBindings(
+        render_context, ViewBindingRepublishMode::kDynamicSystemBindings)) {
+    LOG_F(ERROR,
+      "Renderer: failed to republish current-view bindings after virtual "
+      "shadow update for view {}",
       view_id.get());
   }
 }

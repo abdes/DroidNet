@@ -19,6 +19,7 @@
 #include <Oxygen/Renderer/Types/DirectionalLightBasic.h>
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/PositionalLightData.h>
+#include <Oxygen/Renderer/Types/PositionalShadowCandidate.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -39,17 +40,31 @@ namespace oxygen::renderer {
  -
  `DirectionalShadowCandidate[]`
  - `PositionalLightData[]` (point + spot)
+ -
+ `PositionalShadowCandidate[]`
  The
- manager uses `engine::upload::TransientStructuredBuffer` to allocate per-frame
- structured buffers and write their contents directly into upload memory (no
- explicit copy commands).
+ manager uses
+ `engine::upload::TransientStructuredBuffer` to allocate per-frame
+ structured
+ buffers and write their contents directly into upload memory (no
+ explicit copy
+ commands).
+
+ CPU-side shadow-candidate snapshots intentionally preserve the
+ originating
+ `scene::NodeHandle` so the VSM path can derive stable per-light
+ remap identity
+ from the scene graph. The GPU-facing light payloads remain
+ identity-free.
 
  ### Usage contract
 
  - Call `OnFrameStart()` once per frame before collecting.
- - Call `CollectFromNode()` during scene traversal (frame-phase), including
-   nodes without renderables.
- - Call `EnsureFrameResources()` once collection is complete.
+ - Call `CollectFromNode(node_handle, node)` during scene traversal
+
+ (frame-phase), including nodes without renderables.
+ - Call
+ `EnsureFrameResources()` once collection is complete.
  - Read SRV indices using the `Get*SrvIndex()` accessors, which will lazily
    upload if needed.
 
@@ -86,7 +101,15 @@ public:
   OXGN_RNDR_API auto Clear() noexcept -> void;
 
   //! Collects light data from a scene node (if it contains a light component).
-  OXGN_RNDR_API auto CollectFromNode(const scene::SceneNodeImpl& node) -> void;
+  /*!
+   The caller must supply the traversal-provided `scene::NodeHandle` for
+   * the
+   same node. `LightManager` does not recover node identity from
+
+   * `SceneNodeImpl`.
+  */
+  OXGN_RNDR_API auto CollectFromNode(const scene::NodeHandle& node_handle,
+    const scene::SceneNodeImpl& node) -> void;
 
   //! Ensures transient GPU buffers are allocated and populated for this frame.
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
@@ -115,6 +138,10 @@ public:
   OXGN_RNDR_NDAPI auto GetPositionalLights() const noexcept
     -> std::span<const engine::PositionalLightData>;
 
+  //! Read-only access to shadow-casting positional-light candidates.
+  OXGN_RNDR_NDAPI auto GetPositionalShadowCandidates() const noexcept
+    -> std::span<const engine::PositionalShadowCandidate>;
+
 private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
@@ -131,6 +158,7 @@ private:
   std::vector<engine::DirectionalShadowCandidate>
     directional_shadow_candidates_;
   std::vector<engine::PositionalLightData> positional_;
+  std::vector<engine::PositionalShadowCandidate> positional_shadow_candidates_;
 
   bool uploaded_this_frame_ { false };
   std::uint64_t frames_started_count_ { 0ULL };

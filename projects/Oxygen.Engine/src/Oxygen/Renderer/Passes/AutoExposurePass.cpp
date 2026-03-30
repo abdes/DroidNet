@@ -33,6 +33,34 @@
 namespace oxygen::engine {
 
 namespace {
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& graphics, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+
+    auto& registry = graphics.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  template <typename Resource>
+  auto UnregisterResourceIfPresent(
+    Graphics& graphics, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+
+    auto& registry = graphics.GetResourceRegistry();
+    if (registry.Contains(*resource)) {
+      registry.UnRegisterResource(*resource);
+    }
+  }
+
   constexpr float kMinLogLuminanceRange = 1.0e-4F;
   constexpr float kMinTargetLuminance = 1.0e-6F;
   constexpr float kMinSpotMeterRadius = 0.01F;
@@ -316,9 +344,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
   // 1. Histogram UAV
   if (!histogram_uav_index_.IsValid()
     || last_histogram_buffer_ != config_->histogram_buffer) {
-    if (!registry.Contains(*config_->histogram_buffer)) {
-      registry.Register(config_->histogram_buffer);
-    }
+    RegisterResourceIfNeeded(graphics, config_->histogram_buffer);
     auto handle = allocator.Allocate(graphics::ResourceViewType::kRawBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
@@ -368,7 +394,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
     }
 
     pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-    registry.Register(pass_constants_buffer_);
+    RegisterResourceIfNeeded(graphics, pass_constants_buffer_);
 
     for (size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
       auto handle
@@ -738,9 +764,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
     }
   }
 
-  if (!registry.Contains(*state.buffer)) {
-    registry.Register(state.buffer);
-  }
+  RegisterResourceIfNeeded(gfx, state.buffer);
 
   if (!state.uav_index.IsValid()) {
     auto uav_handle
@@ -819,6 +843,10 @@ auto AutoExposurePass::ReleasePassConstantsBuffer() noexcept -> void
 
   if (pass_constants_buffer_->IsMapped()) {
     pass_constants_buffer_->UnMap();
+  }
+
+  if (graphics_ != nullptr) {
+    UnregisterResourceIfPresent(*graphics_, pass_constants_buffer_);
   }
 
   pass_constants_mapped_ptr_ = nullptr;

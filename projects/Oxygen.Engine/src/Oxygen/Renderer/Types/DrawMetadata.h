@@ -13,11 +13,23 @@
 
 namespace oxygen::engine {
 
+enum class DrawPrimitiveFlagBits : uint32_t {
+  kNone = 0U,
+  kStaticShadowCaster = 1U << 0U,
+  kMainViewVisible = 1U << 1U,
+};
+
+[[nodiscard]] constexpr auto HasAnyDrawPrimitiveFlag(
+  const uint32_t flags, const DrawPrimitiveFlagBits bits) noexcept -> bool
+{
+  return (flags & static_cast<uint32_t>(bits)) != 0U;
+}
+
 //! Per-draw metadata for future-proof bindless rendering.
 /*!
- Comprehensive draw metadata that replaces the simple world transforms buffer
- approach. Contains indices into various binding buffers and draw configuration
- data for efficient GPU-driven rendering.
+ Comprehensive draw metadata that replaces the simple world transforms
+ buffer approach. Contains indices into various binding buffers and draw
+ configuration data for efficient GPU-driven rendering.
 
  ### Usage Notes
 
@@ -56,7 +68,10 @@ struct DrawMetadata {
                                            // metadata buffer
   uint32_t instance_metadata_offset; // Offset into instance metadata buffer
   PassMask flags; // uint32_t, Bitfield: visibility, pass mask, etc.
-  uint32_t padding[3]; // Padding to 64 bytes for alignment
+  uint32_t transform_generation; // Transform-handle generation for stable
+                                 // primitive identity
+  uint32_t submesh_index; // Stable submesh id within the geometry asset
+  uint32_t primitive_flags; // DrawPrimitiveFlagBits
 };
 
 // Logical field bytes: 13 x 4 = 52 + 12 padding = 64.

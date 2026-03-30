@@ -24,6 +24,7 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::data {
 class GeometryAsset;
@@ -37,6 +38,7 @@ namespace oxygen::engine::sceneprep {
 class ScenePrepState {
 public:
   struct CachedNodeBasics {
+    scene::NodeHandle node_handle {};
     bool cast_shadows { true };
     bool receive_shadows { true };
     glm::mat4 world_transform { 1.0F };
@@ -214,8 +216,8 @@ public:
     cached_node_basics_[node] = basics;
   }
 
-  auto TryGetNodeBasics(
-    const scene::SceneNodeImpl* node) const -> const CachedNodeBasics*
+  auto TryGetNodeBasics(const scene::SceneNodeImpl* node) const
+    -> const CachedNodeBasics*
   {
     if (node == nullptr) {
       return nullptr;

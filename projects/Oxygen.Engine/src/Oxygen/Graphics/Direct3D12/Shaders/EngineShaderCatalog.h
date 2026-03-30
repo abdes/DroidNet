@@ -52,6 +52,7 @@ using enum ShaderType;
 //   DEBUG_DIRECT_LIGHTING_FULL: Full forward direct-light term only
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
+//   DEBUG_VIRTUAL_SHADOW_MASK: Stage 15 VSM screen-space shadow mask
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -237,6 +238,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 2>
       { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
+  ShaderFileSpec {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .permutations=std::array<std::string_view, 3>
+      { "DEBUG_VIRTUAL_SHADOW_MASK", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
   // Depth pre-pass: VS and PS with alpha-test permutation
   ShaderFileSpec {
     .path="Depth/DepthPrePass.hlsl",
@@ -252,6 +259,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   // Renderer-level screen-space HZB build shader
   ShaderFileSpec {
     .path="Renderer/ScreenHzbBuild.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmInstanceCulling.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPublishRasterResults.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // Sky atmosphere LUT compute shaders (no permutations)
@@ -319,6 +334,63 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/GroundGrid_PS.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
+  },
+  // VSM runtime page-request generation shader
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPageRequestGenerator.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmInvalidation.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmStaticDynamicMerge.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmHzbBuild.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_SelectPages" },
+      EntryPoint { .type=kCompute, .name="CS_PrepareDispatchArgs" },
+      EntryPoint { .type=kCompute, .name="CS_ClearScratchRect" },
+      EntryPoint { .type=kCompute, .name="CS_BuildPerPage" },
+      EntryPoint { .type=kCompute, .name="CS_BuildTopLevels" }
+    }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmDirectionalProjection.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_ClearShadowMask" },
+      EntryPoint { .type=kCompute, .name="CS_ProjectDirectional" }
+    }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmLocalLightProjectionPerLight.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="CS_ProjectLocalLights" }
+    }
+  },
+  // VSM runtime page-management shaders (stage 6-8)
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPageReuse.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPackAvailablePages.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmAllocateNewPages.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmGenerateHierarchicalFlags.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
+    .path="Renderer/Vsm/VsmPropagateMappedMips.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // ImGui UI shaders (no permutations)
   ShaderFileSpec {

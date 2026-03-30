@@ -54,18 +54,290 @@ m_gtest_program(
 # MaterialPermutations unit tests (no backend dependency)
 m_gtest_program(MaterialPermutations SOURCES "MaterialPermutations_test.cpp")
 
+m_gtest_program(
+  VsmBasic
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VsmCacheManagerTypes_test.cpp"
+    "VirtualShadow/VsmPageRequestPolicy_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceTypes_test.cpp"
+)
+
+m_gtest_program(
+  VsmBeginFrame
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmBeginFrame_test.cpp"
+    "VirtualShadow/VsmBeginFramePoolCompatibility_test.cpp"
+    "VirtualShadow/VsmBeginFrameHzbAvailability_test.cpp"
+)
+
+m_gtest_program(
+  VsmVirtualAddressSpace
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmVirtualAddressAllocation_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceIds_test.cpp"
+    "VirtualShadow/VsmVirtualAddressSpaceLayouts_test.cpp"
+)
+
+m_gtest_program(
+  VsmRemap
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmRemapConstruction_test.cpp"
+    "VirtualShadow/VsmVirtualClipmapHelpers_test.cpp"
+    "VirtualShadow/VsmVirtualRemapBuilder_test.cpp"
+)
+
+m_gtest_program(
+  VirtualShadows
+  SOURCES
+    "VirtualShadow/VirtualShadowTestFixtures.h"
+    "VirtualShadow/VirtualShadowStageCpuHarness.h"
+    "VirtualShadow/VsmPhysicalPoolCompatibility_test.cpp"
+    "VirtualShadow/VsmPhysicalPoolAddressing_test.cpp"
+    "VirtualShadow/VsmPhysicalPagePoolManager_test.cpp"
+    "VirtualShadow/VsmCacheManagerFrameLifecycle_test.cpp"
+    "VirtualShadow/VsmCacheManagerInvalidation_test.cpp"
+    "VirtualShadow/VsmCacheManagerOrchestration_test.cpp"
+    "VirtualShadow/VsmCacheManagerRetention_test.cpp"
+    "VirtualShadow/VsmSceneInvalidationCollector_test.cpp"
+    "VirtualShadow/VsmShaderTypes_test.cpp"
+    "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
+)
+
+gtest_program(
+  "Oxygen.Renderer.VirtualShadowSceneObserver.Tests"
+  SOURCES
+    "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
+  DEPS
+    oxygen::renderer
+    oxygen::testing
+)
+
+source_group(
+  TREE ${CMAKE_CURRENT_SOURCE_DIR}
+  PREFIX VirtualShadowsIntegration
+  FILES
+    "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
+)
+
 if(TARGET oxygen::graphics-direct3d12)
+  m_gtest_program(
+    VsmProjectionRecords
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmProjectionRecordPublication_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmPageRequests
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmPageRequests_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmPageReuse
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmPageReuse_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmAvailablePages
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmAvailablePagePacking_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmPageMappings
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmNewPageMapping_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmHierarchicalFlags
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmHierarchicalPageFlags_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmMappedMips
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmMappedMipPropagation_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmPageInitialization
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmSelectivePageInitialization_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmShadowRasterization
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmShadowRasterJobs_test.cpp"
+      "VirtualShadow/VsmShadowRasterizationLiveScene_test.cpp"
+      "VirtualShadow/VsmShadowRasterizerPass_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmStaticDynamicMerge
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmStaticDynamicMergeLiveScene_test.cpp"
+      "VirtualShadow/VsmStaticDynamicMergePass_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmShadowHzb
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmShadowHzb_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmShadowProjection
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmShadowProjection_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmFrameExtraction
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmFrameExtraction_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VsmCacheValidity
+    SOURCES
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmCacheValidity_test.cpp"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmBeginFrame.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmBeginFrameLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmBeginFrame.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmVirtualAddressSpace.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmVirtualAddressLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmVirtualAddressSpace.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
+  target_sources(
+    Oxygen.Renderer.VsmRemap.Tests
+    PRIVATE
+      "VirtualShadow/VirtualShadowLiveSceneHarness.h"
+      "VirtualShadow/VsmRemapLiveScene_test.cpp"
+  )
+  target_link_libraries(
+    Oxygen.Renderer.VsmRemap.Tests
+    PRIVATE
+      oxygen::graphics-direct3d12
+  )
+
   m_gtest_program(
     "ScreenHzb"
     SOURCES
       "ScreenHzbBuildPass_test.cpp"
       "Fixtures/RendererOffscreenGpuTestFixture.h"
-    DEPS
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    VirtualShadowGpuLifecycle
+    SOURCES
+      "VirtualShadow/VirtualShadowGpuTestFixtures.h"
+      "VirtualShadow/VirtualShadowStageGpuHarness.h"
+      "VirtualShadow/VsmCacheManagerGpuResources_test.cpp"
+      "VirtualShadow/VsmPageLifecyclePasses_test.cpp"
+      "VirtualShadow/VsmShadowRendererBridge_test.cpp"
+      "VirtualShadow/VsmInvalidationPass_test.cpp"
+      "VirtualShadow/VsmPhysicalPagePoolGpuLifecycle_test.cpp"
+      DEPS
       oxygen::graphics-direct3d12
   )
 endif()
 
 m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
+
+m_gtest_program(
+  ShadowManagerPolicy
+  SOURCES
+    "Fakes/Graphics.h"
+    "ShadowManager_policy_test.cpp"
+)
 
 m_gtest_program(
   ScenePrep

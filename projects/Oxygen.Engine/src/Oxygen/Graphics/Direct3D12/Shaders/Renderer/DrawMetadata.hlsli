@@ -23,7 +23,9 @@ struct DrawMetadata
     uint instance_metadata_buffer_index;
     uint instance_metadata_offset;
     uint flags;
-    uint padding[3];
+    uint transform_generation;
+    uint submesh_index;
+    uint primitive_flags;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI

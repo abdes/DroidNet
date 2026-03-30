@@ -46,6 +46,7 @@ enum class ShaderDebugMode : uint8_t {
   kDirectLightingFull = 18, //!< Full direct-light term from ForwardMesh_PS
   kDirectLightGates = 19, //!< R=shadow visibility, G=sun transmittance
   kDirectBrdfCore = 20, //!< Ungated directional BRDF core from ForwardMesh_PS
+  kVirtualShadowMask = 21, //!< Stage 15 VSM screen-space shadow mask
 };
 
 constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
@@ -73,6 +74,7 @@ constexpr auto to_string(ShaderDebugMode mode) -> std::string_view
       case ShaderDebugMode::kDirectLightingFull: return "DirectLightingFull";
       case ShaderDebugMode::kDirectLightGates: return "DirectLightGates";
       case ShaderDebugMode::kDirectBrdfCore: return "DirectBrdfCore";
+      case ShaderDebugMode::kVirtualShadowMask: return "VirtualShadowMask";
     // clang-format on
   }
 }
