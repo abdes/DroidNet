@@ -274,4 +274,41 @@ NOLINT_TEST_F(VsmInvalidationPassGpuTest,
   EXPECT_FALSE(static_cast<bool>(metadata[1].dynamic_invalidated));
 }
 
+NOLINT_TEST_F(VsmInvalidationPassGpuTest, ResetInputClearsPublishedOutputBuffer)
+{
+  auto pass
+    = VsmInvalidationPass(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      std::make_shared<VsmInvalidationPassConfig>(VsmInvalidationPassConfig {
+        .debug_name = "phase-j-invalidation-reset",
+      }));
+
+  auto input = VsmInvalidationPassInput {};
+  input.previous_projection_records
+    = { MakeProjectionRecord(23U, 0U, 1U, 1U, 0U) };
+  input.previous_page_table_entries
+    = { MakeMappedShaderPageTableEntry({ 0U }) };
+  input.previous_physical_page_metadata = { MakePhysicalMeta(23U) };
+  input.invalidation_work_items = {
+    VsmInvalidationWorkItem {
+      .primitive = VsmPrimitiveIdentity {
+        .transform_index = 12U,
+        .transform_generation = 1U,
+        .submesh_index = 0U,
+      },
+      .world_bounding_sphere = glm::vec4 { 0.0F, 0.0F, 0.0F, 0.25F },
+      .projection_index = 0U,
+      .scope = VsmCacheInvalidationScope::kDynamicOnly,
+    },
+  };
+  pass.SetInput(std::move(input));
+
+  ExecutePass(pass, "phase-j-invalidation-reset");
+
+  ASSERT_NE(pass.GetCurrentOutputPhysicalMetadataBuffer(), nullptr);
+
+  pass.ResetInput();
+
+  EXPECT_EQ(pass.GetCurrentOutputPhysicalMetadataBuffer(), nullptr);
+}
+
 } // namespace
