@@ -57,6 +57,14 @@ auto oxygen::clap::Command::PrintSynopsis(
   }
 }
 
+auto oxygen::clap::Command::HasHiddenOptionGroups() const -> bool
+{
+  return std::ranges::any_of(groups_, [](const auto& group_entry) {
+    const auto& [group, hidden] = group_entry;
+    return hidden && group;
+  });
+}
+
 auto oxygen::clap::Command::PrintOptions(
   const CommandLineContext& context, unsigned int width) const -> void
 {
@@ -79,6 +87,22 @@ auto oxygen::clap::Command::PrintOptions(
   for (const auto& positional : positional_args_) {
     positional->Print(context, width);
     context.out << "\n\n";
+  }
+}
+
+auto oxygen::clap::Command::PrintHiddenOptions(
+  const CommandLineContext& context, unsigned int width) const -> void
+{
+  bool wrote_anything = false;
+  for (const auto& [group, hidden] : groups_) {
+    if (!hidden || !group) {
+      continue;
+    }
+    if (wrote_anything) {
+      context.out << "\n\n";
+    }
+    group->Print(context, width);
+    wrote_anything = true;
   }
 }
 

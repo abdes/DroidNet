@@ -116,6 +116,11 @@ public:
   OXGN_CLP_API auto Print(
     const CommandLineContext& context, unsigned width = 80) const -> void;
 
+  OXGN_CLP_NDAPI auto HasHiddenOptionGroups() const -> bool;
+
+  OXGN_CLP_API auto PrintHiddenOptions(
+    const CommandLineContext& context, unsigned width) const -> void;
+
   OXGN_CLP_API auto PrintSynopsis(const CommandLineContext& context) const
     -> void;
 

@@ -496,6 +496,39 @@ namespace {
     EXPECT_EQ(output.find("GLOBAL OPTIONS"), std::string::npos);
   }
 
+  //! Scenario: Hidden command option groups can be printed explicitly.
+  NOLINT_TEST(CommandOptions, HiddenGroups_CanBePrintedExplicitly)
+  {
+    // Arrange
+    const auto visible_group = std::make_shared<Options>("Runtime options");
+    visible_group->Add(
+      Option::WithKey("frames").Long("frames").WithValue<int>().Build());
+    const auto hidden_group = std::make_shared<Options>("Advanced options");
+    hidden_group->Add(Option::WithKey("capture-load")
+        .Long("capture-load")
+        .WithValue<std::string>()
+        .Build());
+
+    Command::Ptr active_command = CommandBuilder(Command::DEFAULT)
+                                    .WithOptions(visible_group)
+                                    .WithOptions(hidden_group, true);
+    OptionValuesMap ovm;
+    CommandLineContext context("tool", active_command, ovm, 80U);
+    context.theme = &CliTheme::Plain();
+
+    testing::internal::CaptureStdout();
+
+    // Act
+    active_command->PrintHiddenOptions(context, context.output_width);
+    const auto output = testing::internal::GetCapturedStdout();
+
+    // Assert
+    EXPECT_TRUE(active_command->HasHiddenOptionGroups());
+    EXPECT_NE(output.find("Advanced options"), std::string::npos);
+    EXPECT_NE(output.find("--capture-load"), std::string::npos);
+    EXPECT_EQ(output.find("--frames"), std::string::npos);
+  }
+
   //! Scenario: Theme global option selects the output theme.
   NOLINT_TEST(GlobalOptions, ThemeSelection_UsesRequestedTheme)
   {
