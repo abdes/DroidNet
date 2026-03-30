@@ -146,6 +146,7 @@ public:
   virtual auto OnEndFrame(
     frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
     = 0;
+  virtual auto OnPresentSurface(observer_ptr<Surface> surface) -> void = 0;
 
 protected:
   [[noreturn]] auto ThrowUnsupportedFeature(

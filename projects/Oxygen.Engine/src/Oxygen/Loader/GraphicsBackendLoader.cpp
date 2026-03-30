@@ -25,7 +25,6 @@
 
 using oxygen::FrameCaptureInitMode;
 using oxygen::FrameCaptureProvider;
-using oxygen::FrameCaptureStartupTrigger;
 using oxygen::GraphicsBackendLoader;
 using oxygen::GraphicsConfig;
 using oxygen::SerializedBackendConfig;
@@ -95,18 +94,6 @@ auto ToJsonString(const FrameCaptureInitMode init_mode) -> std::string_view
     return "path";
   }
   return "disabled";
-}
-
-auto ToJsonString(const FrameCaptureStartupTrigger startup_trigger)
-  -> std::string_view
-{
-  switch (startup_trigger) {
-  case FrameCaptureStartupTrigger::kNone:
-    return "none";
-  case FrameCaptureStartupTrigger::kNextFrame:
-    return "next";
-  }
-  return "none";
 }
 
 //! Gets the DLL filename for a graphics backend module.
@@ -193,8 +180,10 @@ auto SerializeConfigToJson(
     + std::string(ToJsonString(config.frame_capture.provider)) + "\",\n";
   json += R"(    "init_mode": ")"
     + std::string(ToJsonString(config.frame_capture.init_mode)) + "\",\n";
-  json += R"(    "startup_trigger": ")"
-    + std::string(ToJsonString(config.frame_capture.startup_trigger)) + "\",\n";
+  json += R"(    "from_frame": )"
+    + std::to_string(config.frame_capture.from_frame) + ",\n";
+  json += R"(    "frame_count": )"
+    + std::to_string(config.frame_capture.frame_count) + ",\n";
   json += R"(    "module_path": ")"
     + EscapeJsonString(config.frame_capture.module_path) + "\",\n";
   json += R"(    "capture_file_template": ")"

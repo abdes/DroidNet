@@ -74,20 +74,6 @@ auto ParseFrameCaptureInitMode(const std::string& value)
   throw std::runtime_error("unsupported frame_capture.init_mode: " + value);
 }
 
-auto ParseFrameCaptureStartupTrigger(const std::string& value)
-  -> oxygen::FrameCaptureStartupTrigger
-{
-  if (value == "none") {
-    return oxygen::FrameCaptureStartupTrigger::kNone;
-  }
-  if (value == "next") {
-    return oxygen::FrameCaptureStartupTrigger::kNextFrame;
-  }
-
-  throw std::runtime_error(
-    "unsupported frame_capture.startup_trigger: " + value);
-}
-
 auto ParseFrameCaptureConfig(const nlohmann::json& json_config)
   -> oxygen::FrameCaptureConfig
 {
@@ -105,9 +91,11 @@ auto ParseFrameCaptureConfig(const nlohmann::json& json_config)
     config.init_mode = ParseFrameCaptureInitMode(
       frame_capture["init_mode"].get<std::string>());
   }
-  if (frame_capture.contains("startup_trigger")) {
-    config.startup_trigger = ParseFrameCaptureStartupTrigger(
-      frame_capture["startup_trigger"].get<std::string>());
+  if (frame_capture.contains("from_frame")) {
+    config.from_frame = frame_capture["from_frame"].get<uint64_t>();
+  }
+  if (frame_capture.contains("frame_count")) {
+    config.frame_count = frame_capture["frame_count"].get<uint32_t>();
   }
   if (frame_capture.contains("module_path")) {
     config.module_path = frame_capture["module_path"].get<std::string>();
