@@ -115,6 +115,7 @@ struct VsmInvalidationPass::Impl {
 
   std::optional<VsmInvalidationPassInput> input {};
   bool resources_prepared { false };
+  bool output_available { false };
 
   std::vector<VsmShaderInvalidationWorkItem> shader_work_items {};
 
@@ -328,6 +329,7 @@ auto VsmInvalidationPass::SetInput(VsmInvalidationPassInput input) -> void
 {
   impl_->input = std::move(input);
   impl_->resources_prepared = false;
+  impl_->output_available = false;
 }
 
 auto VsmInvalidationPass::ResetInput() noexcept -> void
@@ -335,18 +337,21 @@ auto VsmInvalidationPass::ResetInput() noexcept -> void
   impl_->input.reset();
   impl_->shader_work_items.clear();
   impl_->resources_prepared = false;
+  impl_->output_available = false;
 }
 
 auto VsmInvalidationPass::GetCurrentOutputPhysicalMetadataBuffer()
   const noexcept -> std::shared_ptr<const Buffer>
 {
-  return impl_->physical_meta_buffer;
+  return impl_->output_available ? impl_->physical_meta_buffer
+                                 : std::shared_ptr<const Buffer> {};
 }
 
 auto VsmInvalidationPass::DoPrepareResources(CommandRecorder& recorder)
   -> co::Co<>
 {
   if (!impl_->input.has_value()) {
+    impl_->output_available = false;
     co_return;
   }
 
@@ -498,6 +503,7 @@ auto VsmInvalidationPass::DoPrepareResources(CommandRecorder& recorder)
   recorder.FlushBarriers();
 
   impl_->resources_prepared = true;
+  impl_->output_available = true;
   co_return;
 }
 
@@ -505,6 +511,7 @@ auto VsmInvalidationPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   if (!impl_->input.has_value() || !impl_->resources_prepared
     || impl_->shader_work_items.empty()) {
+    impl_->output_available = false;
     co_return;
   }
 
@@ -513,12 +520,14 @@ auto VsmInvalidationPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     || !RequireValidIndex(impl_->page_table_srv, "page-table SRV")
     || !RequireValidIndex(impl_->physical_meta_uav, "physical-meta UAV")
     || !RequireValidIndex(impl_->constants_index, "pass constants")) {
+    impl_->output_available = false;
     co_return;
   }
 
   const auto dispatch_groups = MakeDispatchGroups(
     static_cast<std::uint32_t>(impl_->shader_work_items.size()));
   if (dispatch_groups == 0U) {
+    impl_->output_available = false;
     co_return;
   }
 

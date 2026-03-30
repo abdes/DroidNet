@@ -592,9 +592,9 @@ namespace {
     const auto clip_level_count = std::max(1U, candidate.cascade_count);
     const auto authored_resolution
       = ShadowResolutionFromHint(candidate.resolution_hint);
-    const auto effective_resolution = ApplyDirectionalShadowQualityTier(
-      authored_resolution, quality_tier,
-      prepared_view.directional_shadow_candidates.size());
+    const auto effective_resolution
+      = ApplyDirectionalShadowQualityTier(authored_resolution, quality_tier,
+        prepared_view.directional_shadow_candidates.size());
     auto desc = VsmDirectionalClipmapDesc {
       .remap_key = BuildDirectionalLightRemapKey(candidate.node_handle),
       .clip_level_count = clip_level_count,
@@ -1408,6 +1408,8 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
 
     const auto& invalidation_workload = cache_manager_.BuildInvalidationWork(
       frame_inputs.primitive_invalidations);
+    auto invalidation_metadata_seed_buffer
+      = std::shared_ptr<const graphics::Buffer> {};
     if (const auto* previous_frame = cache_manager_.GetPreviousFrame();
       previous_frame != nullptr && !invalidation_workload.work_items.empty()) {
       invalidation_pass_->SetInput(engine::VsmInvalidationPassInput {
@@ -1419,14 +1421,14 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
       });
       co_await invalidation_pass_->PrepareResources(render_context, recorder);
       co_await invalidation_pass_->Execute(render_context, recorder);
+      invalidation_metadata_seed_buffer
+        = invalidation_pass_->GetCurrentOutputPhysicalMetadataBuffer();
     } else {
       invalidation_pass_->ResetInput();
     }
 
     const auto& current_projection_records
       = prepared_products->projection_records;
-    const auto invalidation_metadata_seed_buffer
-      = invalidation_pass_->GetCurrentOutputPhysicalMetadataBuffer();
     const auto has_page_requests
       = co_await ExecutePageRequestReadbackBridge(render_context, seam,
         current_projection_records, invalidation_metadata_seed_buffer);

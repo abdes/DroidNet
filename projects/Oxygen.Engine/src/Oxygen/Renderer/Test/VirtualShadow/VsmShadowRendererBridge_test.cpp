@@ -2448,4 +2448,70 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   }
 }
 
+NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
+  PageRequestReadbackBridgeLeavesInvalidationMetadataSeedUnsetWhenNoneIsProvided)
+{
+  const auto resolved_view = MakeResolvedView();
+  const auto world_position = glm::vec3 { 0.0F, 0.0F, -5.0F };
+  const auto depth = ComputeDepthForWorldPoint(resolved_view, world_position);
+  auto depth_texture
+    = UploadSingleChannelTexture(depth, "phase-ka5-seed-bridge-none.depth");
+
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  auto vsm_renderer
+    = VsmShadowRenderer(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+      oxygen::observer_ptr { &renderer->GetStagingProvider() },
+      oxygen::observer_ptr { &renderer->GetInlineTransfersCoordinator() },
+      oxygen::ShadowQualityTier::kHigh);
+  {
+    auto frame_config = Renderer::OffscreenFrameConfig {
+      .frame_slot = Slot { 0U },
+      .frame_sequence = SequenceNumber { 1U },
+    };
+    auto offscreen = renderer->BeginOffscreenFrame(frame_config);
+    auto prepared_frame = PreparedSceneFrame {};
+    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
+
+    auto depth_pass = DepthPrePass(std::make_shared<DepthPrePass::Config>(
+      DepthPrePass::Config { .depth_texture = depth_texture }));
+    auto& render_context = offscreen.GetRenderContext();
+    render_context.RegisterPass(&depth_pass);
+    vsm_renderer.OnFrameStart(
+      oxygen::renderer::internal::RendererTagFactory::Get(),
+      SequenceNumber { 1U }, Slot { 0U });
+
+    auto& pool_manager = vsm_renderer.GetPhysicalPagePoolManager();
+    ASSERT_EQ(pool_manager.EnsureShadowPool(
+                MakeShadowPoolConfig("phase-ka5-seed-none-shadow")),
+      VsmPhysicalPoolChangeResult::kCreated);
+    ASSERT_EQ(
+      pool_manager.EnsureHzbPool(MakeHzbPoolConfig("phase-ka5-seed-none-hzb")),
+      oxygen::renderer::vsm::VsmHzbPoolChangeResult::kCreated);
+
+    const auto seam
+      = MakeSeam(pool_manager, 1ULL, 21U, "phase-ka5-seed-none-frame");
+    const auto current_projection_records = std::array {
+      MakeLocalProjectionRecord(seam.current_frame, resolved_view)
+    };
+
+    auto bridge_committed_requests = false;
+    EventLoop loop;
+    oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+      bridge_committed_requests
+        = co_await vsm_renderer.ExecutePageRequestReadbackBridge(
+          render_context, seam, current_projection_records);
+    });
+    WaitForQueueIdle();
+    EXPECT_TRUE(bridge_committed_requests);
+
+    const auto* committed_frame
+      = vsm_renderer.GetCacheManager().GetCurrentFrame();
+    ASSERT_NE(committed_frame, nullptr);
+    ASSERT_TRUE(committed_frame->is_ready);
+    EXPECT_EQ(committed_frame->physical_page_meta_seed_buffer, nullptr);
+  }
+}
+
 } // namespace
