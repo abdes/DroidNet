@@ -40,7 +40,7 @@ public:
     -> CmdLineArgumentsError& = default;
   auto operator=(CmdLineArgumentsError&&) noexcept
     -> CmdLineArgumentsError& = default;
-  ~CmdLineArgumentsError() override;
+  ~CmdLineArgumentsError() override = default;
 };
 
 class CliBuilder;
