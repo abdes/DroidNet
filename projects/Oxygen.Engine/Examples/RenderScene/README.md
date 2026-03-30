@@ -9,23 +9,23 @@ The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 
 ## Frame Capture CLI
 
-`RenderScene` can configure backend frame capture at startup through the
-graphics backend load config.
+`RenderScene` configures backend frame capture through the example capture CLI.
 
 Supported flags:
 
-- `--frame-capture-provider off|renderdoc`
-- `--frame-capture-init disabled|attached|search|path`
-- `--frame-capture-module <path-to-renderdoc.dll>`
-- `--frame-capture-file <capture-file-template>`
-- `--frame-capture-trigger none|next`
+- `--capture-provider off|renderdoc|pix`
+- `--capture-load attached|search|path`
+- `--capture-library <path-to-capture-runtime>`
+- `--capture-output <capture-file-template>`
+- `--capture-from-frame <zero-based-frame>`
+- `--capture-frame-count <count>`
 
 Examples:
 
-- attach to an already running RenderDoc session and capture the next frame:
-  `render-scene --frame-capture-provider renderdoc --frame-capture-init attached --frame-capture-trigger next`
+- capture frame 30 with the installed RenderDoc runtime:
+  `render-scene --capture-provider renderdoc --capture-load search --capture-from-frame 30 --capture-frame-count 1`
 - load `renderdoc.dll` from an explicit path:
-  `render-scene --frame-capture-provider renderdoc --frame-capture-init path --frame-capture-module C:/Tools/RenderDoc/renderdoc.dll`
+  `render-scene --capture-provider renderdoc --capture-load path --capture-library C:/Tools/RenderDoc/renderdoc.dll`
 
 The runtime also exposes dev-console commands:
 
@@ -35,6 +35,103 @@ The runtime also exposes dev-console commands:
 - `gfx.capture.end`
 - `gfx.capture.discard`
 - `gfx.capture.open_ui`
+
+## RenderDoc K-a Validation Workflow
+
+These commands assume the current working directory is the repository root:
+`H:\projects\DroidNet\projects\Oxygen.Engine`.
+
+Replay-safe capture helper:
+
+- `Examples/RenderScene/Run-RenderSceneCapture.ps1`
+- intentionally narrow: it always runs `RenderScene` with
+  `-v=-1 --fps 0 --directional-shadows vsm --capture-provider renderdoc --capture-load search`
+- only exposes:
+  - `-Frame`
+  - `-Count`
+  - `-Output`
+
+Example capture run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\Run-RenderSceneCapture.ps1' `
+  -Frame 30 `
+  -Count 1 `
+  -Output 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_frame30'
+```
+
+All RenderDoc analysis scripts in this folder are UI-only. Do not run them with
+standalone Python replay. Use:
+
+`qrenderdoc.exe --ui-python <script.py> <capture.rdc>`
+
+The baseline K-a analyzer is:
+
+- `Examples/RenderScene/AnalyzeRenderDocCapture.py`
+
+It stays bounded and answers whether a replay-safe capture is valid automated
+Phase K-a evidence. The baseline report records:
+
+- whether the VSM shell markers are present from `VsmPageRequestGeneratorPass`
+  through `VsmProjectionPass`
+- whether the capture reaches `VsmProjectionPass`
+- whether both Stage 15 mask resources are present
+- whether `VsmProjectionPass` writes both Stage 15 mask resources
+- which K-a gates remain manual or blocked
+
+Example baseline run:
+
+```powershell
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_analysis_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocCapture.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+```
+
+Deep-dive scripts stay separate from the baseline:
+
+- `Examples/RenderScene/AnalyzeRenderDocPassFocus.py`
+  - inspect one pass with `OXYGEN_RENDERDOC_PASS_NAME`
+- `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
+  - inspect one event with `OXYGEN_RENDERDOC_EVENT_ID`
+- `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
+  - inspect Stage 15 mask presence, writer events, and any observed shader-side
+    consumers
+
+Example deep dives:
+
+```powershell
+$env:OXYGEN_RENDERDOC_PASS_NAME = 'VsmProjectionPass'
+$env:OXYGEN_RENDERDOC_RESOURCE_NAME = 'VsmProjectionPass.'
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_pass_focus_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassFocus.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+
+$env:OXYGEN_RENDERDOC_EVENT_ID = '14967'
+$env:OXYGEN_RENDERDOC_RESOURCE_NAME = 'VsmProjectionPass.'
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_event_focus_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocEventFocus.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_stage15_masks_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocStage15Masks.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+```
+
+Automated versus manual K-a evidence:
+
+- Automated from replay-safe capture:
+  - shell reaches `VsmProjectionPass`
+  - both Stage 15 mask textures exist in the capture
+  - `VsmProjectionPass` writes both Stage 15 mask textures
+- Still manual or external:
+  - `Virtual Shadow Mask` visual sign-off in a live engine run
+  - stabilization of the live run for that manual checkpoint
+  - re-enabled analytic bridge GPU gate execution
 
 ## Content Source Behavior (PAK vs Loose Cooked)
 

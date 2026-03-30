@@ -126,7 +126,7 @@ CPU-GPU ABI guidelines
 | H | `complete` | Stage 14 exists and dedicated coverage exists |
 | I | `complete` | Stage 15 plus extraction and cache-valid continuity coverage exist |
 | J | `complete` | scene-observer -> cache-manager -> GPU invalidation slice exists |
-| K-a | `in_progress` | live shell exists, but the Stage 15 diagnostic is not yet manually signed off after the known live-shell bug |
+| K-a | `in_progress` | live shell exists, but late-frame RenderDoc replay is still unstable (`DXGI_ERROR_DEVICE_HUNG`), so the Stage 15 diagnostic is not yet manually signed off |
 | K-b | `in_progress` | directional VSM forward path exists in code, but end-to-end manual validation and full directional support are still incomplete |
 | K-c | `not_started` | no local-light forward consumption yet |
 | K-d | `not_started` | no distant-light refresh budget or point-light face scheduling yet |
@@ -518,6 +518,15 @@ Task checklist:
 - [ ] Stabilize the live engine run enough to complete the manual
   `Virtual Shadow Mask` checkpoint without the current D3D12 device-removal
   failure
+- [ ] Produce a replay-safe late-frame RenderDoc capture recipe for the VSM
+  shell path; captures that can emit thumbnails but still fail replay with
+  `DXGI_ERROR_DEVICE_HUNG` do not satisfy the K-a evidence gate
+- [x] Validate the repo-owned RenderScene RenderDoc analysis workflow against a
+  replay-safe late-frame capture before using it as K-a baseline evidence
+- [ ] Re-enable or replace the disabled analytic bridge GPU gate in
+  `VsmShadowRendererBridge_test.cpp`; the current source compiles out
+  `ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
+  under `#if 0`, so that named exit criterion is not presently runnable
 - [ ] Keep the phase open until
   `VsmShadowRendererBridgeGpuTest.ExecutePreparedViewShellMatchesAnalyticFloorShadowClassificationForTwoBoxes`
   is green and the manual diagnostic is rerun
@@ -539,11 +548,31 @@ Evidence summary:
   `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
 - Directional policy routing coverage exists in
   `Oxygen.Renderer.ShadowManagerPolicy.Tests`.
+- Repo-owned RenderDoc UI analysis now exists in:
+  - `Examples/RenderScene/AnalyzeRenderDocCapture.py`
+  - `Examples/RenderScene/AnalyzeRenderDocPassFocus.py`
+  - `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
+  - `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
+- The replay-safe capture
+  `out/build-ninja/analysis/k_a_baseline/k_a_vsm_40frames_frame10.rdc`
+  was validated with that workflow on `2026-03-30`, producing:
+  - `k_a_vsm_40frames_frame10_analysis_report.txt`
+  - `k_a_vsm_40frames_frame10_pass_focus_report.txt`
+  - `k_a_vsm_40frames_frame10_event_focus_report.txt`
+  - `k_a_vsm_40frames_frame10_stage15_masks_report.txt`
 
 Blocking note:
 
 - Manual K-a sign-off remains invalid because earlier manual acceptance was
   later contradicted by live renderer evidence.
+- The current late-frame CLI capture attempt is not valid K-a evidence:
+  `script_capture_late_frame15.rdc` can emit a thumbnail, but replay/open on
+  the same machine can fail with `DXGI_ERROR_DEVICE_HUNG`.
+- The replayable RenderScene capture
+  `k_a_vsm_40frames_frame10.rdc` now proves the live shell reaches
+  `VsmProjectionPass` and publishes both Stage 15 mask textures through the
+  repo-owned RenderDoc UI workflow, but it does not remove the manual sign-off
+  requirement and it does not make the disabled analytic bridge test passable.
 
 #### Phase K-b - Directional-Light VSM Forward-Lighting Integration
 
@@ -557,8 +586,7 @@ Task checklist:
   both masks
 - [ ] Publish directional `ShadowInstanceMetadata` with validated
   `implementation_kind = kVirtual` semantics for every directional candidate
-  the VSM path intends to support, or record explicit approval that only the
-  primary directional candidate remains supported
+  the VSM path intends to support,
 - [x] Switch `ShadowManager` view publication to the VSM directional shadow
   product when the VSM policy is selected
 - [x] Route forward directional shadow visibility through the VSM directional
