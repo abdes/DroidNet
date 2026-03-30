@@ -20,6 +20,7 @@ namespace oxygen::graphics::d3d12 {
 class AftermathTracker final {
 public:
   static auto Instance() -> AftermathTracker&;
+  [[nodiscard]] static auto IsSdkAvailable() noexcept -> bool;
 
   auto EnableCrashDumps() noexcept -> void;
   auto DisableCrashDumps() noexcept -> void;

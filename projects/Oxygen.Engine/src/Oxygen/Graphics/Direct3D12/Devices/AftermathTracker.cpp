@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Devices/AftermathTracker.h>
-
 #include <chrono>
 #include <cstring>
 #include <deque>
@@ -17,32 +15,29 @@
 #include <thread>
 #include <unordered_map>
 
+#include <d3d12.h>
+
 #include <Oxygen/Base/Logging.h>
 
-#if defined(USE_AFTERMATH)
+#if defined(USE_AFTERMATH) && __has_include(<GFSDK_Aftermath_Defines.h>)       \
+  && __has_include(<GFSDK_Aftermath_GpuCrashDump.h>)                           \
+  && (__has_include(<GFSDK_Aftermath_DX12.h>)                                  \
+    || __has_include(<GFSDK_Aftermath.h>))
 // Try to include Aftermath headers - prefer new header layout
-#  if __has_include(<GFSDK_Aftermath_Defines.h>)
-#    include <GFSDK_Aftermath_Defines.h>
-#  endif
-#  if __has_include(<GFSDK_Aftermath_GpuCrashDump.h>)
-#    include <GFSDK_Aftermath_GpuCrashDump.h>
-#  endif
+#  include <GFSDK_Aftermath_Defines.h>
+#  include <GFSDK_Aftermath_GpuCrashDump.h>
 #  if __has_include(<GFSDK_Aftermath_DX12.h>)
 #    include <GFSDK_Aftermath_DX12.h>
-#  elif __has_include(<GFSDK_Aftermath.h>)
+#  else
 #    include <GFSDK_Aftermath.h>
 #  endif
 
-// Verify we have what we need
-#  if defined(GFSDK_Aftermath_Version_API)                                     \
-    && defined(GFSDK_Aftermath_GpuCrashDumpWatchedApiFlags_DX)
-#    define OXYGEN_HAS_AFTERMATH 1
-#  else
-#    define OXYGEN_HAS_AFTERMATH 0
-#  endif
+#  define OXYGEN_HAS_AFTERMATH 1
 #else
 #  define OXYGEN_HAS_AFTERMATH 0
 #endif
+
+#include <Oxygen/Graphics/Direct3D12/Devices/AftermathTracker.h>
 
 namespace oxygen::graphics::d3d12 {
 namespace {
@@ -105,6 +100,8 @@ namespace {
     std::unordered_map<ID3D12GraphicsCommandList*,
       GFSDK_Aftermath_ContextHandle>
       context_handles;
+    std::unordered_map<ID3D12Resource*, GFSDK_Aftermath_ResourceHandle>
+      resource_handles;
     std::unordered_map<uint64_t, std::unique_ptr<std::string>> marker_payloads;
     std::unordered_map<ID3D12GraphicsCommandList*, std::deque<uint64_t>>
       marker_stack;
@@ -126,8 +123,10 @@ namespace {
       return "DriverVersionNotSupported";
     case GFSDK_Aftermath_Result_FAIL_D3DDebugLayerNotCompatible:
       return "D3DDebugLayerNotCompatible";
-    case GFSDK_Aftermath_Result_FAIL_D3DDeviceNotSupported:
-      return "D3DDeviceNotSupported";
+    case GFSDK_Aftermath_Result_FAIL_InvalidAdapter:
+      return "InvalidAdapter";
+    case GFSDK_Aftermath_Result_FAIL_D3dDllInterceptionNotSupported:
+      return "D3dDllInterceptionNotSupported";
     case GFSDK_Aftermath_Result_FAIL_NotInitialized:
       return "NotInitialized";
     default:
@@ -193,16 +192,11 @@ namespace {
   }
 
   void OnResolveMarker(const void* marker_data, const uint32_t marker_data_size,
-    void* user_data, void** resolved_marker_data,
-    uint32_t* resolved_marker_data_size) noexcept
+    void* user_data, PFN_GFSDK_Aftermath_ResolveMarker resolve_marker) noexcept
   {
-    if (resolved_marker_data == nullptr
-      || resolved_marker_data_size == nullptr) {
+    if (resolve_marker == nullptr) {
       return;
     }
-
-    *resolved_marker_data = nullptr;
-    *resolved_marker_data_size = 0;
 
     if (marker_data_size != 0 || marker_data == nullptr) {
       return;
@@ -222,8 +216,8 @@ namespace {
       return;
     }
 
-    *resolved_marker_data = static_cast<void*>(it->second->data());
-    *resolved_marker_data_size = static_cast<uint32_t>(it->second->size() + 1U);
+    resolve_marker(
+      it->second->data(), static_cast<uint32_t>(it->second->size() + 1U));
   }
 #endif
 
@@ -233,6 +227,15 @@ auto AftermathTracker::Instance() -> AftermathTracker&
 {
   static AftermathTracker instance;
   return instance;
+}
+
+auto AftermathTracker::IsSdkAvailable() noexcept -> bool
+{
+#if OXYGEN_HAS_AFTERMATH
+  return true;
+#else
+  return false;
+#endif
 }
 
 auto AftermathTracker::EnableCrashDumps() noexcept -> void
@@ -279,6 +282,7 @@ auto AftermathTracker::DisableCrashDumps() noexcept -> void
     }
   }
   g_aftermath.context_handles.clear();
+  g_aftermath.resource_handles.clear();
   g_aftermath.marker_payloads.clear();
   g_aftermath.marker_order.clear();
   g_aftermath.dx12_initialized = false;
@@ -384,8 +388,13 @@ auto AftermathTracker::RegisterResource(ID3D12Resource* resource) noexcept
     return;
   }
 
-  const auto res = GFSDK_Aftermath_DX12_RegisterResource(resource);
-  (void)LogAftermathResult("DX12_RegisterResource", res);
+  GFSDK_Aftermath_ResourceHandle resource_handle = nullptr;
+  const auto res
+    = GFSDK_Aftermath_DX12_RegisterResource(resource, &resource_handle);
+  if (LogAftermathResult("DX12_RegisterResource", res)
+    && resource_handle != nullptr) {
+    g_aftermath.resource_handles.insert_or_assign(resource, resource_handle);
+  }
 #else
   (void)resource;
 #endif
@@ -404,8 +413,15 @@ auto AftermathTracker::UnregisterResource(ID3D12Resource* resource) noexcept
     return;
   }
 
-  const auto res = GFSDK_Aftermath_DX12_UnregisterResource(resource);
-  (void)LogAftermathResult("DX12_UnregisterResource", res);
+  const auto it = g_aftermath.resource_handles.find(resource);
+  if (it == g_aftermath.resource_handles.end()) {
+    return;
+  }
+
+  const auto res = GFSDK_Aftermath_DX12_UnregisterResource(it->second);
+  if (LogAftermathResult("DX12_UnregisterResource", res)) {
+    g_aftermath.resource_handles.erase(it);
+  }
 #else
   (void)resource;
 #endif
@@ -526,7 +542,6 @@ auto AftermathTracker::PopMarker(
     return;
   }
 
-  const auto popped_token = stack_it->second.back();
   stack_it->second.pop_back();
 
   // Generate a marker indicating the scope exit
