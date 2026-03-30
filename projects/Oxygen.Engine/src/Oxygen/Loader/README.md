@@ -109,9 +109,12 @@ config.headless = false;
 config.frame_capture = {
   .provider = oxygen::FrameCaptureProvider::kRenderDoc,
   .init_mode = oxygen::FrameCaptureInitMode::kAttachedOnly,
-  .startup_trigger = oxygen::FrameCaptureStartupTrigger::kNextFrame,
+  .from_frame = 120,
+  .frame_count = 3,
   .capture_file_template = "captures/render_scene",
 };
+
+// from_frame is zero-based: 0 means the first rendered frame.
 config.extra = R"({"custom_option": 42, "shader_cache": true})"; // Backend-specific JSON
 
 // Strict mode (engine runtime)
@@ -141,7 +144,8 @@ producing an equivalent string as following:
   "frame_capture": {
     "provider": "renderdoc",
     "init_mode": "attached",
-    "startup_trigger": "next",
+    "from_frame": 120,
+    "frame_count": 3,
     "module_path": "",
     "capture_file_template": "captures/render_scene"
   },

@@ -43,6 +43,8 @@
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCli.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "RenderScene/MainModule.h"
@@ -204,100 +206,6 @@ auto NormalizeCliToken(std::string value) -> std::string
   return value;
 }
 
-auto ParseFrameCaptureProvider(std::string value)
-  -> oxygen::FrameCaptureProvider
-{
-  value = NormalizeCliToken(std::move(value));
-
-  if (value == "off" || value == "none") {
-    return oxygen::FrameCaptureProvider::kNone;
-  }
-  if (value == "renderdoc") {
-    return oxygen::FrameCaptureProvider::kRenderDoc;
-  }
-  if (value == "pix") {
-    return oxygen::FrameCaptureProvider::kPix;
-  }
-
-  throw std::runtime_error("Invalid value for --frame-capture-provider. "
-                           "Expected one of: off, renderdoc, pix");
-}
-
-auto ParseFrameCaptureInitMode(std::string value)
-  -> oxygen::FrameCaptureInitMode
-{
-  value = NormalizeCliToken(std::move(value));
-
-  if (value == "disabled") {
-    return oxygen::FrameCaptureInitMode::kDisabled;
-  }
-  if (value == "attached") {
-    return oxygen::FrameCaptureInitMode::kAttachedOnly;
-  }
-  if (value == "search") {
-    return oxygen::FrameCaptureInitMode::kSearchPath;
-  }
-  if (value == "path") {
-    return oxygen::FrameCaptureInitMode::kExplicitPath;
-  }
-
-  throw std::runtime_error("Invalid value for --frame-capture-init. "
-                           "Expected one of: disabled, attached, search, "
-                           "path");
-}
-
-auto ParseFrameCaptureStartupTrigger(std::string value)
-  -> oxygen::FrameCaptureStartupTrigger
-{
-  value = NormalizeCliToken(std::move(value));
-
-  if (value == "none") {
-    return oxygen::FrameCaptureStartupTrigger::kNone;
-  }
-  if (value == "next") {
-    return oxygen::FrameCaptureStartupTrigger::kNextFrame;
-  }
-
-  throw std::runtime_error("Invalid value for --frame-capture-trigger. "
-                           "Expected one of: none, next");
-}
-
-auto BuildFrameCaptureConfig(const std::string& provider_text,
-  const std::string& init_mode_text, const std::string& trigger_text,
-  const std::string& module_path, const std::string& capture_file_template)
-  -> oxygen::FrameCaptureConfig
-{
-  const auto provider = ParseFrameCaptureProvider(provider_text);
-  if (provider == oxygen::FrameCaptureProvider::kNone) {
-    return {};
-  }
-  if (provider == oxygen::FrameCaptureProvider::kPix) {
-    if (!module_path.empty() || !capture_file_template.empty()
-      || NormalizeCliToken(trigger_text) != "none") {
-      throw std::runtime_error("--frame-capture-module, "
-                               "--frame-capture-file, and "
-                               "--frame-capture-trigger are currently "
-                               "supported only for RenderDoc");
-    }
-    return oxygen::FrameCaptureConfig { .provider = provider };
-  }
-
-  const auto init_mode = ParseFrameCaptureInitMode(init_mode_text);
-  if (init_mode == oxygen::FrameCaptureInitMode::kExplicitPath
-    && module_path.empty()) {
-    throw std::runtime_error(
-      "--frame-capture-module is required when --frame-capture-init=path");
-  }
-
-  return oxygen::FrameCaptureConfig {
-    .provider = provider,
-    .init_mode = init_mode,
-    .startup_trigger = ParseFrameCaptureStartupTrigger(trigger_text),
-    .module_path = module_path,
-    .capture_file_template = capture_file_template,
-  };
-}
-
 } // namespace
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
@@ -314,61 +222,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool hot_reload = true;
   std::string directional_shadows = "conventional";
   std::string cvars_archive_path;
-  std::string frame_capture_provider = "off";
-  std::string frame_capture_init = "attached";
-  std::string frame_capture_module;
-  std::string frame_capture_file;
-  std::string frame_capture_trigger = "none";
+  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
 
   try {
-    CommandBuilder default_command(Command::DEFAULT);
-    default_command.WithOption(Option::WithKey("frames")
-        .About("Number of frames to simulate")
-        .Short("f")
-        .Long("frames")
-        .WithValue<uint32_t>()
-        .UserFriendlyName("count")
-        .StoreTo(&frames)
-        .Build());
-    default_command.WithOption(Option::WithKey("fps")
-        .About("Target frames per second for pacing the event loop")
-        .Short("r")
-        .Long("fps")
-        .WithValue<uint32_t>()
-        .UserFriendlyName("rate")
-        .StoreTo(&target_fps)
-        .Build());
-    default_command.WithOption(Option::WithKey("fullscreen")
-        .About("Run the application in full-screen mode")
-        .Short("F")
-        .Long("fullscreen")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("fullscreen")
-        .StoreTo(&app.fullscreen)
-        .Build());
-    default_command.WithOption(Option::WithKey("vsync")
-        .About("Enable vertical synchronization (limits FPS to monitor refresh "
-               "rate)")
-        .Short("s")
-        .Long("vsync")
-        .WithValue<bool>()
-        .DefaultValue(true)
-        .UserFriendlyName("vsync")
-        .StoreTo(&enable_vsync)
-        .Build());
-    default_command.WithOption(Option::WithKey("verify-hashes")
-        .About("Enable hash-based content integrity verification when mounting "
-               "content sources (PAK CRC32, loose cooked SHA-256)")
+    const auto developer_options
+      = std::make_shared<Options>("Developer options");
+    developer_options->Add(Option::WithKey("verify-hashes")
+        .About("Enable content hash verification for mounted sources")
         .Long("verify-hashes")
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("verify-hashes")
         .StoreTo(&verify_hashes)
         .Build());
-    default_command.WithOption(Option::WithKey("hot-reload")
+    developer_options->Add(Option::WithKey("hot-reload")
         .About("Enable hot-reloading of script files from disk")
         .Long("hot-reload")
         .WithValue<bool>()
@@ -376,55 +245,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .UserFriendlyName("hot-reload")
         .StoreTo(&hot_reload)
         .Build());
-    default_command.WithOption(Option::WithKey("frame-capture-provider")
-        .About("Frame capture provider: off, renderdoc, pix.")
-        .Long("frame-capture-provider")
-        .WithValue<std::string>()
-        .DefaultValue(std::string("off"))
-        .UserFriendlyName("provider")
-        .StoreTo(&frame_capture_provider)
-        .Build());
-    default_command.WithOption(Option::WithKey("frame-capture-init")
-        .About("Frame capture initialization mode: disabled, attached, "
-               "search, path. RenderDoc only.")
-        .Long("frame-capture-init")
-        .WithValue<std::string>()
-        .DefaultValue(std::string("attached"))
-        .UserFriendlyName("mode")
-        .StoreTo(&frame_capture_init)
-        .Build());
-    default_command.WithOption(Option::WithKey("frame-capture-module")
-        .About("Explicit frame capture module path used when "
-               "--frame-capture-init=path. RenderDoc only.")
-        .Long("frame-capture-module")
-        .WithValue<std::string>()
-        .UserFriendlyName("path")
-        .StoreTo(&frame_capture_module)
-        .Build());
-    default_command.WithOption(Option::WithKey("frame-capture-file")
-        .About("Optional RenderDoc capture file path template")
-        .Long("frame-capture-file")
-        .WithValue<std::string>()
-        .UserFriendlyName("template")
-        .StoreTo(&frame_capture_file)
-        .Build());
-    default_command.WithOption(Option::WithKey("frame-capture-trigger")
-        .About("Frame capture startup trigger: none, next. RenderDoc only.")
-        .Long("frame-capture-trigger")
-        .WithValue<std::string>()
-        .DefaultValue(std::string("none"))
-        .UserFriendlyName("trigger")
-        .StoreTo(&frame_capture_trigger)
-        .Build());
-    default_command.WithOption(Option::WithKey("directional-shadows")
-        .About("Directional shadow backend policy: conventional.")
+    developer_options->Add(Option::WithKey("directional-shadows")
+        .About("Directional shadow backend policy")
         .Long("directional-shadows")
         .WithValue<std::string>()
         .DefaultValue(std::string("conventional"))
         .UserFriendlyName("policy")
         .StoreTo(&directional_shadows)
         .Build());
-    default_command.WithOption(Option::WithKey("cvars-archive")
+    developer_options->Add(Option::WithKey("cvars-archive")
         .About("Override the persisted CVar archive path for this run")
         .Long("cvars-archive")
         .WithValue<std::string>()
@@ -432,21 +261,27 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .StoreTo(&cvars_archive_path)
         .Build());
 
-    auto cli = CliBuilder()
-                 .ProgramName("render-scene")
-                 .Version("0.1")
-                 .About("Render a cooked SceneAsset from a mounted .pak")
-                 .WithHelpCommand()
-                 .WithVersionCommand()
-                 .WithCommand(default_command)
-                 .Build();
+    const Command::Ptr default_command
+      = CommandBuilder(Command::DEFAULT)
+          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
+            .frames = &frames,
+            .target_fps = &target_fps,
+            .fullscreen = &app.fullscreen,
+            .vsync = &enable_vsync,
+          }))
+          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
+          .WithOptions(
+            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
+            true)
+          .WithOptions(developer_options, true);
+
+    auto cli = oxygen::examples::cli::BuildCli("render-scene",
+      "Render a cooked scene from mounted content", default_command);
 
     const int argc = static_cast<int>(args.size());
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
-    if (context.active_command->PathAsString() == Command::HELP
-      || context.active_command->PathAsString() == Command::VERSION
-      || context.ovm.HasOption(Command::HELP)) {
+    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return;
     }
 
@@ -455,23 +290,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
-    LOG_F(INFO, "Parsed frame-capture-provider option = {}",
-      frame_capture_provider);
-    LOG_F(INFO, "Parsed frame-capture-init option = {}", frame_capture_init);
-    LOG_F(
-      INFO, "Parsed frame-capture-trigger option = {}", frame_capture_trigger);
-    if (!frame_capture_module.empty()) {
-      LOG_F(
-        INFO, "Parsed frame-capture-module option = {}", frame_capture_module);
-    }
-    if (!frame_capture_file.empty()) {
-      LOG_F(INFO, "Parsed frame-capture-file option = {}", frame_capture_file);
-    }
+    oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
     }
-    LOG_F(INFO, "Starting async engine engine for {} frames (target {} fps)",
+    LOG_F(INFO, "Starting render-scene demo for {} frames (target {} fps)",
       frames, target_fps);
     app.directional_shadow_policy
       = ParseDirectionalShadowPolicy(directional_shadows);
@@ -504,8 +328,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     }
     const auto path_finder_config = std::move(path_finder_builder).Build();
     const auto frame_capture_config
-      = BuildFrameCaptureConfig(frame_capture_provider, frame_capture_init,
-        frame_capture_trigger, frame_capture_module, frame_capture_file);
+      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli);
     const GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,

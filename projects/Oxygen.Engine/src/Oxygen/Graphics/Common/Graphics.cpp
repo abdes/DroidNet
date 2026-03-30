@@ -226,8 +226,12 @@ auto Graphics::PresentSurfaces(
 {
   DLOG_SCOPE_FUNCTION(1);
 
+  const auto frame_capture = GetFrameCaptureController();
   for (const auto& surface : surfaces) {
     try {
+      if (frame_capture != nullptr) {
+        frame_capture->OnPresentSurface(surface);
+      }
       surface->Present();
     } catch (const std::exception& e) {
       LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",

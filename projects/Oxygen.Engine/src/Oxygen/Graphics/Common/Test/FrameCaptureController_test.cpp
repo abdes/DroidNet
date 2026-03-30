@@ -61,6 +61,12 @@ public:
   {
   }
 
+  auto OnPresentSurface(
+    oxygen::observer_ptr<oxygen::graphics::Surface> /*surface*/)
+    -> void override
+  {
+  }
+
   int trigger_calls { 0 };
   int start_calls { 0 };
   int end_calls { 0 };

@@ -46,6 +46,8 @@
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCli.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "MultiView/CompositingMode.h"
@@ -173,7 +175,6 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  using oxygen::clap::CliBuilder;
   using oxygen::clap::CmdLineArgumentsError;
   using oxygen::clap::Command;
   using oxygen::clap::CommandBuilder;
@@ -187,78 +188,40 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   bool headless = false;
   bool enable_vsync = true;
   std::string compositing_mode_value = "copy";
+  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
 
   try {
-    CommandBuilder default_command(Command::DEFAULT);
-    default_command.WithOption(Option::WithKey("frames")
-        .About("Number of frames to simulate")
-        .Short("f")
-        .Long("frames")
-        .WithValue<uint32_t>()
-        .UserFriendlyName("count")
-        .StoreTo(&frames)
-        .Build());
-    default_command.WithOption(Option::WithKey("fps")
-        .About("Target frames per second for pacing the event loop")
-        .Short("r")
-        .Long("fps")
-        .WithValue<uint32_t>()
-        .UserFriendlyName("rate")
-        .StoreTo(&target_fps)
-        .Build());
-    default_command.WithOption(Option::WithKey("headless")
-        .About("Run the engine in headless mode")
-        .Short("d")
-        .Long("headless")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("headless")
-        .StoreTo(&headless)
-        .Build());
-    default_command.WithOption(Option::WithKey("fullscreen")
-        .About("Run the application in full-screen mode")
-        .Short("F")
-        .Long("fullscreen")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("fullscreen")
-        .StoreTo(&app.fullscreen)
-        .Build());
-    default_command.WithOption(Option::WithKey("vsync")
-        .About("Enable vertical synchronization")
-        .Short("s")
-        .Long("vsync")
-        .WithValue<bool>()
-        .DefaultValue(true)
-        .UserFriendlyName("vsync")
-        .StoreTo(&enable_vsync)
-        .Build());
-    default_command.WithOption(Option::WithKey("composite-mode")
-        .About("Compositing mode: copy or blend")
-        .Short("c")
-        .Long("composite-mode")
-        .WithValue<std::string>()
-        .DefaultValue("copy")
-        .UserFriendlyName("mode")
-        .StoreTo(&compositing_mode_value)
-        .Build());
+    const Command::Ptr default_command
+      = CommandBuilder(Command::DEFAULT)
+          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
+            .frames = &frames,
+            .target_fps = &target_fps,
+            .headless = &headless,
+            .fullscreen = &app.fullscreen,
+            .vsync = &enable_vsync,
+          }))
+          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
+          .WithOptions(
+            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
+            true)
+          .WithOption(Option::WithKey("composite-mode")
+              .About("Compositing mode to use: copy or blend")
+              .Short("c")
+              .Long("composite-mode")
+              .WithValue<std::string>()
+              .DefaultValue("copy")
+              .UserFriendlyName("mode")
+              .StoreTo(&compositing_mode_value)
+              .Build());
 
-    auto cli = CliBuilder()
-                 .ProgramName("multiview-example")
-                 .Version("0.1")
-                 .About("Multi-view rendering example")
-                 .WithHelpCommand()
-                 .WithVersionCommand()
-                 .WithCommand(default_command)
-                 .Build();
+    auto cli = oxygen::examples::cli::BuildCli(
+      "multi-view", "Multi-view rendering demo", default_command);
 
     const int argc = static_cast<int>(args.size());
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
-    if (context.active_command->PathAsString() == Command::HELP
-      || context.active_command->PathAsString() == Command::VERSION
-      || context.ovm.HasOption(Command::HELP)) {
+    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return;
     }
 
@@ -266,6 +229,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed composite mode option = {}", compositing_mode_value);
 
     auto compositing_mode
@@ -294,12 +258,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     const auto path_finder_config
       = o::PathFinderConfig::Create().WithWorkspaceRoot(workspace_root).Build();
+    const auto frame_capture_config
+      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
     const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
       .preferred_card_name = std::nullopt,
       .headless = headless,
       .enable_vsync = enable_vsync,
+      .frame_capture = frame_capture_config,
       .extra = {},
     };
     const auto& loader = o::GraphicsBackendLoader::GetInstance();

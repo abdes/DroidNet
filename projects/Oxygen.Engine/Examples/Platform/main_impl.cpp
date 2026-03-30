@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -19,11 +20,19 @@
 #endif
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
+#include <Oxygen/Clap/Option.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+
+#include "Common/DemoCli.h"
 
 using oxygen::Platform;
 using oxygen::PlatformConfig;
@@ -210,7 +219,8 @@ template <> struct oxygen::co::EventLoopTraits<Platform> {
 };
 
 namespace {
-auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
+auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
+  const bool start_fullscreen, const bool show_help_overlay)
   -> oxygen::co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
@@ -259,7 +269,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
     props.extent = { .width = 800, .height = 600 };
     props.flags = { .hidden = false,
       .always_on_top = false,
-      .full_screen = false,
+      .full_screen = start_fullscreen,
       .maximized = false,
       .minimized = false,
       .resizable = true,
@@ -279,6 +289,10 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
           LOG_F(INFO, "Help renderer initialized successfully");
         } catch (const std::exception& e) {
           LOG_F(ERROR, "Failed to create help renderer: {}", e.what());
+        }
+
+        if (show_help_overlay && help_renderer) {
+          help_renderer->ToggleHelp();
         }
       }
 
@@ -505,13 +519,58 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform)
 
 } // namespace
 
-extern "C" void MainImpl(std::span<const char*> /*args*/)
+extern "C" void MainImpl(std::span<const char*> args)
 {
-  auto platform
-    = std::make_shared<Platform>(PlatformConfig { .headless = false });
+  using namespace oxygen::clap; // NOLINT
 
-  oxygen::co::Run(*platform, AsyncMain(platform));
+  bool start_fullscreen = false;
+  bool show_help_overlay = false;
 
-  // Explicit destruction order due to dependencies.
-  platform.reset();
+  try {
+    const auto window_options = std::make_shared<Options>("Window options");
+    window_options->Add(Option::WithKey("fullscreen")
+        .About("Start the demo in full-screen mode")
+        .Short("F")
+        .Long("fullscreen")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("fullscreen")
+        .StoreTo(&start_fullscreen)
+        .Build());
+    window_options->Add(Option::WithKey("show-help")
+        .About("Show the on-screen help overlay on startup")
+        .Long("show-help")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("show-help")
+        .StoreTo(&show_help_overlay)
+        .Build());
+
+    const Command::Ptr default_command
+      = CommandBuilder(Command::DEFAULT).WithOptions(window_options);
+    auto cli = oxygen::examples::cli::BuildCli(
+      "platform", "Interactive platform window controls demo", default_command);
+
+    const int argc = static_cast<int>(args.size());
+    const char** argv = args.data();
+    auto context = cli->Parse(argc, argv);
+    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
+      return;
+    }
+
+    auto platform
+      = std::make_shared<Platform>(PlatformConfig { .headless = false });
+
+    oxygen::co::Run(
+      *platform, AsyncMain(platform, start_fullscreen, show_help_overlay));
+
+    // Explicit destruction order due to dependencies.
+    platform.reset();
+  } catch (const CmdLineArgumentsError& e) {
+    LOG_F(ERROR, "Platform CLI parse failed: {}", e.what());
+    std::exit(EXIT_FAILURE);
+  } catch (const std::exception& e) {
+    LOG_F(ERROR, "Platform example failed: {}", e.what());
+    std::exit(EXIT_FAILURE);
+  }
 }

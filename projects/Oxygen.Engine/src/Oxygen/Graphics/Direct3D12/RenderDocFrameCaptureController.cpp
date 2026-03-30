@@ -46,7 +46,7 @@ auto InitModeText(const oxygen::FrameCaptureInitMode init_mode)
 
 constexpr wchar_t kRenderDocModuleName[] = L"renderdoc.dll";
 
-enum class CaptureMode : uint8_t { kNone, kNextFrame, kManual };
+enum class CaptureMode : uint8_t { kNone, kManual };
 
 constexpr auto kRenderDocSupportedFeatures
   = oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame
@@ -74,6 +74,16 @@ auto LastErrorMessage(const std::string_view action) -> std::string
 {
   return std::string(action) + " failed with Win32 error "
     + std::to_string(::GetLastError());
+}
+
+auto ToEngineFrameSequence(const uint64_t zero_based_frame_index) -> uint64_t
+{
+  return zero_based_frame_index + 1U;
+}
+
+auto HasExplicitTarget(const RenderDocCaptureTarget& target) -> bool
+{
+  return target.device != nullptr && target.window != nullptr;
 }
 
 class RenderDocFrameCaptureController final
@@ -126,7 +136,10 @@ public:
     out << "provider=RenderDoc"
         << " available=" << (api_ != nullptr ? "true" : "false")
         << " capturing=" << (IsCapturingUnlocked() ? "true" : "false")
-        << " next_frame_armed=" << (next_frame_requested_ ? "true" : "false")
+        << " capture_from_frame=" << scheduled_capture_from_frame_
+        << " capture_frame_count=" << scheduled_capture_frame_count_
+        << " active_target_window="
+        << (last_present_target_.window != nullptr ? "true" : "false")
         << " features=" << DescribeSupportedFeatures()
         << " init_mode=" << InitModeText(config_.init_mode);
 
@@ -150,16 +163,31 @@ private:
 
     if (api_ == nullptr) {
       status_message_ = "RenderDoc API unavailable";
+      LOG_F(
+        WARNING, "RenderDoc next-frame capture rejected: {}", status_message_);
       return false;
     }
     if (IsCapturingUnlocked()) {
       status_message_ = "capture already in progress";
+      LOG_F(
+        WARNING, "RenderDoc next-frame capture rejected: {}", status_message_);
+      return false;
+    }
+    if (api_->TriggerCapture == nullptr) {
+      status_message_ = "RenderDoc trigger capture is unavailable";
+      LOG_F(
+        WARNING, "RenderDoc next-frame capture rejected: {}", status_message_);
       return false;
     }
 
-    next_frame_requested_ = true;
-    capture_mode_ = CaptureMode::kNone;
-    status_message_ = "next-frame capture armed";
+    if (!SetActiveCaptureTargetUnlocked()) {
+      LOG_F(WARNING,
+        "RenderDoc next-frame capture has no observed present target; using "
+        "provider active window");
+    }
+    api_->TriggerCapture();
+    status_message_ = "next-frame capture requested";
+    LOG_F(INFO, "RenderDoc next-frame capture requested");
     return true;
   }
 
@@ -171,16 +199,18 @@ private:
     if (api_ == nullptr || IsCapturingUnlocked()) {
       status_message_ = api_ == nullptr ? "RenderDoc API unavailable"
                                         : "capture already in progress";
+      LOG_F(WARNING, "RenderDoc manual capture rejected: {}", status_message_);
       return false;
     }
 
-    next_frame_requested_ = false;
     if (!StartCaptureUnlocked(surface)) {
+      LOG_F(WARNING, "RenderDoc manual capture failed: {}", status_message_);
       return false;
     }
 
     capture_mode_ = CaptureMode::kManual;
     status_message_ = "manual capture started";
+    LOG_F(INFO, "RenderDoc manual capture started");
     return true;
   }
 
@@ -192,14 +222,17 @@ private:
     if (api_ == nullptr || !IsCapturingUnlocked()) {
       status_message_ = api_ == nullptr ? "RenderDoc API unavailable"
                                         : "no active capture to end";
+      LOG_F(WARNING, "RenderDoc capture end rejected: {}", status_message_);
       return false;
     }
 
     const bool ended = EndCaptureUnlocked(surface);
     if (ended) {
       capture_mode_ = CaptureMode::kNone;
-      next_frame_requested_ = false;
       status_message_ = "capture ended";
+      LOG_F(INFO, "RenderDoc capture ended");
+    } else {
+      LOG_F(WARNING, "RenderDoc capture end failed: {}", status_message_);
     }
     return ended;
   }
@@ -211,26 +244,32 @@ private:
 
     if (api_ == nullptr) {
       status_message_ = "RenderDoc API unavailable";
+      LOG_F(WARNING, "RenderDoc capture discard rejected: {}", status_message_);
       return false;
     }
 
-    if (next_frame_requested_ && !IsCapturingUnlocked()) {
-      next_frame_requested_ = false;
+    if (scheduled_capture_frame_count_ > 0 && !IsCapturingUnlocked()) {
+      scheduled_capture_from_frame_ = 0;
+      scheduled_capture_frame_count_ = 0;
       capture_mode_ = CaptureMode::kNone;
-      status_message_ = "next-frame capture request cleared";
+      status_message_ = "configured frame-range capture request cleared";
+      LOG_F(INFO, "RenderDoc configured frame-range capture request cleared");
       return true;
     }
 
     if (!IsCapturingUnlocked()) {
       status_message_ = "no active capture to discard";
+      LOG_F(WARNING, "RenderDoc capture discard rejected: {}", status_message_);
       return false;
     }
 
     const bool discarded = DiscardCaptureUnlocked(surface);
     if (discarded) {
       capture_mode_ = CaptureMode::kNone;
-      next_frame_requested_ = false;
       status_message_ = "capture discarded";
+      LOG_F(INFO, "RenderDoc capture discarded");
+    } else {
+      LOG_F(WARNING, "RenderDoc capture discard failed: {}", status_message_);
     }
     return discarded;
   }
@@ -243,11 +282,15 @@ private:
     config_.capture_file_template = std::string(path_template);
     if (api_ == nullptr || api_->SetCaptureFilePathTemplate == nullptr) {
       status_message_ = "RenderDoc API unavailable";
+      LOG_F(WARNING, "RenderDoc capture file template update rejected: {}",
+        status_message_);
       return false;
     }
 
     api_->SetCaptureFilePathTemplate(config_.capture_file_template.c_str());
     status_message_ = "capture file template updated";
+    LOG_F(INFO, "RenderDoc capture file template updated: {}",
+      config_.capture_file_template);
     return true;
   }
 
@@ -257,68 +300,139 @@ private:
 
     if (api_ == nullptr || api_->LaunchReplayUI == nullptr) {
       status_message_ = "RenderDoc replay UI unavailable";
+      LOG_F(
+        WARNING, "RenderDoc replay UI launch rejected: {}", status_message_);
       return false;
     }
 
     if (api_->LaunchReplayUI(connect_target_control ? 1U : 0U, nullptr) == 0U) {
       status_message_ = "failed to launch RenderDoc replay UI";
+      LOG_F(WARNING, "RenderDoc replay UI launch failed: {}", status_message_);
       return false;
     }
 
     status_message_ = "RenderDoc replay UI launch requested";
+    LOG_F(INFO, "RenderDoc replay UI launch requested");
     return true;
   }
 
-  auto OnBeginFrame(oxygen::frame::SequenceNumber /*frame_number*/,
+  auto OnBeginFrame(oxygen::frame::SequenceNumber frame_number,
     oxygen::frame::Slot /*frame_slot*/) -> void override
   {
     std::scoped_lock lock(mutex_);
 
-    if (api_ == nullptr || !next_frame_requested_ || IsCapturingUnlocked()) {
+    if (api_ == nullptr || IsCapturingUnlocked()) {
       return;
     }
 
-    next_frame_requested_ = false;
-    if (StartCaptureUnlocked({})) {
-      capture_mode_ = CaptureMode::kNextFrame;
-      status_message_ = "next-frame capture started";
+    if (scheduled_capture_frame_count_ == 0
+      || frame_number.get()
+        != ToEngineFrameSequence(scheduled_capture_from_frame_)) {
+      return;
     }
+
+    const auto requested_from_frame = scheduled_capture_from_frame_;
+    const auto requested_frame_count = scheduled_capture_frame_count_;
+    scheduled_capture_from_frame_ = 0;
+    scheduled_capture_frame_count_ = 0;
+
+    if (requested_frame_count == 1) {
+      if (api_->TriggerCapture == nullptr) {
+        status_message_ = "RenderDoc trigger capture is unavailable";
+        LOG_F(WARNING, "RenderDoc configured frame capture rejected: {}",
+          status_message_);
+        return;
+      }
+      if (!SetActiveCaptureTargetUnlocked()) {
+        LOG_F(WARNING,
+          "RenderDoc configured frame capture for frame {} has no observed "
+          "present target; using provider active window",
+          requested_from_frame);
+      }
+      api_->TriggerCapture();
+      status_message_ = "configured frame capture requested for frame "
+        + std::to_string(requested_from_frame);
+      LOG_F(INFO, "RenderDoc configured frame capture requested for frame {}",
+        requested_from_frame);
+      return;
+    }
+
+    if (api_->TriggerMultiFrameCapture == nullptr) {
+      status_message_ = "RenderDoc multi-frame capture is unavailable";
+      LOG_F(WARNING, "RenderDoc configured frame-range capture rejected: {}",
+        status_message_);
+      return;
+    }
+
+    if (!SetActiveCaptureTargetUnlocked()) {
+      LOG_F(WARNING,
+        "RenderDoc configured frame-range capture from frame {} for {} "
+        "frame(s) has no observed present target; using provider active window",
+        requested_from_frame, requested_frame_count);
+    }
+    api_->TriggerMultiFrameCapture(requested_frame_count);
+    status_message_ = "configured frame-range capture requested from frame "
+      + std::to_string(requested_from_frame) + " for "
+      + std::to_string(requested_frame_count) + " frame(s)";
+    LOG_F(INFO,
+      "RenderDoc configured frame-range capture requested from frame {} for {} "
+      "frame(s)",
+      requested_from_frame, requested_frame_count);
   }
 
-  auto OnEndFrame(oxygen::frame::SequenceNumber /*frame_number*/,
+  auto OnEndFrame(oxygen::frame::SequenceNumber frame_number,
     oxygen::frame::Slot /*frame_slot*/) -> void override
   {
     std::scoped_lock lock(mutex_);
 
-    if (api_ == nullptr || capture_mode_ != CaptureMode::kNextFrame) {
+    if (api_ == nullptr || capture_mode_ != CaptureMode::kManual) {
+      return;
+    }
+    static_cast<void>(frame_number);
+  }
+
+  auto OnPresentSurface(
+    const oxygen::observer_ptr<oxygen::graphics::Surface> surface)
+    -> void override
+  {
+    std::scoped_lock lock(mutex_);
+    DCHECK_NOTNULL_F(surface, "Presented surface cannot be null");
+    if (surface == nullptr) {
       return;
     }
 
-    if (EndCaptureUnlocked({})) {
-      status_message_ = "next-frame capture completed";
-    }
-    capture_mode_ = CaptureMode::kNone;
+    last_present_target_ = ResolveCaptureTarget(surface);
   }
 
   auto Initialize() -> void
   {
     if (config_.init_mode == oxygen::FrameCaptureInitMode::kDisabled) {
       status_message_ = "initialization disabled";
+      LOG_F(INFO, "RenderDoc frame capture initialization disabled");
       return;
     }
 
     if (!TryInitializeFromConfig()) {
+      LOG_F(WARNING, "RenderDoc frame capture initialization failed: {}",
+        status_message_);
       return;
     }
 
     if (api_ != nullptr && !config_.capture_file_template.empty()) {
       api_->SetCaptureFilePathTemplate(config_.capture_file_template.c_str());
+      LOG_F(INFO, "RenderDoc capture file template configured: {}",
+        config_.capture_file_template);
     }
-    if (api_ != nullptr
-      && config_.startup_trigger
-        == oxygen::FrameCaptureStartupTrigger::kNextFrame) {
-      next_frame_requested_ = true;
-      status_message_ = "next-frame capture armed from startup config";
+    if (api_ != nullptr && config_.frame_count > 0) {
+      scheduled_capture_from_frame_ = config_.from_frame;
+      scheduled_capture_frame_count_ = config_.frame_count;
+      status_message_ = "configured frame-range capture armed from frame "
+        + std::to_string(config_.from_frame) + " for "
+        + std::to_string(config_.frame_count) + " frame(s)";
+      LOG_F(INFO,
+        "RenderDoc configured frame-range capture armed from frame {} for {} "
+        "frame(s)",
+        config_.from_frame, config_.frame_count);
     }
   }
 
@@ -415,8 +529,10 @@ private:
     -> RenderDocCaptureTarget
   {
     RenderDocCaptureTarget target {};
-    target.device
-      = static_cast<RENDERDOC_DevicePointer>(graphics_.GetCurrentDevice());
+    auto* const current_device = graphics_.GetCurrentDevice();
+    DCHECK_NOTNULL_F(current_device,
+      "RenderDoc capture target resolution requires an active graphics device");
+    target.device = static_cast<RENDERDOC_DevicePointer>(current_device);
 
     if (surface == nullptr) {
       return target;
@@ -459,6 +575,20 @@ private:
       return false;
     }
 
+    return true;
+  }
+
+  auto SetActiveCaptureTargetUnlocked() -> bool
+  {
+    if (api_ == nullptr || api_->SetActiveWindow == nullptr) {
+      return false;
+    }
+    if (!HasExplicitTarget(last_present_target_)) {
+      return false;
+    }
+
+    api_->SetActiveWindow(
+      last_present_target_.device, last_present_target_.window);
     return true;
   }
 
@@ -517,7 +647,9 @@ private:
   std::string resolved_module_path_ {};
   std::string status_message_ {};
   mutable std::mutex mutex_ {};
-  bool next_frame_requested_ { false };
+  RenderDocCaptureTarget last_present_target_ {};
+  uint64_t scheduled_capture_from_frame_ { 0 };
+  uint32_t scheduled_capture_frame_count_ { 0 };
   CaptureMode capture_mode_ { CaptureMode::kNone };
 };
 
@@ -610,6 +742,12 @@ private:
 
   auto OnEndFrame(oxygen::frame::SequenceNumber /*frame_number*/,
     oxygen::frame::Slot /*frame_slot*/) -> void override
+  {
+  }
+
+  auto OnPresentSurface(
+    oxygen::observer_ptr<oxygen::graphics::Surface> /*surface*/)
+    -> void override
   {
   }
 
