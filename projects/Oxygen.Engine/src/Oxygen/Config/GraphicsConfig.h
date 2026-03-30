@@ -23,7 +23,11 @@ namespace oxygen {
 */
 using DeviceId = int64_t;
 
-enum class FrameCaptureProvider : uint8_t { kNone, kRenderDoc };
+enum class FrameCaptureProvider : uint8_t {
+  kNone,
+  kRenderDoc,
+  kPix,
+};
 
 enum class FrameCaptureInitMode : uint8_t {
   kDisabled,
@@ -32,15 +36,17 @@ enum class FrameCaptureInitMode : uint8_t {
   kExplicitPath,
 };
 
-enum class FrameCaptureStartupTrigger : uint8_t { kNone, kNextFrame };
-
 //! Runtime frame-capture tool configuration.
 struct FrameCaptureConfig {
   FrameCaptureProvider provider { FrameCaptureProvider::kNone };
   FrameCaptureInitMode init_mode { FrameCaptureInitMode::kDisabled };
-  FrameCaptureStartupTrigger startup_trigger {
-    FrameCaptureStartupTrigger::kNone
-  };
+
+  //! Zero-based index of the first rendered frame to capture.
+  uint64_t from_frame { 0 };
+
+  //! Number of consecutive frames to capture starting at from_frame.
+  //! A value of 0 disables configured startup capture.
+  uint32_t frame_count { 0 };
 
   //! Explicit module path used only with kExplicitPath.
   std::string module_path {};

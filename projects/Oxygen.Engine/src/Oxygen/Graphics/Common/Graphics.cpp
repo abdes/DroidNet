@@ -379,7 +379,7 @@ auto Graphics::RegisterConsoleBindings(
       return console::ExecutionResult {
         .status = console::ExecutionStatus::kOk,
         .exit_code = 0,
-        .output = frame_capture->DescribeState(),
+        .output = BuildCaptureStatusOutput(frame_capture),
         .error = {},
       };
     },
@@ -401,30 +401,9 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      if (frame_capture == nullptr) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "frame capture provider not configured",
-        };
-      }
-
-      if (!frame_capture->TriggerNextFrame()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "failed to arm next-frame capture",
-        };
-      }
-
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = "next-frame capture armed",
-        .error = {},
-      };
+      return ExecuteCaptureCommand(frame_capture,
+        "failed to arm next-frame capture", "next-frame capture armed",
+        [frame_capture] { return frame_capture->TriggerNextFrame(); });
     },
   });
 
@@ -444,30 +423,9 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      if (frame_capture == nullptr) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "frame capture provider not configured",
-        };
-      }
-
-      if (!frame_capture->StartCapture()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "failed to begin frame capture",
-        };
-      }
-
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = "frame capture started",
-        .error = {},
-      };
+      return ExecuteCaptureCommand(frame_capture,
+        "failed to begin frame capture", "frame capture started",
+        [frame_capture] { return frame_capture->StartCapture(); });
     },
   });
 
@@ -487,30 +445,9 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      if (frame_capture == nullptr) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "frame capture provider not configured",
-        };
-      }
-
-      if (!frame_capture->EndCapture()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "failed to end frame capture",
-        };
-      }
-
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = "frame capture ended",
-        .error = {},
-      };
+      return ExecuteCaptureCommand(frame_capture, "failed to end frame capture",
+        "frame capture ended",
+        [frame_capture] { return frame_capture->EndCapture(); });
     },
   });
 
@@ -530,30 +467,9 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      if (frame_capture == nullptr) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "frame capture provider not configured",
-        };
-      }
-
-      if (!frame_capture->DiscardCapture()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "failed to discard frame capture",
-        };
-      }
-
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = "frame capture discarded",
-        .error = {},
-      };
+      return ExecuteCaptureCommand(frame_capture,
+        "failed to discard frame capture", "frame capture discarded",
+        [frame_capture] { return frame_capture->DiscardCapture(); });
     },
   });
 
@@ -573,30 +489,9 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      if (frame_capture == nullptr) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "frame capture provider not configured",
-        };
-      }
-
-      if (!frame_capture->LaunchReplayUI()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kError,
-          .exit_code = 1,
-          .output = {},
-          .error = "failed to launch replay UI",
-        };
-      }
-
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = "replay UI launch requested",
-        .error = {},
-      };
+      return ExecuteCaptureCommand(frame_capture, "failed to launch replay UI",
+        "replay UI launch requested",
+        [frame_capture] { return frame_capture->LaunchReplayUI(); });
     },
   });
 }
