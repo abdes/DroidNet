@@ -35,6 +35,10 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
+constexpr wchar_t kRenderDocModuleName[] = L"renderdoc.dll";
+constexpr wchar_t kPixGpuCapturerModuleName[] = L"WinPixGpuCapturer.dll";
+constexpr wchar_t kPixTimingCapturerModuleName[] = L"WinPixTimingCapturer.dll";
+
 struct ToolingPolicy {
   bool requested_aftermath { true };
   bool requested_renderdoc { false };
@@ -47,6 +51,11 @@ struct ToolingPolicy {
 };
 
 ToolingPolicy g_tooling_policy;
+
+auto IsModuleLoaded(const wchar_t* module_name) noexcept -> bool
+{
+  return ::GetModuleHandleW(module_name) != nullptr;
+}
 
 auto IsRenderDocRequested(const oxygen::FrameCaptureProvider provider) noexcept
   -> bool
@@ -92,13 +101,9 @@ constexpr auto IsPixBuildAvailable() noexcept -> bool
 #endif
 }
 
-constexpr auto IsAftermathBuildAvailable() noexcept -> bool
+auto IsAftermathBuildAvailable() noexcept -> bool
 {
-#if defined(USE_AFTERMATH)
-  return true;
-#else
-  return false;
-#endif
+  return oxygen::graphics::d3d12::AftermathTracker::IsSdkAvailable();
 }
 
 auto RefreshToolingPolicy() noexcept -> void
@@ -107,18 +112,45 @@ auto RefreshToolingPolicy() noexcept -> void
     && g_tooling_policy.renderdoc_api_initialized;
   g_tooling_policy.pix_enabled
     = g_tooling_policy.requested_pix && IsPixBuildAvailable();
+  const auto capture_hooks_active = IsModuleLoaded(kRenderDocModuleName)
+    || IsModuleLoaded(kPixGpuCapturerModuleName)
+    || IsModuleLoaded(kPixTimingCapturerModuleName);
   g_tooling_policy.aftermath_enabled = g_tooling_policy.requested_aftermath
     && IsAftermathBuildAvailable() && !g_tooling_policy.renderdoc_enabled
-    && !g_tooling_policy.pix_enabled;
+    && !g_tooling_policy.pix_enabled && !capture_hooks_active;
 }
 
 auto IsRenderDocActive() noexcept -> bool
 {
-#if defined(USE_RENDERDOC) && __has_include(<renderdoc_app.h>)
-  return ::GetModuleHandleA("renderdoc.dll") != nullptr;
-#else
-  return false;
-#endif
+  return IsModuleLoaded(kRenderDocModuleName);
+}
+
+auto IsPixCaptureActive() noexcept -> bool
+{
+  return IsModuleLoaded(kPixGpuCapturerModuleName)
+    || IsModuleLoaded(kPixTimingCapturerModuleName);
+}
+
+auto ActiveCaptureToolName() noexcept -> const char*
+{
+  if (IsRenderDocActive()) {
+    return "RenderDoc";
+  }
+  if (IsPixCaptureActive()) {
+    return "PIX";
+  }
+  return nullptr;
+}
+
+auto RequestedCaptureToolName() noexcept -> const char*
+{
+  if (g_tooling_policy.requested_renderdoc) {
+    return "RenderDoc";
+  }
+  if (g_tooling_policy.requested_pix) {
+    return "PIX";
+  }
+  return nullptr;
 }
 
 } // namespace
@@ -163,6 +195,20 @@ void DebugLayer::ConfigureTooling(const bool enable_aftermath,
   LOG_F(INFO,
     "D3D12 tooling policy requested: aftermath={} frame_capture_provider={}",
     enable_aftermath, CaptureProviderText(frame_capture_provider));
+
+  if (const auto* requested_capture = RequestedCaptureToolName();
+    requested_capture != nullptr) {
+    LOG_F(INFO, "D3D12 frame capture layer requested by GraphicsConfig: {}",
+      requested_capture);
+  } else {
+    LOG_F(INFO, "D3D12 frame capture layer requested by GraphicsConfig: none");
+  }
+
+  if (const auto* active_capture = ActiveCaptureToolName();
+    active_capture != nullptr) {
+    LOG_F(INFO, "D3D12 frame capture layer active in this process: {}",
+      active_capture);
+  }
 
   if (enable_aftermath && !IsAftermathBuildAvailable()) {
     LOG_F(INFO,
@@ -225,21 +271,47 @@ void DebugLayer::InitializeDebugLayer(
 
 void DebugLayer::InitializeDred() noexcept
 {
-  // Initialize DRED
-  if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred_settings_)))) {
-    dred_settings_->SetAutoBreadcrumbsEnablement(
-      D3D12_DRED_ENABLEMENT_FORCED_ON);
-    dred_settings_->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-    dred_settings_->SetWatsonDumpEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
-  } else {
-    LOG_F(WARNING, "Failed to enable DRED settings");
+  // Capture tools also install early D3D12 hooks. Leave DRED at the
+  // tool/OS defaults when those hooks are active instead of probing for a
+  // settings interface that may not be exposed through the capture shim.
+  if (const auto* capture_tool = ActiveCaptureToolName();
+    capture_tool != nullptr) {
+    LOG_F(INFO,
+      "Skipping forced DRED configuration because {} capture hooks are "
+      "active; leaving DRED at tool/OS defaults",
+      capture_tool);
+    return;
   }
+
+  const auto hr = D3D12GetDebugInterface(IID_PPV_ARGS(&dred_settings_));
+  if (FAILED(hr)) {
+    LOG_F(WARNING,
+      "Failed to query DRED settings interface (hr=0x{:08X}); continuing "
+      "without forced DRED",
+      static_cast<unsigned int>(hr));
+    return;
+  }
+
+  dred_settings_->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+  dred_settings_->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+  dred_settings_->SetWatsonDumpEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+  LOG_F(
+    INFO, "Forced DRED enabled (auto-breadcrumbs, page faults, Watson dumps)");
 }
 
 void DebugLayer::InitializeAftermath() noexcept
 {
   if (!g_tooling_policy.requested_aftermath) {
     LOG_F(INFO, "Aftermath integration disabled by GraphicsConfig");
+    return;
+  }
+
+  if (const auto* capture_tool = ActiveCaptureToolName();
+    capture_tool != nullptr) {
+    LOG_F(INFO,
+      "Aftermath integration disabled because {} capture hooks are active "
+      "in this process",
+      capture_tool);
     return;
   }
 
@@ -261,6 +333,7 @@ void DebugLayer::InitializeAftermath() noexcept
     return;
   }
 
+  LOG_F(INFO, "Aftermath integration enabled");
   AftermathTracker::Instance().EnableCrashDumps();
 }
 
@@ -276,7 +349,7 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   }
   g_tooling_policy.renderdoc_bootstrap_attempted = true;
 
-  auto* renderdoc_module = ::GetModuleHandleA("renderdoc.dll");
+  auto* renderdoc_module = ::GetModuleHandleW(kRenderDocModuleName);
 
   if (renderdoc_module == nullptr) {
     LOG_F(INFO,

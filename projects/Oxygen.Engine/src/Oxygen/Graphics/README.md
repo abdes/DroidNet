@@ -477,21 +477,206 @@ Resources creates descriptor views based on shader reflection data
 
 ## Frame Capture Integration
 
-Oxygen exposes backend-owned frame capture through the common
-`graphics::FrameCaptureController` service. The current implementation is
-D3D12-only and uses the RenderDoc in-application API when configured through
-`GraphicsConfig.frame_capture`.
+Oxygen exposes backend-owned frame capture and GPU failure tooling through the
+common `graphics::FrameCaptureController` service and the D3D12 `DebugLayer`.
+The service is optional and nullable, and the capture lifecycle is bracketed
+from `Graphics::BeginFrame()` / `Graphics::EndFrame()` so renderer passes stay
+backend-agnostic.
 
-Current design constraints:
+A new developer should think of the tooling stack as separate layers:
 
-- the service is optional and nullable
-- RenderDoc is loaded dynamically, never linked as a required dependency
-- renderer passes remain backend-agnostic and continue using existing GPU event
-  scopes
-- capture lifecycle is bracketed from `Graphics::BeginFrame()` /
-  `Graphics::EndFrame()`
-- PIX remains available as a tooling provider selection for marker emission, but
-  the runtime capture controller hooks are currently RenderDoc-only
+- the D3D12 debug layer validates API usage; `GraphicsConfig.enable_debug`
+  enables it and `GraphicsConfig.enable_validation` adds GPU-based validation
+- DRED (Device Removed Extended Data) records device-removal breadcrumbs and
+  page-fault data; Oxygen force-enables it only when the debug layer is on and
+  no capture hooks are already active in the process
+- RenderDoc provides the current in-app frame capture controller; it is
+  optional and loaded dynamically, never linked as a hard runtime dependency
+- PIX provides marker/event integration through WinPixEventRuntime and can be
+  selected as the frame-capture provider, but the advanced in-app capture
+  controller flags are still RenderDoc-only
+- Nsight Aftermath provides NVIDIA GPU crash dumps and, when fully initialized,
+  DX12 markers, resource tracking, and shader error reporting
+
+### Build-Time SDK Discovery
+
+The D3D12 backend auto-discovers optional tooling packages on Windows. Repo
+helper scripts download the expected layouts into `packages/`:
+
+- `GetRenderDoc.bat` / `GetRenderDoc.ps1` -> `packages/RenderDoc`
+- `GetWinPixEvent.bat` / `GetWinPixEvent.ps1` -> `packages/WinPixEventRuntime`
+- `GetAftermath.bat` / `GetAftermath.ps1` -> `packages/NsightAftermath`
+
+If you keep the SDKs somewhere else, point CMake at them with cache variables:
+
+- `OXYGEN_RENDERDOC_DIR`
+- `OXYGEN_WINPIXEVENTRUNTIME_DIR`
+- `OXYGEN_AFTERMATH_DIR`
+
+Expected package contents:
+
+- RenderDoc: `Include/renderdoc_app.h` and optionally `Bin/x64/renderdoc.dll`
+- WinPixEventRuntime: `Include/pix3.h`, `Lib/x64/WinPixEventRuntime.lib`, and
+  `Bin/x64/WinPixEventRuntime.dll`
+- Nsight Aftermath: `Include/GFSDK_Aftermath.h` (or
+  `Include/GFSDK_Aftermath_DX12.h`), `Lib/x64/GFSDK_Aftermath_Lib.x64.lib`, and
+  `Bin/x64/GFSDK_Aftermath_Lib.x64.dll`
+
+When the SDK artifacts are present, the D3D12 build deploys the matching DLLs
+to the build output automatically.
+
+### Runtime Configuration Surface
+
+The main config knobs live in `GraphicsConfig`:
+
+```cpp
+oxygen::GraphicsConfig config {};
+config.enable_debug = true;
+config.enable_validation = false;
+config.enable_aftermath = true;
+config.frame_capture = {
+  .provider = oxygen::FrameCaptureProvider::kRenderDoc,
+  .init_mode = oxygen::FrameCaptureInitMode::kSearchPath,
+  .from_frame = 0,
+  .frame_count = 1,
+  .capture_file_template = "captures/render_scene",
+};
+```
+
+Equivalent JSON:
+
+```json
+{
+  "enable_debug": true,
+  "enable_validation": false,
+  "enable_aftermath": true,
+  "frame_capture": {
+    "provider": "renderdoc",
+    "init_mode": "search",
+    "from_frame": 0,
+    "frame_count": 1,
+    "capture_file_template": "captures/render_scene"
+  }
+}
+```
+
+Useful values:
+
+- `frame_capture.provider`: `none`, `renderdoc`, or `pix`
+- `frame_capture.init_mode`: `attached`, `search`, or `path`
+- `frame_capture.from_frame`: zero-based first rendered frame to capture
+- `frame_capture.frame_count`: number of consecutive frames to capture; `0`
+  disables configured startup capture
+- `frame_capture.module_path`: explicit DLL path used only with `init_mode=path`
+- `frame_capture.capture_file_template`: provider output template; currently
+  wired through RenderDoc
+
+RenderDoc init modes mean:
+
+- `attached`: only bind to an already-loaded `renderdoc.dll`
+- `search`: use an already-loaded `renderdoc.dll` first, otherwise load
+  `renderdoc.dll` through the normal DLL search path
+- `path`: load `renderdoc.dll` from `frame_capture.module_path`
+
+### Runtime Policy and Tool Interactions
+
+Tooling is configured before DXGI factory creation and device creation. This is
+important because RenderDoc/PIX interception, the D3D12 debug layer, and DRED
+all care about early startup ordering.
+
+The current policy is:
+
+- Oxygen logs both the requested frame-capture provider and the capture layer
+  already active in the process
+- if the D3D12 debug layer is enabled and no capture hooks are active, Oxygen
+  forces DRED auto-breadcrumbs, page-fault reporting, and Watson dumps on
+- if RenderDoc or PIX capture hooks are already active in the process, Oxygen
+  skips forced DRED and leaves DRED at the tool/OS defaults
+- if `enable_aftermath` is true, Aftermath crash-dump collection starts only
+  when the SDK is available and no active RenderDoc/PIX conflict exists
+- Aftermath DX12 initialization is attempted only after device creation and only
+  on NVIDIA adapters
+- when Aftermath DX12 initialization succeeds, Oxygen enables marker capture,
+  resource tracking, and shader error reporting
+- when a device is removed, Oxygen prints a DRED report to the log; if
+  Aftermath crash dumping is active, it writes `.nv-gpudmp` and `.nvdbg`
+  artifacts under `logs/aftermath`
+
+Current known limitations:
+
+- the in-app `FrameCaptureController` is D3D12-only and currently implemented
+  only for RenderDoc
+- PIX provider selection enables PIX event/marker emission when
+  WinPixEventRuntime is built in, but `capture-load`, `capture-library`,
+  `capture-output`, `capture-from-frame`, and `capture-frame-count` are still
+  RenderDoc-only
+- with the current debug-layer configuration, Aftermath crash-dump collection
+  can enable successfully while `GFSDK_Aftermath_DX12_Initialize` still fails
+  with `D3DDebugLayerNotCompatible`; in that state you still get Aftermath
+  crash-dump collection, but not full DX12 marker/resource tracking
+- RenderDoc or PIX capture hooks and Aftermath are intentionally not combined in
+  one process by Oxygen's startup policy
+
+### How a Developer Uses This
+
+The easiest reference demo is
+[`Examples/RenderScene/README.md`](../../../Examples/RenderScene/README.md).
+It exposes the common capture CLI used by the D3D12 examples.
+
+Typical commands from `out/build-ninja` are:
+
+```powershell
+out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider renderdoc --capture-load search --capture-from-frame 0 --capture-frame-count 1
+```
+
+```powershell
+out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider renderdoc --capture-load path --capture-library C:/Tools/RenderDoc/renderdoc.dll
+```
+
+```powershell
+out/build-ninja/bin/Debug/Oxygen.Examples.RenderScene.exe --capture-provider pix
+```
+
+Useful details:
+
+- `--capture-from-frame` is zero-based; frame `0` is the first rendered frame
+- `--capture-provider pix` is currently a tooling/marker selection; the
+  advanced capture flags above are rejected until PIX controller parity is
+  implemented
+- run `Oxygen.Examples.RenderScene.exe help-advanced` to see the hidden
+  development-only capture flags
+- when the RenderDoc provider is active, the dev console exposes
+  `gfx.capture.status`, `gfx.capture.frame`, `gfx.capture.begin`,
+  `gfx.capture.end`, `gfx.capture.discard`, and `gfx.capture.open_ui`
+- if you only want Aftermath diagnostics, leave `frame_capture.provider` at
+  `none`; that lets Oxygen try DRED + Aftermath instead of disabling Aftermath
+  for an active capture tool
+
+### What to Look for in the Log
+
+Healthy startup with no capture tool usually shows lines like:
+
+- `D3D12 frame capture layer requested by GraphicsConfig: none`
+- `D3D12 debug layer enabled (gpu_validation=off)`
+- `Forced DRED enabled (auto-breadcrumbs, page faults, Watson dumps)`
+- `Aftermath integration enabled`
+- `Aftermath: crash dump collection enabled`
+
+Healthy startup under RenderDoc usually shows lines like:
+
+- `D3D12 frame capture layer requested by GraphicsConfig: RenderDoc`
+- `D3D12 frame capture layer active in this process: RenderDoc`
+- `RenderDoc API initialized successfully before DXGI/D3D12 startup`
+- `Skipping forced DRED configuration because RenderDoc capture hooks are active; leaving DRED at tool/OS defaults`
+- `Aftermath integration disabled because RenderDoc capture hooks are active in this process`
+
+Important troubleshooting messages:
+
+- `RenderDoc frame capture requested by GraphicsConfig, but the backend was built without RenderDoc support`
+- `PIX frame capture requested by GraphicsConfig, but the backend was built without PIX support`
+- `Aftermath requested by GraphicsConfig, but the backend was built without Nsight Aftermath support`
+- `Aftermath: DX12_Initialize failed (D3DDebugLayerNotCompatible, ...)`
+- `No DRED data available`
 
 ## Design Patterns
 
