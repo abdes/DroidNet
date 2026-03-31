@@ -324,7 +324,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, LoadBackendWithDifferentConfigs)
 
   // Load with debug configuration
   oxygen::GraphicsConfig debug_config;
-  debug_config.enable_debug = true;
+  debug_config.enable_debug_layer = true;
   auto backend = loader.LoadBackend(
     oxygen::graphics::BackendType::kDirect3D12, debug_config, {});
   EXPECT_FALSE(backend.expired());
@@ -415,7 +415,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
 
   // Create a detailed config with various settings
   oxygen::GraphicsConfig config;
-  config.enable_debug = true;
+  config.enable_debug_layer = false;
   config.enable_validation = true;
   config.enable_aftermath = true;
   config.headless = false;
@@ -455,7 +455,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   // Check that the config contains our values
   EXPECT_TRUE(
     json_str.find(R"("backend_type": "Direct3D12")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("enable_debug": true)") != std::string::npos);
+  EXPECT_TRUE(
+    json_str.find(R"("enable_debug_layer": false)") != std::string::npos);
   EXPECT_TRUE(
     json_str.find(R"("enable_validation": true)") != std::string::npos);
   EXPECT_TRUE(
@@ -495,7 +496,7 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, PixConfigSerialization)
   auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
 
   oxygen::GraphicsConfig config;
-  config.enable_debug = true;
+  config.enable_debug_layer = true;
   config.frame_capture = {
     .provider = oxygen::FrameCaptureProvider::kPix,
     .init_mode = oxygen::FrameCaptureInitMode::kSearchPath,
@@ -525,6 +526,20 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, PixConfigSerialization)
   EXPECT_TRUE(
     json_str.find(R"("capture_file_template": "captures/pix/render_scene")")
     != std::string::npos);
+}
+
+NOLINT_TEST_F(
+  GraphicsBackendLoaderTest, RejectsMutuallyExclusiveGraphicsToolingConfig)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+
+  oxygen::GraphicsConfig config;
+  config.enable_debug_layer = true;
+  config.enable_aftermath = true;
+
+  EXPECT_THROW(static_cast<void>(loader.LoadBackend(
+                 oxygen::graphics::BackendType::kDirect3D12, config, {})),
+    std::invalid_argument);
 }
 
 NOLINT_TEST_F(GraphicsBackendLoaderTest,

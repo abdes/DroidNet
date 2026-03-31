@@ -648,7 +648,7 @@ When a GPU test crashes with `DXGI_ERROR_DEVICE_REMOVED` or `E_FAIL` from a D3D1
 
 ### Validation layer errors
 
-The D3D12 debug layer is enabled by setting `enable_debug = true` in `GraphicsConfig` when constructing the backend. GPU test fixtures that need it must override `BackendConfigJson()` to return JSON with `"enable_debug": true`. Validation errors are printed to the test output stream via the DXGI info queue. Address them before investigating TDRs — many TDRs are caused by a prior validation error that went unnoticed.
+The D3D12 debug layer is enabled by setting `enable_debug_layer = true` in `GraphicsConfig` when constructing the backend. GPU test fixtures that need it must override `BackendConfigJson()` to return JSON with `"enable_debug_layer": true`. Validation errors are printed to the test output stream via the DXGI info queue. Address them before investigating TDRs — many TDRs are caused by a prior validation error that went unnoticed.
 
 ### Shader not found at runtime
 

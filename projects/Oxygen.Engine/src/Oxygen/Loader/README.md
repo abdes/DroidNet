@@ -98,9 +98,9 @@ Below is an example of how the config data is setup on the application side:
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 
 oxygen::GraphicsConfig config{};
-config.enable_debug = true;
+config.enable_debug_layer = true;
 config.enable_validation = true;
-config.enable_aftermath = true;      // Default: prefer Aftermath when available
+config.enable_aftermath = false;     // Default: disabled in all builds
 config.enable_imgui = true;          // Example additional flag
 config.enable_vsync = true;          // VSync preference
 config.preferred_card_name = "NVIDIA";
@@ -113,6 +113,11 @@ config.frame_capture = {
   .capture_file_template = "captures/render_scene",
 };
 config.extra = R"({"custom_option": 42, "shader_cache": true})"; // Backend-specific JSON
+
+// Graphics tooling policy:
+// - Debug builds default to enable_debug_layer=true and enable_aftermath=false
+// - Release builds default to both being false
+// - enable_debug_layer and enable_aftermath are mutually exclusive
 
 // Strict mode (engine runtime)
 auto& loader_strict = oxygen::GraphicsBackendLoader::GetInstance();
@@ -132,9 +137,9 @@ producing an equivalent string as following:
 ```json
 {
   "backend_type": "Direct3D12",
-  "enable_debug": true,
+  "enable_debug_layer": true,
   "enable_validation": true,
-  "enable_aftermath": true,
+  "enable_aftermath": false,
   "headless": false,
   "enable_imgui": true,
   "enable_vsync": true,
@@ -166,7 +171,7 @@ void* CreateBackend(const SerializedBackendConfig& config,
   std::string paths_json(path_finder_config.json_data, path_finder_config.size);
   auto parsed_paths = nlohmann::json::parse(paths_json);
   // Example: read settings
-  const bool enable_debug = parsed.value("enable_debug", false);
+  const bool enable_debug_layer = parsed.value("enable_debug_layer", false);
   const std::string backend = parsed.value("backend_type", "");
   const auto frame_capture = parsed.value("frame_capture", nlohmann::json::object());
   const std::string frame_capture_provider

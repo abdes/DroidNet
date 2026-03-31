@@ -49,7 +49,11 @@ auto main([[maybe_unused]] int argc, [[maybe_unused]] char* argv[]) -> int
 
     // 2- The graphics backend module
     const oxygen::GraphicsBackendProperties backend_props {
+#if defined(NDEBUG)
+      .enable_debug = false,
+#else
       .enable_debug = true,
+#endif
       .enable_validation = false,
       // We want a renderer
       .renderer_props = oxygen::graphics::RendererProperties {},

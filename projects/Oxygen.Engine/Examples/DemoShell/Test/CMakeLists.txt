@@ -21,3 +21,10 @@ m_gtest_program(
 )
 
 m_gtest_program(FrameCaptureCli SOURCES "FrameCaptureCli_test.cpp")
+
+m_gtest_program(GraphicsToolingCli SOURCES "GraphicsToolingCli_test.cpp")
+target_link_libraries(
+  "Oxygen.Examples.DemoShell.GraphicsToolingCli.Tests"
+  PRIVATE
+    oxygen::clap
+)

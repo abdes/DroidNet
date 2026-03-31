@@ -105,15 +105,9 @@ concept DeviceRemovalHandler
     };
 
 struct DeviceManagerDesc {
-  bool enable_debug {
-#if defined(NDEBUG)
-    false
-#else
-    true
-#endif
-  };
+  bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
   bool enable_validation { false };
-  bool enable_aftermath { true };
+  bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
   FrameCaptureConfig frame_capture {};
   bool require_display { true };
   bool auto_select_adapter { true };

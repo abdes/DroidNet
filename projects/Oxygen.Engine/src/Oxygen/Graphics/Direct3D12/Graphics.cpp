@@ -387,8 +387,13 @@ Graphics::Graphics(const SerializedBackendConfig& config,
 
   DeviceManagerDesc desc {};
   const auto frame_capture_config = ParseFrameCaptureConfig(jsonConfig);
-  if (jsonConfig.contains("enable_debug")) {
-    desc.enable_debug = jsonConfig["enable_debug"].get<bool>();
+  if (jsonConfig.contains("enable_debug_layer")) {
+    desc.enable_debug_layer = jsonConfig["enable_debug_layer"].get<bool>();
+  } else if (jsonConfig.contains("enable_debug")) {
+    desc.enable_debug_layer = jsonConfig["enable_debug"].get<bool>();
+    LOG_F(WARNING,
+      "D3D12 Graphics: legacy serialized key 'enable_debug' detected; "
+      "treating it as 'enable_debug_layer'");
   }
   if (jsonConfig.contains("enable_validation")) {
     desc.enable_validation = jsonConfig["enable_validation"].get<bool>();
@@ -396,6 +401,21 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   if (jsonConfig.contains("enable_aftermath")) {
     desc.enable_aftermath = jsonConfig["enable_aftermath"].get<bool>();
   }
+  if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
+        desc.enable_debug_layer, desc.enable_aftermath)) {
+    LOG_F(ERROR,
+      "D3D12 Graphics rejected serialized tooling config: debug_layer={} "
+      "aftermath={} (mutually exclusive)",
+      desc.enable_debug_layer, desc.enable_aftermath);
+    throw std::invalid_argument(
+      "Serialized backend config cannot enable both the D3D12 debug layer "
+      "and Nsight Aftermath");
+  }
+  LOG_F(INFO,
+    "D3D12 Graphics resolved tooling config: debug_layer={} validation={} "
+    "aftermath={} capture_provider={}",
+    desc.enable_debug_layer, desc.enable_validation, desc.enable_aftermath,
+    static_cast<int>(frame_capture_config.provider));
   desc.frame_capture = frame_capture_config;
   if (jsonConfig.contains("enable_vsync")) {
     enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();

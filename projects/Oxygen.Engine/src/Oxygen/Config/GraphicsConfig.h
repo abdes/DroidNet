@@ -13,6 +13,26 @@
 
 namespace oxygen {
 
+constexpr auto DefaultGraphicsDebugLayerEnabled() noexcept -> bool
+{
+#if defined(NDEBUG)
+  return false;
+#else
+  return true;
+#endif
+}
+
+constexpr auto DefaultGraphicsAftermathEnabled() noexcept -> bool
+{
+  return false;
+}
+
+constexpr auto AreGraphicsToolingOptionsMutuallyExclusive(
+  const bool enable_debug_layer, const bool enable_aftermath) noexcept -> bool
+{
+  return !(enable_debug_layer && enable_aftermath);
+}
+
 //! Identifies a GPU device in the system.
 /*!
   The device ID is a unique identifier for a GPU device in the system. The
@@ -58,9 +78,13 @@ struct FrameCaptureConfig {
 //! Graphics configuration data, serialized to JSON and used to configure the
 //! graphics backend module when being loaded.
 struct GraphicsConfig {
-  bool enable_debug { false }; //!< Enable the backend debug layer.
+  bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
+  //!< Enable the backend D3D12 debug layer. Mutually exclusive with
+  //!< `enable_aftermath`.
   bool enable_validation { false }; //!< Enable GPU validation.
-  bool enable_aftermath { true }; //!< Enable Nsight Aftermath when available.
+  bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
+  //!< Enable Nsight Aftermath when available. Mutually exclusive with
+  //!< `enable_debug_layer`.
 
   //! Device selection guidance.
   /*!

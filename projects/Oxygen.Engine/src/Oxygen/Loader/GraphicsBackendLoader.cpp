@@ -37,6 +37,20 @@ using oxygen::loader::detail::PlatformServices;
 
 namespace {
 
+auto ValidateGraphicsToolingConfig(const GraphicsConfig& config) -> void
+{
+  if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
+        config.enable_debug_layer, config.enable_aftermath)) {
+    LOG_F(ERROR,
+      "Rejected GraphicsConfig: debug_layer={} aftermath={} "
+      "(mutually exclusive)",
+      config.enable_debug_layer, config.enable_aftermath);
+    throw std::invalid_argument(
+      "GraphicsConfig.enable_debug_layer and GraphicsConfig.enable_aftermath "
+      "are mutually exclusive");
+  }
+}
+
 auto EscapeJsonString(std::string_view input) -> std::string
 {
   std::string out;
@@ -148,7 +162,7 @@ auto GetBackendModuleDllName(const BackendType backend) -> std::string
 
  ```cpp
  GraphicsConfig config{};
- config.enable_debug = true;
+ config.enable_debug_layer = true;
  auto json = SerializeConfigToJson(config, BackendType::kDirect3D12);
  // Returns properly formatted JSON for backend initialization
  ```
@@ -156,6 +170,16 @@ auto GetBackendModuleDllName(const BackendType backend) -> std::string
 auto SerializeConfigToJson(
   const GraphicsConfig& config, BackendType backend_type) -> std::string
 {
+  ValidateGraphicsToolingConfig(config);
+
+  LOG_F(INFO,
+    "Serializing graphics config: backend={} debug_layer={} validation={} "
+    "aftermath={} headless={} imgui={} vsync={} capture_provider={}",
+    nostd::to_string(backend_type), config.enable_debug_layer,
+    config.enable_validation, config.enable_aftermath, config.headless,
+    config.enable_imgui, config.enable_vsync,
+    ToJsonString(config.frame_capture.provider));
+
   // Start building the JSON object
   std::string json = "{\n";
 
@@ -163,8 +187,8 @@ auto SerializeConfigToJson(
   json += R"(  "backend_type": ")" + nostd::to_string(backend_type) + "\",\n";
 
   // Add basic boolean properties
-  json += "  \"enable_debug\": "
-    + std::string(config.enable_debug ? "true" : "false") + ",\n";
+  json += "  \"enable_debug_layer\": "
+    + std::string(config.enable_debug_layer ? "true" : "false") + ",\n";
   json += "  \"enable_validation\": "
     + std::string(config.enable_validation ? "true" : "false") + ",\n";
   json += "  \"enable_aftermath\": "
@@ -712,7 +736,7 @@ GraphicsBackendLoader::~GraphicsBackendLoader() = default;
  ```cpp
  auto& loader = GraphicsBackendLoader::GetInstance();
  GraphicsConfig config{};
- config.enable_debug = true;
+ config.enable_debug_layer = true;
  PathFinderConfig path_finder_config{};
 
  auto backend = loader.LoadBackend(
