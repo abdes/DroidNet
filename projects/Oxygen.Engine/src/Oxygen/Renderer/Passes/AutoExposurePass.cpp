@@ -801,6 +801,20 @@ auto AutoExposurePass::EnsureExposureStateForView(
     }
 
     EnsureExposureInitUploadBuffer(recorder);
+    if (!recorder.IsResourceTracked(*init_upload_buffer_)) {
+      recorder.BeginTrackingResourceState(
+        *init_upload_buffer_, graphics::ResourceStates::kCopySource, false);
+    }
+
+    // Fresh exposure buffers are seeded through an explicit upload copy.
+    // CopyBuffer does not inject state transitions on its own, so the recorder
+    // must establish COPY_SOURCE/COPY_DEST before the copy and only then
+    // promote the buffer to its steady-state UAV use for this pass.
+    recorder.RequireResourceState(
+      *init_upload_buffer_, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      *state.buffer, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
 
     recorder.CopyBuffer(
       *state.buffer, 0, *init_upload_buffer_, 0, kExposureStateBufferSizeBytes);
@@ -954,11 +968,14 @@ auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
       *init_upload_buffer_, kCopySource, false);
   }
 
+  recorder.RequireResourceState(*init_upload_buffer_, kCopySource);
   recorder.RequireResourceState(*state.buffer, kCopyDest);
   recorder.FlushBarriers();
 
   recorder.CopyBuffer(
     *state.buffer, 0, *init_upload_buffer_, 0, kExposureStateBufferSizeBytes);
+  recorder.RequireResourceState(*state.buffer, kShaderResource);
+  recorder.FlushBarriers();
 }
 
 } // namespace oxygen::engine
