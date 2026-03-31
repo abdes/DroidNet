@@ -34,6 +34,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
+#include <Oxygen/Renderer/Passes/ScreenHzbBuildPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Types/LightCullingConfig.h>
@@ -75,13 +76,19 @@ namespace {
   //! Pass constants uploaded to GPU for the light culling dispatch.
   /*!
    Layout must match `LightCullingPassConstants` in LightCulling.hlsl.
-  */
+ */
   struct alignas(packing::kShaderDataFieldAlignment) LightCullingPassConstants {
     // Resources (heap indices)
-    ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex closest_hzb_texture_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex furthest_hzb_texture_index {
+      kInvalidShaderVisibleIndex
+    };
     ShaderVisibleIndex light_buffer_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex light_list_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex light_count_uav_index { kInvalidShaderVisibleIndex };
+    uint32_t hzb_width { 0 };
+    uint32_t hzb_height { 0 };
+    uint32_t hzb_mip_count { 0 };
 
     // Dispatch parameters
     glm::mat4 inv_projection_matrix { 1.0F };
@@ -138,6 +145,7 @@ struct LightCullingPass::Impl {
   uint32_t light_list_buffer_capacity { 0 };
 
   DepthPrePassOutput depth_output {};
+  SceneDepthDerivatives scene_depth_derivatives {};
   bool resources_prepared { false };
 
   // Cached light data from LightManager
@@ -537,6 +545,7 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
   impl_->resources_prepared = false;
   impl_->depth_output = {};
+  impl_->scene_depth_derivatives = {};
   ++impl_->telemetry_.frames_prepared;
   if (Context().current_view.depth_prepass_completeness
     == renderer::DepthPrePassCompleteness::kDisabled) {
@@ -568,7 +577,24 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const auto& depth_tex = *impl_->depth_output.depth_texture;
+  const auto* screen_hzb_pass = Context().GetPass<ScreenHzbBuildPass>();
+  if (screen_hzb_pass == nullptr) {
+    LOG_F(WARNING,
+      "LightCullingPass skipped because ScreenHzbBuildPass is unavailable");
+    co_return;
+  }
+  impl_->scene_depth_derivatives
+    = screen_hzb_pass->GetCurrentOutput(Context().current_view.view_id);
+  if (!impl_->scene_depth_derivatives.available
+    || impl_->scene_depth_derivatives.closest_texture == nullptr
+    || impl_->scene_depth_derivatives.furthest_texture == nullptr
+    || !impl_->scene_depth_derivatives.closest_srv_index.IsValid()
+    || !impl_->scene_depth_derivatives.furthest_srv_index.IsValid()) {
+    LOG_F(WARNING,
+      "LightCullingPass skipped because scene depth derivatives are "
+      "incomplete");
+    co_return;
+  }
 
   const auto& cluster_cfg = impl_->config->cluster;
   impl_->grid_dims
@@ -604,22 +630,39 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   impl_->EnsurePassConstantsBuffer();
   SetPassConstantsIndex(impl_->pass_constants_index);
 
-  recorder.BeginTrackingResourceState(
-    *impl_->cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    *impl_->light_index_list_buffer, graphics::ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    depth_tex, DepthTextureInitialState(depth_tex), true);
+  if (!recorder.IsResourceTracked(*impl_->cluster_grid_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->light_index_list_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->light_index_list_buffer, graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->scene_depth_derivatives.closest_texture)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->scene_depth_derivatives.closest_texture,
+      graphics::ResourceStates::kShaderResource, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->scene_depth_derivatives.furthest_texture)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->scene_depth_derivatives.furthest_texture,
+      graphics::ResourceStates::kShaderResource, true);
+  }
   if (impl_->num_positional_lights > 0) {
     CHECK_NOTNULL_F(impl_->positional_lights_buffer,
       "LightCullingPass expected positional light buffer for {} lights",
       impl_->num_positional_lights);
-    recorder.BeginTrackingResourceState(*impl_->positional_lights_buffer,
-      graphics::ResourceStates::kGenericRead, true);
+    if (!recorder.IsResourceTracked(*impl_->positional_lights_buffer)) {
+      recorder.BeginTrackingResourceState(*impl_->positional_lights_buffer,
+        graphics::ResourceStates::kGenericRead, true);
+    }
   }
 
+  recorder.RequireResourceState(*impl_->scene_depth_derivatives.closest_texture,
+    graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
-    depth_tex, graphics::ResourceStates::kShaderResource);
+    *impl_->scene_depth_derivatives.furthest_texture,
+    graphics::ResourceStates::kShaderResource);
   if (impl_->num_positional_lights > 0) {
     recorder.RequireResourceState(
       *impl_->positional_lights_buffer, graphics::ResourceStates::kGenericRead);
@@ -684,7 +727,9 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   }
 
   if (!impl_->depth_output.is_complete
-    || impl_->depth_output.depth_texture == nullptr) {
+    || !impl_->scene_depth_derivatives.available
+    || impl_->scene_depth_derivatives.closest_texture == nullptr
+    || impl_->scene_depth_derivatives.furthest_texture == nullptr) {
     co_return;
   }
 
@@ -700,14 +745,17 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const ShaderVisibleIndex depth_srv_index
-    = impl_->depth_output.canonical_srv_index;
-
   LightCullingPassConstants constants {
-    .depth_texture_index = depth_srv_index,
+    .closest_hzb_texture_index
+    = impl_->scene_depth_derivatives.closest_srv_index,
+    .furthest_hzb_texture_index
+    = impl_->scene_depth_derivatives.furthest_srv_index,
     .light_buffer_index = positional_lights_srv,
     .light_list_uav_index = impl_->light_index_list_uav,
     .light_count_uav_index = impl_->cluster_grid_uav,
+    .hzb_width = impl_->scene_depth_derivatives.width,
+    .hzb_height = impl_->scene_depth_derivatives.height,
+    .hzb_mip_count = impl_->scene_depth_derivatives.mip_count,
     .inv_projection_matrix = Context().current_view.resolved_view
       ? Context().current_view.resolved_view->InverseProjection()
       : glm::mat4 { 1.0F },

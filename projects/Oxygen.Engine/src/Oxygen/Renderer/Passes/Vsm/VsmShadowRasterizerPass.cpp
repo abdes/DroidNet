@@ -395,7 +395,7 @@ struct VsmShadowRasterizerPass::Impl {
   bool instance_culling_ready { false };
   std::optional<std::uint32_t> dynamic_slice_index {};
   std::optional<std::uint32_t> static_slice_index {};
-  ScreenHzbBuildPass::ViewOutput previous_frame_hzb {};
+  SceneDepthDerivatives previous_frame_hzb {};
   std::uint32_t deferred_non_dynamic_pages { 0U };
 
   std::shared_ptr<Buffer> shadow_view_constants_buffer_ {};
@@ -1585,10 +1585,11 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     screen_hzb_pass != nullptr) {
     previous_frame_hzb
       = screen_hzb_pass->GetPreviousFrameOutput(context.current_view.view_id);
-    if (previous_frame_hzb.available && previous_frame_hzb.texture != nullptr
-      && !recorder.IsResourceTracked(*previous_frame_hzb.texture)) {
-      recorder.BeginTrackingResourceState(
-        *previous_frame_hzb.texture, ResourceStates::kShaderResource, true);
+    if (previous_frame_hzb.available
+      && previous_frame_hzb.furthest_texture != nullptr
+      && !recorder.IsResourceTracked(*previous_frame_hzb.furthest_texture)) {
+      recorder.BeginTrackingResourceState(*previous_frame_hzb.furthest_texture,
+        ResourceStates::kShaderResource, true);
     }
   }
 
@@ -1648,9 +1649,10 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
     recorder.RequireResourceState(
       *state.count_buffer, ResourceStates::kUnorderedAccess);
   }
-  if (previous_frame_hzb.available && previous_frame_hzb.texture != nullptr) {
+  if (previous_frame_hzb.available
+    && previous_frame_hzb.furthest_texture != nullptr) {
     recorder.RequireResourceState(
-      *previous_frame_hzb.texture, ResourceStates::kShaderResource);
+      *previous_frame_hzb.furthest_texture, ResourceStates::kShaderResource);
   }
   recorder.FlushBarriers();
 
@@ -1663,7 +1665,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareInstanceCulling(
       .draw_metadata_index = prepared_frame.bindless_draw_metadata_slot,
       .draw_bounds_index = prepared_frame.bindless_draw_bounds_slot,
       .previous_frame_hzb_index = previous_frame_hzb.available
-        ? previous_frame_hzb.srv_index
+        ? previous_frame_hzb.furthest_srv_index
         : oxygen::kInvalidShaderVisibleIndex,
       .indirect_commands_uav_index = state.command_uav,
       .command_counts_uav_index = state.count_uav,

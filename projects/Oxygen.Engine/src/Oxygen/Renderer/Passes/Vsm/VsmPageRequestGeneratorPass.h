@@ -33,6 +33,7 @@ namespace oxygen::engine {
 struct VsmPageRequestGeneratorPassConfig {
   std::uint32_t max_projection_count { 128U };
   std::uint32_t max_virtual_page_count { 0U };
+  // Coarse pages are a VSM page-policy output, not a scene-HZB pre-pass.
   bool enable_coarse_pages { true };
   bool enable_light_grid_pruning { true };
   std::string debug_name { "VsmPageRequestGeneratorPass" };

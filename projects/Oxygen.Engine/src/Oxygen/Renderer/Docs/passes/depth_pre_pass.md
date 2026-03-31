@@ -152,9 +152,9 @@ depth is the numerically smallest. The channels are named by semantic meaning
 | `TransparentPass` | `DepthPrePassOutput` (DSV) | Read-only depth test (`kGreaterOrEqual`); not depth-equal eligible |
 | `SkyPass` | `DepthPrePassOutput` (DSV + SRV) | Read-only depth test + shader depth reads for atmosphere |
 | `GroundGridPass` | `DepthPrePassOutput` (SRV) | Shader depth reads for grid intersection; no depth test |
-| `LightCullingPass` | Closest + furthest HZB | Tile depth bounds via HZB mip lookup |
-| `VsmPageRequestGeneratorPass` | Closest + furthest HZB | Coarse tile early-out + per-pixel depth for page requests |
-| `VsmInstanceCulling` | Previous-frame closest HZB | Occlusion culling against projected AABB bounds |
+| `LightCullingPass` | Closest + furthest HZB | Tile depth bounds via HZB mip lookup plus clustered slice-range rejection |
+| `VsmPageRequestGeneratorPass` | `DepthPrePassOutput` (SRV) | Per-pixel depth analysis for VSM page requests; optional coarse-page flags remain a separate VSM policy |
+| `VsmInstanceCulling` | Previous-frame furthest HZB | Occlusion culling against projected AABB bounds |
 | `ScreenHzbBuildPass` | `DepthPrePassOutput` (SRV) | Source for mip-0 of the HZB pyramid |
 
 ## Downstream Depth Exploitation
@@ -188,14 +188,15 @@ gate their dispatch on `completeness != kDisabled`. When depth is incomplete,
 each consumer documents whether it falls back to conservative behavior or skips
 dispatch entirely.
 
-`LightCullingPass` derives per-tile depth bounds from a single HZB mip lookup
-per tile (closest + furthest at the tile's spatial extent) instead of per-tile
-raw-depth shared-memory reduction. In clustered mode, the tile bounds
-additionally skip clusters outside the tile's depth range.
+`LightCullingPass` now consumes the shared closest+furthest HZB and derives
+per-tile depth bounds from a single HZB mip lookup instead of the removed
+raw-depth tile-reduction path. The clustered path uses the same shared bounds
+to reject cluster slices outside the tile depth range.
 
-`VsmPageRequestGeneratorPass` uses a coarse HZB pre-pass at tile granularity
-to skip tiles whose depth range maps entirely to already-requested pages before
-falling through to per-pixel processing.
+`VsmPageRequestGeneratorPass` remains on the canonical raw-depth SRV for
+per-pixel page marking. Its `enable_coarse_pages` behavior is a separate VSM
+coverage policy layered on top of the page-request results; it is not a
+consumer of `SceneDepthDerivatives`.
 
 ## Pipeline State
 
@@ -275,7 +276,7 @@ shader depth reads are needed.
 | Depth clear and population | `DepthPrePass` |
 | Completeness publication | `DepthPrePass` |
 | HZB production | `ScreenHzbBuildPass` |
-| HZB consumption | Each downstream pass via `SceneDepthDerivatives` contract |
+| HZB consumption | `VsmInstanceCulling` and other verified HZB consumers via `SceneDepthDerivatives` |
 | Depth convention | Engine-wide (reversed-Z); consumers read from output metadata |
 
 No pass outside `DepthPrePass` may create depth SRVs for the scene depth

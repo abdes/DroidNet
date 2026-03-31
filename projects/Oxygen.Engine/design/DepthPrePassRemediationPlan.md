@@ -1000,23 +1000,42 @@ Status: `in_progress`
 Problem:
 - `ScreenHzbBuildPass` produces only a min (closest) HZB pyramid; no furthest
   (max) HZB exists
-- `LightCullingPass` ignores the HZB entirely and rebuilds its own per-tile
-  depth min/max from raw depth via a 256-thread shared-memory parallel
-  reduction inside each 16x16 threadgroup
-- `VsmPageRequestGeneratorPass` reads raw depth per-pixel and does not leverage
-  any hierarchical product for early-out or coarse-grained page decisions
-- the HZB's only consumer today is `VsmInstanceCulling` (previous-frame
-  occlusion culling); the investment in building a full mip pyramid every
-  frame is underexploited
-- light culling tile bounds are ephemeral and cannot be reused by any other
-  system that needs the same information
+- Oxygen's DP-7 plan/docs overstated UE5-like downstream scene-HZB usage:
+  local UE source does not support the claim that scene HZB should drive
+  clustered light-grid construction or primary VSM page-request generation
+- current Oxygen naming/consumer semantics around previous-frame VSM occlusion
+  are stale relative to UE's furthest-HZB convention
+- without correcting those assumptions first, any DP-7 "UE5 closeness" claim
+  would be misleading
 
 Goal:
-- produce a canonical dual min+max HZB from the depth prepass
-- route `LightCullingPass` and `VsmPageRequestGeneratorPass` through shared
-  depth derivatives instead of private raw-depth reduction paths
-- ensure every depth derivative is built once and consumed by all systems that
-  need it
+- produce a canonical dual closest+furthest scene HZB from the depth prepass
+  that matches UE's scene-HZB production shape
+- route only verified HZB consumers through that shared contract
+- keep clustered light culling and VSM coarse-page policy separate from
+  `SceneDepthDerivatives` unless a later phase explicitly chooses a non-UE
+  optimization and documents it as such
+- state UE5-closeness gaps truthfully instead of papering them over with
+  invented scene-HZB dependencies
+
+Scope correction (April 1, 2026):
+
+- verified local UE source:
+  - `SceneTextureReductions.cpp` + `DeferredShadingRenderer.cpp` build
+    separate `HZBClosest` and `HZBFurthest` scene products
+  - `LightGridInjection.cpp` + `LightGridInjection.usf` build the clustered
+    light grid from geometric cell bounds and logarithmic Z slicing, not from
+    scene-HZB tile min/max
+  - `VirtualShadowMapArray.cpp` +
+    `Shaders/Private/VirtualShadowMaps/VirtualShadowMapPageMarking.usf`
+    generate VSM page requests from projected pixels, with a separate
+    `MarkCoarsePages` coverage policy pass and `PruneLightGrid` pass
+  - UE previous-frame occlusion stores/extracts the furthest scene HZB
+    (`View.ViewState->PrevFrameViewInfo.HZB`), not the closest channel
+- DP-7 therefore does not claim scene-HZB light-culling parity or add a
+  fabricated scene-HZB gate to `VsmPageRequestGeneratorPass`
+- `VsmPageRequestGeneratorPass.enable_coarse_pages` remains a separate VSM page
+  policy, not a `SceneDepthDerivatives` consumer
 
 Pre-implementation audit (completed March 31, 2026):
 
@@ -1028,7 +1047,7 @@ Current depth derivative producers and consumers:
   - output contract: `ViewOutput { texture, srv_index, width, height,
     mip_count, available }`
   - consumers: `VsmInstanceCulling` (previous-frame HZB occlusion test) only
-  - gap: no max pyramid; light culling and VSM page requests do not consume it
+  - gap: no furthest pyramid and stale single-channel consumer semantics
 
 - `LightCullingPass`
   - source: raw depth via `DepthPrePassOutput.canonical_srv_index`
@@ -1037,16 +1056,16 @@ Current depth derivative producers and consumers:
   - tile min/max is used in the legacy tiled path (`CLUSTERED=0`) only; the
     active clustered path (`CLUSTERED=1`) computes cluster Z bounds from
     logarithmic slicing math and ignores the tile reduction result
-  - gap: the per-tile reduction work is wasted in clustered mode; a shared HZB
-    product could provide the same bounds without per-tile raw-depth reads
+  - note: this remains an Oxygen-specific gap, but local UE source does not
+    justify rerouting it through scene HZB in this phase
 
 - `VsmPageRequestGeneratorPass`
   - source: raw depth via `DepthPrePassOutput.canonical_srv_index`
   - method: per-pixel depth load, reconstruct world position, project into each
     VSM, `InterlockedOr` page request flags
-  - gap: no hierarchical early-out; every screen pixel is processed even when
-    entire tiles map to the same VSM page; a coarse HZB pass could skip tiles
-    whose depth range maps entirely within an already-requested page
+  - note: this is the primary page-marking path and stays on raw depth in this
+    phase; UE5 coarse pages are a separate coverage policy, not the same as a
+    scene-HZB early-out
 
 - `VsmHzbUpdaterPass` (shadow-domain, not scene-domain)
   - source: shadow depth atlas (separate domain from scene depth)
@@ -1063,88 +1082,113 @@ Implementation work:
      furthest depth is the min value; name the channels by semantic meaning
      (`closest`, `furthest`) rather than by operation to avoid convention
      confusion
-   - output format options: either a two-channel `RG32Float` texture or two
-     separate `R32Float` pyramids; prefer the two-channel format to halve
-     dispatch count and descriptor pressure
-   - update `ViewOutput` to expose both `closest_srv_index` and
-     `furthest_srv_index` (or a single SRV with two channels)
-   - update `VsmInstanceCulling` to consume from the renamed output; this is a
-     rename-only change since it already reads the closest channel
+   - use two separate `R32Float` pyramids for the scene implementation so the
+     closest/furthest products stay explicit and descriptor semantics remain
+     straightforward
+   - publish the result through `SceneDepthDerivatives` with both
+     `closest_srv_index` and `furthest_srv_index`
+   - update previous-frame HZB consumers to use the semantic furthest channel,
+     matching UE's extracted previous-frame HZB convention
 
-2. route `LightCullingPass` through the shared HZB:
-   - replace the per-tile 256-thread shared-memory depth reduction with a
-     single HZB mip lookup at the tile's spatial extent
-   - for a 16x16 tile, the correct HZB mip is `ceil(log2(16)) = 4`; a single
-     `Load()` from the closest and furthest HZB at that mip gives exact tile
-     min/max without 256 raw-depth reads and 8 barrier-synchronized reduction
-     steps
-   - in clustered mode, the tile min/max from the HZB can additionally be used
-     to skip clusters that fall entirely outside the tile's depth range,
-     tightening the light-tile intersection and reducing false positives
-   - this eliminates the raw-depth SRV dependency from `LightCullingPass`
-     entirely; it consumes the HZB SRV instead
-   - savings: 256 texture loads + 8 barrier rounds per tile → 2 texture loads
-     per tile; at 1280x720 with 16x16 tiles = 3600 tiles, this is 920K fewer
-     texture loads per frame
+2. remove the incorrect scene-HZB consumer claims from `LightCullingPass` in
+   this phase:
+   - keep `LightCullingPass` on its current raw-depth path unless and until a
+     later phase explicitly pursues a non-UE optimization
+   - do not describe the current clustered light-grid path as UE-like while
+     the local UE source shows geometric cell bounds instead
 
-3. add coarse-grained HZB early-out to `VsmPageRequestGeneratorPass`:
-   - add an optional coarse pre-pass that samples the HZB at tile granularity
-     to determine whether an entire tile's depth range maps to pages that are
-     already requested or already resident
-   - tiles where the entire depth range falls within a single VSM page (or a
-     set of already-flagged pages) can skip the per-pixel pass entirely
-   - this does not replace the per-pixel path; it gates it
-   - expected benefit scales with scene depth coherence: for typical outdoor
-     scenes with large uniform-depth regions, a significant fraction of tiles
-     will early-out; for highly fragmented depth, the overhead of the coarse
-     pass is one HZB load per tile (negligible)
-   - if profiling shows the coarse pass does not pay for itself on Oxygen's
-     target scenes, defer this optimization and document the measurement
+3. keep `VsmPageRequestGeneratorPass` on its existing raw-depth marking path:
+   - do not add a scene-HZB gate here in DP-7; that would move Oxygen away
+     from the documented UE5 VSM shape rather than closer to it
+   - keep `enable_coarse_pages` as an explicit VSM page-policy output layered
+     on top of the per-pixel depth analysis, not a `SceneDepthDerivatives`
+     consumer
+   - if a later phase identifies a measurable and architecturally clean page-
+     request optimization, document that as a separate policy/validation task
+     instead of folding it into the shared scene-HZB contract
 
-4. publish a unified scene-depth derivatives contract:
+4. publish a unified scene-depth derivatives contract for verified HZB
+   consumers:
    - define a `SceneDepthDerivatives` or extend `DepthPrePassOutput` with:
      - raw depth texture + canonical SRV (already exists from DP-2)
      - closest HZB texture + SRV + mip count
      - furthest HZB texture + SRV + mip count (or second channel)
      - dimensions matching the depth target
      - depth convention metadata (from DP-5)
-   - all consumers that need hierarchical depth must consume from this contract
-     instead of building private reductions
+   - only consumers that actually need scene-hierarchical depth should consume
+     from this contract
 
-5. remove the dead per-tile reduction from `LightCulling.hlsl`:
-   - once the HZB path is validated, remove the shared-memory reduction code
-     and the `s_DepthTileMin` / `s_DepthTileMax` arrays
-   - this simplifies the shader and frees 2KB of groupshared memory per
-     threadgroup
+5. document the remaining UE-closeness gap explicitly:
+   - Oxygen still lacks a UE-like clustered light-grid path; keeping the
+     current raw-depth tile reduction is truthful for now, but not a reason to
+     declare DP-7 complete
 
 Validation:
-- correctness: `LightCullingPass` HZB-based tile bounds must produce identical
-  or tighter light-tile intersection results compared to the current
-  shared-memory reduction; validate on a scene with many overlapping lights
-- correctness: `VsmPageRequestGeneratorPass` coarse early-out must not miss
-  any page request that the per-pixel path would generate; validate by running
-  both paths and comparing request bitmaps
-- performance: pass-level GPU timing before/after for `LightCullingPass` and
-  `VsmPageRequestGeneratorPass` on `RenderScene` with `--directional-shadows
-  conventional` and with VSM
+- correctness: `ScreenHzbBuildPass` must publish both closest and furthest
+  scene HZB products with correct reversed-Z semantics
+- correctness: previous-frame scene-HZB consumers must bind the furthest
+  channel, matching the verified UE convention
+- regression: `VsmPageRequestGeneratorPass` request bitmaps and coarse-page
+  flags must remain unchanged after the `SceneDepthDerivatives` publication
+- regression: `LightCullingPass` remains on the canonical raw-depth path until
+  a later phase explicitly changes it
+- performance: do not claim a UE-like `LightCullingPass` or
+  `VsmPageRequestGeneratorPass` optimization in this phase
 - regression: all examples (`RenderScene`, `MultiView`) must produce visually
   identical output
-- RenderDoc evidence: capture showing HZB mip reads in `LightCullingPass`
-  instead of raw-depth tile reduction
+- RenderDoc evidence: capture showing dual scene-HZB production and truthful
+  downstream binding behavior; do not present fabricated `LightCullingPass`
+  HZB reads as UE parity
 - documentation: update scene-depth product ownership docs to reflect the
   unified derivatives contract
 
 UE5 closeness check:
 - UE5 builds a dual closest+furthest HZB (`HZBClosest` / `HZBFurthest`) from
-  the depth prepass and routes it to occlusion culling, light culling, SSR,
-  SSAO, and other screen-space consumers
-- UE5's light culling uses the HZB for tile depth bounds rather than per-tile
-  raw-depth reduction
+  the depth prepass and routes it to occlusion culling, SSR, SSAO, and other
+  screen-space consumers
+- UE previous-frame occlusion stores the furthest HZB as the canonical
+  extracted history texture
+- UE's clustered light-grid injection does not consume the scene HZB in the
+  inspected source path
+- UE5 coarse VSM pages are a separate coverage policy, not evidence that scene
+  HZB should gate primary VSM page-request generation
 - after this phase, Oxygen's depth derivative set and consumer routing should
-  match UE5's architectural shape: one shared hierarchical product, many
-  consumers, zero private reductions
+  match UE5's architectural shape more closely where verified: one shared dual
+  scene HZB product, furthest-HZB previous-frame occlusion history, and VSM
+  coarse pages kept as an explicit separate policy
 
-Status: `not_started`
+Implementation update (April 1, 2026):
+
+- `ScreenHzbBuildPass` now publishes `SceneDepthDerivatives` with dual
+  closest+furthest per-view pyramids and previous-frame history for HZB
+  consumers
+- `LightCullingPass` remains on the canonical raw-depth path after local UE
+  source review disproved the earlier scene-HZB parity claim for clustered
+  light-grid construction
+- `VsmPageRequestGeneratorPass` remains on canonical raw depth for page
+  marking, with coarse pages kept as an explicit VSM policy instead of a
+  `SceneDepthDerivatives` consumer
+- `VsmShadowRasterizerPass` now consumes the renamed previous-frame
+  `SceneDepthDerivatives.furthest_*` contract for its existing HZB hookup
+
+Validation evidence (April 1, 2026):
+
+- validation must be rerun after the UE-closeness correction in this section;
+  prior `LightCullingPass` HZB-consumer captures/timings are no longer valid
+  evidence for the corrected DP-7 scope
+
+Remaining DP-7 delta:
+
+- rerun targeted tests against the corrected code path
+- rerun live `RenderScene` / `MultiView` validation and RenderDoc analysis for
+  the corrected DP-7 scope
+- decide whether the non-UE `LightCullingPass` tile-reduction cleanup belongs
+  in a later Oxygen-specific optimization phase instead of DP-7
+- keep the known DP-5 `VsmShadowRasterization` reversed-Z follow-up out of the
+  DP-7 exit gate unless later evidence shows it directly blocks the shared-HZB
+  work
+
+Status: `in_progress`
 
 ### Phase DP-8: Clean Up Tests, Docs, And Ownership Boundaries
 

@@ -1629,14 +1629,14 @@ NOLINT_TEST_F(
 
   const auto previous_hzb = screen_hzb_pass.GetPreviousFrameOutput(kTestViewId);
   ASSERT_TRUE(previous_hzb.available);
-  ASSERT_NE(previous_hzb.texture, nullptr);
-  ASSERT_TRUE(previous_hzb.srv_index.IsValid());
-  EXPECT_FLOAT_EQ(ReadTextureMipTexel(
-                    previous_hzb.texture, 0U, 0U, 0U, "phase-f-hzb.prev.mip0"),
+  ASSERT_NE(previous_hzb.furthest_texture, nullptr);
+  ASSERT_TRUE(previous_hzb.furthest_srv_index.IsValid());
+  EXPECT_FLOAT_EQ(ReadTextureMipTexel(previous_hzb.furthest_texture, 0U, 0U, 0U,
+                    "phase-f-hzb.prev.mip0"),
     0.1F);
   EXPECT_FLOAT_EQ(
-    ReadTextureMipTexel(previous_hzb.texture, previous_hzb.mip_count - 1U, 0U,
-      0U, "phase-f-hzb.prev.last-mip"),
+    ReadTextureMipTexel(previous_hzb.furthest_texture,
+      previous_hzb.mip_count - 1U, 0U, 0U, "phase-f-hzb.prev.last-mip"),
     0.1F);
 
   {

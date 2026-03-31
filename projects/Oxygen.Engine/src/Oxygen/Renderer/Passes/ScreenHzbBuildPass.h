@@ -31,6 +31,17 @@ namespace oxygen::engine {
 
 struct RenderContext;
 
+struct SceneDepthDerivatives {
+  std::shared_ptr<const graphics::Texture> closest_texture;
+  std::shared_ptr<const graphics::Texture> furthest_texture;
+  ShaderVisibleIndex closest_srv_index { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex furthest_srv_index { kInvalidShaderVisibleIndex };
+  std::uint32_t width { 0U };
+  std::uint32_t height { 0U };
+  std::uint32_t mip_count { 0U };
+  bool available { false };
+};
+
 struct ScreenHzbBuildPassConfig {
   std::string debug_name { "ScreenHzbBuildPass" };
 };
@@ -38,15 +49,7 @@ struct ScreenHzbBuildPassConfig {
 class ScreenHzbBuildPass final : public ComputeRenderPass {
 public:
   using Config = ScreenHzbBuildPassConfig;
-
-  struct ViewOutput {
-    std::shared_ptr<const graphics::Texture> texture;
-    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
-    std::uint32_t width { 0U };
-    std::uint32_t height { 0U };
-    std::uint32_t mip_count { 0U };
-    bool available { false };
-  };
+  using Output = SceneDepthDerivatives;
 
   OXGN_RNDR_API ScreenHzbBuildPass(
     observer_ptr<Graphics> gfx, std::shared_ptr<Config> config);
@@ -56,9 +59,9 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ScreenHzbBuildPass)
 
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetCurrentOutput(ViewId view_id) const
-    -> ViewOutput;
+    -> Output;
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetPreviousFrameOutput(
-    ViewId view_id) const -> ViewOutput;
+    ViewId view_id) const -> Output;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
