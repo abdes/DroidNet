@@ -1,187 +1,356 @@
 # DepthPrePass
 
-Populates the depth buffer before main shading passes to minimize overdraw and
-enable early depth testing. Critical for Forward+ rendering: provides depth
-information for future light culling stages.
+Populates the scene depth buffer before main shading, producing a shared depth
+products contract that enables depth-equal rendering, hierarchical Z culling,
+clustered light culling, and VSM page allocation. The depth prepass is the
+foundational pass in Oxygen's Forward+ pipeline; all downstream depth consumers
+depend on its output contract.
 
 ## Purpose
 
-Renders **opaque and masked (alpha-tested) geometry only** to establish depth
-hierarchy. Transparent geometry is explicitly excluded to prevent depth
-occlusion artifacts during later blending stages.
+- Render opaque and masked (alpha-tested) geometry to establish complete scene
+  depth before any material shading occurs.
+- Publish a `DepthPrePassOutput` contract that downstream passes consume
+  instead of private depth assumptions.
+- Drive the `ScreenHzbBuildPass` to produce a dual closest+furthest HZB
+  pyramid from the populated depth buffer.
+- Enable depth-equal rendering in `ShaderPass`, eliminating redundant fragment
+  shader invocations on occluded geometry.
+
+Transparent geometry is excluded. It does not participate in depth writes and
+must not occlude later blending operations.
+
+## Depth Convention
+
+Oxygen uses **reversed-Z** as the engine-wide depth convention:
+
+| Property | Value |
+| -------- | ----- |
+| Near plane NDC | 1.0 |
+| Far plane NDC | 0.0 |
+| Depth clear value | 0.0 |
+| Depth comparison | `kGreaterOrEqual` |
+| Projection | Right-handed, reversed-Z [0,1] |
+
+Near surfaces produce depth values close to 1.0; far surfaces produce values
+close to 0.0. This opposes the float32 precision distribution against the
+perspective hyperbolic distribution, yielding nearly uniform depth precision
+across the entire range.
+
+All consumers must read the `reverse_z` and `ndc_depth_range` fields from
+`DepthPrePassOutput` rather than assuming a convention.
+
+## Prepass Policy
+
+The pipeline selects a depth prepass mode per frame through `DepthPrePassMode`:
+
+| Mode | Behavior |
+| ---- | -------- |
+| `kDisabled` | No depth prepass executes; downstream depth consumers are skipped |
+| `kOpaqueAndMasked` | Full opaque + masked geometry prepass; produces complete depth |
+
+The mode flows from `FramePlanBuilder` into `ForwardPipeline` at plan time.
+
+### Completeness Contract
+
+The pass publishes `DepthPrePassCompleteness` alongside the output:
+
+| Completeness | Meaning | Downstream effect |
+| ------------ | ------- | ----------------- |
+| `kDisabled` | No prepass ran | Consumers must not run |
+| `kIncomplete` | Prepass ran but depth is partial | Consumers use `kGreaterOrEqual` fallback |
+| `kComplete` | All opaque+masked geometry rendered | Consumers may use `kEqual`; HZB is valid |
+
+Downstream passes must not infer completeness from pass registration or pass
+execution alone. They must read the published completeness value.
 
 ## Configuration
 
 | Field | Type | Required | Purpose |
 | ----- | ---- | -------- | ------- |
-| `depth_texture` | `shared_ptr<Texture>` | Yes | Output depth buffer; defines format/sample count |
-| `debug_name` | `string` | No | Pass identifier (default: "DepthPrePass") |
+| `depth_texture` | `shared_ptr<Texture>` | Yes | Target depth buffer; defines format and dimensions |
+| `debug_name` | `string` | No | Pass identifier (default: `"DepthPrePass"`) |
 
-**Viewport/Scissors**: Optional via `SetViewport()`/`SetScissors()`. When unset,
-the pass renders the full `depth_texture`. When set, the pass resolves an
-effective depth rect from the intersection of the viewport bounds and scissor
-rect, then uses that rect for both rasterization and depth clear. The contract
-is **depth-target local space**, not composition-placement space.
+### Viewport and Scissor
 
-**Offscreen View Normalization**: `ForwardPipeline` now converts
-`CompositionView.view` into depth-target local coordinates before configuring
-`DepthPrePass`. For views rendered into per-view offscreen targets, the
-composition placement offset (`viewport.top_left_x/y`) is stripped and any
-explicit scissor is localized to the depth texture.
+Optional via `SetViewport()` / `SetScissors()`. When unset, the pass covers
+the full `depth_texture`. When set, the pass resolves an effective depth rect
+from the intersection of viewport bounds and scissor rect, then uses that rect
+for both rasterization and depth clear.
 
-**Framebuffer**: Queries `RenderContext::framebuffer` if present; depth texture
-must match framebuffer's depth attachment when both exist.
+The coordinate contract is **depth-target local space**, not composition-
+placement space. `ForwardPipeline` normalizes `CompositionView.view`
+coordinates into depth-target local space before configuring the pass. For
+offscreen per-view targets, the composition placement offset is stripped and
+any explicit scissor is localized to the depth texture.
 
-## Core Design
+An empty viewport/scissor intersection is a contract violation and is rejected.
 
-### Pipeline State
+## Output Contract: `DepthPrePassOutput`
 
-**Fixed Properties** (all variants):
+Every downstream consumer accesses depth through this contract. No pass may
+create private depth SRVs or assumptions outside this surface.
 
-* **Depth/Stencil**: Test enabled (`kLessOrEqual`), write enabled, stencil off
-* **Rasterizer**: Solid fill, front-face CCW
-* **Framebuffer Layout**: Depth-only (no color targets)
-* **Root Signature**: Bindless table (t0-unbounded) + ViewConstants (b1) +
-  RootConstants (b2)
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `depth_texture` | `const Texture*` | Populated depth buffer |
+| `canonical_srv_index` | `ShaderVisibleIndex` | Shader-visible SRV for bindless depth reads |
+| `width`, `height` | `uint32_t` | Depth texture dimensions |
+| `viewport` | `ViewPort` | Effective viewport used for rasterization |
+| `scissors` | `Scissors` | Effective scissor rect |
+| `valid_rect` | `Scissors` | Viewport/scissor intersection defining valid depth region |
+| `ndc_depth_range` | `NdcDepthRange` | `ZeroToOne` (engine standard) |
+| `reverse_z` | `bool` | `true` (engine standard) |
+| `completeness` | `DepthPrePassCompleteness` | Published completeness for downstream gating |
 
-### Execution Model
+### Canonical SRV
 
-```mermaid
-graph TB
-    PrepRes[PrepareResources] --> Transition[Depth → kDepthWrite]
-    Transition --> PassCBV[Upload Pass Constants]
-    PassCBV --> Execute[Execute]
-    Execute --> DSV[Create/Reuse DSV]
-    DSV --> ResolveRect[Resolve effective depth rect]
-    ResolveRect --> Clear[Clear depth only inside valid rect]
-    Clear --> Iterate[Iterate Partitions]
-    Iterate --> Filter{PassMask Check}
-    Filter -->|kOpaque/kMasked| Select[Select PSO Variant]
-    Filter -->|Neither| Skip[Skip]
-    Select --> DrawRange[EmitDrawRange]
-    DrawRange --> Iterate
-    DrawRange --> Register[RegisterPass]
-```
+A single canonical SRV is created per depth texture and cached in the
+descriptor registry. All consumers bind this SRV. No pass creates a duplicate
+depth SRV.
 
-**Per-Draw Indirection**: CPU binds `g_DrawIndex` root constant → GPU fetches
-`DrawMetadata[g_DrawIndex]` → resolves vertex/transform/material buffers via
-bindless indices.
+## Scene Depth Derivatives
+
+The depth prepass output feeds `ScreenHzbBuildPass`, which produces a dual
+closest+furthest HZB pyramid published through `SceneDepthDerivatives`:
+
+| Product | Format | Description |
+| ------- | ------ | ----------- |
+| Raw depth | `D32_Float` | Full-resolution scene depth from `DepthPrePassOutput` |
+| Closest HZB | `R32Float` or `RG32Float` channel | Conservative nearest-surface depth per mip |
+| Furthest HZB | `R32Float` or `RG32Float` channel | Conservative farthest-surface depth per mip |
+
+The HZB is double-buffered per view to support previous-frame occlusion queries.
+
+Under reversed-Z, closest depth is the numerically largest value and furthest
+depth is the numerically smallest. The channels are named by semantic meaning
+(`closest`, `furthest`), not by reduction operation.
+
+### Derivative Consumers
+
+| Consumer | Product consumed | Usage |
+| -------- | ---------------- | ----- |
+| `ShaderPass` | `DepthPrePassOutput` (DSV) | Depth-equal test when complete; `kGreaterOrEqual` fallback |
+| `TransparentPass` | `DepthPrePassOutput` (DSV) | Read-only depth test (`kGreaterOrEqual`); not depth-equal eligible |
+| `SkyPass` | `DepthPrePassOutput` (DSV + SRV) | Read-only depth test + shader depth reads for atmosphere |
+| `GroundGridPass` | `DepthPrePassOutput` (SRV) | Shader depth reads for grid intersection; no depth test |
+| `LightCullingPass` | Closest + furthest HZB | Tile depth bounds via HZB mip lookup |
+| `VsmPageRequestGeneratorPass` | Closest + furthest HZB | Coarse tile early-out + per-pixel depth for page requests |
+| `VsmInstanceCulling` | Previous-frame closest HZB | Occlusion culling against projected AABB bounds |
+| `ScreenHzbBuildPass` | `DepthPrePassOutput` (SRV) | Source for mip-0 of the HZB pyramid |
+
+## Downstream Depth Exploitation
+
+### Depth-Equal in ShaderPass
+
+When `completeness` is `kComplete`, `ShaderPass` binds the depth buffer as a
+read-only DSV with `CompareOp::kEqual`. All opaque fragments that were written
+by the prepass pass the depth test at zero shader cost; all occluded fragments
+are rejected before the pixel shader executes.
+
+When `completeness` is `kIncomplete`, `ShaderPass` falls back to
+`CompareOp::kGreaterOrEqual` with read-only DSV.
+
+**Correctness requirement**: depth-equal demands bitwise-identical depth values
+between the prepass and `ShaderPass`. Both passes must use the same vertex
+transform codepath to produce identical `SV_POSITION` output. Any divergence
+(different constant buffer layout, shader permutation affecting position
+computation, or compiler reordering) causes flickering depth-test failures.
+
+### Non-Candidates for Depth-Equal
+
+- **TransparentPass**: renders with blending at varying depths over opaque
+  geometry; depth-equal is inapplicable.
+- **SkyPass**: renders at the far plane; the prepass does not write sky depth.
+
+### Compute Consumers
+
+`LightCullingPass`, `VsmPageRequestGeneratorPass`, and `ScreenHzbBuildPass`
+gate their dispatch on `completeness != kDisabled`. When depth is incomplete,
+each consumer documents whether it falls back to conservative behavior or skips
+dispatch entirely.
+
+`LightCullingPass` derives per-tile depth bounds from a single HZB mip lookup
+per tile (closest + furthest at the tile's spatial extent) instead of per-tile
+raw-depth shared-memory reduction. In clustered mode, the tile bounds
+additionally skip clusters outside the tile's depth range.
+
+`VsmPageRequestGeneratorPass` uses a coarse HZB pre-pass at tile granularity
+to skip tiles whose depth range maps entirely to already-requested pages before
+falling through to per-pixel processing.
+
+## Pipeline State
+
+### Fixed Properties
+
+| Property | Value |
+| -------- | ----- |
+| Depth test | Enabled, `kGreaterOrEqual` (reversed-Z) |
+| Depth write | Enabled |
+| Stencil | Disabled |
+| Rasterizer | Solid fill, front-face CCW |
+| Color targets | None (depth-only framebuffer) |
+| Root signature | Bindless table (t0-unbounded) + ViewConstants (b1) + RootConstants (b2) |
+| Depth clear | 0.0 (reversed-Z far plane) |
+
+### PSO Permutation Matrix
+
+2 axes x 2 values = 4 PSO variants:
+
+| Alpha Mode | Sidedness | Rasterizer Cull | Pixel Shader |
+| ---------- | --------- | --------------- | ------------ |
+| Opaque | Single-sided | Back-face | Empty (fixed-function depth write) |
+| Opaque | Double-sided | None | Empty (fixed-function depth write) |
+| Masked | Single-sided | Back-face | Alpha test with `clip()` discard |
+| Masked | Double-sided | None | Alpha test with `clip()` discard |
+
+Variant selection is per-partition at runtime based on `PassMask` flags.
 
 ### Shader Contract
 
-**Vertex Shader** (all variants):
+**Vertex shader** (all variants): reads `g_DrawIndex` root constant to fetch
+`DrawMetadata`, resolves vertex and transform buffers via bindless indices,
+transforms position through Local -> World -> View -> Clip. Outputs
+`SV_POSITION` and `TEXCOORD0` (UV for masked alpha test).
 
-* **Input**: `SV_VertexID` (unused `SV_InstanceID`)
-* **Data Chain**: `g_DrawIndex` → `DrawMetadata` → vertex buffer, transform
-  buffer
-* **Transform**: Local → World → View → Clip
-* **Output**: `SV_POSITION`, `TEXCOORD0` (UV)
+**Pixel shader**: opaque variants use an empty PS (fixed-function depth write).
+Masked variants sample opacity via the material's alpha texture or constant and
+discard fragments below the cutoff threshold.
 
-**Pixel Shader**:
+The vertex shader must produce identical `SV_POSITION` output as `ShaderPass`
+to satisfy the depth-equal bitwise-match requirement.
 
-* **Opaque variant** (`PS`): Empty (fixed-function depth write)
-* **Masked variant** (`PS` + `ALPHA_TEST`): Alpha test with `clip()` discard
+## Execution Model
 
-## Variability
+1. `PrepareResources`: transition depth texture to `kDepthWrite`, upload pass
+   constants.
+2. `Execute`: create or reuse DSV, resolve effective depth rect from
+   viewport/scissor configuration, clear depth to 0.0 inside the valid rect
+   only.
+3. Iterate partitions: filter by `kOpaque` / `kMasked` pass mask, select PSO
+   variant, emit draw ranges.
+4. Publish `DepthPrePassOutput` with populated fields and completeness.
+5. Register pass instance for cross-pass queries.
 
-### Permutation Matrix
+Per-draw indirection: CPU binds `g_DrawIndex` root constant; GPU fetches
+`DrawMetadata[g_DrawIndex]` and resolves all buffers via bindless indices.
 
-**2 Axes × 2 Values = 4 PSO Variants**:
+## Resource State Transitions
 
-| Axis | Values | Encoded In | Affects |
-| ---- | ------ | ---------- | ------- |
-| **Alpha Mode** | Opaque / Masked | `PassMask::kMasked` | Shader defines: `ALPHA_TEST` |
-| **Sidedness** | Single / Double | `PassMask::kDoubleSided` | Rasterizer: `kBack` vs. `kNone` culling |
+| Phase | Depth texture state |
+| ----- | ------------------- |
+| Frame init | `kCommon` |
+| DepthPrePass | `kDepthWrite` |
+| ShaderPass / TransparentPass / SkyPass | `kDepthRead` (read-only DSV) |
+| ScreenHzbBuildPass / LightCullingPass / VsmPageRequestGen | `kShaderResource` (SRV) |
 
-**Variants**:
+D3D12 permits simultaneous read-only DSV + SRV binding when depth writes are
+disabled. `ShaderPass` may co-bind the depth buffer as both DSV and SRV when
+shader depth reads are needed.
 
-| Alpha Mode | Sidedness | PSO Variable | Shader (Entry + Defines) |
-| ---------- | --------- | ------------ | ------------------------ |
-| **Opaque** | Single-Sided (Back Cull) | `pso_opaque_single_` | `VS` + `PS` |
-| **Opaque** | Double-Sided (No Cull) | `pso_opaque_double_` | `VS` + `PS` |
-| **Masked** | Single-Sided (Back Cull) | `pso_masked_single_` | `VS` + `PS` + `ALPHA_TEST` |
-| **Masked** | Double-Sided (No Cull) | `pso_masked_double_` | `VS` + `PS` + `ALPHA_TEST` |
+## Ownership Boundaries
 
-### Mechanism
+| Concern | Owner |
+| ------- | ----- |
+| Depth texture lifetime | `ForwardPipeline` (creates per composition target) |
+| Canonical depth SRV | `DepthPrePass` (created and cached in descriptor registry) |
+| Depth clear and population | `DepthPrePass` |
+| Completeness publication | `DepthPrePass` |
+| HZB production | `ScreenHzbBuildPass` |
+| HZB consumption | Each downstream pass via `SceneDepthDerivatives` contract |
+| Depth convention | Engine-wide (reversed-Z); consumers read from output metadata |
 
-| Stage | Variability | Implementation |
-| ----- | ----------- | -------------- |
-| **Compile-Time** | 4 PSO descriptors | `CreatePipelineStateDesc()` builds all variants with distinct shader defines + rasterizer states |
-| **Runtime** | Per-partition selection | CPU inspects `PassMask` flags, selects variant, calls `SetPipelineState()` once per partition |
-| **Per-Draw** | Material properties | GPU fetches `MaterialShadingConstants` via `g_DrawIndex`, evaluates flags dynamically (alpha test on/off, texture sampling) |
+No pass outside `DepthPrePass` may create depth SRVs for the scene depth
+texture. No pass may infer depth completeness from pass registration.
 
-### Shader-Level Variation
+## Deferred Work
 
-**Masked Pixel Shader Decision Path**:
+### Depth-Only PSO Specialization (DP-3)
 
-| Variation Point | Mechanism | Values | Source |
-| --------------- | --------- | ------ | ------ |
-| Alpha test enabled | Material flag | On/Off | `flags & MATERIAL_FLAG_ALPHA_TEST` |
-| Opacity source | Texture presence | Texture/Constant | `opacity_texture_index != INVALID` |
-| Cutoff threshold | Material/Pass constant | Float | `mat.alpha_cutoff` else `pass_constants.alpha_cutoff_default` |
-| Texture sampling | Material flag | On/Off | `!(flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING)` |
+Two independent sub-optimizations, ordered by complexity.
 
-**Pass Constants** (`DepthPrePassConstants`, 16 bytes):
+**Sub-phase A — Null pixel shader for opaque variants**: The opaque PS body is
+empty (the `#ifdef ALPHA_TEST` path compiles away). Opaque PSO variants should
+be built without `.SetPixelShader()`, letting D3D12 elide PS dispatch entirely
+instead of binding a no-op shader stage. This is a ~4-line change in
+`DepthPrePass.cpp` with zero functional or depth-equal risk.
 
-| Field | Type | Purpose | Default |
-| ----- | ---- | ------- | ------- |
-| `alpha_cutoff_default` | `float` | Fallback alpha threshold | 0.5 |
+**Sub-phase B — Position-only vertex stream**: Currently every depth draw
+fetches a 72-byte interleaved `VertexData` struct (position 12 + normal 12 +
+texcoord 8 + tangent 12 + bitangent 12 + color 16). Opaque draws consume only
+position (12 bytes) — 83% bandwidth waste. The optimization introduces a
+parallel 12-byte position-only `StructuredBuffer` per mesh.
 
-**Access**: Bindless CBV via `g_PassConstantsIndex` root constant (b2).
+#### Position-Only Data Layout
 
-### Rationale
+```text
+PositionVertex (12 bytes)     vs.     VertexData (72 bytes)
+┌──────────────────────┐              ┌──────────────────────┐
+│ float3 position (12) │              │ float3 position (12) │
+└──────────────────────┘              │ float3 normal   (12) │
+                                      │ float2 texcoord  (8) │
+                                      │ float3 tangent  (12) │
+                                      │ float3 bitangent(12) │
+                                      │ float4 color    (16) │
+                                      └──────────────────────┘
+```
 
-| Reason | Benefit |
-| ------ | ------- |
-| **Performance** | Opaque path uses minimal PS (fixed-function depth); masked path limits sampling to alpha-tested materials |
-| **Content Support** | Handles foliage (masked+double), architecture (opaque+single), vegetation cards (masked+single) |
-| **State Efficiency** | Pre-compiled PSOs eliminate runtime branching; partitions group similar materials |
-| **GPU Utilization** | Early-Z for opaque; explicit discard for masked prevents transparent pixel depth writes |
+`PositionVertex::position` occupies offset 0 in both structs. Loading from a
+12-byte-stride buffer vs. a 72-byte-stride buffer produces bitwise-identical
+`float3` values for the same vertex index. This guarantees depth-equal
+correctness: the same position bits enter the same transform chain, producing
+identical `SV_POSITION` output.
 
-## Data Flow
+#### Expanded Permutation Matrix (DP-3 Target State)
 
-**Input Dependencies**:
+2 axes × 2 values, with vertex specialization on the opaque axis = 4 variants
+(replacing the current 4, not adding to them):
 
-* `PreparedSceneFrame`: Per-view culled geometry with sorted partitions
-* `RenderContext::view_constants`: Bindless descriptor slots for draw
-  metadata, transforms, materials
-* `depth_texture` (config): Target depth buffer
+| Alpha Mode | Sidedness | VS | PS | Vertex Buffer | Stride |
+| ---------- | --------- | -- | -- | ------------- | ------ |
+| Opaque | Single-sided | `VS_PosOnly` | null | position-only | 12 B |
+| Opaque | Double-sided | `VS_PosOnly` | null | position-only | 12 B |
+| Masked | Single-sided | `VS` | `PS` (alpha test) | full vertex | 72 B |
+| Masked | Double-sided | `VS` | `PS` (alpha test) | full vertex | 72 B |
 
-**Output Products**:
+The variant count stays at 4. Opaque variants become cheaper (position-only
+fetch + no PS), while masked variants are unchanged.
 
-* Populated depth buffer (state: `kDepthWrite`)
-* Effective depth output contract via `DepthPrePassOutput`:
-  * `depth_texture`
-  * `viewport`
-  * `scissors`
-  * `valid_rect`
-* Registered pass instance available for cross-pass queries
+#### DrawMetadata Extension
 
-**Pass Exclusions**: Transparent geometry (`kTransparent` pass mask bit) is
-intentionally excluded to prevent depth writes that would occlude later
-blending operations.
+`DrawMetadata` gains a `position_only_buffer_index` field. The current struct
+is 64 bytes with 12 bytes occupied by `transform_generation`, `submesh_index`,
+and `primitive_flags`. The new field fits within the existing 64-byte envelope
+or at the next 16-byte boundary (80 bytes) if packing cannot absorb it.
 
-## Integration Points
+The HLSL mirror in `Renderer/DrawMetadata.hlsli` must be updated in lockstep.
+`GeometryUploader` creates and registers the position-only SRV alongside the
+existing vertex SRV. `DrawMetadataEmitter` populates the new field.
 
-**Cross-Pass Communication**: After execution, subsequent passes can query
-this pass via `RenderContext::GetPass<DepthPrePass>()` to access depth texture
-or verify execution. Current implementation does not expose explicit resource
-getters; depth texture flows via render graph configuration.
+#### Memory Cost
 
-**Forward+ Pipeline Role**: Depth buffer output will serve as input for future
-light culling stages (compute pass to build per-tile light lists from depth
-pyramid).
++12 bytes per vertex for the position-only buffer = +16.7% GPU vertex memory
+per mesh. +1 SRV per mesh in the descriptor heap.
 
-## Future Enhancements
+#### Implementation Trigger
 
-* **Depth Pyramid**: Generate mip chain for hierarchical Z culling
-* **Light Culling Integration**: Supply depth to tiled/clustered light
-  assignment compute pass
-* **Early-Z Statistics**: Collect depth hierarchy for adaptive culling
-* **Hi-Z Occlusion**: GPU-side occlusion queries for large objects
+This optimization matters when vertex fetch dominates the depth prepass cost,
+which requires >1M depth prepass triangles with small screen-space area. At
+current scene complexity, triangle counts do not approach this threshold.
+Sub-phase A (null PS) is trivial and can be done at any time as a cleanup.
+Sub-phase B should wait for profiling evidence.
+
+### Stencil Sideband
+
+UE5 writes material classification bits during the prepass for deferred
+lighting model dispatch. In Oxygen's forward renderer, the forward pass
+already knows the material, making stencil classification low value. Deferred
+unless a concrete consumer is identified.
 
 ## Related Documentation
 
-* [Data Flow](data_flow.md): Overall renderer pipeline and multi-view
+- [Data Flow](data_flow.md): overall renderer pipeline and multi-view
   architecture
-* [Bindless Conventions](../bindless_conventions.md): Descriptor slot management
+- [Bindless Conventions](../bindless_conventions.md): descriptor slot management
+- [DepthPrePassRemediationPlan](../../../../design/DepthPrePassRemediationPlan.md):
+  phased remediation history and validation evidence
