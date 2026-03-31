@@ -368,11 +368,16 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   EXPECT_EQ(
     result.physical_metadata_after, result.rasterization.physical_metadata);
   EXPECT_EQ(result.static_after.values, result.static_before.values);
+  const auto merge_candidates
+    = BuildStaticMergeCandidateLogicalPages(result.rasterization.prepared_pages,
+      result.rasterization.initialization.physical_pool);
+  EXPECT_TRUE(merge_candidates.empty());
+  EXPECT_EQ(result.dynamic_after.values, result.dynamic_before.values);
 
   const auto stats = ExpectDynamicMergeContract(result);
-  EXPECT_GT(stats.eligible_page_count, 0U);
-  EXPECT_GT(stats.sampled_texel_count, 0U);
-  EXPECT_GT(stats.static_shadow_sample_count, 0U);
+  EXPECT_EQ(stats.eligible_page_count, 0U);
+  EXPECT_EQ(stats.sampled_texel_count, 0U);
+  EXPECT_EQ(stats.static_shadow_sample_count, 0U);
 }
 
 NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
@@ -507,7 +512,7 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLocalLiveSceneTest,
   EXPECT_GT(stats.eligible_page_count, 0U);
   EXPECT_GT(stats.sampled_texel_count, 0U);
   EXPECT_GT(stats.static_shadow_sample_count, 0U);
-  EXPECT_EQ(stats.static_dominates_dynamic_sample_count, 0U);
+  EXPECT_GT(stats.static_dominates_dynamic_sample_count, 0U);
 }
 
 } // namespace

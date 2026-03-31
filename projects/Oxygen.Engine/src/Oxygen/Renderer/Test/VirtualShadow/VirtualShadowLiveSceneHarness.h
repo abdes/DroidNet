@@ -15,6 +15,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -276,6 +277,34 @@ protected:
       }
     }
     return std::nullopt;
+  }
+
+  [[nodiscard]] static auto BuildStaticMergeCandidateLogicalPages(
+    const std::span<const oxygen::renderer::vsm::VsmShadowRasterPageJob>
+      prepared_pages,
+    const oxygen::renderer::vsm::VsmPhysicalPoolSnapshot& pool)
+    -> std::vector<std::uint32_t>
+  {
+    const auto static_slice = FindSliceIndex(
+      pool, oxygen::renderer::vsm::VsmPhysicalPoolSliceRole::kStaticDepth);
+    if (!static_slice.has_value() || pool.tiles_per_axis == 0U) {
+      return {};
+    }
+
+    auto candidates = std::vector<std::uint32_t> {};
+    candidates.reserve(prepared_pages.size());
+    for (const auto& job : prepared_pages) {
+      if (!job.static_only || job.physical_coord.slice != *static_slice) {
+        continue;
+      }
+      candidates.push_back(job.physical_coord.tile_y * pool.tiles_per_axis
+        + job.physical_coord.tile_x);
+    }
+
+    std::ranges::sort(candidates);
+    const auto unique_end = std::ranges::unique(candidates).begin();
+    candidates.erase(unique_end, candidates.end());
+    return candidates;
   }
 
   [[nodiscard]] static auto ResolveHarnessFrameSlot(
@@ -2357,6 +2386,8 @@ protected:
       .frame
       = rasterization.initialization.propagation.mapping.bridge.committed_frame,
       .physical_pool = pool,
+      .merge_candidate_logical_pages = BuildStaticMergeCandidateLogicalPages(
+        rasterization.prepared_pages, pool),
     });
 
     {

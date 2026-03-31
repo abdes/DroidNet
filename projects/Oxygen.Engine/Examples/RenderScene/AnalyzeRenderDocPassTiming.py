@@ -1,26 +1,15 @@
-r"""Deep-dive pass inspection for RenderScene RenderDoc captures.
+r"""Deep-dive GPU timing for a specific RenderDoc pass.
 
 Run only inside RenderDoc UI:
 
 PowerShell:
-    $env:OXYGEN_RENDERDOC_PASS_NAME = 'VsmProjectionPass'
-    $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:/path/pass_focus.txt'
+    $env:OXYGEN_RENDERDOC_PASS_NAME = 'VsmStaticDynamicMergePass'
+    $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:/path/pass_timing.txt'
     & 'C:/Program Files/RenderDoc/qrenderdoc.exe' --ui-python `
-        'H:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/AnalyzeRenderDocPassFocus.py' `
+        'H:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/AnalyzeRenderDocPassTiming.py' `
         'H:/path/capture.rdc'
-
-Environment variables
----------------------
-- `OXYGEN_RENDERDOC_REPORT_PATH`: optional explicit report path.
-- `OXYGEN_RENDERDOC_CAPTURE_PATH`: optional explicit capture path.
-- `OXYGEN_RENDERDOC_PASS_NAME`: required pass name, for example
-  `VsmProjectionPass`.
-- `OXYGEN_RENDERDOC_PASS_EVENT_LIMIT`: optional number of work events to inspect.
-- `OXYGEN_RENDERDOC_RESOURCE_NAME`: optional substring filter applied to
-  reported resource bindings.
 """
 
-import os
 import sys
 import builtins
 from pathlib import Path
@@ -48,9 +37,7 @@ def resolve_script_dir():
         candidates.extend(resolved.parents)
 
     capture_context = globals().get("pyrenderdoc")
-    get_capture_filename = getattr(
-        capture_context, "GetCaptureFilename", None
-    )
+    get_capture_filename = getattr(capture_context, "GetCaptureFilename", None)
     if callable(get_capture_filename):
         try:
             capture_path = Path(get_capture_filename()).resolve()
@@ -91,82 +78,51 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from renderdoc_ui_analysis import (  # noqa: E402
-    DEFAULT_PASS_EVENT_LIMIT,
-    PASS_EVENT_LIMIT_ENV,
     PASS_NAME_ENV,
-    RESOURCE_NAME_ENV,
     ReportWriter,
-    categorized_resource_lines,
     collect_action_records,
-    format_flags,
-    get_required_env,
-    inspect_action_resources,
-    parse_int_env,
-    resource_id_to_name,
-    run_ui_script,
-    summarize_event_ids,
     find_pass_work_records,
     find_scope_records,
+    get_required_env,
+    renderdoc_module,
+    run_ui_script,
+    summarize_event_ids,
 )
 
 
-REPORT_SUFFIX = "_pass_focus_report.txt"
+REPORT_SUFFIX = "_pass_timing_report.txt"
 
 
 def build_report(
     controller, report: ReportWriter, capture_path: Path, report_path: Path
 ) -> None:
+    rd = renderdoc_module()
     pass_name = get_required_env(PASS_NAME_ENV, "the target pass name")
-    event_limit = parse_int_env(
-        PASS_EVENT_LIMIT_ENV, DEFAULT_PASS_EVENT_LIMIT
-    )
-    resource_filter = os.environ.get(RESOURCE_NAME_ENV, "").strip() or None
-
     action_records = collect_action_records(controller)
     scope_records = find_scope_records(action_records, pass_name)
     work_records = find_pass_work_records(action_records, pass_name)
-    resource_names = resource_id_to_name(controller)
+    counter_results = controller.FetchCounters([rd.GPUCounter.EventGPUDuration])
+    durations = {result.eventId: result.value.d for result in counter_results}
 
-    report.append("analysis_profile=pass_focus")
+    total_ms = sum(durations.get(action.event_id, 0.0) for action in work_records)
+    total_ms *= 1000.0
+
+    report.append("analysis_profile=pass_timing")
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
     report.append("pass_name={}".format(pass_name))
-    report.append("resource_filter={}".format(resource_filter or "<none>"))
     report.append("scope_events={}".format(summarize_event_ids(scope_records)))
-    report.append("work_events={}".format(summarize_event_ids(work_records)))
-    report.append("inspected_work_limit={}".format(event_limit))
+    report.append("work_event_count={}".format(len(work_records)))
+    report.append("total_gpu_duration_ms={:.6f}".format(total_ms))
     report.blank()
-
-    if not scope_records:
-        report.append("No pass scope marker matched {}".format(pass_name))
-
-    if not work_records:
-        report.append("No work events were found under {}".format(pass_name))
-        report.flush()
-        return
-
-    report.append("Pass work inspection")
-    for action in work_records[:event_limit]:
-        details = inspect_action_resources(controller, resource_names, action)
+    report.append("work_events:")
+    for action in work_records:
+        duration_ms = durations.get(action.event_id, 0.0) * 1000.0
         report.append(
-            "event {} [{}] {}".format(
-                action.event_id,
-                format_flags(action.flags),
-                action.path,
+            "{}|{:.6f}|{}|{}".format(
+                action.event_id, duration_ms, action.name, action.path
             )
         )
-        filtered_lines = categorized_resource_lines(details, resource_filter)
-        if filtered_lines:
-            report.extend("  " + line for line in filtered_lines)
-        else:
-            report.append("  <no matching resource bindings>")
-        report.blank()
-
-    if len(work_records) > event_limit:
-        report.append(
-            "truncated_after_events={}".format(event_limit)
-        )
-
     report.flush()
 
 

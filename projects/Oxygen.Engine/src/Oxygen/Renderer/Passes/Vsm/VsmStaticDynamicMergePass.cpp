@@ -6,10 +6,17 @@
 
 #include <Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h>
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <optional>
+#include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
@@ -24,8 +31,10 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
 
+using oxygen::Graphics;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::ShaderVisibleIndex;
 using oxygen::graphics::Buffer;
@@ -34,16 +43,17 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::ComputePipelineDesc;
-using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::Texture;
 using oxygen::renderer::vsm::VsmPhysicalPoolSliceRole;
 
 namespace oxygen::engine {
 
 namespace {
 
-  constexpr std::uint32_t kThreadGroupSize = 8U;
+  constexpr std::uint32_t kMergeThreadGroupSize = 8U;
+  constexpr std::uint32_t kPassConstantsSlotCount = 1U;
 
   struct alignas(packing::kShaderDataFieldAlignment)
     VsmStaticDynamicMergePassConstants {
@@ -53,19 +63,21 @@ namespace {
     ShaderVisibleIndex physical_meta_srv_index { kInvalidShaderVisibleIndex };
     std::uint32_t page_size_texels { 0U };
     std::uint32_t tiles_per_axis { 0U };
-    std::uint32_t physical_page_count { 0U };
+    std::uint32_t logical_page_index { 0U };
+    std::uint32_t logical_page_count { 0U };
+    std::uint32_t dynamic_slice_index { 0U };
+    std::uint32_t static_slice_index { 0U };
     std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
   };
   static_assert(sizeof(VsmStaticDynamicMergePassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
 
-  auto MakeDispatchGroups(const std::uint32_t texel_count) noexcept
-    -> std::uint32_t
+  [[nodiscard]] auto MakeDispatchGroups(const std::uint32_t count,
+    const std::uint32_t group_size) noexcept -> std::uint32_t
   {
-    return texel_count == 0U
-      ? 0U
-      : (texel_count + kThreadGroupSize - 1U) / kThreadGroupSize;
+    return count == 0U ? 0U : (count + group_size - 1U) / group_size;
   }
 
   auto FindSliceIndex(const renderer::vsm::VsmPhysicalPoolSnapshot& pool,
@@ -80,45 +92,45 @@ namespace {
     return std::nullopt;
   }
 
-  auto MakeShadowSliceSrvDesc(const std::uint32_t slice)
-    -> graphics::TextureViewDescription
+  [[nodiscard]] auto ShadowSliceSrvDesc(const oxygen::Format depth_format,
+    const std::uint32_t slice) -> graphics::TextureViewDescription
   {
     return graphics::TextureViewDescription {
-    .view_type = ResourceViewType::kTexture_SRV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = oxygen::Format::kR32Float,
-    .dimension = oxygen::TextureType::kTexture2DArray,
-    .sub_resources
-    = {
+      .view_type = ResourceViewType::kTexture_SRV,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .format = depth_format == oxygen::Format::kDepth32
+        ? oxygen::Format::kR32Float
+        : depth_format,
+      .dimension = oxygen::TextureType::kTexture2DArray,
+      .sub_resources = {
         .base_mip_level = 0U,
         .num_mip_levels = 1U,
         .base_array_slice = slice,
         .num_array_slices = 1U,
       },
-    .is_read_only_dsv = false,
-  };
+      .is_read_only_dsv = false,
+    };
   }
 
-  auto MakeScratchUavDesc() -> graphics::TextureViewDescription
+  [[nodiscard]] auto ScratchUavDesc() -> graphics::TextureViewDescription
   {
     return graphics::TextureViewDescription {
-    .view_type = ResourceViewType::kTexture_UAV,
-    .visibility = graphics::DescriptorVisibility::kShaderVisible,
-    .format = oxygen::Format::kR32Float,
-    .dimension = oxygen::TextureType::kTexture2D,
-    .sub_resources
-    = {
+      .view_type = ResourceViewType::kTexture_UAV,
+      .visibility = graphics::DescriptorVisibility::kShaderVisible,
+      .format = oxygen::Format::kR32Float,
+      .dimension = oxygen::TextureType::kTexture2D,
+      .sub_resources = {
         .base_mip_level = 0U,
         .num_mip_levels = 1U,
         .base_array_slice = 0U,
         .num_array_slices = 1U,
       },
-    .is_read_only_dsv = false,
-  };
+      .is_read_only_dsv = false,
+    };
   }
 
-  auto ResolveMergeScratchFormat(const oxygen::Format depth_format) noexcept
-    -> oxygen::Format
+  [[nodiscard]] auto ResolveMergeScratchFormat(
+    const oxygen::Format depth_format) noexcept -> oxygen::Format
   {
     switch (depth_format) {
     case oxygen::Format::kDepth32:
@@ -128,19 +140,37 @@ namespace {
     }
   }
 
-  auto MakeStructuredSrvDesc(const std::uint64_t size_bytes,
-    const std::uint32_t stride) -> graphics::BufferViewDescription
+  [[nodiscard]] auto MakeStructuredViewDesc(const ResourceViewType view_type,
+    const std::uint64_t size_bytes, const std::uint32_t stride)
+    -> graphics::BufferViewDescription
   {
     return graphics::BufferViewDescription {
-      .view_type = ResourceViewType::kStructuredBuffer_SRV,
+      .view_type = view_type,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
       .range = { 0U, size_bytes },
       .stride = stride,
     };
   }
 
+  auto BindComputeStage(CommandRecorder& recorder,
+    const graphics::ComputePipelineDesc& pso_desc,
+    const ShaderVisibleIndex pass_constants_index, const RenderContext& context)
+    -> void
+  {
+    recorder.SetPipelineState(pso_desc);
+    DCHECK_NOTNULL_F(context.view_constants);
+    recorder.SetComputeRootConstantBufferView(
+      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      context.view_constants->GetGPUVirtualAddress());
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      pass_constants_index.get(), 1U);
+  }
+
   auto RequireValidIndex(
-    const ShaderVisibleIndex index, const char* label) noexcept -> bool
+    const ShaderVisibleIndex index, const std::string_view label) -> bool
   {
     if (index.IsValid()) {
       return true;
@@ -151,6 +181,58 @@ namespace {
     return false;
   }
 
+  template <typename Resource>
+  auto RegisterResourceIfNeeded(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (!registry.Contains(*resource)) {
+      registry.Register(resource);
+    }
+  }
+
+  template <typename Resource>
+  auto UnregisterResourceIfPresent(
+    Graphics& gfx, const std::shared_ptr<Resource>& resource) -> void
+  {
+    if (resource == nullptr) {
+      return;
+    }
+
+    auto& registry = gfx.GetResourceRegistry();
+    if (registry.Contains(*resource)) {
+      registry.UnRegisterResource(*resource);
+    }
+  }
+
+  [[nodiscard]] auto BuildMergeCandidateLogicalPages(
+    const std::span<const std::uint32_t> raw_candidates,
+    const std::uint32_t logical_page_count) -> std::vector<std::uint32_t>
+  {
+    auto unique_candidates = std::vector<std::uint32_t> {};
+    if (logical_page_count == 0U || raw_candidates.empty()) {
+      return unique_candidates;
+    }
+
+    auto seen = std::vector<bool>(logical_page_count, false);
+    unique_candidates.reserve(raw_candidates.size());
+    for (const auto logical_page_index : raw_candidates) {
+      if (logical_page_index >= logical_page_count) {
+        continue;
+      }
+      if (seen[logical_page_index]) {
+        continue;
+      }
+      seen[logical_page_index] = true;
+      unique_candidates.push_back(logical_page_index);
+    }
+    return unique_candidates;
+  }
+
 } // namespace
 
 struct VsmStaticDynamicMergePass::Impl {
@@ -159,32 +241,28 @@ struct VsmStaticDynamicMergePass::Impl {
 
   std::optional<VsmStaticDynamicMergePassInput> input {};
   bool resources_prepared { false };
+  bool pipelines_ready { false };
 
-  std::shared_ptr<Buffer> constants_buffer {};
-  void* constants_ptr { nullptr };
+  std::shared_ptr<Buffer> pass_constants_buffer {};
+  void* pass_constants_mapped_ptr { nullptr };
+  std::vector<ShaderVisibleIndex> pass_constants_indices {};
+  std::uint32_t pass_constants_slot_count { 0U };
+  std::uint32_t next_pass_constants_slot { 0U };
 
-  DescriptorHandle constants_cbv_handle {};
-  DescriptorHandle static_shadow_srv_handle {};
-  DescriptorHandle dynamic_shadow_uav_handle {};
-  DescriptorHandle dirty_flags_srv_handle {};
-  DescriptorHandle physical_meta_srv_handle {};
+  std::vector<std::uint32_t> merge_candidate_logical_pages {};
 
-  ShaderVisibleIndex constants_index { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex static_shadow_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex dynamic_shadow_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex dirty_flags_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex physical_meta_srv { kInvalidShaderVisibleIndex };
-
-  const graphics::Texture* shadow_texture_owner { nullptr };
-  std::shared_ptr<graphics::Texture> merge_scratch_texture {};
-  const graphics::Texture* merge_scratch_owner { nullptr };
-  const Buffer* dirty_flags_owner { nullptr };
-  const Buffer* physical_meta_owner { nullptr };
+  std::shared_ptr<Texture> merge_scratch_texture {};
   std::uint32_t merge_scratch_extent { 0U };
   oxygen::Format merge_scratch_format { oxygen::Format::kUnknown };
 
+  ShaderVisibleIndex static_shadow_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex merge_scratch_uav { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex dirty_flags_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex physical_meta_srv { kInvalidShaderVisibleIndex };
+
   std::optional<std::uint32_t> dynamic_slice_index {};
   std::optional<std::uint32_t> static_slice_index {};
+  std::optional<graphics::ComputePipelineDesc> merge_page_pso {};
 
   Impl(observer_ptr<Graphics> gfx_, std::shared_ptr<Config> config_)
     : gfx(gfx_)
@@ -194,168 +272,105 @@ struct VsmStaticDynamicMergePass::Impl {
 
   ~Impl()
   {
-    if (constants_buffer != nullptr && constants_ptr != nullptr) {
-      constants_buffer->UnMap();
-      constants_ptr = nullptr;
+    if (pass_constants_buffer != nullptr
+      && pass_constants_mapped_ptr != nullptr) {
+      pass_constants_buffer->UnMap();
+      pass_constants_mapped_ptr = nullptr;
     }
-    if (gfx != nullptr && constants_buffer != nullptr) {
-      auto& registry = gfx->GetResourceRegistry();
-      if (registry.Contains(*constants_buffer)) {
-        registry.UnRegisterResource(*constants_buffer);
-      }
-    }
-    if (gfx != nullptr && merge_scratch_texture != nullptr) {
-      auto& registry = gfx->GetResourceRegistry();
-      if (registry.Contains(*merge_scratch_texture)) {
-        registry.UnRegisterResource(*merge_scratch_texture);
-      }
-    }
-  }
 
-  auto EnsureConstantsBuffer() -> void
-  {
-    if (constants_buffer != nullptr && constants_ptr != nullptr) {
+    if (gfx == nullptr) {
       return;
     }
 
-    constants_buffer = gfx->CreateBuffer(BufferDesc {
-      .size_bytes = 256U,
+    UnregisterResourceIfPresent(*gfx, pass_constants_buffer);
+    UnregisterResourceIfPresent(*gfx, merge_scratch_texture);
+  }
+
+  auto EnsurePassConstantsBuffer(const std::uint32_t required_slot_count)
+    -> void
+  {
+    CHECK_GT_F(required_slot_count, 0U,
+      "VSM static/dynamic merge requires at least one pass-constants slot");
+
+    if (pass_constants_buffer != nullptr && pass_constants_mapped_ptr != nullptr
+      && pass_constants_slot_count >= required_slot_count
+      && pass_constants_indices.size() >= required_slot_count) {
+      return;
+    }
+
+    if (pass_constants_buffer != nullptr
+      && pass_constants_mapped_ptr != nullptr) {
+      pass_constants_buffer->UnMap();
+      pass_constants_mapped_ptr = nullptr;
+    }
+
+    UnregisterResourceIfPresent(*gfx, pass_constants_buffer);
+
+    pass_constants_slot_count = required_slot_count;
+    pass_constants_indices.assign(
+      pass_constants_slot_count, kInvalidShaderVisibleIndex);
+    const auto pass_constants_stride
+      = static_cast<std::uint64_t>(packing::kConstantBufferAlignment);
+
+    pass_constants_buffer = gfx->CreateBuffer(BufferDesc {
+      .size_bytes = pass_constants_stride * pass_constants_slot_count,
       .usage = BufferUsage::kConstant,
       .memory = BufferMemory::kUpload,
-      .debug_name = config->debug_name + ".Constants",
+      .debug_name = config->debug_name + ".PassConstants",
     });
-    CHECK_NOTNULL_F(
-      constants_buffer.get(), "Failed to create VSM merge constants buffer");
-    gfx->GetResourceRegistry().Register(constants_buffer);
-    constants_ptr = constants_buffer->Map(0U, 256U);
-    CHECK_NOTNULL_F(constants_ptr, "Failed to map VSM merge constants buffer");
-  }
+    CHECK_NOTNULL_F(pass_constants_buffer.get(),
+      "Failed to create VSM merge pass-constants buffer");
+    RegisterResourceIfNeeded(*gfx, pass_constants_buffer);
+    pass_constants_mapped_ptr = pass_constants_buffer->Map(
+      0U, pass_constants_stride * pass_constants_slot_count);
+    CHECK_NOTNULL_F(pass_constants_mapped_ptr,
+      "Failed to map VSM merge pass-constants buffer");
 
-  auto EnsureConstantBufferView() -> ShaderVisibleIndex
-  {
-    auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
-
-    const auto view_desc = graphics::BufferViewDescription {
-      .view_type = ResourceViewType::kConstantBuffer,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .range = { 0U, 256U },
-      .stride = 0U,
-    };
-
-    if (const auto existing
-      = registry.FindShaderVisibleIndex(*constants_buffer, view_desc);
-      existing.has_value()) {
-      constants_index = *existing;
-      return constants_index;
-    }
-
-    constants_cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
-      graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(constants_cbv_handle.IsValid(),
-      "Failed to allocate VSM merge constants CBV");
-    constants_index = allocator.GetShaderVisibleIndex(constants_cbv_handle);
-    const auto view = registry.RegisterView(
-      *constants_buffer, std::move(constants_cbv_handle), view_desc);
-    CHECK_F(view->IsValid(), "Failed to register VSM merge constants CBV");
-    return constants_index;
-  }
-
-  auto EnsureBufferView(Buffer& buffer,
-    const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-    ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex
-  {
     auto& registry = gfx->GetResourceRegistry();
-    auto& allocator = gfx->GetDescriptorAllocator();
+    for (std::uint32_t slot = 0U; slot < pass_constants_slot_count; ++slot) {
+      auto handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+        graphics::DescriptorVisibility::kShaderVisible);
+      CHECK_F(handle.IsValid(),
+        "Failed to allocate VSM merge pass-constants CBV descriptor");
+      pass_constants_indices[slot] = allocator.GetShaderVisibleIndex(handle);
 
-    if (!registry.Contains(buffer)) {
-      registry.Register(std::shared_ptr<Buffer>(&buffer, [](Buffer*) { }));
+      const auto offset
+        = static_cast<std::uint64_t>(slot) * pass_constants_stride;
+      const auto desc = graphics::BufferViewDescription {
+        .view_type = ResourceViewType::kConstantBuffer,
+        .visibility = graphics::DescriptorVisibility::kShaderVisible,
+        .range = { offset, pass_constants_stride },
+        .stride = 0U,
+      };
+      const auto view = registry.RegisterView(
+        *pass_constants_buffer, std::move(handle), desc);
+      CHECK_F(view->IsValid(),
+        "Failed to register VSM merge pass-constants CBV view");
     }
-
-    if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
-      existing.has_value()) {
-      index = *existing;
-      owner = &buffer;
-      return index;
-    }
-
-    handle = allocator.Allocate(
-      desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(), "Failed to allocate VSM merge buffer view");
-    index = allocator.GetShaderVisibleIndex(handle);
-    const auto view = registry.RegisterView(buffer, std::move(handle), desc);
-    CHECK_F(view->IsValid(), "Failed to register VSM merge buffer view");
-    owner = &buffer;
-    return index;
   }
 
-  auto EnsureTextureView(graphics::Texture& texture,
-    const graphics::TextureViewDescription& desc, DescriptorHandle& handle,
-    ShaderVisibleIndex& index, const graphics::Texture*& owner)
-    -> ShaderVisibleIndex
+  auto EnsureMergeScratchTexture(const std::uint32_t page_size_texels,
+    const oxygen::Format depth_format) -> void
   {
-    auto& registry = gfx->GetResourceRegistry();
-    auto& allocator = gfx->GetDescriptorAllocator();
+    const auto scratch_format = ResolveMergeScratchFormat(depth_format);
+    CHECK_F(scratch_format != oxygen::Format::kUnknown,
+      "VSM static/dynamic merge requires a supported depth format "
+      "(depth_format={})",
+      static_cast<int>(depth_format));
 
-    if (!registry.Contains(texture)) {
-      registry.Register(std::shared_ptr<graphics::Texture>(
-        &texture, [](graphics::Texture*) { }));
-    }
-
-    if (const auto existing = registry.FindShaderVisibleIndex(texture, desc);
-      existing.has_value()) {
-      index = *existing;
-      owner = &texture;
-      return index;
-    }
-
-    handle = allocator.Allocate(
-      desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
-    CHECK_F(handle.IsValid(), "Failed to allocate VSM merge texture view");
-    index = allocator.GetShaderVisibleIndex(handle);
-    const auto view = registry.RegisterView(texture, std::move(handle), desc);
-    CHECK_F(view->IsValid(), "Failed to register VSM merge texture view");
-    owner = &texture;
-    return index;
-  }
-
-  auto EnsureMergeScratchTexture(
-    const renderer::vsm::VsmPhysicalPoolSnapshot& pool) -> bool
-  {
-    const auto scratch_format = ResolveMergeScratchFormat(pool.depth_format);
-    if (scratch_format == oxygen::Format::kUnknown) {
-      LOG_F(ERROR,
-        "VSM static/dynamic merge requires a supported depth format "
-        "(depth_format={})",
-        static_cast<int>(pool.depth_format));
-      merge_scratch_texture.reset();
-      merge_scratch_extent = 0U;
-      merge_scratch_format = oxygen::Format::kUnknown;
-      return false;
-    }
-
-    const auto scratch_extent = pool.page_size_texels * pool.tiles_per_axis;
     if (merge_scratch_texture != nullptr
-      && merge_scratch_extent == scratch_extent
+      && merge_scratch_extent == page_size_texels
       && merge_scratch_format == scratch_format) {
-      return true;
+      return;
     }
 
-    if (merge_scratch_texture != nullptr) {
-      auto& registry = gfx->GetResourceRegistry();
-      if (registry.Contains(*merge_scratch_texture)) {
-        registry.UnRegisterResource(*merge_scratch_texture);
-      }
-      merge_scratch_texture.reset();
-      merge_scratch_owner = nullptr;
-      merge_scratch_extent = 0U;
-      merge_scratch_format = oxygen::Format::kUnknown;
-      dynamic_shadow_uav = kInvalidShaderVisibleIndex;
-    }
+    UnregisterResourceIfPresent(*gfx, merge_scratch_texture);
+    merge_scratch_texture.reset();
 
     auto desc = graphics::TextureDesc {};
-    desc.width = scratch_extent;
-    desc.height = scratch_extent;
+    desc.width = page_size_texels;
+    desc.height = page_size_texels;
     desc.array_size = 1U;
     desc.mip_levels = 1U;
     desc.format = scratch_format;
@@ -363,27 +378,68 @@ struct VsmStaticDynamicMergePass::Impl {
     desc.is_uav = true;
     desc.is_shader_resource = false;
     desc.initial_state = ResourceStates::kCommon;
-    desc.debug_name = config != nullptr && !config->debug_name.empty()
-      ? config->debug_name + ".MergeScratch"
-      : "VsmStaticDynamicMergePass.MergeScratch";
+    desc.debug_name = config->debug_name + ".MergeScratch";
 
     merge_scratch_texture = gfx->CreateTexture(desc);
-    if (merge_scratch_texture == nullptr) {
-      LOG_F(ERROR,
-        "VSM static/dynamic merge failed to create scratch texture "
-        "extent={} format={}",
-        scratch_extent, static_cast<int>(scratch_format));
-      return false;
-    }
+    CHECK_NOTNULL_F(merge_scratch_texture.get(),
+      "Failed to create VSM merge scratch texture");
+    RegisterResourceIfNeeded(*gfx, merge_scratch_texture);
 
-    auto& registry = gfx->GetResourceRegistry();
-    if (!registry.Contains(*merge_scratch_texture)) {
-      registry.Register(merge_scratch_texture);
-    }
-
-    merge_scratch_extent = scratch_extent;
+    merge_scratch_extent = page_size_texels;
     merge_scratch_format = scratch_format;
-    return true;
+    merge_scratch_uav = kInvalidShaderVisibleIndex;
+  }
+
+  auto EnsureBufferViewIndex(Buffer& buffer,
+    const graphics::BufferViewDescription& desc) -> ShaderVisibleIndex
+  {
+    auto& registry = gfx->GetResourceRegistry();
+    if (const auto existing = registry.FindShaderVisibleIndex(buffer, desc);
+      existing.has_value()) {
+      return *existing;
+    }
+
+    auto& allocator = gfx->GetDescriptorAllocator();
+    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    CHECK_F(handle.IsValid(), "Failed to allocate VSM merge buffer view");
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    const auto view = registry.RegisterView(buffer, std::move(handle), desc);
+    CHECK_F(view->IsValid(), "Failed to register VSM merge buffer view");
+    return index;
+  }
+
+  auto EnsureTextureViewIndex(Texture& texture,
+    const graphics::TextureViewDescription& desc) -> ShaderVisibleIndex
+  {
+    auto& registry = gfx->GetResourceRegistry();
+    if (const auto existing = registry.FindShaderVisibleIndex(texture, desc);
+      existing.has_value()) {
+      return *existing;
+    }
+
+    auto& allocator = gfx->GetDescriptorAllocator();
+    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    CHECK_F(handle.IsValid(), "Failed to allocate VSM merge texture view");
+    const auto index = allocator.GetShaderVisibleIndex(handle);
+    const auto view = registry.RegisterView(texture, std::move(handle), desc);
+    CHECK_F(view->IsValid(), "Failed to register VSM merge texture view");
+    return index;
+  }
+
+  template <typename T>
+  auto WritePassConstants(const T& constants) -> ShaderVisibleIndex
+  {
+    CHECK_NOTNULL_F(pass_constants_mapped_ptr,
+      "VSM merge pass constants must be mapped before writing");
+    CHECK_LT_F(next_pass_constants_slot, pass_constants_slot_count,
+      "VSM merge exhausted its pass-constants slots");
+    const auto slot = next_pass_constants_slot++;
+    const auto pass_constants_stride
+      = static_cast<std::size_t>(packing::kConstantBufferAlignment);
+    auto* destination = static_cast<std::byte*>(pass_constants_mapped_ptr)
+      + static_cast<std::size_t>(slot) * pass_constants_stride;
+    std::memcpy(destination, &constants, sizeof(constants));
+    return pass_constants_indices.at(slot);
   }
 };
 
@@ -409,6 +465,7 @@ auto VsmStaticDynamicMergePass::ResetInput() noexcept -> void
 {
   impl_->input.reset();
   impl_->resources_prepared = false;
+  impl_->merge_candidate_logical_pages.clear();
 }
 
 auto VsmStaticDynamicMergePass::DoPrepareResources(CommandRecorder& recorder)
@@ -417,6 +474,7 @@ auto VsmStaticDynamicMergePass::DoPrepareResources(CommandRecorder& recorder)
   impl_->resources_prepared = false;
   impl_->dynamic_slice_index.reset();
   impl_->static_slice_index.reset();
+  impl_->merge_candidate_logical_pages.clear();
 
   if (!impl_->input.has_value()) {
     DLOG_F(2, "VSM static/dynamic merge pass skipped because no input is set");
@@ -457,8 +515,22 @@ auto VsmStaticDynamicMergePass::DoPrepareResources(CommandRecorder& recorder)
     co_return;
   }
 
-  auto shadow_texture = std::const_pointer_cast<graphics::Texture>(
-    input.physical_pool.shadow_texture);
+  const auto logical_page_count
+    = input.physical_pool.tiles_per_axis * input.physical_pool.tiles_per_axis;
+  CHECK_GT_F(logical_page_count, 0U,
+    "VSM static/dynamic merge requires at least one logical page slot");
+
+  impl_->merge_candidate_logical_pages = BuildMergeCandidateLogicalPages(
+    input.merge_candidate_logical_pages, logical_page_count);
+  if (impl_->merge_candidate_logical_pages.empty()) {
+    DLOG_F(2,
+      "VSM static/dynamic merge pass skipped because no static merge "
+      "candidates were provided");
+    co_return;
+  }
+
+  auto shadow_texture
+    = std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture);
   auto dirty_flags_buffer
     = std::const_pointer_cast<Buffer>(input.frame.dirty_flags_buffer);
   auto physical_meta_buffer
@@ -470,73 +542,67 @@ auto VsmStaticDynamicMergePass::DoPrepareResources(CommandRecorder& recorder)
     "VSM static/dynamic merge requires a dirty-flags buffer");
   CHECK_NOTNULL_F(physical_meta_buffer.get(),
     "VSM static/dynamic merge requires a physical-metadata buffer");
-  if (!impl_->EnsureMergeScratchTexture(input.physical_pool)) {
-    co_return;
-  }
+
+  RegisterResourceIfNeeded(*impl_->gfx, shadow_texture);
+  RegisterResourceIfNeeded(*impl_->gfx, dirty_flags_buffer);
+  RegisterResourceIfNeeded(*impl_->gfx, physical_meta_buffer);
+
+  impl_->EnsurePassConstantsBuffer(kPassConstantsSlotCount);
+  impl_->EnsureMergeScratchTexture(
+    input.physical_pool.page_size_texels, input.physical_pool.depth_format);
   CHECK_NOTNULL_F(impl_->merge_scratch_texture.get(),
     "VSM static/dynamic merge requires a scratch texture");
 
-  impl_->EnsureConstantsBuffer();
-  static_cast<void>(impl_->EnsureConstantBufferView());
-  static_cast<void>(impl_->EnsureTextureView(*shadow_texture,
-    MakeShadowSliceSrvDesc(*impl_->static_slice_index),
-    impl_->static_shadow_srv_handle, impl_->static_shadow_srv,
-    impl_->shadow_texture_owner));
-  static_cast<void>(impl_->EnsureTextureView(*impl_->merge_scratch_texture,
-    MakeScratchUavDesc(), impl_->dynamic_shadow_uav_handle,
-    impl_->dynamic_shadow_uav, impl_->merge_scratch_owner));
-  static_cast<void>(impl_->EnsureBufferView(*dirty_flags_buffer,
-    MakeStructuredSrvDesc(
-      dirty_flags_buffer->GetDescriptor().size_bytes, sizeof(std::uint32_t)),
-    impl_->dirty_flags_srv_handle, impl_->dirty_flags_srv,
-    impl_->dirty_flags_owner));
-  static_cast<void>(impl_->EnsureBufferView(*physical_meta_buffer,
-    MakeStructuredSrvDesc(physical_meta_buffer->GetDescriptor().size_bytes,
-      sizeof(renderer::vsm::VsmPhysicalPageMeta)),
-    impl_->physical_meta_srv_handle, impl_->physical_meta_srv,
-    impl_->physical_meta_owner));
+  impl_->static_shadow_srv = impl_->EnsureTextureViewIndex(*shadow_texture,
+    ShadowSliceSrvDesc(
+      input.physical_pool.depth_format, *impl_->static_slice_index));
+  impl_->merge_scratch_uav = impl_->EnsureTextureViewIndex(
+    *impl_->merge_scratch_texture, ScratchUavDesc());
+  impl_->dirty_flags_srv = impl_->EnsureBufferViewIndex(*dirty_flags_buffer,
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
+      dirty_flags_buffer->GetDescriptor().size_bytes, sizeof(std::uint32_t)));
+  impl_->physical_meta_srv = impl_->EnsureBufferViewIndex(*physical_meta_buffer,
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
+      physical_meta_buffer->GetDescriptor().size_bytes,
+      sizeof(renderer::vsm::VsmPhysicalPageMeta)));
 
-  if (!RequireValidIndex(impl_->constants_index, "constants CBV")
-    || !RequireValidIndex(impl_->static_shadow_srv, "static-slice SRV")
-    || !RequireValidIndex(impl_->dynamic_shadow_uav, "dynamic-slice UAV")
+  if (!RequireValidIndex(impl_->static_shadow_srv, "static-slice SRV")
+    || !RequireValidIndex(impl_->merge_scratch_uav, "merge scratch UAV")
     || !RequireValidIndex(impl_->dirty_flags_srv, "dirty-flags SRV")
     || !RequireValidIndex(impl_->physical_meta_srv, "physical-metadata SRV")) {
     co_return;
   }
 
-  auto constants = VsmStaticDynamicMergePassConstants {
-    .static_shadow_srv_index = impl_->static_shadow_srv,
-    .dynamic_shadow_uav_index = impl_->dynamic_shadow_uav,
-    .dirty_flags_srv_index = impl_->dirty_flags_srv,
-    .physical_meta_srv_index = impl_->physical_meta_srv,
-    .page_size_texels = input.physical_pool.page_size_texels,
-    .tiles_per_axis = input.physical_pool.tiles_per_axis,
-    .physical_page_count = input.physical_pool.tile_capacity,
-  };
-  std::memcpy(impl_->constants_ptr, &constants, sizeof(constants));
-
-  SetPassConstantsIndex(impl_->constants_index);
-
-  recorder.BeginTrackingResourceState(
-    *shadow_texture, ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    *dirty_flags_buffer, ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    *physical_meta_buffer, ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    *impl_->constants_buffer, ResourceStates::kGenericRead, true);
-  recorder.BeginTrackingResourceState(
-    *impl_->merge_scratch_texture, ResourceStates::kCommon, true);
-
-  recorder.RequireResourceState(
-    *shadow_texture, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *dirty_flags_buffer, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *physical_meta_buffer, ResourceStates::kShaderResource);
-  recorder.FlushBarriers();
+  if (!recorder.IsResourceTracked(*shadow_texture)) {
+    recorder.BeginTrackingResourceState(
+      *shadow_texture, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*dirty_flags_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *dirty_flags_buffer, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*physical_meta_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *physical_meta_buffer, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->pass_constants_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->pass_constants_buffer, ResourceStates::kGenericRead, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->merge_scratch_texture)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->merge_scratch_texture, ResourceStates::kCommon, true);
+  }
 
   impl_->resources_prepared = true;
+  DLOG_F(2,
+    "prepared VSM static/dynamic merge generation={} page_size={} "
+    "logical_pages={} physical_pages={} dynamic_slice={} static_slice={} "
+    "merge_candidates={}",
+    input.frame.snapshot.frame_generation, input.physical_pool.page_size_texels,
+    logical_page_count, input.physical_pool.tile_capacity,
+    *impl_->dynamic_slice_index, *impl_->static_slice_index,
+    impl_->merge_candidate_logical_pages.size());
   co_return;
 }
 
@@ -544,32 +610,42 @@ auto VsmStaticDynamicMergePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   if (!impl_->resources_prepared || !impl_->input.has_value()
     || !impl_->static_slice_index.has_value()
-    || !impl_->dynamic_slice_index.has_value()) {
+    || !impl_->dynamic_slice_index.has_value() || !impl_->merge_page_pso
+    || impl_->merge_candidate_logical_pages.empty()) {
     DLOG_F(2, "VSM static/dynamic merge pass skipped execute");
     co_return;
   }
 
-  const auto page_size = impl_->input->physical_pool.page_size_texels;
-  const auto physical_page_count = impl_->input->physical_pool.tile_capacity;
-  if (page_size == 0U || physical_page_count == 0U) {
+  const auto& input = *impl_->input;
+  const auto page_size = input.physical_pool.page_size_texels;
+  const auto tiles_per_axis = input.physical_pool.tiles_per_axis;
+  const auto logical_page_count = tiles_per_axis * tiles_per_axis;
+  if (page_size == 0U || logical_page_count == 0U) {
     co_return;
   }
 
-  auto shadow_texture = std::const_pointer_cast<graphics::Texture>(
-    impl_->input->physical_pool.shadow_texture);
+  auto shadow_texture
+    = std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture);
+  auto dirty_flags_buffer
+    = std::const_pointer_cast<Buffer>(input.frame.dirty_flags_buffer);
+  auto physical_meta_buffer
+    = std::const_pointer_cast<Buffer>(input.frame.physical_page_meta_buffer);
+
   CHECK_NOTNULL_F(
     shadow_texture.get(), "VSM static/dynamic merge requires a shadow texture");
+  CHECK_NOTNULL_F(dirty_flags_buffer.get(),
+    "VSM static/dynamic merge requires a dirty-flags buffer");
+  CHECK_NOTNULL_F(physical_meta_buffer.get(),
+    "VSM static/dynamic merge requires a physical-metadata buffer");
   CHECK_NOTNULL_F(impl_->merge_scratch_texture.get(),
     "VSM static/dynamic merge requires a scratch texture");
 
-  const auto slice_extent
-    = page_size * impl_->input->physical_pool.tiles_per_axis;
   const auto scratch_slice = graphics::TextureSlice {
     .x = 0U,
     .y = 0U,
     .z = 0U,
-    .width = slice_extent,
-    .height = slice_extent,
+    .width = page_size,
+    .height = page_size,
     .depth = 1U,
     .mip_level = 0U,
     .array_slice = 0U,
@@ -580,57 +656,89 @@ auto VsmStaticDynamicMergePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     .base_array_slice = 0U,
     .num_array_slices = 1U,
   };
-  const auto dynamic_slice = graphics::TextureSlice {
-    .x = 0U,
-    .y = 0U,
-    .z = 0U,
-    .width = slice_extent,
-    .height = slice_extent,
-    .depth = 1U,
-    .mip_level = 0U,
-    .array_slice = *impl_->dynamic_slice_index,
-  };
-  const auto dynamic_subresources = graphics::TextureSubResourceSet {
-    .base_mip_level = 0U,
-    .num_mip_levels = 1U,
-    .base_array_slice = *impl_->dynamic_slice_index,
-    .num_array_slices = 1U,
-  };
+  const auto dispatch_groups
+    = MakeDispatchGroups(page_size, kMergeThreadGroupSize);
 
-  recorder.RequireResourceState(*shadow_texture, ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    *impl_->merge_scratch_texture, ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
+  for (const auto logical_page_index : impl_->merge_candidate_logical_pages) {
+    const auto tile_x = logical_page_index % tiles_per_axis;
+    const auto tile_y = logical_page_index / tiles_per_axis;
+    const auto dynamic_page_slice = graphics::TextureSlice {
+      .x = tile_x * page_size,
+      .y = tile_y * page_size,
+      .z = 0U,
+      .width = page_size,
+      .height = page_size,
+      .depth = 1U,
+      .mip_level = 0U,
+      .array_slice = *impl_->dynamic_slice_index,
+    };
+    const auto dynamic_page_subresources = graphics::TextureSubResourceSet {
+      .base_mip_level = 0U,
+      .num_mip_levels = 1U,
+      .base_array_slice = *impl_->dynamic_slice_index,
+      .num_array_slices = 1U,
+    };
 
-  recorder.CopyTexture(*shadow_texture, dynamic_slice, dynamic_subresources,
-    *impl_->merge_scratch_texture, scratch_slice, scratch_subresources);
+    recorder.RequireResourceState(*shadow_texture, ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      *impl_->merge_scratch_texture, ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    recorder.CopyTexture(*shadow_texture, dynamic_page_slice,
+      dynamic_page_subresources, *impl_->merge_scratch_texture, scratch_slice,
+      scratch_subresources);
+
+    impl_->next_pass_constants_slot = 0U;
+    const auto pass_constants_index
+      = impl_->WritePassConstants(VsmStaticDynamicMergePassConstants {
+        .static_shadow_srv_index = impl_->static_shadow_srv,
+        .dynamic_shadow_uav_index = impl_->merge_scratch_uav,
+        .dirty_flags_srv_index = impl_->dirty_flags_srv,
+        .physical_meta_srv_index = impl_->physical_meta_srv,
+        .page_size_texels = page_size,
+        .tiles_per_axis = tiles_per_axis,
+        .logical_page_index = logical_page_index,
+        .logical_page_count = logical_page_count,
+        .dynamic_slice_index = *impl_->dynamic_slice_index,
+        .static_slice_index = *impl_->static_slice_index,
+      });
+    SetPassConstantsIndex(pass_constants_index);
+    BindComputeStage(
+      recorder, *impl_->merge_page_pso, pass_constants_index, Context());
+    recorder.RequireResourceState(
+      *shadow_texture, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *dirty_flags_buffer, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *physical_meta_buffer, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *impl_->merge_scratch_texture, ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+    recorder.Dispatch(dispatch_groups, dispatch_groups, 1U);
+
+    recorder.RequireResourceState(
+      *impl_->merge_scratch_texture, ResourceStates::kCopySource);
+    recorder.RequireResourceState(*shadow_texture, ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+    recorder.CopyTexture(*impl_->merge_scratch_texture, scratch_slice,
+      scratch_subresources, *shadow_texture, dynamic_page_slice,
+      dynamic_page_subresources);
+  }
 
   recorder.RequireResourceState(
     *shadow_texture, ResourceStates::kShaderResource);
+  recorder.RequireResourceState(*dirty_flags_buffer, ResourceStates::kCommon);
+  recorder.RequireResourceState(*physical_meta_buffer, ResourceStates::kCommon);
   recorder.RequireResourceState(
-    *impl_->merge_scratch_texture, ResourceStates::kUnorderedAccess);
-  recorder.FlushBarriers();
-
-  recorder.Dispatch(MakeDispatchGroups(page_size),
-    MakeDispatchGroups(page_size), physical_page_count);
-
-  recorder.RequireResourceState(
-    *impl_->merge_scratch_texture, ResourceStates::kCopySource);
-  recorder.RequireResourceState(*shadow_texture, ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
-
-  recorder.CopyTexture(*impl_->merge_scratch_texture, scratch_slice,
-    scratch_subresources, *shadow_texture, dynamic_slice, dynamic_subresources);
-
-  recorder.RequireResourceState(
-    *shadow_texture, ResourceStates::kShaderResource);
+    *impl_->merge_scratch_texture, ResourceStates::kCommon);
   recorder.FlushBarriers();
 
   DLOG_F(2,
-    "executed VSM static/dynamic merge pass generation={} physical_pages={} "
-    "page_size={} static_slice={} dynamic_slice={}",
-    impl_->input->frame.snapshot.frame_generation, physical_page_count,
-    page_size, *impl_->static_slice_index, *impl_->dynamic_slice_index);
+    "executed VSM static/dynamic merge generation={} page_size={} "
+    "logical_pages={} physical_pages={} static_slice={} dynamic_slice={} "
+    "merge_candidates={}",
+    input.frame.snapshot.frame_generation, page_size, logical_page_count,
+    input.physical_pool.tile_capacity, *impl_->static_slice_index,
+    *impl_->dynamic_slice_index, impl_->merge_candidate_logical_pages.size());
   co_return;
 }
 
@@ -651,17 +759,20 @@ auto VsmStaticDynamicMergePass::CreatePipelineStateDesc()
     .entry_point = "CS",
   };
 
-  return ComputePipelineDesc::Builder()
-    .SetComputeShader(std::move(shader_request))
-    .SetRootBindings(std::span<const graphics::RootBindingItem>(
-      generated_bindings.data(), generated_bindings.size()))
-    .SetDebugName("VsmStaticDynamicMerge_PSO")
-    .Build();
+  impl_->merge_page_pso
+    = ComputePipelineDesc::Builder()
+        .SetComputeShader(std::move(shader_request))
+        .SetRootBindings(std::span<const graphics::RootBindingItem>(
+          generated_bindings.data(), generated_bindings.size()))
+        .SetDebugName("VsmStaticDynamicMerge_PSO")
+        .Build();
+  impl_->pipelines_ready = true;
+  return *impl_->merge_page_pso;
 }
 
 auto VsmStaticDynamicMergePass::NeedRebuildPipelineState() const -> bool
 {
-  return !LastBuiltPsoDesc().has_value();
+  return !impl_->pipelines_ready;
 }
 
 } // namespace oxygen::engine

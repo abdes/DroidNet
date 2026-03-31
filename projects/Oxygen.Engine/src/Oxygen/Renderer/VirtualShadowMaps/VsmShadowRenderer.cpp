@@ -10,6 +10,7 @@
 #include <cmath>
 #include <optional>
 #include <ranges>
+#include <span>
 #include <string>
 #include <thread>
 #include <tuple>
@@ -166,6 +167,43 @@ namespace {
       = glm::mix(linear_split, logarithmic_split, practical_lambda);
     return std::max(
       prev_depth + kMinCascadeSpan, std::min(generated_end, far_depth));
+  }
+
+  [[nodiscard]] auto FindSliceIndex(const VsmPhysicalPoolSnapshot& pool,
+    const VsmPhysicalPoolSliceRole role) -> std::optional<std::uint32_t>
+  {
+    for (std::uint32_t i = 0U; i < pool.slice_roles.size(); ++i) {
+      if (pool.slice_roles[i] == role) {
+        return i;
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto BuildStaticMergeCandidateLogicalPages(
+    const std::span<const VsmShadowRasterPageJob> prepared_pages,
+    const VsmPhysicalPoolSnapshot& pool) -> std::vector<std::uint32_t>
+  {
+    const auto static_slice_index
+      = FindSliceIndex(pool, VsmPhysicalPoolSliceRole::kStaticDepth);
+    if (!static_slice_index.has_value() || pool.tiles_per_axis == 0U) {
+      return {};
+    }
+
+    auto candidates = std::vector<std::uint32_t> {};
+    candidates.reserve(prepared_pages.size());
+    for (const auto& job : prepared_pages) {
+      if (!job.static_only || job.physical_coord.slice != *static_slice_index) {
+        continue;
+      }
+      candidates.push_back(job.physical_coord.tile_y * pool.tiles_per_axis
+        + job.physical_coord.tile_x);
+    }
+
+    std::ranges::sort(candidates);
+    const auto unique_end = std::ranges::unique(candidates).begin();
+    candidates.erase(unique_end, candidates.end());
+    return candidates;
   }
 
   auto TightenDepthRangeWithShadowCasters(
@@ -1488,11 +1526,15 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
       shadow_rasterizer_pass_->GetRenderedPrimitiveHistory());
     cache_manager_.PublishStaticPrimitivePageFeedback(
       shadow_rasterizer_pass_->GetStaticPageFeedback());
+    const auto merge_candidate_logical_pages
+      = BuildStaticMergeCandidateLogicalPages(
+        shadow_rasterizer_pass_->GetPreparedPages(), seam.physical_pool);
 
     static_dynamic_merge_pass_->SetInput(
       engine::VsmStaticDynamicMergePassInput {
         .frame = current_frame,
         .physical_pool = seam.physical_pool,
+        .merge_candidate_logical_pages = merge_candidate_logical_pages,
       });
     co_await static_dynamic_merge_pass_->PrepareResources(
       render_context, recorder);
