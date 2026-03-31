@@ -88,6 +88,7 @@ set(
   "Passes/TransparentPass.h"
   "Passes/WireframePass.h"
   "Pipeline/CompositionView.h"
+  "Pipeline/DepthPrePassPolicy.h"
   "Pipeline/ForwardPipeline.h"
   "Pipeline/Internal/CompositionPlanner.h"
   "Pipeline/Internal/CompositionViewImpl.h"

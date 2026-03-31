@@ -20,6 +20,7 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
@@ -79,6 +80,9 @@ public:
 
   //! Sets the number of depth slices for clustered culling.
   virtual auto SetClusterDepthSlices(uint32_t /*slices*/) -> void { }
+
+  //! Sets the explicit scene depth-prepass policy for the pipeline.
+  virtual auto SetDepthPrePassMode(DepthPrePassMode /*mode*/) -> void { }
 
   virtual auto SetExposureMode(engine::ExposureMode /*mode*/) -> void { }
   virtual auto SetExposureValue(float /*value*/) -> void { }

@@ -162,6 +162,9 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
   const bool run_scene_passes
     = (plan_spec.intent == ViewRenderIntent::kSceneAndComposite)
     && (plan_spec.effective_render_mode != RenderMode::kWireframe);
+  plan_spec.depth_prepass_mode = run_scene_passes
+    ? inputs.frame_settings.depth_prepass_mode
+    : DepthPrePassMode::kDisabled;
   plan_spec.run_sky_pass = run_scene_passes
     && (sky_state.sky_atmo_enabled || sky_state.sky_sphere_enabled)
     && !debug_intent.is_non_ibl;
@@ -169,11 +172,11 @@ auto FramePlanBuilder::EvaluateViewRenderPlan(const CompositionViewImpl& view,
 
   const ViewRenderPlan plan(plan_spec);
   DLOG_F(2,
-    "ViewRenderPlan view='{}' mode={} intent={} tone_map={} overlay={} sky={} "
-    "lut={}",
+    "ViewRenderPlan view='{}' mode={} intent={} tone_map={} depth_prepass={} "
+    "overlay={} sky={} lut={}",
     view.GetDescriptor().name, plan.EffectiveRenderMode(), plan.Intent(),
-    plan.GetToneMapPolicy(), plan.RunOverlayWireframe(), plan.RunSkyPass(),
-    plan.RunSkyLutUpdate());
+    plan.GetToneMapPolicy(), plan.GetDepthPrePassMode(),
+    plan.RunOverlayWireframe(), plan.RunSkyPass(), plan.RunSkyLutUpdate());
 
   return plan;
 }

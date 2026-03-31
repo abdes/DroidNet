@@ -40,6 +40,7 @@
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/Passes/WireframePass.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
@@ -50,6 +51,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Renderer/Types/VsmFrameBindings.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -109,6 +111,7 @@ public:
   void SetWireframeColor(const graphics::Color& color);
   void SetLightCullingVisualizationMode(engine::ShaderDebugMode mode);
   void SetClusterDepthSlices(uint32_t slices);
+  void SetDepthPrePassMode(DepthPrePassMode mode);
   void SetExposureMode(engine::ExposureMode mode);
   void SetExposureValue(float value);
   void SetToneMapper(engine::ToneMapper mode);
@@ -562,55 +565,104 @@ auto ForwardPipeline::Impl::RunScenePasses(
   const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
   -> co::Co<>
 {
-  if (depth_pass && ctx.depth_texture) {
-    if (shadow_raster_pass && shadow_raster_pass_config) {
-      if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
-        shadow_raster_pass_config->depth_texture
-          = shadow_manager->GetConventionalShadowDepthTexture();
+  auto& renderer = rc.GetRenderer();
+  rc.current_view.depth_prepass_completeness = ctx.plan.WantsDepthPrePass()
+    ? DepthPrePassCompleteness::kIncomplete
+    : DepthPrePassCompleteness::kDisabled;
+
+  bool early_depth_complete = rc.current_view.depth_prepass_completeness
+    == DepthPrePassCompleteness::kComplete;
+
+  if (ctx.plan.WantsDepthPrePass()) {
+    if (!depth_pass || !ctx.depth_texture) {
+      LOG_F(WARNING,
+        "ForwardPipeline: view={} requested DepthPrePass mode {} but no "
+        "scene depth target is available",
+        ctx.view->GetPublishedViewId().get(),
+        to_string(ctx.plan.GetDepthPrePassMode()));
+    } else {
+      if (shadow_raster_pass && shadow_raster_pass_config) {
+        if (const auto shadow_manager = renderer.GetShadowManager()) {
+          shadow_raster_pass_config->depth_texture
+            = shadow_manager->GetConventionalShadowDepthTexture();
+        }
       }
-    }
 
-    if (shadow_raster_pass && shadow_raster_pass_config
-      && shadow_raster_pass_config->depth_texture) {
-      co_await shadow_raster_pass->PrepareResources(rc, rec);
-      co_await shadow_raster_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::ConventionalShadowRasterPass>(
-        shadow_raster_pass.get());
-    }
+      if (shadow_raster_pass && shadow_raster_pass_config
+        && shadow_raster_pass_config->depth_texture) {
+        co_await shadow_raster_pass->PrepareResources(rc, rec);
+        co_await shadow_raster_pass->Execute(rc, rec);
+        rc.RegisterPass<engine::ConventionalShadowRasterPass>(
+          shadow_raster_pass.get());
+      }
 
-    co_await depth_pass->PrepareResources(rc, rec);
-    co_await depth_pass->Execute(rc, rec);
-    rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
+      co_await depth_pass->PrepareResources(rc, rec);
+      co_await depth_pass->Execute(rc, rec);
+      rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
 
-    if (screen_hzb_pass) {
-      co_await screen_hzb_pass->PrepareResources(rc, rec);
-      co_await screen_hzb_pass->Execute(rc, rec);
-      rc.RegisterPass<engine::ScreenHzbBuildPass>(screen_hzb_pass.get());
+      const auto depth_output = depth_pass->GetOutput();
+      early_depth_complete = depth_output.is_complete
+        && depth_output.depth_texture != nullptr
+        && depth_output.has_canonical_srv;
+      rc.current_view.depth_prepass_completeness = early_depth_complete
+        ? DepthPrePassCompleteness::kComplete
+        : DepthPrePassCompleteness::kIncomplete;
+
+      if (!early_depth_complete) {
+        LOG_F(WARNING,
+          "ForwardPipeline: view={} DepthPrePass ran but did not publish a "
+          "complete canonical depth product",
+          ctx.view->GetPublishedViewId().get());
+      }
+
+      if (screen_hzb_pass && early_depth_complete) {
+        co_await screen_hzb_pass->PrepareResources(rc, rec);
+        co_await screen_hzb_pass->Execute(rc, rec);
+        rc.RegisterPass<engine::ScreenHzbBuildPass>(screen_hzb_pass.get());
+      }
     }
   }
 
-  // Sky must run after DepthPrePass so it can depth-test against the
-  // populated depth buffer and only shade background pixels.
-  if (ctx.plan.RunSkyPass() && sky_pass) {
+  const bool defer_sky_until_after_opaque
+    = ctx.plan.RunSkyPass() && !early_depth_complete;
+
+  // Sky can run before opaque shading only when early depth is complete. When
+  // it is not, defer sky until after opaque depth has been written.
+  if (ctx.plan.RunSkyPass() && sky_pass && !defer_sky_until_after_opaque) {
     co_await sky_pass->PrepareResources(rc, rec);
     co_await sky_pass->Execute(rc, rec);
   }
 
-  if (light_culling_pass) {
+  if (light_culling_pass && early_depth_complete) {
     co_await light_culling_pass->PrepareResources(rc, rec);
     co_await light_culling_pass->Execute(rc, rec);
     rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
+  } else {
+    // When clustered culling does not execute for this view, explicitly clear
+    // the published bindings so ShaderPass cannot reuse stale data.
+    renderer.UpdateCurrentViewLightCullingConfig(
+      rc, engine::LightCullingConfig {});
   }
 
-  if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
+  if (const auto shadow_manager = renderer.GetShadowManager()) {
     if (const auto vsm_shadow_renderer
       = shadow_manager->GetVirtualShadowRenderer()) {
-      DLOG_F(2,
-        "ForwardPipeline: view={} executing VSM shell after screen-hzb and "
-        "light-culling",
-        ctx.view->GetPublishedViewId());
-      co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
-        observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
+      if (early_depth_complete) {
+        DLOG_F(2,
+          "ForwardPipeline: view={} executing VSM shell after screen-hzb and "
+          "light-culling",
+          ctx.view->GetPublishedViewId());
+        co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
+          observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
+      } else {
+        renderer.UpdateCurrentViewVirtualShadowFrameBindings(
+          rc, engine::VsmFrameBindings {});
+        DLOG_F(2,
+          "ForwardPipeline: view={} skipping VSM shell because early depth is "
+          "{}",
+          ctx.view->GetPublishedViewId(),
+          to_string(rc.current_view.depth_prepass_completeness));
+      }
     }
   }
 
@@ -618,6 +670,16 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await shader_pass->PrepareResources(rc, rec);
     co_await shader_pass->Execute(rc, rec);
     rc.RegisterPass<engine::ShaderPass>(shader_pass.get());
+  }
+
+  if (defer_sky_until_after_opaque && sky_pass) {
+    DLOG_F(2,
+      "ForwardPipeline: view={} deferring SkyPass until after opaque shading "
+      "because early depth is {}",
+      ctx.view->GetPublishedViewId(),
+      to_string(rc.current_view.depth_prepass_completeness));
+    co_await sky_pass->PrepareResources(rc, rec);
+    co_await sky_pass->Execute(rc, rec);
   }
 
   if (transparent_pass) {
@@ -774,6 +836,10 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
     .depth_texture = nullptr,
     .sdr_in_render_target = false,
   };
+  rc.current_view.depth_prepass_mode = ctx.plan.GetDepthPrePassMode();
+  rc.current_view.depth_prepass_completeness = ctx.plan.WantsDepthPrePass()
+    ? DepthPrePassCompleteness::kIncomplete
+    : DepthPrePassCompleteness::kDisabled;
   DCHECK_NOTNULL_F(ctx.view.get());
   const bool run_scene_passes = ctx.plan.HasSceneLinearPath()
     && (ctx.plan.EffectiveRenderMode() != RenderMode::kWireframe);
@@ -1131,6 +1197,12 @@ void ForwardPipeline::Impl::SetClusterDepthSlices(uint32_t slices)
   settings_draft.dirty = true;
 }
 
+void ForwardPipeline::Impl::SetDepthPrePassMode(DepthPrePassMode mode)
+{
+  settings_draft.depth_prepass_mode = mode;
+  settings_draft.dirty = true;
+}
+
 void ForwardPipeline::Impl::SetExposureMode(engine::ExposureMode mode)
 {
   if (mode == settings_draft.exposure_mode) {
@@ -1398,6 +1470,11 @@ auto ForwardPipeline::SetLightCullingVisualizationMode(
 auto ForwardPipeline::SetClusterDepthSlices(uint32_t slices) -> void
 {
   impl_->SetClusterDepthSlices(slices);
+}
+
+auto ForwardPipeline::SetDepthPrePassMode(DepthPrePassMode mode) -> void
+{
+  impl_->SetDepthPrePassMode(mode);
 }
 
 auto ForwardPipeline::SetExposureMode(engine::ExposureMode mode) -> void

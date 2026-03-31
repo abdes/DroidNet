@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Renderer/api_export.h>
 
@@ -90,6 +91,7 @@ public:
   auto SetLightCullingVisualizationMode(engine::ShaderDebugMode mode)
     -> void override;
   auto SetClusterDepthSlices(uint32_t slices) -> void override;
+  auto SetDepthPrePassMode(DepthPrePassMode mode) -> void override;
   auto SetExposureMode(engine::ExposureMode mode) -> void override;
   auto SetExposureValue(float value) -> void override;
   auto SetGamma(float gamma) -> void override;

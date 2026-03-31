@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
 #include <Oxygen/Renderer/Passes/GroundGridPass.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 
@@ -27,6 +28,9 @@ struct PipelineSettings {
   graphics::Color wire_color { 1.0F, 1.0F, 1.0F, 1.0F };
   engine::ShaderDebugMode light_culling_debug_mode {
     engine::ShaderDebugMode::kDisabled
+  };
+  renderer::DepthPrePassMode depth_prepass_mode {
+    renderer::DepthPrePassMode::kOpaqueAndMasked
   };
   std::uint32_t cluster_depth_slices { 24 };
   engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };

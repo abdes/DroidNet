@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 namespace oxygen::renderer::internal {
@@ -89,6 +90,8 @@ public:
     RenderMode effective_render_mode { RenderMode::kSolid };
     //! Tone-map policy for scene->composite conversion when applicable.
     ToneMapPolicy tone_map_policy { ToneMapPolicy::kConfigured };
+    //! Explicit early scene-depth policy for this planned view.
+    DepthPrePassMode depth_prepass_mode { DepthPrePassMode::kOpaqueAndMasked };
     //! Executes wireframe overlay pass on composite-domain output.
     bool run_overlay_wireframe { false };
     //! Executes sky rendering pass.
@@ -108,6 +111,7 @@ public:
     : intent_(spec.intent)
     , effective_render_mode_(spec.effective_render_mode)
     , tone_map_policy_(spec.tone_map_policy)
+    , depth_prepass_mode_(spec.depth_prepass_mode)
     , run_overlay_wireframe_(spec.run_overlay_wireframe)
     , run_sky_pass_(spec.run_sky_pass)
     , run_sky_lut_update_(spec.run_sky_lut_update)
@@ -118,6 +122,12 @@ public:
     CHECK_F(!(tone_map_policy_ == ToneMapPolicy::kNeutral)
         || intent_ == ViewRenderIntent::kSceneAndComposite,
       "Neutral tonemap requires HDR->SDR path");
+    CHECK_F(depth_prepass_mode_ == DepthPrePassMode::kDisabled
+        || intent_ == ViewRenderIntent::kSceneAndComposite,
+      "DepthPrePass requires scene+composite intent");
+    CHECK_F(depth_prepass_mode_ == DepthPrePassMode::kDisabled
+        || effective_render_mode_ != RenderMode::kWireframe,
+      "DepthPrePass is not valid for wireframe-only plans");
     CHECK_F(!run_sky_pass_ || intent_ == ViewRenderIntent::kSceneAndComposite,
       "Sky visuals require scene+composite intent");
     CHECK_F(
@@ -150,6 +160,16 @@ public:
   {
     return tone_map_policy_;
   }
+  //! Returns the explicit early scene-depth mode for this plan.
+  [[nodiscard]] auto GetDepthPrePassMode() const noexcept -> DepthPrePassMode
+  {
+    return depth_prepass_mode_;
+  }
+  //! Returns whether the plan requires the canonical scene depth prepass.
+  [[nodiscard]] auto WantsDepthPrePass() const noexcept -> bool
+  {
+    return depth_prepass_mode_ != DepthPrePassMode::kDisabled;
+  }
   //! Returns whether wireframe overlay pass should run.
   [[nodiscard]] auto RunOverlayWireframe() const noexcept -> bool
   {
@@ -175,6 +195,7 @@ private:
   ViewRenderIntent intent_ { ViewRenderIntent::kCompositeOnly };
   RenderMode effective_render_mode_ { RenderMode::kSolid };
   ToneMapPolicy tone_map_policy_ { ToneMapPolicy::kConfigured };
+  DepthPrePassMode depth_prepass_mode_ { DepthPrePassMode::kDisabled };
   bool run_overlay_wireframe_ { false };
   bool run_sky_pass_ { false };
   bool run_sky_lut_update_ { false };
