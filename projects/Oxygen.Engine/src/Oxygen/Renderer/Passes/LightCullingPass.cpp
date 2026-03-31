@@ -137,9 +137,7 @@ struct LightCullingPass::Impl {
   uint32_t cluster_buffer_capacity { 0 };
   uint32_t light_list_buffer_capacity { 0 };
 
-  // Current frame's depth texture SRV (single descriptor updated in-place)
-  ShaderVisibleIndex depth_texture_srv { kInvalidShaderVisibleIndex };
-  const graphics::Texture* depth_texture_owner { nullptr };
+  DepthPrePassOutput depth_output {};
   bool resources_prepared { false };
 
   // Cached light data from LightManager
@@ -170,7 +168,6 @@ struct LightCullingPass::Impl {
     uint64_t frames_executed { 0 };
     uint64_t cluster_buffer_recreate_count { 0 };
     uint64_t light_list_buffer_recreate_count { 0 };
-    uint64_t depth_srv_refresh_count { 0 };
     uint64_t peak_clusters { 0 };
     uint64_t peak_light_index_capacity { 0 };
   };
@@ -254,8 +251,6 @@ struct LightCullingPass::Impl {
       telemetry_.cluster_buffer_recreate_count);
     LOG_F(INFO, "light-list buffer recreate count    : {}",
       telemetry_.light_list_buffer_recreate_count);
-    LOG_F(INFO, "depth SRV refresh count             : {}",
-      telemetry_.depth_srv_refresh_count);
     LOG_F(INFO, "peak clusters                       : {}",
       telemetry_.peak_clusters);
     LOG_F(INFO, "peak light index capacity           : {}",
@@ -344,98 +339,6 @@ struct LightCullingPass::Impl {
       = RetiredBuffer { .resource = std::move(old_resource) };
     retire_strategy_.Release(
       kTimelineRetireDomain, slot_handle, retire_queue_, retire_fence_);
-  }
-
-  //! Create or update the depth texture SRV for reading depth in compute.
-  auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
-    -> ShaderVisibleIndex
-  {
-    auto& allocator = gfx->GetDescriptorAllocator();
-    auto& registry = gfx->GetResourceRegistry();
-
-    // Convert depth format to SRV-compatible format
-    const auto depth_format = depth_tex.GetDescriptor().format;
-    Format srv_format = Format::kR32Float;
-
-    switch (depth_format) {
-    case Format::kDepth32:
-    case Format::kDepth32Stencil8:
-      srv_format = Format::kR32Float;
-      break;
-    case Format::kDepth16:
-      srv_format = Format::kR16UNorm;
-      break;
-    case Format::kDepth24Stencil8:
-      srv_format = Format::kR32Float;
-      break;
-    default:
-      srv_format = depth_format;
-      break;
-    }
-
-    graphics::TextureViewDescription srv_desc {
-      .view_type = ResourceViewType::kTexture_SRV,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = srv_format,
-      .dimension = depth_tex.GetDescriptor().texture_type,
-      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      .is_read_only_dsv = false,
-    };
-
-    // Recover an already-registered SRV first. This is the normal resize-safe
-    // path used by other passes when local pass state is stale but the global
-    // registry still owns the descriptor slot.
-    if (const auto existing_index
-      = registry.FindShaderVisibleIndex(depth_tex, srv_desc);
-      existing_index.has_value()) {
-      depth_texture_srv = *existing_index;
-      depth_texture_owner = &depth_tex;
-      return depth_texture_srv;
-    }
-
-    if (depth_texture_srv.IsValid() && depth_texture_owner == &depth_tex
-      && registry.Contains(depth_tex, srv_desc)) {
-      return depth_texture_srv;
-    }
-
-    auto register_new_srv = [&]() -> ShaderVisibleIndex {
-      auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-      if (!srv_handle.IsValid()) {
-        LOG_F(ERROR, "Failed to allocate depth SRV handle");
-        return kInvalidShaderVisibleIndex;
-      }
-      depth_texture_srv = allocator.GetShaderVisibleIndex(srv_handle);
-
-      auto native_view
-        = registry.RegisterView(const_cast<graphics::Texture&>(depth_tex),
-          std::move(srv_handle), srv_desc);
-      if (!native_view->IsValid()) {
-        LOG_F(ERROR, "Failed to register depth SRV view");
-        depth_texture_srv = kInvalidShaderVisibleIndex;
-        return kInvalidShaderVisibleIndex;
-      }
-      depth_texture_owner = &depth_tex;
-      ++telemetry_.depth_srv_refresh_count;
-      return depth_texture_srv;
-    };
-
-    if (!depth_texture_srv.IsValid()) {
-      return register_new_srv();
-    }
-
-    const auto updated
-      = registry.UpdateView(const_cast<graphics::Texture&>(depth_tex),
-        bindless::HeapIndex { depth_texture_srv.get() }, srv_desc);
-    if (!updated) {
-      LOG_F(INFO, "Failed to update depth SRV view, re-registering");
-      depth_texture_srv = kInvalidShaderVisibleIndex;
-      depth_texture_owner = nullptr;
-      return register_new_srv();
-    }
-    depth_texture_owner = &depth_tex;
-    ++telemetry_.depth_srv_refresh_count;
-    return depth_texture_srv;
   }
 
   auto EnsurePassConstantsBuffer() -> void
@@ -633,6 +536,7 @@ LightCullingPass::~LightCullingPass() = default;
 auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
   impl_->resources_prepared = false;
+  impl_->depth_output = {};
   ++impl_->telemetry_.frames_prepared;
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (depth_pass == nullptr) {
@@ -640,12 +544,21 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const auto& depth_tex = depth_pass->GetDepthTexture();
-  const auto& depth_desc = depth_tex.GetDescriptor();
+  impl_->depth_output = depth_pass->GetOutput();
+  if (!impl_->depth_output.is_complete
+    || impl_->depth_output.depth_texture == nullptr
+    || !impl_->depth_output.has_canonical_srv) {
+    LOG_F(WARNING,
+      "LightCullingPass skipped because DepthPrePass output is incomplete");
+    co_return;
+  }
+
+  const auto& depth_tex = *impl_->depth_output.depth_texture;
 
   const auto& cluster_cfg = impl_->config->cluster;
-  impl_->grid_dims = cluster_cfg.ComputeGridDimensions(
-    { .width = depth_desc.width, .height = depth_desc.height });
+  impl_->grid_dims
+    = cluster_cfg.ComputeGridDimensions({ .width = impl_->depth_output.width,
+      .height = impl_->depth_output.height });
 
   if (impl_->grid_dims.z != impl_->last_logged_z) {
     LOG_F(INFO, "config={} grid_dims={}x{}x{} ",
@@ -658,12 +571,6 @@ auto LightCullingPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
   impl_->EnsureClusterBuffers(
     impl_->grid_dims.total_clusters, cluster_cfg.max_lights_per_cluster);
-
-  impl_->depth_texture_srv = impl_->EnsureDepthTextureSrv(depth_tex);
-  if (impl_->depth_texture_srv == kInvalidShaderVisibleIndex) {
-    LOG_F(ERROR, "Failed to create depth texture SRV");
-    co_return;
-  }
 
   auto& renderer = Context().GetRenderer();
   if (const auto light_manager = renderer.GetLightManager()) {
@@ -761,13 +668,10 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const auto* depth_pass = Context().GetPass<DepthPrePass>();
-  if (depth_pass == nullptr) {
+  if (!impl_->depth_output.is_complete
+    || impl_->depth_output.depth_texture == nullptr) {
     co_return;
   }
-
-  const auto& depth_tex = depth_pass->GetDepthTexture();
-  const auto& depth_desc = depth_tex.GetDescriptor();
 
   const ShaderVisibleIndex positional_lights_srv = impl_->positional_lights_srv;
   const uint32_t num_lights = impl_->num_positional_lights;
@@ -781,7 +685,8 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
 
-  const ShaderVisibleIndex depth_srv_index = impl_->depth_texture_srv;
+  const ShaderVisibleIndex depth_srv_index
+    = impl_->depth_output.canonical_srv_index;
 
   LightCullingPassConstants constants {
     .depth_texture_index = depth_srv_index,
@@ -791,8 +696,8 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     .inv_projection_matrix = Context().current_view.resolved_view
       ? Context().current_view.resolved_view->InverseProjection()
       : glm::mat4 { 1.0F },
-    .screen_dimensions = { static_cast<float>(depth_desc.width),
-      static_cast<float>(depth_desc.height) },
+    .screen_dimensions = { static_cast<float>(impl_->depth_output.width),
+      static_cast<float>(impl_->depth_output.height) },
     .num_lights = num_lights,
     ._pad0 = 0,
     .cluster_dim_x = impl_->grid_dims.x,

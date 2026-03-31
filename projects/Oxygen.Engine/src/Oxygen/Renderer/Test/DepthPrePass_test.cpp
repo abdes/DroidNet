@@ -65,8 +65,9 @@ constexpr std::uint32_t kSingleTexelReadbackRowPitch = 256U;
 
 class DepthPrePassGpuTest : public RendererOffscreenGpuTestFixture {
 protected:
-  [[nodiscard]] static auto MakeResolvedView(
-    const std::uint32_t width, const std::uint32_t height) -> ResolvedView
+  [[nodiscard]] static auto MakeResolvedView(const std::uint32_t width,
+    const std::uint32_t height, const bool reverse_z = false,
+    const NdcDepthRange depth_range = NdcDepthRange::ZeroToOne) -> ResolvedView
   {
     auto view_config = View {};
     view_config.viewport = ViewPort {
@@ -77,6 +78,7 @@ protected:
       .min_depth = 0.0F,
       .max_depth = 1.0F,
     };
+    view_config.reverse_z = reverse_z;
     view_config.scissor = Scissors {
       .left = 0,
       .top = 0,
@@ -89,7 +91,7 @@ protected:
       .view_matrix = glm::mat4 { 1.0F },
       .proj_matrix = glm::mat4 { 1.0F },
       .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
-      .depth_range = NdcDepthRange::ZeroToOne,
+      .depth_range = depth_range,
       .near_plane = 0.1F,
       .far_plane = 100.0F,
     });
@@ -247,6 +249,9 @@ NOLINT_TEST_F(DepthPrePassGpuTest, OutputDefaultsToFullTextureRectWhenUnset)
   const auto output = pass.GetOutput();
   ASSERT_NE(output.depth_texture, nullptr);
   EXPECT_EQ(output.depth_texture, depth_texture.get());
+  EXPECT_FALSE(output.canonical_srv_index.IsValid());
+  EXPECT_EQ(output.width, 8U);
+  EXPECT_EQ(output.height, 6U);
   EXPECT_FLOAT_EQ(output.viewport.top_left_x, 0.0F);
   EXPECT_FLOAT_EQ(output.viewport.top_left_y, 0.0F);
   EXPECT_FLOAT_EQ(output.viewport.width, 8.0F);
@@ -259,6 +264,11 @@ NOLINT_TEST_F(DepthPrePassGpuTest, OutputDefaultsToFullTextureRectWhenUnset)
   EXPECT_EQ(output.valid_rect.top, 0);
   EXPECT_EQ(output.valid_rect.right, 8);
   EXPECT_EQ(output.valid_rect.bottom, 6);
+  EXPECT_EQ(output.ndc_depth_range, NdcDepthRange::ZeroToOne);
+  EXPECT_FALSE(output.reverse_z);
+  EXPECT_TRUE(output.has_depth_texture);
+  EXPECT_FALSE(output.has_canonical_srv);
+  EXPECT_FALSE(output.is_complete);
 }
 
 NOLINT_TEST_F(
@@ -342,6 +352,11 @@ NOLINT_TEST_F(DepthPrePassGpuTest, ClearHonorsEffectiveDepthRectIntersection)
   EXPECT_EQ(output.valid_rect.top, 1);
   EXPECT_EQ(output.valid_rect.right, 4);
   EXPECT_EQ(output.valid_rect.bottom, 3);
+  EXPECT_EQ(output.width, 4U);
+  EXPECT_EQ(output.height, 4U);
+  EXPECT_TRUE(output.has_depth_texture);
+  EXPECT_FALSE(output.has_canonical_srv);
+  EXPECT_FALSE(output.is_complete);
 
   ExecuteDepthPass(pass, *renderer, depth_texture, SequenceNumber { 1U },
     "depth-prepass.clipped.execute");
@@ -361,6 +376,52 @@ NOLINT_TEST_F(DepthPrePassGpuTest, ClearHonorsEffectiveDepthRectIntersection)
   EXPECT_FLOAT_EQ(
     ReadDepthTexel(depth_texture, 3U, 2U, "depth-prepass.clipped.inside.b"),
     1.0F);
+}
+
+NOLINT_TEST_F(DepthPrePassGpuTest,
+  ExecutionPublishesCanonicalDepthProductsForDownstreamPasses)
+{
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  auto depth_texture
+    = CreateDepthTexture(6U, 5U, "depth-prepass.products.texture");
+  ASSERT_NE(depth_texture, nullptr);
+
+  auto pass
+    = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
+      .depth_texture = depth_texture,
+      .debug_name = "depth-prepass.products",
+    }));
+
+  auto prepared_frame = PreparedSceneFrame {};
+  auto offscreen = renderer->BeginOffscreenFrame(
+    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 7U } });
+  offscreen.SetCurrentView(kTestViewId,
+    MakeResolvedView(depth_texture->GetDescriptor().width,
+      depth_texture->GetDescriptor().height, true, NdcDepthRange::ZeroToOne),
+    prepared_frame);
+  auto& render_context = offscreen.GetRenderContext();
+
+  {
+    auto recorder = AcquireRecorder("depth-prepass.products.execute");
+    ASSERT_NE(recorder, nullptr);
+    EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
+    RunPass(pass, render_context, *recorder);
+  }
+  WaitForQueueIdle();
+
+  const auto output = pass.GetOutput();
+  ASSERT_NE(output.depth_texture, nullptr);
+  EXPECT_EQ(output.depth_texture, depth_texture.get());
+  EXPECT_TRUE(output.canonical_srv_index.IsValid());
+  EXPECT_EQ(output.width, 6U);
+  EXPECT_EQ(output.height, 5U);
+  EXPECT_EQ(output.ndc_depth_range, NdcDepthRange::ZeroToOne);
+  EXPECT_TRUE(output.reverse_z);
+  EXPECT_TRUE(output.has_depth_texture);
+  EXPECT_TRUE(output.has_canonical_srv);
+  EXPECT_TRUE(output.is_complete);
 }
 
 } // namespace

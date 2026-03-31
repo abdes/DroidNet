@@ -46,21 +46,6 @@ namespace {
 
   constexpr std::uint32_t kThreadGroupSize = 8U;
 
-  [[nodiscard]] auto DepthSrvFormat(const graphics::Texture& texture)
-    -> oxygen::Format
-  {
-    switch (texture.GetDescriptor().format) {
-    case oxygen::Format::kDepth32:
-    case oxygen::Format::kDepth24Stencil8:
-    case oxygen::Format::kDepth32Stencil8:
-      return oxygen::Format::kR32Float;
-    case oxygen::Format::kDepth16:
-      return oxygen::Format::kR16UNorm;
-    default:
-      return texture.GetDescriptor().format;
-    }
-  }
-
   [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
     -> graphics::ResourceStates
   {
@@ -159,9 +144,7 @@ struct VsmPageRequestGeneratorPass::Impl {
   ShaderVisibleIndex request_flags_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex request_flags_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex pass_constants_index { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex depth_texture_srv { kInvalidShaderVisibleIndex };
-
-  const graphics::Texture* depth_texture_owner { nullptr };
+  DepthPrePassOutput depth_output {};
 
   Impl(observer_ptr<Graphics> gfx_, std::shared_ptr<Config> config_)
     : gfx(gfx_)
@@ -385,72 +368,6 @@ struct VsmPageRequestGeneratorPass::Impl {
     registry.RegisterView(
       *pass_constants_buffer, std::move(cbv_handle), cbv_desc);
   }
-
-  auto EnsureDepthTextureSrv(const graphics::Texture& depth_tex)
-    -> ShaderVisibleIndex
-  {
-    auto& allocator = gfx->GetDescriptorAllocator();
-    auto& registry = gfx->GetResourceRegistry();
-    graphics::TextureViewDescription srv_desc {
-      .view_type = ResourceViewType::kTexture_SRV,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = DepthSrvFormat(depth_tex),
-      .dimension = depth_tex.GetDescriptor().texture_type,
-      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      .is_read_only_dsv = false,
-    };
-
-    if (const auto existing_index
-      = registry.FindShaderVisibleIndex(depth_tex, srv_desc);
-      existing_index.has_value()) {
-      depth_texture_srv = *existing_index;
-      depth_texture_owner = &depth_tex;
-      return depth_texture_srv;
-    }
-
-    if (depth_texture_srv.IsValid() && depth_texture_owner == &depth_tex
-      && registry.Contains(depth_tex, srv_desc)) {
-      return depth_texture_srv;
-    }
-
-    auto register_new_srv = [&]() -> ShaderVisibleIndex {
-      auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-      if (!srv_handle.IsValid()) {
-        LOG_F(ERROR, "Failed to allocate VSM page-request depth SRV");
-        return kInvalidShaderVisibleIndex;
-      }
-      depth_texture_srv = allocator.GetShaderVisibleIndex(srv_handle);
-      const auto view
-        = registry.RegisterView(const_cast<graphics::Texture&>(depth_tex),
-          std::move(srv_handle), srv_desc);
-      if (!view->IsValid()) {
-        LOG_F(ERROR, "Failed to register VSM page-request depth SRV");
-        depth_texture_srv = kInvalidShaderVisibleIndex;
-        return depth_texture_srv;
-      }
-      depth_texture_owner = &depth_tex;
-      return depth_texture_srv;
-    };
-
-    if (!depth_texture_srv.IsValid()) {
-      return register_new_srv();
-    }
-
-    const auto updated
-      = registry.UpdateView(const_cast<graphics::Texture&>(depth_tex),
-        bindless::HeapIndex { depth_texture_srv.get() }, srv_desc);
-    if (!updated) {
-      LOG_F(
-        INFO, "VSM page-request depth SRV update failed, re-registering view");
-      depth_texture_srv = kInvalidShaderVisibleIndex;
-      depth_texture_owner = nullptr;
-      return register_new_srv();
-    }
-
-    depth_texture_owner = &depth_tex;
-    return depth_texture_srv;
-  }
 };
 
 VsmPageRequestGeneratorPass::VsmPageRequestGeneratorPass(
@@ -529,6 +446,7 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
   -> co::Co<>
 {
   impl_->resources_prepared = false;
+  impl_->depth_output = {};
 
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (depth_pass == nullptr) {
@@ -554,12 +472,16 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
       impl_->frame_projections.size() * sizeof(VsmPageRequestProjection));
   }
 
-  const auto& depth_texture = depth_pass->GetDepthTexture();
-  const auto depth_srv = impl_->EnsureDepthTextureSrv(depth_texture);
-  if (!depth_srv.IsValid()) {
-    LOG_F(ERROR, "VSM page-request pass failed to create depth SRV");
+  impl_->depth_output = depth_pass->GetOutput();
+  if (!impl_->depth_output.is_complete
+    || impl_->depth_output.depth_texture == nullptr
+    || !impl_->depth_output.has_canonical_srv) {
+    LOG_F(ERROR,
+      "VSM page-request pass failed because DepthPrePass output is incomplete");
     co_return;
   }
+  const auto& depth_texture = *impl_->depth_output.depth_texture;
+  const auto depth_srv = impl_->depth_output.canonical_srv_index;
 
   ShaderVisibleIndex cluster_grid_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex light_index_list_index { kInvalidShaderVisibleIndex };
@@ -580,14 +502,14 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
     tile_size_px = light_culling->GetClusterConfig().tile_size_px;
   }
 
-  const auto& depth_desc = depth_texture.GetDescriptor();
   const auto constants = VsmPageRequestGeneratorPassConstants {
     .depth_texture_index = depth_srv,
     .projection_buffer_index = impl_->projection_srv,
     .page_request_flags_uav_index = impl_->request_flags_uav,
     .cluster_grid_index = cluster_grid_index,
     .light_index_list_index = light_index_list_index,
-    .screen_dimensions = { depth_desc.width, depth_desc.height },
+    .screen_dimensions
+    = { impl_->depth_output.width, impl_->depth_output.height },
     .projection_count = GetProjectionCount(),
     .virtual_page_count = impl_->virtual_page_count,
     .inverse_view_projection = resolved_view->InverseViewProjection(),
@@ -671,16 +593,14 @@ auto VsmPageRequestGeneratorPass::DoExecute(CommandRecorder& recorder)
     co_return;
   }
 
-  const auto* depth_pass = Context().GetPass<DepthPrePass>();
-  if (depth_pass == nullptr) {
+  if (!impl_->depth_output.is_complete) {
     co_return;
   }
 
-  const auto& depth_desc = depth_pass->GetDepthTexture().GetDescriptor();
   const auto groups_x = std::max(
-    1U, (depth_desc.width + kThreadGroupSize - 1U) / kThreadGroupSize);
-  const auto groups_y = std::max(
-    1U, (depth_desc.height + kThreadGroupSize - 1U) / kThreadGroupSize);
+    1U, (impl_->depth_output.width + kThreadGroupSize - 1U) / kThreadGroupSize);
+  const auto groups_y = std::max(1U,
+    (impl_->depth_output.height + kThreadGroupSize - 1U) / kThreadGroupSize);
 
   recorder.Dispatch(groups_x, groups_y, 1U);
   recorder.RequireResourceState(

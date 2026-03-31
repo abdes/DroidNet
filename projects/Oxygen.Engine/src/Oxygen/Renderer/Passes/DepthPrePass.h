@@ -12,6 +12,8 @@
 #include <span>
 #include <string>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -58,9 +60,17 @@ struct DepthPrePassConfig {
 
 struct DepthPrePassOutput {
   const graphics::Texture* depth_texture { nullptr };
+  ShaderVisibleIndex canonical_srv_index { kInvalidShaderVisibleIndex };
+  std::uint32_t width { 0U };
+  std::uint32_t height { 0U };
   ViewPort viewport {};
   Scissors scissors {};
   Scissors valid_rect {};
+  NdcDepthRange ndc_depth_range { NdcDepthRange::ZeroToOne };
+  bool reverse_z { false };
+  bool has_depth_texture { false };
+  bool has_canonical_srv { false };
+  bool is_complete { false };
 };
 
 //! Generic implementation for a depth-only raster pass. Can be extended if
@@ -181,6 +191,7 @@ protected:
     graphics::CommandRecorder& command_recorder) const -> void;
   [[nodiscard]] auto SelectPipelineStateForPartition(
     const PassMask& pass_mask) const -> const graphics::GraphicsPipelineDesc&;
+  auto EnsureCanonicalDepthSrv() -> ShaderVisibleIndex;
 
 private:
   //! List of mesh or draw call identifiers to render in the pre-pass.
@@ -231,6 +242,12 @@ private:
   //! Current clear color for the pass (interpreted for depth/stencil).
   std::optional<graphics::Color>
     clear_color_ {}; // Default clear color (e.g., black, full alpha)
+
+  ShaderVisibleIndex canonical_depth_srv_index_ { kInvalidShaderVisibleIndex };
+  const graphics::Texture* canonical_depth_srv_owner_ { nullptr };
+  NdcDepthRange output_ndc_depth_range_ { NdcDepthRange::ZeroToOne };
+  bool output_reverse_z_ { false };
+  bool output_is_complete_ { false };
 };
 
 } // namespace oxygen::engine

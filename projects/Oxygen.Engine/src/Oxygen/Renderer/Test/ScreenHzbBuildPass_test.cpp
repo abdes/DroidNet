@@ -53,6 +53,7 @@ using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::Renderer;
 using oxygen::engine::ScreenHzbBuildPass;
 using oxygen::engine::ScreenHzbBuildPassConfig;
+using oxygen::engine::testing::RendererOffscreenGpuTestFixture;
 using oxygen::engine::testing::RunPass;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
@@ -61,7 +62,6 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
-using oxygen::engine::testing::RendererOffscreenGpuTestFixture;
 
 constexpr ViewId kTestViewId { 21U };
 class ScreenHzbBuildGpuTest : public RendererOffscreenGpuTestFixture {
@@ -254,6 +254,12 @@ protected:
     {
       auto recorder = AcquireRecorder(std::string(debug_name));
       ASSERT_NE(recorder, nullptr);
+      EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
+      oxygen::co::testing::TestEventLoop loop;
+      oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+        co_await depth_pass.PrepareResources(render_context, *recorder);
+        co_return;
+      });
       RunPass(pass, render_context, *recorder);
     }
     WaitForQueueIdle();
