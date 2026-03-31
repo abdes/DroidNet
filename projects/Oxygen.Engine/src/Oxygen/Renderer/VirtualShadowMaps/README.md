@@ -2,6 +2,11 @@
 
 This folder contains the greenfield low-level VSM module. It is intentionally separate from the active renderer shadow backend, which remains the conventional directional shadow path.
 
+Cross-reference:
+
+- performance investigation and tuning workflow:
+  `design/VsmPerformanceOptimizationPlaybook.md`
+
 ## Ownership Split
 
 - `VsmPhysicalPagePool*`: persistent physical pool state, compatibility, snapshots, and GPU resource lifetime.
