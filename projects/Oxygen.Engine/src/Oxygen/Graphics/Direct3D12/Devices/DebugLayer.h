@@ -24,13 +24,13 @@ class DebugLayer final : public Component {
   OXYGEN_COMPONENT(DebugLayer)
 
 public:
-  DebugLayer(bool enable_debug, bool enable_validation) noexcept;
+  DebugLayer(bool enable_debug_layer, bool enable_validation) noexcept;
   ~DebugLayer() noexcept override;
 
   OXYGEN_MAKE_NON_COPYABLE(DebugLayer);
   OXYGEN_MAKE_NON_MOVABLE(DebugLayer);
 
-  static auto ConfigureTooling(bool enable_aftermath,
+  static auto ConfigureTooling(bool enable_debug_layer, bool enable_aftermath,
     const oxygen::FrameCaptureConfig& frame_capture_config) noexcept -> void;
   static auto BootstrapRenderDoc() noexcept -> void;
   static auto BootstrapPix() noexcept -> void;
@@ -54,8 +54,8 @@ public:
   static auto PrintDredReport(dx::IDevice* device) noexcept -> void;
 
 private:
-  auto InitializeDebugLayer(bool enable_debug, bool enable_validation) noexcept
-    -> void;
+  auto InitializeDebugLayer(
+    bool enable_debug_layer, bool enable_validation) noexcept -> void;
   auto InitializeDred() noexcept -> void;
   auto InitializeAftermath() noexcept -> void;
   auto PrintLiveObjectsReport() noexcept -> void;

@@ -228,12 +228,12 @@ auto PathsEquivalent(
 } // namespace
 
 DebugLayer::DebugLayer(
-  const bool enable_debug, const bool enable_validation) noexcept
+  const bool enable_debug_layer, const bool enable_validation) noexcept
 {
   BootstrapRenderDoc();
   BootstrapPix();
-  InitializeDebugLayer(enable_debug, enable_validation);
-  if (enable_debug) {
+  InitializeDebugLayer(enable_debug_layer, enable_validation);
+  if (enable_debug_layer) {
     InitializeDred();
   }
   InitializeAftermath();
@@ -257,7 +257,8 @@ DebugLayer::~DebugLayer() noexcept
   AftermathTracker::Instance().DisableCrashDumps();
 }
 
-void DebugLayer::ConfigureTooling(const bool enable_aftermath,
+void DebugLayer::ConfigureTooling(const bool enable_debug_layer,
+  const bool enable_aftermath,
   const oxygen::FrameCaptureConfig& frame_capture_config) noexcept
 {
   g_tooling_policy = ToolingPolicy { .requested_aftermath = enable_aftermath,
@@ -267,8 +268,10 @@ void DebugLayer::ConfigureTooling(const bool enable_aftermath,
   RefreshToolingPolicy();
 
   LOG_F(INFO,
-    "D3D12 tooling policy requested: aftermath={} frame_capture_provider={}",
-    enable_aftermath, CaptureProviderText(frame_capture_config.provider));
+    "D3D12 tooling policy requested: debug_layer={} aftermath={} "
+    "frame_capture_provider={}",
+    enable_debug_layer, enable_aftermath,
+    CaptureProviderText(frame_capture_config.provider));
 
   if (const auto* requested_capture = RequestedCaptureToolName();
     requested_capture != nullptr) {
@@ -305,6 +308,12 @@ void DebugLayer::ConfigureTooling(const bool enable_aftermath,
       IsPixBuildAvailable(), IsPixGpuCaptureBuildAvailable(),
       IsPixTimingCaptureBuildAvailable(), IsPixUiBuildAvailable());
   }
+
+  LOG_F(INFO,
+    "D3D12 tooling policy resolved: debug_layer={} aftermath={} renderdoc={} "
+    "pix={}",
+    enable_debug_layer, g_tooling_policy.aftermath_enabled,
+    g_tooling_policy.renderdoc_enabled, g_tooling_policy.pix_enabled);
 }
 
 auto DebugLayer::IsPixEnabled() noexcept -> bool
@@ -313,9 +322,9 @@ auto DebugLayer::IsPixEnabled() noexcept -> bool
 }
 
 void DebugLayer::InitializeDebugLayer(
-  const bool enable_debug, const bool enable_validation) noexcept
+  const bool enable_debug_layer, const bool enable_validation) noexcept
 {
-  if (!enable_debug) {
+  if (!enable_debug_layer) {
     return;
   }
 

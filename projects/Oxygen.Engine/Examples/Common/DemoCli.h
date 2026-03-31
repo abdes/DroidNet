@@ -8,18 +8,26 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 
 namespace oxygen::examples::cli {
 
 inline constexpr auto kAdvancedHelpCommand = "help-advanced";
+
+class GraphicsToolingCliError : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
 
 struct RuntimeOptionBindings {
   uint32_t* frames = nullptr;
@@ -27,6 +35,11 @@ struct RuntimeOptionBindings {
   bool* headless = nullptr;
   bool* fullscreen = nullptr;
   bool* vsync = nullptr;
+};
+
+struct GraphicsToolingCliState {
+  bool enable_debug_layer { oxygen::DefaultGraphicsDebugLayerEnabled() };
+  bool enable_aftermath { oxygen::DefaultGraphicsAftermathEnabled() };
 };
 
 inline auto MakeRuntimeOptions(const RuntimeOptionBindings& bindings)
@@ -95,6 +108,52 @@ inline auto MakeAdvancedHelpCommand() -> clap::Command::Ptr
 {
   return clap::CommandBuilder(std::string(kAdvancedHelpCommand))
     .About("Display help including advanced and development-only options.");
+}
+
+inline auto MakeGraphicsToolingOptions(GraphicsToolingCliState& state)
+  -> clap::Options::Ptr
+{
+  auto options = std::make_shared<clap::Options>("Graphics tooling options");
+  options->Add(clap::Option::WithKey("debug-layer")
+      .About("Enable the D3D12 debug layer. Mutually exclusive with "
+             "--aftermath")
+      .Long("debug-layer")
+      .WithValue<bool>()
+      .DefaultValue(oxygen::DefaultGraphicsDebugLayerEnabled())
+      .UserFriendlyName("enabled")
+      .StoreTo(&state.enable_debug_layer)
+      .Build());
+  options->Add(clap::Option::WithKey("aftermath")
+      .About("Enable Nsight Aftermath. Mutually exclusive with "
+             "--debug-layer")
+      .Long("aftermath")
+      .WithValue<bool>()
+      .DefaultValue(oxygen::DefaultGraphicsAftermathEnabled())
+      .UserFriendlyName("enabled")
+      .StoreTo(&state.enable_aftermath)
+      .Build());
+  return options;
+}
+
+inline auto ValidateGraphicsToolingOptions(const GraphicsToolingCliState& state)
+  -> void
+{
+  if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
+        state.enable_debug_layer, state.enable_aftermath)) {
+    LOG_F(ERROR,
+      "Rejected graphics tooling CLI options: debug_layer={} aftermath={} "
+      "(mutually exclusive)",
+      state.enable_debug_layer, state.enable_aftermath);
+    throw GraphicsToolingCliError(
+      "--debug-layer and --aftermath are mutually exclusive");
+  }
+}
+
+inline auto LogGraphicsToolingOptions(const GraphicsToolingCliState& state)
+  -> void
+{
+  LOG_F(INFO, "Graphics tooling CLI resolved: debug_layer={} aftermath={}",
+    state.enable_debug_layer, state.enable_aftermath);
 }
 
 inline auto BuildCli(std::string program_name, std::string about,

@@ -126,7 +126,7 @@ auto AdapterInfo::MemoryAsString() const -> std::string
 
 void DeviceManager::InitializeFactory()
 {
-  if (props_.enable_debug) {
+  if (props_.enable_debug_layer) {
     const auto hr
       = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&factory_));
     if (SUCCEEDED(hr)) {
@@ -260,7 +260,7 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     ThrowOnFailed(D3D12CreateDevice(context.adapter.Get(),
       props_.minFeatureLevel, IID_PPV_ARGS(&context.device)));
 
-    if (props_.enable_debug) {
+    if (props_.enable_debug_layer) {
       DebugLayer::ConfigureDeviceInfoQueue(context.device.Get());
     }
     DebugLayer::ConfigureAftermathForDevice(
@@ -365,7 +365,24 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
 {
   LOG_SCOPE_F(INFO, "DeviceManager init");
 
-  DebugLayer::ConfigureTooling(props_.enable_aftermath, props_.frame_capture);
+  if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
+        props_.enable_debug_layer, props_.enable_aftermath)) {
+    LOG_F(ERROR,
+      "Rejected D3D12 device manager config: debug_layer={} aftermath={} "
+      "(mutually exclusive)",
+      props_.enable_debug_layer, props_.enable_aftermath);
+    throw std::invalid_argument(
+      "D3D12 debug layer and Nsight Aftermath are mutually exclusive");
+  }
+
+  LOG_F(INFO,
+    "D3D12 device manager config accepted: debug_layer={} validation={} "
+    "aftermath={} capture_provider={}",
+    props_.enable_debug_layer, props_.enable_validation,
+    props_.enable_aftermath, static_cast<int>(props_.frame_capture.provider));
+
+  DebugLayer::ConfigureTooling(
+    props_.enable_debug_layer, props_.enable_aftermath, props_.frame_capture);
 
   // RenderDoc must be bootstrapped before any DXGI factory creation or
   // D3D12 debug/device entry-point usage so its hooks can wrap the objects
@@ -375,11 +392,11 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
   DebugLayer::BootstrapPix();
   InitializeFactory();
 
-  if (props_.enable_debug || props_.enable_aftermath
+  if (props_.enable_debug_layer || props_.enable_aftermath
     || props_.frame_capture.provider != oxygen::FrameCaptureProvider::kNone) {
     // The DebugLayer object also owns runtime debug-tool integration state.
     debug_layer_ = std::make_unique<DebugLayer>(
-      props_.enable_debug, props_.enable_validation);
+      props_.enable_debug_layer, props_.enable_validation);
   }
 
   DiscoverAdapters();

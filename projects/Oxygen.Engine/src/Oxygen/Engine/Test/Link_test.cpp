@@ -45,7 +45,7 @@ auto main(int argc, char** argv) -> int
   auto platform = std::make_shared<Platform>(platform_config);
 
   const GraphicsConfig gfx_config {
-    .enable_debug = false,
+    .enable_debug_layer = false,
     .enable_validation = false,
     .headless = true,
     .extra = {},

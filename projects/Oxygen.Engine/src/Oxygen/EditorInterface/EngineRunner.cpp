@@ -197,17 +197,17 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
 
     // Load the graphics backend
     const GraphicsConfig gfx_config {
-      .enable_debug = true,
+      .enable_debug_layer = DefaultGraphicsDebugLayerEnabled(),
       .enable_validation = false,
+      .enable_aftermath = DefaultGraphicsAftermathEnabled(),
       .preferred_card_name = std::nullopt,
       .headless = false,
       .enable_vsync = false,
       .extra = {},
     };
     const auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
-    ctx->gfx_weak
-      = loader.LoadBackend(graphics::BackendType::kDirect3D12, gfx_config,
-        config.path_finder_config);
+    ctx->gfx_weak = loader.LoadBackend(graphics::BackendType::kDirect3D12,
+      gfx_config, config.path_finder_config);
     CHECK_F(
       !ctx->gfx_weak.expired()); // Expect a valid graphics backend, or abort
     ctx->gfx_weak.lock()->CreateCommandQueues(ctx->queue_strategy);

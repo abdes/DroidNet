@@ -224,6 +224,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool hot_reload = true;
   std::string directional_shadows = "conventional";
   std::string cvars_archive_path;
+  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
   app.headless = false;
@@ -271,6 +272,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             .fullscreen = &app.fullscreen,
             .vsync = &enable_vsync,
           }))
+          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
+            graphics_tooling_cli))
           .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
           .WithOptions(
             oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
@@ -287,10 +290,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       return EXIT_SUCCESS;
     }
 
+    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed frames option = {}", frames);
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
     oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
@@ -334,9 +339,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     const auto frame_capture_config
       = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli);
     const GraphicsConfig gfx_config {
-      .enable_debug = true,
+      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
       .enable_validation = false,
-      .enable_aftermath = true,
+      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
       .preferred_card_name = std::nullopt,
       .headless = app.headless,
       .enable_vsync = enable_vsync,

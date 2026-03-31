@@ -53,7 +53,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
-  bool enable_debug = true;
+  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   bool enable_validation = false;
   bool require_display = true;
   bool auto_select_adapter = false;
@@ -61,14 +61,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
   try {
     const auto device_options = std::make_shared<Options>("Device options");
-    device_options->Add(Option::WithKey("debug")
-        .About("Enable the D3D12 debug layer")
-        .Long("debug")
-        .WithValue<bool>()
-        .DefaultValue(true)
-        .UserFriendlyName("debug")
-        .StoreTo(&enable_debug)
-        .Build());
     device_options->Add(Option::WithKey("validation")
         .About("Enable GPU validation")
         .Long("validation")
@@ -103,7 +95,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .Build());
 
     const Command::Ptr default_command
-      = CommandBuilder(Command::DEFAULT).WithOptions(device_options);
+      = CommandBuilder(Command::DEFAULT)
+          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
+            graphics_tooling_cli))
+          .WithOptions(device_options);
     auto cli = oxygen::examples::cli::BuildCli(
       "devices", "D3D12 device removal demo", default_command);
 
@@ -114,9 +109,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       return EXIT_SUCCESS;
     }
 
+    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
+    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
+
     const oxygen::graphics::d3d12::DeviceManagerDesc props {
-      .enable_debug = enable_debug,
+      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
       .enable_validation = enable_validation,
+      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
       .require_display = require_display,
       .auto_select_adapter = auto_select_adapter,
       .minFeatureLevel = ParseFeatureLevel(feature_level),
