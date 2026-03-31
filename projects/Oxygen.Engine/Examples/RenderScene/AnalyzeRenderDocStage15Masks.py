@@ -248,4 +248,4 @@ def build_report(
     report.flush()
 
 
-os._exit(run_ui_script(REPORT_SUFFIX, build_report))
+RUN_EXIT_CODE = run_ui_script(REPORT_SUFFIX, build_report)

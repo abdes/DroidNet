@@ -25,7 +25,6 @@ Manual sign-off and external test gates remain out of scope for this script and
 are reported as manual or blocked even when all automated checks pass.
 """
 
-import os
 import sys
 import builtins
 from pathlib import Path
@@ -310,4 +309,4 @@ def build_report(
     report.flush()
 
 
-os._exit(run_ui_script(REPORT_SUFFIX, build_report))
+RUN_EXIT_CODE = run_ui_script(REPORT_SUFFIX, build_report)

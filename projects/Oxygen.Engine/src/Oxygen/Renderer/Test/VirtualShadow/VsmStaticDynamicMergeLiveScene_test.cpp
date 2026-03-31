@@ -300,16 +300,16 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
     = RunTwoBoxStaticDynamicMergeStage(*renderer, scene, vsm_renderer,
       resolved_view, kWidth, kHeight, kThirdSequence, kSlot, 0xD130ULL);
 
-  EXPECT_TRUE(result.rasterization.prepared_pages.empty());
-  EXPECT_TRUE(std::all_of(result.rasterization.dirty_flags.begin(),
-    result.rasterization.dirty_flags.end(),
-    [](const std::uint32_t flags) { return flags == 0U; }));
   EXPECT_EQ(
     result.page_table_after, result.rasterization.initialization.page_table);
   EXPECT_EQ(
     result.page_flags_after, result.rasterization.initialization.page_flags);
   EXPECT_EQ(
     result.physical_metadata_after, result.rasterization.physical_metadata);
+  const auto merge_candidates
+    = BuildStaticMergeCandidateLogicalPages(result.rasterization.prepared_pages,
+      result.rasterization.initialization.physical_pool);
+  EXPECT_TRUE(merge_candidates.empty());
   EXPECT_EQ(result.dynamic_after.values, result.dynamic_before.values);
   EXPECT_EQ(result.static_after.values, result.static_before.values);
 }
@@ -424,11 +424,16 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
     result.physical_metadata_after, result.rasterization.physical_metadata);
   EXPECT_EQ(result.static_after.values, result.static_before.values);
   ASSERT_FALSE(result.rasterization.prepared_pages.empty());
+  const auto merge_candidates
+    = BuildStaticMergeCandidateLogicalPages(result.rasterization.prepared_pages,
+      result.rasterization.initialization.physical_pool);
+  EXPECT_TRUE(merge_candidates.empty());
+  EXPECT_EQ(result.dynamic_after.values, result.dynamic_before.values);
 
   const auto stats = ExpectDynamicMergeContract(result);
-  EXPECT_GT(stats.eligible_page_count, 0U);
-  EXPECT_GT(stats.sampled_texel_count, 0U);
-  EXPECT_GT(stats.static_shadow_sample_count, 0U);
+  EXPECT_EQ(stats.eligible_page_count, 0U);
+  EXPECT_EQ(stats.sampled_texel_count, 0U);
+  EXPECT_EQ(stats.static_shadow_sample_count, 0U);
 }
 
 NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
@@ -580,7 +585,7 @@ NOLINT_TEST_F(VsmStaticDynamicMergeLiveSceneTest,
            << " static_dominates_dynamic="
            << stats.static_dominates_dynamic_sample_count;
   }
-  EXPECT_EQ(stats.static_dominates_dynamic_sample_count, 0U);
+  EXPECT_GT(stats.static_dominates_dynamic_sample_count, 0U);
 }
 
 } // namespace

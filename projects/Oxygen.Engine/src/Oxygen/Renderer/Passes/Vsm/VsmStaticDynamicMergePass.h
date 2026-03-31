@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -35,6 +37,7 @@ struct VsmStaticDynamicMergePassConfig {
 struct VsmStaticDynamicMergePassInput {
   renderer::vsm::VsmPageAllocationFrame frame {};
   renderer::vsm::VsmPhysicalPoolSnapshot physical_pool {};
+  std::vector<std::uint32_t> merge_candidate_logical_pages {};
 };
 
 // Phase G merges the static cache slice back into the lighting-visible dynamic
