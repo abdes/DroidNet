@@ -33,10 +33,10 @@
 namespace oxygen::examples::multiview {
 
 MainModule::MainModule(
-  const DemoAppContext& app, CompositingMode compositing_mode) noexcept
+  const DemoAppContext& app, MainModuleConfig config) noexcept
   : Base(app)
   , app_(app)
-  , compositing_mode_(compositing_mode)
+  , config_(std::move(config))
 {
 
   main_view_id_ = this->GetOrCreateViewId("MainView");
@@ -109,6 +109,14 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
           : 1.0F);
       cam.SetNearPlane(kMainCamNear);
       cam.SetFarPlane(kMainCamFar);
+      cam.SetViewport(ViewPort {
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      });
     }
   }
 
@@ -136,7 +144,6 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       const float sh = static_cast<float>(extent.height);
       const float pip_w = sw * kPipWidthRatio;
       const float pip_h = sh * kPipHeightRatio;
-
       constexpr float kPipCamFov = 35.0F;
       constexpr float kPipCamNear = 0.05F;
       constexpr float kPipCamFar = 100.0F;
@@ -145,6 +152,17 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       cam.SetAspectRatio(pip_h > 0 ? (pip_w / pip_h) : 1.0F);
       cam.SetNearPlane(kPipCamNear);
       cam.SetFarPlane(kPipCamFar);
+      cam.SetViewport(ViewPort {
+        // The camera renders into a dedicated PiP-sized offscreen target.
+        // Its local viewport must start at (0,0); the absolute on-screen
+        // inset belongs to CompositionView, not the camera.
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = pip_w,
+        .height = pip_h,
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      });
     }
   }
 }
@@ -345,6 +363,22 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       .bottom = static_cast<int32_t>(offset_y + pip_h),
     };
 
+    if (config_.pip_scissor_inset_px > 0U) {
+      const auto inset = static_cast<int32_t>(config_.pip_scissor_inset_px);
+      pip_view.scissor.left
+        = (std::min)(pip_view.scissor.left + inset, pip_view.scissor.right);
+      pip_view.scissor.top
+        = (std::min)(pip_view.scissor.top + inset, pip_view.scissor.bottom);
+      pip_view.scissor.right
+        = (std::max)(pip_view.scissor.left, pip_view.scissor.right - inset);
+      pip_view.scissor.bottom
+        = (std::max)(pip_view.scissor.top, pip_view.scissor.bottom - inset);
+      CHECK_F(pip_view.scissor.left < pip_view.scissor.right
+          && pip_view.scissor.top < pip_view.scissor.bottom,
+        "PiP scissor inset {} collapses the PiP depth rect (viewport={}x{})",
+        config_.pip_scissor_inset_px, pip_w, pip_h);
+    }
+
     auto pip_comp = renderer::CompositionView::ForPip(pip_view_id_,
       renderer::CompositionView::ZOrder {
         renderer::CompositionView::kZOrderScene.get() + 1 },
@@ -354,7 +388,9 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     const graphics::Color kPipClearColor { 0.1F, 0.1F, 0.1F, 0.5F };
     pip_comp.clear_color = kPipClearColor;
     pip_comp.opacity = 1.0F;
-    pip_comp.force_wireframe = true;
+    pip_comp.force_wireframe = config_.pip_force_wireframe;
+    // PiP should meter only its own HDR target. Sharing the main-view
+    // exposure couples the inset to unrelated luminance outside its view.
 
     views.push_back(std::move(pip_comp));
   }

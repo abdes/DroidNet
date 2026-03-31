@@ -370,8 +370,11 @@ auto GroundGridPass::UpdateExposureIndex(
   constants.exposure_srv_index = oxygen::kInvalidShaderVisibleIndex.get();
   if (const auto* ae = Context().GetPass<engine::AutoExposurePass>();
     ae != nullptr) {
-    const auto view_id = Context().current_view.view_id;
-    const auto exposure_output = ae->GetExposureOutput(view_id);
+    const auto exposure_view_id
+      = Context().current_view.exposure_view_id != kInvalidViewId
+      ? Context().current_view.exposure_view_id
+      : Context().current_view.view_id;
+    const auto exposure_output = ae->GetExposureOutput(exposure_view_id);
     if (exposure_output.exposure_state_srv_index.IsValid()) {
       constants.exposure_srv_index
         = exposure_output.exposure_state_srv_index.get();
@@ -438,12 +441,14 @@ auto GroundGridPass::ComputeGridOffset(GroundGridPassConstants& constants)
   const glm::dvec2 origin = glm::dvec2(config_->origin.x, config_->origin.y);
 
   glm::vec2 grid_offset;
-  grid_offset.x = static_cast<float>(std::fmod(effective_cam_pos.x - origin.x, period));
+  grid_offset.x
+    = static_cast<float>(std::fmod(effective_cam_pos.x - origin.x, period));
   if (grid_offset.x < 0.0F) {
     grid_offset.x += static_cast<float>(period);
   }
 
-  grid_offset.y = static_cast<float>(std::fmod(effective_cam_pos.y - origin.y, period));
+  grid_offset.y
+    = static_cast<float>(std::fmod(effective_cam_pos.y - origin.y, period));
   if (grid_offset.y < 0.0F) {
     grid_offset.y += static_cast<float>(period);
   }

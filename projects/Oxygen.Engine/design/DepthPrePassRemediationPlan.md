@@ -93,7 +93,51 @@ UE5 closeness check:
 - Oxygen must at least make the pass observable enough to support the same kind
   of design reasoning
 
-Status: `not_started`
+Completion evidence:
+
+- implementation:
+  - `Examples/RenderScene/renderdoc_ui_analysis.py` now recognizes
+    both `DepthPrePass` and `ConventionalShadowRasterPass` as routable pass
+    names for the shared timing and pass-focus scripts
+  - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp` now assigns distinct
+    debug names to the main-scene depth pass and the conventional shadow raster
+    pass instead of letting both inherit the same generic depth-pass naming
+- documentation:
+  - `Examples/RenderScene/README.md` now records the `Release` late-frame
+    capture-and-analysis recipe for `DepthPrePass`
+- validation artifacts:
+  - `out/build-ninja/analysis/depth_prepass_review_release/release_frame200_conventional_fps30_frame200.rdc`
+  - `out/build-ninja/analysis/depth_prepass_review_release/release_frame200_conventional_fps30.depth_timing.txt`
+  - `out/build-ninja/analysis/depth_prepass_review_release/release_frame200_conventional_fps30.depth_focus.txt`
+  - `out/build-ninja/analysis/depth_prepass_review_release/release_frame200_conventional_fps30.shadow_timing.txt`
+  - `out/build-ninja/analysis/depth_prepass_review_release/release_frame200_conventional_fps30.shadow_focus.txt`
+- follow-up operating note:
+  - complex-scene depth-prepass analysis should prefer `conventional`
+    directional shadows unless a remediation phase is explicitly studying VSM
+    interaction, because late-frame VSM captures can carry very large but legal
+    shadow-pool state that distorts RenderDoc load/replay behavior without
+    being relevant to the depth-prepass contract itself
+
+Current evidence:
+
+- the frame-200 conventional-shadow capture is valid and replayable
+- `DepthPrePass` now produces measurable work in the repo-owned timing script:
+  - `work_event_count=627`
+  - `total_gpu_duration_ms=6.346976`
+- `ConventionalShadowRasterPass` is now separately measurable:
+  - `work_event_count=3036`
+  - `total_gpu_duration_ms=30.350336`
+
+Remaining gap:
+
+- `DepthPrePass` scope purity is still not correct
+- the current `DepthPrePass` pass-focus artifact still begins with
+  `DirectionalShadowDepthArray` clear work before the pass switches to drawing
+  into `Forward_HDR_Depth`
+- until that residual contamination is removed or explained by a tighter
+  pass-scoping contract, DP-0 cannot be called complete
+
+Status: `in_progress`
 
 ### Phase DP-1: Fix The Viewport/Scissor Contract
 
@@ -121,7 +165,57 @@ UE5 closeness check:
 - UE5 reasons about per-view rects explicitly during depth and HZB work
 - Oxygen must stop treating full-target rasterization as the only legal mode
 
-Status: `not_started`
+Current implementation:
+
+- `DepthPrePass` now honors configured viewport/scissor overrides instead of
+  always binding the full target
+- `DepthPrePass` now publishes `DepthPrePassOutput` with:
+  - `depth_texture`
+  - effective `viewport`
+  - effective `scissors`
+  - effective `valid_rect`
+- `DepthPrePass` now clears only inside the effective depth rect instead of
+  assuming full-target coverage
+- `ForwardPipeline` now normalizes composition-space view rectangles into
+  depth-target local coordinates before configuring `DepthPrePass`
+
+Validation evidence so far:
+
+- focused GPU tests:
+  - `Oxygen.Renderer.DepthPrePass.Tests`
+  - verified:
+    - full-target defaults
+    - contract rejection for empty viewport/scissor intersections
+    - clipped clear behavior on the actual depth texture
+- live pipeline regression check:
+  - `Examples/MultiView` previously failed for the PiP scene view with
+    `viewport dimensions (...) exceed depth_texture bounds (...)`
+  - after the `ForwardPipeline` normalization fix, the same `Release`
+    late-frame run completes and emits:
+    - `out/build-ninja/analysis/depth_prepass_dp1/multiview_frame200_frame200.rdc`
+    - `out/build-ninja/analysis/depth_prepass_dp1/multiview_frame200.run.log`
+- RenderDoc tooling support:
+  - pass-focus reports now include raster viewport/scissor state to support
+    depth-rect validation
+- live clipped replay evidence:
+  - `Examples/MultiView` now exposes explicit validation knobs:
+    - `--pip-wireframe`
+    - `--pip-scissor-inset`
+  - a late `Release` capture with
+    `--pip-wireframe false --pip-scissor-inset 24` now emits:
+    - `out/build-ninja/analysis/depth_prepass_dp1_late/multiview_solid_inset24_frame200.rdc`
+    - `out/build-ninja/analysis/depth_prepass_dp1_late/multiview_solid_inset24.run.log`
+    - `out/build-ninja/analysis/depth_prepass_dp1_late/multiview_solid_inset24.depth_focus.txt`
+  - the pass-focus report proves two `DepthPrePass.SceneDepthWork` scopes:
+    - main scene view: viewport `1280x720`, scissor `0..1280 x 0..720`
+    - PiP view: viewport `576x324`, scissor `24..552 x 24..300`
+  - this closes the missing live clipped-rect replay evidence
+
+Remaining gap:
+
+- none for DP-1 itself
+
+Status: `completed`
 
 ### Phase DP-2: Introduce A Real Depth Products Contract
 
@@ -363,6 +457,8 @@ Recommended capture discipline:
 
 - use late frames only
 - use `Release`
+- prefer `--directional-shadows conventional` for depth-prepass remediation
+  unless the current phase explicitly needs VSM interaction
 - use the repo-owned RenderDoc UI analysis workflow
 - keep baseline analysis bounded and put expensive inspection into focused
   scripts

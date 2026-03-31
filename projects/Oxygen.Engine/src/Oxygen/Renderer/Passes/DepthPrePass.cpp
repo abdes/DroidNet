@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 #include <utility>
-
-#include <cstring>
 
 #include <fmt/format.h>
 
@@ -54,6 +55,66 @@ struct DepthPrePassConstantsSnapshot {
 };
 static_assert(sizeof(DepthPrePassConstantsSnapshot) == 16);
 
+auto HasPositiveArea(const Scissors& rect) -> bool
+{
+  return rect.left < rect.right && rect.top < rect.bottom;
+}
+
+auto FullViewportForTexture(const Texture& texture) -> ViewPort
+{
+  const auto& desc = texture.GetDescriptor();
+  return ViewPort {
+    .top_left_x = 0.0f,
+    .top_left_y = 0.0f,
+    .width = static_cast<float>(desc.width),
+    .height = static_cast<float>(desc.height),
+    .min_depth = 0.0f,
+    .max_depth = 1.0f,
+  };
+}
+
+auto FullScissorsForTexture(const Texture& texture) -> Scissors
+{
+  const auto& desc = texture.GetDescriptor();
+  return Scissors {
+    .left = 0,
+    .top = 0,
+    .right = static_cast<int32_t>(desc.width),
+    .bottom = static_cast<int32_t>(desc.height),
+  };
+}
+
+auto ViewportPixelBounds(const ViewPort& viewport, const Texture& texture)
+  -> Scissors
+{
+  const auto& desc = texture.GetDescriptor();
+  const auto clamp_x
+    = [width = static_cast<int32_t>(desc.width)](
+        const int32_t value) { return std::clamp(value, 0, width); };
+  const auto clamp_y
+    = [height = static_cast<int32_t>(desc.height)](
+        const int32_t value) { return std::clamp(value, 0, height); };
+
+  return Scissors {
+    .left = clamp_x(static_cast<int32_t>(std::floor(viewport.top_left_x))),
+    .top = clamp_y(static_cast<int32_t>(std::floor(viewport.top_left_y))),
+    .right = clamp_x(
+      static_cast<int32_t>(std::ceil(viewport.top_left_x + viewport.width))),
+    .bottom = clamp_y(
+      static_cast<int32_t>(std::ceil(viewport.top_left_y + viewport.height))),
+  };
+}
+
+auto IntersectRects(const Scissors& lhs, const Scissors& rhs) -> Scissors
+{
+  return Scissors {
+    .left = (std::max)(lhs.left, rhs.left),
+    .top = (std::max)(lhs.top, rhs.top),
+    .right = (std::min)(lhs.right, rhs.right),
+    .bottom = (std::min)(lhs.bottom, rhs.bottom),
+  };
+}
+
 } // namespace
 
 DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
@@ -93,6 +154,16 @@ auto DepthPrePass::SetViewport(const ViewPort& viewport) -> void
       "viewport dimensions ({}, {}) exceed depth_texture bounds: ({}, {})",
       viewport_width, viewport_height, tex_desc.width, tex_desc.height));
   }
+
+  if (scissors_.has_value()) {
+    const auto valid_rect = IntersectRects(
+      ViewportPixelBounds(viewport, *config_->depth_texture), *scissors_);
+    if (!HasPositiveArea(valid_rect)) {
+      throw std::invalid_argument(
+        "viewport/scissors intersection resolves to an empty depth rect");
+    }
+  }
+
   viewport_.emplace(viewport);
 }
 
@@ -116,6 +187,15 @@ auto DepthPrePass::SetScissors(const Scissors& scissors) -> void
     throw std::out_of_range(fmt::format(
       "scissors dimensions ({}, {}) exceed depth_texture bounds ({}, {})",
       scissors.right, scissors.bottom, tex_desc.width, tex_desc.height));
+  }
+
+  if (viewport_.has_value()) {
+    const auto valid_rect = IntersectRects(
+      ViewportPixelBounds(*viewport_, *config_->depth_texture), scissors);
+    if (!HasPositiveArea(valid_rect)) {
+      throw std::invalid_argument(
+        "viewport/scissors intersection resolves to an empty depth rect");
+    }
   }
 
   scissors_.emplace(scissors);
@@ -273,6 +353,36 @@ auto DepthPrePass::GetDepthTexture() const -> const Texture&
     "DepthPrePass requires an explicit config depth_texture.");
 }
 
+auto DepthPrePass::GetEffectiveViewport() const -> ViewPort
+{
+  return viewport_.value_or(FullViewportForTexture(GetDepthTexture()));
+}
+
+auto DepthPrePass::GetEffectiveScissors() const -> Scissors
+{
+  return scissors_.value_or(FullScissorsForTexture(GetDepthTexture()));
+}
+
+auto DepthPrePass::GetEffectiveDepthRect() const -> Scissors
+{
+  const auto valid_rect = IntersectRects(
+    ViewportPixelBounds(GetEffectiveViewport(), GetDepthTexture()),
+    GetEffectiveScissors());
+  DCHECK_F(HasPositiveArea(valid_rect),
+    "DepthPrePass effective depth rect must have positive area");
+  return valid_rect;
+}
+
+auto DepthPrePass::GetOutput() const -> DepthPrePassOutput
+{
+  return DepthPrePassOutput {
+    .depth_texture = &GetDepthTexture(),
+    .viewport = GetEffectiveViewport(),
+    .scissors = GetEffectiveScissors(),
+    .valid_rect = GetEffectiveDepthRect(),
+  };
+}
+
 /*!
  For a DepthPrePass, this involves rendering the geometry from the `draw_list`
  (specified in `Config`) to populate the `depth_texture`. Key responsibilities
@@ -423,9 +533,19 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
 auto DepthPrePass::ClearDepthStencilView(CommandRecorder& command_recorder,
   const graphics::NativeView& dsv_handle) const -> void
 {
-  // only depth, as the depth pre-pass does not use the stencil buffer
-  command_recorder.ClearDepthStencilView(
-    GetDepthTexture(), dsv_handle, graphics::ClearFlags::kDepth, 1.0f, 0);
+  const auto full_rect = FullScissorsForTexture(GetDepthTexture());
+  const auto valid_rect = GetEffectiveDepthRect();
+  if (valid_rect.left == full_rect.left && valid_rect.top == full_rect.top
+    && valid_rect.right == full_rect.right
+    && valid_rect.bottom == full_rect.bottom) {
+    command_recorder.ClearDepthStencilView(
+      GetDepthTexture(), dsv_handle, graphics::ClearFlags::kDepth, 1.0f, 0);
+    return;
+  }
+
+  const std::array clear_rects { valid_rect };
+  command_recorder.ClearDepthStencilView(GetDepthTexture(), dsv_handle,
+    graphics::ClearFlags::kDepth, 1.0f, 0, clear_rects);
 }
 
 auto DepthPrePass::SetupRenderTargets(CommandRecorder& command_recorder,
@@ -440,29 +560,8 @@ auto DepthPrePass::SetupRenderTargets(CommandRecorder& command_recorder,
 auto DepthPrePass::SetupViewPortAndScissors(
   CommandRecorder& command_recorder) const -> void
 {
-  // Use the depth texture. It is already validated consistent with the
-  // framebuffer if provided.
-  const auto& common_tex_desc = GetDepthTexture().GetDescriptor();
-  const auto width = common_tex_desc.width;
-  const auto height = common_tex_desc.height;
-
-  const ViewPort viewport {
-    .top_left_x = 0.0f,
-    .top_left_y = 0.0f,
-    .width = static_cast<float>(width),
-    .height = static_cast<float>(height),
-    .min_depth = 0.0f,
-    .max_depth = 1.0f,
-  };
-  command_recorder.SetViewport(viewport);
-
-  const Scissors scissors {
-    .left = 0,
-    .top = 0,
-    .right = static_cast<int32_t>(width),
-    .bottom = static_cast<int32_t>(height),
-  };
-  command_recorder.SetScissors(scissors);
+  command_recorder.SetViewport(GetEffectiveViewport());
+  command_recorder.SetScissors(GetEffectiveScissors());
 }
 
 auto DepthPrePass::SelectPipelineStateForPartition(

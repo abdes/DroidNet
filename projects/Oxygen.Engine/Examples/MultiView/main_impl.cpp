@@ -96,7 +96,8 @@ struct oxygen::co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 namespace {
 
 auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  oxygen::examples::multiview::CompositingMode compositing_mode) -> void
+  const oxygen::examples::multiview::MainModuleConfig& main_module_config)
+  -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -125,7 +126,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
   register_module(std::move(renderer_unique));
 
   register_module(std::make_unique<oxygen::examples::multiview::MainModule>(
-    app, compositing_mode));
+    app, main_module_config));
 
   if (!app.headless) {
     auto imgui_backend
@@ -137,7 +138,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
 }
 
 auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
-  oxygen::examples::multiview::CompositingMode compositing_mode) -> co::Co<int>
+  const oxygen::examples::multiview::MainModuleConfig& main_module_config)
+  -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
   {
@@ -154,7 +156,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
     co_await n.Start(&o::AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app, compositing_mode);
+    RegisterEngineModules(app, main_module_config);
 
     n.Start([&app]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -188,6 +190,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool headless = false;
   bool enable_vsync = true;
   std::string compositing_mode_value = "copy";
+  bool pip_wireframe = true;
+  uint32_t pip_scissor_inset_px = 0U;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -216,6 +220,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
               .DefaultValue("copy")
               .UserFriendlyName("mode")
               .StoreTo(&compositing_mode_value)
+              .Build())
+          .WithOption(Option::WithKey("pip-wireframe")
+              .About("Render the PiP scene view in wireframe mode")
+              .Long("pip-wireframe")
+              .WithValue<bool>()
+              .DefaultValue(true)
+              .UserFriendlyName("enabled")
+              .StoreTo(&pip_wireframe)
+              .Build())
+          .WithOption(Option::WithKey("pip-scissor-inset")
+              .About("Inset the PiP scene scissor in pixels before rendering")
+              .Long("pip-scissor-inset")
+              .WithValue<uint32_t>()
+              .DefaultValue(0U)
+              .UserFriendlyName("pixels")
+              .StoreTo(&pip_scissor_inset_px)
               .Build());
 
     auto cli = oxygen::examples::cli::BuildCli(
@@ -236,16 +256,23 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
     oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed composite mode option = {}", compositing_mode_value);
+    LOG_F(INFO, "Parsed pip wireframe option = {}", pip_wireframe);
+    LOG_F(INFO, "Parsed pip scissor inset option = {}", pip_scissor_inset_px);
 
-    auto compositing_mode
-      = oxygen::examples::multiview::CompositingMode::kBlend;
+    auto main_module_config = oxygen::examples::multiview::MainModuleConfig {
+      .compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend,
+      .pip_force_wireframe = pip_wireframe,
+      .pip_scissor_inset_px = pip_scissor_inset_px,
+    };
     auto mode_lower = compositing_mode_value;
     std::ranges::transform(mode_lower, mode_lower.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (mode_lower == "copy") {
-      compositing_mode = oxygen::examples::multiview::CompositingMode::kCopy;
+      main_module_config.compositing_mode
+        = oxygen::examples::multiview::CompositingMode::kCopy;
     } else if (mode_lower == "blend") {
-      compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend;
+      main_module_config.compositing_mode
+        = oxygen::examples::multiview::CompositingMode::kBlend;
     } else if (!mode_lower.empty()) {
       throw std::runtime_error("Invalid composite mode; use 'copy' or 'blend'");
     }
@@ -297,6 +324,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       }
     );
 
+    if (context.ovm.HasOption("fps")) {
+      (void)app.engine->GetConsole().SetCVarFromText({
+        .name = "ngin.target_fps",
+        .text = std::to_string(target_fps),
+      });
+    }
     if (context.ovm.HasOption("vsync")) {
       (void)app.engine->GetConsole().SetCVarFromText({
         .name = "gfx.vsync",
@@ -307,7 +340,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       }
     }
 
-    const auto rc = co::Run(app, AsyncMain(app, frames, compositing_mode));
+    const auto rc = co::Run(app, AsyncMain(app, frames, main_module_config));
 
     app.platform->Stop();
     app.engine.reset();

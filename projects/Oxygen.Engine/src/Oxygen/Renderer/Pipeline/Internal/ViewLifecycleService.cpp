@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <map>
+#include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -103,36 +104,42 @@ void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
 void ViewLifecycleService::PublishViews(engine::FrameContext& context)
 {
   DCHECK_NOTNULL_F(renderer_.get());
-  for (auto* view : state_->sorted_views) {
+  const auto build_view_context
+    = [](const CompositionViewImpl& view,
+        const ViewId exposure_view_id) -> engine::ViewContext {
     engine::ViewContext view_ctx;
-    view_ctx.view = view->GetDescriptor().view;
-    const bool has_scene = view->GetDescriptor().camera.has_value();
-    view_ctx.metadata = { .name = std::string(view->GetDescriptor().name),
+    view_ctx.view = view.GetDescriptor().view;
+    const bool has_scene = view.GetDescriptor().camera.has_value();
+    view_ctx.metadata = { .name = std::string(view.GetDescriptor().name),
       .purpose = has_scene ? "scene" : "overlay",
       .is_scene_view = has_scene,
-      .with_atmosphere = view->GetDescriptor().with_atmosphere };
-    view_ctx.render_target = view->GetHdrFramebuffer()
-      ? observer_ptr { view->GetHdrFramebuffer().get() }
-      : observer_ptr { view->GetSdrFramebuffer().get() };
-    view_ctx.composite_source = view->GetSdrFramebuffer()
-      ? observer_ptr { view->GetSdrFramebuffer().get() }
+      .with_atmosphere = view.GetDescriptor().with_atmosphere,
+      .exposure_view_id = exposure_view_id };
+    view_ctx.render_target = view.GetHdrFramebuffer()
+      ? observer_ptr { view.GetHdrFramebuffer().get() }
+      : observer_ptr { view.GetSdrFramebuffer().get() };
+    view_ctx.composite_source = view.GetSdrFramebuffer()
+      ? observer_ptr { view.GetSdrFramebuffer().get() }
       : view_ctx.render_target;
 
-    CHECK_F(!has_scene || view->GetDescriptor().enable_hdr,
-      "Scene view '{}' must enable HDR rendering", view->GetDescriptor().name);
+    CHECK_F(!has_scene || view.GetDescriptor().enable_hdr,
+      "Scene view '{}' must enable HDR rendering", view.GetDescriptor().name);
     CHECK_NOTNULL_F(view_ctx.render_target.get(),
-      "View '{}' missing render_target framebuffer",
-      view->GetDescriptor().name);
+      "View '{}' missing render_target framebuffer", view.GetDescriptor().name);
     CHECK_NOTNULL_F(view_ctx.composite_source.get(),
       "View '{}' missing composite_source framebuffer",
-      view->GetDescriptor().name);
+      view.GetDescriptor().name);
     if (has_scene) {
-      CHECK_NOTNULL_F(view->GetHdrFramebuffer().get(),
-        "Scene view '{}' missing HDR framebuffer", view->GetDescriptor().name);
-      CHECK_NOTNULL_F(view->GetSdrFramebuffer().get(),
-        "Scene view '{}' missing SDR framebuffer", view->GetDescriptor().name);
+      CHECK_NOTNULL_F(view.GetHdrFramebuffer().get(),
+        "Scene view '{}' missing HDR framebuffer", view.GetDescriptor().name);
+      CHECK_NOTNULL_F(view.GetSdrFramebuffer().get(),
+        "Scene view '{}' missing SDR framebuffer", view.GetDescriptor().name);
     }
+    return view_ctx;
+  };
 
+  for (auto* view : state_->sorted_views) {
+    auto view_ctx = build_view_context(*view, kInvalidViewId);
     if (view->GetPublishedViewId() == kInvalidViewId) {
       view->SetPublishedViewId(context.RegisterView(std::move(view_ctx)),
         access::ViewLifecycleTagFactory::Get());
@@ -146,6 +153,51 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
       DLOG_F(1, "Updated View '{}' (PublishedViewId: {})",
         view->GetDescriptor().name, view->GetPublishedViewId().get());
     }
+  }
+
+  std::unordered_map<ViewId, std::size_t> sorted_indices;
+  sorted_indices.reserve(state_->sorted_views.size());
+  for (std::size_t i = 0; i < state_->sorted_views.size(); ++i) {
+    sorted_indices.emplace(state_->sorted_views[i]->GetDescriptor().id, i);
+  }
+
+  for (auto* view : state_->sorted_views) {
+    const auto self_published_view_id = view->GetPublishedViewId();
+    CHECK_F(self_published_view_id != kInvalidViewId,
+      "View '{}' must be published before exposure resolution",
+      view->GetDescriptor().name);
+
+    ViewId resolved_exposure_view_id = self_published_view_id;
+    if (const auto requested_source_id
+      = view->GetDescriptor().exposure_source_view_id;
+      requested_source_id != kInvalidViewId
+      && requested_source_id != view->GetDescriptor().id) {
+      const auto source_it = state_->view_pool.find(requested_source_id);
+      CHECK_F(source_it != state_->view_pool.end(),
+        "View '{}' references missing exposure source intent id {}",
+        view->GetDescriptor().name, requested_source_id.get());
+
+      const auto source_index_it = sorted_indices.find(requested_source_id);
+      CHECK_F(source_index_it != sorted_indices.end(),
+        "View '{}' references inactive exposure source intent id {}",
+        view->GetDescriptor().name, requested_source_id.get());
+
+      const auto consumer_index = sorted_indices.at(view->GetDescriptor().id);
+      CHECK_F(source_index_it->second <= consumer_index,
+        "View '{}' references exposure source '{}' that renders later in the "
+        "frame",
+        view->GetDescriptor().name, source_it->second.GetDescriptor().name);
+
+      resolved_exposure_view_id = source_it->second.GetPublishedViewId();
+      CHECK_F(resolved_exposure_view_id != kInvalidViewId,
+        "View '{}' references exposure source '{}' before publication",
+        view->GetDescriptor().name, source_it->second.GetDescriptor().name);
+    }
+
+    auto resolved_view_ctx
+      = build_view_context(*view, resolved_exposure_view_id);
+    context.UpdateView(
+      view->GetPublishedViewId(), std::move(resolved_view_ctx));
   }
 }
 

@@ -305,6 +305,36 @@ NOLINT_TEST(FrameContext_basic_test, ViewTargetsArePublishedInSnapshot)
   EXPECT_EQ(snap.gameSnapshot.views[0].composite_source.get(), composite_fb);
 }
 
+NOLINT_TEST(FrameContext_basic_test, ViewMetadataPublishesExposureViewId)
+{
+  using Tag = oxygen::engine::internal::EngineTagFactory;
+
+  FrameContext ctx;
+  ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
+
+  auto owner = MakeDummyViewContext();
+  owner.metadata.name = "OwnerView";
+  const auto owner_id = ctx.RegisterView(owner);
+
+  auto dependent = MakeDummyViewContext();
+  dependent.metadata.name = "DependentView";
+  dependent.metadata.exposure_view_id = owner_id;
+  const auto dependent_id = ctx.RegisterView(dependent);
+
+  const auto& stored = ctx.GetViewContext(dependent_id);
+  EXPECT_EQ(stored.metadata.exposure_view_id, owner_id);
+
+  ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
+  auto& snap = ctx.PublishSnapshots(Tag::Get());
+  ASSERT_EQ(snap.gameSnapshot.views.size(), 2u);
+
+  const auto it = std::find_if(snap.gameSnapshot.views.begin(),
+    snap.gameSnapshot.views.end(),
+    [dependent_id](const auto& view) { return view.id == dependent_id; });
+  ASSERT_NE(it, snap.gameSnapshot.views.end());
+  EXPECT_EQ(it->metadata.exposure_view_id, owner_id);
+}
+
 NOLINT_TEST(
   FrameContext_basic_test, UpdateViewReplacesRenderAndCompositeTargets)
 {

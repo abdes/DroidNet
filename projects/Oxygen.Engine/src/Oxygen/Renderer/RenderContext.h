@@ -163,6 +163,7 @@ struct RenderContext {
   // during per-view iterations.
   struct ViewSpecific {
     oxygen::ViewId view_id {};
+    oxygen::ViewId exposure_view_id {};
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
     observer_ptr<internal::SkyAtmosphereLutManager> atmo_lut_manager;

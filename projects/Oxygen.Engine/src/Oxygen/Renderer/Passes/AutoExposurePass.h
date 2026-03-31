@@ -53,6 +53,9 @@ struct AutoExposurePassConfig {
   //! HDR source texture to analyze.
   std::shared_ptr<graphics::Texture> source_texture;
 
+  //! Optional local source-texture rect to meter instead of the full target.
+  std::optional<Scissors> metering_rect {};
+
   //! Global histogram buffer (transient per-frame).
   std::shared_ptr<graphics::Buffer> histogram_buffer;
 
@@ -173,7 +176,10 @@ private:
 
   static constexpr uint32_t kPassConstantsStride
     = packing::kConstantBufferAlignment;
-  static constexpr size_t kPassConstantsSlots = 4U;
+  static constexpr size_t kDispatchesPerView = 3U;
+  static constexpr size_t kMaxViewsPerCommandList = 8U;
+  static constexpr size_t kPassConstantsSlots
+    = kDispatchesPerView * kMaxViewsPerCommandList;
 
   std::array<bindless::ShaderVisibleIndex, kPassConstantsSlots>
     pass_constants_indices_;

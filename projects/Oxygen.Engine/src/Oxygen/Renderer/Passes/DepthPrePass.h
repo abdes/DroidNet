@@ -56,6 +56,13 @@ struct DepthPrePassConfig {
   std::string debug_name { "DepthPrePass" };
 };
 
+struct DepthPrePassOutput {
+  const graphics::Texture* depth_texture { nullptr };
+  ViewPort viewport {};
+  Scissors scissors {};
+  Scissors valid_rect {};
+};
+
 //! Generic implementation for a depth-only raster pass. Can be extended if
 //! needed with custom behavior and backend-specific logic.
 /*!
@@ -144,6 +151,10 @@ public:
   */
   OXGN_RNDR_NDAPI virtual auto GetDepthTexture() const
     -> const graphics::Texture&;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetEffectiveViewport() const -> ViewPort;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetEffectiveScissors() const -> Scissors;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetEffectiveDepthRect() const -> Scissors;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetOutput() const -> DepthPrePassOutput;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)

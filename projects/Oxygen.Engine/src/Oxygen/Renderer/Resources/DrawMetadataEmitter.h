@@ -100,6 +100,19 @@ public:
   OXGN_RNDR_API auto OnFrameStart(renderer::RendererTag,
     oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void;
 
+  //! Reset per-view emitted data while keeping frame-scoped GPU resources.
+  /*!
+   Multi-view scene prep finalizes one view at a time before rendering
+   * begins.
+   Each view therefore needs an isolated DrawMetadata payload and
+   * SRV indices.
+   This clears the current view's CPU-side emission state and
+   * invalidates the
+   cached SRV indices so the next view allocates/publishes
+   * its own payload.
+  */
+  OXGN_RNDR_API auto ResetViewData() -> void;
+
   //! Emits one DrawMetadata from a retained RenderItemData.
   OXGN_RNDR_API auto EmitDrawMetadata(
     const oxygen::engine::sceneprep::RenderItemData& item_data) -> void;

@@ -43,6 +43,12 @@ class CameraRigController;
 
 namespace oxygen::examples::multiview {
 
+struct MainModuleConfig {
+  CompositingMode compositing_mode { CompositingMode::kBlend };
+  bool pip_force_wireframe { true };
+  uint32_t pip_scissor_inset_px { 0U };
+};
+
 //! Multi-view rendering example demonstrating Phase 2 features.
 /*!
  This example showcases multi-view rendering with:
@@ -61,8 +67,8 @@ class MainModule final : public examples::DemoModuleBase {
 public:
   using Base = examples::DemoModuleBase;
 
-  explicit MainModule(const examples::DemoAppContext& app,
-    CompositingMode compositing_mode) noexcept;
+  explicit MainModule(
+    const examples::DemoAppContext& app, MainModuleConfig config) noexcept;
   ~MainModule() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
@@ -141,7 +147,7 @@ private:
   scene::SceneNode pip_camera_node_;
 
   observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
-  CompositingMode compositing_mode_ { CompositingMode::kBlend };
+  MainModuleConfig config_ {};
   platform::window::ExtentT last_viewport_ { 0, 0 };
 };
 

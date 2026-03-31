@@ -307,6 +307,15 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
+    "DepthPrePass"
+    SOURCES
+      "DepthPrePass_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
     "ScreenHzb"
     SOURCES
       "ScreenHzbBuildPass_test.cpp"

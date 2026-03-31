@@ -79,17 +79,51 @@ namespace {
     uint32_t histogram_buffer_index;
     float min_log_luminance;
     float inv_log_luminance_range;
-    uint32_t screen_width;
-    uint32_t screen_height;
+    uint32_t metering_left;
+    uint32_t metering_top;
+    uint32_t metering_width;
+    uint32_t metering_height;
     uint32_t metering_mode;
-    uint32_t _pad;
     float spot_meter_radius;
-    float _pad1;
-    float _pad2;
-    float _pad3;
+    uint32_t _pad0;
+    uint32_t _pad1;
   };
 
   static_assert(sizeof(AutoExposureHistogramConstants) == 48); // NOLINT
+
+  auto ResolveMeteringRect(const AutoExposurePassConfig& config,
+    const graphics::TextureDesc& tex_desc) -> Scissors
+  {
+    const auto full_rect = Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<int32_t>(tex_desc.width),
+      .bottom = static_cast<int32_t>(tex_desc.height),
+    };
+
+    if (!config.metering_rect.has_value()) {
+      return full_rect;
+    }
+
+    const auto clamp_x = [width = full_rect.right](const int32_t value) {
+      return std::clamp(value, 0, width);
+    };
+    const auto clamp_y = [height = full_rect.bottom](const int32_t value) {
+      return std::clamp(value, 0, height);
+    };
+
+    const auto rect = Scissors {
+      .left = clamp_x(config.metering_rect->left),
+      .top = clamp_y(config.metering_rect->top),
+      .right = clamp_x(config.metering_rect->right),
+      .bottom = clamp_y(config.metering_rect->bottom),
+    };
+
+    if (rect.left >= rect.right || rect.top >= rect.bottom) {
+      return full_rect;
+    }
+    return rect;
+  }
 
   // Must match HLSL `AutoExposureAverageConstants` in
   // Shaders/Compositing/AutoExposure_Average_CS.hlsl.
@@ -334,8 +368,8 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
       *config_->source_texture, graphics::ResourceStates::kCommon, true);
   }
   if (!recorder.IsResourceTracked(*config_->histogram_buffer)) {
-    recorder.BeginTrackingResourceState(*config_->histogram_buffer,
-      graphics::ResourceStates::kUnorderedAccess, false);
+    recorder.BeginTrackingResourceState(
+      *config_->histogram_buffer, graphics::ResourceStates::kCommon, false);
   }
 
   recorder.EnableAutoMemoryBarriers(*config_->histogram_buffer);
@@ -515,9 +549,14 @@ auto AutoExposurePass::DoExecute(graphics::CommandRecorder& recorder)
   UpdateHistogramConstants(recorder);
 
   const auto& tex_desc = config_->source_texture->GetDescriptor();
-  recorder.Dispatch((tex_desc.width + (kHistogramDispatchGroupSize - 1U))
+  const auto metering_rect = ResolveMeteringRect(*config_, tex_desc);
+  const auto dispatch_width
+    = static_cast<uint32_t>(metering_rect.right - metering_rect.left);
+  const auto dispatch_height
+    = static_cast<uint32_t>(metering_rect.bottom - metering_rect.top);
+  recorder.Dispatch((dispatch_width + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
-    (tex_desc.height + (kHistogramDispatchGroupSize - 1U))
+    (dispatch_height + (kHistogramDispatchGroupSize - 1U))
       / kHistogramDispatchGroupSize,
     1);
 
@@ -532,6 +571,14 @@ auto AutoExposurePass::DoExecute(graphics::CommandRecorder& recorder)
   recorder.SetPipelineState(*pso_stages_.average);
   UpdateAverageConstants(recorder);
   recorder.Dispatch(1, 1, 1);
+
+  // Publish a stable readable output for later passes and reset the transient
+  // histogram buffer to a known state for the next frame.
+  recorder.RequireResourceState(
+    *active_exposure_state_->buffer, graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(
+    *config_->histogram_buffer, graphics::ResourceStates::kCommon);
+  recorder.FlushBarriers();
 
   co_return;
 }
@@ -600,20 +647,23 @@ auto AutoExposurePass::UpdateHistogramConstants(
   }
 
   const auto& tex_desc = config_->source_texture->GetDescriptor();
+  const auto metering_rect = ResolveMeteringRect(*config_, tex_desc);
 
   AutoExposureHistogramConstants constants { .source_texture_index
     = source_texture_srv_index_.get(),
     .histogram_buffer_index = histogram_uav_index_.get(),
     .min_log_luminance = config_->min_log_luminance,
     .inv_log_luminance_range = 1.0F / config_->log_luminance_range,
-    .screen_width = tex_desc.width,
-    .screen_height = tex_desc.height,
+    .metering_left = static_cast<uint32_t>(metering_rect.left),
+    .metering_top = static_cast<uint32_t>(metering_rect.top),
+    .metering_width
+    = static_cast<uint32_t>(metering_rect.right - metering_rect.left),
+    .metering_height
+    = static_cast<uint32_t>(metering_rect.bottom - metering_rect.top),
     .metering_mode = static_cast<uint32_t>(config_->metering_mode),
-    ._pad = 0,
     .spot_meter_radius = config_->spot_meter_radius,
-    ._pad1 = 0.0F,
-    ._pad2 = 0.0F,
-    ._pad3 = 0.0F };
+    ._pad0 = 0U,
+    ._pad1 = 0U };
 
   const auto slot = pass_constants_slot_ % kPassConstantsSlots;
   pass_constants_slot_++;
@@ -747,7 +797,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
 
     if (!recorder.IsResourceTracked(*state.buffer)) {
       recorder.BeginTrackingResourceState(
-        *state.buffer, graphics::ResourceStates::kCopyDest, false);
+        *state.buffer, graphics::ResourceStates::kCommon, false);
     }
 
     EnsureExposureInitUploadBuffer(recorder);
@@ -760,7 +810,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
   } else {
     if (!recorder.IsResourceTracked(*state.buffer)) {
       recorder.BeginTrackingResourceState(
-        *state.buffer, graphics::ResourceStates::kUnorderedAccess, false);
+        *state.buffer, graphics::ResourceStates::kShaderResource, false);
     }
   }
 
@@ -891,10 +941,10 @@ auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,
 
   using enum oxygen::graphics::ResourceStates;
 
-  // We always expect to start as UAV, and we always transition back to UAV at
-  // the end for a consistent state.
+  // Published exposure buffers are consumed as SRVs between frames, so that is
+  // the stable starting state when a reset occurs on an existing view.
   if (!recorder.IsResourceTracked(*state.buffer)) {
-    recorder.BeginTrackingResourceState(*state.buffer, kUnorderedAccess, true);
+    recorder.BeginTrackingResourceState(*state.buffer, kShaderResource, true);
   }
 
   // This reset buffer is always used as a copy source, and its initial state

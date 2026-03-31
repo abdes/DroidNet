@@ -16,11 +16,11 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -49,10 +49,10 @@ namespace {
 
 using oxygen::DirectionalShadowImplementationPolicy;
 using oxygen::NdcDepthRange;
+using oxygen::observer_ptr;
 using oxygen::ResolvedView;
 using oxygen::Scissors;
 using oxygen::View;
-using oxygen::observer_ptr;
 using oxygen::ViewPort;
 using oxygen::engine::ViewConstants;
 using oxygen::engine::sceneprep::RenderItemData;
@@ -332,14 +332,179 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
     view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
     {}, std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } });
 
-  EXPECT_NE(
-    publication.shadow_instance_metadata_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
   const auto* shadow_instance
     = manager->TryGetShadowInstanceMetadata(oxygen::ViewId { 5 });
   ASSERT_NE(shadow_instance, nullptr);
   EXPECT_EQ(shadow_instance->implementation_kind,
-    static_cast<std::uint32_t>(oxygen::engine::ShadowImplementationKind::kConventional));
+    static_cast<std::uint32_t>(
+      oxygen::engine::ShadowImplementationKind::kConventional));
   EXPECT_NE(manager->TryGetRasterRenderPlan(oxygen::ViewId { 5 }), nullptr);
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyAssignsDistinctDirectionalShadowSlicesPerPublishedView)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  auto view_config = View {};
+  view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = 1.0F,
+    .height = 1.0F,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  view_config.scissor = Scissors {
+    .left = 0,
+    .top = 0,
+    .right = 1,
+    .bottom = 1,
+  };
+  const auto resolved_view = ResolvedView(ResolvedView::Params {
+    .view_config = view_config,
+    .view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
+      glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F }),
+    .proj_matrix
+    = glm::perspectiveRH_ZO(glm::radians(20.0F), 1.0F, 0.1F, 30.0F),
+    .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
+    .depth_range = NdcDepthRange::ZeroToOne,
+    .near_plane = 0.1F,
+    .far_plane = 30.0F,
+  });
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  directional_impl->get()
+    .GetComponent<DirectionalLight>()
+    .Common()
+    .casts_shadows
+    = true;
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 5 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 5 }, Slot { 0 });
+  manager->ReserveFrameResources(2U, lights);
+
+  const auto shadow_caster_bounds
+    = std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } };
+  const auto publication_a = manager->PublishForView(oxygen::ViewId { 5 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, shadow_caster_bounds);
+  const auto publication_b = manager->PublishForView(oxygen::ViewId { 6 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 576.0F,
+    {}, shadow_caster_bounds);
+
+  ASSERT_NE(publication_a.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(publication_b.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(publication_a.directional_shadow_texture_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_EQ(publication_a.directional_shadow_texture_srv,
+    publication_b.directional_shadow_texture_srv);
+
+  const auto* plan_a = manager->TryGetRasterRenderPlan(oxygen::ViewId { 5 });
+  const auto* plan_b = manager->TryGetRasterRenderPlan(oxygen::ViewId { 6 });
+  ASSERT_NE(plan_a, nullptr);
+  ASSERT_NE(plan_b, nullptr);
+  ASSERT_FALSE(plan_a->jobs.empty());
+  ASSERT_FALSE(plan_b->jobs.empty());
+  ASSERT_EQ(plan_a->jobs.size(), plan_b->jobs.size());
+
+  std::vector<std::uint32_t> slices_a {};
+  std::vector<std::uint32_t> slices_b {};
+  slices_a.reserve(plan_a->jobs.size());
+  slices_b.reserve(plan_b->jobs.size());
+  for (const auto& job : plan_a->jobs) {
+    slices_a.push_back(job.target_array_slice);
+  }
+  for (const auto& job : plan_b->jobs) {
+    slices_b.push_back(job.target_array_slice);
+  }
+
+  EXPECT_EQ(slices_a, (std::vector<std::uint32_t> { 0U, 1U, 2U, 3U }));
+  EXPECT_EQ(slices_b, (std::vector<std::uint32_t> { 4U, 5U, 6U, 7U }));
+  ASSERT_NE(plan_b->depth_texture, nullptr);
+  EXPECT_GE(plan_b->depth_texture->GetDescriptor().array_size,
+    slices_a.size() + slices_b.size());
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyRepublishesWhenVisibleReceiverBoundsChange)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView();
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  directional_impl->get()
+    .GetComponent<DirectionalLight>()
+    .Common()
+    .casts_shadows
+    = true;
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 6 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 6 }, Slot { 0 });
+
+  const auto shadow_caster_bounds
+    = std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 8.0F } };
+  const auto left_receivers
+    = std::array { glm::vec4 { -6.0F, 0.0F, -8.0F, 2.5F } };
+  const auto right_receivers
+    = std::array { glm::vec4 { 6.0F, 0.0F, -8.0F, 2.5F } };
+
+  const auto publication_left = manager->PublishForView(oxygen::ViewId { 5 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, shadow_caster_bounds, left_receivers);
+  const auto* plan_left = manager->TryGetRasterRenderPlan(oxygen::ViewId { 5 });
+  ASSERT_NE(publication_left.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(publication_left.directional_shadow_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(publication_left.directional_shadow_texture_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(plan_left, nullptr);
+  ASSERT_FALSE(plan_left->jobs.empty());
+
+  const auto publication_right = manager->PublishForView(oxygen::ViewId { 5 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, shadow_caster_bounds, right_receivers);
+  const auto* plan_right
+    = manager->TryGetRasterRenderPlan(oxygen::ViewId { 5 });
+  ASSERT_NE(publication_right.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(publication_right.directional_shadow_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(plan_right, nullptr);
+  ASSERT_FALSE(plan_right->jobs.empty());
+
+  EXPECT_EQ(publication_left.directional_shadow_texture_srv,
+    publication_right.directional_shadow_texture_srv);
+  EXPECT_TRUE(publication_left.shadow_instance_metadata_srv
+      != publication_right.shadow_instance_metadata_srv
+    || publication_left.directional_shadow_metadata_srv
+      != publication_right.directional_shadow_metadata_srv);
 }
 
 NOLINT_TEST_F(
@@ -400,8 +565,8 @@ NOLINT_TEST_F(
     rendered_items, shadow_caster_bounds, visible_receiver_bounds,
     std::chrono::milliseconds { 23 }, 0xBEEFULL);
 
-  EXPECT_NE(
-    publication.shadow_instance_metadata_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(publication.directional_shadow_metadata_srv,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(publication.directional_shadow_texture_srv,
@@ -412,13 +577,12 @@ NOLINT_TEST_F(
   ASSERT_NE(shadow_instance, nullptr);
   EXPECT_EQ(shadow_instance->light_index, 0U);
   EXPECT_EQ(shadow_instance->implementation_kind,
-    static_cast<std::uint32_t>(oxygen::engine::ShadowImplementationKind::kVirtual));
-  EXPECT_EQ(
-    shadow_instance->domain,
+    static_cast<std::uint32_t>(
+      oxygen::engine::ShadowImplementationKind::kVirtual));
+  EXPECT_EQ(shadow_instance->domain,
     static_cast<std::uint32_t>(oxygen::engine::ShadowDomain::kDirectional));
-  EXPECT_NE(
-    shadow_instance->flags & static_cast<std::uint32_t>(
-      oxygen::engine::ShadowProductFlags::kValid),
+  EXPECT_NE(shadow_instance->flags
+      & static_cast<std::uint32_t>(oxygen::engine::ShadowProductFlags::kValid),
     0U);
 
   const auto vsm_renderer = manager->GetVirtualShadowRenderer();

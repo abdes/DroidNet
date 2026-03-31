@@ -5,7 +5,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Callable, Dict, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 REPORT_PATH_ENV = "OXYGEN_RENDERDOC_REPORT_PATH"
@@ -20,6 +20,12 @@ DEFAULT_PASS_EVENT_LIMIT = 24
 DEFAULT_RESOURCE_EVENT_LIMIT = 24
 
 KNOWN_PASS_NAMES = (
+    "ConventionalShadowRasterPass.ShadowDepthWork",
+    "DepthPrePass.SceneDepthWork",
+    "AutoExposurePass",
+    "ToneMapPass",
+    "ConventionalShadowRasterPass",
+    "DepthPrePass",
     "ScreenHzbBuildPass",
     "LightCullingPass",
     "VsmPageRequestGeneratorPass",
@@ -62,7 +68,15 @@ class ActionRecord:
 
 class ActionResources:
     def __init__(
-        self, outputs, depth, pixel_ro, compute_ro, pixel_rw, compute_rw
+        self,
+        outputs,
+        depth,
+        pixel_ro,
+        compute_ro,
+        pixel_rw,
+        compute_rw,
+        raster_viewports,
+        raster_scissors,
     ):
         self.outputs = outputs
         self.depth = depth
@@ -70,9 +84,13 @@ class ActionResources:
         self.compute_ro = compute_ro
         self.pixel_rw = pixel_rw
         self.compute_rw = compute_rw
+        self.raster_viewports = raster_viewports
+        self.raster_scissors = raster_scissors
 
     def all_lines(self) -> List[str]:
-        lines = list(self.outputs)
+        lines = list(self.raster_viewports)
+        lines.extend(self.raster_scissors)
+        lines.extend(self.outputs)
         if self.depth is not None:
             lines.append(self.depth)
         lines.extend(self.pixel_ro)
@@ -82,7 +100,9 @@ class ActionResources:
         return lines
 
     def writable_lines(self) -> List[str]:
-        lines = list(self.outputs)
+        lines = list(self.raster_viewports)
+        lines.extend(self.raster_scissors)
+        lines.extend(self.outputs)
         lines.extend(self.pixel_rw)
         lines.extend(self.compute_rw)
         return lines
@@ -316,17 +336,25 @@ def run_ui_script(
 
         report = ReportWriter(report_path)
         callback_completed = {"value": False}
+        callback_error = {"value": None}
 
         def replay_callback(controller):
-            analysis_callback(
-                controller,
-                report,
-                loaded_capture_path,
-                report_path,
-            )
-            callback_completed["value"] = True
+            try:
+                analysis_callback(
+                    controller,
+                    report,
+                    loaded_capture_path,
+                    report_path,
+                )
+                callback_completed["value"] = True
+            except Exception:
+                callback_error["value"] = traceback.format_exc()
 
         capture_context.Replay().BlockInvoke(replay_callback)
+        if callback_error["value"] is not None:
+            raise RuntimeError(
+                "Replay callback failed:\n{}".format(callback_error["value"])
+            )
         if not callback_completed["value"]:
             raise RuntimeError("Replay callback did not execute")
         return 0
@@ -383,11 +411,33 @@ def is_work_action(flags) -> bool:
     )
 
 
+def is_clear_only_action(flags) -> bool:
+    rd = renderdoc_module()
+    return bool(
+        flags & rd.ActionFlags.Clear
+        and not (
+            flags & rd.ActionFlags.Drawcall
+            or flags & rd.ActionFlags.Dispatch
+            or flags & rd.ActionFlags.MeshDispatch
+            or flags & rd.ActionFlags.Copy
+            or flags & rd.ActionFlags.Resolve
+        )
+    )
+
+
 def matching_pass_name(path_parts: Sequence[str]) -> Optional[str]:
     for path_part in reversed(path_parts):
-        for pass_name in KNOWN_PASS_NAMES:
-            if pass_name in path_part:
-                return pass_name
+        exact_matches = [
+            pass_name for pass_name in KNOWN_PASS_NAMES if path_part == pass_name
+        ]
+        if exact_matches:
+            return max(exact_matches, key=len)
+
+        substring_matches = [
+            pass_name for pass_name in KNOWN_PASS_NAMES if pass_name in path_part
+        ]
+        if substring_matches:
+            return max(substring_matches, key=len)
     return None
 
 
@@ -497,6 +547,118 @@ def describe_used_descriptors(
     return lines
 
 
+def describe_viewport(viewport, index: int) -> Optional[str]:
+    if viewport is None:
+        return None
+
+    x = safe_getattr(
+        viewport, "x", safe_getattr(viewport, "topLeftX", safe_getattr(viewport, "top_left_x"))
+    )
+    y = safe_getattr(
+        viewport, "y", safe_getattr(viewport, "topLeftY", safe_getattr(viewport, "top_left_y"))
+    )
+    width = safe_getattr(viewport, "width")
+    height = safe_getattr(viewport, "height")
+    min_depth = safe_getattr(
+        viewport, "minDepth", safe_getattr(viewport, "min_depth")
+    )
+    max_depth = safe_getattr(
+        viewport, "maxDepth", safe_getattr(viewport, "max_depth")
+    )
+    if x is None or y is None or width is None or height is None:
+        return None
+
+    return (
+        "viewport[{}]=x={} y={} width={} height={} minDepth={} maxDepth={}".format(
+            index, x, y, width, height, min_depth, max_depth
+        )
+    )
+
+
+def describe_scissor(scissor, index: int) -> Optional[str]:
+    if scissor is None:
+        return None
+
+    left = safe_getattr(
+        scissor, "x", safe_getattr(scissor, "left", safe_getattr(scissor, "topLeftX"))
+    )
+    top = safe_getattr(
+        scissor, "y", safe_getattr(scissor, "top", safe_getattr(scissor, "topLeftY"))
+    )
+    width = safe_getattr(scissor, "width")
+    height = safe_getattr(scissor, "height")
+    if width is not None and height is not None and left is not None and top is not None:
+        right = left + width
+        bottom = top + height
+    else:
+        right = safe_getattr(scissor, "right")
+        bottom = safe_getattr(scissor, "bottom")
+        if right is not None and left is not None:
+            width = right - left
+        if bottom is not None and top is not None:
+            height = bottom - top
+
+    if left is None or top is None or right is None or bottom is None:
+        return None
+
+    return (
+        "scissor[{}]=left={} top={} right={} bottom={} width={} height={}".format(
+            index, left, top, right, bottom, width, height
+        )
+    )
+
+
+def collect_raster_rect_lines(state) -> Tuple[List[str], List[str]]:
+    viewport_lines: List[str] = []
+    scissor_lines: List[str] = []
+
+    get_viewports = safe_getattr(state, "GetViewports")
+    if callable(get_viewports):
+        try:
+            for index, viewport in enumerate(get_viewports()):
+                line = describe_viewport(viewport, index)
+                if line is not None:
+                    viewport_lines.append(line)
+        except Exception:
+            pass
+    else:
+        get_viewport = safe_getattr(state, "GetViewport")
+        if callable(get_viewport):
+            for index in range(8):
+                try:
+                    viewport = get_viewport(index)
+                except Exception:
+                    break
+                line = describe_viewport(viewport, index)
+                if line is None:
+                    break
+                viewport_lines.append(line)
+
+    get_scissors = safe_getattr(state, "GetScissors")
+    if callable(get_scissors):
+        try:
+            for index, scissor in enumerate(get_scissors()):
+                line = describe_scissor(scissor, index)
+                if line is not None:
+                    scissor_lines.append(line)
+        except Exception:
+            pass
+    else:
+        get_scissor = safe_getattr(state, "GetScissor")
+        if callable(get_scissor):
+            for index in range(8):
+                try:
+                    scissor = get_scissor(index)
+                except Exception:
+                    break
+                line = describe_scissor(scissor, index)
+                if line is None:
+                    break
+                scissor_lines.append(line)
+
+    return viewport_lines, scissor_lines
+
+
 def inspect_action_resources(
     controller, resource_names: Dict[str, str], action: ActionRecord
 ) -> ActionResources:
@@ -530,6 +692,7 @@ def inspect_action_resources(
         resource_names,
         state.GetReadWriteResources(rd.ShaderStage.Compute, True),
     )
+    raster_viewports, raster_scissors = collect_raster_rect_lines(state)
 
     return ActionResources(
         outputs=outputs,
@@ -538,6 +701,8 @@ def inspect_action_resources(
         compute_ro=compute_ro,
         pixel_rw=pixel_rw,
         compute_rw=compute_rw,
+        raster_viewports=raster_viewports,
+        raster_scissors=raster_scissors,
     )
 
 
@@ -617,6 +782,12 @@ def categorized_resource_lines(
     details: ActionResources, substring: Optional[str] = None
 ) -> List[str]:
     lines: List[str] = []
+
+    for line in details.raster_viewports:
+        lines.append(line)
+
+    for line in details.raster_scissors:
+        lines.append(line)
 
     for line in matching_resource_lines(details.outputs, substring):
         lines.append("output={}".format(line))

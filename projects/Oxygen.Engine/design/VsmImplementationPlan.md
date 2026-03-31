@@ -783,6 +783,12 @@ Evidence summary:
   `Oxygen.Renderer.VsmStaticDynamicMerge.Tests`.
 - The method and commands are recorded in
   `design/VsmPerformanceOptimizationPlaybook.md`.
+- Late-frame capture-state pressure is now a recorded follow-up optimization
+  concern: complex-scene VSM captures can retain a peak shadow pool plus
+  derived HZB in the `~350 MB` class, which is legal but can make RenderDoc
+  load/replay much less usable than PIX. That issue should be revisited during
+  later VSM pool-budget and shrink-policy work, not during unrelated pass
+  investigations such as depth-prepass review.
 
 ---
 

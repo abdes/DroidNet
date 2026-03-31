@@ -658,6 +658,7 @@ auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
 
   render_context_.current_view = {};
   render_context_.current_view.view_id = view_id;
+  render_context_.current_view.exposure_view_id = view_id;
   render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
   render_context_.current_view.prepared_frame.reset(&*current_prepared_frame_);
 
@@ -1833,6 +1834,21 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
   std::uint64_t frame_render_graph_ns = 0;
   std::uint64_t frame_env_update_ns = 0;
 
+  if (shadow_manager_ && scene_prep_state_ != nullptr) {
+    if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+      std::uint32_t active_scene_view_count = 0U;
+      for (const auto& [view_id, _] : graphs_snapshot) {
+        const auto& view_ctx = context->GetViewContext(view_id);
+        if (view_ctx.metadata.is_scene_view
+          && resolved_views_.contains(view_id)) {
+          ++active_scene_view_count;
+        }
+      }
+      shadow_manager_->ReserveFrameResources(
+        active_scene_view_count, *light_manager);
+    }
+  }
+
   for (const auto& [view_id, factory] : graphs_snapshot) {
     const auto view_begin = std::chrono::steady_clock::now();
     std::uint64_t view_render_graph_ns = 0;
@@ -1913,6 +1929,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         // scene-dependent constants wiring.
         render_context_->current_view = {};
         render_context_->current_view.view_id = view_id;
+        render_context_->current_view.exposure_view_id
+          = view_ctx.metadata.exposure_view_id != kInvalidViewId
+          ? view_ctx.metadata.exposure_view_id
+          : view_id;
       }
 
       namespace env = scene::environment;
@@ -2462,11 +2482,15 @@ auto Renderer::PrepareAndWireViewConstantsForView(ViewId view_id,
     return false;
   }
 
+  const auto& view_ctx = frame_context.GetViewContext(view_id);
   // Populate render_context.current_view before EnvStatic update.
   render_context.current_view.view_id = view_id;
+  render_context.current_view.exposure_view_id
+    = view_ctx.metadata.exposure_view_id != kInvalidViewId
+    ? view_ctx.metadata.exposure_view_id
+    : view_id;
   render_context.current_view.resolved_view.reset(&resolved_it->second);
   render_context.current_view.prepared_frame.reset(&prepared_it->second);
-  const auto& view_ctx = frame_context.GetViewContext(view_id);
   const bool allow_atmosphere = view_ctx.metadata.with_atmosphere;
   bool atmo_enabled = false;
   if (const auto scene = render_context.scene; allow_atmosphere && scene) {
@@ -2673,6 +2697,9 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
       auto sun_shadow_index = 0xFFFFFFFFU;
       if (const auto light_manager = scene_prep_state_->GetLightManager()) {
         const auto prepared_it = prepared_frames_.find(view_id);
+        const auto rendered_items = prepared_it != prepared_frames_.end()
+          ? prepared_it->second.render_items
+          : std::span<const sceneprep::RenderItemData> {};
         const auto shadow_caster_bounds = prepared_it != prepared_frames_.end()
           ? prepared_it->second.shadow_caster_bounding_spheres
           : std::span<const glm::vec4> {};
@@ -2682,11 +2709,8 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           : std::span<const glm::vec4> {};
         auto shadow_caster_content_hash
           = HashPreparedShadowCasterContent(prepared);
-        const auto alpha_test_material_state
-          = HashShadowCasterMaterialState(scene_prep_state_ != nullptr
-              ? scene_prep_state_->CollectedItems()
-              : std::span<const sceneprep::RenderItemData> {},
-            texture_binder_.get());
+        const auto alpha_test_material_state = HashShadowCasterMaterialState(
+          rendered_items, texture_binder_.get());
         if (alpha_test_material_state.hash != 0U) {
           shadow_caster_content_hash = HashBytes(
             &alpha_test_material_state.hash,
@@ -2703,10 +2727,7 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
           alpha_test_material_state.alpha_test_domain_mismatch_count);
         const auto shadow_view = shadow_manager_->PublishForView(view_id,
           view_constants, *light_manager, render_context.GetSceneMutable(),
-          std::max(1.0F, resolved.Viewport().width),
-          scene_prep_state_ != nullptr
-            ? scene_prep_state_->CollectedItems()
-            : std::span<const sceneprep::RenderItemData> {},
+          std::max(1.0F, resolved.Viewport().width), rendered_items,
           shadow_caster_bounds, visible_receiver_bounds,
           frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
         shadow_instance_metadata_slot
@@ -3034,7 +3055,7 @@ auto Renderer::UpdateViewExposure(ViewId view_id, const scene::Scene& scene,
   }
 
   exposure *= exposure_key;
-  LOG_F(INFO,
+  DLOG_F(2,
     "Renderer: view={} exposure update mode={} exposure_enabled={} "
     "camera_ev={} manual_ev={} compensation_ev={:.6f} raw_key={:.6f} "
     "seed_exposure={:.6f} sun_enabled={} sun_cos_zenith={:.6f}",
@@ -3183,7 +3204,7 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
         std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(
           view_ptr),
         frame_seq, *scene_prep_state_,
-        run_frame_phase); // Only reset on first view
+        true); // Reset per-view transient data for every view.
       break;
     }
     case PrepStep::kViewCollectSingle: {
@@ -3333,7 +3354,7 @@ auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
 
       prepared_frame.exposure
         = UpdateViewExposure(view_id, scene, runtime_state.sun);
-      LOG_F(INFO, "Renderer: frame={} view={} exposure={:.6f}", frame_seq,
+      DLOG_F(2, "Renderer: frame={} view={} exposure={:.6f}", frame_seq,
         nostd::to_string(view_id), prepared_frame.exposure);
 
       // Populate SkyAtmosphere per-view context. Defaults stay conservative
@@ -3480,6 +3501,7 @@ auto Renderer::PublishPreparedFrameSpans(
     prepared_frame.draw_bounding_spheres = {};
   }
 
+  storage.render_item_storage.clear();
   storage.shadow_caster_bounds_storage.clear();
   storage.visible_receiver_bounds_storage.clear();
   std::size_t collected_item_count = 0U;
@@ -3487,9 +3509,13 @@ auto Renderer::PublishPreparedFrameSpans(
   std::size_t cast_shadow_item_count = 0U;
   std::size_t receive_shadow_item_count = 0U;
   std::size_t main_view_visible_item_count = 0U;
+  prepared_frame.render_items = {};
   if (scene_prep_state_ != nullptr) {
     const auto items = scene_prep_state_->CollectedItems();
     collected_item_count = items.size();
+    storage.render_item_storage.assign(items.begin(), items.end());
+    prepared_frame.render_items = std::span<const sceneprep::RenderItemData>(
+      storage.render_item_storage.data(), storage.render_item_storage.size());
     storage.shadow_caster_bounds_storage.reserve(items.size());
     storage.visible_receiver_bounds_storage.reserve(items.size());
     std::size_t zero_radius_log_count = 0U;
@@ -3543,6 +3569,8 @@ auto Renderer::PublishPreparedFrameSpans(
       storage.visible_receiver_bounds_storage.push_back(
         item.world_bounding_sphere);
     }
+  } else {
+    storage.render_item_storage.clear();
   }
   prepared_frame.shadow_caster_bounding_spheres
     = std::span<const glm::vec4>(storage.shadow_caster_bounds_storage.data(),

@@ -13,6 +13,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
@@ -55,6 +56,8 @@ struct PreparedSceneFrame {
   std::span<const PartitionRange> partitions; // published ranges (may be empty)
   std::span<const glm::vec4>
     draw_bounding_spheres; // one per draw metadata record
+  std::span<const sceneprep::RenderItemData>
+    render_items; // per-view collected items captured at scene-prep finalize
   std::span<const glm::vec4>
     shadow_caster_bounding_spheres; // xyz=center, w=radius
   std::span<const glm::vec4>

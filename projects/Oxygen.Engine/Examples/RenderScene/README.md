@@ -167,6 +167,64 @@ The Stage 13 optimization followed exactly that workflow:
 The longer write-up, including the UE5 reference model that guided that
 optimization, lives in `design/VsmPerformanceOptimizationPlaybook.md`.
 
+## Depth PrePass Measurement Workflow
+
+For complex scenes, prefer `Release` captures, do not capture before frame 40,
+and use `--directional-shadows conventional` unless the specific investigation
+is about VSM interaction. Late-frame VSM captures can carry a very large but
+legal shadow-pool/HZB state that makes RenderDoc load and replay much less
+usable for depth-prepass work while adding noise unrelated to the pass being
+reviewed. The generic RenderDoc timing and pass-focus scripts can measure
+`DepthPrePass` directly once the capture is steady-state.
+
+Important:
+
+- do not assume frame 45 is always valid for every content set
+- choose a scene-loaded late frame for the current content
+- if the example scene loads slowly, lower `--fps` or run for many more total
+  frames so the capture target and post-capture tail both occur after the scene
+  is live
+- on the current complex `RenderScene` content, a validated conventional-shadow
+  depth-prepass capture was produced at frame 200 with `--fps 30`
+
+Recommended command shape:
+
+```powershell
+H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\bin\Release\Oxygen.Examples.RenderScene.exe `
+  -v=-1 `
+  --frames 450 `
+  --fps 30 `
+  --directional-shadows conventional `
+  --capture-provider renderdoc `
+  --capture-load search `
+  --capture-output H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\depth_prepass_review_release\release_frame200_conventional_fps30 `
+  --capture-from-frame 200 `
+  --capture-frame-count 1
+```
+
+Timing run:
+
+```powershell
+$env:OXYGEN_RENDERDOC_PASS_NAME = 'DepthPrePass'
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\depth_prepass_review_release\release_frame200_conventional_fps30.depth_timing.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassTiming.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\depth_prepass_review_release\release_frame200_conventional_fps30_frame200.rdc'
+```
+
+Pass focus run:
+
+```powershell
+$env:OXYGEN_RENDERDOC_PASS_NAME = 'DepthPrePass'
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\depth_prepass_review_release\release_frame200_conventional_fps30.depth_focus.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassFocus.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\depth_prepass_review_release\release_frame200_conventional_fps30_frame200.rdc'
+```
+
+Use the timing report for cost and event count, then use the pass-focus report
+to inspect the draw/clear mix and bound resources inside the depth pass scope.
+
 ## Content Source Behavior (PAK vs Loose Cooked)
 
 The demo supports loading scenes from multiple cooked sources (PAK files and

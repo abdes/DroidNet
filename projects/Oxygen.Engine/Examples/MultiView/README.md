@@ -49,6 +49,20 @@ cmake --build out/build --target Oxygen.Examples.MultiView
 ./out/build/bin/Debug/Oxygen.Examples.MultiView.exe
 ```
 
+Validation-oriented options:
+
+- `--pip-wireframe <true|false>`: keep the PiP view in wireframe or run the
+  full scene-linear path.
+- `--pip-scissor-inset <pixels>`: inset the PiP scene scissor before rendering.
+  This is useful for validating clipped depth/HZB behavior against a live
+  replayable scene-view capture.
+
+Exposure behavior:
+
+- Each scene view meters its own HDR target by default.
+- PiP therefore builds its histogram from the PiP HDR texture only, instead of
+  inheriting the main view exposure.
+
 ## Architecture Notes
 
 - Scene created once; views share the scene but not view state.

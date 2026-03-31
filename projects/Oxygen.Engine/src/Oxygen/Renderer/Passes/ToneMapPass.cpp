@@ -113,13 +113,12 @@ auto ToneMapPass::DoPrepareResources(graphics::CommandRecorder& recorder)
 
   const auto& source = GetSourceTexture();
   const auto& output = GetOutputTexture();
-  const auto& src_desc = source.GetDescriptor();
-  const auto& out_desc = output.GetDescriptor();
-
   DLOG_F(2, "source ptr={} size={}x{} fmt={} name={}", fmt::ptr(&source),
-    src_desc.width, src_desc.height, src_desc.format, src_desc.debug_name);
+    source.GetDescriptor().width, source.GetDescriptor().height,
+    source.GetDescriptor().format, source.GetDescriptor().debug_name);
   DLOG_F(2, "output ptr={} size={}x{} fmt={} name={}", fmt::ptr(&output),
-    out_desc.width, out_desc.height, out_desc.format, out_desc.debug_name);
+    output.GetDescriptor().width, output.GetDescriptor().height,
+    output.GetDescriptor().format, output.GetDescriptor().debug_name);
   DLOG_F(2, "exposure={} tonemapper={}", config_->manual_exposure,
     config_->tone_mapper);
 
@@ -361,34 +360,32 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
 {
   CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
 
-  float exposure = std::max(config_->manual_exposure, 0.0F);
+  const float manual_exposure = std::max(config_->manual_exposure, 0.0F);
+  float cpu_exposure_constant = manual_exposure;
   ShaderVisibleIndex exposure_buffer_index = kInvalidShaderVisibleIndex;
   uint32_t debug_flags = 0u;
+  bool fallback_used = false;
+  const char* shader_exposure_source = "manual";
+  const auto current_view_id = Context().current_view.view_id;
+  const auto exposure_view_id
+    = Context().current_view.exposure_view_id != kInvalidViewId
+    ? Context().current_view.exposure_view_id
+    : current_view_id;
   if (config_->exposure_mode == ExposureMode::kAuto) {
     debug_flags |= 1u; // want auto exposure
-    const auto view_id = Context().current_view.view_id;
     const auto* ae = Context().GetPass<AutoExposurePass>();
 
     if (ae != nullptr) {
       debug_flags |= 2u; // AutoExposurePass found
       exposure_buffer_index
-        = ae->GetExposureOutput(view_id).exposure_state_srv_index;
-    }
-
-    if (ae == nullptr) {
-      LOG_F(ERROR,
-        "ToneMapPass: Auto exposure requested, but AutoExposurePass is not "
-        "registered (view_id={})",
-        view_id.get());
+        = ae->GetExposureOutput(exposure_view_id).exposure_state_srv_index;
     }
 
     if (exposure_buffer_index.IsValid()) {
       debug_flags |= 4u; // exposure buffer valid
+      shader_exposure_source = "buffer";
     } else {
-      LOG_F(ERROR,
-        "ToneMapPass: Auto exposure requested, but exposure buffer SRV index "
-        "is invalid (view_id={}, ae_registered={})",
-        view_id.get(), ae != nullptr);
+      shader_exposure_source = "prepared_fallback";
     }
 
     // Fallback: if auto exposure pass did not run, use the resolved view
@@ -396,30 +393,32 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
     if (!exposure_buffer_index.IsValid()) {
       if (const auto* prepared = Context().current_view.prepared_frame.get()) {
         debug_flags |= 8u; // used prepared-frame fallback exposure
-        exposure = std::max(prepared->exposure, 0.0F);
+        fallback_used = true;
+        cpu_exposure_constant = std::max(prepared->exposure, 0.0F);
+      } else {
+        shader_exposure_source = "manual_fallback";
       }
     }
   }
-  {
-    const auto view_id = Context().current_view.view_id;
-    const float prepared_exposure
-      = Context().current_view.prepared_frame != nullptr
+  DLOG_F(2,
+    "ToneMapPass: view={} exposure_view={} exposure_mode={} "
+    "shader_exposure_source={} "
+    "manual_exposure={:.6f} cpu_exposure_constant={:.6f} "
+    "exposure_buffer_index={} fallback_used={} debug_flags=0x{:x} "
+    "prepared_exposure={:.6f}",
+    current_view_id.get(), exposure_view_id.get(),
+    static_cast<std::uint32_t>(config_->exposure_mode), shader_exposure_source,
+    config_->manual_exposure, cpu_exposure_constant,
+    exposure_buffer_index.get(), fallback_used, debug_flags,
+    Context().current_view.prepared_frame != nullptr
       ? Context().current_view.prepared_frame->exposure
-      : -1.0F;
-    LOG_F(INFO,
-      "ToneMapPass: view={} exposure_mode={} manual_exposure={:.6f} "
-      "resolved_exposure={:.6f} exposure_buffer_index={} debug_flags=0x{:x} "
-      "prepared_exposure={:.6f}",
-      view_id.get(), static_cast<std::uint32_t>(config_->exposure_mode),
-      config_->manual_exposure, exposure, exposure_buffer_index.get(),
-      debug_flags, prepared_exposure);
-  }
+      : -1.0F);
   const ToneMapPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0u,
     .exposure_buffer_index = exposure_buffer_index.get(),
     .tone_mapper = static_cast<uint32_t>(config_->tone_mapper),
-    .exposure = exposure,
+    .exposure = cpu_exposure_constant,
     .gamma = config_->gamma,
     .debug_flags = debug_flags,
     ._pad0 = 0.0F,
