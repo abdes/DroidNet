@@ -20,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -297,6 +298,9 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   DCHECK_F(dsv->IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
+  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  graphics::GpuEventScope scene_depth_work_scope(
+    recorder, "DepthPrePass.SceneDepthWork", scope_options);
   ClearDepthStencilView(recorder, dsv);
   SetupRenderTargets(recorder, dsv);
 
