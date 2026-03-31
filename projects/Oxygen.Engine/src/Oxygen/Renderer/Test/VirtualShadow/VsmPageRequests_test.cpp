@@ -153,9 +153,9 @@ protected:
     const oxygen::ResolvedView& resolved_view, std::string_view debug_name)
     -> std::vector<VsmVisiblePixelSample>
   {
-    auto float_texture = CreateSingleChannelTexture2D(texture.GetDescriptor().width,
-      texture.GetDescriptor().height, oxygen::Format::kR32Float,
-      std::string(debug_name) + ".float-copy");
+    auto float_texture = CreateSingleChannelTexture2D(
+      texture.GetDescriptor().width, texture.GetDescriptor().height,
+      oxygen::Format::kR32Float, std::string(debug_name) + ".float-copy");
     EXPECT_NE(float_texture, nullptr);
     if (float_texture == nullptr) {
       return {};
@@ -187,7 +187,8 @@ protected:
           .mip_level = 0U,
           .array_slice = 0U,
         },
-        oxygen::graphics::TextureSubResourceSet::EntireTexture(), *float_texture,
+        oxygen::graphics::TextureSubResourceSet::EntireTexture(),
+        *float_texture,
         oxygen::graphics::TextureSlice {
           .x = 0U,
           .y = 0U,
@@ -222,16 +223,14 @@ protected:
       static_cast<std::uint64_t>(data.layout.width) * sizeof(float));
 
     auto visible_samples = std::vector<VsmVisiblePixelSample> {};
-    visible_samples.reserve(static_cast<std::size_t>(data.layout.width)
-      * data.layout.height);
+    visible_samples.reserve(
+      static_cast<std::size_t>(data.layout.width) * data.layout.height);
     for (std::uint32_t y = 0U; y < data.layout.height; ++y) {
-      const auto* row
-        = data.bytes.data()
+      const auto* row = data.bytes.data()
         + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
       for (std::uint32_t x = 0U; x < data.layout.width; ++x) {
         auto depth = 1.0F;
-        std::memcpy(
-          &depth, row + static_cast<std::size_t>(x) * sizeof(float),
+        std::memcpy(&depth, row + static_cast<std::size_t>(x) * sizeof(float),
           sizeof(depth));
         if (depth >= 1.0F) {
           continue;
@@ -498,8 +497,9 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   const auto actual_flags = ReadRequestFlags(
     vsm_renderer, virtual_page_count, "vsm-stage-five.directional.flags");
   ASSERT_NE(result.scene_depth_texture, nullptr);
-  const auto visible_samples = ReadDepthTextureSamples(*result.scene_depth_texture,
-    resolved_view, "vsm-stage-five.directional.depth-readback");
+  const auto visible_samples
+    = ReadDepthTextureSamples(*result.scene_depth_texture, resolved_view,
+      "vsm-stage-five.directional.depth-readback");
   ASSERT_FALSE(visible_samples.empty());
 
   const auto expected_flags
@@ -570,6 +570,13 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   {
     auto recorder = AcquireRecorder("vsm-stage-five.local-coarse.execute");
     CHECK_NOTNULL_F(recorder.get());
+    EnsureTracked(
+      *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
+    oxygen::co::testing::TestEventLoop loop;
+    oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+      co_await depth_pass.PrepareResources(render_context, *recorder);
+      co_return;
+    });
     RunPass(request_pass, render_context, *recorder);
   }
   WaitForQueueIdle();
@@ -660,6 +667,13 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   {
     auto recorder = AcquireRecorder("vsm-stage-five.directional-clip.execute");
     CHECK_NOTNULL_F(recorder.get());
+    EnsureTracked(
+      *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
+    oxygen::co::testing::TestEventLoop loop;
+    oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+      co_await depth_pass.PrepareResources(render_context, *recorder);
+      co_return;
+    });
     RunPass(request_pass, render_context, *recorder);
   }
   WaitForQueueIdle();

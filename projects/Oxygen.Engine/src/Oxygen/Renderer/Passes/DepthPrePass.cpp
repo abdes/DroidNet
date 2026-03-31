@@ -115,6 +115,20 @@ auto IntersectRects(const Scissors& lhs, const Scissors& rhs) -> Scissors
   };
 }
 
+auto CanonicalDepthSrvFormat(const Texture& texture) -> oxygen::Format
+{
+  switch (texture.GetDescriptor().format) {
+  case oxygen::Format::kDepth32:
+  case oxygen::Format::kDepth24Stencil8:
+  case oxygen::Format::kDepth32Stencil8:
+    return oxygen::Format::kR32Float;
+  case oxygen::Format::kDepth16:
+    return oxygen::Format::kR16UNorm;
+  default:
+    return texture.GetDescriptor().format;
+  }
+}
+
 } // namespace
 
 DepthPrePass::DepthPrePass(std::shared_ptr<Config> config)
@@ -132,6 +146,9 @@ DepthPrePass::~DepthPrePass()
   pass_constants_cbv_ = {};
   pass_constants_index_ = kInvalidShaderVisibleIndex;
   pass_constants_buffer_.reset();
+  canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
+  canonical_depth_srv_owner_ = nullptr;
+  output_is_complete_ = false;
 }
 
 //! Sets the viewport for the depth pre-pass.
@@ -228,6 +245,9 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
 */
 auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
+  output_is_complete_ = false;
+  canonical_depth_srv_owner_ = nullptr;
+
   // Ensure the depth_texture is in kDepthWrite state before derived classes
   // might perform operations like clears. Note that the depth_texture should
   // be already in a valid state when this method is called, but we are
@@ -293,6 +313,23 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   }
 
   SetPassConstantsIndex(pass_constants_index_);
+
+  const auto canonical_depth_srv = EnsureCanonicalDepthSrv();
+  if (!canonical_depth_srv.IsValid()) {
+    throw std::runtime_error(
+      "DepthPrePass: Failed to publish canonical depth SRV");
+  }
+
+  if (const auto* resolved_view = Context().current_view.resolved_view.get();
+    resolved_view != nullptr) {
+    output_ndc_depth_range_ = resolved_view->DepthRange();
+    output_reverse_z_ = resolved_view->ReverseZ();
+  } else {
+    output_ndc_depth_range_ = oxygen::NdcDepthRange::ZeroToOne;
+    output_reverse_z_ = false;
+  }
+  output_is_complete_
+    = config_->depth_texture != nullptr && canonical_depth_srv_index_.IsValid();
 
   co_return;
 }
@@ -375,12 +412,97 @@ auto DepthPrePass::GetEffectiveDepthRect() const -> Scissors
 
 auto DepthPrePass::GetOutput() const -> DepthPrePassOutput
 {
+  const auto* depth_texture = config_ && config_->depth_texture
+    ? config_->depth_texture.get()
+    : nullptr;
+  const auto width
+    = depth_texture != nullptr ? depth_texture->GetDescriptor().width : 0U;
+  const auto height
+    = depth_texture != nullptr ? depth_texture->GetDescriptor().height : 0U;
   return DepthPrePassOutput {
-    .depth_texture = &GetDepthTexture(),
+    .depth_texture = depth_texture,
+    .canonical_srv_index = canonical_depth_srv_index_,
+    .width = width,
+    .height = height,
     .viewport = GetEffectiveViewport(),
     .scissors = GetEffectiveScissors(),
     .valid_rect = GetEffectiveDepthRect(),
+    .ndc_depth_range = output_ndc_depth_range_,
+    .reverse_z = output_reverse_z_,
+    .has_depth_texture = depth_texture != nullptr,
+    .has_canonical_srv = canonical_depth_srv_index_.IsValid(),
+    .is_complete = output_is_complete_,
   };
+}
+
+auto DepthPrePass::EnsureCanonicalDepthSrv() -> ShaderVisibleIndex
+{
+  DCHECK_NOTNULL_F(config_->depth_texture.get(),
+    "DepthPrePass requires a valid depth texture before publishing output");
+
+  auto& graphics = Context().GetGraphics();
+  auto& registry = graphics.GetResourceRegistry();
+  auto& allocator = graphics.GetDescriptorAllocator();
+  auto& depth_texture = const_cast<graphics::Texture&>(*config_->depth_texture);
+  const auto srv_desc = graphics::TextureViewDescription {
+    .view_type = ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = CanonicalDepthSrvFormat(depth_texture),
+    .dimension = depth_texture.GetDescriptor().texture_type,
+    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+    .is_read_only_dsv = false,
+  };
+
+  if (const auto existing_index
+    = registry.FindShaderVisibleIndex(depth_texture, srv_desc);
+    existing_index.has_value()) {
+    canonical_depth_srv_index_ = *existing_index;
+    canonical_depth_srv_owner_ = &depth_texture;
+    return canonical_depth_srv_index_;
+  }
+
+  if (canonical_depth_srv_index_.IsValid()
+    && canonical_depth_srv_owner_ == &depth_texture
+    && registry.Contains(depth_texture, srv_desc)) {
+    return canonical_depth_srv_index_;
+  }
+
+  auto register_new_view = [&]() -> ShaderVisibleIndex {
+    auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+    if (!srv_handle.IsValid()) {
+      canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
+      canonical_depth_srv_owner_ = nullptr;
+      return canonical_depth_srv_index_;
+    }
+
+    canonical_depth_srv_index_ = allocator.GetShaderVisibleIndex(srv_handle);
+    const auto view
+      = registry.RegisterView(depth_texture, std::move(srv_handle), srv_desc);
+    if (!view->IsValid()) {
+      canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
+      canonical_depth_srv_owner_ = nullptr;
+      return canonical_depth_srv_index_;
+    }
+
+    canonical_depth_srv_owner_ = &depth_texture;
+    return canonical_depth_srv_index_;
+  };
+
+  if (!canonical_depth_srv_index_.IsValid()) {
+    return register_new_view();
+  }
+
+  const auto updated = registry.UpdateView(depth_texture,
+    bindless::HeapIndex { canonical_depth_srv_index_.get() }, srv_desc);
+  if (!updated) {
+    canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
+    canonical_depth_srv_owner_ = nullptr;
+    return register_new_view();
+  }
+
+  canonical_depth_srv_owner_ = &depth_texture;
+  return canonical_depth_srv_index_;
 }
 
 /*!

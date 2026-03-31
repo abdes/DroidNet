@@ -125,33 +125,6 @@ namespace {
   };
   }
 
-  [[nodiscard]] auto DepthSrvDesc(const graphics::Texture& texture)
-    -> graphics::TextureViewDescription
-  {
-    auto format = texture.GetDescriptor().format;
-    switch (format) {
-    case oxygen::Format::kDepth32:
-    case oxygen::Format::kDepth24Stencil8:
-    case oxygen::Format::kDepth32Stencil8:
-      format = oxygen::Format::kR32Float;
-      break;
-    case oxygen::Format::kDepth16:
-      format = oxygen::Format::kR16UNorm;
-      break;
-    default:
-      break;
-    }
-
-    return graphics::TextureViewDescription {
-      .view_type = graphics::ResourceViewType::kTexture_SRV,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = format,
-      .dimension = texture.GetDescriptor().texture_type,
-      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      .is_read_only_dsv = false,
-    };
-  }
-
   [[nodiscard]] auto DepthTextureInitialState(const graphics::Texture& texture)
     -> graphics::ResourceStates
   {
@@ -223,7 +196,6 @@ struct ScreenHzbBuildPass::Impl {
 
   const graphics::Texture* active_depth_texture { nullptr };
   ShaderVisibleIndex active_depth_srv { kInvalidShaderVisibleIndex };
-  const graphics::Texture* depth_texture_owner { nullptr };
   ViewState* active_view_state { nullptr };
   ViewId active_view_id {};
   std::uint32_t active_write_slot { 0U };
@@ -419,68 +391,6 @@ struct ScreenHzbBuildPass::Impl {
       cached_index = kInvalidShaderVisibleIndex;
     }
     return cached_index;
-  }
-
-  auto EnsureDepthSrv(const graphics::Texture& depth_texture)
-    -> ShaderVisibleIndex
-  {
-    auto& registry = gfx->GetResourceRegistry();
-    auto& allocator = gfx->GetDescriptorAllocator();
-    const auto view_desc = DepthSrvDesc(depth_texture);
-
-    if (const auto existing
-      = registry.FindShaderVisibleIndex(depth_texture, view_desc);
-      existing.has_value()) {
-      active_depth_srv = *existing;
-      depth_texture_owner = &depth_texture;
-      return active_depth_srv;
-    }
-
-    if (active_depth_srv.IsValid() && depth_texture_owner == &depth_texture
-      && registry.Contains(depth_texture, view_desc)) {
-      return active_depth_srv;
-    }
-
-    auto register_new_view = [&]() -> ShaderVisibleIndex {
-      auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
-      if (!handle.IsValid()) {
-        LOG_F(ERROR, "Screen HZB: failed to allocate depth SRV");
-        active_depth_srv = kInvalidShaderVisibleIndex;
-        return active_depth_srv;
-      }
-
-      active_depth_srv = allocator.GetShaderVisibleIndex(handle);
-      const auto view
-        = registry.RegisterView(const_cast<graphics::Texture&>(depth_texture),
-          std::move(handle), view_desc);
-      if (!view->IsValid()) {
-        LOG_F(ERROR, "Screen HZB: failed to register depth SRV");
-        active_depth_srv = kInvalidShaderVisibleIndex;
-        return active_depth_srv;
-      }
-
-      depth_texture_owner = &depth_texture;
-      return active_depth_srv;
-    };
-
-    if (!active_depth_srv.IsValid()) {
-      return register_new_view();
-    }
-
-    const auto updated
-      = registry.UpdateView(const_cast<graphics::Texture&>(depth_texture),
-        bindless::HeapIndex { active_depth_srv.get() }, view_desc);
-    if (!updated) {
-      LOG_F(
-        INFO, "Screen HZB: depth SRV update failed, re-registering descriptor");
-      active_depth_srv = kInvalidShaderVisibleIndex;
-      depth_texture_owner = nullptr;
-      return register_new_view();
-    }
-
-    depth_texture_owner = &depth_texture;
-    return active_depth_srv;
   }
 
   auto EnsureViewResources(const ViewId view_id, const std::uint32_t width,
@@ -685,23 +595,26 @@ auto ScreenHzbBuildPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     co_return;
   }
 
-  const auto& depth_texture = depth_pass->GetDepthTexture();
-  const auto& depth_desc = depth_texture.GetDescriptor();
-  const auto mip_count = ComputeMipCount(depth_desc.width, depth_desc.height);
-  auto& state = impl_->EnsureViewResources(
-    view_id, depth_desc.width, depth_desc.height, mip_count);
-
-  impl_->EnsurePassConstantsBuffer(mip_count);
-
-  const auto depth_srv = impl_->EnsureDepthSrv(depth_texture);
-  if (!depth_srv.IsValid()) {
-    LOG_F(ERROR, "Screen HZB pass failed to acquire a valid depth SRV");
+  const auto depth_output = depth_pass->GetOutput();
+  if (!depth_output.is_complete || depth_output.depth_texture == nullptr
+    || !depth_output.has_canonical_srv) {
+    LOG_F(WARNING,
+      "Screen HZB pass skipped because DepthPrePass output is incomplete");
     co_return;
   }
+
+  const auto& depth_texture = *depth_output.depth_texture;
+  const auto mip_count
+    = ComputeMipCount(depth_output.width, depth_output.height);
+  auto& state = impl_->EnsureViewResources(
+    view_id, depth_output.width, depth_output.height, mip_count);
+
+  impl_->EnsurePassConstantsBuffer(mip_count);
 
   impl_->active_view_state = &state;
   impl_->active_view_id = view_id;
   impl_->active_depth_texture = &depth_texture;
+  impl_->active_depth_srv = depth_output.canonical_srv_index;
   impl_->active_write_slot
     = state.has_current_output ? (state.current_history_slot ^ 1U) : 0U;
 
