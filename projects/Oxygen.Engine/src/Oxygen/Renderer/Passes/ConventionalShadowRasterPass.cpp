@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -142,6 +143,9 @@ auto ConventionalShadowRasterPass::DoExecute(
 
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
   SetupViewPortAndScissors(recorder);
+  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  graphics::GpuEventScope shadow_depth_work_scope(
+    recorder, "ConventionalShadowRasterPass.ShadowDepthWork", scope_options);
 
   const auto* records
     = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
