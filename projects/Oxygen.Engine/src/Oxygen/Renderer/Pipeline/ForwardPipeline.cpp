@@ -852,6 +852,8 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   depth_pass_config = std::make_shared<p::DepthPrePassConfig>();
   shadow_raster_pass_config
     = std::make_shared<p::ConventionalShadowRasterPass::Config>();
+  depth_pass_config->debug_name = "DepthPrePass";
+  shadow_raster_pass_config->debug_name = "ConventionalShadowRasterPass";
   shader_pass_config = std::make_shared<p::ShaderPassConfig>();
   wireframe_pass_config = std::make_shared<p::WireframePassConfig>();
   sky_pass_config = std::make_shared<p::SkyPassConfig>();
