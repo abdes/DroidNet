@@ -93,6 +93,9 @@ Deep-dive scripts stay separate from the baseline:
 
 - `Examples/RenderScene/AnalyzeRenderDocPassFocus.py`
   - inspect one pass with `OXYGEN_RENDERDOC_PASS_NAME`
+- `Examples/RenderScene/AnalyzeRenderDocPassTiming.py`
+  - measure GPU time and work events for one pass with
+    `OXYGEN_RENDERDOC_PASS_NAME`
 - `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
   - inspect one event with `OXYGEN_RENDERDOC_EVENT_ID`
 - `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
@@ -108,6 +111,12 @@ $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
   'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassFocus.py' `
   'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+
+$env:OXYGEN_RENDERDOC_PASS_NAME = 'VsmStaticDynamicMergePass'
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\merge_timing_post_selective\late_frame35.timing.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassTiming.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\merge_timing_post_selective\late_frame35.rdc'
 
 $env:OXYGEN_RENDERDOC_EVENT_ID = '14967'
 $env:OXYGEN_RENDERDOC_RESOURCE_NAME = 'VsmProjectionPass.'
@@ -132,6 +141,31 @@ Automated versus manual K-a evidence:
   - `Virtual Shadow Mask` visual sign-off in a live engine run
   - stabilization of the live run for that manual checkpoint
   - re-enabled analytic bridge GPU gate execution
+
+## RenderDoc Performance Workflow
+
+For VSM performance investigations, keep the baseline analyzer bounded and use
+the narrow helper plus the timing/pass deep dives instead.
+
+Working rules:
+
+- capture replay-safe late frames, not early warm-up frames
+- time one pass at a time with `AnalyzeRenderDocPassTiming.py`
+- inspect the same pass with `AnalyzeRenderDocPassFocus.py` when the timing
+  alone does not explain the cost
+- keep each script focused on one question and route shared UI/capture/report
+  behavior through `renderdoc_ui_analysis.py`
+
+The Stage 13 optimization followed exactly that workflow:
+
+1. capture late frames with `Run-RenderSceneCapture.ps1`
+2. time `VsmStaticDynamicMergePass`
+3. inspect the merge pass scope and event mix
+4. redesign the workload shape
+5. rerun the same capture-and-timing flow for before/after evidence
+
+The longer write-up, including the UE5 reference model that guided that
+optimization, lives in `design/VsmPerformanceOptimizationPlaybook.md`.
 
 ## Content Source Behavior (PAK vs Loose Cooked)
 

@@ -133,7 +133,7 @@ CPU-GPU ABI guidelines
 | K-e | `not_started` | renderer hardening and architecture gap closure still outstanding |
 | L-a | `not_started` | no repeatable automation harness yet |
 | L-b | `not_started` | no scene matrix or screenshot-validation flow yet |
-| L-c | `not_started` | no measured performance baseline yet |
+| L-c | `in_progress` | Stage 13 hot-path tuning is now evidence-backed, but no full scene/profile performance matrix exists yet |
 | L-d | `not_started` | no shipping defaults chosen from measured evidence yet |
 
 ---
@@ -369,13 +369,22 @@ Implementation summary:
 
 - Runtime pass exists in
   `src/Oxygen/Renderer/Passes/Vsm/VsmStaticDynamicMergePass.h/.cpp`.
-- The merge keeps the shadow pool depth-backed and uses a transient float
-  scratch atlas rather than turning the shadow atlas into a UAV resource.
+- The current implementation keeps the shadow pool depth-backed and uses a
+  transient float scratch surface rather than turning the shadow atlas into a
+  UAV resource.
+- The old full-slice copy-out -> full-pool dispatch -> full-slice copy-back
+  workload was replaced with a selective page-local merge path driven by
+  current-frame static-raster merge candidates from `VsmShadowRenderer`.
 
 Evidence summary:
 
 - Dedicated Stage 13 coverage exists in
   `Oxygen.Renderer.VsmStaticDynamicMerge.Tests`.
+- RenderDoc before/after timing evidence exists under:
+  - `out/build-ninja/analysis/merge_timing`
+  - `out/build-ninja/analysis/merge_timing_post_selective`
+- The optimization method, UE5 reference model, and tooling workflow are
+  recorded in `design/VsmPerformanceOptimizationPlaybook.md`.
 
 ---
 
@@ -739,7 +748,7 @@ Checklist:
 
 **Architecture ref:** all sections
 
-**Status:** `not_started`
+**Status:** `in_progress`
 
 Checklist:
 
@@ -748,8 +757,32 @@ Checklist:
 - [ ] Capture utilization and workload metrics per scene and profile
 - [ ] Add at least one explicit stress characterization run anchored on
   `physics_domains_vsm_benchmark` and a many-local-light scene if needed
-- [ ] Identify hot paths and perform only measurement-backed tuning
-- [ ] Record before and after evidence for every tuning change
+- [x] Identify hot paths and perform only measurement-backed tuning
+- [x] Record before and after evidence for every tuning change
+
+Implementation summary:
+
+- Stage 13 tuning is now grounded in replay-safe late-frame capture analysis
+  rather than frame-level guesswork.
+- `VsmStaticDynamicMergePass` was redesigned around selective page-local work
+  after RenderDoc timing showed the previous design was dominated by whole-slice
+  copies and whole-pool dispatch cost.
+- The UE5 VSM implementation was used as the reference workload shape for the
+  redesign; the resulting Oxygen path now skips Stage 13 work entirely on
+  steady-state late frames with no eligible static merge candidates.
+
+Evidence summary:
+
+- Before-change timing evidence exists in:
+  - `out/build-ninja/analysis/merge_timing/late_frame35.merge_timing.json`
+  - `out/build-ninja/analysis/merge_timing/late_frame39.merge_timing.json`
+- After-change timing evidence exists in:
+  - `out/build-ninja/analysis/merge_timing_post_selective/late_frame35.timing.txt`
+  - `out/build-ninja/analysis/merge_timing_post_selective/late_frame40.timing.txt`
+- Correctness coverage for the redesigned pass was rerun in
+  `Oxygen.Renderer.VsmStaticDynamicMerge.Tests`.
+- The method and commands are recorded in
+  `design/VsmPerformanceOptimizationPlaybook.md`.
 
 ---
 
