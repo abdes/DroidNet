@@ -162,9 +162,9 @@ depth is the numerically smallest. The channels are named by semantic meaning
 ### Depth-Equal in ShaderPass
 
 When `completeness` is `kComplete`, `ShaderPass` binds the depth buffer as a
-read-only DSV with `CompareOp::kEqual`. All opaque fragments that were written
-by the prepass pass the depth test at zero shader cost; all occluded fragments
-are rejected before the pixel shader executes.
+read-only DSV with `CompareOp::kEqual`. Visible opaque fragments match the
+prepass depth exactly, while occluded or otherwise mismatched fragments fail
+the fixed-function depth test against the prepass result.
 
 When `completeness` is `kIncomplete`, `ShaderPass` falls back to
 `CompareOp::kGreaterOrEqual` with read-only DSV.

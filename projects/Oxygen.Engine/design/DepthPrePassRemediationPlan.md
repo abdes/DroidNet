@@ -931,12 +931,13 @@ Implementation work:
 
 Validation:
 - depth-equal correctness test: render a scene with `ShaderPass` using
-  depth-equal and verify zero depth-test failures on opaque geometry via
-  RenderDoc pixel history
+  depth-equal and verify that visible opaque fragments match the prepass depth
+  while occluded `ShaderPass` fragments fail the equal depth test without
+  changing the final color/depth result
 - depth-equal precision test: verify no flickering or holes at distance,
   especially after DP-5 reversed-Z migration
-- performance evidence: measure fragment shader invocation count before/after
-  depth-equal on a scene with significant overdraw
+- performance evidence (remaining delta): measure fragment shader invocation
+  count before/after depth-equal on a scene with significant overdraw
 - fallback behavior test: verify `ShaderPass` falls back to less/greater-equal
   when `is_complete` is false
 - RenderDoc resource state validation: confirm `kDepthRead` state and
@@ -952,7 +953,47 @@ UE5 closeness check:
 - after this phase, Oxygen's `ShaderPass` should match UE5's base-pass
   depth-equal exploitation pattern for complete prepass scenarios
 
-Status: `not_started`
+Implementation update (April 1, 2026):
+
+- `ShaderPass` now resolves canonical `DepthPrePassOutput.depth_texture` even
+  when completeness is `kIncomplete`, preserving the DP-2/DP-4/DP-5 depth
+  contract instead of dropping to framebuffer-only depth assumptions
+- `ShaderPass` now builds `CompareOp::kEqual` only when
+  `DepthPrePassCompleteness` is `kComplete` and keeps
+  `CompareOp::kGreaterOrEqual` as the fallback when completeness is not
+  complete
+- `ShaderPass` PSOs now rebuild when the resolved depth attachment or depth
+  compare op changes, so completeness transitions cannot leave a stale
+  fallback/equal pipeline live
+- `TransparentPass` and `SkyPass` remain unchanged as intentional
+  non-candidates for depth-equal
+
+Validation evidence (April 1, 2026):
+
+- targeted tests:
+  - `Oxygen.Renderer.ShaderPassDepthState.Tests` passed (`2` tests)
+  - `Oxygen.Renderer.DepthPrePassContract.Tests` passed (`4` tests)
+- live runs:
+  - `Oxygen.Examples.MultiView.exe -v=-1 --frames 60 --fps 0 --pip-wireframe false`
+  - `Oxygen.Examples.MultiView.exe -v=2 --frames 20 --fps 0 --pip-wireframe false`
+  - `Oxygen.Examples.RenderScene.exe -v=-1 --frames 60 --fps 0 --directional-shadows conventional`
+  - `Oxygen.Examples.RenderScene.exe -v=2 --frames 20 --fps 0 --directional-shadows conventional`
+- RenderDoc capture:
+  - `out/build-ninja/analysis/dp6/renderscene_debug_dp6_frame30.rdc`
+  - `out/build-ninja/analysis/dp6/renderscene_debug_dp6_shader_depth_equal_report.txt`
+  - capture confirms `ShaderPass` uses `CompareFunction.Equal`,
+    `depthReadOnly=True`, the shared `Forward_HDR_Depth` target in
+    `D3D12_RESOURCE_STATE_DEPTH_READ`, and a sampled `ShaderPass` fragment at
+    `(532, 787)` fails the equal depth test (`event_id=508`) because its
+    shader depth (`0.002552839694544673`) does not match the prepass depth
+    (`0.0029069758020341396`)
+
+Remaining DP-6 delta:
+
+- capture an explicit before/after fragment-invocation or timing comparison to
+  quantify the depth-equal win on an overdraw-heavy scene
+
+Status: `in_progress`
 
 ### Phase DP-7: Unify Depth Derivatives And Stop Redundant Work
 

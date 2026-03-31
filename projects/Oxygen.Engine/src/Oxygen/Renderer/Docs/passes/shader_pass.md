@@ -20,8 +20,9 @@ handled by TransparentPass.
 | `debug_name` | `string` | No | Pass identifier (default: "ShaderPass") |
 | `fill_mode` | `FillMode` | No | Rasterizer fill mode (default: `kSolid`; wireframe disables culling) |
 
-**Depth Attachment**: Determined from `RenderContext::framebuffer`. If present,
-depth is used read-only (depth test enabled, depth write disabled).
+**Depth Attachment**: Determined from the canonical scene-depth contract first
+(`DepthPrePassOutput` when available), falling back to `RenderContext`'s
+framebuffer depth attachment. Depth is always read-only.
 
 ## Core Design
 
@@ -29,8 +30,9 @@ depth is used read-only (depth test enabled, depth write disabled).
 
 **Fixed Properties** (all variants):
 
-* **Depth/Stencil**: Test enabled if depth present (`kLessOrEqual`), write
-  **disabled** (depth already populated by DepthPrePass), stencil off
+* **Depth/Stencil**: Test enabled if depth present, write **disabled**, stencil
+  off. When `DepthPrePassCompleteness` is `kComplete`, `ShaderPass` uses
+  `CompareOp::kEqual`; otherwise it falls back to `CompareOp::kGreaterOrEqual`.
 * **Blend State**: Disabled (opaque rendering)
 * **Framebuffer Layout**: Single color target + optional depth (read-only)
 * **Root Signature**: Bindless table (t0-unbounded) + ViewConstants (b1) +
