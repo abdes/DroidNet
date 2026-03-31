@@ -33,6 +33,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -347,7 +348,8 @@ protected:
     return oxygen::ResolvedView(oxygen::ResolvedView::Params {
       .view_config = view_config,
       .view_matrix = glm::lookAtRH(eye, target, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-      .proj_matrix = glm::perspectiveRH_ZO(fov_y_radians,
+      .proj_matrix
+      = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(fov_y_radians,
         static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F),
       .camera_position = eye,
       .depth_range = oxygen::NdcDepthRange::ZeroToOne,
@@ -743,7 +745,7 @@ protected:
     texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+      = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = oxygen::graphics::ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
@@ -834,10 +836,10 @@ protected:
       const auto* row = data.bytes.data()
         + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
       for (std::uint32_t x = 0U; x < data.layout.width; ++x) {
-        auto depth = 1.0F;
+        auto depth = 0.0F;
         std::memcpy(&depth, row + static_cast<std::size_t>(x) * sizeof(float),
           sizeof(depth));
-        if (depth >= 1.0F) {
+        if (depth <= 1.0e-6F) {
           continue;
         }
         visible_samples.push_back(oxygen::renderer::vsm::VsmVisiblePixelSample {

@@ -76,6 +76,7 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
 
   // Build final view config: derive viewport from camera if present
   View cfg;
+  cfg.reverse_z = true;
   if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
     cfg.viewport = cam->get().ActiveViewport();
   } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {

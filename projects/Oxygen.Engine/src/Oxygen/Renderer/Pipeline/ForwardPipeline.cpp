@@ -519,8 +519,9 @@ void ForwardPipeline::Impl::BindHdrAndClear(
                            ->GetDescriptor()
                            .color_attachments[0]
                            .ResolveClearColor(std::nullopt);
+  // Scene depth follows engine reversed-Z, so clearing the far plane means 0.0.
   rec.ClearFramebuffer(*ctx.view->GetHdrFramebuffer(),
-    std::vector<std::optional<graphics::Color>> { hdr_clear }, 1.0F);
+    std::vector<std::optional<graphics::Color>> { hdr_clear }, 0.0F);
 }
 
 void ForwardPipeline::Impl::BindSdrAndMaybeClear(

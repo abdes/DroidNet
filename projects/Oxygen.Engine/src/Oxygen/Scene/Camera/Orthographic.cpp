@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,9 +26,10 @@ namespace oxygen::scene {
 */
 auto OrthographicCamera::ProjectionMatrix() const -> Mat4
 {
-  // Engine canonical orthographic projection: right-handed, z in [0,1], no
-  // Y-flip.
-  Mat4 proj = glm::orthoRH_ZO(left_, right_, bottom_, top_, near_, far_);
+  // Engine canonical orthographic projection: right-handed, z in [0,1],
+  // reversed-Z, no Y-flip.
+  Mat4 proj = MakeReversedZOrthographicProjectionRH_ZO(
+    left_, right_, bottom_, top_, near_, far_);
   return proj;
 }
 

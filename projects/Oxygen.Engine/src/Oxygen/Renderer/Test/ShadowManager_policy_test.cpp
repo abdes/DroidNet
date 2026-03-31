@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/LightManager.h>
@@ -155,7 +156,8 @@ protected:
     const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
       glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
     const auto projection_matrix
-      = glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
+      = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+        glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
 
     auto view_config = View {};
     view_config.viewport = ViewPort {
@@ -218,9 +220,9 @@ protected:
     auto far_depth = 0.0F;
     for (const auto& clip_corner : clip_corners) {
       const auto near_corner
-        = transform_point(inv_proj, glm::vec3(clip_corner, 0.0F));
-      const auto far_corner
         = transform_point(inv_proj, glm::vec3(clip_corner, 1.0F));
+      const auto far_corner
+        = transform_point(inv_proj, glm::vec3(clip_corner, 0.0F));
       near_depth += std::max(0.0F, -near_corner.z);
       far_depth += std::max(0.0F, -far_corner.z);
     }
@@ -368,8 +370,8 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
     .view_config = view_config,
     .view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
       glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-    .proj_matrix
-    = glm::perspectiveRH_ZO(glm::radians(20.0F), 1.0F, 0.1F, 30.0F),
+    .proj_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+      glm::radians(20.0F), 1.0F, 0.1F, 30.0F),
     .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
     .depth_range = NdcDepthRange::ZeroToOne,
     .near_plane = 0.1F,

@@ -23,6 +23,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -66,7 +67,7 @@ constexpr std::uint32_t kSingleTexelReadbackRowPitch = 256U;
 class DepthPrePassGpuTest : public RendererOffscreenGpuTestFixture {
 protected:
   [[nodiscard]] static auto MakeResolvedView(const std::uint32_t width,
-    const std::uint32_t height, const bool reverse_z = false,
+    const std::uint32_t height, const bool reverse_z = true,
     const NdcDepthRange depth_range = NdcDepthRange::ZeroToOne) -> ResolvedView
   {
     auto view_config = View {};
@@ -110,7 +111,7 @@ protected:
     texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+      = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
@@ -265,7 +266,7 @@ NOLINT_TEST_F(DepthPrePassGpuTest, OutputDefaultsToFullTextureRectWhenUnset)
   EXPECT_EQ(output.valid_rect.right, 8);
   EXPECT_EQ(output.valid_rect.bottom, 6);
   EXPECT_EQ(output.ndc_depth_range, NdcDepthRange::ZeroToOne);
-  EXPECT_FALSE(output.reverse_z);
+  EXPECT_TRUE(output.reverse_z);
   EXPECT_TRUE(output.has_depth_texture);
   EXPECT_FALSE(output.has_canonical_srv);
   EXPECT_FALSE(output.is_complete);
@@ -372,10 +373,10 @@ NOLINT_TEST_F(DepthPrePassGpuTest, ClearHonorsEffectiveDepthRectIntersection)
     0.25F);
   EXPECT_FLOAT_EQ(
     ReadDepthTexel(depth_texture, 1U, 1U, "depth-prepass.clipped.inside.a"),
-    1.0F);
+    0.0F);
   EXPECT_FLOAT_EQ(
     ReadDepthTexel(depth_texture, 3U, 2U, "depth-prepass.clipped.inside.b"),
-    1.0F);
+    0.0F);
 }
 
 NOLINT_TEST_F(DepthPrePassGpuTest,

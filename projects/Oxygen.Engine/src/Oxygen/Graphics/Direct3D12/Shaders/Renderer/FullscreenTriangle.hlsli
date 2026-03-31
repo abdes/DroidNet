@@ -30,7 +30,7 @@ struct FullscreenVSOutput
    (0,0) at top-left, (1,1) at bottom-right.
 
  @param vertex_id The SV_VertexID semantic value (0, 1, or 2).
- @param[out] position Clip-space position with w=1 and z=1 (far plane for reverse-Z).
+ @param[out] position Clip-space position with w=1 and z=0 (far plane for reverse-Z).
  @param[out] uv Texture coordinates in [0, 1] range.
 */
 static inline void GenerateFullscreenTriangle(
@@ -44,9 +44,9 @@ static inline void GenerateFullscreenTriangle(
     corner.x = (vertex_id == 1) ? 3.0f : -1.0f;
     corner.y = (vertex_id == 2) ? -3.0f : 1.0f;
 
-    // Position at z=1 (far plane in reverse-Z) for sky rendering.
-    // This allows depth test LESS_EQUAL to pass only where no geometry was rendered.
-    position = float4(corner.x, corner.y, 1.0f, 1.0f);
+    // Position at z=0 (far plane in reversed-Z) for sky/background rendering.
+    // This allows depth test GREATER_EQUAL to pass only where no geometry was rendered.
+    position = float4(corner.x, corner.y, 0.0f, 1.0f);
 
     // UV coordinates: remap from clip [-1,1] to texture [0,1].
     // Note: DirectX texture convention has (0,0) at top-left.
@@ -60,7 +60,7 @@ static inline void GenerateFullscreenTriangle(
  view-projection matrix. The result is an unnormalized world-space direction
  from the camera position toward the far plane.
 
- @param clip_pos Clip-space position (x, y in [-1, 1], z=1, w=1).
+ @param clip_pos Clip-space position (x, y in [-1, 1], z=0, w=1).
  @param inv_view_proj Inverse of the combined view-projection matrix.
  @return Unnormalized world-space view direction.
 */
@@ -71,7 +71,7 @@ static inline float3 ComputeViewDirection(float4 clip_pos, float4x4 inv_view_pro
     world_pos.xyz /= world_pos.w;
 
     // The direction is from camera origin (implicitly at inverse transform origin)
-    // to the world position. Since we're at z=1 (far plane), this gives the view ray.
+    // to the world position. Since we're at z=0 (far plane in reversed-Z), this gives the view ray.
     return world_pos.xyz;
 }
 

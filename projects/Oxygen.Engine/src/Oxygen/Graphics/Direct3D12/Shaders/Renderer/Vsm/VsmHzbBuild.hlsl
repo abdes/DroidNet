@@ -86,9 +86,9 @@ struct VsmHzbTopBuildPassConstants
     uint _pad3;
 };
 
-static float VsmMinReduce4(const float a, const float b, const float c, const float d)
+static float VsmMaxReduce4(const float a, const float b, const float c, const float d)
 {
-    return min(min(a, b), min(c, d));
+    return max(max(a, b), max(c, d));
 }
 
 [shader("compute")]
@@ -260,14 +260,14 @@ void CS_BuildPerPage(uint3 dispatch_thread_id : SV_DispatchThreadID)
     const uint2 source_texel = uint2(source_base_x + local_x * 2u,
         source_base_y + local_y * 2u);
 
-    float reduced_depth = 1.0f;
+    float reduced_depth = 0.0f;
     if (pass_constants.source_is_shadow_depth != 0u) {
         if (!BX_IsValidSlot(pass_constants.shadow_depth_srv_index)) {
             return;
         }
         Texture2DArray<float> shadow_depth
             = ResourceDescriptorHeap[pass_constants.shadow_depth_srv_index];
-        reduced_depth = VsmMinReduce4(
+        reduced_depth = VsmMaxReduce4(
             shadow_depth[uint3(source_texel.x, source_texel.y, 0u)],
             shadow_depth[uint3(source_texel.x + 1u, source_texel.y, 0u)],
             shadow_depth[uint3(source_texel.x, source_texel.y + 1u, 0u)],
@@ -278,7 +278,7 @@ void CS_BuildPerPage(uint3 dispatch_thread_id : SV_DispatchThreadID)
         }
         Texture2D<float> source_hzb
             = ResourceDescriptorHeap[pass_constants.source_hzb_srv_index];
-        reduced_depth = VsmMinReduce4(
+        reduced_depth = VsmMaxReduce4(
             source_hzb[source_texel],
             source_hzb[uint2(source_texel.x + 1u, source_texel.y)],
             source_hzb[uint2(source_texel.x, source_texel.y + 1u)],
@@ -311,7 +311,7 @@ void CS_BuildTopLevels(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass_constants.destination_hzb_uav_index];
 
     const uint2 source_texel = dispatch_thread_id.xy * 2u;
-    destination_hzb[dispatch_thread_id.xy] = VsmMinReduce4(
+    destination_hzb[dispatch_thread_id.xy] = VsmMaxReduce4(
         source_hzb[source_texel],
         source_hzb[uint2(source_texel.x + 1u, source_texel.y)],
         source_hzb[uint2(source_texel.x, source_texel.y + 1u)],

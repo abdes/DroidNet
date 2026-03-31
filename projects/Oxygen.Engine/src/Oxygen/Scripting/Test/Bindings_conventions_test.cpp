@@ -71,7 +71,7 @@ if math.abs(c.view.right.x - 1.0) > eps
   error("view.right mismatch")
 end
 
-if c.clip.z_near ~= 0.0 or c.clip.z_far ~= 1.0 then
+if c.clip.z_near ~= 1.0 or c.clip.z_far ~= 0.0 then
   error("clip z range mismatch")
 end
 if c.clip.front_face_ccw ~= true then

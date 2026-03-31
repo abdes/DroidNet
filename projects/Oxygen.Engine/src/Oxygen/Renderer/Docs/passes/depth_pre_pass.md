@@ -40,6 +40,24 @@ across the entire range.
 All consumers must read the `reverse_z` and `ndc_depth_range` fields from
 `DepthPrePassOutput` rather than assuming a convention.
 
+### Related Shadow Domains
+
+`DepthPrePass` owns the **scene** depth contract only. Shadow-domain raster
+passes intentionally do not consume `DepthPrePassOutput`, but they must still
+follow the same engine-wide reversed-Z convention so that depth math, compare
+ops, and debugging expectations remain coherent across the renderer.
+
+- Conventional directional shadow maps are separate depth products, not scene
+  depth products.
+- Conventional shadow depth therefore does **not** publish or consume
+  `DepthPrePassOutput`.
+- Conventional shadow depth still uses reversed-Z semantics:
+  - far-plane clear at `0.0`
+  - `GREATER_EQUAL` depth comparisons
+  - near surfaces mapping toward `1.0`, far surfaces toward `0.0`
+- VSM owns its own depth/HZB products and validation surface; any VSM-specific
+  failures are tracked separately from the `DepthPrePass` contract.
+
 ## Prepass Policy
 
 The pipeline selects a depth prepass mode per frame through `DepthPrePassMode`:

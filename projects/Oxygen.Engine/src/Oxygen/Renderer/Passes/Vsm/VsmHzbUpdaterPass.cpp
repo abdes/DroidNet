@@ -78,7 +78,7 @@ namespace {
     ShaderVisibleIndex destination_hzb_uav_index { kInvalidShaderVisibleIndex };
     std::uint32_t destination_width { 0U };
     std::uint32_t destination_height { 0U };
-    float clear_depth { 1.0F };
+    float clear_depth { 0.0F };
     std::uint32_t _pad0 { 0U };
     std::uint32_t _pad1 { 0U };
     std::uint32_t _pad2 { 0U };
@@ -859,11 +859,11 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
       MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
         impl_->selected_page_count_buffer->GetDescriptor().size_bytes,
         sizeof(std::uint32_t)));
-  impl_->dispatch_args_uav = impl_->EnsureBufferViewIndex(
-    *impl_->dispatch_args_buffer,
-    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
-      impl_->dispatch_args_buffer->GetDescriptor().size_bytes,
-      sizeof(std::uint32_t)));
+  impl_->dispatch_args_uav
+    = impl_->EnsureBufferViewIndex(*impl_->dispatch_args_buffer,
+      MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
+        impl_->dispatch_args_buffer->GetDescriptor().size_bytes,
+        sizeof(std::uint32_t)));
 
   if (impl_->pass_constants_indices.empty()
     || !RequireValidIndex(
@@ -893,7 +893,8 @@ auto VsmHzbUpdaterPass::DoPrepareResources(CommandRecorder& recorder)
     "VSM HZB updater bindings pass_constants_slots={} first_pass_constants={} "
     "shadow_depth_srv={} dirty_flags_uav={} "
     "physical_meta_uav={} selected_pages_srv={} selected_pages_uav={} "
-    "selected_page_count_srv={} selected_page_count_uav={} dispatch_args_uav={} "
+    "selected_page_count_srv={} selected_page_count_uav={} "
+    "dispatch_args_uav={} "
     "dynamic_slice={}",
     impl_->pass_constants_slot_count,
     impl_->pass_constants_indices.front().get(), impl_->shadow_depth_srv.get(),
@@ -964,9 +965,8 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   if (!impl_->resources_prepared || !impl_->input.has_value()
     || !impl_->dynamic_slice_index.has_value() || !impl_->select_pages_pso
-    || !impl_->prepare_dispatch_args_pso
-    || !impl_->clear_scratch_rect_pso || !impl_->build_per_page_pso
-    || !impl_->build_top_levels_pso) {
+    || !impl_->prepare_dispatch_args_pso || !impl_->clear_scratch_rect_pso
+    || !impl_->build_per_page_pso || !impl_->build_top_levels_pso) {
     DLOG_F(2, "VSM HZB updater skipped execute");
     co_return;
   }
@@ -1079,7 +1079,7 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
           = impl_->scratch_uav_indices[destination_slot],
           .destination_width = destination_width,
           .destination_height = destination_height,
-          .clear_depth = 1.0F,
+          .clear_depth = 0.0F,
         });
       SetPassConstantsIndex(scratch_init_constants_index);
       BindComputeStage(recorder, *impl_->clear_scratch_rect_pso,

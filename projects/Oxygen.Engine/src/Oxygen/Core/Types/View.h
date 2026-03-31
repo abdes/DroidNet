@@ -35,7 +35,7 @@ struct View {
   // positive Y = down (top-left origin). The ViewResolver converts pixels
   // -> NDC when applying jitter.
   glm::vec2 pixel_jitter { 0.0f, 0.0f };
-  bool reverse_z = false; // if true, projection uses reversed-Z (near > far)
+  bool reverse_z = true; // Oxygen canonical depth convention is reversed-Z
   bool mirrored = false;
 
   View() = default;

@@ -33,6 +33,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -330,7 +331,8 @@ protected:
       camera_position + glm::vec3 { 0.0F, 0.0F, -1.0F },
       glm::vec3 { 0.0F, 1.0F, 0.0F });
     const auto projection_matrix
-      = glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
+      = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+        glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
     auto view_config = View {};
     view_config.viewport = ViewPort {
       .top_left_x = 0.0F,
@@ -382,7 +384,8 @@ protected:
     return ResolvedView(ResolvedView::Params {
       .view_config = view_config,
       .view_matrix = glm::lookAtRH(eye, target, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-      .proj_matrix = glm::perspectiveRH_ZO(fov_y_radians,
+      .proj_matrix
+      = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(fov_y_radians,
         static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F),
       .camera_position = eye,
       .depth_range = NdcDepthRange::ZeroToOne,
@@ -515,15 +518,7 @@ protected:
   auto UploadSingleChannelTexture(
     const float value, std::string_view debug_name) -> std::shared_ptr<Texture>
   {
-    auto texture_desc = TextureDesc {};
-    texture_desc.width = 1U;
-    texture_desc.height = 1U;
-    texture_desc.format = Format::kR32Float;
-    texture_desc.texture_type = TextureType::kTexture2D;
-    texture_desc.is_shader_resource = true;
-    texture_desc.debug_name = std::string(debug_name);
-
-    auto texture = CreateRegisteredTexture(texture_desc);
+    auto texture = CreateDepthTexture2D(1U, 1U, debug_name);
     auto upload = CreateRegisteredBuffer(BufferDesc {
       .size_bytes = kTextureUploadRowPitch,
       .usage = BufferUsage::kNone,
@@ -568,15 +563,7 @@ protected:
     const std::uint32_t height, const float value, std::string_view debug_name)
     -> std::shared_ptr<Texture>
   {
-    auto texture_desc = TextureDesc {};
-    texture_desc.width = width;
-    texture_desc.height = height;
-    texture_desc.format = Format::kR32Float;
-    texture_desc.texture_type = TextureType::kTexture2D;
-    texture_desc.is_shader_resource = true;
-    texture_desc.debug_name = std::string(debug_name);
-
-    auto texture = CreateRegisteredTexture(texture_desc);
+    auto texture = CreateDepthTexture2D(width, height, debug_name);
     CHECK_NOTNULL_F(texture.get(), "Failed to create texture `{}`", debug_name);
 
     const auto row_pitch
@@ -648,7 +635,7 @@ protected:
     texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+      = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
@@ -918,8 +905,24 @@ protected:
 
   auto ExecutePreparedViewShell(VsmShadowRenderer& renderer,
     const oxygen::engine::RenderContext& render_context,
-    const oxygen::observer_ptr<const Texture> scene_depth_texture = {}) -> void
+    const std::shared_ptr<Texture>& scene_depth_texture = {}) -> void
   {
+    if (const auto* depth_pass = render_context.GetPass<DepthPrePass>();
+      depth_pass != nullptr && scene_depth_texture != nullptr) {
+      auto depth_recorder = AcquireRecorder("phase-ka5-live-shell.depth-pass");
+      ASSERT_NE(depth_recorder, nullptr);
+      if (depth_recorder != nullptr) {
+        EnsureTracked(
+          *depth_recorder, scene_depth_texture, ResourceStates::kCommon);
+        EventLoop publish_loop;
+        oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+          co_await const_cast<DepthPrePass&>(*depth_pass)
+            .PrepareResources(render_context, *depth_recorder);
+        });
+      }
+      WaitForQueueIdle();
+    }
+
     EventLoop loop;
     oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
       auto recorder = Backend().AcquireCommandRecorder(
@@ -929,8 +932,8 @@ protected:
       if (recorder == nullptr) {
         co_return;
       }
-      co_await renderer.ExecutePreparedViewShell(
-        render_context, *recorder, scene_depth_texture);
+      co_await renderer.ExecutePreparedViewShell(render_context, *recorder,
+        oxygen::observer_ptr<const Texture> { scene_depth_texture.get() });
     });
     const auto completed_value = WaitForQueueIdle();
     if (completed_value.get() == std::numeric_limits<std::uint64_t>::max()) {
@@ -1004,6 +1007,16 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
   auto& render_context = offscreen.GetRenderContext();
   render_context.RegisterPass(&depth_pass);
+  {
+    auto depth_recorder = AcquireRecorder("phase-ka4.depth-pass");
+    ASSERT_NE(depth_recorder, nullptr);
+    EnsureTracked(*depth_recorder, depth_texture, ResourceStates::kCommon);
+    EventLoop publish_loop;
+    oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+      co_await depth_pass.PrepareResources(render_context, *depth_recorder);
+    });
+  }
+  WaitForQueueIdle();
 
   auto bridge_committed_requests = false;
   EventLoop loop;
@@ -1105,8 +1118,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
   static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
     MakeViewConstants(resolved_view, SequenceNumber { 1U }, Slot { 0U }),
     lights, oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
-  ExecutePreparedViewShell(vsm_renderer, render_context,
-    oxygen::observer_ptr<const Texture> { depth_texture.get() });
+  ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
 
   EXPECT_EQ(vsm_renderer.GetCacheManager().DescribeBuildState(),
     VsmCacheBuildState::kIdle);
@@ -1427,8 +1439,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<float>(kOutputWidth), std::span(rendered_items),
     std::span(draw_bounds), std::span(receiver_bounds),
     std::chrono::milliseconds { 16 }, 0xCA57ULL));
-  ExecutePreparedViewShell(vsm_renderer, render_context,
-    oxygen::observer_ptr<const Texture> { depth_texture.get() });
+  ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
 
   const auto visible_primitives
     = vsm_renderer.GetShadowRasterizerPass()->GetVisibleShadowPrimitives();
@@ -1879,8 +1890,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<float>(kOutputWidth), std::span(rendered_items),
     std::span(shadow_caster_bounds), std::span(receiver_bounds),
     std::chrono::milliseconds { 16 }, 0xB0A5ULL));
-  ExecutePreparedViewShell(vsm_renderer, render_context,
-    oxygen::observer_ptr<const Texture> { depth_texture.get() });
+  ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
 
   auto raycast_distance_to_aabb
     = [](const glm::vec3 origin, const glm::vec3 direction,
@@ -2154,8 +2164,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
       MakeViewConstants(view, sequence, Slot { 0U }), lights,
       oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
-    ExecutePreparedViewShell(vsm_renderer, render_context,
-      oxygen::observer_ptr<const Texture> { depth_texture.get() });
+    ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
     const auto* extracted_frame
       = vsm_renderer.GetCacheManager().GetPreviousFrame();
     CHECK_NOTNULL_F(extracted_frame,
@@ -2268,8 +2277,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
       MakeViewConstants(resolved_view, sequence, Slot { 0U }), lights,
       oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
-    ExecutePreparedViewShell(vsm_renderer, render_context,
-      oxygen::observer_ptr<const Texture> { depth_texture.get() });
+    ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
   };
 
   run_frame(SequenceNumber { 1U });
@@ -2355,8 +2363,7 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
     static_cast<void>(vsm_renderer.PrepareView(kTestViewId,
       MakeViewConstants(resolved_view, sequence, Slot { 0U }), lights,
       oxygen::observer_ptr<Scene> { scene.get() }, 1024.0F));
-    ExecutePreparedViewShell(vsm_renderer, render_context,
-      oxygen::observer_ptr<const Texture> { depth_texture.get() });
+    ExecutePreparedViewShell(vsm_renderer, render_context, depth_texture);
 
     const auto projection_output
       = vsm_renderer.GetProjectionPass()->GetCurrentOutput(kTestViewId);
@@ -2406,6 +2413,16 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       DepthPrePass::Config { .depth_texture = depth_texture }));
     auto& render_context = offscreen.GetRenderContext();
     render_context.RegisterPass(&depth_pass);
+    {
+      auto depth_recorder = AcquireRecorder("phase-ka5-seed-bridge.depth-pass");
+      ASSERT_NE(depth_recorder, nullptr);
+      EnsureTracked(*depth_recorder, depth_texture, ResourceStates::kCommon);
+      EventLoop publish_loop;
+      oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+        co_await depth_pass.PrepareResources(render_context, *depth_recorder);
+      });
+    }
+    WaitForQueueIdle();
     vsm_renderer.OnFrameStart(
       oxygen::renderer::internal::RendererTagFactory::Get(),
       SequenceNumber { 1U }, Slot { 0U });
@@ -2478,6 +2495,17 @@ NOLINT_TEST_F(VsmShadowRendererBridgeGpuTest,
       DepthPrePass::Config { .depth_texture = depth_texture }));
     auto& render_context = offscreen.GetRenderContext();
     render_context.RegisterPass(&depth_pass);
+    {
+      auto depth_recorder
+        = AcquireRecorder("phase-ka5-seed-bridge-none.depth-pass");
+      ASSERT_NE(depth_recorder, nullptr);
+      EnsureTracked(*depth_recorder, depth_texture, ResourceStates::kCommon);
+      EventLoop publish_loop;
+      oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+        co_await depth_pass.PrepareResources(render_context, *depth_recorder);
+      });
+    }
+    WaitForQueueIdle();
     vsm_renderer.OnFrameStart(
       oxygen::renderer::internal::RendererTagFactory::Get(),
       SequenceNumber { 1U }, Slot { 0U });

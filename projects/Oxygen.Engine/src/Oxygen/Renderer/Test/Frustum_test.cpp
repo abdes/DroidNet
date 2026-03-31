@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 
 #include <Oxygen/Testing/GTest.h>
 
@@ -24,19 +25,18 @@ static auto MakePerspective(float fov_y_deg, float aspect, float zn, float zf)
   -> ::oxygen::Mat4
 {
   const float fov_y = glm::radians(fov_y_deg);
-  // Engine canonical: right-handed, Z in [0,1]
-  return glm::perspectiveRH_ZO(fov_y, aspect, zn, zf);
+  return oxygen::MakeReversedZPerspectiveProjectionRH_ZO(fov_y, aspect, zn, zf);
 }
 
 NOLINT_TEST(Frustum_BasicTest, ExtractPlanes_And_IntersectAabb)
 {
-  // Arrange: view = identity, proj = perspective, no reverse-Z
+  // Arrange: view = identity, proj = reversed-Z perspective
   const ::oxygen::Mat4 view(1.0F);
   const ::oxygen::Mat4 proj = MakePerspective(60.0F, 1.0F, 0.1F, 100.0F);
   const ::oxygen::Mat4 vp = proj * view;
 
   // Act
-  const auto fr = Frustum::FromViewProj(vp, /*reverse_z*/ false);
+  const auto fr = Frustum::FromViewProj(vp, /*reverse_z*/ true);
 
   // Assert: AABB at origin of size 1 should be inside
   const ::oxygen::Vec3 bmin(-0.5F);
@@ -55,16 +55,15 @@ NOLINT_TEST(Frustum_BasicTest, IntersectSphere_And_ReverseZ)
   const ::oxygen::Mat4 view = glm::lookAtRH(::oxygen::Vec3(0, 0, 5),
     ::oxygen::Vec3(0, 0, 0), ::oxygen::space::look::Up);
 
-  // Normal Z (near<far)
+  // Reversed-Z perspective
   const ::oxygen::Mat4 proj = MakePerspective(70.0F, 16.0F / 9.0F, 0.1F, 50.0F);
-  const auto fr_n = Frustum::FromViewProj(proj * view, /*reverse_z*/ false);
+  const auto fr_n = Frustum::FromViewProj(proj * view, /*reverse_z*/ true);
 
   // Sphere at origin radius 0.5 visible
   EXPECT_TRUE(fr_n.IntersectsSphere(::oxygen::Vec3(0), 0.5F));
   // Sphere far beyond far plane should be culled
   EXPECT_FALSE(fr_n.IntersectsSphere(::oxygen::Vec3(0, 0, -60), 1.0F));
 
-  // Reverse-Z: swap near/far plane meaning; choose large far and near ~1e-2
   const ::oxygen::Mat4 proj_r
     = MakePerspective(70.0F, 16.0F / 9.0F, 0.01F, 1000.0F);
   const auto fr_r = Frustum::FromViewProj(proj_r * view, /*reverse_z*/ true);

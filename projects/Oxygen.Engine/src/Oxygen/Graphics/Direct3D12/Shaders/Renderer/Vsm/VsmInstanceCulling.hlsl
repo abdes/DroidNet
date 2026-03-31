@@ -104,12 +104,12 @@ static bool VsmIntersectsD3DClip(const VsmClipSphere clip_sphere)
 
 static bool VsmProjectClipSphereToHzb(const VsmClipSphere clip_sphere,
     const uint hzb_width, const uint hzb_height, out uint2 pixel_min,
-    out uint2 pixel_max, out uint mip_level, out float front_depth)
+    out uint2 pixel_max, out uint mip_level, out float nearest_depth)
 {
     pixel_min = uint2(0u, 0u);
     pixel_max = uint2(0u, 0u);
     mip_level = 0u;
-    front_depth = 0.0f;
+    nearest_depth = 0.0f;
 
     if (hzb_width == 0u || hzb_height == 0u) {
         return false;
@@ -153,8 +153,10 @@ static bool VsmProjectClipSphereToHzb(const VsmClipSphere clip_sphere,
                         max(uv_max * float2(hzb_width, hzb_height) - 1.0f, 0.0f)),
         uint2(hzb_width - 1u, hzb_height - 1u));
 
-    front_depth = saturate(
-        (clip_sphere.center.z - clip_sphere.extent.z) / near_w);
+    // Oxygen uses reversed-Z, so the nearest visible point on the sphere has
+    // the maximum NDC depth value.
+    nearest_depth = saturate(
+        (clip_sphere.center.z + clip_sphere.extent.z) / near_w);
     return true;
 }
 
@@ -173,11 +175,11 @@ static bool VsmIsOccludedByPreviousHzb(const Texture2D<float> previous_frame_hzb
     uint2 pixel_min = uint2(0u, 0u);
     uint2 pixel_max = uint2(0u, 0u);
     uint mip_level = 0u;
-    float front_depth = 0.0f;
+    float nearest_depth = 0.0f;
     if (!VsmProjectClipSphereToHzb(camera_clip_sphere,
             pass_constants.previous_frame_hzb_width,
             pass_constants.previous_frame_hzb_height, pixel_min, pixel_max,
-            mip_level, front_depth)) {
+            mip_level, nearest_depth)) {
         return false;
     }
 
@@ -210,11 +212,11 @@ static bool VsmIsOccludedByPreviousHzb(const Texture2D<float> previous_frame_hzb
     const float depth_center
         = previous_frame_hzb.Load(int3(sample_center, mip_level)).r;
 
-    return front_depth > depth00 + VSM_OCCLUSION_EPSILON
-        && front_depth > depth10 + VSM_OCCLUSION_EPSILON
-        && front_depth > depth01 + VSM_OCCLUSION_EPSILON
-        && front_depth > depth11 + VSM_OCCLUSION_EPSILON
-        && front_depth > depth_center + VSM_OCCLUSION_EPSILON;
+    return nearest_depth + VSM_OCCLUSION_EPSILON < depth00
+        && nearest_depth + VSM_OCCLUSION_EPSILON < depth10
+        && nearest_depth + VSM_OCCLUSION_EPSILON < depth01
+        && nearest_depth + VSM_OCCLUSION_EPSILON < depth11
+        && nearest_depth + VSM_OCCLUSION_EPSILON < depth_center;
 }
 
 [shader("compute")]

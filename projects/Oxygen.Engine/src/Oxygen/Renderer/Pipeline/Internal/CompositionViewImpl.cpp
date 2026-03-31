@@ -83,7 +83,8 @@ void CompositionViewImpl::EnsureResources(
     depth_desc.is_shader_resource = true;
     depth_desc.is_typeless = true;
     depth_desc.use_clear_value = true;
-    depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
+    // Engine canonical depth is reversed-Z, so the far-plane clear is 0.0.
+    depth_desc.clear_value = { 0.0F, 0.0F, 0.0F, 0.0F };
     depth_desc.initial_state = graphics::ResourceStates::kCommon;
     depth_desc.debug_name = "Forward_HDR_Depth";
     hdr_fb_desc.SetDepthAttachment(graphics.CreateTexture(depth_desc));

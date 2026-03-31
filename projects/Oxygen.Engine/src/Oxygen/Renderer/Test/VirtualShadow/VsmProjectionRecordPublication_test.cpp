@@ -14,6 +14,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmProjectionTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmVirtualAddressSpaceTypes.h>
@@ -331,8 +332,9 @@ NOLINT_TEST_F(VsmProjectionRecordPublicationLiveSceneTest,
   const auto expected_outer_cone_angle = std::clamp(
     2.0F * std::acos(std::clamp(light.outer_cone_cos, -1.0F, 1.0F)),
     glm::radians(1.0F), glm::radians(175.0F));
-  const auto expected_projection = glm::perspectiveRH_ZO(
-    expected_outer_cone_angle, 1.0F, 0.1F, std::max(light.range, 0.2F));
+  const auto expected_projection
+    = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+      expected_outer_cone_angle, 1.0F, 0.1F, std::max(light.range, 0.2F));
 
   ExpectMat4Near(projection.projection.view_matrix, expected_view);
   ExpectMat4Near(projection.projection.projection_matrix, expected_projection);

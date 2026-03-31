@@ -23,6 +23,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -424,8 +425,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
   const auto face1_view = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
     glm::vec3 { 1.0F, 0.0F, 0.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
-  const auto face_projection
-    = glm::perspectiveRH_ZO(glm::radians(90.0F), 1.0F, 0.1F, 10.0F);
+  const auto face_projection = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+    glm::radians(90.0F), 1.0F, 0.1F, 10.0F);
 
   pass.SetInput(VsmShadowRasterizerPassInput {
     .frame = frame,
@@ -441,7 +442,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     = MakeBaseViewConstants(view_frame_slot, kFrameSlot, kFrameSequence),
   });
 
-  ClearShadowSlice(physical_pool.shadow_texture, 0U, 1.0F,
+  ClearShadowSlice(physical_pool.shadow_texture, 0U, 0.0F,
     "phase-f-rasterizer-point-face.clear");
 
   offscreen.SetCurrentView(kTestViewId, MakeResolvedView(), prepared_frame);
@@ -477,8 +478,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     192U, 64U, "phase-f-rasterizer-point-face.target");
   const float neighbor_depth = ReadDepthTexel(physical_pool.shadow_texture, 0U,
     64U, 64U, "phase-f-rasterizer-point-face.neighbor");
-  EXPECT_LT(target_depth, 1.0F);
-  EXPECT_FLOAT_EQ(neighbor_depth, 1.0F);
+  EXPECT_GT(target_depth, 0.0F);
+  EXPECT_FLOAT_EQ(neighbor_depth, 0.0F);
   EXPECT_EQ(render_context.GetPass<VsmShadowRasterizerPass>(), &pass);
 }
 
@@ -702,7 +703,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   });
 
   ClearShadowSlice(
-    physical_pool.shadow_texture, 0U, 1.0F, "phase-f-rasterizer-draw.clear");
+    physical_pool.shadow_texture, 0U, 0.0F, "phase-f-rasterizer-draw.clear");
 
   offscreen.SetCurrentView(kTestViewId, MakeResolvedView(), prepared_frame);
   auto& render_context = offscreen.GetRenderContext();
@@ -755,7 +756,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
 
   EXPECT_NEAR(left_page_depth, 0.25F, 1.0e-4F);
   EXPECT_NEAR(right_page_depth, 0.25F, 1.0e-4F);
-  EXPECT_FLOAT_EQ(untouched_depth, 1.0F);
+  EXPECT_FLOAT_EQ(untouched_depth, 0.0F);
 
   const auto dirty_flags = ReadBufferAs<std::uint32_t>(frame.dirty_flags_buffer,
     initial_meta.size(), "phase-f-rasterizer-draw.dirty");
@@ -807,7 +808,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
 
   std::array<TestVertex, 4> vertices {
     TestVertex {
-      .position = { -0.15F, -0.15F, 0.25F },
+      .position = { -0.15F, -0.15F, 0.85F },
       .normal = { 0.0F, 0.0F, 1.0F },
       .texcoord = { 0.0F, 1.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
@@ -815,7 +816,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       .color = { 1.0F, 0.0F, 0.0F, 1.0F },
     },
     TestVertex {
-      .position = { 0.15F, -0.15F, 0.25F },
+      .position = { 0.15F, -0.15F, 0.85F },
       .normal = { 0.0F, 0.0F, 1.0F },
       .texcoord = { 1.0F, 1.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
@@ -823,7 +824,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       .color = { 0.0F, 1.0F, 0.0F, 1.0F },
     },
     TestVertex {
-      .position = { 0.15F, 0.15F, 0.25F },
+      .position = { 0.15F, 0.15F, 0.85F },
       .normal = { 0.0F, 0.0F, 1.0F },
       .texcoord = { 1.0F, 0.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
@@ -831,7 +832,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
       .color = { 0.0F, 0.0F, 1.0F, 1.0F },
     },
     TestVertex {
-      .position = { -0.15F, 0.15F, 0.25F },
+      .position = { -0.15F, 0.15F, 0.85F },
       .normal = { 0.0F, 0.0F, 1.0F },
       .texcoord = { 0.0F, 0.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
@@ -931,8 +932,8 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     draw_allocation->mapped_ptr, draw_records.data(), sizeof(draw_records));
 
   const std::array<glm::vec4, 2> draw_bounds {
-    glm::vec4 { -0.5F, 0.0F, 0.25F, 0.35F },
-    glm::vec4 { 0.5F, 0.0F, 0.25F, 0.35F },
+    glm::vec4 { -0.5F, 0.0F, 0.85F, 0.35F },
+    glm::vec4 { 0.5F, 0.0F, 0.85F, 0.35F },
   };
   auto draw_bounds_buffer = CreateStructuredSrvBuffer<glm::vec4>(
     draw_bounds, "phase-f-rasterizer-localized.bounds");
@@ -1045,7 +1046,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
     = MakeBaseViewConstants(view_frame_slot, kFrameSlot, kFrameSequence),
   });
 
-  ClearShadowSlice(physical_pool.shadow_texture, 0U, 1.0F,
+  ClearShadowSlice(physical_pool.shadow_texture, 0U, 0.0F,
     "phase-f-rasterizer-localized.clear");
 
   {
@@ -1309,7 +1310,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
 
   ClearShadowSlice(physical_pool.shadow_texture, 0U, 0.9F,
     "phase-f-rasterizer-static.dynamic-clear");
-  ClearShadowSlice(physical_pool.shadow_texture, 1U, 1.0F,
+  ClearShadowSlice(physical_pool.shadow_texture, 1U, 0.0F,
     "phase-f-rasterizer-static.static-clear");
   const float dynamic_depth_before
     = ReadDepthTexel(physical_pool.shadow_texture, 0U, 64U, 64U,
@@ -1317,7 +1318,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   const float static_depth_before = ReadDepthTexel(physical_pool.shadow_texture,
     1U, 64U, 64U, "phase-f-rasterizer-static.static-before");
   EXPECT_FLOAT_EQ(dynamic_depth_before, 0.9F);
-  EXPECT_FLOAT_EQ(static_depth_before, 1.0F);
+  EXPECT_FLOAT_EQ(static_depth_before, 0.0F);
 
   offscreen.SetCurrentView(kTestViewId, MakeResolvedView(), prepared_frame);
   auto& render_context = offscreen.GetRenderContext();
@@ -1413,6 +1414,12 @@ NOLINT_TEST_F(
 
     auto recorder = AcquireRecorder("phase-f-hzb.frame1");
     ASSERT_NE(recorder, nullptr);
+    EnsureTracked(
+      *recorder, previous_depth, oxygen::graphics::ResourceStates::kCommon);
+    oxygen::co::testing::TestEventLoop publish_loop;
+    oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+      co_await depth_pass.PrepareResources(render_context, *recorder);
+    });
     RunPass(screen_hzb_pass, render_context, *recorder);
   }
   WaitForQueueIdle();
@@ -1601,7 +1608,7 @@ NOLINT_TEST_F(
   });
 
   ClearShadowSlice(
-    physical_pool.shadow_texture, 0U, 1.0F, "phase-f-rasterizer-hzb.clear");
+    physical_pool.shadow_texture, 0U, 0.0F, "phase-f-rasterizer-hzb.clear");
 
   offscreen.SetCurrentView(
     kTestViewId, MakeResolvedView(4U, 4U), prepared_frame);
@@ -1611,6 +1618,12 @@ NOLINT_TEST_F(
   {
     auto recorder = AcquireRecorder("phase-f-hzb.frame2");
     ASSERT_NE(recorder, nullptr);
+    EnsureTracked(
+      *recorder, current_depth, oxygen::graphics::ResourceStates::kCommon);
+    oxygen::co::testing::TestEventLoop publish_loop;
+    oxygen::co::Run(publish_loop, [&]() -> oxygen::co::Co<> {
+      co_await depth_pass.PrepareResources(render_context, *recorder);
+    });
     RunPass(screen_hzb_pass, render_context, *recorder);
   }
 
@@ -1650,7 +1663,7 @@ NOLINT_TEST_F(
 
   const float page_depth = ReadDepthTexel(
     physical_pool.shadow_texture, 0U, 64U, 64U, "phase-f-rasterizer-hzb.page");
-  EXPECT_FLOAT_EQ(page_depth, 1.0F);
+  EXPECT_FLOAT_EQ(page_depth, 0.0F);
   EXPECT_EQ(pass.GetVisibleShadowPrimitives().size(), 1U);
   EXPECT_EQ(pass.GetPreparedPageCount(), 1U);
   EXPECT_EQ(render_context.GetPass<VsmShadowRasterizerPass>(), &pass);
@@ -1878,7 +1891,7 @@ NOLINT_TEST_F(VsmShadowRasterizerPassGpuTest,
   });
 
   ClearShadowSlice(
-    physical_pool.shadow_texture, 0U, 1.0F, "phase-f-rasterizer-reveal.clear");
+    physical_pool.shadow_texture, 0U, 0.0F, "phase-f-rasterizer-reveal.clear");
 
   offscreen.SetCurrentView(
     kTestViewId, MakeResolvedView(4U, 4U), prepared_frame);

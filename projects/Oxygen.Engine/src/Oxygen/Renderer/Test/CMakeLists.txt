@@ -307,10 +307,33 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
-    "DepthPrePass"
+    "DepthPrePassConfig"
     SOURCES
-      "DepthPrePass_test.cpp"
+      "DepthPrePass/DepthPrePassConfig_test.cpp"
+      "DepthPrePass/DepthPrePassGpuTestFixture.h"
       "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    "DepthPrePassExecution"
+    SOURCES
+      "DepthPrePass/DepthPrePassExecution_test.cpp"
+      "DepthPrePass/DepthPrePassGpuTestFixture.h"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      "Fixtures/SyntheticSceneBuilder.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    "DepthPrePassContract"
+    SOURCES
+      "DepthPrePass/DepthPrePassContract_test.cpp"
+      "DepthPrePass/DepthPrePassGpuTestFixture.h"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      "Fixtures/SyntheticSceneBuilder.h"
       DEPS
       oxygen::graphics-direct3d12
   )

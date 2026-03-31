@@ -21,6 +21,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -627,7 +628,8 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
   desc.is_shader_resource = true;
   desc.is_typeless = true;
   desc.use_clear_value = true;
-  desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
+  // Conventional shadow depth also follows the engine reversed-Z convention.
+  desc.clear_value = { 0.0F, 0.0F, 0.0F, 0.0F };
   desc.initial_state = graphics::ResourceStates::kCommon;
   desc.debug_name = "DirectionalShadowDepthArray";
 
@@ -746,13 +748,13 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
   };
   for (std::size_t i = 0; i < clip_corners.size(); ++i) {
     near_corners[i]
-      = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
-    far_corners[i]
       = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
+    far_corners[i]
+      = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
     view_near_corners[i]
-      = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
-    view_far_corners[i]
       = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
+    view_far_corners[i]
+      = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
   }
 
   float near_depth = 0.0F;
@@ -926,7 +928,8 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
       const float far_plane
         = std::max(near_plane + 1.0F, -min_depth + depth_padding);
       const glm::mat4 light_proj
-        = glm::orthoRH_ZO(left, right, bottom, top, near_plane, far_plane);
+        = oxygen::MakeReversedZOrthographicProjectionRH_ZO(
+          left, right, bottom, top, near_plane, far_plane);
 
       metadata.cascade_distances[cascade_index] = end_depth;
       metadata.cascade_world_texel_size[cascade_index] = world_units_per_texel;

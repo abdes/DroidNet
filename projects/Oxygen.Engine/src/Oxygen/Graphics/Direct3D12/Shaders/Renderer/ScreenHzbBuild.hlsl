@@ -7,7 +7,7 @@
 // Renderer-level screen-space HZB construction.
 //
 // This pass consumes the main-view depth texture produced by DepthPrePass and
-// builds a min-reduced screen pyramid used by later VSM instance culling.
+// builds a reversed-Z max-reduced screen pyramid used by later VSM instance culling.
 // The current frame writes into scratch textures first, then the CPU side
 // copies each reduced level into the persistent per-view HZB pyramid.
 
@@ -71,7 +71,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = uint2(pass_constants.source_width, pass_constants.source_height);
     const uint2 base_coord = dispatch_thread_id.xy * pass_constants.source_texel_step;
 
-    float min_depth = 1.0f;
+    float max_depth = 0.0f;
     [unroll]
     for (uint offset_y = 0u; offset_y < 2u; ++offset_y) {
         [unroll]
@@ -79,9 +79,9 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             const uint2 sample_coord = min(
                 base_coord + uint2(offset_x, offset_y),
                 source_dimensions - 1u);
-            min_depth = min(min_depth, source_texture.Load(int3(sample_coord, 0)).r);
+            max_depth = max(max_depth, source_texture.Load(int3(sample_coord, 0)).r);
         }
     }
 
-    destination_texture[dispatch_thread_id.xy] = min_depth;
+    destination_texture[dispatch_thread_id.xy] = max_depth;
 }

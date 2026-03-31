@@ -73,14 +73,14 @@ namespace space {
 
     - Right-handed
     - Forward = -Z
-    - Z range = [0, 1]
+    - Reversed-Z range = [1, 0] where near = 1 and far = 0
     - CCW = front face
 
    Backends (DX12, Vulkan, etc.) must adapt to THIS contract.
   */
   namespace clip {
-    inline constexpr float ZNear = 0.0F;
-    inline constexpr float ZFar = 1.0F;
+    inline constexpr float ZNear = 1.0F;
+    inline constexpr float ZFar = 0.0F;
     inline constexpr bool FrontFaceCCW = true;
   } // namespace clip
 

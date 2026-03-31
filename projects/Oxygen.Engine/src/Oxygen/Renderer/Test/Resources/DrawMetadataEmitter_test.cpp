@@ -18,6 +18,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -872,8 +873,8 @@ NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
 {
   TestResolvedVirtualPage page {};
   page.view_matrix = glm::mat4(1.0F);
-  page.projection_matrix
-    = glm::orthoRH_ZO(-1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 10.0F);
+  page.projection_matrix = oxygen::MakeReversedZOrthographicProjectionRH_ZO(
+    -1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 10.0F);
 
   const glm::vec4 inside_sphere(0.0F, 0.0F, -1.0F, 0.25F);
   const glm::vec4 touching_sphere(1.2F, 0.0F, -1.0F, 0.25F);

@@ -46,9 +46,9 @@ struct SkyPassConfig {
 //! Sky rendering pass: draws the sky background behind scene geometry.
 /*!
  The SkyPass renders the sky as a fullscreen triangle using depth-test
- LESS_EQUAL at z=1.0 (sky at far plane). It must execute after DepthPrePass
- so it can depth-test against the populated depth buffer and only shade
- background pixels.
+ GREATER_EQUAL at z=0.0 (sky at far plane under reversed-Z). It must execute
+ after DepthPrePass so it can depth-test against the populated depth buffer and
+ only shade background pixels.
 
  Rendering priority is handled in the shader:
  1. SkyAtmosphere (procedural) - if enabled

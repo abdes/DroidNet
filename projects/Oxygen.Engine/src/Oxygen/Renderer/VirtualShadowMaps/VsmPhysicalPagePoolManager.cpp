@@ -78,7 +78,8 @@ namespace {
     desc.is_render_target = true;
     desc.is_typeless = true;
     desc.use_clear_value = true;
-    desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
+    // VSM shadow depth follows the engine reversed-Z convention.
+    desc.clear_value = { 0.0F, 0.0F, 0.0F, 0.0F };
     desc.initial_state = graphics::ResourceStates::kCommon;
 
     auto texture = gfx.CreateTexture(desc);

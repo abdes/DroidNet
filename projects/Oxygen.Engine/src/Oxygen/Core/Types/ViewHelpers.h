@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <glm/ext/matrix_clip_space.hpp>
 #include <glm/glm.hpp>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -61,6 +62,23 @@ inline glm::mat4 RemapProjectionDepthRange(
     return remap * proj;
   }
   return proj;
+}
+
+// Build a right-handed [0,1] reversed-Z perspective projection. GLM's
+// perspectiveRH_ZO is forward-Z, so reversed-Z is obtained by swapping the
+// near/far inputs while preserving the same handedness and clip-space range.
+inline glm::mat4 MakeReversedZPerspectiveProjectionRH_ZO(const float fov_y,
+  const float aspect, const float near_plane, const float far_plane)
+{
+  return glm::perspectiveRH_ZO(fov_y, aspect, far_plane, near_plane);
+}
+
+// Build a right-handed [0,1] reversed-Z orthographic projection.
+inline glm::mat4 MakeReversedZOrthographicProjectionRH_ZO(const float left,
+  const float right, const float bottom, const float top,
+  const float near_plane, const float far_plane)
+{
+  return glm::orthoRH_ZO(left, right, bottom, top, far_plane, near_plane);
 }
 
 } // namespace oxygen
