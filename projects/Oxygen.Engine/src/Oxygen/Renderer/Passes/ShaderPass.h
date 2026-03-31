@@ -82,6 +82,7 @@ private:
 
   //! Convenience method to get the framebuffer specified in the context.
   [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
+  [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture*;
 
   //! Convenience method to get the clear color for the pass.
   [[nodiscard]] auto GetClearColor() const -> const graphics::Color&;

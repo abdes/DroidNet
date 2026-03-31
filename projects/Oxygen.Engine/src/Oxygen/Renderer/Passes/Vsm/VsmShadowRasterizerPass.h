@@ -47,6 +47,16 @@ struct VsmShadowRasterizerPassInput {
     previous_visible_shadow_primitives {};
 };
 
+//! VSM shadow-depth raster pass.
+/*!
+ Reuses `DepthPrePass`'s depth-only raster machinery intentionally, but this
+ pass operates on the VSM physical shadow pool rather than on the canonical
+ main-view scene depth buffer.
+
+ It is therefore an intentional non-consumer and non-publisher of
+ `DepthPrePassOutput`: sharing the raster infrastructure is legitimate, but
+ sharing the scene-depth product would be architecturally wrong.
+*/
 class VsmShadowRasterizerPass : public DepthPrePass {
 public:
   using Config = VsmShadowRasterizerPassConfig;
@@ -97,6 +107,7 @@ protected:
   auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc override;
   auto NeedRebuildPipelineState() const -> bool override;
+  auto PublishesCanonicalDepthOutput() const -> bool override;
 
 private:
   auto UsesFramebufferDepthAttachment() const -> bool override;

@@ -23,7 +23,7 @@ namespace oxygen::engine {
 struct TransparentPassConfig {
   std::shared_ptr<const graphics::Texture> color_texture; //!< Target color RT
   std::shared_ptr<const graphics::Texture>
-    depth_texture; //!< Shared depth buffer
+    depth_texture; //!< Legacy raw-depth fallback for standalone/offscreen paths
   std::string debug_name { "TransparentPass" };
   //! Rasterization fill mode for this pass (default: solid)
   graphics::FillMode fill_mode { graphics::FillMode::kSolid };
@@ -66,6 +66,9 @@ protected:
 
 private:
   auto GetColorTexture() const -> const graphics::Texture&;
+  //! Prefers registered `DepthPrePassOutput`, falls back to
+  //! `config_->depth_texture` only for standalone/offscreen/test paths that
+  //! intentionally bypass the canonical cross-pass depth product.
   auto GetDepthTexture() const -> const graphics::Texture*; // nullable
 
   std::shared_ptr<Config> config_;

@@ -174,6 +174,7 @@ protected:
   auto CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc override;
   auto NeedRebuildPipelineState() const -> bool override;
   virtual auto UsesFramebufferDepthAttachment() const -> bool;
+  virtual auto PublishesCanonicalDepthOutput() const -> bool;
   virtual auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc;
   virtual auto ExtendShaderDefines(

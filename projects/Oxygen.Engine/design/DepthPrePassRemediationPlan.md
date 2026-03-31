@@ -248,7 +248,69 @@ UE5 closeness check:
 - UE5 treats scene depth as a first-class renderer product, not a raw texture
   each pass discovers independently
 
-Status: `not_started`
+Current implementation:
+
+- `DepthPrePassOutput` now publishes:
+  - `depth_texture`
+  - canonical shader-visible SRV identity
+  - texture dimensions
+  - effective viewport/scissor/valid rect
+  - depth convention metadata
+  - completeness flags
+- the shared depth contract is now consumed by:
+  - `ScreenHzbBuildPass`
+  - `LightCullingPass`
+  - `VsmPageRequestGeneratorPass`
+  - `ShaderPass`
+  - `TransparentPass`
+  - `SkyPass`
+  - `GroundGridPass`
+  - `VsmProjectionPass` through `VsmShadowRenderer`
+- duplicate depth SRV ownership was removed from those three consumers
+- duplicate depth SRV ownership is now also removed from:
+  - `ShaderPass`
+  - `SkyPass`
+  - `GroundGridPass`
+- `TransparentPass` now prefers the published depth texture instead of only the
+  raw config pointer
+- `VsmProjectionPass` now consumes the published canonical depth SRV when
+  available and falls back to its raw depth texture seam only for standalone
+  harness/test paths that do not have a registered `DepthPrePass`
+
+Validation evidence so far:
+
+- focused build:
+  - `cmake --build out/build-ninja --config Release --parallel 12 --target oxygen-renderer Oxygen.Renderer.DepthPrePass.Tests Oxygen.Renderer.VsmPageRequests.Tests oxygen-examples-renderscene oxygen-examples-multiview`
+- focused tests:
+  - `Oxygen.Renderer.DepthPrePass.Tests`: pass
+  - `Oxygen.Renderer.VsmPageRequests.Tests`:
+    - all `3/3` tests pass in `Release`
+  - `Oxygen.Renderer.VsmShadowProjection.Tests` after rebuilding the target
+    against the updated `VsmProjectionPassInput` contract:
+    - `DirectionalTwoBoxSceneMatchesCpuProjectionFromRealStageInputs`: pass
+    - `DirectionalTwoBoxLiveShellMatchesIsolatedProjectionAtAnalyticFloorProbes`: pass
+    - `PagedSpotLightTwoBoxSceneMatchesCpuProjectionFromRealStageInputs`: pass
+    - `DirectionalSingleCascadeLiveShellDarkensStableFarAnalyticShadowProbes`: fail
+    - `DirectionalFourCascadeLiveShellMatchesAnalyticFloorClassificationAcrossDenseVisibleProbes`: fail
+    - current failure mode is no longer crash/SEH; it is a real Stage 15
+      overbright-mask semantic mismatch on analytically shadowed probes
+- live pipeline smokes:
+  - `out/build-ninja/analysis/dp2_progress/renderscene_vsm_smoke.log`
+  - `out/build-ninja/analysis/dp2_progress/multiview_smoke.log`
+  - both example runs exit `0`
+  - neither log contains `CHECK FAILED`, device-loss, or explicit render-pass
+    failure markers
+
+Remaining scope / gap:
+
+- DP-2 still cannot be called complete
+- docs for the depth-products contract are not fully updated yet
+- the remaining `Release` live-scene VSM projection semantic failures must be
+  fixed or explicitly proven unrelated before DP-2 can exit:
+  - `DirectionalSingleCascadeLiveShellDarkensStableFarAnalyticShadowProbes`
+  - `DirectionalFourCascadeLiveShellMatchesAnalyticFloorClassificationAcrossDenseVisibleProbes`
+
+Status: `in_progress`
 
 ### Phase DP-3: Specialize The Depth Pass Like UE5
 

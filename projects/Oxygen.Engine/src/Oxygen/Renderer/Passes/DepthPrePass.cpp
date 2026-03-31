@@ -314,12 +314,6 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 
   SetPassConstantsIndex(pass_constants_index_);
 
-  const auto canonical_depth_srv = EnsureCanonicalDepthSrv();
-  if (!canonical_depth_srv.IsValid()) {
-    throw std::runtime_error(
-      "DepthPrePass: Failed to publish canonical depth SRV");
-  }
-
   if (const auto* resolved_view = Context().current_view.resolved_view.get();
     resolved_view != nullptr) {
     output_ndc_depth_range_ = resolved_view->DepthRange();
@@ -328,8 +322,20 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     output_ndc_depth_range_ = oxygen::NdcDepthRange::ZeroToOne;
     output_reverse_z_ = false;
   }
-  output_is_complete_
-    = config_->depth_texture != nullptr && canonical_depth_srv_index_.IsValid();
+
+  if (PublishesCanonicalDepthOutput()) {
+    const auto canonical_depth_srv = EnsureCanonicalDepthSrv();
+    if (!canonical_depth_srv.IsValid()) {
+      throw std::runtime_error(
+        "DepthPrePass: Failed to publish canonical depth SRV");
+    }
+    output_is_complete_ = config_->depth_texture != nullptr
+      && canonical_depth_srv_index_.IsValid();
+  } else {
+    canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
+    canonical_depth_srv_owner_ = nullptr;
+    output_is_complete_ = false;
+  }
 
   co_return;
 }
@@ -365,6 +371,11 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
 }
 
 auto DepthPrePass::UsesFramebufferDepthAttachment() const -> bool
+{
+  return true;
+}
+
+auto DepthPrePass::PublishesCanonicalDepthOutput() const -> bool
 {
   return true;
 }
@@ -412,6 +423,10 @@ auto DepthPrePass::GetEffectiveDepthRect() const -> Scissors
 
 auto DepthPrePass::GetOutput() const -> DepthPrePassOutput
 {
+  if (!PublishesCanonicalDepthOutput()) {
+    return {};
+  }
+
   const auto* depth_texture = config_ && config_->depth_texture
     ? config_->depth_texture.get()
     : nullptr;

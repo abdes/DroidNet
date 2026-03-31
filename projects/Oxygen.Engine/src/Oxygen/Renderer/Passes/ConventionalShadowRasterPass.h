@@ -28,7 +28,9 @@ namespace oxygen::engine {
  What this class changes is not the core raster model, but the shadow-specific
  execution contract: it consumes a generic raster shadow render plan, binds
  per-job shadow view constants, and targets shadow-map slices rather than the
- main-view depth buffer.
+ main-view depth buffer. It intentionally does not consume or publish the
+ canonical scene `DepthPrePassOutput`, because its output lives in the shadow
+ domain and must never be mistaken for the main-view depth product.
 */
 class ConventionalShadowRasterPass : public DepthPrePass {
 public:
@@ -46,6 +48,7 @@ protected:
     -> co::Co<> override;
   auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
   auto UsesFramebufferDepthAttachment() const -> bool override;
+  auto PublishesCanonicalDepthOutput() const -> bool override;
   auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc override;
 

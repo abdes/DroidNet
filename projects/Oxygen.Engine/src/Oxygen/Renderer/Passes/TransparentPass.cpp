@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -22,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -37,6 +39,22 @@ using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
+
+namespace {
+auto ResolveDepthOutput(const oxygen::engine::RenderContext& context)
+  -> std::optional<oxygen::engine::DepthPrePassOutput>
+{
+  if (const auto* depth_pass = context.GetPass<oxygen::engine::DepthPrePass>();
+    depth_pass != nullptr) {
+    const auto output = depth_pass->GetOutput();
+    if (output.is_complete && output.depth_texture != nullptr) {
+      return output;
+    }
+  }
+
+  return std::nullopt;
+}
+} // namespace
 
 TransparentPass::TransparentPass(std::shared_ptr<Config> config)
   : GraphicsRenderPass(config ? config->debug_name : "TransparentPass")
@@ -57,9 +75,9 @@ auto TransparentPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   // Transition targets (color RT for render, depth read if provided)
   recorder.RequireResourceState(
     *config_->color_texture, graphics::ResourceStates::kRenderTarget);
-  if (config_->depth_texture) {
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
     recorder.RequireResourceState(
-      *config_->depth_texture, graphics::ResourceStates::kDepthRead);
+      *depth_texture, graphics::ResourceStates::kDepthRead);
   }
 
   // Ensure environment static resources (e.g. BRDF LUT) are in correct state
@@ -111,8 +129,8 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   }
 
   graphics::NativeView dsv;
-  if (config_->depth_texture) {
-    const auto& depth_tex = *config_->depth_texture;
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    const auto& depth_tex = *depth_texture;
     const auto& depth_desc = depth_tex.GetDescriptor();
     graphics::TextureViewDescription dsv_desc { .view_type
       = ResourceViewType::kTexture_DSV,
@@ -205,6 +223,11 @@ auto TransparentPass::GetColorTexture() const -> const Texture&
 
 auto TransparentPass::GetDepthTexture() const -> const Texture*
 {
+  if (const auto depth_output = ResolveDepthOutput(Context());
+    depth_output.has_value()) {
+    return depth_output->depth_texture;
+  }
+
   return config_->depth_texture.get();
 }
 

@@ -82,7 +82,8 @@ private:
   /*!
    Prefers the depth texture produced by DepthPrePass (via RenderContext
    cross-pass access). Falls back to the current framebuffer depth attachment
-   when the DepthPrePass was not executed or not registered.
+   only for valid compositions that intentionally do not register a canonical
+   DepthPrePass (for example wireframe-only or other debug/offscreen paths).
 
    @return Pointer to the depth texture, or nullptr when unavailable.
   */

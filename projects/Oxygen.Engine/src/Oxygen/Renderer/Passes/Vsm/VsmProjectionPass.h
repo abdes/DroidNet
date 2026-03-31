@@ -15,6 +15,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Passes/ComputeRenderPass.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmCacheManagerTypes.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPagePoolTypes.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -38,7 +39,13 @@ struct VsmProjectionPassConfig {
 struct VsmProjectionPassInput {
   renderer::vsm::VsmPageAllocationFrame frame {};
   renderer::vsm::VsmPhysicalPoolSnapshot physical_pool {};
+  //! Legacy raw-depth seam retained only for standalone GPU harnesses and
+  //! focused tests that do not execute/register the main scene DepthPrePass.
   std::shared_ptr<const graphics::Texture> scene_depth_texture {};
+  //! Canonical scene depth product from DepthPrePass. This is the primary path
+  //! for the main renderer and the only path that should be used in normal
+  //! scene execution.
+  DepthPrePassOutput scene_depth_output {};
 };
 
 // Standalone Phase I projection/composite component.
@@ -48,6 +55,13 @@ struct VsmProjectionPassInput {
 // - GPU upload of current-frame projection records published on the cache frame
 // - per-view screen-space shadow mask allocation
 // - directional and local-light projection/composite dispatches
+//
+// Depth input contract:
+// - Main renderer path: consume `scene_depth_output`
+// - Standalone test/harness path: may fall back to `scene_depth_texture`
+//
+// The raw-depth field exists only to keep the low-level VSM test seams alive
+// while the rest of the renderer migrates to the canonical scene depth product.
 class VsmProjectionPass final : public ComputeRenderPass {
 public:
   using Config = VsmProjectionPassConfig;

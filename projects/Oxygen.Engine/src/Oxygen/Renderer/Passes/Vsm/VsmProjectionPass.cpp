@@ -297,6 +297,7 @@ struct VsmProjectionPass::Impl {
   std::uint32_t pass_constants_slot_count { 0U };
   std::uint32_t next_pass_constants_slot { 0U };
 
+  const Texture* active_scene_depth_texture { nullptr };
   ShaderVisibleIndex scene_depth_srv_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_table_srv_index { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex shadow_texture_srv_index { kInvalidShaderVisibleIndex };
@@ -632,6 +633,7 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
   impl_->active_directional_projection_count = 0U;
   impl_->active_local_projection_count = 0U;
   impl_->active_dynamic_slice_index.reset();
+  impl_->active_scene_depth_texture = nullptr;
   impl_->next_pass_constants_slot = 0U;
 
   if (!impl_->input.has_value()) {
@@ -658,7 +660,11 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
       "unavailable");
     co_return;
   }
-  if (!input.scene_depth_texture) {
+  const auto* scene_depth_texture = input.scene_depth_output.is_complete
+      && input.scene_depth_output.depth_texture != nullptr
+    ? input.scene_depth_output.depth_texture
+    : input.scene_depth_texture.get();
+  if (scene_depth_texture == nullptr) {
     LOG_F(WARNING,
       "VSM projection pass skipped because the scene depth texture is "
       "unavailable");
@@ -671,13 +677,24 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
     co_return;
   }
 
+  if (input.scene_depth_output.depth_texture != nullptr
+    && input.scene_depth_texture
+    && input.scene_depth_output.depth_texture
+      != input.scene_depth_texture.get()) {
+    DLOG_F(WARNING,
+      "VSM projection pass received mismatched scene depth inputs: "
+      "DepthPrePassOutput depth={} raw fallback depth={}",
+      fmt::ptr(input.scene_depth_output.depth_texture),
+      fmt::ptr(input.scene_depth_texture.get()));
+  }
+
   const auto dynamic_slice_index = FindDynamicSliceIndex(input.physical_pool);
   if (!dynamic_slice_index.has_value()) {
     LOG_F(ERROR, "VSM projection pass requires a dynamic shadow slice");
     co_return;
   }
 
-  const auto depth_desc = input.scene_depth_texture->GetDescriptor();
+  const auto depth_desc = scene_depth_texture->GetDescriptor();
   if (depth_desc.width == 0U || depth_desc.height == 0U) {
     LOG_F(
       ERROR, "VSM projection pass requires a non-empty scene depth texture");
@@ -712,9 +729,17 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
         * sizeof(renderer::vsm::VsmPageRequestProjection));
   }
 
-  impl_->scene_depth_srv_index = impl_->EnsureTextureViewIndex(
-    *std::const_pointer_cast<Texture>(input.scene_depth_texture),
-    DepthSrvDesc(*input.scene_depth_texture));
+  impl_->active_scene_depth_texture = scene_depth_texture;
+  if (input.scene_depth_output.is_complete
+    && input.scene_depth_output.depth_texture == scene_depth_texture
+    && input.scene_depth_output.has_canonical_srv) {
+    impl_->scene_depth_srv_index = input.scene_depth_output.canonical_srv_index;
+  } else {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    impl_->scene_depth_srv_index = impl_->EnsureTextureViewIndex(
+      const_cast<Texture&>(*scene_depth_texture),
+      DepthSrvDesc(*scene_depth_texture));
+  }
   impl_->shadow_texture_srv_index = impl_->EnsureTextureViewIndex(
     *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
     WholeShadowTextureSrvDesc(input.physical_pool.depth_format));
@@ -725,8 +750,9 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
       sizeof(renderer::vsm::VsmShaderPageTableEntry)));
 
   recorder.BeginTrackingResourceState(
-    *std::const_pointer_cast<Texture>(input.scene_depth_texture),
-    DepthTextureInitialState(*input.scene_depth_texture), true);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+    *const_cast<Texture*>(scene_depth_texture),
+    DepthTextureInitialState(*scene_depth_texture), true);
   recorder.BeginTrackingResourceState(
     *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
     ResourceStates::kCommon, true);
@@ -753,11 +779,14 @@ auto VsmProjectionPass::DoPrepareResources(CommandRecorder& recorder)
 
   DLOG_F(2,
     "prepared VSM projection pass generation={} projections={} directional={} "
-    "local={} depth={}x{} view={}",
+    "local={} depth={}x{} view={} canonical_scene_depth_srv={}",
     input.frame.snapshot.frame_generation, impl_->active_projection_count,
     impl_->active_directional_projection_count,
     impl_->active_local_projection_count, depth_desc.width, depth_desc.height,
-    impl_->active_view_id.get());
+    impl_->active_view_id.get(),
+    input.scene_depth_output.is_complete
+      && input.scene_depth_output.depth_texture == scene_depth_texture
+      && input.scene_depth_output.has_canonical_srv);
 
   co_return;
 }
@@ -832,7 +861,8 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (impl_->active_directional_projection_count > 0U) {
     recorder.RequireResourceState(
-      *std::const_pointer_cast<Texture>(input.scene_depth_texture),
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+      *const_cast<Texture*>(impl_->active_scene_depth_texture),
       ResourceStates::kShaderResource);
     recorder.RequireResourceState(
       *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
@@ -858,7 +888,8 @@ auto VsmProjectionPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
   if (impl_->active_local_projection_count > 0U) {
     recorder.RequireResourceState(
-      *std::const_pointer_cast<Texture>(input.scene_depth_texture),
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+      *const_cast<Texture*>(impl_->active_scene_depth_texture),
       ResourceStates::kShaderResource);
     recorder.RequireResourceState(
       *std::const_pointer_cast<Texture>(input.physical_pool.shadow_texture),
