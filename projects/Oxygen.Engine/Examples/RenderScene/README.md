@@ -98,6 +98,9 @@ Deep-dive scripts stay separate from the baseline:
     `OXYGEN_RENDERDOC_PASS_NAME`
 - `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
   - inspect one event with `OXYGEN_RENDERDOC_EVENT_ID`
+- `Examples/RenderScene/AnalyzeRenderDocShaderPassDepthEqual.py`
+  - verify `ShaderPass` depth-equal state, matched depth target/resource
+    states, and sample `PixelHistory` evidence for accepted/rejected fragments
 - `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
   - inspect Stage 15 mask presence, writer events, and any observed shader-side
     consumers
@@ -124,6 +127,11 @@ $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
   'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocEventFocus.py' `
   'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10.rdc'
+
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\dp6\renderscene_debug_dp6_shader_depth_equal_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocShaderPassDepthEqual.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\dp6\renderscene_debug_dp6_frame30.rdc'
 
 $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_stage15_masks_report.txt'
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `

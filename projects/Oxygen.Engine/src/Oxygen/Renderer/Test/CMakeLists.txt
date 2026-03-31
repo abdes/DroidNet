@@ -348,6 +348,16 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
+    "ShaderPassDepthState"
+    SOURCES
+      "ShaderPass/ShaderPassDepthState_test.cpp"
+      "DepthPrePass/DepthPrePassGpuTestFixture.h"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
     VirtualShadowGpuLifecycle
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"

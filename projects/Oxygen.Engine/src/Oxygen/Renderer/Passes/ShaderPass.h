@@ -64,6 +64,15 @@ public:
 
   OXGN_RNDR_API explicit ShaderPass(std::shared_ptr<ShaderPassConfig> config);
 
+  //! Test seam for validating DP-6 depth-state selection without reintroducing
+  //! private pipeline-state inference into production code.
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetBuiltDepthCompareOpForTesting() const
+    -> graphics::CompareOp;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto HasResolvedDepthTextureForTesting() const
+    -> bool;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto NeedRebuildPipelineStateForTesting() const
+    -> bool;
+
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
@@ -88,6 +97,7 @@ private:
   [[nodiscard]] auto GetClearColor() const -> const graphics::Color&;
 
   [[nodiscard]] auto HasDepth() const -> bool;
+  [[nodiscard]] auto GetDepthCompareOp() const -> graphics::CompareOp;
 
   virtual auto SetupViewPortAndScissors(
     graphics::CommandRecorder& command_recorder) const -> void;

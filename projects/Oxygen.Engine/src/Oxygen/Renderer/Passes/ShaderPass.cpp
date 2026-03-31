@@ -50,7 +50,7 @@ auto ResolveDepthOutput(const oxygen::engine::RenderContext& context)
   if (const auto* depth_pass = context.GetPass<oxygen::engine::DepthPrePass>();
     depth_pass != nullptr) {
     const auto output = depth_pass->GetOutput();
-    if (output.is_complete && output.depth_texture != nullptr) {
+    if (output.depth_texture != nullptr) {
       return output;
     }
   }
@@ -63,6 +63,23 @@ ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
   : GraphicsRenderPass(config ? config->debug_name : "ShaderPass")
   , config_(std::move(config))
 {
+}
+
+auto ShaderPass::GetBuiltDepthCompareOpForTesting() const -> graphics::CompareOp
+{
+  const auto& built = LastBuiltPsoDesc();
+  CHECK_F(built.has_value(), "ShaderPass test hook expected a built PSO");
+  return built->DepthStencilState().depth_func;
+}
+
+auto ShaderPass::HasResolvedDepthTextureForTesting() const -> bool
+{
+  return GetDepthTexture() != nullptr;
+}
+
+auto ShaderPass::NeedRebuildPipelineStateForTesting() const -> bool
+{
+  return NeedRebuildPipelineState();
 }
 
 /*!
@@ -354,6 +371,13 @@ auto ShaderPass::HasDepth() const -> bool
   return GetDepthTexture() != nullptr;
 }
 
+auto ShaderPass::GetDepthCompareOp() const -> graphics::CompareOp
+{
+  return Context().current_view.IsEarlyDepthComplete()
+    ? graphics::CompareOp::kEqual
+    : graphics::CompareOp::kGreaterOrEqual;
+}
+
 auto ShaderPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
   -> void
 {
@@ -505,7 +529,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = has_depth && (requested_fill != FillMode::kWireframe),
     .depth_write_enable = false,
-    .depth_func = CompareOp::kGreaterOrEqual,
+    .depth_func = GetDepthCompareOp(),
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,
@@ -619,14 +643,23 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   }
 
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
+  const auto* depth_texture = GetDepthTexture();
+  const auto current_depth_format = depth_texture != nullptr
+    ? depth_texture->GetDescriptor().format
+    : Format::kUnknown;
   auto current_sample_count = color_tex_desc.sample_count;
-  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+  if (depth_texture != nullptr) {
     current_sample_count = depth_texture->GetDescriptor().sample_count;
   }
 
   if (last_built->FramebufferLayout().color_target_formats.empty()
     || last_built->FramebufferLayout().color_target_formats[0]
       != color_tex_desc.format) {
+    return true;
+  }
+
+  if (last_built->FramebufferLayout().depth_stencil_format
+    != current_depth_format) {
     return true;
   }
 
@@ -637,6 +670,16 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   const auto requested_fill
     = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
   if (last_built->RasterizerState().fill_mode != requested_fill) {
+    return true;
+  }
+
+  const auto should_test_depth = depth_texture != nullptr
+    && requested_fill != graphics::FillMode::kWireframe;
+  if (last_built->DepthStencilState().depth_test_enable != should_test_depth) {
+    return true;
+  }
+  if (should_test_depth
+    && last_built->DepthStencilState().depth_func != GetDepthCompareOp()) {
     return true;
   }
 
