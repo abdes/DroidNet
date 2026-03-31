@@ -17,6 +17,7 @@
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/ToneMapPass.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionPlanner.h>
 #include <Oxygen/Renderer/Pipeline/Internal/CompositionViewImpl.h>
 #include <Oxygen/Renderer/Pipeline/Internal/FramePlanBuilder.h>
@@ -31,6 +32,8 @@ using oxygen::graphics::Framebuffer;
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::TextureDesc;
 using oxygen::renderer::CompositionView;
+using oxygen::renderer::DepthPrePassMode;
+using oxygen::renderer::RenderMode;
 using oxygen::renderer::internal::CompositionPlanner;
 using oxygen::renderer::internal::CompositionViewImpl;
 using oxygen::renderer::internal::FramePlanBuilder;
@@ -51,7 +54,8 @@ auto MakeView() -> oxygen::View
   return view;
 }
 
-auto MakeCompositeTarget(FakeGraphics& graphics) -> std::shared_ptr<Framebuffer>
+auto MakeCompositeTarget(const std::shared_ptr<FakeGraphics>& graphics)
+  -> std::shared_ptr<Framebuffer>
 {
   TextureDesc desc {};
   desc.width = 320;
@@ -65,10 +69,10 @@ auto MakeCompositeTarget(FakeGraphics& graphics) -> std::shared_ptr<Framebuffer>
   desc.initial_state = oxygen::graphics::ResourceStates::kCommon;
   desc.debug_name = "CompositionPlannerTestTarget";
 
-  auto texture = graphics.CreateTexture(desc);
+  auto texture = graphics->CreateTexture(desc);
   FramebufferDesc fb_desc {};
   fb_desc.AddColorAttachment({ .texture = texture });
-  return graphics.CreateFramebuffer(fb_desc);
+  return graphics->CreateFramebuffer(fb_desc);
 }
 
 auto MakeInputs() -> FramePlanBuilder::Inputs
@@ -93,14 +97,14 @@ void PrepareView(CompositionViewImpl& view_impl, const CompositionView& desc,
 
 TEST(CompositionPlannerTest, PrimarySceneViewUsesCopyTaskAtFullOpacity)
 {
-  FakeGraphics graphics;
+  auto graphics = std::make_shared<FakeGraphics>();
 
   CompositionView scene_view = CompositionView::ForScene(
     ViewId { 101U }, MakeView(), oxygen::scene::SceneNode {});
   scene_view.opacity = 1.0F;
 
   CompositionViewImpl view_impl;
-  PrepareView(view_impl, scene_view, graphics, ViewId { 201U });
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 201U });
 
   FramePlanBuilder builder;
   std::array views { &view_impl };
@@ -121,14 +125,14 @@ TEST(CompositionPlannerTest, PrimarySceneViewUsesCopyTaskAtFullOpacity)
 
 TEST(CompositionPlannerTest, PartialOpacitySceneViewUsesTextureBlendTask)
 {
-  FakeGraphics graphics;
+  auto graphics = std::make_shared<FakeGraphics>();
 
   CompositionView scene_view = CompositionView::ForScene(
     ViewId { 102U }, MakeView(), oxygen::scene::SceneNode {});
   scene_view.opacity = 0.5F;
 
   CompositionViewImpl view_impl;
-  PrepareView(view_impl, scene_view, graphics, ViewId { 202U });
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 202U });
 
   FramePlanBuilder builder;
   std::array views { &view_impl };
@@ -149,7 +153,7 @@ TEST(CompositionPlannerTest, PartialOpacitySceneViewUsesTextureBlendTask)
 
 TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
 {
-  FakeGraphics graphics;
+  auto graphics = std::make_shared<FakeGraphics>();
 
   const auto overlay = [](oxygen::graphics::CommandRecorder&) { };
   CompositionView overlay_view = CompositionView::ForHud(
@@ -157,7 +161,7 @@ TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
   overlay_view.opacity = 1.0F;
 
   CompositionViewImpl view_impl;
-  PrepareView(view_impl, overlay_view, graphics, ViewId { 203U });
+  PrepareView(view_impl, overlay_view, *graphics, ViewId { 203U });
 
   FramePlanBuilder builder;
   std::array views { &view_impl };
@@ -174,6 +178,78 @@ TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
   EXPECT_EQ(submission.tasks[0].type,
     oxygen::engine::CompositingTaskType::kBlendTexture);
   EXPECT_FLOAT_EQ(submission.tasks[0].texture_blend.alpha, 1.0F);
+}
+
+TEST(CompositionPlannerTest, SceneViewPlansDepthPrePassByDefault)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 104U }, MakeView(), oxygen::scene::SceneNode {});
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 204U });
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs());
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_TRUE(plan.HasSceneLinearPath());
+  EXPECT_EQ(plan.GetDepthPrePassMode(), DepthPrePassMode::kOpaqueAndMasked);
+  EXPECT_TRUE(plan.WantsDepthPrePass());
+}
+
+TEST(CompositionPlannerTest, DisabledDepthPrePassPolicyPropagatesToScenePlan)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 105U }, MakeView(), oxygen::scene::SceneNode {});
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 205U });
+
+  auto inputs = MakeInputs();
+  inputs.frame_settings.depth_prepass_mode = DepthPrePassMode::kDisabled;
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    inputs);
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_EQ(plan.GetDepthPrePassMode(), DepthPrePassMode::kDisabled);
+  EXPECT_FALSE(plan.WantsDepthPrePass());
+}
+
+TEST(CompositionPlannerTest, WireframeScenePlanDisablesDepthPrePass)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 106U }, MakeView(), oxygen::scene::SceneNode {});
+  scene_view.force_wireframe = true;
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 206U });
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs());
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_EQ(plan.EffectiveRenderMode(), RenderMode::kWireframe);
+  EXPECT_EQ(plan.GetDepthPrePassMode(), DepthPrePassMode::kDisabled);
+  EXPECT_FALSE(plan.WantsDepthPrePass());
 }
 
 } // namespace

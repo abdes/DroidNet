@@ -588,10 +588,25 @@ auto ScreenHzbBuildPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     co_return;
   }
 
+  if (Context().current_view.depth_prepass_completeness
+    == renderer::DepthPrePassCompleteness::kDisabled) {
+    DLOG_F(2,
+      "Screen HZB pass skipped because DepthPrePass mode is disabled for "
+      "view {}",
+      view_id.get());
+    co_return;
+  }
+
   const auto* depth_pass = Context().GetPass<DepthPrePass>();
   if (depth_pass == nullptr) {
-    LOG_F(
-      WARNING, "Screen HZB pass skipped because DepthPrePass is unavailable");
+    const auto status = Context().current_view.depth_prepass_completeness;
+    const auto level = status == renderer::DepthPrePassCompleteness::kComplete
+      ? loguru::Verbosity_ERROR
+      : loguru::Verbosity_WARNING;
+    VLOG_F(level,
+      "Screen HZB pass skipped because DepthPrePass is unavailable for "
+      "view {} (early depth status={})",
+      view_id.get(), to_string(status));
     co_return;
   }
 

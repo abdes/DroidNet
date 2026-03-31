@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 
 namespace oxygen {
 class Graphics;
@@ -167,6 +168,26 @@ struct RenderContext {
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
     observer_ptr<internal::SkyAtmosphereLutManager> atmo_lut_manager;
+    //! Planner-selected early-depth policy for the active view.
+    mutable renderer::DepthPrePassMode depth_prepass_mode {
+      renderer::DepthPrePassMode::kOpaqueAndMasked
+    };
+    //! Published completeness state for the active view's canonical scene
+    //! depth prepass. Mutable because the render graph updates it while passes
+    //! still observe `RenderContext` through const references.
+    mutable renderer::DepthPrePassCompleteness depth_prepass_completeness {
+      renderer::DepthPrePassCompleteness::kIncomplete
+    };
+
+    [[nodiscard]] auto HasPlannedDepthPrePass() const noexcept -> bool
+    {
+      return depth_prepass_mode != renderer::DepthPrePassMode::kDisabled;
+    }
+    [[nodiscard]] auto IsEarlyDepthComplete() const noexcept -> bool
+    {
+      return depth_prepass_completeness
+        == renderer::DepthPrePassCompleteness::kComplete;
+    }
   };
 
   //! Active view iteration state for the currently-executing view.
