@@ -241,6 +241,53 @@ auto TightenDepthRangeWithShadowCasters(
   return tightened;
 }
 
+auto SphereOverlapsViewDepthRange(const glm::vec4& sphere,
+  const glm::mat4& view_matrix, const float min_depth, const float max_depth)
+  -> bool
+{
+  const float radius = sphere.w;
+  if (radius <= 0.0F) {
+    return false;
+  }
+
+  const glm::vec3 center_vs
+    = glm::vec3(view_matrix * glm::vec4(glm::vec3(sphere), 1.0F));
+  const float nearest_depth = std::max(0.0F, -center_vs.z - radius);
+  const float farthest_depth = std::max(0.0F, -center_vs.z + radius);
+  return farthest_depth >= min_depth && nearest_depth <= max_depth;
+}
+
+auto AccumulateReceiverLightSpaceExtents(
+  const std::span<const glm::vec4> visible_receiver_bounds,
+  const glm::mat4& view_matrix, const glm::mat4& light_rotation,
+  const float min_depth, const float max_depth, glm::vec2& min_xy,
+  glm::vec2& max_xy) -> bool
+{
+  bool found_receivers = false;
+  for (const auto& sphere : visible_receiver_bounds) {
+    const float radius = sphere.w;
+    if (!SphereOverlapsViewDepthRange(
+          sphere, view_matrix, min_depth, max_depth)) {
+      continue;
+    }
+
+    const glm::vec3 center_ls
+      = glm::vec3(light_rotation * glm::vec4(glm::vec3(sphere), 1.0F));
+    const glm::vec2 sphere_min = glm::vec2(center_ls) - glm::vec2(radius);
+    const glm::vec2 sphere_max = glm::vec2(center_ls) + glm::vec2(radius);
+    if (!found_receivers) {
+      min_xy = sphere_min;
+      max_xy = sphere_max;
+      found_receivers = true;
+    } else {
+      min_xy = glm::min(min_xy, sphere_min);
+      max_xy = glm::max(max_xy, sphere_max);
+    }
+  }
+
+  return found_receivers;
+}
+
 [[nodiscard]] auto ResolveCascadeEndDepth(
   const oxygen::engine::DirectionalShadowCandidate& candidate,
   const std::uint32_t cascade_index, const float prev_depth,
@@ -312,15 +359,41 @@ auto ConventionalShadowBackend::ResetCachedState() -> void
   view_cache_.clear();
 }
 
+auto ConventionalShadowBackend::ReserveFrameResources(
+  const std::span<const engine::DirectionalShadowCandidate>
+    directional_candidates,
+  const std::uint32_t scene_view_count) -> void
+{
+  if (scene_view_count == 0U || directional_candidates.empty()) {
+    return;
+  }
+
+  const auto layers_per_view = CountDirectionalLayers(directional_candidates);
+  if (layers_per_view == 0U) {
+    return;
+  }
+
+  CHECK_F(scene_view_count
+      <= (std::numeric_limits<std::uint32_t>::max() / layers_per_view),
+    "ConventionalShadowBackend: scene_view_count={} with layers_per_view={} "
+    "overflows the directional shadow layer reservation",
+    scene_view_count, layers_per_view);
+
+  const auto resource_config = BuildDirectionalResourceConfig(
+    directional_candidates, layers_per_view * scene_view_count, 0U);
+  EnsureDirectionalResources(resource_config);
+}
+
 auto ConventionalShadowBackend::PublishView(const ViewId view_id,
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
+  const std::span<const glm::vec4> visible_receiver_bounds,
   const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   const auto key = BuildPublicationKey(view_constants, directional_candidates,
-    shadow_caster_bounds, shadow_caster_content_hash);
+    shadow_caster_bounds, visible_receiver_bounds, shadow_caster_content_hash);
   if (const auto it = view_cache_.find(view_id);
     it != view_cache_.end() && it->second.key == key) {
     return it->second.frame_publication;
@@ -328,6 +401,10 @@ auto ConventionalShadowBackend::PublishView(const ViewId view_id,
 
   ViewCacheEntry state {};
   state.key = key;
+  state.directional_layers_used
+    = CountDirectionalLayers(directional_candidates);
+  state.required_directional_resolution
+    = BuildDirectionalResourceConfig(directional_candidates, 0U, 0U).resolution;
 
   if (directional_candidates.empty()) {
     LOG_F(INFO,
@@ -336,11 +413,17 @@ auto ConventionalShadowBackend::PublishView(const ViewId view_id,
       view_id.get());
   }
 
+  const auto base_resource_layer
+    = CountPublishedDirectionalLayers(std::optional<ViewId> { view_id });
+  const auto required_resolution
+    = std::max(state.required_directional_resolution,
+      MaxPublishedDirectionalResolution(std::optional<ViewId> { view_id }));
   const auto resource_config
-    = BuildDirectionalResourceConfig(directional_candidates);
+    = BuildDirectionalResourceConfig(directional_candidates,
+      base_resource_layer + state.directional_layers_used, required_resolution);
   EnsureDirectionalResources(resource_config);
   BuildDirectionalViewState(view_id, view_constants, directional_candidates,
-    shadow_caster_bounds, state);
+    shadow_caster_bounds, visible_receiver_bounds, base_resource_layer, state);
 
   if (!directional_candidates.empty() && state.shadow_instances.empty()) {
     LOG_F(WARNING,
@@ -421,6 +504,7 @@ auto ConventionalShadowBackend::BuildPublicationKey(
   const std::span<const engine::DirectionalShadowCandidate>
     directional_candidates,
   const std::span<const glm::vec4> shadow_caster_bounds,
+  const std::span<const glm::vec4> visible_receiver_bounds,
   const std::uint64_t shadow_caster_content_hash) const -> PublicationKey
 {
   PublicationKey key {};
@@ -436,26 +520,76 @@ auto ConventionalShadowBackend::BuildPublicationKey(
     = HashBytes(&camera_position, sizeof(camera_position), key.view_hash);
   key.candidate_hash = HashSpan(directional_candidates);
   key.caster_hash = HashSpan(shadow_caster_bounds);
+  key.receiver_hash = HashSpan(visible_receiver_bounds);
   key.shadow_content_hash = shadow_caster_content_hash;
   return key;
+}
+
+auto ConventionalShadowBackend::CountDirectionalLayers(
+  const std::span<const engine::DirectionalShadowCandidate> candidates) const
+  -> std::uint32_t
+{
+  std::uint32_t required_layers = 0U;
+  for (const auto& candidate : candidates) {
+    required_layers += std::max(
+      1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
+  }
+  return required_layers;
+}
+
+auto ConventionalShadowBackend::CountPublishedDirectionalLayers(
+  const std::optional<ViewId> excluded_view_id) const -> std::uint32_t
+{
+  std::uint32_t required_layers = 0U;
+  for (const auto& [cached_view_id, state] : view_cache_) {
+    if (excluded_view_id.has_value() && cached_view_id == *excluded_view_id) {
+      continue;
+    }
+    required_layers += state.directional_layers_used;
+  }
+  return required_layers;
+}
+
+auto ConventionalShadowBackend::MaxPublishedDirectionalResolution(
+  const std::optional<ViewId> excluded_view_id) const -> std::uint32_t
+{
+  std::uint32_t resolution = 0U;
+  for (const auto& [cached_view_id, state] : view_cache_) {
+    if (excluded_view_id.has_value() && cached_view_id == *excluded_view_id) {
+      continue;
+    }
+    resolution = std::max(resolution, state.required_directional_resolution);
+  }
+  return resolution;
 }
 
 auto ConventionalShadowBackend::RefreshViewExports(ViewCacheEntry& state) const
   -> void
 {
+  state.frame_publication.directional_shadow_texture_srv
+    = directional_shadow_texture_srv_;
   state.raster_plan.depth_texture
     = observer_ptr { directional_shadow_texture_.get() };
   state.raster_plan.jobs = state.raster_jobs;
 }
 
+auto ConventionalShadowBackend::RefreshAllViewExports() -> void
+{
+  for (auto& [_, state] : view_cache_) {
+    RefreshViewExports(state);
+  }
+}
+
 auto ConventionalShadowBackend::BuildDirectionalResourceConfig(
-  const std::span<const engine::DirectionalShadowCandidate> candidates) const
+  const std::span<const engine::DirectionalShadowCandidate> candidates,
+  const std::uint32_t required_layers,
+  const std::uint32_t required_resolution) const
   -> DirectionalShadowResourceConfig
 {
   DirectionalShadowResourceConfig config {};
+  config.required_layers = required_layers;
+  config.resolution = required_resolution;
   for (const auto& candidate : candidates) {
-    config.required_layers += std::max(
-      1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
     config.resolution = std::max(config.resolution,
       ApplyDirectionalShadowQualityTier(
         ShadowResolutionFromHint(candidate.resolution_hint),
@@ -478,15 +612,14 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
     return;
   }
 
-  ReleaseDirectionalResources();
-
-  directional_shadow_capacity_layers_ = config.required_layers;
-  directional_shadow_resolution_ = config.resolution;
+  const auto old_texture = directional_shadow_texture_;
+  const auto new_capacity_layers = config.required_layers;
+  const auto new_resolution = config.resolution;
 
   graphics::TextureDesc desc {};
-  desc.width = directional_shadow_resolution_;
-  desc.height = directional_shadow_resolution_;
-  desc.array_size = directional_shadow_capacity_layers_;
+  desc.width = new_resolution;
+  desc.height = new_resolution;
+  desc.array_size = new_capacity_layers;
   desc.mip_levels = 1U;
   desc.format = oxygen::Format::kDepth32;
   desc.texture_type = oxygen::TextureType::kTexture2DArray;
@@ -498,8 +631,8 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
   desc.initial_state = graphics::ResourceStates::kCommon;
   desc.debug_name = "DirectionalShadowDepthArray";
 
-  directional_shadow_texture_ = gfx_->CreateTexture(desc);
-  if (!directional_shadow_texture_) {
+  auto new_texture = gfx_->CreateTexture(desc);
+  if (!new_texture) {
     directional_shadow_capacity_layers_ = 0U;
     directional_shadow_resolution_ = 0U;
     throw std::runtime_error(
@@ -508,18 +641,7 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
 
   auto& registry = gfx_->GetResourceRegistry();
   auto& allocator = gfx_->GetDescriptorAllocator();
-  registry.Register(directional_shadow_texture_);
-
-  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
-  if (!handle.IsValid()) {
-    directional_shadow_texture_.reset();
-    directional_shadow_capacity_layers_ = 0U;
-    directional_shadow_resolution_ = 0U;
-    throw std::runtime_error(
-      "ConventionalShadowBackend: failed to allocate directional shadow SRV "
-      "descriptor");
-  }
+  registry.Register(new_texture);
 
   const graphics::TextureViewDescription srv_desc {
     .view_type = graphics::ResourceViewType::kTexture_SRV,
@@ -530,14 +652,40 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
       .base_mip_level = 0U,
       .num_mip_levels = 1U,
       .base_array_slice = 0U,
-      .num_array_slices = directional_shadow_capacity_layers_,
+      .num_array_slices = new_capacity_layers,
     },
     .is_read_only_dsv = false,
   };
 
-  directional_shadow_texture_srv_ = allocator.GetShaderVisibleIndex(handle);
-  directional_shadow_texture_srv_view_ = registry.RegisterView(
-    *directional_shadow_texture_, std::move(handle), srv_desc);
+  graphics::NativeView new_srv_view {};
+  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  if (!handle.IsValid()) {
+    registry.UnRegisterResource(*new_texture);
+    throw std::runtime_error(
+      "ConventionalShadowBackend: failed to allocate directional shadow SRV "
+      "descriptor");
+  }
+
+  const auto new_srv_index = allocator.GetShaderVisibleIndex(handle);
+  new_srv_view
+    = registry.RegisterView(*new_texture, std::move(handle), srv_desc);
+  if (!new_srv_view->IsValid()) {
+    registry.UnRegisterResource(*new_texture);
+    throw std::runtime_error(
+      "ConventionalShadowBackend: failed to register directional shadow SRV "
+      "view");
+  }
+
+  directional_shadow_texture_ = std::move(new_texture);
+  directional_shadow_texture_srv_ = new_srv_index;
+  directional_shadow_texture_srv_view_ = new_srv_view;
+  directional_shadow_capacity_layers_ = new_capacity_layers;
+  directional_shadow_resolution_ = new_resolution;
+  if (old_texture) {
+    registry.UnRegisterResource(*old_texture);
+  }
+  RefreshAllViewExports();
 
   LOG_F(INFO,
     "ConventionalShadowBackend: created directional shadow texture {}x{} "
@@ -557,10 +705,9 @@ auto ConventionalShadowBackend::ReleaseDirectionalResources() -> void
     return;
   }
 
-  if (directional_shadow_texture_
-    && directional_shadow_texture_srv_view_->IsValid()) {
-    gfx_->GetResourceRegistry().UnRegisterView(
-      *directional_shadow_texture_, directional_shadow_texture_srv_view_);
+  if (directional_shadow_texture_) {
+    gfx_->GetResourceRegistry().UnRegisterResource(
+      *directional_shadow_texture_);
   }
 
   directional_shadow_texture_.reset();
@@ -573,8 +720,9 @@ auto ConventionalShadowBackend::ReleaseDirectionalResources() -> void
 auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
   const engine::ViewConstants& view_constants,
   const std::span<const engine::DirectionalShadowCandidate> candidates,
-  const std::span<const glm::vec4> shadow_caster_bounds, ViewCacheEntry& state)
-  -> void
+  const std::span<const glm::vec4> shadow_caster_bounds,
+  const std::span<const glm::vec4> visible_receiver_bounds,
+  const std::uint32_t base_resource_layer, ViewCacheEntry& state) -> void
 {
   if (candidates.empty() || !directional_shadow_texture_) {
     return;
@@ -626,7 +774,7 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
   state.shadow_instances.reserve(candidates.size());
   state.directional_metadata.reserve(candidates.size());
 
-  std::uint32_t next_resource_layer = 0U;
+  std::uint32_t next_resource_layer = base_resource_layer;
   for (const auto& candidate : candidates) {
     const auto cascade_count = std::max(
       1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
@@ -719,14 +867,34 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
       glm::vec3 slice_center_ls
         = glm::vec3(light_rotation * glm::vec4(slice_center_ws, 1.0F));
 
+      float ortho_half_extent_x = padded_half_extent_x;
+      float ortho_half_extent_y = padded_half_extent_y;
+      glm::vec3 ortho_center_ls = slice_center_ls;
+      glm::vec2 receiver_min_xy {};
+      glm::vec2 receiver_max_xy {};
+      if (AccumulateReceiverLightSpaceExtents(visible_receiver_bounds,
+            view_matrix, light_rotation, prev_depth, end_depth, receiver_min_xy,
+            receiver_max_xy)) {
+        const glm::vec2 receiver_center_xy
+          = (receiver_min_xy + receiver_max_xy) * 0.5F;
+        const glm::vec2 receiver_half_extent = glm::max(
+          (receiver_max_xy - receiver_min_xy) * 0.5F, glm::vec2(1.0F));
+        ortho_center_ls.x = receiver_center_xy.x;
+        ortho_center_ls.y = receiver_center_xy.y;
+        ortho_half_extent_x = ComputePaddedHalfExtent(
+          receiver_half_extent.x, directional_shadow_resolution_);
+        ortho_half_extent_y = ComputePaddedHalfExtent(
+          receiver_half_extent.y, directional_shadow_resolution_);
+      }
+
       const glm::vec3 snapped_center_ls
-        = SnapLightSpaceCenter(slice_center_ls, padded_half_extent_x,
-          padded_half_extent_y, directional_shadow_resolution_);
+        = SnapLightSpaceCenter(ortho_center_ls, ortho_half_extent_x,
+          ortho_half_extent_y, directional_shadow_resolution_);
       const glm::vec3 snapped_center_ws
         = glm::vec3(inv_light_rotation * glm::vec4(snapped_center_ls, 1.0F));
 
       const float pullback_extent = std::max(
-        std::max(padded_half_extent_x, padded_half_extent_y), sphere_radius);
+        std::max(ortho_half_extent_x, ortho_half_extent_y), sphere_radius);
 
       const glm::vec3 light_eye = snapped_center_ws
         + light_dir_to_light * (pullback_extent + kLightPullbackPadding);
@@ -738,8 +906,6 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
       float min_depth
         = -(pullback_extent + kLightPullbackPadding) - sphere_radius;
 
-      const float ortho_half_extent_x = padded_half_extent_x;
-      const float ortho_half_extent_y = padded_half_extent_y;
       [[maybe_unused]] const bool has_shadow_caster_depths
         = TightenDepthRangeWithShadowCasters(shadow_caster_bounds, light_view,
           ortho_half_extent_x, ortho_half_extent_y, min_depth, max_depth);

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -302,6 +303,49 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   const auto& sm = mesh->SubMeshes()[0];
   EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-1.0f, -4.0f, -2.0f));
   EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(3.0f, 2.0f, 5.0f));
+}
+
+//! Submesh bounds fall back to mesh-view vertices when no descriptor is stored.
+NOLINT_TEST_F(
+  SubMeshBuilderFixture, ProceduralSubMeshComputesBoundsWithoutDescriptor)
+{
+  std::vector<Vertex> vertices = {
+    { .position = { -3, 4, 2 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} },
+    { .position = { 6, -2, -5 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} },
+    { .position = { 1, 9, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {} },
+  };
+  std::vector<std::uint32_t> indices = { 0, 1, 2 };
+  auto material = MakeMaterial();
+
+  auto mesh = MeshBuilder(0, "procedural_submesh")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("sm", material)
+                .WithMeshView({ .first_index = 0,
+                  .index_count = static_cast<std::uint32_t>(indices.size()),
+                  .first_vertex = 0,
+                  .vertex_count = static_cast<std::uint32_t>(vertices.size()) })
+                .EndSubMesh()
+                .Build();
+
+  const auto& sm = mesh->SubMeshes()[0];
+  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-3, -2, -5));
+  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(6, 9, 2));
 }
 
 //! Tests EndSubMesh throws when no mesh views were added (1:N constraint).

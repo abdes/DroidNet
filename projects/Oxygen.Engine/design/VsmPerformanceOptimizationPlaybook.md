@@ -229,3 +229,11 @@ What remains open:
 - no full Phase L-b scene matrix characterization yet
 - no many-local-light or explicit benchmark scene profile recorded yet
 - no global VSM default-budget selection yet
+- late-frame RenderDoc captures on complex scenes can now carry very large but
+  legal VSM state because the sticky physical shadow pool retains peak capacity
+  and the derived HZB scales with it; on March 31, 2026 this produced captures
+  in the `~350 MB` class that loaded poorly in RenderDoc while PIX eventually
+  succeeded
+- that capture-state bulk should be revisited as a later VSM optimization item,
+  likely alongside pool-budget and shrink-policy work, instead of polluting
+  unrelated investigations such as depth-prepass review

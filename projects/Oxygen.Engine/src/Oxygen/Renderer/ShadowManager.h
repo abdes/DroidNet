@@ -27,8 +27,8 @@
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
-#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
@@ -74,6 +74,8 @@ public:
   OXGN_RNDR_API auto OnFrameStart(
     RendererTag tag, frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_RNDR_API auto ResetCachedState() -> void;
+  OXGN_RNDR_API auto ReserveFrameResources(
+    std::uint32_t scene_view_count, const LightManager& lights) -> void;
 
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,

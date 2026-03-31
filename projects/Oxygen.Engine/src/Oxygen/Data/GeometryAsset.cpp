@@ -186,7 +186,16 @@ auto Mesh::ComputeBounds() -> void
       bbox_min_ = bbox_max_ = glm::vec3(0.0f);
     }
   } else {
-    bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    const auto vertices = Vertices();
+    if (vertices.empty()) {
+      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    } else {
+      bbox_min_ = bbox_max_ = vertices.front().position;
+      for (const auto& vertex : vertices.subspan(1)) {
+        bbox_min_ = glm::min(bbox_min_, vertex.position);
+        bbox_max_ = glm::max(bbox_max_, vertex.position);
+      }
+    }
   }
 
   // Step 2: Always compute bounding sphere from bounding box
@@ -213,7 +222,22 @@ auto SubMesh::ComputeBounds() -> void
     bbox_max_ = glm::vec3(desc.bounding_box_max[0], desc.bounding_box_max[1],
       desc.bounding_box_max[2]);
   } else {
-    bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    bool has_vertices = false;
+    for (const auto& mesh_view : mesh_views_) {
+      for (const auto& vertex : mesh_view.Vertices()) {
+        if (!has_vertices) {
+          bbox_min_ = bbox_max_ = vertex.position;
+          has_vertices = true;
+        } else {
+          bbox_min_ = glm::min(bbox_min_, vertex.position);
+          bbox_max_ = glm::max(bbox_max_, vertex.position);
+        }
+      }
+    }
+
+    if (!has_vertices) {
+      bbox_min_ = bbox_max_ = glm::vec3(0.0f);
+    }
   }
 
   // Step 2: Always compute bounding sphere from bounding box

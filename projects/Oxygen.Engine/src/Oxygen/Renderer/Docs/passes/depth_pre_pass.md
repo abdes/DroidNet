@@ -17,8 +17,17 @@ occlusion artifacts during later blending stages.
 | `depth_texture` | `shared_ptr<Texture>` | Yes | Output depth buffer; defines format/sample count |
 | `debug_name` | `string` | No | Pass identifier (default: "DepthPrePass") |
 
-**Viewport/Scissors**: Optional via `SetViewport()`/`SetScissors()`. Defaults
-to full `depth_texture` dimensions.
+**Viewport/Scissors**: Optional via `SetViewport()`/`SetScissors()`. When unset,
+the pass renders the full `depth_texture`. When set, the pass resolves an
+effective depth rect from the intersection of the viewport bounds and scissor
+rect, then uses that rect for both rasterization and depth clear. The contract
+is **depth-target local space**, not composition-placement space.
+
+**Offscreen View Normalization**: `ForwardPipeline` now converts
+`CompositionView.view` into depth-target local coordinates before configuring
+`DepthPrePass`. For views rendered into per-view offscreen targets, the
+composition placement offset (`viewport.top_left_x/y`) is stripped and any
+explicit scissor is localized to the depth texture.
 
 **Framebuffer**: Queries `RenderContext::framebuffer` if present; depth texture
 must match framebuffer's depth attachment when both exist.
@@ -43,7 +52,8 @@ graph TB
     Transition --> PassCBV[Upload Pass Constants]
     PassCBV --> Execute[Execute]
     Execute --> DSV[Create/Reuse DSV]
-    DSV --> Clear[Clear Depth to 1.0]
+    DSV --> ResolveRect[Resolve effective depth rect]
+    ResolveRect --> Clear[Clear depth only inside valid rect]
     Clear --> Iterate[Iterate Partitions]
     Iterate --> Filter{PassMask Check}
     Filter -->|kOpaque/kMasked| Select[Select PSO Variant]
@@ -140,6 +150,11 @@ bindless indices.
 **Output Products**:
 
 * Populated depth buffer (state: `kDepthWrite`)
+* Effective depth output contract via `DepthPrePassOutput`:
+  * `depth_texture`
+  * `viewport`
+  * `scissors`
+  * `valid_rect`
 * Registered pass instance available for cross-pass queries
 
 **Pass Exclusions**: Transparent geometry (`kTransparent` pass mask bit) is

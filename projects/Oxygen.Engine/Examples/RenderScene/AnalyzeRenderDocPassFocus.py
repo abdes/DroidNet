@@ -101,6 +101,7 @@ from renderdoc_ui_analysis import (  # noqa: E402
     format_flags,
     get_required_env,
     inspect_action_resources,
+    is_clear_only_action,
     parse_int_env,
     resource_id_to_name,
     run_ui_script,
@@ -145,6 +146,32 @@ def build_report(
         report.flush()
         return
 
+    report.append("Pass scopes")
+    for scope in scope_records:
+        report.append("scope event {} path={}".format(scope.event_id, scope.path))
+        scoped_prefix = scope.path + " > "
+        scoped_work = [
+            action for action in work_records if action.path.startswith(scoped_prefix)
+        ]
+        if not scoped_work:
+            report.append("  <no work events under this scope>")
+            continue
+        first_work = scoped_work[0]
+        report.append(
+            "  first_work event {} [{}] {}".format(
+                first_work.event_id,
+                format_flags(first_work.flags),
+                first_work.path,
+            )
+        )
+        details = inspect_action_resources(controller, resource_names, first_work)
+        filtered_lines = categorized_resource_lines(details, resource_filter)
+        if filtered_lines:
+            report.extend("    " + line for line in filtered_lines)
+        else:
+            report.append("    <no matching resource bindings>")
+    report.blank()
+
     report.append("Pass work inspection")
     for action in work_records[:event_limit]:
         details = inspect_action_resources(controller, resource_names, action)
@@ -155,6 +182,12 @@ def build_report(
                 action.path,
             )
         )
+        if is_clear_only_action(action.flags):
+            report.append(
+                "  note=Clear events report the currently bound targets from "
+                "RenderDoc pipeline state; that may differ from the explicit "
+                "clear destination."
+            )
         filtered_lines = categorized_resource_lines(details, resource_filter)
         if filtered_lines:
             report.extend("  " + line for line in filtered_lines)

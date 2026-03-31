@@ -170,6 +170,9 @@ public:
     collected_items_.clear();
     retained_indices_.clear();
     pass_masks.clear();
+    if (draw_emitter_) {
+      draw_emitter_->ResetViewData();
+    }
     // Clear cached per-frame filtered node list populated during Frame-phase
     filtered_scene_nodes_.clear();
     cached_node_basics_.clear();
@@ -178,10 +181,15 @@ public:
   //! Reset per-view data while keeping global lists/caches intact.
   auto ResetViewData() -> void
   {
-    // Clear only per-view transient data; keep collected_items_ and
-    // any persistent caches intact so frame-phase work can be reused.
+    // Clear per-view transient data while preserving frame-phase caches
+    // (filtered node list and cached node basics) so later views can reuse the
+    // frame traversal without inheriting the previous view's collected items.
+    collected_items_.clear();
     retained_indices_.clear();
     pass_masks.clear();
+    if (draw_emitter_) {
+      draw_emitter_->ResetViewData();
+    }
   }
 
   //! Add a node pointer to the cached filtered scene nodes list. Populated

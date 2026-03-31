@@ -194,6 +194,7 @@ struct ViewMetadata {
   std::string purpose; // e.g. "primary", "shadow", "reflection"
   bool is_scene_view { false };
   bool with_atmosphere { false };
+  ViewId exposure_view_id { kInvalidViewId };
 };
 
 // Complete context for a view, including its render output target.

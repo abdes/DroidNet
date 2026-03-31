@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -129,6 +130,57 @@ NOLINT_TEST_F(MeshAssetBasicTest, BoundingBoxCorrectness)
   // Assert
   EXPECT_EQ(min, glm::vec3(0, 0, 0));
   EXPECT_EQ(max, glm::vec3(1, 1, 0));
+}
+
+//! Checks that procedural meshes compute bounds from vertices without a
+//! packaged descriptor.
+NOLINT_TEST_F(MeshAssetBasicTest, ProceduralMeshComputesBoundsWithoutDescriptor)
+{
+  std::vector<Vertex> vertices = {
+    {
+      .position = { -2, 1, 3 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 4, -5, 2 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+    {
+      .position = { 0, 7, -1 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
+  std::vector<std::uint32_t> indices = { 0, 1, 2 };
+  auto material = MaterialAsset::CreateDefault();
+
+  const auto mesh
+    = oxygen::data::MeshBuilder(0, "procedural")
+        .WithVertices(vertices)
+        .WithIndices(indices)
+        .BeginSubMesh("main", material)
+        .WithMeshView({
+          .first_index = 0,
+          .index_count = static_cast<std::uint32_t>(indices.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<std::uint32_t>(vertices.size()),
+        })
+        .EndSubMesh()
+        .Build();
+
+  EXPECT_EQ(mesh->BoundingBoxMin(), glm::vec3(-2, -5, -1));
+  EXPECT_EQ(mesh->BoundingBoxMax(), glm::vec3(4, 7, 3));
 }
 
 //! Checks that Mesh is safely shareable via shared_ptr.

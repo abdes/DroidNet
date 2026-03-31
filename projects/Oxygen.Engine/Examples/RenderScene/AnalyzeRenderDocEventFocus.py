@@ -98,6 +98,7 @@ from renderdoc_ui_analysis import (  # noqa: E402
     format_flags,
     get_required_env,
     inspect_action_resources,
+    is_clear_only_action,
     resource_id_to_name,
     run_ui_script,
 )
@@ -137,6 +138,12 @@ def build_report(
     report.append("path={}".format(event_record.path))
     report.blank()
     report.append("Event resource bindings")
+    if is_clear_only_action(event_record.flags):
+        report.append(
+            "note=Clear events report the currently bound targets from "
+            "RenderDoc pipeline state; that may differ from the explicit "
+            "clear destination."
+        )
 
     filtered_lines = categorized_resource_lines(details, resource_filter)
     if filtered_lines:

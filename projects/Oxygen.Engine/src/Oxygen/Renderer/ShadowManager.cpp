@@ -153,6 +153,20 @@ auto ShadowManager::ResetCachedState() -> void
   }
 }
 
+auto ShadowManager::ReserveFrameResources(
+  const std::uint32_t scene_view_count, const LightManager& lights) -> void
+{
+  if (scene_view_count == 0U || !conventional_backend_
+    || directional_policy_
+      != oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly) {
+    return;
+  }
+
+  const auto directional_candidates = lights.GetDirectionalShadowCandidates();
+  conventional_backend_->ReserveFrameResources(
+    directional_candidates, scene_view_count);
+}
+
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
   const observer_ptr<scene::Scene> active_scene,
@@ -164,7 +178,6 @@ auto ShadowManager::PublishForView(const ViewId view_id,
   const std::uint64_t shadow_caster_content_hash) -> ShadowFramePublication
 {
   static_cast<void>(camera_viewport_width);
-  static_cast<void>(visible_receiver_bounds);
   static_cast<void>(gpu_budget);
 
   std::vector<engine::DirectionalShadowCandidate> candidates_storage;
@@ -230,9 +243,10 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       state.shadow_instances.push_back(engine::ShadowInstanceMetadata {
         .light_index = candidate.light_index,
         .payload_index = 0U,
-        .domain = static_cast<std::uint32_t>(engine::ShadowDomain::kDirectional),
-        .implementation_kind = static_cast<std::uint32_t>(
-          is_primary_virtual_candidate
+        .domain
+        = static_cast<std::uint32_t>(engine::ShadowDomain::kDirectional),
+        .implementation_kind
+        = static_cast<std::uint32_t>(is_primary_virtual_candidate
             ? engine::ShadowImplementationKind::kVirtual
             : engine::ShadowImplementationKind::kNone),
         .flags = is_primary_virtual_candidate
@@ -241,7 +255,8 @@ auto ShadowManager::PublishForView(const ViewId view_id,
       });
       if (is_primary_virtual_candidate
         && (state.shadow_instances.back().flags
-             & static_cast<std::uint32_t>(engine::ShadowProductFlags::kSunLight))
+             & static_cast<std::uint32_t>(
+               engine::ShadowProductFlags::kSunLight))
           != 0U) {
         state.frame_publication.sun_shadow_index
           = static_cast<std::uint32_t>(candidate_index);
@@ -296,9 +311,9 @@ auto ShadowManager::PublishForView(const ViewId view_id,
     return {};
   }
 
-  const auto publication
-    = conventional_backend_->PublishView(view_id, view_constants,
-      candidates_storage, shadow_caster_bounds, shadow_caster_content_hash);
+  const auto publication = conventional_backend_->PublishView(view_id,
+    view_constants, candidates_storage, shadow_caster_bounds,
+    visible_receiver_bounds, shadow_caster_content_hash);
   if (publication.shadow_instance_metadata_srv != kInvalidShaderVisibleIndex) {
     RecordDirectionalImplementation(last_view_directional_implementation_,
       view_id, engine::ShadowImplementationKind::kConventional,
@@ -352,7 +367,8 @@ auto ShadowManager::TryGetShadowInstanceMetadata(
   if (directional_policy_
     == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
     const auto it = virtual_view_cache_.find(view_id);
-    return it != virtual_view_cache_.end() && !it->second.shadow_instances.empty()
+    return it != virtual_view_cache_.end()
+        && !it->second.shadow_instances.empty()
       ? &it->second.shadow_instances.front()
       : nullptr;
   }

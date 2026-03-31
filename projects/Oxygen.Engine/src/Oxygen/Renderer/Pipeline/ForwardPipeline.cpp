@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
-
+#include <cmath>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -229,6 +230,69 @@ namespace {
     bool force_exposure_one { false };
   };
 
+  auto HasPositiveArea(const Scissors& rect) -> bool
+  {
+    return rect.left < rect.right && rect.top < rect.bottom;
+  }
+
+  auto MakeFullTextureScissors(const graphics::Texture& texture) -> Scissors
+  {
+    const auto& desc = texture.GetDescriptor();
+    return Scissors {
+      .left = 0,
+      .top = 0,
+      .right = static_cast<int32_t>(desc.width),
+      .bottom = static_cast<int32_t>(desc.height),
+    };
+  }
+
+  auto MakeLocalDepthViewport(
+    const View& view, const graphics::Texture& depth_texture) -> ViewPort
+  {
+    const auto& depth_desc = depth_texture.GetDescriptor();
+    return ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = static_cast<float>(depth_desc.width),
+      .height = static_cast<float>(depth_desc.height),
+      .min_depth = view.viewport.min_depth,
+      .max_depth = view.viewport.max_depth,
+    };
+  }
+
+  auto ResolveLocalTextureScissors(
+    const View& view, const graphics::Texture& texture) -> Scissors
+  {
+    if (!HasPositiveArea(view.scissor)) {
+      return MakeFullTextureScissors(texture);
+    }
+
+    const auto& desc = texture.GetDescriptor();
+    const auto origin_x
+      = static_cast<int32_t>(std::floor(view.viewport.top_left_x));
+    const auto origin_y
+      = static_cast<int32_t>(std::floor(view.viewport.top_left_y));
+    const auto clamp_x
+      = [width = static_cast<int32_t>(desc.width)](
+          const int32_t value) { return std::clamp(value, 0, width); };
+    const auto clamp_y
+      = [height = static_cast<int32_t>(desc.height)](
+          const int32_t value) { return std::clamp(value, 0, height); };
+
+    return Scissors {
+      .left = clamp_x(view.scissor.left - origin_x),
+      .top = clamp_y(view.scissor.top - origin_y),
+      .right = clamp_x(view.scissor.right - origin_x),
+      .bottom = clamp_y(view.scissor.bottom - origin_y),
+    };
+  }
+
+  auto ResolveLocalDepthScissors(
+    const View& view, const graphics::Texture& depth_texture) -> Scissors
+  {
+    return ResolveLocalTextureScissors(view, depth_texture);
+  }
+
   auto EvaluateDebugModeIntent(engine::ShaderDebugMode mode) -> DebugModeIntent
   {
     using enum engine::ShaderDebugMode;
@@ -402,6 +466,12 @@ void ForwardPipeline::Impl::ConfigurePassTargets(
   if (shadow_raster_pass_config) {
     shadow_raster_pass_config->depth_texture.reset();
   }
+  if (depth_pass && ctx.depth_texture) {
+    const auto& view = ctx.view->GetDescriptor().view;
+    depth_pass->SetViewport(MakeLocalDepthViewport(view, *ctx.depth_texture));
+    depth_pass->SetScissors(
+      ResolveLocalDepthScissors(view, *ctx.depth_texture));
+  }
   if (shader_pass_config) {
     shader_pass_config->color_texture = ctx.view->GetHdrTexture();
   }
@@ -535,8 +605,9 @@ auto ForwardPipeline::Impl::RunScenePasses(
   if (const auto shadow_manager = rc.GetRenderer().GetShadowManager()) {
     if (const auto vsm_shadow_renderer
       = shadow_manager->GetVirtualShadowRenderer()) {
-      LOG_F(INFO,
-        "view={} executing VSM shell after screen-hzb and light-culling",
+      DLOG_F(2,
+        "ForwardPipeline: view={} executing VSM shell after screen-hzb and "
+        "light-culling",
         ctx.view->GetPublishedViewId());
       co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
         observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
@@ -723,35 +794,46 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
       }
       co_await RunScenePasses(ctx, rc, rec);
 
-      if (frame_plan_builder->WantAutoExposure() && auto_exposure_pass) {
+      const auto published_view_id = ctx.view->GetPublishedViewId();
+      const auto exposure_view_id
+        = rc.current_view.exposure_view_id != kInvalidViewId
+        ? rc.current_view.exposure_view_id
+        : published_view_id;
+      const bool owns_auto_exposure = published_view_id == exposure_view_id;
+
+      if (frame_plan_builder->WantAutoExposure() && auto_exposure_pass
+        && owns_auto_exposure) {
         if (frame_plan_builder->AutoExposureReset().has_value()) {
           const float k = 12.5F;
           const float ev = *frame_plan_builder->AutoExposureReset();
           const float lum = std::pow(2.0F, ev) * k / 100.0F;
-          const auto vid = ctx.view->GetPublishedViewId();
-          if (vid != kInvalidViewId) {
-            auto_exposure_pass->ResetExposure(rec, vid, lum);
+          if (published_view_id != kInvalidViewId) {
+            auto_exposure_pass->ResetExposure(rec, published_view_id, lum);
           }
         }
 
         auto_exposure_config->source_texture = effective_view.GetHdrTexture();
-        LOG_F(INFO,
+        auto_exposure_config->metering_rect
+          = ResolveLocalTextureScissors(effective_view.GetDescriptor().view,
+            *auto_exposure_config->source_texture);
+        DLOG_F(2,
           "ForwardPipeline: auto exposure executing want_auto=true "
-          "reset_ev={} source_texture_valid={} view_id={}",
+          "reset_ev={} source_texture_valid={} view_id={} "
+          "exposure_view_id={}",
           frame_plan_builder->AutoExposureReset().has_value()
             ? *frame_plan_builder->AutoExposureReset()
             : -9999.0F,
           auto_exposure_config->source_texture != nullptr,
-          ctx.view->GetPublishedViewId().get());
+          published_view_id.get(), exposure_view_id.get());
         co_await auto_exposure_pass->PrepareResources(rc, rec);
         co_await auto_exposure_pass->Execute(rc, rec);
         rc.RegisterPass<engine::AutoExposurePass>(auto_exposure_pass.get());
       } else {
-        LOG_F(INFO,
+        DLOG_F(2,
           "ForwardPipeline: auto exposure skipped want_auto={} has_pass={} "
-          "view_id={}",
+          "owns_auto_exposure={} view_id={} exposure_view_id={}",
           frame_plan_builder->WantAutoExposure(), auto_exposure_pass != nullptr,
-          ctx.view->GetPublishedViewId().get());
+          owns_auto_exposure, published_view_id.get(), exposure_view_id.get());
       }
 
       if (ground_grid_pass && grid_pass_config && grid_pass_config->enabled) {

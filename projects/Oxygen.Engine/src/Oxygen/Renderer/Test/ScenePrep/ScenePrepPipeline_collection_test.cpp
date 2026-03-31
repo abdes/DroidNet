@@ -190,6 +190,84 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
   }
 }
 
+NOLINT_TEST_F(
+  ScenePrepPipelineTest, Collect_ViewResetDoesNotAppendPreviousViewItems)
+{
+  auto pre
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        it.SetVisible();
+        it.SetGeometry(it.Renderable().GetGeometry());
+        it.SetWorldTransform(it.Transform().GetWorldMatrix());
+      };
+  auto resolve
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (const auto g = it.Geometry()) {
+          it.ResolveMesh(g->MeshAt(0), 0);
+        } else {
+          it.MarkDropped();
+        }
+      };
+  auto vis
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (!it.ResolvedMesh()) {
+          it.MarkDropped();
+          return;
+        }
+        it.SetVisibleSubmeshes({ 0u });
+      };
+  auto prod = [](const sceneprep::ScenePrepContext& /*ctx*/,
+                sceneprep::ScenePrepState& st, sceneprep::RenderItemProto& it) {
+    const auto default_material = MaterialAsset::CreateDefault();
+    const auto default_material_key = default_material != nullptr
+      ? default_material->GetAssetKey()
+      : oxygen::data::AssetKey {};
+
+    st.CollectItem(sceneprep::RenderItemData {
+      .submesh_index = 0U,
+      .geometry = sceneprep::GeometryRef {
+        .asset_key = it.Geometry()->GetAssetKey(),
+        .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+        .mesh = it.ResolvedMesh(),
+      },
+      .material = sceneprep::MaterialRef {
+        .source_asset_key = default_material_key,
+        .resolved_asset_key = default_material_key,
+        .resolved_asset = default_material,
+      },
+      .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
+      .cast_shadows = it.CastsShadows(),
+      .receive_shadows = it.ReceivesShadows(),
+    });
+  };
+
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
+    .mesh_resolver = resolve,
+    .visibility_filter = vis,
+    .producer = prod,
+  };
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
+
+  pipeline->Collect(SceneRef(), std::nullopt,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
+  ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
+
+  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
+    StateRef(), true);
+  EXPECT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
+}
+
 //! Drop at pre-filter: downstream stages must not run; no items produced.
 NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
 {

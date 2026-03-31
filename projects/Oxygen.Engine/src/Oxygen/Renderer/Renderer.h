@@ -36,6 +36,7 @@
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/DebugFrameBindings.h>
 #include <Oxygen/Renderer/Types/DrawFrameBindings.h>
@@ -668,6 +669,7 @@ private:
     std::vector<std::byte> draw_metadata_storage;
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
     std::vector<glm::vec4> draw_bounding_sphere_storage;
+    std::vector<sceneprep::RenderItemData> render_item_storage;
     std::vector<glm::vec4> shadow_caster_bounds_storage;
     std::vector<glm::vec4> visible_receiver_bounds_storage;
     std::vector<float> world_matrix_storage;

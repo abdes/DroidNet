@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -54,11 +55,15 @@ public:
   OXGN_RNDR_API auto OnFrameStart(
     RendererTag tag, frame::SequenceNumber sequence, frame::Slot slot) -> void;
   OXGN_RNDR_API auto ResetCachedState() -> void;
+  OXGN_RNDR_API auto ReserveFrameResources(
+    std::span<const engine::DirectionalShadowCandidate> directional_candidates,
+    std::uint32_t scene_view_count) -> void;
 
   OXGN_RNDR_API auto PublishView(ViewId view_id,
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
+    std::span<const glm::vec4> visible_receiver_bounds = {},
     std::uint64_t shadow_caster_content_hash = 0U) -> ShadowFramePublication;
   OXGN_RNDR_API auto SetPublishedViewFrameBindingsSlot(
     ViewId view_id, engine::BindlessViewFrameBindingsSlot slot) -> void;
@@ -83,6 +88,7 @@ private:
     std::uint64_t view_hash { 0U };
     std::uint64_t candidate_hash { 0U };
     std::uint64_t caster_hash { 0U };
+    std::uint64_t receiver_hash { 0U };
     std::uint64_t shadow_content_hash { 0U };
 
     [[nodiscard]] auto operator==(const PublicationKey&) const noexcept -> bool
@@ -91,6 +97,8 @@ private:
 
   struct ViewCacheEntry {
     PublicationKey key {};
+    std::uint32_t directional_layers_used { 0U };
+    std::uint32_t required_directional_resolution { 0U };
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalShadowMetadata> directional_metadata;
     std::vector<RasterShadowJob> raster_jobs;
@@ -123,10 +131,20 @@ private:
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::span<const glm::vec4> shadow_caster_bounds,
+    std::span<const glm::vec4> visible_receiver_bounds,
     std::uint64_t shadow_caster_content_hash) const -> PublicationKey;
-  OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
-  OXGN_RNDR_API auto BuildDirectionalResourceConfig(
+  [[nodiscard]] OXGN_RNDR_NDAPI auto CountDirectionalLayers(
     std::span<const engine::DirectionalShadowCandidate> candidates) const
+    -> std::uint32_t;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto CountPublishedDirectionalLayers(
+    std::optional<ViewId> excluded_view_id = {}) const -> std::uint32_t;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto MaxPublishedDirectionalResolution(
+    std::optional<ViewId> excluded_view_id = {}) const -> std::uint32_t;
+  OXGN_RNDR_API auto RefreshViewExports(ViewCacheEntry& state) const -> void;
+  OXGN_RNDR_API auto RefreshAllViewExports() -> void;
+  OXGN_RNDR_API auto BuildDirectionalResourceConfig(
+    std::span<const engine::DirectionalShadowCandidate> candidates,
+    std::uint32_t required_layers, std::uint32_t required_resolution) const
     -> DirectionalShadowResourceConfig;
   OXGN_RNDR_API auto EnsureDirectionalResources(
     const DirectionalShadowResourceConfig& config) -> void;
@@ -134,8 +152,9 @@ private:
   OXGN_RNDR_API auto BuildDirectionalViewState(ViewId view_id,
     const engine::ViewConstants& view_constants,
     std::span<const engine::DirectionalShadowCandidate> candidates,
-    std::span<const glm::vec4> shadow_caster_bounds, ViewCacheEntry& state)
-    -> void;
+    std::span<const glm::vec4> shadow_caster_bounds,
+    std::span<const glm::vec4> visible_receiver_bounds,
+    std::uint32_t base_resource_layer, ViewCacheEntry& state) -> void;
 
   OXGN_RNDR_API auto PublishShadowInstances(
     std::span<const engine::ShadowInstanceMetadata> instances)

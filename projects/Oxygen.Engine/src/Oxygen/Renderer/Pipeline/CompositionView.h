@@ -100,6 +100,14 @@ struct CompositionView {
   //! Default is false; apps must opt in per view.
   bool with_atmosphere { false };
 
+  //! Optional intent id of another CompositionView whose exposure state should
+  //! be consumed by this view.
+  //!
+  //! When left invalid, the view owns and consumes its own exposure history.
+  //! When set, the referenced view must also be active in the same frame and
+  //! be rendered no later than this view.
+  ViewId exposure_source_view_id { kInvalidViewId };
+
   //! Override to force wireframe rendering for this specific view.
   bool force_wireframe { false };
 

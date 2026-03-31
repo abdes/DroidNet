@@ -218,6 +218,19 @@ auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag /*tag*/,
   ++frames_started_count_;
 }
 
+auto DrawMetadataEmitter::ResetViewData() -> void
+{
+  frame_write_count_ = 0U;
+  Cpu().clear();
+  keys_.clear();
+  partitions_.clear();
+  draw_bounding_spheres_.clear();
+  instance_transform_indices_.clear();
+  draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
+  draw_bounds_srv_index_ = kInvalidShaderVisibleIndex;
+  instance_data_srv_index_ = kInvalidShaderVisibleIndex;
+}
+
 auto DrawMetadataEmitter::EmitDrawMetadata(
   const oxygen::engine::sceneprep::RenderItemData& item) -> void
 {

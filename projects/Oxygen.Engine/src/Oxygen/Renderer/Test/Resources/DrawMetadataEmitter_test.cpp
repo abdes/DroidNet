@@ -195,8 +195,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
     oxygen::data::AssetKey {}, desc);
 }
 
-[[nodiscard]] auto MakeMaterial(
-  const oxygen::data::MaterialDomain domain,
+[[nodiscard]] auto MakeMaterial(const oxygen::data::MaterialDomain domain,
   const std::string_view name = "RoutingMaterial")
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
@@ -307,6 +306,80 @@ NOLINT_TEST_F(
 
   EXPECT_NE(srv0, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(srv0, srv1);
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  ResetViewData_ClearsPreviousViewEmissionBeforeNextView)
+{
+  auto multi_view_geometry
+    = MakeTwoViewGeometryRef("DrawMetadataEmitter.ResetViewData.MultiView");
+  auto single_view_geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.ResetViewData.SingleView");
+  {
+    oxygen::data::AssetKey::ByteArray bytes {};
+    bytes[0] = 1U;
+    multi_view_geometry.asset_key = oxygen::data::AssetKey::FromBytes(bytes);
+  }
+  {
+    oxygen::data::AssetKey::ByteArray bytes {};
+    bytes[0] = 2U;
+    single_view_geometry.asset_key = oxygen::data::AssetKey::FromBytes(bytes);
+  }
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto multi_handle = GeoUploader().GetOrAllocate(multi_view_geometry);
+  const auto single_handle = GeoUploader().GetOrAllocate(single_view_geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  EXPECT_NE(
+    GeoUploader().GetShaderVisibleIndices(multi_handle).vertex_srv_index,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(
+    GeoUploader().GetShaderVisibleIndices(single_handle).vertex_srv_index,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData first_view_item_a {};
+  first_view_item_a.geometry = multi_view_geometry;
+  first_view_item_a.submesh_index = 0U;
+  first_view_item_a.transform_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 1U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+      };
+
+  Emitter().EmitDrawMetadata(first_view_item_a);
+  Emitter().SortAndPartition();
+
+  EXPECT_EQ(Emitter().GetDrawMetadataBytes().size(),
+    2U * sizeof(oxygen::engine::DrawMetadata));
+  const auto first_view_srv = Emitter().GetDrawMetadataSrvIndex();
+  EXPECT_NE(first_view_srv, oxygen::kInvalidShaderVisibleIndex);
+
+  Emitter().ResetViewData();
+
+  EXPECT_TRUE(Emitter().GetDrawMetadataBytes().empty());
+  EXPECT_TRUE(Emitter().GetPartitions().empty());
+  EXPECT_TRUE(Emitter().GetDrawBoundingSpheres().empty());
+  EXPECT_EQ(
+    Emitter().GetInstanceDataSrvIndex(), oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData second_view_item {};
+  second_view_item.geometry = single_view_geometry;
+  second_view_item.submesh_index = 0U;
+  second_view_item.transform_handle
+    = oxygen::engine::sceneprep::TransformHandle {
+        oxygen::engine::sceneprep::TransformHandle::Index { 2U },
+        oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+      };
+
+  Emitter().EmitDrawMetadata(second_view_item);
+  Emitter().SortAndPartition();
+
+  EXPECT_EQ(Emitter().GetDrawMetadataBytes().size(),
+    sizeof(oxygen::engine::DrawMetadata));
+  const auto second_view_srv = Emitter().GetDrawMetadataSrvIndex();
+  EXPECT_NE(second_view_srv, oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(DrawMetadataEmitterTest,
@@ -618,8 +691,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   vertices[2].position = { 0.0F, 1.0F, 0.0F };
 
   const std::vector<std::uint32_t> indices { 0U, 1U, 2U };
-  const auto material = MakeMaterial(
-    d::MaterialDomain::kAlphaBlended, "TransparentRouting");
+  const auto material
+    = MakeMaterial(d::MaterialDomain::kAlphaBlended, "TransparentRouting");
 
   auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.TransparentRouting")
                 .WithVertices(vertices)
