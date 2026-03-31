@@ -10,8 +10,6 @@
 #include "Renderer/Vsm/VsmPageRequestProjection.hlsli"
 #include "Renderer/Vsm/VsmPageTable.hlsli"
 
-static const float VSM_MIN_RECEIVER_DEPTH_BIAS = 0.0005;
-
 struct VsmProjectedShadowSample
 {
     float2 atlas_uv;
@@ -24,7 +22,7 @@ struct VsmProjectedShadowSample
 
 static float VsmReceiverDepthBias(VsmProjectionData projection)
 {
-    return max(projection.receiver_depth_range_pad.z, VSM_MIN_RECEIVER_DEPTH_BIAS);
+    return max(projection.receiver_depth_range_pad.z, 0.0);
 }
 
 static bool VsmTryProjectMappedSample(

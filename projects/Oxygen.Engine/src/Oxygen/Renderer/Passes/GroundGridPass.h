@@ -98,6 +98,9 @@ protected:
 
 private:
   [[nodiscard]] auto GetColorTexture() const -> const graphics::Texture&;
+  //! Prefers registered `DepthPrePassOutput`, but keeps a raw framebuffer-depth
+  //! fallback for valid debug/offscreen paths that intentionally bypass the
+  //! canonical scene depth product.
   [[nodiscard]] auto GetDepthTexture() const -> const graphics::Texture*;
   [[nodiscard]] auto GetFramebuffer() const -> const graphics::Framebuffer*;
 

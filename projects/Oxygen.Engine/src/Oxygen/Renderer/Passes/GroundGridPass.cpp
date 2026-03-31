@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <utility>
@@ -96,6 +97,19 @@ struct alignas(oxygen::packing::kShaderDataFieldAlignment)
 } // namespace oxygen::engine
 
 namespace {
+auto ResolveDepthOutput(const oxygen::engine::RenderContext& context)
+  -> std::optional<oxygen::engine::DepthPrePassOutput>
+{
+  if (const auto* depth_pass = context.GetPass<oxygen::engine::DepthPrePass>();
+    depth_pass != nullptr) {
+    const auto output = depth_pass->GetOutput();
+    if (output.is_complete && output.depth_texture != nullptr) {
+      return output;
+    }
+  }
+
+  return std::nullopt;
+}
 
 constexpr uint32_t kConstantsBufferMinSize = 256U;
 
@@ -338,7 +352,26 @@ auto GroundGridPass::ComputeInvViewProj() const -> glm::mat4
 auto GroundGridPass::UpdateDepthTexture(
   Graphics& graphics, GroundGridPassConstants& constants) -> void
 {
-  if (const Texture* depth_texture = GetDepthTexture();
+  if (const auto depth_output = ResolveDepthOutput(Context());
+    depth_output.has_value()) {
+    last_depth_texture_ = depth_output->depth_texture;
+    depth_srv_index_ = depth_output->has_canonical_srv
+      ? depth_output->canonical_srv_index
+      : oxygen::kInvalidShaderVisibleIndex;
+
+    if (!depth_output->has_canonical_srv) {
+      auto& registry = graphics.GetResourceRegistry();
+      auto& allocator = graphics.GetDescriptorAllocator();
+      const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+        const_cast<Texture&>(*depth_output->depth_texture), registry,
+        allocator);
+      if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
+        depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
+      }
+    }
+    constants.depth_srv_index = depth_srv_index_.get();
+  } else if (const Texture* depth_texture = GetDepthTexture();
     depth_texture != nullptr) {
     auto& registry = graphics.GetResourceRegistry();
     auto& allocator = graphics.GetDescriptorAllocator();
@@ -700,9 +733,9 @@ auto GroundGridPass::NeedRebuildPipelineState() const -> bool
 
 auto GroundGridPass::GetDepthTexture() const -> const Texture*
 {
-  if (const auto* depth_pass = Context().GetPass<engine::DepthPrePass>();
-    depth_pass != nullptr) {
-    return &depth_pass->GetDepthTexture();
+  if (const auto depth_output = ResolveDepthOutput(Context());
+    depth_output.has_value()) {
+    return depth_output->depth_texture;
   }
 
   const auto* fb = GetFramebuffer();

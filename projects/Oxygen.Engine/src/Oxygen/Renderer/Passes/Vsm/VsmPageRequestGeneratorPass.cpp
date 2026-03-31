@@ -522,16 +522,26 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
   std::memcpy(impl_->pass_constants_mapped_ptr, &constants, sizeof(constants));
   SetPassConstantsIndex(impl_->pass_constants_index);
 
-  recorder.BeginTrackingResourceState(
-    *impl_->projection_buffer, graphics::ResourceStates::kGenericRead, true);
-  recorder.BeginTrackingResourceState(*impl_->projection_upload_buffer,
-    graphics::ResourceStates::kGenericRead, true);
-  recorder.BeginTrackingResourceState(
-    *impl_->request_flags_buffer, graphics::ResourceStates::kCommon, true);
-  recorder.BeginTrackingResourceState(
-    *impl_->request_clear_buffer, graphics::ResourceStates::kGenericRead, true);
-  recorder.BeginTrackingResourceState(
-    depth_texture, DepthTextureInitialState(depth_texture), true);
+  if (!recorder.IsResourceTracked(*impl_->projection_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->projection_buffer, graphics::ResourceStates::kGenericRead, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->projection_upload_buffer)) {
+    recorder.BeginTrackingResourceState(*impl_->projection_upload_buffer,
+      graphics::ResourceStates::kGenericRead, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->request_flags_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *impl_->request_flags_buffer, graphics::ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*impl_->request_clear_buffer)) {
+    recorder.BeginTrackingResourceState(*impl_->request_clear_buffer,
+      graphics::ResourceStates::kGenericRead, true);
+  }
+  if (!recorder.IsResourceTracked(depth_texture)) {
+    recorder.BeginTrackingResourceState(
+      depth_texture, DepthTextureInitialState(depth_texture), true);
+  }
   if (impl_->config->enable_light_grid_pruning) {
     if (cluster_grid_buffer == nullptr || light_index_list_buffer == nullptr) {
       LOG_F(ERROR,
@@ -539,10 +549,14 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
         "did not publish tracked buffers");
       co_return;
     }
-    recorder.BeginTrackingResourceState(
-      *cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
-    recorder.BeginTrackingResourceState(
-      *light_index_list_buffer, graphics::ResourceStates::kCommon, true);
+    if (!recorder.IsResourceTracked(*cluster_grid_buffer)) {
+      recorder.BeginTrackingResourceState(
+        *cluster_grid_buffer, graphics::ResourceStates::kCommon, true);
+    }
+    if (!recorder.IsResourceTracked(*light_index_list_buffer)) {
+      recorder.BeginTrackingResourceState(
+        *light_index_list_buffer, graphics::ResourceStates::kCommon, true);
+    }
   }
 
   recorder.RequireResourceState(

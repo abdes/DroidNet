@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -22,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/SkyPass.h>
@@ -40,6 +42,22 @@ using oxygen::graphics::NativeObject;
 using oxygen::graphics::ResourceRegistry;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
+
+namespace {
+auto ResolveDepthOutput(const oxygen::engine::RenderContext& context)
+  -> std::optional<oxygen::engine::DepthPrePassOutput>
+{
+  if (const auto* depth_pass = context.GetPass<oxygen::engine::DepthPrePass>();
+    depth_pass != nullptr) {
+    const auto output = depth_pass->GetOutput();
+    if (output.is_complete && output.depth_texture != nullptr) {
+      return output;
+    }
+  }
+
+  return std::nullopt;
+}
+} // namespace
 
 ShaderPass::ShaderPass(std::shared_ptr<ShaderPassConfig> config)
   : GraphicsRenderPass(config ? config->debug_name : "ShaderPass")
@@ -74,12 +92,10 @@ auto ShaderPass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
   recorder.RequireResourceState(
     GetColorTexture(), graphics::ResourceStates::kRenderTarget);
 
-  // Transition the depth target to DEPTH_READ or DEPTH_WRITE as needed
-  const auto* fb = GetFramebuffer();
-  if (fb && fb->GetDescriptor().depth_attachment.IsValid()
-    && fb->GetDescriptor().depth_attachment.texture) {
-    recorder.RequireResourceState(*fb->GetDescriptor().depth_attachment.texture,
-      graphics::ResourceStates::kDepthRead);
+  // Transition the depth target to DEPTH_READ when available.
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    recorder.RequireResourceState(
+      *depth_texture, graphics::ResourceStates::kDepthRead);
   }
 
   // Ensure environment static resources (e.g. BRDF LUT) are in correct state
@@ -189,11 +205,9 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 
   // Prepare DSV if depth attachment is present
   graphics::NativeView dsv = {};
-  const auto* fb = GetFramebuffer();
-  if ((fb != nullptr) && fb->GetDescriptor().depth_attachment.IsValid()
-    && fb->GetDescriptor().depth_attachment.texture) {
-    auto& depth_texture = *fb->GetDescriptor().depth_attachment.texture;
-    dsv = PrepareDepthStencilView(depth_texture, registry, allocator);
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    auto& depth_texture_ref = const_cast<Texture&>(*depth_texture);
+    dsv = PrepareDepthStencilView(depth_texture_ref, registry, allocator);
   }
 
   // Bind both RTV(s) and DSV if present
@@ -208,9 +222,7 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     "[ShaderPass] SetupRenderTargets: color_tex={}, depth_tex={}, "
     "clear_color=({}, {}, {}, {})",
     static_cast<const void*>(&color_texture),
-    dsv->IsValid() ? static_cast<const void*>(
-                       fb->GetDescriptor().depth_attachment.texture.get())
-                   : nullptr,
+    dsv->IsValid() ? static_cast<const void*>(GetDepthTexture()) : nullptr,
     GetClearColor().r, GetClearColor().g, GetClearColor().b, GetClearColor().a);
 
   const bool clear_enabled = (!config_) || config_->clear_color_target;
@@ -313,6 +325,22 @@ auto ShaderPass::GetFramebuffer() const -> const Framebuffer*
   return Context().pass_target.get();
 }
 
+auto ShaderPass::GetDepthTexture() const -> const Texture*
+{
+  if (const auto depth_output = ResolveDepthOutput(Context());
+    depth_output.has_value()) {
+    return depth_output->depth_texture;
+  }
+
+  const auto* fb = GetFramebuffer();
+  if ((fb != nullptr) && fb->GetDescriptor().depth_attachment.IsValid()
+    && fb->GetDescriptor().depth_attachment.texture) {
+    return fb->GetDescriptor().depth_attachment.texture.get();
+  }
+
+  return nullptr;
+}
+
 auto ShaderPass::GetClearColor() const -> const graphics::Color&
 {
   if (config_ && config_->clear_color.has_value()) {
@@ -323,8 +351,7 @@ auto ShaderPass::GetClearColor() const -> const graphics::Color&
 }
 auto ShaderPass::HasDepth() const -> bool
 {
-  const auto* fb = GetFramebuffer();
-  return (fb != nullptr) && fb->GetDescriptor().depth_attachment.IsValid();
+  return GetDepthTexture() != nullptr;
 }
 
 auto ShaderPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
@@ -462,20 +489,17 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   bool has_depth = false;
   auto depth_format = Format::kUnknown;
   uint32_t sample_count = 1;
-  if (fb != nullptr) {
-    const auto& fb_desc = fb->GetDescriptor();
-    if (fb_desc.depth_attachment.IsValid()
-      && fb_desc.depth_attachment.texture) {
-      has_depth = true;
-      depth_format = fb_desc.depth_attachment.texture->GetDescriptor().format;
-      sample_count
-        = fb_desc.depth_attachment.texture->GetDescriptor().sample_count;
-    } else if (!fb_desc.color_attachments.empty()
-      && fb_desc.color_attachments[0].IsValid()
-      && fb_desc.color_attachments[0].texture) {
-      sample_count
-        = fb_desc.color_attachments[0].texture->GetDescriptor().sample_count;
-    }
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    has_depth = true;
+    depth_format = depth_texture->GetDescriptor().format;
+    sample_count = depth_texture->GetDescriptor().sample_count;
+  } else if (fb != nullptr && !fb->GetDescriptor().color_attachments.empty()
+    && fb->GetDescriptor().color_attachments[0].IsValid()
+    && fb->GetDescriptor().color_attachments[0].texture) {
+    sample_count = fb->GetDescriptor()
+                     .color_attachments[0]
+                     .texture->GetDescriptor()
+                     .sample_count;
   }
 
   DepthStencilStateDesc ds_desc {
@@ -595,14 +619,18 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
   }
 
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
+  auto current_sample_count = color_tex_desc.sample_count;
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    current_sample_count = depth_texture->GetDescriptor().sample_count;
+  }
+
   if (last_built->FramebufferLayout().color_target_formats.empty()
     || last_built->FramebufferLayout().color_target_formats[0]
       != color_tex_desc.format) {
     return true;
   }
 
-  if (last_built->FramebufferLayout().sample_count
-    != color_tex_desc.sample_count) {
+  if (last_built->FramebufferLayout().sample_count != current_sample_count) {
     return true;
   }
   // Rebuild if rasterizer fill mode changed

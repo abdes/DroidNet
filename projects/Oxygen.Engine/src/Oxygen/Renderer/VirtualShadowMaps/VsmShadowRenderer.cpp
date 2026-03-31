@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmHzbUpdaterPass.h>
 #include <Oxygen/Renderer/Passes/Vsm/VsmInvalidationPass.h>
@@ -1552,6 +1553,11 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
     cache_manager_.PublishCurrentFrameHzbAvailability(
       seam.hzb_pool.is_available);
 
+    auto scene_depth_output = engine::DepthPrePassOutput {};
+    if (const auto* depth_pass = render_context.GetPass<engine::DepthPrePass>();
+      depth_pass != nullptr) {
+      scene_depth_output = depth_pass->GetOutput();
+    }
     auto scene_depth_texture_ref = std::shared_ptr<const graphics::Texture> {};
     if (scene_depth_texture) {
       scene_depth_texture_ref = std::shared_ptr<const graphics::Texture>(
@@ -1561,6 +1567,7 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
       .frame = current_frame,
       .physical_pool = seam.physical_pool,
       .scene_depth_texture = std::move(scene_depth_texture_ref),
+      .scene_depth_output = scene_depth_output,
     });
     co_await projection_pass_->PrepareResources(render_context, recorder);
     co_await projection_pass_->Execute(render_context, recorder);

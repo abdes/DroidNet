@@ -307,20 +307,22 @@ protected:
   template <typename T>
   auto ReadBufferAs(
     const std::shared_ptr<const oxygen::graphics::Buffer>& buffer,
-    const std::size_t element_count, std::string_view debug_name)
-    -> std::vector<T>
+    const std::size_t element_count, std::string_view debug_name,
+    const oxygen::graphics::ResourceStates initial_state
+    = oxygen::graphics::ResourceStates::kCommon) -> std::vector<T>
   {
     const auto bytes = ReadBufferBytes(
-      std::const_pointer_cast<oxygen::graphics::Buffer>(buffer),
-      element_count * sizeof(T), debug_name);
+      *std::const_pointer_cast<oxygen::graphics::Buffer>(buffer),
+      element_count * sizeof(T), debug_name, initial_state);
     auto result = std::vector<T>(element_count);
     std::memcpy(result.data(), bytes.data(), bytes.size());
     return result;
   }
 
   auto ReadBufferBytes(const oxygen::graphics::Buffer& source,
-    const std::size_t size_bytes, std::string_view debug_name)
-    -> std::vector<std::byte>
+    const std::size_t size_bytes, std::string_view debug_name,
+    const oxygen::graphics::ResourceStates initial_state
+    = oxygen::graphics::ResourceStates::kCommon) -> std::vector<std::byte>
   {
     auto readback = GetReadbackManager()->CreateBufferReadback(debug_name);
     CHECK_NOTNULL_F(readback.get(), "Failed to create buffer readback");
@@ -329,8 +331,7 @@ protected:
     {
       auto recorder = AcquireRecorder(std::string(debug_name));
       CHECK_NOTNULL_F(recorder.get(), "Failed to acquire readback recorder");
-      recorder->BeginTrackingResourceState(
-        source, oxygen::graphics::ResourceStates::kCommon, true);
+      recorder->BeginTrackingResourceState(source, initial_state, true);
 
       const auto queued_ticket = readback->EnqueueCopy(
         *recorder, source, oxygen::graphics::BufferRange { 0U, size_bytes });
@@ -349,11 +350,12 @@ protected:
 
   template <typename T>
   auto ReadBufferAs(const oxygen::graphics::Buffer& source,
-    const std::size_t element_count, std::string_view debug_name)
-    -> std::vector<T>
+    const std::size_t element_count, std::string_view debug_name,
+    const oxygen::graphics::ResourceStates initial_state
+    = oxygen::graphics::ResourceStates::kCommon) -> std::vector<T>
   {
-    const auto bytes
-      = ReadBufferBytes(source, sizeof(T) * element_count, debug_name);
+    const auto bytes = ReadBufferBytes(
+      source, sizeof(T) * element_count, debug_name, initial_state);
     auto result = std::vector<T>(element_count);
     std::memcpy(result.data(), bytes.data(), bytes.size());
     return result;

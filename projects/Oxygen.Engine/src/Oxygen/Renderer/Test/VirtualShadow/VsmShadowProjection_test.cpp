@@ -49,8 +49,6 @@ using oxygen::renderer::vsm::testing::TwoBoxShadowProjectionResult;
 using oxygen::renderer::vsm::testing::TwoBoxShadowSceneData;
 using oxygen::renderer::vsm::testing::VsmLiveSceneHarness;
 
-constexpr auto kShadowCompareBias = 0.0F;
-
 struct AxisAlignedBox {
   glm::vec3 min {};
   glm::vec3 max {};
@@ -680,6 +678,8 @@ protected:
     });
     const auto atlas_extent
       = static_cast<float>(tiles_per_axis * page_size_texels);
+    const auto receiver_depth_bias
+      = (std::max)(projection.projection.receiver_depth_range_pad.z, 0.0F);
 
     return CpuProjectedSample {
       .atlas_uv
@@ -687,7 +687,7 @@ protected:
             * static_cast<float>(page_size_texels)
           + page_uv * static_cast<float>(page_size_texels))
         / atlas_extent,
-      .receiver_depth = ndc.z,
+      .receiver_depth = std::clamp(ndc.z - receiver_depth_bias, 0.0F, 1.0F),
       .physical_page_index = physical_page_index,
       .atlas_slice = atlas_slice,
       .atlas_texel_origin = atlas_texel_origin,
@@ -726,8 +726,7 @@ protected:
           = glm::clamp(base + glm::ivec2 { x, y }, min_coord, max_coord);
         const auto stored_depth = slice.At(static_cast<std::uint32_t>(coord.x),
           static_cast<std::uint32_t>(coord.y));
-        visibility
-          += receiver_depth <= stored_depth + kShadowCompareBias ? 1.0F : 0.0F;
+        visibility += receiver_depth <= stored_depth ? 1.0F : 0.0F;
       }
     }
 
@@ -1383,8 +1382,35 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
     = vsm_renderer.GetProjectionPass()->GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
   ASSERT_NE(output.directional_shadow_mask_texture, nullptr);
-  const auto [shadow_probes, lit_probes] = SelectStableAnalyticFloorProbes(
-    scene_data, *result.live_frame.scene_depth_texture, resolved_view, 8U, 8U);
+  const auto [candidate_shadow_probes, candidate_lit_probes]
+    = SelectStableAnalyticFloorProbes(scene_data,
+      *result.live_frame.scene_depth_texture, resolved_view, 32U, 32U);
+  auto shadow_probes = std::vector<ProbeSample> {};
+  auto lit_probes = std::vector<ProbeSample> {};
+  shadow_probes.reserve(8U);
+  lit_probes.reserve(8U);
+  for (const auto& probe : candidate_shadow_probes) {
+    const auto visibility = ComputeCpuVisibility(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    if (!visibility.has_directional_sample || visibility.directional > 0.25F) {
+      continue;
+    }
+    shadow_probes.push_back(probe);
+    if (shadow_probes.size() >= 8U) {
+      break;
+    }
+  }
+  for (const auto& probe : candidate_lit_probes) {
+    const auto visibility = ComputeCpuVisibility(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    if (!visibility.has_directional_sample || visibility.directional < 0.75F) {
+      continue;
+    }
+    lit_probes.push_back(probe);
+    if (lit_probes.size() >= 8U) {
+      break;
+    }
+  }
   ASSERT_GE(shadow_probes.size(), 4U);
   ASSERT_GE(lit_probes.size(), 4U);
   SCOPED_TRACE("Darkest visible floor probes: "
@@ -1464,9 +1490,35 @@ NOLINT_TEST_F(VsmShadowProjectionLiveSceneTest,
     vsm_renderer, resolved_view, kOutputWidth, kOutputHeight,
     SequenceNumber { 61U }, Slot { 0U }, kShadowCasterContentHash);
 
-  const auto [shadow_probes, lit_probes]
+  const auto [candidate_shadow_probes, candidate_lit_probes]
     = SelectStableAnalyticFloorProbes(scene_data,
-      *result.live_frame.scene_depth_texture, resolved_view, 64U, 64U);
+      *result.live_frame.scene_depth_texture, resolved_view, 256U, 256U);
+  auto shadow_probes = std::vector<ProbeSample> {};
+  auto lit_probes = std::vector<ProbeSample> {};
+  shadow_probes.reserve(64U);
+  lit_probes.reserve(64U);
+  for (const auto& probe : candidate_shadow_probes) {
+    const auto visibility = ComputeCpuVisibility(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    if (!visibility.has_directional_sample || visibility.directional > 0.25F) {
+      continue;
+    }
+    shadow_probes.push_back(probe);
+    if (shadow_probes.size() >= 64U) {
+      break;
+    }
+  }
+  for (const auto& probe : candidate_lit_probes) {
+    const auto visibility = ComputeCpuVisibility(
+      isolated_result, resolved_view.ViewMatrix(), probe.point_ws);
+    if (!visibility.has_directional_sample || visibility.directional < 0.75F) {
+      continue;
+    }
+    lit_probes.push_back(probe);
+    if (lit_probes.size() >= 64U) {
+      break;
+    }
+  }
   ASSERT_GE(shadow_probes.size(), 32U);
   ASSERT_GE(lit_probes.size(), 32U);
   SCOPED_TRACE("Darkest visible floor probes: "

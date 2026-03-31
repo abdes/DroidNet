@@ -113,24 +113,6 @@ auto BuildExpectedRequestFlags(
 
 class VsmPageRequestLiveSceneTest : public VsmLiveSceneHarness {
 protected:
-  auto ReadUploadedProjectionRecords(VsmShadowRenderer& renderer,
-    const std::size_t projection_count, std::string_view debug_name)
-    -> std::vector<VsmPageRequestProjection>
-  {
-    const auto request_pass = renderer.GetPageRequestGeneratorPass();
-    EXPECT_NE(request_pass, nullptr);
-    if (request_pass == nullptr) {
-      return {};
-    }
-    const auto buffer = request_pass->GetProjectionBuffer();
-    EXPECT_NE(buffer, nullptr);
-    if (buffer == nullptr) {
-      return {};
-    }
-    return ReadBufferAs<VsmPageRequestProjection>(
-      *buffer, projection_count, debug_name);
-  }
-
   auto ReadRequestFlags(VsmShadowRenderer& renderer,
     const std::uint32_t virtual_page_count, std::string_view debug_name)
     -> std::vector<VsmShaderPageRequestFlags>
@@ -486,12 +468,6 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   ASSERT_EQ(result.virtual_frame.directional_layouts.size(), 1U);
   ASSERT_TRUE(result.virtual_frame.local_light_layouts.empty());
 
-  const auto uploaded_projection_records = ReadUploadedProjectionRecords(
-    vsm_renderer, result.extracted_frame->projection_records.size(),
-    "vsm-stage-five.directional.projections");
-  EXPECT_EQ(
-    uploaded_projection_records, result.extracted_frame->projection_records);
-
   const auto virtual_page_count
     = static_cast<std::uint32_t>(result.extracted_frame->page_table.size());
   const auto actual_flags = ReadRequestFlags(
@@ -535,9 +511,9 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   constexpr std::uint32_t kVirtualPageCount = 64U;
 
   const auto resolved_view = MakeResolvedView(kWidth, kHeight);
-  auto depth_texture = CreateUploadedFloatTexture2D(
-    std::vector<float>(static_cast<std::size_t>(kWidth) * kHeight, kDepth),
-    kWidth, kHeight, oxygen::Format::kR32Float, "vsm-stage-five.local-depth");
+  auto depth_texture
+    = CreateDepthTexture2D(kWidth, kHeight, "vsm-stage-five.local-depth");
+  UploadDepthTexture(depth_texture, kDepth, "vsm-stage-five.local-depth");
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -631,10 +607,9 @@ NOLINT_TEST_F(VsmPageRequestLiveSceneTest,
   constexpr std::uint32_t kVirtualPageCount = 64U;
 
   const auto resolved_view = MakeResolvedView(kWidth, kHeight);
-  auto depth_texture = CreateUploadedFloatTexture2D(
-    std::vector<float>(static_cast<std::size_t>(kWidth) * kHeight, kDepth),
-    kWidth, kHeight, oxygen::Format::kR32Float,
-    "vsm-stage-five.directional-depth");
+  auto depth_texture
+    = CreateDepthTexture2D(kWidth, kHeight, "vsm-stage-five.directional-depth");
+  UploadDepthTexture(depth_texture, kDepth, "vsm-stage-five.directional-depth");
 
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);

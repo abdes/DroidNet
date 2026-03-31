@@ -1175,8 +1175,6 @@ protected:
         scene_data.scene.get(),
       },
     };
-    auto offscreen = renderer.BeginOffscreenFrame(frame_config);
-
     auto world_buffer = TransientStructuredBuffer(
       oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
       renderer.GetStagingProvider(), sizeof(glm::mat4),
@@ -1263,109 +1261,116 @@ protected:
     prepared_frame.bindless_draw_bounds_slot
       = scene_data.draw_bounds_buffer.slot;
 
-    offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
-      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot));
-
     auto depth_texture
       = CreateDepthTexture2D(width, height, "early-stage-two-box.depth");
     CHECK_NOTNULL_F(depth_texture.get(), "Failed to create depth texture");
-    auto depth_pass = oxygen::engine::DepthPrePass(
-      std::make_shared<oxygen::engine::DepthPrePass::Config>(
-        oxygen::engine::DepthPrePass::Config {
-          .depth_texture = depth_texture,
-          .debug_name = "early-stage-two-box.depth-pass",
-        }));
-    auto& render_context = offscreen.GetRenderContext();
-    render_context.RegisterPass(&depth_pass);
+    auto result = TwoBoxLiveFrameResult {};
     {
-      auto recorder = AcquireRecorder("early-stage-two-box.depth-pass");
-      CHECK_NOTNULL_F(recorder.get(), "Failed to acquire depth recorder");
-      EnsureTracked(
-        *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
-      RunPass(depth_pass, render_context, *recorder);
-      recorder->RequireResourceStateFinal(
-        *depth_texture, oxygen::graphics::ResourceStates::kCommon);
-      recorder->FlushBarriers();
-    }
-    WaitForQueueIdle();
+      auto offscreen = renderer.BeginOffscreenFrame(frame_config);
+      offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame,
+        MakeViewConstants(
+          resolved_view, sequence, frame_slot, view_frame_slot));
 
-    auto light_culling_pass
-      = std::optional<oxygen::engine::LightCullingPass> {};
-    if (enable_light_culling) {
-      CollectRendererSceneLights(renderer, scene_data);
-      light_culling_pass.emplace(
-        oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-        std::make_shared<oxygen::engine::LightCullingPassConfig>(
-          oxygen::engine::LightCullingPassConfig {
-            .cluster =
-              [] {
-                auto config = oxygen::engine::LightCullingConfig::Default();
-                config.cluster_dim_z = 1U;
-                config.tile_size_px = 16U;
-                return config;
-              }(),
-            .debug_name = "early-stage-two-box.light-culling",
+      auto depth_pass = oxygen::engine::DepthPrePass(
+        std::make_shared<oxygen::engine::DepthPrePass::Config>(
+          oxygen::engine::DepthPrePass::Config {
+            .depth_texture = depth_texture,
+            .debug_name = "early-stage-two-box.depth-pass",
           }));
-      render_context.RegisterPass(&(*light_culling_pass));
+      auto& render_context = offscreen.GetRenderContext();
+      render_context.RegisterPass(&depth_pass);
       {
-        auto recorder = AcquireRecorder("early-stage-two-box.light-culling");
-        CHECK_NOTNULL_F(
-          recorder.get(), "Failed to acquire light-culling recorder");
-        RunPass(*light_culling_pass, render_context, *recorder);
+        auto recorder = AcquireRecorder("early-stage-two-box.depth-pass");
+        CHECK_NOTNULL_F(recorder.get(), "Failed to acquire depth recorder");
+        EnsureTracked(
+          *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
+        RunPass(depth_pass, render_context, *recorder);
+        recorder->RequireResourceStateFinal(
+          *depth_texture, oxygen::graphics::ResourceStates::kCommon);
+        recorder->FlushBarriers();
       }
       WaitForQueueIdle();
-      EXPECT_TRUE(light_culling_pass->GetClusterGridSrvIndex().IsValid());
-      EXPECT_TRUE(light_culling_pass->GetLightIndexListSrvIndex().IsValid());
+
+      auto light_culling_pass
+        = std::optional<oxygen::engine::LightCullingPass> {};
+      if (enable_light_culling) {
+        CollectRendererSceneLights(renderer, scene_data);
+        light_culling_pass.emplace(
+          oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+          std::make_shared<oxygen::engine::LightCullingPassConfig>(
+            oxygen::engine::LightCullingPassConfig {
+              .cluster =
+                [] {
+                  auto config = oxygen::engine::LightCullingConfig::Default();
+                  config.cluster_dim_z = 1U;
+                  config.tile_size_px = 16U;
+                  return config;
+                }(),
+              .debug_name = "early-stage-two-box.light-culling",
+            }));
+        render_context.RegisterPass(&(*light_culling_pass));
+        {
+          auto recorder = AcquireRecorder("early-stage-two-box.light-culling");
+          CHECK_NOTNULL_F(
+            recorder.get(), "Failed to acquire light-culling recorder");
+          RunPass(*light_culling_pass, render_context, *recorder);
+        }
+        WaitForQueueIdle();
+        EXPECT_TRUE(light_culling_pass->GetClusterGridSrvIndex().IsValid());
+        EXPECT_TRUE(light_culling_pass->GetLightIndexListSrvIndex().IsValid());
+      }
+
+      auto lights = oxygen::renderer::LightManager(
+        oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
+        oxygen::observer_ptr { &renderer.GetStagingProvider() },
+        oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() });
+      lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+        sequence, frame_slot);
+      CollectSceneLights(lights, scene_data);
+
+      vsm_renderer.OnFrameStart(
+        oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
+        frame_slot);
+      const auto has_work = vsm_renderer.PrepareView(kTestViewId,
+        MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot),
+        lights,
+        oxygen::observer_ptr<oxygen::scene::Scene> { scene_data.scene.get() },
+        static_cast<float>(width), std::span(scene_data.rendered_items),
+        std::span(scene_data.shadow_caster_bounds),
+        std::span(scene_data.receiver_bounds), std::chrono::milliseconds { 16 },
+        shadow_caster_content_hash);
+      CHECK_F(has_work, "Two-box scene should produce virtual shadow work");
+      ExecutePreparedViewShell(vsm_renderer, render_context,
+        oxygen::observer_ptr<const oxygen::graphics::Texture> {
+          depth_texture.get(),
+        });
+
+      const auto* extracted_frame
+        = vsm_renderer.GetCacheManager().GetPreviousFrame();
+      DLOG_F(2,
+        "RunTwoBoxLiveShellFrame result generation={} extracted_generation={} "
+        "visible={} rendered_history={} static_feedback={}",
+        sequence.get(),
+        extracted_frame != nullptr ? extracted_frame->frame_generation : 0ULL,
+        extracted_frame != nullptr
+          ? extracted_frame->visible_shadow_primitives.size()
+          : 0U,
+        extracted_frame != nullptr
+          ? extracted_frame->rendered_primitive_history.size()
+          : 0U,
+        extracted_frame != nullptr
+          ? extracted_frame->static_primitive_page_feedback.size()
+          : 0U);
+
+      result = TwoBoxLiveFrameResult {
+        .virtual_frame = vsm_renderer.GetVirtualAddressSpace().DescribeFrame(),
+        .prepared_view = vsm_renderer.TryGetPreparedViewState(kTestViewId),
+        .extracted_frame = extracted_frame,
+        .scene_depth_texture = depth_texture,
+      };
     }
 
-    auto lights = oxygen::renderer::LightManager(
-      oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
-      oxygen::observer_ptr { &renderer.GetStagingProvider() },
-      oxygen::observer_ptr { &renderer.GetInlineTransfersCoordinator() });
-    lights.OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
-      sequence, frame_slot);
-    CollectSceneLights(lights, scene_data);
-
-    vsm_renderer.OnFrameStart(
-      oxygen::renderer::internal::RendererTagFactory::Get(), sequence,
-      frame_slot);
-    const auto has_work = vsm_renderer.PrepareView(kTestViewId,
-      MakeViewConstants(resolved_view, sequence, frame_slot, view_frame_slot),
-      lights,
-      oxygen::observer_ptr<oxygen::scene::Scene> { scene_data.scene.get() },
-      static_cast<float>(width), std::span(scene_data.rendered_items),
-      std::span(scene_data.shadow_caster_bounds),
-      std::span(scene_data.receiver_bounds), std::chrono::milliseconds { 16 },
-      shadow_caster_content_hash);
-    CHECK_F(has_work, "Two-box scene should produce virtual shadow work");
-    ExecutePreparedViewShell(vsm_renderer, render_context,
-      oxygen::observer_ptr<const oxygen::graphics::Texture> {
-        depth_texture.get(),
-      });
-
-    const auto* extracted_frame
-      = vsm_renderer.GetCacheManager().GetPreviousFrame();
-    DLOG_F(2,
-      "RunTwoBoxLiveShellFrame result generation={} extracted_generation={} "
-      "visible={} rendered_history={} static_feedback={}",
-      sequence.get(),
-      extracted_frame != nullptr ? extracted_frame->frame_generation : 0ULL,
-      extracted_frame != nullptr
-        ? extracted_frame->visible_shadow_primitives.size()
-        : 0U,
-      extracted_frame != nullptr
-        ? extracted_frame->rendered_primitive_history.size()
-        : 0U,
-      extracted_frame != nullptr
-        ? extracted_frame->static_primitive_page_feedback.size()
-        : 0U);
-
-    return TwoBoxLiveFrameResult {
-      .virtual_frame = vsm_renderer.GetVirtualAddressSpace().DescribeFrame(),
-      .prepared_view = vsm_renderer.TryGetPreparedViewState(kTestViewId),
-      .extracted_frame = extracted_frame,
-      .scene_depth_texture = depth_texture,
-    };
+    return result;
   }
 
   auto PrimeTwoBoxExtractedFrame(oxygen::engine::Renderer& renderer,

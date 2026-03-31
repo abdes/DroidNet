@@ -1999,6 +1999,11 @@ auto VsmShadowRasterizerPass::UsesFramebufferDepthAttachment() const -> bool
   return false;
 }
 
+auto VsmShadowRasterizerPass::PublishesCanonicalDepthOutput() const -> bool
+{
+  return false;
+}
+
 auto VsmShadowRasterizerPass::DoPrepareResources(CommandRecorder& recorder)
   -> co::Co<>
 {

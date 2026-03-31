@@ -57,6 +57,12 @@ struct WireframePassConfig {
  Emits constant-color lines using a small pass-constants CBV. The pass caches
  its CBV and updates it when the wire color changes.
 
+ Unlike scene shading passes, WireframePass intentionally does not consume
+ `DepthPrePassOutput`. It is a debug/overlay pass that works against the
+ currently bound framebuffer depth attachment so it can run in wireframe-only
+ and other diagnostic compositions where no canonical DepthPrePass has been
+ executed or registered for the view.
+
 @note Call `SetWireColor` on the engine thread before `PrepareResources`.
 */
 class WireframePass : public GraphicsRenderPass {

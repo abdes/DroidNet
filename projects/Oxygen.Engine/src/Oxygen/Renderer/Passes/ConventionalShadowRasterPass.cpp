@@ -92,6 +92,11 @@ auto ConventionalShadowRasterPass::UsesFramebufferDepthAttachment() const
   return false;
 }
 
+auto ConventionalShadowRasterPass::PublishesCanonicalDepthOutput() const -> bool
+{
+  return false;
+}
+
 auto ConventionalShadowRasterPass::BuildRasterizerStateDesc(
   const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
 {
