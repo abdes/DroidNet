@@ -267,7 +267,7 @@ protected:
 };
 
 NOLINT_TEST_F(ScreenHzbBuildGpuTest,
-  BuildPassComputesExpectedMinPyramidFromDepthPrePassOutput)
+  BuildPassComputesExpectedClosestAndFurthestPyramidsFromDepthPrePassOutput)
 {
   auto renderer = MakeRenderer();
   ASSERT_NE(renderer, nullptr);
@@ -288,26 +288,38 @@ NOLINT_TEST_F(ScreenHzbBuildGpuTest,
   const auto previous = pass.GetPreviousFrameOutput(kTestViewId);
   ASSERT_TRUE(current.available);
   EXPECT_FALSE(previous.available);
-  EXPECT_NE(current.texture, nullptr);
-  EXPECT_TRUE(current.srv_index.IsValid());
+  EXPECT_NE(current.closest_texture, nullptr);
+  EXPECT_NE(current.furthest_texture, nullptr);
+  EXPECT_TRUE(current.closest_srv_index.IsValid());
+  EXPECT_TRUE(current.furthest_srv_index.IsValid());
   EXPECT_EQ(current.width, 4U);
   EXPECT_EQ(current.height, 4U);
   EXPECT_EQ(current.mip_count, 3U);
 
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 0U, 0U, 0U, "screen-hzb.mip0.00"), 0.8F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 0U, 3U, 3U, "screen-hzb.mip0.33"), 0.2F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 1U, 0U, 0U, "screen-hzb.mip1.00"), 0.8F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 1U, 1U, 0U, "screen-hzb.mip1.10"), 0.6F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 1U, 0U, 1U, "screen-hzb.mip1.01"), 0.4F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 1U, 1U, 1U, "screen-hzb.mip1.11"), 0.2F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 2U, 0U, 0U, "screen-hzb.mip2.00"), 0.8F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 0U, 0U, 0U,
+                    "screen-hzb.closest.mip0.00"),
+    0.8F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 0U, 3U, 3U,
+                    "screen-hzb.furthest.mip0.33"),
+    0.2F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 1U, 0U, 0U,
+                    "screen-hzb.closest.mip1.00"),
+    0.8F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 1U, 1U, 0U,
+                    "screen-hzb.closest.mip1.10"),
+    0.6F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 1U, 0U, 1U,
+                    "screen-hzb.furthest.mip1.01"),
+    0.4F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 1U, 1U, 1U,
+                    "screen-hzb.furthest.mip1.11"),
+    0.2F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 2U, 0U, 0U,
+                    "screen-hzb.closest.mip2.00"),
+    0.8F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 2U, 0U, 0U,
+                    "screen-hzb.furthest.mip2.00"),
+    0.2F);
 }
 
 NOLINT_TEST_F(
@@ -339,17 +351,27 @@ NOLINT_TEST_F(
   const auto current = pass.GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(previous.available);
   ASSERT_TRUE(current.available);
-  EXPECT_NE(previous.texture, nullptr);
-  EXPECT_NE(current.texture, nullptr);
-  EXPECT_TRUE(previous.srv_index.IsValid());
-  EXPECT_TRUE(current.srv_index.IsValid());
+  EXPECT_NE(previous.closest_texture, nullptr);
+  EXPECT_NE(previous.furthest_texture, nullptr);
+  EXPECT_NE(current.closest_texture, nullptr);
+  EXPECT_NE(current.furthest_texture, nullptr);
+  EXPECT_TRUE(previous.closest_srv_index.IsValid());
+  EXPECT_TRUE(previous.furthest_srv_index.IsValid());
+  EXPECT_TRUE(current.closest_srv_index.IsValid());
+  EXPECT_TRUE(current.furthest_srv_index.IsValid());
 
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(previous.texture, 2U, 0U, 0U, "screen-hzb-history.prev"),
+  EXPECT_FLOAT_EQ(ReadMipTexel(previous.closest_texture, 2U, 0U, 0U,
+                    "screen-hzb-history.prev.closest"),
     0.9F);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 2U, 0U, 0U, "screen-hzb-history.curr"),
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 2U, 0U, 0U,
+                    "screen-hzb-history.curr.closest"),
     0.85F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(previous.furthest_texture, 2U, 0U, 0U,
+                    "screen-hzb-history.prev.furthest"),
+    0.3F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 2U, 0U, 0U,
+                    "screen-hzb-history.curr.furthest"),
+    0.25F);
 }
 
 NOLINT_TEST_F(ScreenHzbBuildGpuTest,
@@ -384,9 +406,12 @@ NOLINT_TEST_F(ScreenHzbBuildGpuTest,
   EXPECT_EQ(current.width, 8U);
   EXPECT_EQ(current.height, 8U);
   EXPECT_EQ(current.mip_count, 4U);
-  EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 3U, 0U, 0U, "screen-hzb-recreate.curr"),
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.closest_texture, 3U, 0U, 0U,
+                    "screen-hzb-recreate.curr.closest"),
     0.8F);
+  EXPECT_FLOAT_EQ(ReadMipTexel(current.furthest_texture, 3U, 0U, 0U,
+                    "screen-hzb-recreate.curr.furthest"),
+    0.2F);
 }
 
 } // namespace

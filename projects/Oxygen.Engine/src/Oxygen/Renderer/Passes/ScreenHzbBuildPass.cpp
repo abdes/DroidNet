@@ -48,8 +48,16 @@ namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment)
     ScreenHzbBuildPassConstants {
-    ShaderVisibleIndex source_texture_index { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex destination_texture_uav_index {
+    ShaderVisibleIndex source_closest_texture_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex source_furthest_texture_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex destination_closest_texture_uav_index {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex destination_furthest_texture_uav_index {
       kInvalidShaderVisibleIndex
     };
     std::uint32_t source_width { 0U };
@@ -57,10 +65,12 @@ namespace {
     std::uint32_t destination_width { 0U };
     std::uint32_t destination_height { 0U };
     std::uint32_t source_texel_step { 1U };
-    std::uint32_t _pad { 0U };
+    std::uint32_t _pad0 { 0U };
+    std::uint32_t _pad1 { 0U };
+    std::uint32_t _pad2 { 0U };
   };
 
-  static_assert(sizeof(ScreenHzbBuildPassConstants) == 32U);
+  static_assert(sizeof(ScreenHzbBuildPassConstants) == 48U);
   static_assert(
     sizeof(ScreenHzbBuildPassConstants) % packing::kShaderDataFieldAlignment
     == 0U);
@@ -162,10 +172,7 @@ namespace {
 } // namespace
 
 struct ScreenHzbBuildPass::Impl {
-  struct ViewState {
-    std::uint32_t width { 0U };
-    std::uint32_t height { 0U };
-    std::uint32_t mip_count { 0U };
+  struct PyramidResources {
     std::array<std::shared_ptr<graphics::Texture>, 2> history_textures {};
     std::array<ShaderVisibleIndex, 2> history_srv_indices {
       kInvalidShaderVisibleIndex,
@@ -180,6 +187,14 @@ struct ScreenHzbBuildPass::Impl {
       kInvalidShaderVisibleIndex,
       kInvalidShaderVisibleIndex,
     };
+  };
+
+  struct ViewState {
+    std::uint32_t width { 0U };
+    std::uint32_t height { 0U };
+    std::uint32_t mip_count { 0U };
+    PyramidResources closest {};
+    PyramidResources furthest {};
     std::uint32_t current_history_slot { 0U };
     bool has_current_output { false };
     bool has_previous_output { false };
@@ -232,21 +247,26 @@ struct ScreenHzbBuildPass::Impl {
   static auto ReleaseViewResources(
     graphics::ResourceRegistry& registry, ViewState& state) -> void
   {
-    for (auto& texture : state.history_textures) {
-      if (texture && registry.Contains(*texture)) {
-        registry.UnRegisterResource(*texture);
+    const auto release_pyramid = [&](PyramidResources& pyramid) {
+      for (auto& texture : pyramid.history_textures) {
+        if (texture && registry.Contains(*texture)) {
+          registry.UnRegisterResource(*texture);
+        }
+        texture.reset();
       }
-      texture.reset();
-    }
-    for (auto& texture : state.scratch_textures) {
-      if (texture && registry.Contains(*texture)) {
-        registry.UnRegisterResource(*texture);
+      for (auto& texture : pyramid.scratch_textures) {
+        if (texture && registry.Contains(*texture)) {
+          registry.UnRegisterResource(*texture);
+        }
+        texture.reset();
       }
-      texture.reset();
-    }
-    state.history_srv_indices.fill(kInvalidShaderVisibleIndex);
-    state.scratch_srv_indices.fill(kInvalidShaderVisibleIndex);
-    state.scratch_uav_indices.fill(kInvalidShaderVisibleIndex);
+      pyramid.history_srv_indices.fill(kInvalidShaderVisibleIndex);
+      pyramid.scratch_srv_indices.fill(kInvalidShaderVisibleIndex);
+      pyramid.scratch_uav_indices.fill(kInvalidShaderVisibleIndex);
+    };
+
+    release_pyramid(state.closest);
+    release_pyramid(state.furthest);
     state.current_history_slot = 0U;
     state.has_current_output = false;
     state.has_previous_output = false;
@@ -399,19 +419,30 @@ struct ScreenHzbBuildPass::Impl {
     auto& state = view_states[view_id];
     auto& registry = gfx->GetResourceRegistry();
 
-    const bool needs_recreate = state.history_textures[0] == nullptr
-      || state.history_textures[1] == nullptr
-      || state.scratch_textures[0] == nullptr
-      || state.scratch_textures[1] == nullptr || state.width != width
+    const auto pyramid_missing_resource
+      = [](const PyramidResources& pyramid) -> bool {
+      return pyramid.history_textures[0] == nullptr
+        || pyramid.history_textures[1] == nullptr
+        || pyramid.scratch_textures[0] == nullptr
+        || pyramid.scratch_textures[1] == nullptr;
+    };
+    const auto pyramid_has_any_resource
+      = [](const PyramidResources& pyramid) -> bool {
+      return pyramid.history_textures[0] != nullptr
+        || pyramid.history_textures[1] != nullptr
+        || pyramid.scratch_textures[0] != nullptr
+        || pyramid.scratch_textures[1] != nullptr;
+    };
+
+    const bool needs_recreate = pyramid_missing_resource(state.closest)
+      || pyramid_missing_resource(state.furthest) || state.width != width
       || state.height != height || state.mip_count != mip_count;
     if (!needs_recreate) {
       return state;
     }
 
-    if (state.history_textures[0] != nullptr
-      || state.history_textures[1] != nullptr
-      || state.scratch_textures[0] != nullptr
-      || state.scratch_textures[1] != nullptr) {
+    if (pyramid_has_any_resource(state.closest)
+      || pyramid_has_any_resource(state.furthest)) {
       LOG_F(INFO,
         "Screen HZB: recreating per-view resources for view {} (old={}x{} "
         "mips={} new={}x{} mips={}); previous-frame history becomes "
@@ -424,53 +455,65 @@ struct ScreenHzbBuildPass::Impl {
     const auto base_name
       = config->debug_name + "_View" + std::to_string(view_id.get());
 
-    for (std::uint32_t slot = 0U; slot < 2U; ++slot) {
-      graphics::TextureDesc history_desc {};
-      history_desc.width = width;
-      history_desc.height = height;
-      history_desc.mip_levels = mip_count;
-      history_desc.format = oxygen::Format::kR32Float;
-      history_desc.texture_type = oxygen::TextureType::kTexture2D;
-      history_desc.is_shader_resource = true;
-      history_desc.initial_state = graphics::ResourceStates::kCommon;
-      history_desc.debug_name
-        = base_name + "_HzbHistory" + std::to_string(slot);
-      state.history_textures[slot] = gfx->CreateTexture(history_desc);
-      CHECK_NOTNULL_F(state.history_textures[slot].get(),
-        "Failed to create Screen HZB history texture");
-      registry.Register(state.history_textures[slot]);
+    const auto create_pyramid = [&](PyramidResources& pyramid,
+                                  const char* semantic_label) {
+      for (std::uint32_t slot = 0U; slot < 2U; ++slot) {
+        graphics::TextureDesc history_desc {};
+        history_desc.width = width;
+        history_desc.height = height;
+        history_desc.mip_levels = mip_count;
+        history_desc.format = oxygen::Format::kR32Float;
+        history_desc.texture_type = oxygen::TextureType::kTexture2D;
+        history_desc.is_shader_resource = true;
+        history_desc.initial_state = graphics::ResourceStates::kCommon;
+        history_desc.debug_name
+          = base_name + "_" + semantic_label + "History" + std::to_string(slot);
+        pyramid.history_textures[slot] = gfx->CreateTexture(history_desc);
+        CHECK_NOTNULL_F(pyramid.history_textures[slot].get(),
+          "Failed to create Screen HZB {} history texture", semantic_label);
+        registry.Register(pyramid.history_textures[slot]);
 
-      graphics::TextureDesc scratch_desc {};
-      scratch_desc.width = width;
-      scratch_desc.height = height;
-      scratch_desc.mip_levels = 1U;
-      scratch_desc.format = oxygen::Format::kR32Float;
-      scratch_desc.texture_type = oxygen::TextureType::kTexture2D;
-      scratch_desc.is_shader_resource = true;
-      scratch_desc.is_uav = true;
-      scratch_desc.initial_state = graphics::ResourceStates::kCommon;
-      scratch_desc.debug_name
-        = base_name + "_HzbScratch" + std::to_string(slot);
-      state.scratch_textures[slot] = gfx->CreateTexture(scratch_desc);
-      CHECK_NOTNULL_F(state.scratch_textures[slot].get(),
-        "Failed to create Screen HZB scratch texture");
-      registry.Register(state.scratch_textures[slot]);
+        graphics::TextureDesc scratch_desc {};
+        scratch_desc.width = width;
+        scratch_desc.height = height;
+        scratch_desc.mip_levels = 1U;
+        scratch_desc.format = oxygen::Format::kR32Float;
+        scratch_desc.texture_type = oxygen::TextureType::kTexture2D;
+        scratch_desc.is_shader_resource = true;
+        scratch_desc.is_uav = true;
+        scratch_desc.initial_state = graphics::ResourceStates::kCommon;
+        scratch_desc.debug_name
+          = base_name + "_" + semantic_label + "Scratch" + std::to_string(slot);
+        pyramid.scratch_textures[slot] = gfx->CreateTexture(scratch_desc);
+        CHECK_NOTNULL_F(pyramid.scratch_textures[slot].get(),
+          "Failed to create Screen HZB {} scratch texture", semantic_label);
+        registry.Register(pyramid.scratch_textures[slot]);
 
-      const auto history_srv = EnsureTextureSrv(*state.history_textures[slot],
-        WholeTextureSrvDesc(), state.history_srv_indices[slot],
-        slot == 0U ? "history-0" : "history-1");
-      CHECK_F(history_srv.IsValid(), "Screen HZB history SRV must be valid");
+        const auto history_label = slot == 0U
+          ? std::string(semantic_label) + "-history-0"
+          : std::string(semantic_label) + "-history-1";
+        const auto history_srv = EnsureTextureSrv(
+          *pyramid.history_textures[slot], WholeTextureSrvDesc(),
+          pyramid.history_srv_indices[slot], history_label.c_str());
+        CHECK_F(history_srv.IsValid(), "Screen HZB history SRV must be valid");
 
-      const auto scratch_srv = EnsureTextureSrv(*state.scratch_textures[slot],
-        SingleMipSrvDesc(), state.scratch_srv_indices[slot],
-        slot == 0U ? "scratch-0" : "scratch-1");
-      CHECK_F(scratch_srv.IsValid(), "Screen HZB scratch SRV must be valid");
+        const auto scratch_label = slot == 0U
+          ? std::string(semantic_label) + "-scratch-0"
+          : std::string(semantic_label) + "-scratch-1";
+        const auto scratch_srv = EnsureTextureSrv(
+          *pyramid.scratch_textures[slot], SingleMipSrvDesc(),
+          pyramid.scratch_srv_indices[slot], scratch_label.c_str());
+        CHECK_F(scratch_srv.IsValid(), "Screen HZB scratch SRV must be valid");
 
-      const auto scratch_uav = EnsureTextureUav(*state.scratch_textures[slot],
-        SingleMipUavDesc(), state.scratch_uav_indices[slot],
-        slot == 0U ? "scratch-0" : "scratch-1");
-      CHECK_F(scratch_uav.IsValid(), "Screen HZB scratch UAV must be valid");
-    }
+        const auto scratch_uav = EnsureTextureUav(
+          *pyramid.scratch_textures[slot], SingleMipUavDesc(),
+          pyramid.scratch_uav_indices[slot], scratch_label.c_str());
+        CHECK_F(scratch_uav.IsValid(), "Screen HZB scratch UAV must be valid");
+      }
+    };
+
+    create_pyramid(state.closest, "Closest");
+    create_pyramid(state.furthest, "Furthest");
 
     state.width = width;
     state.height = height;
@@ -495,19 +538,23 @@ struct ScreenHzbBuildPass::Impl {
 
   [[nodiscard]] static auto BuildOutput(
     const ViewState& state, const std::uint32_t slot, const bool available)
-    -> ScreenHzbBuildPass::ViewOutput
+    -> ScreenHzbBuildPass::Output
   {
     if (!available) {
       return {};
     }
-    return ScreenHzbBuildPass::ViewOutput {
-      .texture = state.history_textures[slot],
-      .srv_index = state.history_srv_indices[slot],
+    return ScreenHzbBuildPass::Output {
+      .closest_texture = state.closest.history_textures[slot],
+      .furthest_texture = state.furthest.history_textures[slot],
+      .closest_srv_index = state.closest.history_srv_indices[slot],
+      .furthest_srv_index = state.furthest.history_srv_indices[slot],
       .width = state.width,
       .height = state.height,
       .mip_count = state.mip_count,
-      .available = state.history_textures[slot] != nullptr
-        && state.history_srv_indices[slot].IsValid(),
+      .available = state.closest.history_textures[slot] != nullptr
+        && state.furthest.history_textures[slot] != nullptr
+        && state.closest.history_srv_indices[slot].IsValid()
+        && state.furthest.history_srv_indices[slot].IsValid(),
     };
   }
 };
@@ -523,8 +570,7 @@ ScreenHzbBuildPass::ScreenHzbBuildPass(
 
 ScreenHzbBuildPass::~ScreenHzbBuildPass() = default;
 
-auto ScreenHzbBuildPass::GetCurrentOutput(const ViewId view_id) const
-  -> ViewOutput
+auto ScreenHzbBuildPass::GetCurrentOutput(const ViewId view_id) const -> Output
 {
   const auto it = impl_->view_states.find(view_id);
   if (it == impl_->view_states.end()) {
@@ -535,7 +581,7 @@ auto ScreenHzbBuildPass::GetCurrentOutput(const ViewId view_id) const
 }
 
 auto ScreenHzbBuildPass::GetPreviousFrameOutput(const ViewId view_id) const
-  -> ViewOutput
+  -> Output
 {
   const auto it = impl_->view_states.find(view_id);
   if (it == impl_->view_states.end() || !it->second.has_previous_output) {
@@ -633,27 +679,42 @@ auto ScreenHzbBuildPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   impl_->active_write_slot
     = state.has_current_output ? (state.current_history_slot ^ 1U) : 0U;
 
-  auto* write_texture = state.history_textures[impl_->active_write_slot].get();
-  CHECK_NOTNULL_F(write_texture, "Screen HZB write texture is unavailable");
+  auto* closest_write_texture
+    = state.closest.history_textures[impl_->active_write_slot].get();
+  auto* furthest_write_texture
+    = state.furthest.history_textures[impl_->active_write_slot].get();
+  CHECK_NOTNULL_F(
+    closest_write_texture, "Screen HZB closest write texture is unavailable");
+  CHECK_NOTNULL_F(
+    furthest_write_texture, "Screen HZB furthest write texture is unavailable");
 
   if (!recorder.IsResourceTracked(depth_texture)) {
     recorder.BeginTrackingResourceState(
       depth_texture, DepthTextureInitialState(depth_texture), true);
   }
-  if (!recorder.IsResourceTracked(*write_texture)) {
-    recorder.BeginTrackingResourceState(*write_texture,
+  if (!recorder.IsResourceTracked(*closest_write_texture)) {
+    recorder.BeginTrackingResourceState(*closest_write_texture,
       impl_->GetHistoryInitialState(state, impl_->active_write_slot), true);
   }
-  for (const auto& scratch_texture : state.scratch_textures) {
-    CHECK_NOTNULL_F(
-      scratch_texture.get(), "Screen HZB scratch texture is unavailable");
-    if (!recorder.IsResourceTracked(*scratch_texture)) {
-      recorder.BeginTrackingResourceState(
-        *scratch_texture, graphics::ResourceStates::kCommon, true);
-    }
+  if (!recorder.IsResourceTracked(*furthest_write_texture)) {
+    recorder.BeginTrackingResourceState(*furthest_write_texture,
+      impl_->GetHistoryInitialState(state, impl_->active_write_slot), true);
   }
-
+  const auto track_scratch_resources
+    = [&](const Impl::PyramidResources& pyramid, const char* label) {
+        for (const auto& scratch_texture : pyramid.scratch_textures) {
+          CHECK_NOTNULL_F(scratch_texture.get(),
+            "Screen HZB {} scratch texture is unavailable", label);
+          if (!recorder.IsResourceTracked(*scratch_texture)) {
+            recorder.BeginTrackingResourceState(
+              *scratch_texture, graphics::ResourceStates::kCommon, true);
+          }
+        }
+      };
+  track_scratch_resources(state.closest, "closest");
+  track_scratch_resources(state.furthest, "furthest");
   impl_->resources_prepared = true;
+
   co_return;
 }
 
@@ -668,8 +729,56 @@ auto ScreenHzbBuildPass::DoExecute(graphics::CommandRecorder& recorder)
 
   auto& state = *impl_->active_view_state;
   const auto had_previous = state.has_current_output;
-  auto write_texture = state.history_textures[impl_->active_write_slot];
-  CHECK_NOTNULL_F(write_texture.get(), "Screen HZB write texture is null");
+  auto closest_write_texture
+    = state.closest.history_textures[impl_->active_write_slot];
+  auto furthest_write_texture
+    = state.furthest.history_textures[impl_->active_write_slot];
+  CHECK_NOTNULL_F(
+    closest_write_texture.get(), "Screen HZB closest write texture is null");
+  CHECK_NOTNULL_F(
+    furthest_write_texture.get(), "Screen HZB furthest write texture is null");
+
+  const auto copy_scratch_to_history
+    = [&](const Impl::PyramidResources& pyramid,
+        const std::shared_ptr<graphics::Texture>& write_texture,
+        const std::uint32_t scratch_slot, const std::uint32_t mip_level,
+        const std::uint32_t destination_width,
+        const std::uint32_t destination_height) {
+        recorder.CopyTexture(*pyramid.scratch_textures[scratch_slot],
+          graphics::TextureSlice {
+            .x = 0U,
+            .y = 0U,
+            .z = 0U,
+            .width = destination_width,
+            .height = destination_height,
+            .depth = 1U,
+            .mip_level = 0U,
+            .array_slice = 0U,
+          },
+          graphics::TextureSubResourceSet {
+            .base_mip_level = 0U,
+            .num_mip_levels = 1U,
+            .base_array_slice = 0U,
+            .num_array_slices = 1U,
+          },
+          *write_texture,
+          graphics::TextureSlice {
+            .x = 0U,
+            .y = 0U,
+            .z = 0U,
+            .width = destination_width,
+            .height = destination_height,
+            .depth = 1U,
+            .mip_level = mip_level,
+            .array_slice = 0U,
+          },
+          graphics::TextureSubResourceSet {
+            .base_mip_level = mip_level,
+            .num_mip_levels = 1U,
+            .base_array_slice = 0U,
+            .num_array_slices = 1U,
+          });
+      };
 
   for (std::uint32_t mip_level = 0U; mip_level < state.mip_count; ++mip_level) {
     const auto destination_width = MipExtent(state.width, mip_level);
@@ -681,20 +790,32 @@ auto ScreenHzbBuildPass::DoExecute(graphics::CommandRecorder& recorder)
       : MipExtent(state.height, mip_level - 1U);
     const auto scratch_slot = mip_level & 1U;
 
-    ShaderVisibleIndex source_srv = impl_->active_depth_srv;
+    ShaderVisibleIndex closest_source_srv = impl_->active_depth_srv;
+    ShaderVisibleIndex furthest_source_srv = impl_->active_depth_srv;
     if (mip_level > 0U) {
-      source_srv = state.scratch_srv_indices[scratch_slot ^ 1U];
+      closest_source_srv = state.closest.scratch_srv_indices[scratch_slot ^ 1U];
+      furthest_source_srv
+        = state.furthest.scratch_srv_indices[scratch_slot ^ 1U];
     }
-    const auto destination_uav = state.scratch_uav_indices[scratch_slot];
+    const auto closest_destination_uav
+      = state.closest.scratch_uav_indices[scratch_slot];
+    const auto furthest_destination_uav
+      = state.furthest.scratch_uav_indices[scratch_slot];
 
-    CHECK_F(source_srv.IsValid(), "Screen HZB source SRV is invalid for mip {}",
-      mip_level);
-    CHECK_F(destination_uav.IsValid(),
-      "Screen HZB destination UAV is invalid for mip {}", mip_level);
+    CHECK_F(closest_source_srv.IsValid(),
+      "Screen HZB closest source SRV is invalid for mip {}", mip_level);
+    CHECK_F(furthest_source_srv.IsValid(),
+      "Screen HZB furthest source SRV is invalid for mip {}", mip_level);
+    CHECK_F(closest_destination_uav.IsValid(),
+      "Screen HZB closest destination UAV is invalid for mip {}", mip_level);
+    CHECK_F(furthest_destination_uav.IsValid(),
+      "Screen HZB furthest destination UAV is invalid for mip {}", mip_level);
 
     const auto constants = ScreenHzbBuildPassConstants {
-      .source_texture_index = source_srv,
-      .destination_texture_uav_index = destination_uav,
+      .source_closest_texture_index = closest_source_srv,
+      .source_furthest_texture_index = furthest_source_srv,
+      .destination_closest_texture_uav_index = closest_destination_uav,
+      .destination_furthest_texture_uav_index = furthest_destination_uav,
       .source_width = source_width,
       .source_height = source_height,
       .destination_width = destination_width,
@@ -703,9 +824,6 @@ auto ScreenHzbBuildPass::DoExecute(graphics::CommandRecorder& recorder)
     };
     impl_->WritePassConstants(mip_level, constants);
     SetPassConstantsIndex(impl_->pass_constants_indices[mip_level]);
-    // This pass switches pass-constant slots per mip, so it must refresh the
-    // root constants per dispatch instead of relying on ComputeRenderPass's
-    // one-time Execute() binding.
     BindDispatchConstants(
       recorder, Context(), impl_->pass_constants_indices[mip_level]);
 
@@ -713,10 +831,17 @@ auto ScreenHzbBuildPass::DoExecute(graphics::CommandRecorder& recorder)
       recorder.RequireResourceState(*impl_->active_depth_texture,
         graphics::ResourceStates::kShaderResource);
     } else {
-      recorder.RequireResourceState(*state.scratch_textures[scratch_slot ^ 1U],
+      recorder.RequireResourceState(
+        *state.closest.scratch_textures[scratch_slot ^ 1U],
+        graphics::ResourceStates::kShaderResource);
+      recorder.RequireResourceState(
+        *state.furthest.scratch_textures[scratch_slot ^ 1U],
         graphics::ResourceStates::kShaderResource);
     }
-    recorder.RequireResourceState(*state.scratch_textures[scratch_slot],
+    recorder.RequireResourceState(*state.closest.scratch_textures[scratch_slot],
+      graphics::ResourceStates::kUnorderedAccess);
+    recorder.RequireResourceState(
+      *state.furthest.scratch_textures[scratch_slot],
       graphics::ResourceStates::kUnorderedAccess);
     recorder.FlushBarriers();
 
@@ -724,54 +849,35 @@ auto ScreenHzbBuildPass::DoExecute(graphics::CommandRecorder& recorder)
       (destination_width + (kThreadGroupSize - 1U)) / kThreadGroupSize,
       (destination_height + (kThreadGroupSize - 1U)) / kThreadGroupSize, 1U);
 
-    recorder.RequireResourceState(*state.scratch_textures[scratch_slot],
+    recorder.RequireResourceState(*state.closest.scratch_textures[scratch_slot],
       graphics::ResourceStates::kCopySource);
     recorder.RequireResourceState(
-      *write_texture, graphics::ResourceStates::kCopyDest);
+      *state.furthest.scratch_textures[scratch_slot],
+      graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      *closest_write_texture, graphics::ResourceStates::kCopyDest);
+    recorder.RequireResourceState(
+      *furthest_write_texture, graphics::ResourceStates::kCopyDest);
     recorder.FlushBarriers();
 
-    recorder.CopyTexture(*state.scratch_textures[scratch_slot],
-      graphics::TextureSlice {
-        .x = 0U,
-        .y = 0U,
-        .z = 0U,
-        .width = destination_width,
-        .height = destination_height,
-        .depth = 1U,
-        .mip_level = 0U,
-        .array_slice = 0U,
-      },
-      graphics::TextureSubResourceSet {
-        .base_mip_level = 0U,
-        .num_mip_levels = 1U,
-        .base_array_slice = 0U,
-        .num_array_slices = 1U,
-      },
-      *write_texture,
-      graphics::TextureSlice {
-        .x = 0U,
-        .y = 0U,
-        .z = 0U,
-        .width = destination_width,
-        .height = destination_height,
-        .depth = 1U,
-        .mip_level = mip_level,
-        .array_slice = 0U,
-      },
-      graphics::TextureSubResourceSet {
-        .base_mip_level = mip_level,
-        .num_mip_levels = 1U,
-        .base_array_slice = 0U,
-        .num_array_slices = 1U,
-      });
+    copy_scratch_to_history(state.closest, closest_write_texture, scratch_slot,
+      mip_level, destination_width, destination_height);
+    copy_scratch_to_history(state.furthest, furthest_write_texture,
+      scratch_slot, mip_level, destination_width, destination_height);
   }
 
   recorder.RequireResourceState(
-    *state.scratch_textures[0], graphics::ResourceStates::kCommon);
+    *state.closest.scratch_textures[0], graphics::ResourceStates::kCommon);
   recorder.RequireResourceState(
-    *state.scratch_textures[1], graphics::ResourceStates::kCommon);
+    *state.closest.scratch_textures[1], graphics::ResourceStates::kCommon);
   recorder.RequireResourceState(
-    *write_texture, graphics::ResourceStates::kShaderResource);
+    *state.furthest.scratch_textures[0], graphics::ResourceStates::kCommon);
+  recorder.RequireResourceState(
+    *state.furthest.scratch_textures[1], graphics::ResourceStates::kCommon);
+  recorder.RequireResourceState(
+    *closest_write_texture, graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(
+    *furthest_write_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
   state.current_history_slot = impl_->active_write_slot;

@@ -49,10 +49,14 @@ static const uint MAX_LIGHTS_PER_CLUSTER = 64;
 struct LightCullingPassConstants
 {
     // Resources (heap indices)
-    uint depth_texture_index;     // TEXTURES domain: Texture2D<float> depth
+    uint closest_hzb_texture_index; // GLOBAL_SRV domain: Texture2D<float> closest HZB
+    uint furthest_hzb_texture_index; // GLOBAL_SRV domain: Texture2D<float> furthest HZB
     uint light_buffer_index;      // GLOBAL_SRV domain: StructuredBuffer<PositionalLightData>
     uint light_list_uav_index;    // GLOBAL_SRV domain: RWStructuredBuffer<uint>
     uint light_count_uav_index;   // GLOBAL_SRV domain: RWStructuredBuffer<uint2>
+    uint hzb_width;
+    uint hzb_height;
+    uint hzb_mip_count;
 
     // Dispatch parameters
     float4x4 inv_projection_matrix;
@@ -77,13 +81,40 @@ groupshared uint s_ClusterLightCount;
 groupshared uint s_ClusterLightIndices[MAX_LIGHTS_PER_CLUSTER];
 groupshared float s_ClusterDepthNear;
 groupshared float s_ClusterDepthFar;
-groupshared float s_DepthTileMin[TILE_SIZE * TILE_SIZE];
-groupshared float s_DepthTileMax[TILE_SIZE * TILE_SIZE];
+groupshared uint s_ClusterActive;
 
 float DeviceDepthFromLinearViewDepth(float linear_depth)
 {
     const float4 clip = mul(projection_matrix, float4(0.0, 0.0, -linear_depth, 1.0));
     return clip.z / max(clip.w, 1.0e-6);
+}
+
+uint CeilLog2(uint value)
+{
+    if (value <= 1u) {
+        return 0u;
+    }
+
+    uint result = 0u;
+    uint remaining = value - 1u;
+    while (remaining > 0u) {
+        remaining >>= 1u;
+        ++result;
+    }
+    return result;
+}
+
+uint ComputeClusterIndex(uint3 clusterID, uint cluster_dim_x, uint cluster_dim_y)
+{
+    return clusterID.z * (cluster_dim_x * cluster_dim_y)
+         + clusterID.y * cluster_dim_x
+         + clusterID.x;
+}
+
+bool DepthRangesOverlapReversedZ(
+    float lhs_near, float lhs_far, float rhs_near, float rhs_far)
+{
+    return max(lhs_far, rhs_far) <= min(lhs_near, rhs_near);
 }
 
 // Convert screen coordinates to view space position
@@ -226,15 +257,15 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     const uint num_lights = pass_constants.num_lights;
 
     // Validate required resources.
-    const uint depth_texture_index = pass_constants.depth_texture_index;
+    const uint closest_hzb_texture_index = pass_constants.closest_hzb_texture_index;
+    const uint furthest_hzb_texture_index = pass_constants.furthest_hzb_texture_index;
     const uint light_buffer_index = pass_constants.light_buffer_index;
     const uint light_list_uav_index = pass_constants.light_list_uav_index;
     const uint light_count_uav_index = pass_constants.light_count_uav_index;
 
     // Validate resource indices are in valid bindless ranges.
-    // Note: depth texture SRV is allocated from GLOBAL_SRV domain (not TEXTURES)
-    // because it's a dynamically created view, not a loaded texture asset.
-    if (!BX_IN_GLOBAL_SRV(depth_texture_index) ||
+    if (!BX_IN_GLOBAL_SRV(closest_hzb_texture_index) ||
+        !BX_IN_GLOBAL_SRV(furthest_hzb_texture_index) ||
         !BX_IN_GLOBAL_SRV(light_buffer_index) ||
         !BX_IN_GLOBAL_SRV(light_list_uav_index) ||
         !BX_IN_GLOBAL_SRV(light_count_uav_index)) {
@@ -256,35 +287,34 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     // Initialize shared memory on first thread
     if (groupIndex == 0) {
         s_ClusterLightCount = 0;
-        s_ClusterDepthNear = 1.0f;
+        s_ClusterDepthNear = 0.0f;
         s_ClusterDepthFar = 0.0f;
+        s_ClusterActive = 0u;
     }
 
     GroupMemoryBarrierWithGroupSync(); // Sync after init
 
-    // Sample depth buffer to determine tile depth bounds
-    Texture2D<float> depth_tex = ResourceDescriptorHeap[depth_texture_index];
-    // Under reversed-Z, an out-of-bounds sample should behave like the far
-    // plane, not the near plane.
-    float depth = 0.0f;
-    if (all(pixelCoord < uint2(screen_dimensions))) { // Boundary check
-        depth = depth_tex.Load(int3(pixelCoord, 0)).r;
-    }
-    s_DepthTileMin[groupIndex] = depth;
-    s_DepthTileMax[groupIndex] = depth;
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // Parallel reduction for min/max
-    for (uint stride = (TILE_SIZE * TILE_SIZE) / 2; stride > 0; stride >>= 1) {
-        if (groupIndex < stride) {
-            s_DepthTileMin[groupIndex] = min(s_DepthTileMin[groupIndex], s_DepthTileMin[groupIndex + stride]);
-            s_DepthTileMax[groupIndex] = max(s_DepthTileMax[groupIndex], s_DepthTileMax[groupIndex + stride]);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
-
     if (groupIndex == 0) {
+        Texture2D<float> closest_hzb = ResourceDescriptorHeap[closest_hzb_texture_index];
+        Texture2D<float> furthest_hzb = ResourceDescriptorHeap[furthest_hzb_texture_index];
+        const uint2 screen_dimensions_u = uint2(screen_dimensions);
+        const uint2 tile_origin = groupID.xy * tile_size;
+        const uint2 tile_extent = max(
+            min(screen_dimensions_u - min(tile_origin, screen_dimensions_u),
+                uint2(tile_size, tile_size)),
+            uint2(1u, 1u));
+        const uint tile_hzb_mip = min(
+            CeilLog2(max(tile_extent.x, tile_extent.y)),
+            max(pass_constants.hzb_mip_count, 1u) - 1u);
+        const uint mip_width = max(pass_constants.hzb_width >> tile_hzb_mip, 1u);
+        const uint mip_height = max(pass_constants.hzb_height >> tile_hzb_mip, 1u);
+        const uint2 hzb_coord = min(
+            tile_origin >> tile_hzb_mip, uint2(mip_width - 1u, mip_height - 1u));
+        const float tile_depth_near = clamp(
+            closest_hzb.Load(int3(hzb_coord, tile_hzb_mip)).r, 0.0f, 1.0f);
+        const float tile_depth_far = clamp(
+            furthest_hzb.Load(int3(hzb_coord, tile_hzb_mip)).r, 0.0f, 1.0f);
+
         // Tile-based: use per-tile depth reduction from depth prepass
         // Clustered: compute slice bounds from logarithmic Z config
 #if CLUSTERED
@@ -310,18 +340,34 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
         // Convert linear view depth back to device depth through the active
         // projection matrix so clustered frusta honor the engine's canonical
         // reversed-Z convention without hardcoding forward-Z formulas.
-        s_ClusterDepthNear = DeviceDepthFromLinearViewDepth(slice_near_linear);
-        s_ClusterDepthFar = DeviceDepthFromLinearViewDepth(slice_far_linear);
+        s_ClusterDepthNear
+            = clamp(DeviceDepthFromLinearViewDepth(slice_near_linear), 0.0f, 1.0f);
+        s_ClusterDepthFar
+            = clamp(DeviceDepthFromLinearViewDepth(slice_far_linear), 0.0f, 1.0f);
+        s_ClusterActive = DepthRangesOverlapReversedZ(
+            s_ClusterDepthNear, s_ClusterDepthFar, tile_depth_near, tile_depth_far)
+            ? 1u
+            : 0u;
 #else
         // Tile-based: use the per-tile device-depth extrema. Under reversed-Z
         // the nearest surface has the largest device-depth value.
-        s_ClusterDepthNear = clamp(s_DepthTileMax[0], 0.0f, 1.0f);
-        s_ClusterDepthFar = clamp(s_DepthTileMin[0], 0.0f, 1.0f);
+        s_ClusterDepthNear = tile_depth_near;
+        s_ClusterDepthFar = tile_depth_far;
+        s_ClusterActive = s_ClusterDepthNear > 0.0f ? 1u : 0u;
 #endif
         s_ClusterLightCount = 0;
     }
 
     GroupMemoryBarrierWithGroupSync();
+
+    if (s_ClusterActive == 0u) {
+        if (groupIndex == 0) {
+            RWStructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[light_count_uav_index];
+            uint clusterIndex = ComputeClusterIndex(clusterID, cluster_dim_x, cluster_dim_y);
+            cluster_grid[clusterIndex] = uint2(clusterIndex * MAX_LIGHTS_PER_CLUSTER, 0u);
+        }
+        return;
+    }
 
     // Calculate cluster frustum
     float4 frustumPlanes[6];
@@ -358,9 +404,7 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
         // Compute linear cluster index
         // For tile-based: clusterIndex = y * tiles_x + x
         // For clustered: clusterIndex = z * (tiles_x * tiles_y) + y * tiles_x + x
-        uint clusterIndex = clusterID.z * (cluster_dim_x * cluster_dim_y)
-                          + clusterID.y * cluster_dim_x
-                          + clusterID.x;
+        uint clusterIndex = ComputeClusterIndex(clusterID, cluster_dim_x, cluster_dim_y);
 
         // Clamp light count to maximum
         uint finalLightCount = min(s_ClusterLightCount, MAX_LIGHTS_PER_CLUSTER);
