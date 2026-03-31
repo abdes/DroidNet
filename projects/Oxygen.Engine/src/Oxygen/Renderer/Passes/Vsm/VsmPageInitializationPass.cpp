@@ -373,7 +373,7 @@ auto VsmPageInitializationPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       const auto batch_count
         = std::min(kMaxClearRectsPerCall, clear_rects.size() - offset);
       recorder.ClearDepthStencilView(*shadow_texture, impl_->dynamic_slice_dsv,
-        graphics::ClearFlags::kDepth, 1.0F, 0U,
+        graphics::ClearFlags::kDepth, 0.0F, 0U,
         std::span<const oxygen::Scissors> {
           clear_rects.data() + offset,
           batch_count,

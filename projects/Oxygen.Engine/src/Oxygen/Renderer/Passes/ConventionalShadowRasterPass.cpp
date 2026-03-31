@@ -30,11 +30,13 @@ namespace oxygen::engine {
 
 namespace {
 
-  constexpr float kDirectionalShadowRasterDepthBias = 1500.0F;
-  // Conventional CSM should keep the same layered bias policy as the hardened
-  // virtual path: constant raster bias, a small clamped slope term, and the
-  // existing receiver-side normal/constant bias in shader space.
-  constexpr float kDirectionalShadowRasterSlopeBias = 2.0F;
+  // Conventional shadow maps now rasterize into reversed-Z depth. The legacy
+  // forward-Z bias sign pushes stored caster depths toward the light in this
+  // convention, which manifests as widespread self-shadow acne on receivers.
+  // Keep the existing bias magnitude, but flip the raster bias sign so stored
+  // depths are biased away from the light under GREATER_EQUAL comparison.
+  constexpr float kDirectionalShadowRasterDepthBias = -1500.0F;
+  constexpr float kDirectionalShadowRasterSlopeBias = -2.0F;
   constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0025F;
 
 } // namespace

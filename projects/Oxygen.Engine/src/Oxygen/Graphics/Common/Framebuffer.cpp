@@ -37,7 +37,9 @@ auto FramebufferAttachment::ResolveDepthStencil(
 
   const auto format_info = GetFormatInfo(format);
 
-  float depth = 1.0f;
+  // Oxygen's canonical depth convention is reversed-Z, so the implicit
+  // far-plane clear is 0.0 unless the caller or attachment overrides it.
+  float depth = 0.0f;
   uint8_t stencil = 0;
   if (explicit_depth.has_value()) {
     depth = explicit_depth.value();

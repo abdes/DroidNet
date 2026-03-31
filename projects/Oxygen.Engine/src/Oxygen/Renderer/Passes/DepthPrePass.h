@@ -67,7 +67,7 @@ struct DepthPrePassOutput {
   Scissors scissors {};
   Scissors valid_rect {};
   NdcDepthRange ndc_depth_range { NdcDepthRange::ZeroToOne };
-  bool reverse_z { false };
+  bool reverse_z { true };
   bool has_depth_texture { false };
   bool has_canonical_srv { false };
   bool is_complete { false };
@@ -247,7 +247,7 @@ private:
   ShaderVisibleIndex canonical_depth_srv_index_ { kInvalidShaderVisibleIndex };
   const graphics::Texture* canonical_depth_srv_owner_ { nullptr };
   NdcDepthRange output_ndc_depth_range_ { NdcDepthRange::ZeroToOne };
-  bool output_reverse_z_ { false };
+  bool output_reverse_z_ { true };
   bool output_is_complete_ { false };
 };
 

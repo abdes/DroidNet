@@ -327,40 +327,253 @@ Remaining scope / gap:
 
 Status: `in_progress`
 
-### Phase DP-3: Specialize The Depth Pass Like UE5
+### Phase DP-3: Depth Pass Specialization (Null PS + Position-Only Stream)
 
 Problem:
-- Oxygen always binds a pixel shader and always loads a full vertex payload,
-  even for fully opaque depth-only draws
+
+Oxygen binds a pixel shader for every depth prepass draw, including fully
+opaque draws where the PS body is empty (the `#ifdef ALPHA_TEST` block compiles
+away). More significantly, every draw fetches a full 72-byte interleaved
+`VertexData` struct (position 12 + normal 12 + texcoord 8 + tangent 12 +
+bitangent 12 + color 16) even though opaque depth draws consume only
+`position` (12 bytes) and masked draws consume only `position` + `texcoord`
+(20 bytes). This wastes 83% of vertex fetch bandwidth for opaque draws and 72%
+for masked draws.
 
 Goal:
-- specialize depth rendering into the same broad classes UE5 uses
 
-Implementation work:
-- split depth PSOs into at least:
-  - position-only, no-pixel-shader
-  - full-vertex, no-pixel-shader
-  - full-vertex plus pixel-shader for masked / PDO / coverage-required cases
-- introduce any required geometry metadata changes to support position-only
-  vertex streams or equivalent optimized fetch paths
-- avoid interpolants and material fetches for opaque no-PS depth draws
-- define clear eligibility rules for each permutation
-- document those rules
+Eliminate unnecessary PS dispatch and vertex fetch waste for depth-only draws,
+matching UE5's `DepthPosOnlyNoPixelPipeline` / `DepthNoPixelPipeline` /
+`FDepthOnlyPS`-only-when-needed architecture in shape.
+
+This phase has two independent sub-optimizations with very different
+cost/impact profiles. They can be implemented independently in either order.
+
+---
+
+#### Sub-phase A: Null Pixel Shader for Opaque Variants
+
+**Complexity**: trivial (1 file, ~4 lines)
+**Risk**: none — D3D12 explicitly supports null PS for depth-only rendering
+
+Current state:
+
+- `DepthPrePass.cpp` `CreatePipelineStateDesc()` calls `.SetPixelShader()`
+  for all four PSO variants, including the two opaque variants
+- the opaque PS entry point in `Depth/DepthPrePass.hlsl` has an empty body
+  (the `#ifdef ALPHA_TEST` block compiles away entirely)
+- the driver recognizes the empty body and elides dispatch, but Oxygen still
+  pays for shader binding and PSO creation with a PS stage present
+
+Implementation:
+
+1. In `DepthPrePass.cpp` `CreatePipelineStateDesc()`, build opaque variants
+   without `.SetPixelShader()`:
+
+   ```text
+   // Current: BuildDesc always calls .SetPixelShader()
+   // Change: split into BuildDescWithPS and BuildDescNoPS, or pass a
+   // bool needs_pixel_shader parameter to BuildDesc
+   ```
+
+   The lambda `BuildDesc` currently always chains `.SetPixelShader(...)`.
+   Add a `bool needs_ps` parameter. When `false`, skip the
+   `.SetPixelShader()` call entirely. Call with `false` for
+   `pso_opaque_single_` and `pso_opaque_double_`, `true` for
+   `pso_masked_single_` and `pso_masked_double_`.
+
+2. No shader file changes needed. The masked PS continues to use the existing
+   `PS` entry point with `ALPHA_TEST` defined.
+
+3. No `DrawMetadata`, vertex buffer, or upstream changes needed.
+
+Depth-equal safety: the pixel shader does not affect `SV_POSITION` output.
+Removing the PS from opaque variants has zero impact on the bitwise-match
+requirement between `DepthPrePass` and `ShaderPass`.
 
 Validation:
-- new tests covering permutation selection
-- replay-safe captures showing the specialized event shape
-- measured before/after evidence on representative scenes
 
-UE5 closeness check:
-- explicitly compare Oxygen specialization against:
-  - `TDepthOnlyVS<true>`
-  - `TDepthOnlyVS<false>`
-  - `DepthPosOnlyNoPixelPipeline`
-  - `DepthNoPixelPipeline`
-  - `FDepthOnlyPS` only when needed
-- this phase is not complete unless Oxygen's pass shape is recognizably in the
-  same family as UE5's
+- existing `Oxygen.Renderer.DepthPrePass.Tests` pass (no behavior change)
+- RenderDoc capture: opaque depth events show `PS: (null)` in pipeline state
+- visual regression: none expected (no functional change)
+
+---
+
+#### Sub-phase B: Position-Only Vertex Stream for Opaque Draws
+
+**Complexity**: medium-high (7-8 files across 3 layers)
+**Risk**: low (position data is identical; no depth-equal impact)
+
+Current state:
+
+- `VertexData` / `Vertex` is a single 72-byte interleaved struct defined in:
+  - CPU: `src/Oxygen/Data/Vertex.h` (`data::Vertex`)
+  - GPU: `Depth/DepthPrePass.hlsl` (local `VertexData` struct)
+- `BX_LoadVertex()` in `Core/Bindless/BindlessHelpers.hlsl` loads the full
+  struct via `StructuredBuffer<BX_VERTEX_TYPE>`
+- `DrawMetadata` is 64 bytes with 12 bytes of padding available (fields
+  `transform_generation`, `submesh_index`, `primitive_flags` leave room)
+- `Mesh` class in `Data/GeometryAsset.h` exposes `Vertices()` returning
+  `std::span<const Vertex>` and stores one vertex `BufferResource`
+- `GeometryUploader` creates and uploads one vertex buffer per mesh
+- no position-only buffer, stream, or SRV exists anywhere in the codebase
+
+Bandwidth arithmetic:
+
+| Draw type | Bytes needed | Bytes fetched (current) | Waste |
+| --------- | ------------ | ----------------------- | ----- |
+| Opaque    | 12           | 72                      | 83%   |
+| Masked    | 20           | 72                      | 72%   |
+
+For 1M opaque vertices: 72 MB fetched → 12 MB needed = 60 MB wasted per
+frame.
+
+Implementation (7 ordered steps):
+
+1. **`Vertex.h`** — define a `PositionVertex` struct:
+
+   ```cpp
+   struct PositionVertex {
+     glm::vec3 position;  // 12 bytes, matches Vertex::position layout
+   };
+   ```
+
+   This is a strict subset of `Vertex`. The `position` field occupies the
+   same offset (0) in both structs; loading from a `StructuredBuffer`
+   with stride 12 vs. stride 72 produces bitwise-identical `float3` values.
+
+2. **`GeometryAsset.h` / `Mesh` class** — add position-only buffer storage:
+
+   - add `BufferResource` member `position_only_buffer_` alongside existing
+     `vertex_buffer_`
+   - expose `PositionOnlyBuffer()` accessor
+   - extend `SetBufferResources()` to accept the position-only buffer
+
+3. **`GeometryUploader`** — create and upload the position-only buffer:
+
+   - in `UploadVertexBuffer()`, after creating the full 72-byte vertex buffer,
+     create a second 12-byte-stride buffer containing only the `position`
+     field extracted from each `Vertex`
+   - register an SRV for the position-only buffer in the descriptor heap
+   - extend `ShaderVisibleIndices` to include `position_only_srv_index`
+
+4. **`DrawMetadata.h`** — add `position_only_buffer_index` field:
+
+   The struct is currently 64 bytes with 12 bytes consumed by
+   `transform_generation` (uint32), `submesh_index` (uint32), and
+   `primitive_flags` (uint32). These 3 fields plus any existing padding give
+   room to add one `ShaderVisibleIndex position_only_buffer_index` without
+   exceeding 64 bytes. If alignment is tight, `primitive_flags` can be
+   packed or the struct can grow to 80 bytes (next 16-byte boundary).
+
+   Corresponding HLSL struct in `Renderer/DrawMetadata.hlsli` must be
+   updated in lockstep.
+
+5. **`DrawMetadataEmitter`** — populate the new field:
+
+   In the emission loop, set `dm.position_only_buffer_index` from
+   `indices.position_only_srv_index` obtained from `GeometryUploader`.
+
+6. **`DepthPrePass.hlsl`** — add position-only vertex shader variant:
+
+   ```hlsl
+   struct PositionOnlyVertex {
+     float3 position;
+   };
+
+   #ifdef POSITION_ONLY
+   #define BX_VERTEX_TYPE PositionOnlyVertex
+   #else
+   #define BX_VERTEX_TYPE VertexData
+   #endif
+   ```
+
+   Add a new VS entry point `VS_PosOnly` (or use the same entry with
+   `#ifdef POSITION_ONLY`) that:
+   - loads from `meta.position_only_buffer_index` instead of
+     `meta.vertex_buffer_index`
+   - outputs only `SV_POSITION` (no `TEXCOORD0`)
+   - uses the same transform chain: `world_matrix * position` →
+     `view_matrix` → `projection_matrix`
+
+   The masked VS path continues to use the full `VertexData` buffer and
+   output UV for alpha testing.
+
+7. **`DepthPrePass.cpp`** — add position-only PSO variants:
+
+   Extend the permutation matrix from 4 to 6 variants:
+
+   | Alpha Mode | Sidedness | VS | PS | Buffer |
+   | ---------- | --------- | -- | -- | ------ |
+   | Opaque | Single | `VS_PosOnly` | null | position-only (12B) |
+   | Opaque | Double | `VS_PosOnly` | null | position-only (12B) |
+   | Masked | Single | `VS` | `PS` | full vertex (72B) |
+   | Masked | Double | `VS` | `PS` | full vertex (72B) |
+
+   `SelectPipelineStateForPartition()` already branches on `is_masked`;
+   the opaque branch returns the position-only variant.
+
+Memory cost:
+
+- +12 bytes per vertex for the position-only buffer = +16.7% GPU vertex
+  memory per mesh
+- +1 SRV per mesh in the descriptor heap
+- for 10M vertices: ~114 MB → ~133 MB (+19 MB)
+
+Depth-equal bitwise-match safety:
+
+Both the position-only VS and the `ForwardMesh_VS` load the same `float3`
+position and apply the same Local → World → View → Clip transform chain.
+The structured buffer stride (12 vs. 72) does not affect the loaded `float3`
+value. `SV_POSITION` output is bitwise-identical. HLSL does not reorder
+the multiply chain across compilation units. **No depth-equal risk.**
+
+---
+
+#### Files touched (complete list)
+
+| File | Sub-phase | Change |
+| ---- | --------- | ------ |
+| `Renderer/Passes/DepthPrePass.cpp` | A + B | null PS for opaque; position-only PSO variants |
+| `Data/Vertex.h` | B | add `PositionVertex` struct |
+| `Data/GeometryAsset.h` | B | add position-only buffer slot in `Mesh` |
+| `Renderer/Resources/GeometryUploader.cpp` | B | create + upload position-only buffer |
+| `Renderer/Types/DrawMetadata.h` | B | add `position_only_buffer_index` field |
+| `Renderer/Upload/DrawMetadataEmitter.cpp` | B | populate new field |
+| `Graphics/Direct3D12/Shaders/Depth/DepthPrePass.hlsl` | B | position-only VS variant |
+| `Graphics/Direct3D12/Shaders/Renderer/DrawMetadata.hlsli` | B | mirror new field |
+
+#### Validation
+
+- `Oxygen.Renderer.DepthPrePass.Tests`: all existing tests pass
+- new unit tests for `SelectPipelineStateForPartition()` returning
+  position-only variants for opaque partitions
+- RenderDoc capture: opaque depth events show position-only VS,
+  `PS: (null)`, 12-byte vertex stride
+- RenderDoc capture: masked depth events show full VS, alpha-test PS,
+  72-byte vertex stride
+- `Oxygen.Renderer.ScreenHzb.Tests`: HZB still valid (depth output unchanged)
+- visual regression: none expected (depth values identical)
+
+#### UE5 closeness check
+
+| UE5 concept | Oxygen equivalent |
+| ----------- | ----------------- |
+| `TDepthOnlyVS<true>` (position-only) | `VS_PosOnly` loading from `position_only_buffer_index` |
+| `TDepthOnlyVS<false>` (full vertex) | existing `VS` with full `VertexData` |
+| `DepthPosOnlyNoPixelPipeline` | opaque single/double PSO: position-only VS + null PS |
+| `DepthNoPixelPipeline` | (not needed separately; opaque path covers this) |
+| `FDepthOnlyPS` only when needed | masked single/double PSO: full VS + alpha-test PS |
+| `FPositionOnlyVertex` | `PositionVertex` (12 bytes) |
+
+#### When to implement
+
+The trigger for this phase is profiling evidence showing vertex fetch as the
+dominant cost in the depth prepass. At current scene complexity (TexturedCube,
+LightBench, RenderScene), triangle counts do not approach the threshold where
+vertex fetch bandwidth dominates over rasterization or compute. Sub-phase A
+(null PS) is trivial and can be done at any time. Sub-phase B (position-only
+stream) should wait for scenes with >1M depth prepass triangles.
 
 Status: `deferred`
 
@@ -371,6 +584,7 @@ Deferral rationale:
   remediation wave
 - the work remains valid future optimization scope and should not be considered
   completed
+- sub-phase A (null PS) is trivial enough to implement as a cleanup at any time
 
 Current consequence:
 
@@ -532,7 +746,100 @@ UE5 closeness check:
   comparisons, `0.0` clear, and `max()` HZB reduction
 - after this phase, Oxygen's depth convention matches UE5's
 
-Status: `not_started`
+Current implementation:
+
+- engine-facing cameras now build reversed-Z projections through
+  `MakeReversedZPerspectiveProjectionRH_ZO()` and
+  `MakeReversedZOrthographicProjectionRH_ZO()`
+- scene/view metadata defaults now treat reversed-Z as the engine standard
+- the main depth consumers now use reversed-Z comparisons:
+  - `DepthPrePass`
+  - `ShaderPass`
+  - `TransparentPass`
+  - `WireframePass`
+  - `SkyPass`
+- the D3D12 shadow comparison sampler now uses `GREATER_EQUAL`
+- scene HZB and VSM HZB generation were flipped to reversed-Z reduction
+- depth-prepass output now publishes reversed-Z convention metadata
+- the main scene depth target now uses reversed-Z clear values in:
+  - `CompositionViewImpl`
+  - `ForwardPipeline`
+  - `DepthPrePass`
+- conventional directional shadows now use reversed-Z for:
+  - depth resource clear values
+  - directional frustum near/far reconstruction
+  - orthographic light projection setup
+
+Validation evidence so far:
+
+- focused tests already proven green in this remediation wave:
+  - `Oxygen.Renderer.DepthPrePass.Tests`
+  - `Oxygen.Renderer.ScreenHzb.Tests`
+  - `Oxygen.Scene.PerspectiveCamera.Tests`
+  - `Oxygen.Scene.OrthographicCamera.Tests`
+  - `Oxygen.Renderer.Frustum.Tests`
+  - `Oxygen.Scripting.Bindings.Tests --gtest_filter=ConventionsBindingsTest.ExecuteScriptConventionsExposeEngineCoordinateLaw`
+- conventional-shadow regression fix validation:
+  - `Oxygen.Renderer.ShadowManagerPolicy.Tests` passes after the reversed-Z
+    conventional-shadow fixes
+  - runtime evidence:
+    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_debuglayer.log`
+      captured the pre-fix failure:
+      - `invalid camera depth span ... skipping directional shadows`
+      - `no shadow products were published`
+    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_debuglayer_postfix2.log`
+      shows that failure is gone on the rebuilt binary
+  - replay evidence:
+    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60_frame60.rdc`
+    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60.shadow_inner_timing.txt`
+    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60.shadow_inner_focus.txt`
+    - this proves `ConventionalShadowRasterPass.ShadowDepthWork` is executing
+      again with 4 clear events and 4 draw events on shadow slices `0..3`
+  - post-fix runtime smoke on the current `Debug` binary:
+    - `out/build-ninja/analysis/conventional_shadow_runtime_debug_after_biasfix.log`
+    - no D3D12 warnings/errors, no invalid depth-span publication failure, and
+      stable conventional-shadow execution through the frame run
+  - live visual validation:
+    - user-confirmed disappearance of the widespread periodic receiver acne in
+      `RenderScene` after the reversed-Z raster-bias sign fix
+
+Scope correction as of April 1, 2026:
+
+- DP-5 exit is no longer blocked on VSM harness/test failures.
+- The phase closes on engine-wide reversed-Z migration for scene depth,
+  downstream consumers, HZB/light-culling behavior, and conventional
+  directional shadows.
+- Remaining VSM instability is tracked as a separate follow-up and must not be
+  used to keep the depth-prepass reversed-Z phase artificially open.
+
+Summary of DP-5 deliverables:
+
+1. Scene-depth convention migrated to reversed-Z.
+   - cameras, view metadata, clears, depth compares, and canonical depth
+     products now follow near=`1.0`, far=`0.0`, clear=`0.0`,
+     compare=`GREATER_EQUAL`
+2. Downstream depth consumers updated to the same convention.
+   - HZB generation, clustered light culling, and scene-depth consumers now
+     reason about reversed-Z explicitly
+3. Conventional directional shadows aligned with engine reversed-Z.
+   - resource clears, frustum near/far reconstruction, orthographic light
+     projection, shadow comparison sampling, and raster bias direction are now
+     coherent with reversed-Z
+4. Depth-path documentation updated to describe reversed-Z as the canonical
+   renderer contract.
+
+Single pending follow-up moved out of the DP-5 exit gate:
+
+1. VSM reversed-Z harness/test failures
+   - normalize the remaining VSM harness/tests to the engine reversed-Z
+     helpers and fix the remaining VSM suites that still fail under the new
+     convention
+
+Remaining gap for DP-5 itself:
+
+- none
+
+Status: `completed`
 
 ### Phase DP-6: Rework Downstream Consumers To Exploit Depth Better
 

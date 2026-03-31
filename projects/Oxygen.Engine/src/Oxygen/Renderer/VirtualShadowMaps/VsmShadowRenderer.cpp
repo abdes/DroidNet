@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -445,24 +446,40 @@ namespace {
       glm::vec2(-1.0F, 1.0F),
     };
 
-    auto context = DirectionalFrustumContext {};
-    for (std::size_t i = 0; i < clip_corners.size(); ++i) {
-      context.near_corners_ws[i]
-        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
-      context.far_corners_ws[i]
-        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
-      context.near_corners_vs[i]
-        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
-      context.far_corners_vs[i]
-        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
-    }
+    auto clip_zero_corners_ws = std::array<glm::vec3, 4> {};
+    auto clip_one_corners_ws = std::array<glm::vec3, 4> {};
+    auto clip_zero_corners_vs = std::array<glm::vec3, 4> {};
+    auto clip_one_corners_vs = std::array<glm::vec3, 4> {};
+    auto clip_zero_depth = 0.0F;
+    auto clip_one_depth = 0.0F;
 
-    for (std::size_t i = 0; i < context.near_corners_vs.size(); ++i) {
-      context.near_depth += std::max(0.0F, -context.near_corners_vs[i].z);
-      context.far_depth += std::max(0.0F, -context.far_corners_vs[i].z);
+    for (std::size_t i = 0; i < clip_corners.size(); ++i) {
+      clip_zero_corners_ws[i]
+        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 0.0F));
+      clip_one_corners_ws[i]
+        = TransformPoint(inv_view_proj, glm::vec3(clip_corners[i], 1.0F));
+      clip_zero_corners_vs[i]
+        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 0.0F));
+      clip_one_corners_vs[i]
+        = TransformPoint(inv_proj, glm::vec3(clip_corners[i], 1.0F));
+      clip_zero_depth += std::max(0.0F, -clip_zero_corners_vs[i].z);
+      clip_one_depth += std::max(0.0F, -clip_one_corners_vs[i].z);
     }
-    context.near_depth /= static_cast<float>(context.near_corners_vs.size());
-    context.far_depth /= static_cast<float>(context.far_corners_vs.size());
+    clip_zero_depth /= static_cast<float>(clip_corners.size());
+    clip_one_depth /= static_cast<float>(clip_corners.size());
+
+    auto context = DirectionalFrustumContext {};
+    const auto clip_zero_is_near = clip_zero_depth <= clip_one_depth;
+    context.near_corners_ws
+      = clip_zero_is_near ? clip_zero_corners_ws : clip_one_corners_ws;
+    context.far_corners_ws
+      = clip_zero_is_near ? clip_one_corners_ws : clip_zero_corners_ws;
+    context.near_corners_vs
+      = clip_zero_is_near ? clip_zero_corners_vs : clip_one_corners_vs;
+    context.far_corners_vs
+      = clip_zero_is_near ? clip_one_corners_vs : clip_zero_corners_vs;
+    context.near_depth = clip_zero_is_near ? clip_zero_depth : clip_one_depth;
+    context.far_depth = clip_zero_is_near ? clip_one_depth : clip_zero_depth;
 
     if (context.far_depth <= context.near_depth + kMinCascadeSpan) {
       return std::nullopt;
@@ -596,8 +613,9 @@ namespace {
     const auto far_plane
       = std::max(near_plane + 1.0F, -min_depth + depth_padding);
     const auto light_projection
-      = glm::orthoRH_ZO(-padded_half_extent_x, padded_half_extent_x,
-        -padded_half_extent_y, padded_half_extent_y, near_plane, far_plane);
+      = oxygen::MakeReversedZOrthographicProjectionRH_ZO(-padded_half_extent_x,
+        padded_half_extent_x, -padded_half_extent_y, padded_half_extent_y,
+        near_plane, far_plane);
 
     return DirectionalClipLevelState {
       .light_view = light_view,
@@ -884,8 +902,9 @@ namespace {
       const auto outer_cone_angle = std::clamp(
         2.0F * std::acos(std::clamp(light.outer_cone_cos, -1.0F, 1.0F)),
         glm::radians(1.0F), glm::radians(175.0F));
-      const auto light_projection = glm::perspectiveRH_ZO(
-        outer_cone_angle, 1.0F, 0.1F, std::max(light.range, 0.2F));
+      const auto light_projection
+        = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+          outer_cone_angle, 1.0F, 0.1F, std::max(light.range, 0.2F));
 
       projection_records.push_back(VsmPageRequestProjection {
       .projection = VsmProjectionData {

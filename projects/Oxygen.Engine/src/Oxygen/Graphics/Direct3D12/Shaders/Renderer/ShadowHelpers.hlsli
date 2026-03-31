@@ -92,7 +92,7 @@ static inline DirectionalShadowProjection ProjectDirectionalShadowCascade(
 {
     DirectionalShadowProjection projection;
     projection.uv = 0.0.xx;
-    projection.receiver_depth = 1.0;
+    projection.receiver_depth = 0.0;
     projection.valid = false;
 
     const float4 shadow_clip =
@@ -109,7 +109,7 @@ static inline DirectionalShadowProjection ProjectDirectionalShadowCascade(
     projection.valid =
         projection.uv.x >= 0.0 && projection.uv.x <= 1.0
         && projection.uv.y >= 0.0 && projection.uv.y <= 1.0
-        && projection.receiver_depth > 0.0 && projection.receiver_depth < 1.0;
+        && projection.receiver_depth >= 0.0 && projection.receiver_depth <= 1.0;
     return projection;
 }
 
@@ -166,7 +166,7 @@ static inline float SampleDirectionalShadowPcf3x3(
         for (int x = -1; x <= 1; ++x) {
             const int2 coord = clamp(center + int2(x, y), int2(0, 0), texture_size - 1);
             const float stored_depth = shadow_texture.Load(int4(coord, (int)layer, 0));
-            visibility += receiver_depth <= stored_depth + 0.0005 ? 1.0 : 0.0;
+            visibility += receiver_depth >= stored_depth - 0.0005 ? 1.0 : 0.0;
         }
     }
 

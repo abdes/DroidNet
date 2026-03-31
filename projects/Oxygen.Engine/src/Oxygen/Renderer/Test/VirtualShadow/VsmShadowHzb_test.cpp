@@ -70,10 +70,10 @@ protected:
     };
   }
 
-  [[nodiscard]] static auto MinReduce4(
+  [[nodiscard]] static auto MaxReduce4(
     const float a, const float b, const float c, const float d) -> float
   {
-    return std::min(std::min(a, b), std::min(c, d));
+    return std::max(std::max(a, b), std::max(c, d));
   }
 
   [[nodiscard]] static auto SnapshotValue(
@@ -131,7 +131,7 @@ protected:
       expected = result.hzb_before_mips;
     } else {
       for (const auto& mip : result.hzb_before_mips) {
-        expected.push_back(MakeFilledSnapshot(mip.width, mip.height, 1.0F));
+        expected.push_back(MakeFilledSnapshot(mip.width, mip.height, 0.0F));
       }
     }
 
@@ -165,11 +165,11 @@ protected:
             const auto source_x = source_base_x + local_x * 2U;
             const auto source_y = source_base_y + local_y * 2U;
             const auto reduced_depth = mip_level == 0U
-              ? MinReduce4(result.merge.dynamic_after.At(source_x, source_y),
+              ? MaxReduce4(result.merge.dynamic_after.At(source_x, source_y),
                   result.merge.dynamic_after.At(source_x + 1U, source_y),
                   result.merge.dynamic_after.At(source_x, source_y + 1U),
                   result.merge.dynamic_after.At(source_x + 1U, source_y + 1U))
-              : MinReduce4(
+              : MaxReduce4(
                   SnapshotValue(expected[mip_level - 1U], source_x, source_y),
                   SnapshotValue(
                     expected[mip_level - 1U], source_x + 1U, source_y),
@@ -198,7 +198,7 @@ protected:
           const auto source_y = y * 2U;
           destination
             .values[static_cast<std::size_t>(y) * destination.width + x]
-            = MinReduce4(SnapshotValue(source, source_x, source_y),
+            = MaxReduce4(SnapshotValue(source, source_x, source_y),
               SnapshotValue(source, source_x + 1U, source_y),
               SnapshotValue(source, source_x, source_y + 1U),
               SnapshotValue(source, source_x + 1U, source_y + 1U));

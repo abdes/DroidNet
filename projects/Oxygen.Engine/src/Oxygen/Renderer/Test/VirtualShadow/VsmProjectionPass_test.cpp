@@ -336,7 +336,7 @@ protected:
     desc.is_render_target = true;
     desc.is_typeless = true;
     desc.use_clear_value = true;
-    desc.clear_value = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+    desc.clear_value = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     desc.initial_state = ResourceStates::kCommon;
     desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(desc);

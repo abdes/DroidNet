@@ -75,10 +75,16 @@ struct LightCullingPassConstants
 // Group shared memory for tile/cluster-based processing
 groupshared uint s_ClusterLightCount;
 groupshared uint s_ClusterLightIndices[MAX_LIGHTS_PER_CLUSTER];
-groupshared float s_ClusterDepthMin;
-groupshared float s_ClusterDepthMax;
+groupshared float s_ClusterDepthNear;
+groupshared float s_ClusterDepthFar;
 groupshared float s_DepthTileMin[TILE_SIZE * TILE_SIZE];
 groupshared float s_DepthTileMax[TILE_SIZE * TILE_SIZE];
+
+float DeviceDepthFromLinearViewDepth(float linear_depth)
+{
+    const float4 clip = mul(projection_matrix, float4(0.0, 0.0, -linear_depth, 1.0));
+    return clip.z / max(clip.w, 1.0e-6);
+}
 
 // Convert screen coordinates to view space position
 float3 ScreenToView(float2 screenPos, float depth, float2 screenDimensions,
@@ -118,26 +124,26 @@ void CalculateTileFrustum(uint2 tileID, float2 screen_dimensions,
     tileMax = min(tileMax, screen_dimensions);
 
     // Use shared memory depth bounds (these are normalized 0-1 depth values)
-    float normMinDepth = s_ClusterDepthMin;
-    float normMaxDepth = s_ClusterDepthMax;
+    float normNearDepth = s_ClusterDepthNear;
+    float normFarDepth = s_ClusterDepthFar;
 
     // Calculate frustum corner points in view space
     float3 frustumCorners[8];
-    frustumCorners[0] = ScreenToView(float2(tileMin.x, tileMin.y), normMinDepth,
+    frustumCorners[0] = ScreenToView(float2(tileMin.x, tileMin.y), normNearDepth,
                                      screen_dimensions, inv_projection_matrix); // NBL
-    frustumCorners[1] = ScreenToView(float2(tileMax.x, tileMin.y), normMinDepth,
+    frustumCorners[1] = ScreenToView(float2(tileMax.x, tileMin.y), normNearDepth,
                                      screen_dimensions, inv_projection_matrix); // NBR
-    frustumCorners[2] = ScreenToView(float2(tileMax.x, tileMax.y), normMinDepth,
+    frustumCorners[2] = ScreenToView(float2(tileMax.x, tileMax.y), normNearDepth,
                                      screen_dimensions, inv_projection_matrix); // NTR
-    frustumCorners[3] = ScreenToView(float2(tileMin.x, tileMax.y), normMinDepth,
+    frustumCorners[3] = ScreenToView(float2(tileMin.x, tileMax.y), normNearDepth,
                                      screen_dimensions, inv_projection_matrix); // NTL
-    frustumCorners[4] = ScreenToView(float2(tileMin.x, tileMin.y), normMaxDepth,
+    frustumCorners[4] = ScreenToView(float2(tileMin.x, tileMin.y), normFarDepth,
                                      screen_dimensions, inv_projection_matrix); // FBL
-    frustumCorners[5] = ScreenToView(float2(tileMax.x, tileMin.y), normMaxDepth,
+    frustumCorners[5] = ScreenToView(float2(tileMax.x, tileMin.y), normFarDepth,
                                      screen_dimensions, inv_projection_matrix); // FBR
-    frustumCorners[6] = ScreenToView(float2(tileMax.x, tileMax.y), normMaxDepth,
+    frustumCorners[6] = ScreenToView(float2(tileMax.x, tileMax.y), normFarDepth,
                                      screen_dimensions, inv_projection_matrix); // FTR
-    frustumCorners[7] = ScreenToView(float2(tileMin.x, tileMax.y), normMaxDepth,
+    frustumCorners[7] = ScreenToView(float2(tileMin.x, tileMax.y), normFarDepth,
                                      screen_dimensions, inv_projection_matrix); // FTL
 
     // Calculate the geometric center of the frustum, used to ensure normals point inward.
@@ -250,15 +256,17 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
     // Initialize shared memory on first thread
     if (groupIndex == 0) {
         s_ClusterLightCount = 0;
-        s_ClusterDepthMin = 1.0f; // Far plane (assuming depth 0=near, 1=far)
-        s_ClusterDepthMax = 0.0f; // Near plane
+        s_ClusterDepthNear = 1.0f;
+        s_ClusterDepthFar = 0.0f;
     }
 
     GroupMemoryBarrierWithGroupSync(); // Sync after init
 
     // Sample depth buffer to determine tile depth bounds
     Texture2D<float> depth_tex = ResourceDescriptorHeap[depth_texture_index];
-    float depth = 1.0f;
+    // Under reversed-Z, an out-of-bounds sample should behave like the far
+    // plane, not the near plane.
+    float depth = 0.0f;
     if (all(pixelCoord < uint2(screen_dimensions))) { // Boundary check
         depth = depth_tex.Load(int3(pixelCoord, 0)).r;
     }
@@ -299,16 +307,16 @@ void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint
         slice_near_linear = clamp(slice_near_linear, z_near, z_far);
         slice_far_linear = clamp(slice_far_linear, z_near, z_far);
 
-        // Convert linear depth to NDC depth for standard D3D12 (0=near, 1=far)
-        // Formula: ndc = (1 - z_near/z) * z_far / (z_far - z_near)
-        // At z=z_near: ndc=0, At z=z_far: ndc=1
-        float range = z_far - z_near;
-        s_ClusterDepthMin = (1.0 - z_near / slice_near_linear) * z_far / range;  // Near edge (smaller NDC)
-        s_ClusterDepthMax = (1.0 - z_near / slice_far_linear) * z_far / range;   // Far edge (larger NDC)
+        // Convert linear view depth back to device depth through the active
+        // projection matrix so clustered frusta honor the engine's canonical
+        // reversed-Z convention without hardcoding forward-Z formulas.
+        s_ClusterDepthNear = DeviceDepthFromLinearViewDepth(slice_near_linear);
+        s_ClusterDepthFar = DeviceDepthFromLinearViewDepth(slice_far_linear);
 #else
-        // Tile-based: use the per-tile min/max from depth reduction
-        s_ClusterDepthMin = clamp(s_DepthTileMin[0], 0.0f, 1.0f);
-        s_ClusterDepthMax = clamp(s_DepthTileMax[0], 0.0f, 1.0f);
+        // Tile-based: use the per-tile device-depth extrema. Under reversed-Z
+        // the nearest surface has the largest device-depth value.
+        s_ClusterDepthNear = clamp(s_DepthTileMax[0], 0.0f, 1.0f);
+        s_ClusterDepthFar = clamp(s_DepthTileMin[0], 0.0f, 1.0f);
 #endif
         s_ClusterLightCount = 0;
     }

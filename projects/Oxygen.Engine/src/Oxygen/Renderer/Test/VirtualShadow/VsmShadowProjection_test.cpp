@@ -61,7 +61,7 @@ struct ProbeSample {
 
 struct CpuProjectedSample {
   glm::vec2 atlas_uv {};
-  float receiver_depth { 1.0F };
+  float receiver_depth { 0.0F };
   std::uint32_t physical_page_index { 0U };
   std::uint32_t atlas_slice { 0U };
   glm::uvec2 atlas_texel_origin { 0U, 0U };
@@ -78,10 +78,10 @@ struct CpuDirectionalRouteDebug {
   float dynamic_before_visibility { 1.0F };
   float static_before_visibility { 1.0F };
   float dynamic_after_visibility { 1.0F };
-  float receiver_depth { 1.0F };
-  std::array<float, 4> tap_depths { 1.0F, 1.0F, 1.0F, 1.0F };
-  float tall_box_min_depth { 1.0F };
-  float tall_box_max_depth { 1.0F };
+  float receiver_depth { 0.0F };
+  std::array<float, 4> tap_depths { 0.0F, 0.0F, 0.0F, 0.0F };
+  float tall_box_min_depth { 0.0F };
+  float tall_box_max_depth { 0.0F };
   std::uint32_t level { std::numeric_limits<std::uint32_t>::max() };
   std::uint32_t page_table_index { std::numeric_limits<std::uint32_t>::max() };
   std::uint32_t physical_page_index {
@@ -95,7 +95,7 @@ struct CpuDirectionalRouteDebug {
     std::numeric_limits<std::uint32_t>::max(),
   };
   std::uint32_t covered_texel_count { 0U };
-  float page_min_depth { 1.0F };
+  float page_min_depth { 0.0F };
   glm::uvec2 sample_texel { 0U, 0U };
   glm::uvec2 covered_min { 0U, 0U };
   glm::uvec2 covered_max { 0U, 0U };
@@ -110,8 +110,8 @@ struct CpuDirectionalRouteCandidate {
     std::numeric_limits<std::uint32_t>::max()
   };
   float visibility { 1.0F };
-  float receiver_depth { 1.0F };
-  std::array<float, 4> tap_depths { 1.0F, 1.0F, 1.0F, 1.0F };
+  float receiver_depth { 0.0F };
+  std::array<float, 4> tap_depths { 0.0F, 0.0F, 0.0F, 0.0F };
 };
 
 class VsmShadowProjectionLiveSceneTest : public VsmLiveSceneHarness {
@@ -302,9 +302,9 @@ protected:
         - (2.0F * (static_cast<float>(y) + 0.5F)
           / static_cast<float>(kOutputHeight));
       auto near_point
-        = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
-      auto far_point
         = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 1.0F, 1.0F };
+      auto far_point
+        = inverse_view_projection * glm::vec4 { ndc_x, ndc_y, 0.0F, 1.0F };
       near_point /= near_point.w;
       far_point /= far_point.w;
       const auto origin = glm::vec3 { near_point };
@@ -687,7 +687,7 @@ protected:
             * static_cast<float>(page_size_texels)
           + page_uv * static_cast<float>(page_size_texels))
         / atlas_extent,
-      .receiver_depth = std::clamp(ndc.z - receiver_depth_bias, 0.0F, 1.0F),
+      .receiver_depth = std::clamp(ndc.z + receiver_depth_bias, 0.0F, 1.0F),
       .physical_page_index = physical_page_index,
       .atlas_slice = atlas_slice,
       .atlas_texel_origin = atlas_texel_origin,
@@ -726,7 +726,7 @@ protected:
           = glm::clamp(base + glm::ivec2 { x, y }, min_coord, max_coord);
         const auto stored_depth = slice.At(static_cast<std::uint32_t>(coord.x),
           static_cast<std::uint32_t>(coord.y));
-        visibility += receiver_depth <= stored_depth ? 1.0F : 0.0F;
+        visibility += receiver_depth >= stored_depth ? 1.0F : 0.0F;
       }
     }
 
@@ -825,7 +825,7 @@ protected:
       max_depth = (std::max)(max_depth, ndc_z);
     }
     if (min_depth == std::numeric_limits<float>::max()) {
-      return { 1.0F, 1.0F };
+      return { 0.0F, 0.0F };
     }
     return { min_depth, max_depth };
   }
@@ -938,8 +938,8 @@ protected:
       if (!best.has_sample
         || projection.projection.clipmap_level < best.level) {
         auto covered_texel_count = 0U;
-        auto page_min_depth = 1.0F;
-        auto tap_depths = std::array<float, 4> { 1.0F, 1.0F, 1.0F, 1.0F };
+        auto page_min_depth = 0.0F;
+        auto tap_depths = std::array<float, 4> { 0.0F, 0.0F, 0.0F, 0.0F };
         constexpr auto kLocalCubeBounds = AxisAlignedBox {
           .min = glm::vec3 { -0.5F, 0.0F, -0.5F },
           .max = glm::vec3 { 0.5F, 1.0F, 0.5F },
@@ -988,8 +988,8 @@ protected:
           for (auto x = 0U; x < pool.page_size_texels; ++x) {
             const auto depth = slice->At(sample->atlas_texel_origin.x + x,
               sample->atlas_texel_origin.y + y);
-            page_min_depth = (std::min)(page_min_depth, depth);
-            if (depth < 0.9999F) {
+            page_min_depth = (std::max)(page_min_depth, depth);
+            if (depth > 0.0001F) {
               ++covered_texel_count;
               covered_min = glm::min(covered_min, glm::uvec2 { x, y });
               covered_max = glm::max(covered_max, glm::uvec2 { x, y });
@@ -1076,7 +1076,7 @@ protected:
           static_cast<int>(
             sample->atlas_texel_origin.y + pool.page_size_texels - 1U)),
       };
-      auto tap_depths = std::array<float, 4> { 1.0F, 1.0F, 1.0F, 1.0F };
+      auto tap_depths = std::array<float, 4> { 0.0F, 0.0F, 0.0F, 0.0F };
       for (auto y = 0; y < 2; ++y) {
         for (auto x = 0; x < 2; ++x) {
           const auto coord

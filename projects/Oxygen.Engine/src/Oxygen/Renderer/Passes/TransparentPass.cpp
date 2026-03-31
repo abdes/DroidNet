@@ -323,7 +323,7 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = (GetDepthTexture() != nullptr),
     .depth_write_enable = false, // transparent: no depth writes
-    .depth_func = CompareOp::kLessOrEqual,
+    .depth_func = CompareOp::kGreaterOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,

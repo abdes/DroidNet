@@ -107,7 +107,7 @@ private:
   ViewPort viewport_ {};
   Scissors scissor_ {};
   glm::vec2 pixel_jitter_ { 0.0f, 0.0f };
-  bool reverse_z_ = false;
+  bool reverse_z_ = true;
   bool mirrored_ = false;
   glm::vec3 camera_position_ { 0.0f, 0.0f, 0.0f };
   std::optional<float> camera_ev_ {};

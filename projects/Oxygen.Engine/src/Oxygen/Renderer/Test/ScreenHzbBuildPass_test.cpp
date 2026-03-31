@@ -109,7 +109,7 @@ protected:
     texture_desc.is_typeless = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+      = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
@@ -307,7 +307,7 @@ NOLINT_TEST_F(ScreenHzbBuildGpuTest,
   EXPECT_FLOAT_EQ(
     ReadMipTexel(current.texture, 1U, 1U, 1U, "screen-hzb.mip1.11"), 0.2F);
   EXPECT_FLOAT_EQ(
-    ReadMipTexel(current.texture, 2U, 0U, 0U, "screen-hzb.mip2.00"), 0.2F);
+    ReadMipTexel(current.texture, 2U, 0U, 0U, "screen-hzb.mip2.00"), 0.8F);
 }
 
 NOLINT_TEST_F(
@@ -346,10 +346,10 @@ NOLINT_TEST_F(
 
   EXPECT_FLOAT_EQ(
     ReadMipTexel(previous.texture, 2U, 0U, 0U, "screen-hzb-history.prev"),
-    0.3F);
+    0.9F);
   EXPECT_FLOAT_EQ(
     ReadMipTexel(current.texture, 2U, 0U, 0U, "screen-hzb-history.curr"),
-    0.25F);
+    0.85F);
 }
 
 NOLINT_TEST_F(ScreenHzbBuildGpuTest,
@@ -386,7 +386,7 @@ NOLINT_TEST_F(ScreenHzbBuildGpuTest,
   EXPECT_EQ(current.mip_count, 4U);
   EXPECT_FLOAT_EQ(
     ReadMipTexel(current.texture, 3U, 0U, 0U, "screen-hzb-recreate.curr"),
-    0.2F);
+    0.8F);
 }
 
 } // namespace

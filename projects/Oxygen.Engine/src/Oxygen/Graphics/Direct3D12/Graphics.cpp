@@ -257,11 +257,11 @@ protected:
           sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
           sampler_desc.MipLODBias = 0.0f;
           sampler_desc.MaxAnisotropy = 1;
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-          sampler_desc.BorderColor[0] = 1.0f;
-          sampler_desc.BorderColor[1] = 1.0f;
-          sampler_desc.BorderColor[2] = 1.0f;
-          sampler_desc.BorderColor[3] = 1.0f;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
+          sampler_desc.BorderColor[0] = 0.0f;
+          sampler_desc.BorderColor[1] = 0.0f;
+          sampler_desc.BorderColor[2] = 0.0f;
+          sampler_desc.BorderColor[3] = 0.0f;
           sampler_desc.MinLOD = 0.0f;
           sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
 

@@ -273,7 +273,7 @@ auto WireframePass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     && config_->depth_write_enable && depth_texture_ptr;
   if (clear_depth) {
     recorder.ClearDepthStencilView(
-      *depth_texture_ptr, dsv, graphics::ClearFlags::kDepth, 1.0F, 0);
+      *depth_texture_ptr, dsv, graphics::ClearFlags::kDepth, 0.0F, 0);
   }
 
   const bool clear_enabled = (!config_) || config_->clear_color_target;
@@ -450,7 +450,7 @@ auto WireframePass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = has_depth,
     .depth_write_enable = depth_write_enable,
-    .depth_func = CompareOp::kLessOrEqual,
+    .depth_func = CompareOp::kGreaterOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,

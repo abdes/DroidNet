@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::scene {
@@ -31,8 +32,9 @@ namespace oxygen::scene {
 */
 auto PerspectiveCamera::ProjectionMatrix() const -> Mat4
 {
-  // Engine canonical projection: right-handed, z in [0,1], no Y-flip.
-  const auto proj = glm::perspectiveRH_ZO(fov_y_, aspect_, near_, far_);
+  // Engine canonical projection: right-handed, z in [0,1], reversed-Z.
+  const auto proj
+    = MakeReversedZPerspectiveProjectionRH_ZO(fov_y_, aspect_, near_, far_);
   return proj;
 }
 

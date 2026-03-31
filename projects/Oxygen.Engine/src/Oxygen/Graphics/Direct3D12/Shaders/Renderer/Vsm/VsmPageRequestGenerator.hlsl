@@ -160,7 +160,7 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass_constants.page_request_flags_uav_index];
 
     const float depth = depth_tex.Load(int3(dispatch_thread_id.xy, 0)).r;
-    if (depth >= 1.0f) {
+    if (depth <= 0.0f) {
         return;
     }
 

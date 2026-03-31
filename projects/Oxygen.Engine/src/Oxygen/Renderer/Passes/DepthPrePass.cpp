@@ -320,7 +320,7 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     output_reverse_z_ = resolved_view->ReverseZ();
   } else {
     output_ndc_depth_range_ = oxygen::NdcDepthRange::ZeroToOne;
-    output_reverse_z_ = false;
+    output_reverse_z_ = true;
   }
 
   if (PublishesCanonicalDepthOutput()) {
@@ -676,13 +676,13 @@ auto DepthPrePass::ClearDepthStencilView(CommandRecorder& command_recorder,
     && valid_rect.right == full_rect.right
     && valid_rect.bottom == full_rect.bottom) {
     command_recorder.ClearDepthStencilView(
-      GetDepthTexture(), dsv_handle, graphics::ClearFlags::kDepth, 1.0f, 0);
+      GetDepthTexture(), dsv_handle, graphics::ClearFlags::kDepth, 0.0f, 0);
     return;
   }
 
   const std::array clear_rects { valid_rect };
   command_recorder.ClearDepthStencilView(GetDepthTexture(), dsv_handle,
-    graphics::ClearFlags::kDepth, 1.0f, 0, clear_rects);
+    graphics::ClearFlags::kDepth, 0.0f, 0, clear_rects);
 }
 
 auto DepthPrePass::SetupRenderTargets(CommandRecorder& command_recorder,
@@ -739,7 +739,7 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   constexpr DepthStencilStateDesc ds_desc {
     .depth_test_enable = true, // Enable depth testing
     .depth_write_enable = true, // Enable writing to depth buffer
-    .depth_func = CompareOp::kLessOrEqual, // Typical depth comparison function
+    .depth_func = CompareOp::kGreaterOrEqual, // Reversed-Z depth comparison
     .stencil_enable = false, // Stencil testing usually disabled unless required
     .stencil_read_mask = 0xFF, // full-mask for reading stencil buffer
     .stencil_write_mask = 0xFF, // full-mask for writing to stencil buffer

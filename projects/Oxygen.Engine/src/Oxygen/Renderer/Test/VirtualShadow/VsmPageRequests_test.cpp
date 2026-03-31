@@ -21,6 +21,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
@@ -211,10 +212,10 @@ protected:
       const auto* row = data.bytes.data()
         + static_cast<std::size_t>(y) * data.layout.row_pitch.get();
       for (std::uint32_t x = 0U; x < data.layout.width; ++x) {
-        auto depth = 1.0F;
+        auto depth = 0.0F;
         std::memcpy(&depth, row + static_cast<std::size_t>(x) * sizeof(float),
           sizeof(depth));
-        if (depth >= 1.0F) {
+        if (depth <= 1.0e-6F) {
           continue;
         }
         visible_samples.push_back(VsmVisiblePixelSample {
@@ -309,7 +310,8 @@ protected:
       .view_config = view_config,
       .view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
         glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-      .proj_matrix = glm::perspectiveRH_ZO(glm::radians(90.0F),
+      .proj_matrix
+      = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(glm::radians(90.0F),
         static_cast<float>(width) / static_cast<float>(height), 0.1F, 100.0F),
       .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
       .depth_range = oxygen::NdcDepthRange::ZeroToOne,

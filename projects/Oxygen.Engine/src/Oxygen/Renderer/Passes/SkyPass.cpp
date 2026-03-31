@@ -525,12 +525,12 @@ auto SkyPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   }
 
   // Restore hardware depth-stencil state for sky pass.
-  // Use CompareOp::kLessOrEqual to ensure sky is only drawn at the far plane
-  // (background), preventing it from drawing over opaque geometry.
+  // Use CompareOp::kGreaterOrEqual with fullscreen depth at z=0 so sky is
+  // only drawn where depth stayed at the far-plane clear value.
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = has_depth,
     .depth_write_enable = false,
-    .depth_func = CompareOp::kLessOrEqual,
+    .depth_func = CompareOp::kGreaterOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF,
     .stencil_write_mask = 0xFF,

@@ -11,6 +11,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPageRequestGeneration.h>
 
 #include "VirtualShadowTestFixtures.h"
@@ -42,7 +43,8 @@ protected:
     = oxygen::renderer::vsm::kVsmInvalidCubeFaceIndex,
     const glm::mat4& view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
       glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F }),
-    const glm::mat4& projection_matrix = glm::perspectiveRH_ZO(
+    const glm::mat4& projection_matrix
+    = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
       glm::radians(90.0F), 1.0F, 0.1F, 100.0F)) -> VsmPageRequestProjection
   {
     return VsmPageRequestProjection {

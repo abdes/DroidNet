@@ -108,7 +108,7 @@ void CS_ProjectDirectional(uint3 dispatch_thread_id : SV_DispatchThreadID)
         ResourceDescriptorHeap[pass_constants.shadow_texture_srv_index];
 
     const float depth = scene_depth.Load(int3(dispatch_thread_id.xy, 0));
-    if (depth >= 1.0) {
+    if (depth <= 0.0) {
         return;
     }
 

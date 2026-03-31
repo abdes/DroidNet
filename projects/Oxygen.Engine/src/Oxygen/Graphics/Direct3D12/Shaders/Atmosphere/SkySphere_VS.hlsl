@@ -15,7 +15,7 @@
 //! Vertex shader output for sky rendering.
 struct SkyVSOutput
 {
-    float4 position : SV_POSITION; //!< Clip-space position (z=1 for far plane).
+    float4 position : SV_POSITION; //!< Clip-space position (z=0 for far plane).
     float3 view_dir : TEXCOORD0;   //!< World-space view direction (unnormalized).
     float2 uv : TEXCOORD1;         //!< Screen UV coordinates.
 };

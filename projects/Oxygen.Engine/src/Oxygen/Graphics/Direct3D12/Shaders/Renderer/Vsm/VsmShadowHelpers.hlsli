@@ -35,7 +35,7 @@ static bool VsmTryProjectMappedSample(
     out VsmProjectedShadowSample sample)
 {
     sample.atlas_uv = 0.0.xx;
-    sample.receiver_depth = 1.0;
+    sample.receiver_depth = 0.0;
     sample.physical_page_index = 0u;
     sample.atlas_slice = 0u;
     sample.atlas_texel_origin = 0u.xx;
@@ -102,7 +102,7 @@ static bool VsmTryProjectMappedSample(
     const float atlas_extent = (float)(tiles_per_axis * page_size_texels);
     sample.atlas_uv = (float2(tile_x, tile_y) * (float)page_size_texels
         + page_uv * (float)page_size_texels) / atlas_extent;
-    sample.receiver_depth = saturate(ndc.z - VsmReceiverDepthBias(projection.projection));
+    sample.receiver_depth = saturate(ndc.z + VsmReceiverDepthBias(projection.projection));
     sample.physical_page_index = physical_page_index;
     sample.atlas_slice = atlas_slice;
     sample.atlas_texel_origin = atlas_texel_origin;
@@ -122,7 +122,7 @@ static bool VsmTryProjectDirectionalSampleWithFallback(
     out VsmProjectedShadowSample sample)
 {
     sample.atlas_uv = 0.0.xx;
-    sample.receiver_depth = 1.0;
+    sample.receiver_depth = 0.0;
     sample.physical_page_index = 0u;
     sample.atlas_slice = 0u;
     sample.atlas_texel_origin = 0u.xx;
@@ -191,7 +191,7 @@ static float VsmSampleVisibilityPcf2x2(
         for (int x = 0; x < 2; ++x) {
             const int2 coord = clamp(base + int2(x, y), min_coord, max_coord);
             const float stored_depth = shadow_texture.Load(int4(coord, (int)atlas_slice, 0));
-            visibility += receiver_depth <= stored_depth ? 1.0 : 0.0;
+            visibility += receiver_depth >= stored_depth ? 1.0 : 0.0;
         }
     }
 

@@ -392,7 +392,7 @@ protected:
     texture_desc.is_render_target = true;
     texture_desc.use_clear_value = true;
     texture_desc.clear_value
-      = oxygen::graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+      = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = oxygen::graphics::ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
