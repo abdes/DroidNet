@@ -589,46 +589,27 @@ auto AutoExposurePass::UpdateHistogramConstants(
   auto& graphics = Context().GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
+  const auto& tex_desc = config_->source_texture->GetDescriptor();
+  graphics::TextureViewDescription srv_desc {
+    .view_type = graphics::ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = tex_desc.format,
+    .dimension = tex_desc.texture_type,
+    .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+    .is_read_only_dsv = false,
+  };
 
-  if (!source_texture_srv_index_.IsValid()
-    || last_source_texture_ != config_->source_texture) {
-    const auto& tex_desc = config_->source_texture->GetDescriptor();
-    graphics::TextureViewDescription srv_desc {
-      .view_type = graphics::ResourceViewType::kTexture_SRV,
-      .visibility = graphics::DescriptorVisibility::kShaderVisible,
-      .format = tex_desc.format,
-      .dimension = tex_desc.texture_type,
-      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      .is_read_only_dsv = false,
-    };
-
-    // If an equivalent view is already registered, reuse its shader-visible
-    // index instead of allocating and attempting to re-register the view.
-    if (registry.Contains(*config_->source_texture, srv_desc)) {
-      if (auto maybe_index
-        = registry.FindShaderVisibleIndex(*config_->source_texture, srv_desc);
-        maybe_index.has_value()) {
-        source_texture_srv_index_ = *maybe_index;
-        last_source_texture_ = config_->source_texture;
-      } else {
-        // Fallback: allocate and register (should be rare/edge-case)
-        auto handle
-          = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-            graphics::DescriptorVisibility::kShaderVisible);
-        if (!handle.IsValid()) {
-          throw std::runtime_error("AutoExposurePass: failed to allocate "
-                                   "source texture SRV descriptor");
-        }
-        source_texture_srv_index_ = allocator.GetShaderVisibleIndex(handle);
-        const auto view = registry.RegisterView(
-          *config_->source_texture, std::move(handle), srv_desc);
-        if (!view->IsValid()) {
-          throw std::runtime_error(
-            "AutoExposurePass: failed to register source texture SRV view");
-        }
-        last_source_texture_ = config_->source_texture;
-      }
-    } else {
+  if (const auto existing_index
+    = registry.FindShaderVisibleIndex(*config_->source_texture, srv_desc);
+    existing_index.has_value()) {
+    source_texture_srv_index_ = *existing_index;
+    last_source_texture_ = config_->source_texture;
+  } else {
+    const bool registry_has_view
+      = registry.Contains(*config_->source_texture, srv_desc);
+    if (!source_texture_srv_index_.IsValid()
+      || last_source_texture_ != config_->source_texture
+      || !registry_has_view) {
       auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
       if (!handle.IsValid()) {
@@ -646,7 +627,6 @@ auto AutoExposurePass::UpdateHistogramConstants(
     }
   }
 
-  const auto& tex_desc = config_->source_texture->GetDescriptor();
   const auto metering_rect = ResolveMeteringRect(*config_, tex_desc);
 
   AutoExposureHistogramConstants constants { .source_texture_index
@@ -917,6 +897,8 @@ auto AutoExposurePass::ReleasePassConstantsBuffer() noexcept -> void
   pass_constants_buffer_.reset();
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
   pass_constants_slot_ = 0U;
+  last_source_texture_.reset();
+  source_texture_srv_index_ = kInvalidShaderVisibleIndex;
 }
 
 auto AutoExposurePass::ResetExposure(graphics::CommandRecorder& recorder,

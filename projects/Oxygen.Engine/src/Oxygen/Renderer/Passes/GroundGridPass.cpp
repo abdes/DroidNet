@@ -375,19 +375,13 @@ auto GroundGridPass::UpdateDepthTexture(
     depth_texture != nullptr) {
     auto& registry = graphics.GetResourceRegistry();
     auto& allocator = graphics.GetDescriptorAllocator();
-
-    if (depth_texture != last_depth_texture_) {
-      last_depth_texture_ = depth_texture;
-      depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
-    }
-
-    if (!depth_srv_index_.IsValid()) {
-      const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        const_cast<Texture&>(*depth_texture), registry, allocator);
-      if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
-        depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
-      }
+    const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+      const_cast<Texture&>(*depth_texture), registry, allocator);
+    last_depth_texture_ = depth_texture;
+    depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
+    if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
+      depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
     }
     constants.depth_srv_index = depth_srv_index_.get();
   } else {

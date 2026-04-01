@@ -44,6 +44,14 @@ m_gtest_program(
 
 m_gtest_program(PassDebugNames SOURCES "PassDebugNames_test.cpp")
 
+m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
+
+m_gtest_program(
+  SceneCameraViewResolver
+  SOURCES
+    "SceneCameraViewResolver_test.cpp"
+)
+
 m_gtest_program(
   CompositionPlanner
   SOURCES

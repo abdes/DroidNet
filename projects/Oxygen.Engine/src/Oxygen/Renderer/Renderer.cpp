@@ -1882,6 +1882,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
       // Get the ViewContext for this view to access render target framebuffer
       const auto& view_ctx = context->GetViewContext(view_id);
 
+      // Pass instances live on the pipeline, but pass registrations are
+      // per-view state and must not leak across view graph executions.
+      render_context_->ClearRegisteredPasses();
+
       CHECK_NOTNULL_F(view_ctx.render_target.get(),
         "View {} ('{}'/{}) has no render_target framebuffer", view_id.get(),
         view_ctx.metadata.name, view_ctx.metadata.purpose);
@@ -2059,6 +2063,17 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             *context, view_id, *recorder, *render_context_)) {
         LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
           view_id.get());
+        record_view_timing();
+        continue;
+      }
+      if (is_scene_view
+        && !RepublishCurrentViewBindings(
+          *render_context_, ViewBindingRepublishMode::kDynamicSystemBindings)) {
+        LOG_F(ERROR,
+          "Failed to republish scene depth/view bindings for view {}; "
+          "skipping",
+          view_id.get());
+        update_view_state(view_id, false);
         record_view_timing();
         continue;
       }
@@ -2935,20 +2950,10 @@ auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
     || !runtime_state.owns_scene_depth_srv) {
     return register_new_srv();
   }
-
-  const auto updated
-    = registry.UpdateView(const_cast<graphics::Texture&>(depth_texture),
-      bindless::HeapIndex { runtime_state.scene_depth_srv.get() }, srv_desc);
-  if (!updated) {
-    runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
-    runtime_state.scene_depth_texture_owner = nullptr;
-    runtime_state.owns_scene_depth_srv = false;
-    return register_new_srv();
-  }
-
-  runtime_state.scene_depth_texture_owner = &depth_texture;
-  runtime_state.owns_scene_depth_srv = true;
-  return runtime_state.scene_depth_srv;
+  runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
+  runtime_state.scene_depth_texture_owner = nullptr;
+  runtime_state.owns_scene_depth_srv = false;
+  return register_new_srv();
 }
 
 auto Renderer::UpdateCurrentViewLightCullingConfig(

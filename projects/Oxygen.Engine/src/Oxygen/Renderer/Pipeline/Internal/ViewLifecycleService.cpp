@@ -96,7 +96,8 @@ void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
     view.GetDescriptor().name);
   auto camera = view.GetDescriptor().camera.value_or(scene::SceneNode {});
   renderer::SceneCameraViewResolver resolver(
-    [camera](const ViewId&) -> scene::SceneNode { return camera; });
+    [camera](const ViewId&) -> scene::SceneNode { return camera; },
+    view.GetDescriptor().view.viewport);
   renderer_->RegisterViewRenderGraph(
     published_view_id, render_view_coroutine_, resolver(published_view_id));
 }

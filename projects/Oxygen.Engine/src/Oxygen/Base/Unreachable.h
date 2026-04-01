@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <utility>
+
 namespace oxygen {
 
 [[noreturn]] inline void Unreachable()

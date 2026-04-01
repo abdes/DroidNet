@@ -246,6 +246,7 @@ auto DepthPrePass::SetClearColor(const Color& color) -> void
 auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
 {
   output_is_complete_ = false;
+  canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
   canonical_depth_srv_owner_ = nullptr;
 
   // Ensure the depth_texture is in kDepthWrite state before derived classes

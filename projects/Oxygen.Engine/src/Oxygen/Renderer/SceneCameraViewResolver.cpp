@@ -16,8 +16,8 @@
 
 namespace oxygen::renderer {
 
-auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
-  -> ResolvedView
+auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
+  std::optional<oxygen::ViewPort> viewport_override) -> ResolvedView
 {
   // Validate camera node
   if (!camera_node.IsAlive() || !camera_node.HasCamera()) {
@@ -81,6 +81,9 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
     cfg.viewport = cam->get().ActiveViewport();
   } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
     cfg.viewport = camo->get().ActiveViewport();
+  }
+  if (viewport_override.has_value() && viewport_override->IsValid()) {
+    cfg.viewport = *viewport_override;
   }
 
   const auto stable_proj_m

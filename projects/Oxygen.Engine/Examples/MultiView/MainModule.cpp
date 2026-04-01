@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -31,6 +32,62 @@
 #include "MultiView/MainModule.h"
 
 namespace oxygen::examples::multiview {
+
+namespace {
+
+  auto HasPositiveExtent(const platform::window::ExtentT& extent) -> bool
+  {
+    return extent.width > 0U && extent.height > 0U;
+  }
+
+  auto GetFramebufferExtent(const graphics::Framebuffer& framebuffer)
+    -> platform::window::ExtentT
+  {
+    const auto& fb_desc = framebuffer.GetDescriptor();
+    if (!fb_desc.color_attachments.empty()
+      && fb_desc.color_attachments[0].texture) {
+      const auto& color_desc
+        = fb_desc.color_attachments[0].texture->GetDescriptor();
+      return { color_desc.width, color_desc.height };
+    }
+    if (fb_desc.depth_attachment.texture) {
+      const auto& depth_desc
+        = fb_desc.depth_attachment.texture->GetDescriptor();
+      return { depth_desc.width, depth_desc.height };
+    }
+    return {};
+  }
+
+  struct PipLayout {
+    float width { 0.0F };
+    float height { 0.0F };
+    float offset_x { 0.0F };
+    float offset_y { 0.0F };
+  };
+
+  auto ComputePipLayout(const platform::window::ExtentT& extent) -> PipLayout
+  {
+    constexpr float kPipWidthRatio = 0.45F;
+    constexpr float kPipHeightRatio = 0.45F;
+    constexpr float kPipMargin = 24.0F;
+
+    const float sw = static_cast<float>(extent.width);
+    const float sh = static_cast<float>(extent.height);
+    const float pip_w = std::floor(sw * kPipWidthRatio);
+    const float pip_h = std::floor(sh * kPipHeightRatio);
+    const float offset_x = std::max(0.0F, sw - pip_w - kPipMargin);
+    const float offset_y
+      = std::clamp(kPipMargin, 0.0F, std::max(0.0F, sh - pip_h));
+
+    return {
+      .width = pip_w,
+      .height = pip_h,
+      .offset_x = offset_x,
+      .offset_y = offset_y,
+    };
+  }
+
+} // namespace
 
 MainModule::MainModule(
   const DemoAppContext& app, MainModuleConfig config) noexcept
@@ -88,8 +145,35 @@ auto MainModule::OnShutdown() noexcept -> void
   scene_bootstrapper_.BindToScene(observer_ptr<scene::Scene> { nullptr });
 }
 
+auto MainModule::ResolveRenderExtent() const -> platform::window::ExtentT
+{
+  if (app_window_) {
+    if (auto framebuffer = app_window_->GetCurrentFrameBuffer().lock()) {
+      const auto framebuffer_extent = GetFramebufferExtent(*framebuffer);
+      if (HasPositiveExtent(framebuffer_extent)) {
+        return framebuffer_extent;
+      }
+    }
+  }
+
+  if (app_window_ && app_window_->GetWindow()) {
+    const auto window_extent = app_window_->GetWindow()->Size();
+    if (HasPositiveExtent(window_extent)) {
+      return window_extent;
+    }
+  }
+
+  return last_viewport_;
+}
+
 auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
 {
+  if (!HasPositiveExtent(extent)) {
+    DLOG_F(2, "[MultiView] Skip camera update for invalid extent {}x{}",
+      extent.width, extent.height);
+    return;
+  }
+
   // Update Main camera (match legacy)
   if (main_camera_node_.IsAlive()) {
     const auto cam_opt
@@ -138,18 +222,14 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       pip_camera_node_.GetTransform().SetLocalRotation(pip_rot);
 
       // PiP aspect ratio from its intended viewport
-      constexpr float kPipWidthRatio = 0.45F;
-      constexpr float kPipHeightRatio = 0.45F;
-      const float sw = static_cast<float>(extent.width);
-      const float sh = static_cast<float>(extent.height);
-      const float pip_w = sw * kPipWidthRatio;
-      const float pip_h = sh * kPipHeightRatio;
+      const auto pip_layout = ComputePipLayout(extent);
       constexpr float kPipCamFov = 35.0F;
       constexpr float kPipCamNear = 0.05F;
       constexpr float kPipCamFar = 100.0F;
 
       cam.SetFieldOfView(glm::radians(kPipCamFov));
-      cam.SetAspectRatio(pip_h > 0 ? (pip_w / pip_h) : 1.0F);
+      cam.SetAspectRatio(
+        pip_layout.height > 0 ? (pip_layout.width / pip_layout.height) : 1.0F);
       cam.SetNearPlane(kPipCamNear);
       cam.SetFarPlane(kPipCamFar);
       cam.SetViewport(ViewPort {
@@ -158,8 +238,8 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
         // inset belongs to CompositionView, not the camera.
         .top_left_x = 0.0F,
         .top_left_y = 0.0F,
-        .width = pip_w,
-        .height = pip_h,
+        .width = pip_layout.width,
+        .height = pip_layout.height,
         .min_depth = 0.0F,
         .max_depth = 1.0F,
       });
@@ -270,7 +350,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     shell.SetStagedMainCamera(main_camera_node_);
     scene_bootstrapper_.BindToScene(staged_scene);
     (void)scene_bootstrapper_.EnsureSceneWithContent();
-    UpdateCameras(app_window_->GetWindow()->Size());
+    const auto extent = ResolveRenderExtent();
+    if (HasPositiveExtent(extent)) {
+      UpdateCameras(extent);
+      last_viewport_ = extent;
+    }
   }
 
   if (!active_scene_.IsValid()) {
@@ -278,9 +362,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  const auto extent = app_window_->GetWindow()->Size();
-  if (extent.width != last_viewport_.width
-    || extent.height != last_viewport_.height) {
+  const auto extent = ResolveRenderExtent();
+  if (HasPositiveExtent(extent)
+    && (extent.width != last_viewport_.width
+      || extent.height != last_viewport_.height)) {
     UpdateCameras(extent);
     last_viewport_ = extent;
   }
@@ -312,7 +397,12 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     return;
   }
 
-  const auto extent = app_window_->GetWindow()->Size();
+  const auto extent = ResolveRenderExtent();
+  if (!HasPositiveExtent(extent)) {
+    DLOG_F(2, "[MultiView] Skip composition update for invalid extent {}x{}",
+      extent.width, extent.height);
+    return;
+  }
   const float sw = static_cast<float>(extent.width);
   const float sh = static_cast<float>(extent.height);
 
@@ -326,6 +416,12 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     .min_depth = 0.0F,
     .max_depth = 1.0F,
   };
+  main_view.scissor = Scissors {
+    .left = 0,
+    .top = 0,
+    .right = static_cast<int32_t>(extent.width),
+    .bottom = static_cast<int32_t>(extent.height),
+  };
   auto main_comp = renderer::CompositionView::ForScene(
     main_view_id_, main_view, main_camera_node_);
   main_comp.with_atmosphere = true;
@@ -336,31 +432,22 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
 
   // 2. PiP View
   if (pip_camera_node_.IsAlive()) {
-    constexpr float kPipWidthRatio = 0.45F;
-    constexpr float kPipHeightRatio = 0.45F;
-    constexpr float kPipMargin = 24.0F;
-
-    const float pip_w = std::floor(sw * kPipWidthRatio);
-    const float pip_h = std::floor(sh * kPipHeightRatio);
-
-    const float offset_x = std::max(0.0F, sw - pip_w - kPipMargin);
-    const float offset_y
-      = std::clamp(kPipMargin, 0.0F, std::max(0.0F, sh - pip_h));
+    const auto pip_layout = ComputePipLayout(extent);
 
     View pip_view {};
     pip_view.viewport = ViewPort {
-      .top_left_x = offset_x,
-      .top_left_y = offset_y,
-      .width = pip_w,
-      .height = pip_h,
+      .top_left_x = pip_layout.offset_x,
+      .top_left_y = pip_layout.offset_y,
+      .width = pip_layout.width,
+      .height = pip_layout.height,
       .min_depth = 0.0F,
       .max_depth = 1.0F,
     };
     pip_view.scissor = Scissors {
-      .left = static_cast<int32_t>(offset_x),
-      .top = static_cast<int32_t>(offset_y),
-      .right = static_cast<int32_t>(offset_x + pip_w),
-      .bottom = static_cast<int32_t>(offset_y + pip_h),
+      .left = static_cast<int32_t>(pip_layout.offset_x),
+      .top = static_cast<int32_t>(pip_layout.offset_y),
+      .right = static_cast<int32_t>(pip_layout.offset_x + pip_layout.width),
+      .bottom = static_cast<int32_t>(pip_layout.offset_y + pip_layout.height),
     };
 
     if (config_.pip_scissor_inset_px > 0U) {
@@ -376,7 +463,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       CHECK_F(pip_view.scissor.left < pip_view.scissor.right
           && pip_view.scissor.top < pip_view.scissor.bottom,
         "PiP scissor inset {} collapses the PiP depth rect (viewport={}x{})",
-        config_.pip_scissor_inset_px, pip_w, pip_h);
+        config_.pip_scissor_inset_px, pip_layout.width, pip_layout.height);
     }
 
     auto pip_comp = renderer::CompositionView::ForPip(pip_view_id_,
