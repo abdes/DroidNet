@@ -18,6 +18,8 @@
 
 namespace oxygen::engine::imgui {
 
+struct GpuTimelinePresentationSmootherTestAccess;
+
 struct GpuTimelinePresentationScope {
   uint32_t scope_id { 0 };
   uint32_t parent_scope_id { 0 };
@@ -76,6 +78,8 @@ public:
     -> GpuTimelinePresentationFrame;
 
 private:
+  friend struct GpuTimelinePresentationSmootherTestAccess;
+
   struct SmoothedScopeState {
     float start_ms { 0.0F };
     float end_ms { 0.0F };
