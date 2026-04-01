@@ -45,24 +45,23 @@ struct DrawMetadata;
  - **GraphicsRenderPass**: For passes using graphics pipelines (vertex/pixel
    shaders, rasterization, draw calls). Examples: DepthPrePass, ShaderPass,
    TransparentPass.
-
  - **ComputeRenderPass**: For passes using compute pipelines (compute shaders,
    dispatch calls). Examples: LightCullingPass, SSAOPass.
 
- ### Key Design Points
+ ### Architecture Notes
 
- - Passes are modular and composable, supporting Forward+, deferred, or custom
-   pipelines.
- - Resource state transitions and barriers are explicit and handled in
-   PrepareResources.
- - Execution is coroutine-based, allowing for async GPU work, resource uploads,
-   and synchronization.
- - Passes can be enabled/disabled at runtime for debugging or feature toggling.
+ - Passes are modular and composable, supporting Forward+, deferred, or
+   custom pipelines.
+ - Resource state transitions and barriers are explicit and declared in
+   `PrepareResources`.
+ - Execution is coroutine-based, enabling async GPU work and fine-grained
+   synchronization.
 
  @see GraphicsRenderPass, ComputeRenderPass
 */
 class RenderPass : public Composition, public Named {
 public:
+  //! Construct a render pass with the given name.
   OXGN_RNDR_API explicit RenderPass(std::string_view name);
   ~RenderPass() override = default;
 
@@ -70,58 +69,35 @@ public:
   OXYGEN_DEFAULT_MOVABLE(RenderPass)
 
   //! Prepare and transition all resources needed for this pass.
-  /*!
-   This coroutine explicitly declares and transitions all input/output resources
-   (textures, buffers, framebuffers, etc.) to the correct states for this pass,
-   using the provided CommandRecorder. This includes inserting resource
-   barriers, preparing descriptor tables, and ensuring all dependencies are met
-   before execution.
-
-   @param context The render context containing shared frame data.
-   @param recorder The command recorder for issuing resource transitions.
-   @return Coroutine handle (co::Co<>)
-  */
   OXGN_RNDR_NDAPI auto PrepareResources(const RenderContext& context,
     graphics::CommandRecorder& recorder) -> co::Co<>;
 
   //! Execute the main rendering logic for this pass.
-  /*!
-   This coroutine performs all rendering commands for the pass, including
-   pipeline setup, resource binding, draw/dispatch calls, and any per-pass
-   logic. It is called after PrepareResources and assumes all resources are in
-   the correct state.
-
-   @param context The render context containing shared frame data.
-   @param recorder The command recorder for issuing rendering commands.
-   @return Coroutine handle (co::Co<>)
-  */
   OXGN_RNDR_NDAPI auto Execute(const RenderContext& context,
     graphics::CommandRecorder& recorder) -> co::Co<>;
 
-  //! Get the name of this pass (from Named interface).
+  //! Return the name of this pass.
   OXGN_RNDR_NDAPI auto GetName() const noexcept -> std::string_view override;
 
-  //! Set the name of this pass (from Named interface).
+  //! Set the name of this pass.
   OXGN_RNDR_API auto SetName(std::string_view name) noexcept -> void override;
 
 protected:
-  //! Access the current render context during pass execution.
+  //! Return the current render context; valid only during pass execution.
   OXGN_RNDR_NDAPI auto Context() const -> const RenderContext&;
 
   //! Build the canonical engine root bindings from the generated table.
-  /*!
-   This produces root bindings that match the bindless engine root signature
-   generated from Bindless.yaml. Both graphics and compute pipelines must use
-   the same layout so that shader ABI requirements (e.g., ViewConstants at
-   b1, RootConstants at b2) are satisfied.
-  */
   OXGN_RNDR_NDAPI static auto BuildRootBindings()
     -> std::vector<graphics::RootBindingItem>;
 
-  //! Set the pass-level RootConstants payload for this pass execution.
+  //! Store the pass-level constants index for use during execution.
   /*!
-   This binds the `g_PassConstantsIndex` root constant (DWORD1 at `b2, space0`)
-   once per pass.
+   Binds `g_PassConstantsIndex` (DWORD1 at `b2, space0`) once per pass.
+   Call this from `DoPrepareResources` before execution begins.
+
+   @param pass_constants_index Shader-visible heap index of the per-pass
+          constants buffer.
+   @see GetPassConstantsIndex, SetPassConstantsIndex
   */
   auto SetPassConstantsIndex(ShaderVisibleIndex pass_constants_index) noexcept
     -> void
@@ -129,83 +105,54 @@ protected:
     pass_constants_index_ = pass_constants_index;
   }
 
+  //! Return the pass-level constants index set for this execution.
+  /*!
+   Returns `kInvalidShaderVisibleIndex` if `SetPassConstantsIndex` has not
+   been called yet.
+
+   @return Shader-visible heap index of the per-pass constants buffer.
+   @see SetPassConstantsIndex
+  */
   [[nodiscard]] auto GetPassConstantsIndex() const noexcept
     -> ShaderVisibleIndex
   {
     return pass_constants_index_;
   }
 
-  //=== Pure Virtual Interface ===-------------------------------------------//
+  //=== Hooks for Derived Base Classes ===-----------------------------------//
 
-  //! Validate the pass configuration.
-  /*!
-   Called during PrepareResources before any resource operations. Derived
-   classes should throw std::runtime_error if configuration is invalid.
-  */
+  //! Validate the pass configuration before resource preparation.
   virtual auto ValidateConfig() -> void = 0;
 
-  //! Prepare pass-specific resources.
-  /*!
-   Called after ValidateConfig. Derived classes should allocate buffers,
-   transition resources, and prepare for execution.
+  //! Called during `PrepareResources` after `ValidateConfig`; handle PSO
+  //! rebuild here.
+  virtual auto OnPrepareResources(graphics::CommandRecorder& recorder) -> void
+    = 0;
 
-   @param recorder The command recorder for resource operations.
-  */
+  //! Prepare pass-specific resources (barriers, descriptors, uploads).
   virtual auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<>
     = 0;
 
-  //! Execute pass-specific rendering logic.
-  /*!
-   Called after pipeline is set. Derived classes should issue draw or dispatch
-   calls.
-
-   @param recorder The command recorder for rendering commands.
-  */
-  virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
-
-  //=== Hooks for Derived Base Classes ===-----------------------------------//
-
-  //! Called during PrepareResources after ValidateConfig.
-  /*!
-   Override in GraphicsRenderPass/ComputeRenderPass to handle PSO rebuild.
-  */
-  virtual auto OnPrepareResources(graphics::CommandRecorder& recorder) -> void
-    = 0;
-
-  //! Called during Execute before DoExecute.
-  /*!
-   Override in GraphicsRenderPass/ComputeRenderPass to set pipeline state.
-  */
+  //! Called during `Execute` before `DoExecute`; set pipeline state here.
   virtual auto OnExecute(graphics::CommandRecorder& recorder) -> void = 0;
+
+  //! Issue pass-specific draw or dispatch commands.
+  virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
 
   //=== Draw Helpers (for GraphicsRenderPass derivatives) ===-----------------//
 
-  //! Bind the per-draw root constant identifying the draw record.
-  /*!
-   Derived passes that need to switch pipeline state per partition can use this
-   helper while iterating ranges directly.
-
-   @param recorder Command recorder used to bind the constant.
-   @param draw_index Index into PreparedSceneFrame draw metadata.
-  */
+  //! Bind the per-draw root constant for the given draw record index.
   OXGN_RNDR_API auto BindDrawIndexConstant(
     graphics::CommandRecorder& recorder, DrawIndex draw_index) const -> void;
 
-  //! Emit draws for a half-open [begin, end) range with robust error handling.
-  /*!
-   Increments counters for emitted, skipped invalid, and errors.
-  */
+  //! Emit draws for the half-open range `[begin, end)` with error isolation.
   OXGN_RNDR_API auto EmitDrawRange(graphics::CommandRecorder& recorder,
     const DrawMetadata* records, uint32_t begin, uint32_t end,
     uint32_t& emitted_count, uint32_t& skipped_invalid,
     uint32_t& draw_errors) const noexcept -> void;
 
-  //! Issue draw calls over a specific pass partition.
-  /*!
-   Iterates PreparedSceneFrame partitions and emits draws only within the
-   ranges whose pass_mask includes the requested bit. Logs emitted count.
-  */
+  //! Issue draw calls for all partitions whose mask includes `pass_bit`.
   OXGN_RNDR_API auto IssueDrawCallsOverPass(graphics::CommandRecorder& recorder,
     PassMaskBit pass_bit) const noexcept -> void;
 

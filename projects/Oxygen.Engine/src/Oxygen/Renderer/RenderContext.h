@@ -300,6 +300,14 @@ struct RenderContext {
     known_passes_[idx].reset(pass);
   }
 
+  //! Clears pass registrations before executing the next view graph.
+  auto ClearRegisteredPasses() const -> void
+  {
+    for (auto& p : known_passes_) {
+      p.reset(nullptr);
+    }
+  }
+
 private:
   friend class Renderer;
   friend class RenderContextPool; // allow small pool helper to Reset() contexts
@@ -326,9 +334,7 @@ private:
   */
   auto Reset() -> void
   {
-    for (auto& p : known_passes_) {
-      p.reset(nullptr);
-    }
+    ClearRegisteredPasses();
     renderer_.reset(nullptr);
     graphics_.reset(nullptr);
     view_constants.reset();

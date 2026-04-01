@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <stdexcept>
@@ -35,6 +36,34 @@
 namespace oxygen::engine {
 
 namespace {
+  constexpr float kDefaultManualExposure = 1.0F;
+  constexpr float kDefaultGamma = 2.2F;
+
+  auto SanitizeManualExposure(const float manual_exposure) -> float
+  {
+    if (!std::isfinite(manual_exposure)) {
+      return kDefaultManualExposure;
+    }
+    return std::max(manual_exposure, 0.0F);
+  }
+
+  auto SanitizeGamma(const float gamma) -> float
+  {
+    if (!std::isfinite(gamma) || gamma <= 0.0F) {
+      return kDefaultGamma;
+    }
+    return gamma;
+  }
+
+  auto CheckTrackedTexture(const graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture, const char* role) -> void
+  {
+    CHECK_F(recorder.IsResourceTracked(texture),
+      "{} texture '{}' must already have resource-state tracking "
+      "before execution",
+      role, texture.GetDescriptor().debug_name);
+  }
+
   struct alignas(16) ToneMapPassConstants {
     uint32_t source_texture_index;
     uint32_t sampler_index;
@@ -87,7 +116,7 @@ namespace {
 } // namespace
 
 ToneMapPass::ToneMapPass(std::shared_ptr<ToneMapPassConfig> config)
-  : GraphicsRenderPass(config ? config->debug_name : "ToneMapPass", true)
+  : GraphicsRenderPass(config ? config->debug_name : "ToneMapPass", false)
   , config_(std::move(config))
 {
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
@@ -103,7 +132,28 @@ auto ToneMapPass::ValidateConfig() -> void
   if (!config_->source_texture) {
     throw std::runtime_error("ToneMapPass: source texture is required");
   }
-  // Output texture can be null - we'll use framebuffer in that case
+
+  const auto& output = GetOutputTexture();
+  if (&GetSourceTexture() == &output) {
+    throw std::runtime_error(
+      "ToneMapPass: source texture and output texture must be distinct");
+  }
+
+  if (!std::isfinite(config_->manual_exposure)) {
+    LOG_F(WARNING, "invalid manual_exposure={}, resetting to default {}",
+      config_->manual_exposure, kDefaultManualExposure);
+    config_->manual_exposure = kDefaultManualExposure;
+  } else if (config_->manual_exposure < 0.0F) {
+    LOG_F(WARNING, "negative manual_exposure={}, clamping to 0",
+      config_->manual_exposure);
+    config_->manual_exposure = 0.0F;
+  }
+
+  if (!std::isfinite(config_->gamma) || config_->gamma <= 0.0F) {
+    LOG_F(WARNING, "invalid gamma={}, resetting to default {}", config_->gamma,
+      kDefaultGamma);
+    config_->gamma = kDefaultGamma;
+  }
 }
 
 auto ToneMapPass::DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -121,6 +171,11 @@ auto ToneMapPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     output.GetDescriptor().format, output.GetDescriptor().debug_name);
   DLOG_F(2, "exposure={} tonemapper={}", config_->manual_exposure,
     config_->tone_mapper);
+
+  // ToneMapPass does not own the scene HDR/SDR textures, so it must not guess
+  // or overwrite their initial tracker state. Callers must seed tracking.
+  CheckTrackedTexture(recorder, source, "source");
+  CheckTrackedTexture(recorder, output, "output");
 
   recorder.RequireResourceState(
     source, graphics::ResourceStates::kShaderResource);
@@ -229,6 +284,7 @@ auto ToneMapPass::EnsurePassConstantsBuffer() -> void
   }
 
   auto& graphics = Context().GetGraphics();
+  graphics_ = observer_ptr { &graphics };
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
 
@@ -285,6 +341,9 @@ auto ToneMapPass::ReleasePassConstantsBuffer() -> void
 {
   if (!pass_constants_buffer_) {
     pass_constants_mapped_ptr_ = nullptr;
+    pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
+    pass_constants_slot_ = 0u;
+    SetPassConstantsIndex(kInvalidShaderVisibleIndex);
     return;
   }
 
@@ -292,10 +351,18 @@ auto ToneMapPass::ReleasePassConstantsBuffer() -> void
     pass_constants_buffer_->UnMap();
   }
 
+  if (graphics_ != nullptr) {
+    auto& registry = graphics_->GetResourceRegistry();
+    if (registry.Contains(*pass_constants_buffer_)) {
+      registry.UnRegisterResource(*pass_constants_buffer_);
+    }
+  }
+
   pass_constants_mapped_ptr_ = nullptr;
   pass_constants_buffer_.reset();
   pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
   pass_constants_slot_ = 0u;
+  SetPassConstantsIndex(kInvalidShaderVisibleIndex);
 }
 
 auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
@@ -315,26 +382,18 @@ auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     .is_read_only_dsv = false,
   };
 
-  // The resource registry aborts if we try to register a duplicate view (same
-  // resource + same description). This can occur if this pass is re-created
-  // (or its local cache is cleared) while the global registry still holds the
-  // prior view. In that case, explicitly unregister the stale view first.
-  const bool registry_has_view = registry.Contains(texture, srv_desc);
+  // Reuse the canonical shader-visible SRV already registered for this
+  // texture/description pair when available.
+  if (const auto existing_index
+    = registry.FindShaderVisibleIndex(texture, srv_desc);
+    existing_index.has_value()) {
+    return *existing_index;
+  }
 
-  if (auto it = source_texture_srvs_.find(&texture);
-    it != source_texture_srvs_.end()) {
-    if (registry_has_view) {
-      return it->second;
-    }
-    source_texture_srvs_.erase(it);
-  } else if (registry_has_view) {
-    // If the registry already has this view, use its index.
-    const auto existing_index
-      = registry.FindShaderVisibleIndex(texture, srv_desc);
-    if (existing_index.has_value()) {
-      source_texture_srvs_[&texture] = *existing_index;
-      return *existing_index;
-    }
+  if (registry.Contains(texture, srv_desc)) {
+    throw std::runtime_error(
+      "ToneMapPass: source SRV exists in registry without a shader-visible "
+      "index");
   }
 
   auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
@@ -351,7 +410,6 @@ auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     throw std::runtime_error("ToneMapPass: Failed to register source SRV view");
   }
 
-  source_texture_srvs_[&texture] = srv_index;
   return srv_index;
 }
 
@@ -360,7 +418,9 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
 {
   CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
 
-  const float manual_exposure = std::max(config_->manual_exposure, 0.0F);
+  const float manual_exposure
+    = SanitizeManualExposure(config_->manual_exposure);
+  const float gamma = SanitizeGamma(config_->gamma);
   float cpu_exposure_constant = manual_exposure;
   ShaderVisibleIndex exposure_buffer_index = kInvalidShaderVisibleIndex;
   uint32_t debug_flags = 0u;
@@ -401,7 +461,7 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
     }
   }
   DLOG_F(2,
-    "ToneMapPass: view={} exposure_view={} exposure_mode={} "
+    "view={} exposure_view={} exposure_mode={} "
     "shader_exposure_source={} "
     "manual_exposure={:.6f} cpu_exposure_constant={:.6f} "
     "exposure_buffer_index={} fallback_used={} debug_flags=0x{:x} "
@@ -419,7 +479,7 @@ auto ToneMapPass::UpdatePassConstants(ShaderVisibleIndex source_texture_index)
     .exposure_buffer_index = exposure_buffer_index.get(),
     .tone_mapper = static_cast<uint32_t>(config_->tone_mapper),
     .exposure = cpu_exposure_constant,
-    .gamma = config_->gamma,
+    .gamma = gamma,
     .debug_flags = debug_flags,
     ._pad0 = 0.0F,
   };

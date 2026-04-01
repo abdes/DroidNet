@@ -10,9 +10,9 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -21,6 +21,10 @@ namespace oxygen::graphics {
 class Buffer;
 class Texture;
 } // namespace oxygen::graphics
+
+namespace oxygen {
+class Graphics;
+} // namespace oxygen
 
 namespace oxygen::engine {
 
@@ -43,9 +47,6 @@ struct ToneMapPassConfig {
 
   //! Tonemapping operator to apply.
   ToneMapper tone_mapper { ToneMapper::kNone };
-
-  //! Whether this pass is enabled.
-  bool enabled { true };
 
   //! Debug label for diagnostics.
   std::string debug_name { "ToneMapPass" };
@@ -93,15 +94,13 @@ private:
   static constexpr size_t kPassConstantsSlots = 8U;
 
   std::shared_ptr<Config> config_;
+  observer_ptr<Graphics> graphics_ { nullptr };
 
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   std::byte* pass_constants_mapped_ptr_ { nullptr };
   std::array<ShaderVisibleIndex, kPassConstantsSlots>
     pass_constants_indices_ {};
   size_t pass_constants_slot_ { 0U };
-
-  std::unordered_map<const graphics::Texture*, ShaderVisibleIndex>
-    source_texture_srvs_;
 };
 
 } // namespace oxygen::engine

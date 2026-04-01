@@ -7,6 +7,7 @@
 #pragma once
 
 #include <concepts>
+#include <optional>
 #include <type_traits>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -26,7 +27,9 @@ concept NodeLookupConcept = std::invocable<F, const oxygen::ViewId&>
 class FromNodeLookup {
 protected:
   OXGN_RNDR_NDAPI static auto ResolveForNode(
-    oxygen::scene::SceneNode& camera_node) -> oxygen::ResolvedView;
+    oxygen::scene::SceneNode& camera_node,
+    std::optional<oxygen::ViewPort> viewport_override = std::nullopt)
+    -> oxygen::ResolvedView;
 };
 
 template <NodeLookupConcept NodeLookup>
@@ -35,8 +38,10 @@ public:
   static_assert(std::is_invocable_r_v<oxygen::scene::SceneNode, NodeLookup,
     const oxygen::ViewId&>);
 
-  explicit SceneCameraViewResolver(NodeLookup lookup)
+  explicit SceneCameraViewResolver(NodeLookup lookup,
+    std::optional<oxygen::ViewPort> viewport_override = std::nullopt)
     : node_lookup_(std::move(lookup))
+    , viewport_override_(viewport_override)
   {
   }
 
@@ -44,11 +49,12 @@ public:
   {
     // Resolve the scene node from the ViewId using the provided callable.
     auto camera_node = node_lookup_(id);
-    return ResolveForNode(camera_node);
+    return ResolveForNode(camera_node, viewport_override_);
   }
 
 private:
   NodeLookup node_lookup_;
+  std::optional<oxygen::ViewPort> viewport_override_;
 };
 
 } // namespace oxygen::renderer

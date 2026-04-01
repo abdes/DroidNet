@@ -130,6 +130,7 @@ protected:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
+  [[nodiscard]] auto ResolveRenderExtent() const -> platform::window::ExtentT;
   auto UpdateCameras(const platform::window::ExtentT& extent) -> void;
 
   const examples::DemoAppContext& app_;
