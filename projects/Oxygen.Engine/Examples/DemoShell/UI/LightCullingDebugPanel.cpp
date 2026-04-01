@@ -55,9 +55,7 @@ void LightingPanel::DrawVisualizationModes()
 
   const auto current_mode = vm_->GetVisualizationMode();
 
-  const bool is_lighting_mode = current_mode == ShaderDebugMode::kDepthSlice
-    || current_mode == ShaderDebugMode::kClusterIndex
-    || current_mode == ShaderDebugMode::kLightCullingHeatMap;
+  const bool is_lighting_mode = engine::IsLightCullingDebugMode(current_mode);
 
   const bool normal_selected
     = current_mode == ShaderDebugMode::kDisabled || !is_lighting_mode;

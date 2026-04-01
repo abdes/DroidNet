@@ -29,6 +29,7 @@ using oxygen::TextureType;
 using oxygen::engine::DepthPrePass;
 using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::RenderPass;
+using oxygen::engine::ShaderDebugMode;
 using oxygen::engine::ShaderPass;
 using oxygen::engine::ShaderPassConfig;
 using oxygen::engine::testing::DepthPrePassGpuTestFixture;
@@ -197,6 +198,67 @@ NOLINT_TEST_F(ShaderPassDepthStateTest,
   }
 
   EXPECT_EQ(shader_pass.GetBuiltDepthCompareOpForTesting(), CompareOp::kEqual);
+}
+
+NOLINT_TEST_F(ShaderPassDepthStateTest,
+  SceneDepthMismatchModeKeepsGreaterOrEqualForDiagnostics)
+{
+  auto renderer = MakeRenderer();
+  ASSERT_NE(renderer, nullptr);
+
+  constexpr std::uint32_t kWidth = 8U;
+  constexpr std::uint32_t kHeight = 8U;
+
+  auto color_texture
+    = CreateColorTexture(kWidth, kHeight, "shader-pass.mismatch.color");
+  auto depth_texture
+    = CreateDepthTexture(kWidth, kHeight, "shader-pass.mismatch.depth");
+  ASSERT_NE(color_texture, nullptr);
+  ASSERT_NE(depth_texture, nullptr);
+
+  auto prepared_frame = PreparedSceneFrame {};
+  auto offscreen = renderer->BeginOffscreenFrame(
+    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 3U } });
+  offscreen.SetCurrentView(
+    kTestViewId, MakeResolvedView(kWidth, kHeight), prepared_frame);
+  auto& render_context = offscreen.GetRenderContext();
+
+  auto depth_pass
+    = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
+      .depth_texture = depth_texture,
+      .debug_name = "shader-pass.mismatch.depth-prepass",
+    }));
+
+  render_context.RegisterPass<DepthPrePass>(&depth_pass);
+
+  {
+    auto recorder = AcquireRecorder("shader-pass.mismatch.depth-prepass");
+    ASSERT_NE(recorder, nullptr);
+    EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
+    PreparePassResources(depth_pass, render_context, *recorder);
+  }
+
+  ASSERT_TRUE(depth_pass.GetOutput().is_complete);
+  render_context.current_view.depth_prepass_completeness
+    = DepthPrePassCompleteness::kComplete;
+
+  auto shader_pass
+    = ShaderPass(std::make_shared<ShaderPassConfig>(ShaderPassConfig {
+      .color_texture = color_texture,
+      .debug_name = "shader-pass.scene-depth-mismatch",
+      .debug_mode = ShaderDebugMode::kSceneDepthMismatch,
+    }));
+
+  {
+    auto recorder = AcquireRecorder("shader-pass.mismatch.prepare");
+    ASSERT_NE(recorder, nullptr);
+    EnsureTracked(*recorder, color_texture, ResourceStates::kCommon);
+    EnsureTracked(*recorder, depth_texture, ResourceStates::kDepthWrite);
+    PreparePassResources(shader_pass, render_context, *recorder);
+  }
+
+  EXPECT_EQ(
+    shader_pass.GetBuiltDepthCompareOpForTesting(), CompareOp::kGreaterOrEqual);
 }
 
 } // namespace

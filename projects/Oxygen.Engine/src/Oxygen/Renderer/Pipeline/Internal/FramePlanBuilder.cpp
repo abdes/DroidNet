@@ -24,34 +24,7 @@ namespace {
   auto EvaluateFramePlanDebugModeIntent(engine::ShaderDebugMode mode)
     -> FramePlanDebugModeIntent
   {
-    const auto is_non_ibl = [&] {
-      switch (mode) {
-      case engine::ShaderDebugMode::kLightCullingHeatMap:
-      case engine::ShaderDebugMode::kDepthSlice:
-      case engine::ShaderDebugMode::kClusterIndex:
-      case engine::ShaderDebugMode::kBaseColor:
-      case engine::ShaderDebugMode::kUv0:
-      case engine::ShaderDebugMode::kOpacity:
-      case engine::ShaderDebugMode::kWorldNormals:
-      case engine::ShaderDebugMode::kRoughness:
-      case engine::ShaderDebugMode::kMetalness:
-      case engine::ShaderDebugMode::kDirectLightingOnly:
-      case engine::ShaderDebugMode::kIblOnly:
-      case engine::ShaderDebugMode::kDirectPlusIbl:
-      case engine::ShaderDebugMode::kDirectLightingFull:
-      case engine::ShaderDebugMode::kDirectLightGates:
-      case engine::ShaderDebugMode::kDirectBrdfCore:
-      case engine::ShaderDebugMode::kVirtualShadowMask:
-        return true;
-      case engine::ShaderDebugMode::kIblSpecular:
-      case engine::ShaderDebugMode::kIblRawSky:
-      case engine::ShaderDebugMode::kIblIrradiance:
-      case engine::ShaderDebugMode::kIblFaceIndex:
-      case engine::ShaderDebugMode::kDisabled:
-      default:
-        return false;
-      }
-    }();
+    const bool is_non_ibl = engine::IsNonIblDebugMode(mode);
 
     const bool requires_neutral_tonemap
       = mode != engine::ShaderDebugMode::kDisabled;

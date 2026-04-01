@@ -296,48 +296,8 @@ namespace {
 
   auto EvaluateDebugModeIntent(engine::ShaderDebugMode mode) -> DebugModeIntent
   {
-    using enum engine::ShaderDebugMode;
-    const auto is_non_ibl = [&] {
-      switch (mode) {
-      case kLightCullingHeatMap:
-      case kDepthSlice:
-      case kClusterIndex:
-      case kBaseColor:
-      case kUv0:
-      case kOpacity:
-      case kWorldNormals:
-      case kRoughness:
-      case kMetalness:
-      case kDirectLightingOnly:
-      case kIblOnly:
-      case kDirectPlusIbl:
-      case kDirectLightingFull:
-      case kDirectLightGates:
-      case kDirectBrdfCore:
-      case kVirtualShadowMask:
-        return true;
-      case kIblSpecular:
-      case kIblRawSky:
-      case kIblIrradiance:
-      case kIblFaceIndex:
-      case kDisabled:
-      default:
-        return false;
-      }
-    }();
-
-    const auto is_ibl_debug = [&] {
-      switch (mode) {
-      case kIblSpecular:
-      case kIblRawSky:
-      case kIblIrradiance:
-      case kIblFaceIndex:
-        return true;
-      case kDisabled:
-      default:
-        return false;
-      }
-    }();
+    const bool is_non_ibl = engine::IsNonIblDebugMode(mode);
+    const bool is_ibl_debug = engine::IsIblDebugMode(mode);
 
     const bool force_exposure_one
       = (mode == engine::ShaderDebugMode::kIblRawSky);

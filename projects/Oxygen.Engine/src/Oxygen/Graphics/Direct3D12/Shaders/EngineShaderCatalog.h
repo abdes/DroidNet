@@ -53,6 +53,10 @@ using enum ShaderType;
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
 //   DEBUG_VIRTUAL_SHADOW_MASK: Stage 15 VSM screen-space shadow mask
+//   DEBUG_SCENE_DEPTH_RAW: Published scene depth in reversed-Z space
+//   DEBUG_SCENE_DEPTH_LINEAR: Published scene depth reconstructed to eye depth
+//   DEBUG_SCENE_DEPTH_MISMATCH: Shading depth disagreement vs pre-pass depth
+//   DEBUG_MASKED_ALPHA_COVERAGE: Masked alpha pass/fail classification
 
 // clang-format off
 inline constexpr auto kEngineShaders = GenerateCatalog(
@@ -243,6 +247,34 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
     .permutations=std::array<std::string_view, 3>
       { "DEBUG_VIRTUAL_SHADOW_MASK", "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  RequiredDefineShaderFileSpec<1, 1, 2> {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_RAW" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  RequiredDefineShaderFileSpec<1, 1, 2> {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_LINEAR" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  RequiredDefineShaderFileSpec<1, 1, 2> {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_MISMATCH" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
+  },
+  RequiredDefineShaderFileSpec<1, 1, 2> {
+    .path="Forward/ForwardDebug_PS.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_MASKED_ALPHA_COVERAGE" },
+    .permutations=std::array<std::string_view, 2>
+      { "ALPHA_TEST", "OXYGEN_HDR_OUTPUT" }
   },
   // Depth pre-pass: VS and PS with alpha-test permutation
   ShaderFileSpec {
@@ -453,6 +485,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 121
+// Total: 137
 
 } // namespace oxygen::graphics::d3d12
