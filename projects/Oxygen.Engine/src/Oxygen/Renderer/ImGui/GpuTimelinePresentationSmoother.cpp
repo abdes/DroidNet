@@ -96,6 +96,18 @@ namespace {
     };
   }
 
+  auto NormalizePresentationRange(GpuTimelinePresentationScope& scope) -> void
+  {
+    if (!scope.valid) {
+      return;
+    }
+
+    scope.display_start_ms = std::max(0.0F, scope.display_start_ms);
+    scope.display_end_ms = std::max(scope.display_start_ms, scope.display_end_ms);
+    scope.display_duration_ms
+      = std::max(0.0F, scope.display_end_ms - scope.display_start_ms);
+  }
+
 } // namespace
 
 auto GpuTimelinePresentationSmoother::Apply(
@@ -240,15 +252,16 @@ auto GpuTimelinePresentationSmoother::Apply(
         continue;
       }
 
+      if (previous_scope.display_start_ms > current_scope.display_end_ms) {
+        continue;
+      }
       const float stitched_boundary_ms = std::clamp(
         0.5F * (previous_scope.display_end_ms + current_scope.display_start_ms),
         previous_scope.display_start_ms, current_scope.display_end_ms);
       previous_scope.display_end_ms = stitched_boundary_ms;
-      previous_scope.display_duration_ms = std::max(
-        0.0F, previous_scope.display_end_ms - previous_scope.display_start_ms);
+      NormalizePresentationRange(previous_scope);
       current_scope.display_start_ms = stitched_boundary_ms;
-      current_scope.display_duration_ms = std::max(
-        0.0F, current_scope.display_end_ms - current_scope.display_start_ms);
+      NormalizePresentationRange(current_scope);
     }
   };
 

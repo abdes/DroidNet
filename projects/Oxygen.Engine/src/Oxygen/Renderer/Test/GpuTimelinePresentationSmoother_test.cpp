@@ -5,12 +5,27 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Renderer/ImGui/GpuTimelinePresentationSmoother.h>
+
 #include <Oxygen/Testing/GTest.h>
+
+namespace oxygen::engine::imgui {
+
+struct GpuTimelinePresentationSmootherTestAccess {
+  static auto ScopeState(GpuTimelinePresentationSmoother& smoother)
+    -> std::unordered_map<uint64_t,
+      GpuTimelinePresentationSmoother::SmoothedScopeState>&
+  {
+    return smoother.scope_state_;
+  }
+};
+
+} // namespace oxygen::engine::imgui
 
 namespace {
 
 using oxygen::engine::imgui::GpuTimelinePresentationFrame;
 using oxygen::engine::imgui::GpuTimelinePresentationSmoother;
+using oxygen::engine::imgui::GpuTimelinePresentationSmootherTestAccess;
 using oxygen::engine::internal::GpuTimelineFrame;
 using oxygen::engine::internal::GpuTimelineScope;
 
@@ -269,6 +284,39 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest,
     presentation.scopes[2].display_end_ms
       - presentation.scopes[1].display_start_ms,
     0.0001F);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  InvertedSiblingDisplayWindowSkipsStitchWithoutCrashing)
+{
+  GpuTimelinePresentationSmoother smoother;
+
+  GpuTimelineFrame frame {};
+  frame.frame_sequence = 1U;
+  frame.scopes = {
+    MakeScope(0U, 0xFFFFFFFFU, 100U, "Composite Root", 0U, 0.0F, 3.0F),
+    MakeScope(1U, 0U, 101U, "Composite A", 1U, 0.0F, 1.0F),
+    MakeScope(2U, 0U, 102U, "Composite B", 1U, 1.0F, 1.0F),
+  };
+
+  const auto first = smoother.Apply(frame);
+  ASSERT_EQ(first.scopes.size(), 3U);
+
+  const auto first_child_key = first.scopes[1].stable_key;
+  const auto second_child_key = first.scopes[2].stable_key;
+  auto& scope_state = GpuTimelinePresentationSmootherTestAccess::ScopeState(
+    smoother);
+  scope_state[first_child_key] = { .start_ms = 10.0F, .end_ms = 11.0F };
+  scope_state[second_child_key] = { .start_ms = 0.0F, .end_ms = 0.5F };
+
+  EXPECT_NO_THROW({
+    const auto presentation = smoother.Apply(frame);
+    ASSERT_EQ(presentation.scopes.size(), 3U);
+    EXPECT_GE(presentation.scopes[1].display_end_ms,
+      presentation.scopes[1].display_start_ms);
+    EXPECT_GE(presentation.scopes[2].display_end_ms,
+      presentation.scopes[2].display_start_ms);
+  });
 }
 
 } // namespace
