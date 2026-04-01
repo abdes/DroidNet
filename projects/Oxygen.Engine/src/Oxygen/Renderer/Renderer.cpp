@@ -814,6 +814,36 @@ auto Renderer::EnsureOffscreenFrameServicesInitialized() -> void
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
   }
+
+  EnsureShadowServicesInitialized(observer_ptr { gfx.get() });
+}
+
+auto Renderer::EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx)
+  -> void
+{
+  CHECK_NOTNULL_F(gfx.get(),
+    "Renderer::EnsureShadowServicesInitialized requires a live Graphics "
+    "backend");
+  CHECK_NOTNULL_F(inline_transfers_.get(),
+    "Renderer::EnsureShadowServicesInitialized requires "
+    "InlineTransfersCoordinator");
+  CHECK_NOTNULL_F(inline_staging_provider_.get(),
+    "Renderer::EnsureShadowServicesInitialized requires inline staging "
+    "provider");
+
+  if (!shadow_manager_) {
+    shadow_manager_ = std::make_unique<renderer::ShadowManager>(
+      observer_ptr { gfx.get() }, observer_ptr { inline_staging_provider_.get() },
+      observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
+      config_.directional_shadow_policy);
+  }
+
+  if (!shadow_frame_bindings_publisher_) {
+    shadow_frame_bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
+      observer_ptr { gfx.get() }, *inline_staging_provider_,
+      observer_ptr { inline_transfers_.get() }, "ShadowFrameBindings");
+  }
 }
 
 auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
@@ -971,6 +1001,9 @@ auto Renderer::ResetStats() noexcept -> void
 auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 {
   DCHECK_NOTNULL_F(engine);
+  CHECK_F(!offscreen_frame_used_,
+    "Renderer::OnAttached cannot attach a renderer after it has already been "
+    "used for offscreen rendering");
   engine_ = engine;
 
   asset_loader_ = engine->GetAssetLoader();
@@ -1023,11 +1056,7 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       std::move(geom_uploader), std::move(xform_uploader),
       std::move(mat_binder), std::move(emitter), std::move(light_manager));
     texture_binder_ = std::move(texture_binder);
-    shadow_manager_
-      = std::make_unique<renderer::ShadowManager>(observer_ptr { gfx.get() },
-        observer_ptr { inline_staging_provider_.get() },
-        observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
-        config_.directional_shadow_policy);
+    EnsureShadowServicesInitialized(observer_ptr { gfx.get() });
 
     // Initialize the ViewConstants manager for per-view, per-slot upload-heap
     // storage.
@@ -1060,10 +1089,6 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       internal::PerViewStructuredPublisher<VsmFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
-    shadow_frame_bindings_publisher_ = std::make_unique<
-      internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
-      observer_ptr { gfx.get() }, *inline_staging_provider_,
-      observer_ptr { inline_transfers_.get() }, "ShadowFrameBindings");
     environment_view_data_publisher_ = std::make_unique<
       internal::PerViewStructuredPublisher<EnvironmentViewData>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
@@ -1671,6 +1696,7 @@ auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
   // explicit test/tool frames, which can turn timing into hangs.
   gfx->BeginFrame(config.frame_sequence, config.frame_slot);
   BeginFrameServices(config.frame_slot, config.frame_sequence);
+  offscreen_frame_used_ = true;
   offscreen_frame_active_ = true;
   return OffscreenFrameSession(*this, config);
 }
