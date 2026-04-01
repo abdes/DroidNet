@@ -259,67 +259,6 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     };
   };
 
-  const auto GetDebugDefineName = [](ShaderDebugMode mode) -> const char* {
-    switch (mode) {
-    case ShaderDebugMode::kLightCullingHeatMap:
-      return "DEBUG_LIGHT_HEATMAP";
-    case ShaderDebugMode::kDepthSlice:
-      return "DEBUG_DEPTH_SLICE";
-    case ShaderDebugMode::kClusterIndex:
-      return "DEBUG_CLUSTER_INDEX";
-    case ShaderDebugMode::kIblSpecular:
-      return "DEBUG_IBL_SPECULAR";
-    case ShaderDebugMode::kIblRawSky:
-      return "DEBUG_IBL_RAW_SKY";
-    case ShaderDebugMode::kIblIrradiance:
-      return "DEBUG_IBL_IRRADIANCE";
-    case ShaderDebugMode::kIblFaceIndex:
-      return "DEBUG_IBL_FACE_INDEX";
-    case ShaderDebugMode::kBaseColor:
-      return "DEBUG_BASE_COLOR";
-    case ShaderDebugMode::kUv0:
-      return "DEBUG_UV0";
-    case ShaderDebugMode::kOpacity:
-      return "DEBUG_OPACITY";
-    case ShaderDebugMode::kWorldNormals:
-      return "DEBUG_WORLD_NORMALS";
-    case ShaderDebugMode::kRoughness:
-      return "DEBUG_ROUGHNESS";
-    case ShaderDebugMode::kMetalness:
-      return "DEBUG_METALNESS";
-    case ShaderDebugMode::kDirectLightingOnly:
-      return "DEBUG_DIRECT_LIGHTING_ONLY";
-    case ShaderDebugMode::kIblOnly:
-      return "DEBUG_IBL_ONLY";
-    case ShaderDebugMode::kDirectPlusIbl:
-      return "DEBUG_DIRECT_PLUS_IBL";
-    case ShaderDebugMode::kDirectLightingFull:
-      return "DEBUG_DIRECT_LIGHTING_FULL";
-    case ShaderDebugMode::kDirectLightGates:
-      return "DEBUG_DIRECT_LIGHT_GATES";
-    case ShaderDebugMode::kDirectBrdfCore:
-      return "DEBUG_DIRECT_BRDF_CORE";
-    case ShaderDebugMode::kVirtualShadowMask:
-      return "DEBUG_VIRTUAL_SHADOW_MASK";
-    default:
-      return nullptr;
-    }
-  };
-
-  const auto UsesForwardMeshDebugVariant = [](ShaderDebugMode mode) -> bool {
-    switch (mode) {
-    case ShaderDebugMode::kDirectLightingOnly:
-    case ShaderDebugMode::kIblOnly:
-    case ShaderDebugMode::kDirectPlusIbl:
-    case ShaderDebugMode::kDirectLightingFull:
-    case ShaderDebugMode::kDirectLightGates:
-    case ShaderDebugMode::kDirectBrdfCore:
-      return true;
-    default:
-      return false;
-    }
-  };
-
   DepthStencilStateDesc ds_desc {
     .depth_test_enable = (GetDepthTexture() != nullptr),
     .depth_write_enable = false, // transparent: no depth writes
@@ -362,12 +301,14 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
     }
 
     const char* ps_source = "Forward/ForwardMesh_PS.hlsl";
-    if (const char* debug_define = GetDebugDefineName(debug_mode)) {
-      if (!UsesForwardMeshDebugVariant(debug_mode)) {
+    if (const auto debug_define
+      = oxygen::engine::GetShaderDebugDefineName(debug_mode);
+      !debug_define.empty()) {
+      if (!oxygen::engine::UsesForwardMeshDebugVariant(debug_mode)) {
         ps_source = "Forward/ForwardDebug_PS.hlsl";
       }
       ps_defines.push_back(ShaderDefine {
-        .name = debug_define,
+        .name = debug_define.data(),
         .value = "1",
       });
     } else if (skip_brdf_lut) {

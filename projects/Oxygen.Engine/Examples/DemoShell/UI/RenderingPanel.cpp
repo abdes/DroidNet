@@ -105,24 +105,8 @@ void RenderingPanel::DrawDebugModes()
 
   const auto current_mode = vm_->GetDebugMode();
 
-  const bool is_ui_debug_mode = current_mode == ShaderDebugMode::kBaseColor
-    || current_mode == ShaderDebugMode::kUv0
-    || current_mode == ShaderDebugMode::kOpacity
-    || current_mode == ShaderDebugMode::kIblSpecular
-    || current_mode == ShaderDebugMode::kIblRawSky
-    || current_mode == ShaderDebugMode::kIblIrradiance
-    || current_mode == ShaderDebugMode::kIblFaceIndex
-    || current_mode == ShaderDebugMode::kIblNoBrdfLut
-    || current_mode == ShaderDebugMode::kDirectLightingOnly
-    || current_mode == ShaderDebugMode::kIblOnly
-    || current_mode == ShaderDebugMode::kDirectPlusIbl
-    || current_mode == ShaderDebugMode::kDirectLightingFull
-    || current_mode == ShaderDebugMode::kDirectLightGates
-    || current_mode == ShaderDebugMode::kDirectBrdfCore
-    || current_mode == ShaderDebugMode::kVirtualShadowMask
-    || current_mode == ShaderDebugMode::kWorldNormals
-    || current_mode == ShaderDebugMode::kRoughness
-    || current_mode == ShaderDebugMode::kMetalness;
+  const bool is_ui_debug_mode = current_mode != ShaderDebugMode::kDisabled
+    && !engine::IsLightCullingDebugMode(current_mode);
 
   const bool normal_selected
     = current_mode == ShaderDebugMode::kDisabled || !is_ui_debug_mode;
@@ -218,6 +202,26 @@ void RenderingPanel::DrawDebugModes()
   if (ImGui::RadioButton("Virtual Shadow Mask",
         current_mode == ShaderDebugMode::kVirtualShadowMask)) {
     vm_->SetDebugMode(ShaderDebugMode::kVirtualShadowMask);
+  }
+
+  if (ImGui::RadioButton(
+        "Scene Depth Raw", current_mode == ShaderDebugMode::kSceneDepthRaw)) {
+    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthRaw);
+  }
+
+  if (ImGui::RadioButton("Scene Depth Linear",
+        current_mode == ShaderDebugMode::kSceneDepthLinear)) {
+    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthLinear);
+  }
+
+  if (ImGui::RadioButton("Scene Depth Mismatch",
+        current_mode == ShaderDebugMode::kSceneDepthMismatch)) {
+    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthMismatch);
+  }
+
+  if (ImGui::RadioButton("Masked Alpha Coverage",
+        current_mode == ShaderDebugMode::kMaskedAlphaCoverage)) {
+    vm_->SetDebugMode(ShaderDebugMode::kMaskedAlphaCoverage);
   }
 
   if (disable_debug_modes) {

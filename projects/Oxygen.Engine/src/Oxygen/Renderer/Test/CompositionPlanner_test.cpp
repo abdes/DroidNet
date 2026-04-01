@@ -27,6 +27,7 @@ namespace {
 
 using oxygen::observer_ptr;
 using oxygen::ViewId;
+using oxygen::engine::ShaderDebugMode;
 using oxygen::frame::SequenceNumber;
 using oxygen::graphics::Framebuffer;
 using oxygen::graphics::FramebufferDesc;
@@ -37,6 +38,7 @@ using oxygen::renderer::RenderMode;
 using oxygen::renderer::internal::CompositionPlanner;
 using oxygen::renderer::internal::CompositionViewImpl;
 using oxygen::renderer::internal::FramePlanBuilder;
+using oxygen::renderer::internal::ToneMapPolicy;
 using oxygen::renderer::internal::access::ViewLifecycleTagFactory;
 using oxygen::renderer::testing::FakeGraphics;
 
@@ -250,6 +252,32 @@ TEST(CompositionPlannerTest, WireframeScenePlanDisablesDepthPrePass)
   EXPECT_EQ(plan.EffectiveRenderMode(), RenderMode::kWireframe);
   EXPECT_EQ(plan.GetDepthPrePassMode(), DepthPrePassMode::kDisabled);
   EXPECT_FALSE(plan.WantsDepthPrePass());
+}
+
+TEST(CompositionPlannerTest, DepthPrepassDebugModesForceNeutralToneMapping)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 107U }, MakeView(), oxygen::scene::SceneNode {});
+
+  CompositionViewImpl view_impl;
+  PrepareView(view_impl, scene_view, *graphics, ViewId { 207U });
+
+  auto inputs = MakeInputs();
+  auto shader_pass_config = oxygen::engine::ShaderPassConfig {};
+  shader_pass_config.debug_mode = ShaderDebugMode::kSceneDepthRaw;
+  inputs.shader_pass_config = observer_ptr { &shader_pass_config };
+
+  FramePlanBuilder builder;
+  std::array views { &view_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    inputs);
+
+  ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
+  const auto& plan = builder.GetFrameViewPackets().front().Plan();
+  EXPECT_EQ(plan.GetToneMapPolicy(), ToneMapPolicy::kNeutral);
 }
 
 } // namespace
