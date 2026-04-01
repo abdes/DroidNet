@@ -17,19 +17,22 @@ slow discovery.
 
 Current task focus:
 
-- Active phase is now `CSM-3`.
+- Active phase is now `CSM-4`.
 - Effective `2026-04-02`, the authoritative comparison baseline for later
   phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
   pre-`CSM-2` conventional package.
 - The next acceptable outputs are:
-  - `CSM-3` light-space receiver-mask implementation
-  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-3`
-  - receiver-mask occupancy evidence compared against the locked `CSM-2`
+  - `CSM-4` GPU caster culling and compaction implementation
+  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-4`
+  - compacted draw-count evidence compared against the locked `CSM-2`
     baseline
-- `CSM-1` and `CSM-2` are implemented and validated.
+- `CSM-1`, `CSM-2`, and `CSM-3` are implemented and validated.
 - `CSM-2` is the locked baseline package for future phases. It does not
   compare against an older capture package because it is the new authoritative
   baseline.
+- `CSM-3` has a fresh frame-`350` capture package, sequential RenderDoc
+  analysis, and an explicit baseline comparison against the locked `CSM-2`
+  package.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -181,14 +184,14 @@ Conclusion:
   rect
 - `CSM-2` is the authoritative baseline and therefore has no baseline-compare
   requirement against older stale captures
-- active implementation work now moves to `CSM-3`
+- active implementation work now moves to `CSM-4`
 
 ### 1.6 Per-Phase Evidence Rule
 
 Every future phase must produce all of the following:
 
 1. Release build evidence.
-2. Fresh frame-`320` capture of the canonical benchmark.
+2. Fresh frame-`350` capture of the canonical benchmark.
 3. Sequential RenderDoc Python-script analysis.
 4. A comparison against the authoritative `CSM-2` baseline package in this
    document.
@@ -498,7 +501,7 @@ Required phase evidence:
 
 Status:
 
-- pending
+- complete
 
 Goals:
 
@@ -538,6 +541,90 @@ Required phase evidence:
 - fresh frame-`350` capture
 - RenderDoc receiver-mask report
 - explicit baseline comparison
+
+Current validation evidence:
+
+- implementation files:
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowReceiverMaskPass.h`
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowReceiverMaskPass.cpp`
+  - `src/Oxygen/Renderer/Types/ConventionalShadowReceiverMask.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowReceiverMask.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowReceiverMask.hlsl`
+  - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp`
+  - `Examples/RenderScene/Analyze-ConventionalShadowCsm3.ps1`
+  - `Examples/RenderScene/AnalyzeRenderDocConventionalReceiverMask.py`
+  - `Examples/RenderScene/CompareConventionalShadowCsm3Baseline.py`
+- synthetic validation:
+  - `Oxygen.Renderer.ConventionalShadowReceiverAnalysisPass.Tests.exe`
+    `ConventionalShadowReceiverAnalysisPassTest.ProducesSampleDrivenReceiverBoundsTighterThanFullCascadeFit`
+    passed
+  - `Oxygen.Renderer.ConventionalShadowReceiverMaskPass.Tests.exe`
+    `ConventionalShadowReceiverMaskPassTest.ProducesSparseReceiverTileMaskForSampledCascade`
+    passed
+- Release validation:
+  - `cmake --build out/build-ninja --config Release --target`
+    `Oxygen.Examples.RenderScene.exe`
+    `Oxygen.Graphics.Direct3D12.ShaderBake.exe`
+    `oxygen-renderer`
+    succeeded
+- live validation artifacts:
+  - capture:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50_frame350.rdc`
+  - benchmark log:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.benchmark.log`
+  - timing reports:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.shadow_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.shader_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.screen_hzb_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_analysis_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_mask_timing.txt`
+  - receiver-analysis report:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_analysis_report.txt`
+  - receiver-mask report:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_mask_report.txt`
+  - baseline comparison:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.baseline_compare.txt`
+
+Current live `CSM-3` facts from the fresh canonical package:
+
+- scene build frame: `207`
+- last texture repoint frame: `281`
+- capture frame: `350`
+- post-scene-build stabilization: `143` frames / `6.292 s`
+- post-last-repoint stabilization: `69` frames / `1.541 s`
+- receiver-mask timing:
+  - `ConventionalShadowReceiverMaskPass`: `5.460544 ms`
+- receiver-mask occupancy:
+  - `job_count`: `4`
+  - `valid_job_count`: `2`
+  - `sampled_job_count`: `2`
+  - `sparse_job_count`: `2`
+  - `total_occupied_tile_count`: `2211 / 65536`
+  - `aggregate_occupied_tile_ratio`: `0.033737`
+  - `total_hierarchy_occupied_tile_count`: `168 / 4096`
+  - `aggregate_hierarchy_occupied_tile_ratio`: `0.041016`
+  - `sampled_aggregate_occupied_tile_ratio`: `0.067474`
+  - `sampled_aggregate_hierarchy_occupied_tile_ratio`: `0.082031`
+  - job `0` occupied-tile ratio: `0.133606`
+  - job `1` occupied-tile ratio: `0.001343`
+  - jobs `2` and `3` are empty
+- baseline comparison against locked `CSM-2`:
+  - shadow work events unchanged: `1608`
+  - shader work events unchanged: `33`
+  - `ConventionalShadowRasterPass` delta: `+1.313728 ms`
+  - `ShaderPass` delta: `+0.205728 ms`
+  - new receiver-mask pass cost is explicit and accounted for in the capture
+
+Conclusion:
+
+- the canonical frame-`350` capture shows sparse receiver occupancy for both
+  sampled cascades
+- aggregate occupied-tile coverage is materially below full-map coverage on the
+  canonical benchmark
+- structural work counts match the locked `CSM-2` baseline
+- the new shadow-path overhead is explained by the added `CSM-3` receiver-mask
+  pass itself
+- active implementation work now moves to `CSM-4`
 
 ### CSM-4. GPU Caster Culling And Compaction
 
@@ -615,7 +702,7 @@ Exit gate:
 Required phase evidence:
 
 - Release build
-- fresh frame-`320` capture
+- fresh frame-`350` capture
 - RenderDoc indirect-raster report
 - normalized timing compare versus baseline
 
@@ -679,11 +766,12 @@ Closure gate:
 
 The next meaningful execution order from the recovered state is:
 
-1. Implement `CSM-3` light-space receiver-mask construction from the locked
-   `CSM-2` receiver-analysis output.
+1. Implement `CSM-4` GPU caster culling and compaction from the locked
+   `CSM-2` receiver-analysis output plus the completed `CSM-3` receiver mask.
 2. Capture and analyze the canonical benchmark at frame `350` and `50 fps`.
-3. Prove sparse occupied-tile coverage on at least one near cascade.
-4. Only then proceed to `CSM-4` GPU caster culling and compaction.
+3. Prove non-trivial real-scene caster rejection and reduced eligible
+   draws/job versus the baseline replay shape.
+4. Only then proceed to `CSM-5` counted-indirect conventional raster.
 
 Do not restart with receiver object bounds. Do not attempt to tune the old
 rect/slab method. That path has already failed and been rolled back.
