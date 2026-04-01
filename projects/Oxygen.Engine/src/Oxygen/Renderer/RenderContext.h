@@ -86,6 +86,7 @@ class GroundGridPass;
 class ScreenHzbBuildPass;
 class ConventionalShadowReceiverAnalysisPass;
 class ConventionalShadowReceiverMaskPass;
+class ConventionalShadowCasterCullingPass;
 class VsmPageRequestGeneratorPass;
 class VsmInvalidationPass;
 class VsmPageManagementPass;
@@ -108,7 +109,7 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   VsmInvalidationPass, VsmPageManagementPass, VsmPageFlagPropagationPass,
   VsmPageInitializationPass, VsmShadowRasterizerPass, VsmStaticDynamicMergePass,
   VsmHzbUpdaterPass, VsmProjectionPass, ConventionalShadowReceiverAnalysisPass,
-  ConventionalShadowReceiverMaskPass>;
+  ConventionalShadowReceiverMaskPass, ConventionalShadowCasterCullingPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

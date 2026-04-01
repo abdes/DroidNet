@@ -27,6 +27,7 @@ KNOWN_PASS_NAMES = (
     "ConventionalShadowRasterPass",
     "ConventionalShadowReceiverAnalysisPass",
     "ConventionalShadowReceiverMaskPass",
+    "ConventionalShadowCasterCullingPass",
     "DepthPrePass",
     "ScreenHzbBuildPass",
     "LightCullingPass",
