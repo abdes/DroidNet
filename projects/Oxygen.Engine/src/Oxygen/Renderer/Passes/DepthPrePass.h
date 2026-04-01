@@ -181,12 +181,13 @@ protected:
     std::vector<graphics::ShaderDefine>& defines) const -> void;
   [[nodiscard]] auto TryGetConfiguredDepthTexture() const noexcept
     -> const graphics::Texture*;
+  [[nodiscard]] auto GetDepthTextureMutable() -> graphics::Texture&;
   auto SetConfiguredDepthTexture(
     std::shared_ptr<const graphics::Texture> depth_texture) -> void;
 
   // Helper methods for Execute()
-  virtual auto PrepareDepthStencilView(
-    const graphics::Texture& depth_texture_ref) -> graphics::NativeView;
+  virtual auto PrepareDepthStencilView(graphics::Texture& depth_texture_ref)
+    -> graphics::NativeView;
   virtual auto ClearDepthStencilView(
     graphics::CommandRecorder& command_recorder,
     const graphics::NativeView& dsv_handle) const -> void;
