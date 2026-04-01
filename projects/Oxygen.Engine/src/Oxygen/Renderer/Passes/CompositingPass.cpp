@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "CompositingPass.h"
-
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <span>
 #include <stdexcept>
@@ -28,11 +27,62 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Passes/CompositingPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::engine {
 
 namespace {
+  constexpr float kDefaultAlpha = 1.0F;
+
+  auto SanitizeAlpha(const float alpha) -> float
+  {
+    if (!std::isfinite(alpha)) {
+      return kDefaultAlpha;
+    }
+    return std::clamp(alpha, 0.0F, 1.0F);
+  }
+
+  auto CheckTrackedTexture(const graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture, const char* role) -> void
+  {
+    CHECK_F(recorder.IsResourceTracked(texture),
+      "{} texture '{}' must already have "
+      "resource-state tracking before execution",
+      role, texture.GetDescriptor().debug_name);
+  }
+
+  auto HasPositiveArea(const ViewPort& viewport) -> bool
+  {
+    return viewport.width > 0.0F && viewport.height > 0.0F;
+  }
+
+  auto ResolveAttachmentFormat(
+    const graphics::FramebufferAttachment& attachment) -> Format
+  {
+    CHECK_NOTNULL_F(attachment.texture.get());
+    if (attachment.format != Format::kUnknown) {
+      return attachment.format;
+    }
+    return attachment.texture->GetDescriptor().format;
+  }
+
+  auto ResolveAttachmentExtent(
+    const graphics::FramebufferAttachment& attachment)
+    -> std::pair<uint32_t, uint32_t>
+  {
+    CHECK_NOTNULL_F(attachment.texture.get());
+    const auto& texture_desc = attachment.texture->GetDescriptor();
+    const auto sub_resources
+      = attachment.sub_resources.Resolve(texture_desc, true);
+    const auto mip_level = sub_resources.base_mip_level;
+
+    return {
+      (std::max)(1u, texture_desc.width >> mip_level),
+      (std::max)(1u, texture_desc.height >> mip_level),
+    };
+  }
+
   struct CompositingPassConstants {
     uint32_t source_texture_index;
     uint32_t sampler_index;
@@ -43,55 +93,19 @@ namespace {
   static_assert(sizeof(CompositingPassConstants) == 16,
     "CompositingPassConstants must be 16 bytes");
 
-  auto PrepareRenderTargetView(graphics::Texture& color_texture,
-    graphics::ResourceRegistry& registry,
-    graphics::DescriptorAllocator& allocator) -> graphics::NativeView
-  {
-    const auto& tex_desc = color_texture.GetDescriptor();
-    graphics::TextureViewDescription rtv_view_desc {
-      .view_type = graphics::ResourceViewType::kTexture_RTV,
-      .visibility = graphics::DescriptorVisibility::kCpuOnly,
-      .format = tex_desc.format,
-      .dimension = tex_desc.texture_type,
-      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      .is_read_only_dsv = false,
-    };
-
-    if (const auto rtv = registry.Find(color_texture, rtv_view_desc);
-      rtv->IsValid()) {
-      return rtv;
-    }
-
-    auto rtv_desc_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_RTV,
-        graphics::DescriptorVisibility::kCpuOnly);
-    if (!rtv_desc_handle.IsValid()) {
-      throw std::runtime_error(
-        "CompositingPass: Failed to allocate RTV descriptor handle");
-    }
-
-    const auto rtv = registry.RegisterView(
-      color_texture, std::move(rtv_desc_handle), rtv_view_desc);
-    if (!rtv->IsValid()) {
-      throw std::runtime_error(
-        "CompositingPass: Failed to register RTV with resource registry");
-    }
-    return rtv;
-  }
-
-  auto ClampViewport(const ViewPort& viewport,
-    const graphics::TextureDesc& target_desc) -> ViewPort
+  auto ClampViewport(const ViewPort& viewport, const uint32_t target_width,
+    const uint32_t target_height) -> ViewPort
   {
     ViewPort clamped = viewport;
-    clamped.top_left_x = std::clamp(
-      clamped.top_left_x, 0.0F, static_cast<float>(target_desc.width));
-    clamped.top_left_y = std::clamp(
-      clamped.top_left_y, 0.0F, static_cast<float>(target_desc.height));
+    clamped.top_left_x
+      = std::clamp(clamped.top_left_x, 0.0F, static_cast<float>(target_width));
+    clamped.top_left_y
+      = std::clamp(clamped.top_left_y, 0.0F, static_cast<float>(target_height));
 
     const auto max_width
-      = static_cast<float>(target_desc.width) - clamped.top_left_x;
+      = static_cast<float>(target_width) - clamped.top_left_x;
     const auto max_height
-      = static_cast<float>(target_desc.height) - clamped.top_left_y;
+      = static_cast<float>(target_height) - clamped.top_left_y;
 
     clamped.width = std::clamp(clamped.width, 0.0F, max_width);
     clamped.height = std::clamp(clamped.height, 0.0F, max_height);
@@ -104,13 +118,15 @@ CompositingPass::CompositingPass(std::shared_ptr<Config> config)
   : GraphicsRenderPass(config ? config->debug_name : "CompositingPass", false)
   , config_(std::move(config))
 {
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
 }
 
 CompositingPass::~CompositingPass() { ReleasePassConstantsBuffer(); }
 
 auto CompositingPass::ValidateConfig() -> void
 {
+  has_drawable_region_ = false;
+  clamped_viewport_ = {};
+
   if (!config_) {
     throw std::runtime_error("CompositingPass: missing configuration");
   }
@@ -120,8 +136,31 @@ auto CompositingPass::ValidateConfig() -> void
   if (!config_->viewport.IsValid()) {
     throw std::runtime_error("CompositingPass: viewport is invalid");
   }
-  if (!GetFramebuffer()) {
-    throw std::runtime_error("CompositingPass: framebuffer is required");
+
+  const auto& output = GetOutputTexture();
+  if (&GetSourceTexture() == &output) {
+    throw std::runtime_error(
+      "CompositingPass: source texture and output texture must be distinct");
+  }
+
+  const auto sanitized_alpha = SanitizeAlpha(config_->alpha);
+  if (!std::isfinite(config_->alpha)) {
+    LOG_F(WARNING, "invalid alpha={}, resetting to default {}", config_->alpha,
+      kDefaultAlpha);
+    config_->alpha = sanitized_alpha;
+  } else if (config_->alpha != sanitized_alpha) {
+    LOG_F(WARNING, "clamping alpha={} to {}", config_->alpha, sanitized_alpha);
+    config_->alpha = sanitized_alpha;
+  }
+
+  clamped_viewport_ = GetClampedViewport();
+  has_drawable_region_ = HasPositiveArea(clamped_viewport_);
+  if (!has_drawable_region_) {
+    LOG_F(INFO,
+      "skipping draw because viewport ({}, {}) {}x{} "
+      "clamps to an empty region on the current target",
+      config_->viewport.top_left_x, config_->viewport.top_left_y,
+      config_->viewport.width, config_->viewport.height);
   }
 }
 
@@ -145,8 +184,16 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     config_->viewport.top_left_y, config_->viewport.width,
     config_->viewport.height, config_->alpha);
 
-  recorder.BeginTrackingResourceState(
-    source, graphics::ResourceStates::kCommon);
+  if (!has_drawable_region_) {
+    SetPassConstantsIndex(kInvalidShaderVisibleIndex);
+    co_return;
+  }
+
+  // CompositingPass does not own either texture, so it must not guess or
+  // overwrite their initial tracker state. Callers must seed tracking.
+  CheckTrackedTexture(recorder, source, "source");
+  CheckTrackedTexture(recorder, output, "output");
+
   recorder.RequireResourceState(
     source, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
@@ -168,14 +215,14 @@ auto CompositingPass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
+  if (!has_drawable_region_) {
+    co_return;
+  }
+
   SetupViewPortAndScissors(recorder);
   SetupRenderTargets(recorder);
 
   recorder.Draw(3, 1, 0, 0);
-
-  const auto& source = GetSourceTexture();
-  recorder.RequireResourceState(source, graphics::ResourceStates::kCommon);
-  recorder.FlushBarriers();
 
   co_return;
 }
@@ -183,39 +230,35 @@ auto CompositingPass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 auto CompositingPass::SetupRenderTargets(
   graphics::CommandRecorder& recorder) const -> void
 {
-  auto& graphics = Context().GetGraphics();
-  auto& registry = graphics.GetResourceRegistry();
-  auto& allocator = graphics.GetDescriptorAllocator();
-
-  auto& color_texture = const_cast<graphics::Texture&>(GetOutputTexture());
-  const auto color_rtv
-    = PrepareRenderTargetView(color_texture, registry, allocator);
-  std::array rtvs { color_rtv };
-
-  recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+  const auto* fb = GetFramebuffer();
+  CHECK_NOTNULL_F(fb);
+  const auto rtvs = fb->GetRenderTargetViews();
+  CHECK_F(!rtvs.empty() && rtvs[0]->IsValid(),
+    "framebuffer missing a valid color RTV");
+  std::array<graphics::NativeView, 1> color_rtvs { rtvs[0] };
+  recorder.SetRenderTargets(std::span(color_rtvs), std::nullopt);
 }
 
 auto CompositingPass::SetupViewPortAndScissors(
   graphics::CommandRecorder& recorder) const -> void
 {
-  const auto& output_desc = GetOutputTexture().GetDescriptor();
-  const auto clamped = ClampViewport(config_->viewport, output_desc);
-
   const ViewPort viewport {
-    .top_left_x = clamped.top_left_x,
-    .top_left_y = clamped.top_left_y,
-    .width = clamped.width,
-    .height = clamped.height,
-    .min_depth = clamped.min_depth,
-    .max_depth = clamped.max_depth,
+    .top_left_x = clamped_viewport_.top_left_x,
+    .top_left_y = clamped_viewport_.top_left_y,
+    .width = clamped_viewport_.width,
+    .height = clamped_viewport_.height,
+    .min_depth = clamped_viewport_.min_depth,
+    .max_depth = clamped_viewport_.max_depth,
   };
   recorder.SetViewport(viewport);
 
   const Scissors scissors {
-    .left = static_cast<int32_t>(clamped.top_left_x),
-    .top = static_cast<int32_t>(clamped.top_left_y),
-    .right = static_cast<int32_t>(clamped.top_left_x + clamped.width),
-    .bottom = static_cast<int32_t>(clamped.top_left_y + clamped.height),
+    .left = static_cast<int32_t>(clamped_viewport_.top_left_x),
+    .top = static_cast<int32_t>(clamped_viewport_.top_left_y),
+    .right = static_cast<int32_t>(
+      clamped_viewport_.top_left_x + clamped_viewport_.width),
+    .bottom = static_cast<int32_t>(
+      clamped_viewport_.top_left_y + clamped_viewport_.height),
   };
   recorder.SetScissors(scissors);
 }
@@ -225,7 +268,8 @@ auto CompositingPass::GetFramebuffer() const -> const graphics::Framebuffer*
   return Context().pass_target.get();
 }
 
-auto CompositingPass::GetOutputTexture() const -> const graphics::Texture&
+auto CompositingPass::GetOutputAttachment() const
+  -> const graphics::FramebufferAttachment&
 {
   const auto* fb = GetFramebuffer();
   if (!fb) {
@@ -236,7 +280,12 @@ auto CompositingPass::GetOutputTexture() const -> const graphics::Texture&
     || !fb_desc.color_attachments[0].texture) {
     throw std::runtime_error("CompositingPass: missing color attachment");
   }
-  return *fb_desc.color_attachments[0].texture;
+  return fb_desc.color_attachments[0];
+}
+
+auto CompositingPass::GetOutputTexture() const -> const graphics::Texture&
+{
+  return *GetOutputAttachment().texture;
 }
 
 auto CompositingPass::GetSourceTexture() const -> const graphics::Texture&
@@ -247,41 +296,57 @@ auto CompositingPass::GetSourceTexture() const -> const graphics::Texture&
   return *config_->source_texture;
 }
 
+auto CompositingPass::GetClampedViewport() const -> ViewPort
+{
+  const auto& attachment = GetOutputAttachment();
+  const auto [width, height] = ResolveAttachmentExtent(attachment);
+  return ClampViewport(config_->viewport, width, height);
+}
+
 auto CompositingPass::EnsurePassConstantsBuffer() -> void
 {
-  if (pass_constants_buffer_ && pass_constants_indices_[0].IsValid()) {
-    return;
+  auto& state = GetCurrentFramePassConstantsState();
+  if (state.chunks.empty()) {
+    CreatePassConstantsChunk(state);
   }
+}
 
+auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
+  -> void
+{
   auto& graphics = Context().GetGraphics();
+  graphics_ = observer_ptr { &graphics };
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
 
+  const size_t chunk_index = state.chunks.size();
   const graphics::BufferDesc desc {
-    .size_bytes = kPassConstantsStride * kPassConstantsSlots,
+    .size_bytes = kPassConstantsStride * kPassConstantsChunkSlots,
     .usage = graphics::BufferUsage::kConstant,
     .memory = graphics::BufferMemory::kUpload,
-    .debug_name = std::string { GetName() } + "_PassConstants",
+    .debug_name = fmt::format("{}_PassConstants_Frame{}_Chunk{}", GetName(),
+      Context().frame_slot.get(), chunk_index),
   };
 
-  pass_constants_buffer_ = graphics.CreateBuffer(desc);
-  if (!pass_constants_buffer_) {
+  PassConstantsChunk chunk {};
+  chunk.buffer = graphics.CreateBuffer(desc);
+  if (!chunk.buffer) {
     throw std::runtime_error(
       "CompositingPass: Failed to create pass constants buffer");
   }
-  pass_constants_buffer_->SetName(desc.debug_name);
+  chunk.buffer->SetName(desc.debug_name);
 
-  pass_constants_mapped_ptr_
-    = static_cast<std::byte*>(pass_constants_buffer_->Map(0, desc.size_bytes));
-  if (!pass_constants_mapped_ptr_) {
+  chunk.mapped_ptr
+    = static_cast<std::byte*>(chunk.buffer->Map(0, desc.size_bytes));
+  if (!chunk.mapped_ptr) {
     throw std::runtime_error(
       "CompositingPass: Failed to map pass constants buffer");
   }
 
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  registry.Register(pass_constants_buffer_);
-  for (size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
-    const uint32_t offset = static_cast<uint32_t>(slot * kPassConstantsStride);
+  chunk.indices.fill(kInvalidShaderVisibleIndex);
+  registry.Register(chunk.buffer);
+  for (uint32_t slot = 0; slot < kPassConstantsChunkSlots; ++slot) {
+    const uint32_t offset = slot * kPassConstantsStride;
 
     graphics::BufferViewDescription cbv_view_desc;
     cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
@@ -295,32 +360,69 @@ auto CompositingPass::EnsurePassConstantsBuffer() -> void
       throw std::runtime_error(
         "CompositingPass: Failed to allocate CBV descriptor handle");
     }
-    pass_constants_indices_[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
+    chunk.indices[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
 
     auto cbv_view = registry.RegisterView(
-      *pass_constants_buffer_, std::move(cbv_handle), cbv_view_desc);
+      *chunk.buffer, std::move(cbv_handle), cbv_view_desc);
     if (!cbv_view->IsValid()) {
       throw std::runtime_error(
         "CompositingPass: Failed to register pass constants CBV");
     }
   }
+
+  state.chunks.push_back(std::move(chunk));
+}
+
+auto CompositingPass::GetCurrentFramePassConstantsState()
+  -> FramePassConstantsState&
+{
+  CHECK_F(Context().frame_slot != frame::kInvalidSlot,
+    "frame_slot must be valid before allocating pass "
+    "constants");
+  const auto slot_index = static_cast<size_t>(Context().frame_slot.get());
+  CHECK_LT_F(slot_index, pass_constants_frames_.size(),
+    "frame_slot {} out of bounds for pass constants",
+    Context().frame_slot.get());
+
+  auto& state = pass_constants_frames_[slot_index];
+  if (state.frame_sequence != Context().frame_sequence) {
+    ReleasePassConstantsFrameState(state);
+    state.frame_sequence = Context().frame_sequence;
+  }
+  return state;
 }
 
 auto CompositingPass::ReleasePassConstantsBuffer() -> void
 {
-  if (!pass_constants_buffer_) {
-    pass_constants_mapped_ptr_ = nullptr;
-    return;
+  for (auto& state : pass_constants_frames_) {
+    ReleasePassConstantsFrameState(state);
   }
+  SetPassConstantsIndex(kInvalidShaderVisibleIndex);
+}
 
-  if (pass_constants_buffer_->IsMapped()) {
-    pass_constants_buffer_->UnMap();
+auto CompositingPass::ReleasePassConstantsFrameState(
+  FramePassConstantsState& state) -> void
+{
+  for (auto& chunk : state.chunks) {
+    if (!chunk.buffer) {
+      continue;
+    }
+    if (chunk.buffer->IsMapped()) {
+      chunk.buffer->UnMap();
+    }
+    if (graphics_ != nullptr) {
+      auto& registry = graphics_->GetResourceRegistry();
+      if (registry.Contains(*chunk.buffer)) {
+        registry.UnRegisterResource(*chunk.buffer);
+      }
+    }
+    chunk.buffer.reset();
+    chunk.mapped_ptr = nullptr;
+    chunk.indices.fill(kInvalidShaderVisibleIndex);
+    chunk.used_slots = 0u;
   }
-
-  pass_constants_mapped_ptr_ = nullptr;
-  pass_constants_buffer_.reset();
-  pass_constants_indices_.fill(kInvalidShaderVisibleIndex);
-  pass_constants_slot_ = 0u;
+  state.chunks.clear();
+  state.frame_sequence = frame::kInvalidSequenceNumber;
 }
 
 auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
@@ -340,21 +442,22 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
     .is_read_only_dsv = false,
   };
 
-  // Recover and reuse any existing SRV index already registered for this
-  // texture/description pair (e.g. after pass recreation).
+  // Reuse the canonical shader-visible SRV already registered for this
+  // texture/description pair when available.
   if (const auto existing_index
     = registry.FindShaderVisibleIndex(texture, srv_desc);
     existing_index.has_value()) {
-    source_texture_srvs_[&texture] = *existing_index;
     return *existing_index;
   }
 
-  if (auto it = source_texture_srvs_.find(&texture);
-    it != source_texture_srvs_.end()) {
-    if (registry.Contains(texture, srv_desc)) {
-      return it->second;
-    }
-    source_texture_srvs_.erase(it);
+  CHECK_F(registry.Contains(texture),
+    "source texture '{}' must be registered in "
+    "ResourceRegistry before SRV creation",
+    texture.GetDescriptor().debug_name);
+  if (registry.Contains(texture, srv_desc)) {
+    throw std::runtime_error(
+      "CompositingPass: source SRV exists in registry without a "
+      "shader-visible index");
   }
 
   auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
@@ -372,16 +475,13 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
       "CompositingPass: Failed to register source SRV view");
   }
 
-  source_texture_srvs_[&texture] = srv_index;
   return srv_index;
 }
 
 auto CompositingPass::UpdatePassConstants(
   ShaderVisibleIndex source_texture_index) -> void
 {
-  CHECK_NOTNULL_F(pass_constants_mapped_ptr_);
-
-  const float alpha = std::clamp(config_->alpha, 0.0F, 1.0F);
+  const float alpha = SanitizeAlpha(config_->alpha);
   const CompositingPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0u,
@@ -389,12 +489,20 @@ auto CompositingPass::UpdatePassConstants(
     .pad0 = 0.0F,
   };
 
-  const auto slot = pass_constants_slot_ % kPassConstantsSlots;
-  pass_constants_slot_++;
-  auto* slot_ptr = pass_constants_mapped_ptr_
+  auto& state = GetCurrentFramePassConstantsState();
+  if (state.chunks.empty()
+    || state.chunks.back().used_slots >= kPassConstantsChunkSlots) {
+    CreatePassConstantsChunk(state);
+  }
+
+  auto& chunk = state.chunks.back();
+  CHECK_NOTNULL_F(chunk.mapped_ptr);
+  CHECK_LT_F(chunk.used_slots, kPassConstantsChunkSlots);
+  const auto slot = chunk.used_slots++;
+  auto* slot_ptr = chunk.mapped_ptr
     + static_cast<std::ptrdiff_t>(slot * kPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
-  SetPassConstantsIndex(pass_constants_indices_[slot]);
+  SetPassConstantsIndex(chunk.indices[slot]);
 }
 
 auto CompositingPass::CreatePipelineStateDesc()
@@ -411,9 +519,10 @@ auto CompositingPass::CreatePipelineStateDesc()
   using graphics::RasterizerStateDesc;
   using graphics::ShaderRequest;
 
-  const auto& color_desc = GetOutputTexture().GetDescriptor();
+  const auto& attachment = GetOutputAttachment();
+  const auto& color_desc = attachment.texture->GetDescriptor();
   const FramebufferLayoutDesc fb_layout_desc {
-    .color_target_formats = { color_desc.format },
+    .color_target_formats = { ResolveAttachmentFormat(attachment) },
     .depth_stencil_format = Format::kUnknown,
     .sample_count = color_desc.sample_count,
   };
@@ -470,10 +579,12 @@ auto CompositingPass::NeedRebuildPipelineState() const -> bool
     return true;
   }
 
-  const auto& color_desc = GetOutputTexture().GetDescriptor();
+  const auto& attachment = GetOutputAttachment();
+  const auto& color_desc = attachment.texture->GetDescriptor();
+  const auto output_format = ResolveAttachmentFormat(attachment);
   if (last_built->FramebufferLayout().color_target_formats.empty()
     || last_built->FramebufferLayout().color_target_formats[0]
-      != color_desc.format) {
+      != output_format) {
     return true;
   }
 

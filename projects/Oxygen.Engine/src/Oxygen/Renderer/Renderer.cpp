@@ -418,17 +418,38 @@ auto TrackCompositionFramebuffer(oxygen::graphics::CommandRecorder& recorder,
   }
 }
 
+auto TrackCompositionSourceTexture(oxygen::graphics::ResourceRegistry& registry,
+  oxygen::graphics::CommandRecorder& recorder,
+  const oxygen::graphics::Texture& texture) -> void
+{
+  CHECK_F(registry.Contains(texture),
+    "Renderer: composition source texture '{}' must be registered in "
+    "ResourceRegistry before compositing",
+    texture.GetDescriptor().debug_name);
+  if (recorder.IsResourceTracked(texture)) {
+    return;
+  }
+
+  auto initial = texture.GetDescriptor().initial_state;
+  CHECK_F(initial != oxygen::graphics::ResourceStates::kUnknown
+      && initial != oxygen::graphics::ResourceStates::kUndefined,
+    "Renderer: composition source texture '{}' must either already have "
+    "resource-state tracking or declare a valid initial_state",
+    texture.GetDescriptor().debug_name);
+  recorder.BeginTrackingResourceState(texture, initial, true);
+}
+
 auto CopyTextureToRegion(oxygen::graphics::CommandRecorder& recorder,
   oxygen::graphics::Texture& source, oxygen::graphics::Texture& backbuffer,
   const oxygen::ViewPort& viewport) -> void
 {
-  recorder.BeginTrackingResourceState(
-    source, oxygen::graphics::ResourceStates::kCommon);
-  recorder.RequireResourceState(
-    source, oxygen::graphics::ResourceStates::kCopySource);
-  recorder.RequireResourceState(
-    backbuffer, oxygen::graphics::ResourceStates::kCopyDest);
-  recorder.FlushBarriers();
+  CHECK_F(recorder.IsResourceTracked(source),
+    "Renderer: copy source texture '{}' must already be tracked for "
+    "compositing",
+    source.GetDescriptor().debug_name);
+  CHECK_F(recorder.IsResourceTracked(backbuffer),
+    "Renderer: compositing backbuffer '{}' must already be tracked",
+    backbuffer.GetDescriptor().debug_name);
 
   const auto& src_desc = source.GetDescriptor();
   const auto& dst_desc = backbuffer.GetDescriptor();
@@ -449,6 +470,12 @@ auto CopyTextureToRegion(oxygen::graphics::CommandRecorder& recorder,
   if (copy_width == 0 || copy_height == 0) {
     return;
   }
+
+  recorder.RequireResourceState(
+    source, oxygen::graphics::ResourceStates::kCopySource);
+  recorder.RequireResourceState(
+    backbuffer, oxygen::graphics::ResourceStates::kCopyDest);
+  recorder.FlushBarriers();
 
   const oxygen::graphics::TextureSlice src_slice {
     .x = 0,
@@ -477,9 +504,6 @@ auto CopyTextureToRegion(oxygen::graphics::CommandRecorder& recorder,
 
   recorder.CopyTexture(
     source, src_slice, subresources, backbuffer, dst_slice, subresources);
-  recorder.RequireResourceState(
-    source, oxygen::graphics::ResourceStates::kCommon);
-  recorder.FlushBarriers();
 }
 
 auto BuildSkyAtmosphereParamsFromEnvironment(
@@ -2231,6 +2255,8 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
         DLOG_F(2, "Log copy viewport: ({}, {}) {}x{}",
           task.copy.viewport.top_left_x, task.copy.viewport.top_left_y,
           task.copy.viewport.width, task.copy.viewport.height);
+        TrackCompositionSourceTexture(
+          gfx->GetResourceRegistry(), recorder, *source);
         if (source->GetDescriptor().format
           != backbuffer.GetDescriptor().format) {
           DLOG_F(1, "Fallback to blend: format mismatch for view {}",
@@ -2270,6 +2296,8 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
           task.blend.viewport.width, task.blend.viewport.height,
           task.blend.alpha);
 
+        TrackCompositionSourceTexture(
+          gfx->GetResourceRegistry(), recorder, *source);
         CHECK_NOTNULL_F(
           compositing_pass_config_.get(), "CompositingPass config missing");
         compositing_pass_config_->source_texture = source;
@@ -2298,6 +2326,8 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
           task.texture_blend.viewport.width, task.texture_blend.viewport.height,
           task.texture_blend.alpha);
 
+        TrackCompositionSourceTexture(gfx->GetResourceRegistry(), recorder,
+          *task.texture_blend.source_texture);
         CHECK_NOTNULL_F(
           compositing_pass_config_.get(), "CompositingPass config missing");
         compositing_pass_config_->source_texture
