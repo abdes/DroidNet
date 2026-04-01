@@ -2,213 +2,423 @@
 
 ## Overview
 
-The Oxygen Engine uses a **pure Forward+ rendering architecture**, implemented
-through a modular, coroutine-based render pass system designed for modern
-explicit graphics APIs (D3D12, Vulkan). Each render pass encapsulates a single
-stage of the pipeline and is implemented as a component with official naming
-and metadata support.
+The Oxygen Engine uses a **Forward+ rendering architecture** implemented
+through a modular, coroutine-based render pass system for modern explicit
+graphics APIs (D3D12, Vulkan). Rendering is split into HDR scene passes,
+tonemapping, and SDR compositing/overlay phases. Passes are orchestrated by
+the `ForwardPipeline` via per-view coroutines that sequence pass execution.
 
-This document provides a high-level introduction to Forward+ rendering and
-Oxygen's pass architecture. For implementation details of individual passes,
-see the dedicated documentation files linked throughout.
+This document covers the Forward+ technique, Oxygen's pass taxonomy and class
+hierarchy, the ForwardPipeline orchestration model, cross-pass communication,
+PSO management, and the bindless root signature contract.
 
 ## Forward+ Rendering
 
-Forward+ (also called Tiled Forward Shading) is a rendering technique that
-combines the flexibility of forward rendering with efficient light culling to
-handle many dynamic lights in real-time.
+Forward+ (Tiled/Clustered Forward Shading) combines forward rendering
+flexibility with efficient light culling to handle many dynamic lights.
 
 ### Classic Forward vs Forward+
 
-In classic forward rendering, each draw call evaluates all lights in the scene,
-leading to O(objects × lights) shader complexity. This becomes prohibitively
-expensive with many lights.
-
-Forward+ solves this by dividing the screen into tiles (typically 16×16 or
-32×32 pixels) and culling lights against each tile's depth bounds. During
-shading, each pixel only evaluates lights that affect its tile, reducing
-complexity dramatically.
+Classic forward rendering evaluates all lights per draw call (**O(objects ×
+lights)**). Forward+ partitions the frustum into spatial clusters and prunes
+lights against each cluster's bounds, so each pixel evaluates only the lights
+that actually affect its region.
 
 ### Pipeline Stages
 
-A typical Forward+ pipeline consists of these conceptual stages:
+A Forward+ frame conceptually proceeds through these stages:
 
-1. **Depth Pre-Pass** — Render all opaque geometry to populate the depth buffer
-   without color output. This enables early-z rejection in later passes and
-   provides depth data for light culling.
-
-2. **Light Culling** — A compute shader analyzes the depth buffer per tile,
-   determines min/max depth bounds, and builds a list of lights affecting each
-   tile. The result is a per-tile light index buffer.
-
-3. **Forward Shading** — Geometry is drawn and shaded in a single pass. Each
-   pixel samples the per-tile light list and evaluates only the relevant
-   lights. PBR material evaluation and all lighting (direct, shadows, IBL)
-   happen here.
-
-4. **Transparency** — Transparent geometry is rendered after opaques, using
-   the same lighting model. Blending requires back-to-front ordering or
-   order-independent transparency (OIT) techniques.
-
-5. **Post-Processing** — Screen-space effects such as tone mapping, bloom,
-   FXAA, and color grading are applied to the final color buffer.
+1. **Depth Pre-Pass** — Render opaque/masked geometry depth-only. Enables
+   early-Z rejection in later passes, feeds light culling and HZB
+   construction, and provides the scene depth product.
+2. **HZB Build** — Generate a hierarchical Z-buffer (min/max mip chain) from
+   the full-resolution depth buffer for occlusion and VSM page requests.
+3. **Light Culling** — A compute pass builds a 3D cluster grid from the view
+   frustum and assigns each positional light to the clusters it overlaps.
+4. **Shadow Passes** — Raster shadows (conventional cascaded shadow maps) and
+   Virtual Shadow Map (VSM) passes produce shadow data consumed during
+   forward shading.
+5. **Sky & Atmosphere LUTs** — Compute passes precompute atmospheric scattering
+   LUTs; a graphics pass renders the sky background behind scene geometry.
+6. **Forward Shading** — Geometry is drawn with full PBR lighting (direct,
+   IBL, shadows) in a single pass, sampling the per-cluster light list.
+7. **Transparency** — Transparent geometry rendered with blending (depth read,
+   no depth write), sharing the same lighting model.
+8. **Auto Exposure** — A compute pass builds a luminance histogram from the
+   HDR buffer and derives adapted exposure.
+9. **Ground Grid / Debug Overlays** — Procedural overlays rendered into the
+   HDR buffer before tonemapping.
+10. **Tonemapping** — Converts the HDR buffer to SDR with exposure,
+    tone-mapping operator, and gamma correction.
+11. **SDR Overlays** — Wireframe overlay, ImGui tools, GPU debug draw pass —
+    rendered directly into the SDR buffer.
+12. **Compositing** — Alpha-blended blit of per-view SDR results into the
+    swapchain backbuffer.
 
 ### Why Forward+
 
-Oxygen uses Forward+ as its exclusive rendering technique for these reasons:
-
 | Advantage | Explanation |
 | --- | --- |
-| Transparency support | All lighting code lives in the forward shader, so transparents receive identical lighting to opaques |
-| MSAA compatibility | Forward rendering naturally supports hardware MSAA without complex resolve steps |
-| Material flexibility | Arbitrary BRDFs can be used without G-buffer bandwidth constraints |
-| Memory efficiency | No G-buffer storage (albedo, normals, roughness, etc.) required |
-| Modern GPU fit | Compute-based light culling leverages GPU parallelism effectively |
+| Transparency support | All lighting lives in the forward shader; transparents receive identical lighting |
+| MSAA compatibility | Forward rendering naturally supports hardware MSAA |
+| Material flexibility | Arbitrary BRDFs without G-buffer constraints |
+| Memory efficiency | No G-buffer storage required |
+| Modern GPU fit | Compute-based light culling leverages GPU parallelism |
 
-## Oxygen's Pass Architecture
+## Pass Class Hierarchy
 
-Oxygen implements Forward+ through a concrete set of render passes, orchestrated
-via coroutines in the application's render graph.
+All passes inherit from `RenderPass`, which provides the coroutine protocol,
+naming, pass-constants management, and draw helpers. Two intermediate base
+classes specialize for pipeline type:
 
-### Implemented Passes
+```mermaid
+classDiagram
+    class RenderPass {
+        <<abstract>>
+        +PrepareResources(ctx, rec) Co~void~
+        +Execute(ctx, rec) Co~void~
+        #ValidateConfig()
+        #DoPrepareResources(rec) Co~void~
+        #DoExecute(rec) Co~void~
+        #SetPassConstantsIndex(idx)
+        #IssueDrawCallsOverPass(rec, bit)
+        #EmitDrawRange(rec, records, begin, end, ...)
+    }
 
-| Pass | Class | Status | Documentation |
-| --- | --- | --- | --- |
-| Depth Pre-Pass | `DepthPrePass` | ✅ Implemented | [depth_pre_pass.md](depth_pre_pass.md) |
-| Forward Shading | `ShaderPass` | ✅ Implemented | [shader_pass.md](shader_pass.md) |
-| Transparency | `TransparentPass` | ✅ Implemented | (pending) |
-| Light Culling | — | 🔲 Planned | — |
+    class GraphicsRenderPass {
+        <<abstract>>
+        #CreatePipelineStateDesc() GraphicsPipelineDesc
+        #NeedRebuildPipelineState() bool
+        #DoSetupPipeline(rec)
+    }
 
-### Current Pipeline Sequence
+    class ComputeRenderPass {
+        <<abstract>>
+        #CreatePipelineStateDesc() ComputePipelineDesc
+        #NeedRebuildPipelineState() bool
+    }
 
-The `RenderGraph` executes passes in the following order:
+    RenderPass <|-- GraphicsRenderPass
+    RenderPass <|-- ComputeRenderPass
 
-```text
-DepthPrePass → ShaderPass → TransparentPass → [Post-Processing] → [UI]
+    GraphicsRenderPass <|-- DepthPrePass
+    GraphicsRenderPass <|-- ShaderPass
+    GraphicsRenderPass <|-- TransparentPass
+    GraphicsRenderPass <|-- SkyPass
+    GraphicsRenderPass <|-- GroundGridPass
+    GraphicsRenderPass <|-- WireframePass
+    GraphicsRenderPass <|-- ToneMapPass
+    GraphicsRenderPass <|-- CompositingPass
+    GraphicsRenderPass <|-- GpuDebugDrawPass
+    GraphicsRenderPass <|-- SkyCapturePass
+
+    DepthPrePass <|-- ConventionalShadowRasterPass
+    DepthPrePass <|-- VsmShadowRasterizerPass
+
+    ComputeRenderPass <|-- LightCullingPass
+    ComputeRenderPass <|-- SkyAtmosphereLutComputePass
+    ComputeRenderPass <|-- ScreenHzbBuildPass
+    ComputeRenderPass <|-- AutoExposurePass
+    ComputeRenderPass <|-- GpuDebugClearPass
+    ComputeRenderPass <|-- VsmPageRequestGeneratorPass
+    ComputeRenderPass <|-- VsmInvalidationPass
+    ComputeRenderPass <|-- VsmPageManagementPass
+    ComputeRenderPass <|-- VsmPageFlagPropagationPass
+    ComputeRenderPass <|-- VsmPageInitializationPass
+    ComputeRenderPass <|-- VsmStaticDynamicMergePass
+    ComputeRenderPass <|-- VsmHzbUpdaterPass
+    ComputeRenderPass <|-- VsmProjectionPass
+
+    RenderPass <|-- IblComputePass
 ```
 
-Each pass follows the two-phase coroutine protocol:
+### RenderPass Contract
 
-1. **PrepareResources** — Transition resources to required states, set up
-   descriptor tables, insert barriers
-2. **Execute** — Issue draw/dispatch calls with resources in correct states
+Every pass follows a two-phase coroutine protocol:
 
-### RenderPass Base Class
+1. **`PrepareResources(ctx, rec)`** → Validates config, rebuilds PSO if
+   needed (`OnPrepareResources`), then calls `DoPrepareResources` for
+   pass-specific barrier insertion, descriptor setup, and uploads.
+2. **`Execute(ctx, rec)`** → Calls `OnExecute` (sets pipeline state, binds
+   common root parameters), then `DoExecute` for draw/dispatch calls.
 
-All passes inherit from `RenderPass`, which provides:
+The `RenderContext` is accessible during both phases via `Context()`.
 
-- Coroutine entry points (`PrepareResources`, `Execute`)
-- Naming/metadata via `Named` interface
-- Access to `RenderContext` for scene data and cross-pass communication
+### GraphicsRenderPass Responsibilities
 
-Derived passes override `DoPrepareResources()` and `DoExecute()` to implement
-their specific logic.
+Handles graphics-pipeline lifecycle:
 
-### Cross-Pass Communication
+- Caches and lazily rebuilds PSOs via `CreatePipelineStateDesc()` /
+  `NeedRebuildPipelineState()`.
+- In `OnExecute`: sets the graphics pipeline, binds `ViewConstants` CBV at
+  `b1`, binds the indices buffer, and binds the pass-constants index
+  constant at `b2.DWORD1`.
 
-Passes can query each other through the `RenderContext`:
+### ComputeRenderPass Responsibilities
 
-- `RegisterPass<T>()` — Register a pass instance for lookup
-- `GetPass<T>()` — Retrieve a registered pass by type
+Handles compute-pipeline lifecycle identically (cache + lazy rebuild) and
+sets the compute pipeline before `DoExecute`.
 
-This enables patterns like the `ShaderPass` querying the `DepthPrePass` for
-depth buffer configuration.
+## Implemented Passes
 
-## Resource Dependencies
+### Scene Geometry & Shading
 
-The following table summarizes resource flow between passes:
-
-| Pass | Input Resources | Output Resources | State Transitions |
+| Pass | Base | Domain | Documentation |
 | --- | --- | --- | --- |
-| Depth Pre-Pass | Geometry buffers | Depth buffer | Depth → DEPTH_WRITE |
-| Light Culling | Depth buffer (SRV), light data | Per-tile light list (UAV) | Depth → SHADER_RESOURCE |
-| Forward Shading | Depth (SRV), light lists, geometry, textures | Color buffer (RTV) | Color → RENDER_TARGET |
-| Transparency | Depth (SRV), light lists, geometry, textures | Color buffer (RTV, blend) | Color → RENDER_TARGET |
-| Post-Processing | Color buffer (SRV) | Color buffer (RTV/UAV) | Color → SRV → RENDER_TARGET |
+| `DepthPrePass` | `GraphicsRenderPass` | Depth-only raster (opaque + masked) | [depth_pre_pass.md](depth_pre_pass.md) |
+| `ShaderPass` | `GraphicsRenderPass` | Forward PBR shading (opaque + masked) | [shader_pass.md](shader_pass.md) |
+| `TransparentPass` | `GraphicsRenderPass` | Forward shading for blended geometry | — |
+| `WireframePass` | `GraphicsRenderPass` | Constant-color wireframe (debug/overlay) | — |
 
-Resource state transitions are managed through explicit barriers in each pass's
-`PrepareResources` phase.
+### Lighting & Shadows
 
-## Bindless Architecture
+| Pass | Base | Domain | Documentation |
+| --- | --- | --- | --- |
+| `LightCullingPass` | `ComputeRenderPass` | Clustered light grid build | [light_culling.md](light_culling.md) |
+| `ConventionalShadowRasterPass` | `DepthPrePass` | Cascaded shadow map raster | — |
+| `VsmPageRequestGeneratorPass` | `ComputeRenderPass` | VSM page request generation | — |
+| `VsmInvalidationPass` | `ComputeRenderPass` | VSM page invalidation | — |
+| `VsmPageManagementPass` | `ComputeRenderPass` | VSM page allocation/eviction | — |
+| `VsmPageFlagPropagationPass` | `ComputeRenderPass` | VSM coarse flag propagation | — |
+| `VsmPageInitializationPass` | `ComputeRenderPass` | VSM new page initialization | — |
+| `VsmShadowRasterizerPass` | `DepthPrePass` | VSM shadow depth raster | — |
+| `VsmStaticDynamicMergePass` | `ComputeRenderPass` | VSM static/dynamic page merge | — |
+| `VsmHzbUpdaterPass` | `ComputeRenderPass` | VSM HZB update | — |
+| `VsmProjectionPass` | `ComputeRenderPass` | VSM screen-space shadow projection | — |
 
-All passes share a common root signature layout for bindless resource access:
+### Sky & Environment
 
-| Slot | Type | Content |
+| Pass | Base | Domain |
 | --- | --- | --- |
-| t0 | SRV | Unbounded descriptor table (all textures/buffers) |
-| b1 | CBV | ViewConstants (view invariants, draw-routing slots, `bindless_view_frame_bindings_slot`) |
-| b2 | Root Constants | Draw index + pass-constants index |
+| `SkyAtmosphereLutComputePass` | `ComputeRenderPass` | Atmosphere transmittance + sky-view LUT generation |
+| `SkyPass` | `GraphicsRenderPass` | Fullscreen sky background render |
+| `SkyCapturePass` | `GraphicsRenderPass` | Cubemap capture for IBL source |
+| `IblComputePass` | `RenderPass` (direct) | Irradiance + prefilter cubemap filtering |
 
-This architecture eliminates per-draw descriptor binding overhead and enables
-GPU-driven rendering patterns.
+### Post-Processing & Compositing
+
+| Pass | Base | Domain |
+| --- | --- | --- |
+| `AutoExposurePass` | `ComputeRenderPass` | Histogram-based adaptive exposure |
+| `ScreenHzbBuildPass` | `ComputeRenderPass` | Hierarchical Z-buffer mip chain |
+| `ToneMapPass` | `GraphicsRenderPass` | HDR → SDR tonemapping |
+| `CompositingPass` | `GraphicsRenderPass` | Alpha-blended PIP compositing |
+| `GroundGridPass` | `GraphicsRenderPass` | Procedural infinite grid |
+
+### Debug
+
+| Pass | Base | Domain |
+| --- | --- | --- |
+| `GpuDebugClearPass` | `ComputeRenderPass` | Clear GPU debug line buffer |
+| `GpuDebugDrawPass` | `GraphicsRenderPass` | Render GPU debug lines to color buffer |
+
+## ForwardPipeline Pass Ordering
+
+The `ForwardPipeline` orchestrates per-view pass execution through
+`ExecuteRegisteredView`. The following diagram shows the complete sequence
+for a standard scene-linear view, including conditional branches:
+
+```mermaid
+flowchart TD
+    Start([View Start]) --> TrackRes[Track View Resources]
+    TrackRes --> ConfigTgt[Configure Pass Targets]
+    ConfigTgt --> BindHdr[Bind HDR + Clear Depth/Color]
+
+    BindHdr --> DbgClear{GPU Debug?}
+    DbgClear -->|Yes| GpuDbgClear["GpuDebugClearPass<br/>(compute)"]
+    DbgClear -->|No| ScenePasses
+
+    GpuDbgClear --> ScenePasses
+
+    subgraph ScenePasses [Scene Passes - HDR Buffer]
+        direction TB
+        ShadowQ{Shadows?}
+        ShadowQ -->|Conv.| ConvShadow["ConventionalShadowRasterPass<br/>(depth-only raster)"]
+        ShadowQ -->|None| DepthQ
+        ConvShadow --> DepthQ
+
+        DepthQ{Depth PrePass?}
+        DepthQ -->|Yes| DPP["DepthPrePass<br/>(depth-only raster)"]
+        DepthQ -->|No| SkyQ
+
+        DPP --> HzbQ{Depth Complete?}
+        HzbQ -->|Yes| HZB["ScreenHzbBuildPass<br/>(compute)"]
+        HzbQ -->|No| SkyQ
+
+        HZB --> SkyEarly{Sky before shading?}
+        SkyEarly -->|depth OK| SKY1["SkyPass<br/>(fullscreen triangle)"]
+        SkyEarly -->|No| LC
+
+        SkyQ --> LC
+        SKY1 --> LC
+
+        LC["LightCullingPass<br/>(compute)"]
+
+        LC --> VsmQ{VSM Shadows?}
+        VsmQ -->|Yes| VSM["VSM Shell<br/>(9 compute + 1 raster)"]
+        VsmQ -->|No| SP
+
+        VSM --> SP
+        SP["ShaderPass<br/>(forward PBR)"]
+
+        SP --> SkyDeferred{Deferred Sky?}
+        SkyDeferred -->|Yes| SKY2["SkyPass<br/>(deferred)"]
+        SkyDeferred -->|No| TP
+
+        SKY2 --> TP
+        TP["TransparentPass<br/>(blended)"]
+    end
+
+    ScenePasses --> AutoExp{Auto Exposure?}
+    AutoExp -->|Yes| AE["AutoExposurePass<br/>(compute, 3 dispatches)"]
+    AutoExp -->|No| Grid
+
+    AE --> Grid
+    Grid{Grid?}
+    Grid -->|Yes| GG["GroundGridPass<br/>(fullscreen)"]
+    Grid -->|No| ToneMap
+
+    GG --> ToneMap
+    ToneMap["ToneMapPass<br/>(HDR → SDR)"]
+
+    ToneMap --> SDR
+
+    subgraph SDR [SDR Overlays]
+        OvWire{Overlay Wire?}
+        OvWire -->|Yes| OW["WireframePass<br/>(overlay)"]
+        OvWire -->|No| ViewOv
+
+        OW --> ViewOv[View Overlay Callback]
+        ViewOv --> ImGui{ImGui Tools?}
+        ImGui -->|Yes| IG[ImGuiPass]
+        ImGui -->|No| DbgDraw
+
+        IG --> DbgDraw
+        DbgDraw{Debug Draw?}
+        DbgDraw -->|Yes| GDD["GpuDebugDrawPass<br/>(graphics)"]
+        DbgDraw -->|No| Transition
+    end
+
+    GDD --> Transition
+    Transition[Transition SDR → Shader Read]
+    Transition --> Done([Compositing])
+```
+
+## Cross-Pass Communication
+
+Passes communicate through `RenderContext`, which holds a compile-time-indexed
+registry of known pass types:
+
+- **`RegisterPass<T>(pass*)`** — Called by the pipeline after a pass executes
+  to publish its pointer.
+- **`GetPass<T>()`** — Returns the registered pass pointer (or `nullptr` if
+  not yet executed/registered).
+
+The `KnownPassTypes` type list defines all registered pass types. Adding a
+new pass type requires appending to this list (order determines index; do not
+reorder for binary compatibility).
+
+### Cross-Pass Data Contracts
+
+| Consumer | Producer | Accessed Via |
+| --- | --- | --- |
+| `ShaderPass` | `DepthPrePass` | `ctx.GetPass<DepthPrePass>()->GetOutput()` → `DepthPrePassOutput` |
+| `SkyPass` | `DepthPrePass` | Same depth output (reads depth for sky-vs-geometry test) |
+| `TransparentPass` | `DepthPrePass` | Depth texture for read-only depth test |
+| `GroundGridPass` | `DepthPrePass` | Depth SRV for depth-aware grid fading |
+| `ScreenHzbBuildPass` | `DepthPrePass` | Full-resolution depth as HZB source |
+| `VsmProjectionPass` | `DepthPrePass` | Scene depth for VSM screen-space projection |
+| `ShaderPass` | `LightCullingPass` | Cluster grid/index list SRV indices via `LightingFrameBindings` |
+| `TransparentPass` | `LightCullingPass` | Same cluster grid data |
+| `ToneMapPass` | Scene passes | HDR color texture as source |
+| `AutoExposurePass` | Scene passes | HDR color texture for histogram analysis |
+| `IblComputePass` | `SkyCapturePass` | Captured cubemap SRV for IBL filtering |
+
+## Bindless Root Signature
+
+All passes share a single canonical root signature layout:
+
+| Slot | Register | Type | Content |
+| --- | --- | --- | --- |
+| 0 | `t0, space0` | Descriptor Table | Unbounded SRV array (all bindless resources) |
+| 1 | `b1, space0` | Root CBV | `ViewConstants` (view/projection, camera, `view_frame_bindings_bslot`) |
+| 2 | `b2, space0` | Root Constants (2 DWORDs) | `g_DrawIndex` (DWORD0) + `g_PassConstantsIndex` (DWORD1) |
+
+### Bindless Indirection Chain
+
+Shaders resolve resources through a multi-level indirection:
+
+1. `ViewConstants.view_frame_bindings_bslot` → `ViewFrameBindings`
+2. `ViewFrameBindings.draw_frame_slot` → `DrawFrameBindings`
+3. `DrawFrameBindings.draw_metadata_slot` → `DrawMetadata[]`
+4. `DrawMetadata[g_DrawIndex]` → per-draw vertex/index/material/transform indices
+
+This eliminates per-draw descriptor binding and enables GPU-driven rendering.
 
 ## PSO Management
 
-Each pass owns its Pipeline State Object variants. For geometry passes, this
-typically includes 4 pre-compiled variants:
+### Geometry Pass Variants
 
-| Variant | PassMask Bits | Use Case |
+Scene geometry passes (`DepthPrePass`, `ShaderPass`, `WireframePass`) maintain
+4 PSO variants selected per partition:
+
+| Variant | Alpha Mode | Culling |
 | --- | --- | --- |
-| Opaque, single-sided | `kOpaque` only | Standard solid geometry |
-| Opaque, double-sided | `kOpaque + kDoubleSided` | Foliage, cloth |
-| Masked, single-sided | `kMasked` only | Cutout materials |
-| Masked, double-sided | `kMasked + kDoubleSided` | Foliage with alpha test |
+| `pso_opaque_single_` | `kOpaque` | Back-face cull |
+| `pso_opaque_double_` | `kOpaque + kDoubleSided` | No cull |
+| `pso_masked_single_` | `kMasked` | Back-face cull |
+| `pso_masked_double_` | `kMasked + kDoubleSided` | No cull |
 
-PSO selection occurs per-drawcall based on the `PassMask` flags in `DrawMetadata`.
+### TransparentPass Variants
 
-## Orchestration
+`TransparentPass` maintains 2 PSO variants (single-sided / double-sided);
+alpha blending is always enabled, depth write is always off.
 
-Pass orchestration is handled by the application's `RenderGraph` (or equivalent
-render scene function), which:
+### PSO Rebuild Triggers
 
-1. Creates and configures pass instances
-2. Wires shared resources (color texture, depth texture) between passes
-3. Executes passes in sequence via coroutine `co_await`
+PSOs are rebuilt lazily when `NeedRebuildPipelineState()` returns `true`.
+Typical triggers: viewport/framebuffer size change, render target format
+change, fill-mode or debug-mode change.
 
-Example from `RenderGraph::RunPasses()`:
+### PassMask-Driven Selection
 
-```cpp
-co_await depth_pass_->PrepareResources(ctx, recorder);
-co_await depth_pass_->Execute(ctx, recorder);
+During rendering, draws are sorted and partitioned by `PassMask`. Each
+partition has a uniform `PassMask`, and the pass selects the matching PSO
+variant before issuing the draw range. This minimizes state changes.
 
-co_await shader_pass_->PrepareResources(ctx, recorder);
-co_await shader_pass_->Execute(ctx, recorder);
+**Active `PassMaskBit` flags:**
 
-co_await transparent_pass_->PrepareResources(ctx, recorder);
-co_await transparent_pass_->Execute(ctx, recorder);
-```
+| Bit | Meaning |
+| --- | --- |
+| `kOpaque` | Depth-writing opaque surfaces |
+| `kMasked` | Alpha-tested (cutout) surfaces |
+| `kTransparent` | Alpha-blended surfaces |
+| `kDoubleSided` | Disable back-face culling |
+| `kShadowCaster` | Participates in shadow submission |
+| `kMainViewVisible` | Visible in the main camera view |
 
-## Future Enhancements
+## DepthPrePassOutput
 
-### Light Culling Pass
+`DepthPrePass` publishes a structured output consumed by downstream passes:
 
-The Light Culling compute pass will analyze the depth buffer per tile, build
-min/max depth bounds, and produce a per-tile light index buffer consumed by
-`ShaderPass` and `TransparentPass`.
+| Field | Type | Description |
+| --- | --- | --- |
+| `depth_texture` | `Texture*` | Raw depth texture pointer |
+| `canonical_srv_index` | `ShaderVisibleIndex` | Bindless SRV for depth reads |
+| `width`, `height` | `uint32_t` | Depth buffer dimensions |
+| `viewport`, `scissors` | Viewport/Scissors | Effective render region |
+| `ndc_depth_range` | `NdcDepthRange` | `ZeroToOne` (D3D12 default) |
+| `reverse_z` | `bool` | `true` — engine uses reversed-Z |
+| `is_complete` | `bool` | All fields valid and depth populated |
 
-### Shadow Mapping
-
-Dedicated shadow backends/passes will render depth for each shadow-casting
-light product, publishing either conventional pooled shadow maps or virtual
-shadow-map residency/page data consumed during forward shading.
-
-### Environment System Integration
-
-The SceneEnvironment system will provide:
-
-- **SkyLight** — IBL (Image-Based Lighting) via HDR environment cubemaps
-- **SkyAtmosphere** — Procedural atmospheric scattering
-- **SkySphere** — Simple skydome for background rendering
-- **Fog** — Distance and height-based fog
-- **VolumetricClouds** — Volumetric cloud rendering
-- **PostProcessVolume** — Per-volume post-processing overrides
-
-These components integrate with the forward shading pass through
-`ViewFrameBindings` and system-owned frame bindings, not a dedicated
-environment root constant buffer.
+Shadow raster passes (`ConventionalShadowRasterPass`,
+`VsmShadowRasterizerPass`) reuse `DepthPrePass` infrastructure but
+intentionally **do not** publish `DepthPrePassOutput` — their depth lives
+in the shadow domain.
 
 ## See Also
 
 - [data_flow.md](data_flow.md) — Scene preparation and GPU data flow
 - [depth_pre_pass.md](depth_pre_pass.md) — Depth Pre-Pass implementation
 - [shader_pass.md](shader_pass.md) — Forward Shading Pass implementation
+- [light_culling.md](light_culling.md) — Light Culling Pass implementation

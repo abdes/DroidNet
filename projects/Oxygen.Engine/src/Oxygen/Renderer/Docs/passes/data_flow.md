@@ -2,392 +2,460 @@
 
 This document describes the data flow through the Oxygen renderer pipeline,
 focusing on how data moves from the application through scene preparation to
-render pass execution. It is intended as a reference for understanding the
-renderer's architecture and as a basis for future enhancements.
+render pass execution and compositing. It is a companion to
+[design-overview.md](design-overview.md), which covers pass taxonomy and
+ordering.
 
 ## Overview
 
-The renderer operates on a **multi-view, per-frame pipeline** where each view
-(camera) independently prepares its rendering data. The pipeline has three main
-phases:
-
-1. **Application Setup**: Register views and configure render graphs
-2. **Scene Preparation (PreRender)**: Extract, cull, and prepare draw data
-3. **Rendering (Render)**: Execute render passes using prepared data
+The renderer operates on a **multi-view, per-frame pipeline** orchestrated
+by a `RenderingPipeline` implementation (currently `ForwardPipeline`). Each
+frame proceeds through well-defined phases:
 
 ```mermaid
-graph TB
-    App[Application] --> |RegisterView| Renderer
-    App --> |Update Scene| Scene[Scene Graph]
-
-    subgraph PreRender Phase
-        Scene --> |Traverse| ScenePrep[ScenePrepPipeline]
-        ScenePrep --> |Collect| Extract[Scene Extraction]
-        Extract --> |Visibility Cull| Filter[Filtering]
-        Filter --> |Transform & Material| Resolve[Resource Resolution]
-        Resolve --> |Finalize| Upload[GPU Upload]
-        Upload --> PrepFrame[PreparedSceneFrame]
+flowchart TB
+    subgraph App [Application]
+        Scene[Scene Graph]
+        CompView[CompositionView Descriptors]
     end
 
-    subgraph Render Phase
-        PrepFrame --> |Per View| RenderCtx[RenderContext]
-        RenderCtx --> |Execute| Passes[Render Passes]
-        Passes --> DepthPre[DepthPrePass]
-        Passes --> Shader[ShaderPass]
-        Passes --> Transparent[TransparentPass]
-        Passes --> OtherPasses[...]
+    subgraph FrameStart [Phase: FrameStart]
+        ApplySettings[Apply Staged Settings]
     end
 
-    style PrepFrame stroke:#90EE90
-    style RenderCtx stroke:#87CEEB
+    subgraph PublishViews [Phase: PublishViews]
+        Sync[Sync Active Views]
+        Register[Register Render Graphs]
+    end
+
+    subgraph PreRender [Phase: PreRender]
+        FramePlan[Build Frame Plan]
+        ScenePrep[ScenePrepPipeline per view]
+        Finalize[Finalize GPU Uploads]
+        BindPub[Publish ViewFrameBindings]
+    end
+
+    subgraph Render [Phase: Render / per view]
+        RC[RenderContext]
+        Passes[Pass Coroutine Execution]
+    end
+
+    subgraph Compositing [Phase: Compositing]
+        ToneMap[ToneMapPass HDR→SDR]
+        CompPass[CompositingPass]
+        Final[Swapchain Present]
+    end
+
+    App --> FrameStart
+    FrameStart --> PublishViews
+    PublishViews --> PreRender
+    PreRender --> Render
+    Render --> Compositing
+
+    style ScenePrep stroke:#90EE90
+    style RC stroke:#87CEEB
 ```
 
 ## Multi-View Architecture
 
-The renderer supports **multiple simultaneous views** (e.g., main camera,
-shadow maps, reflection probes). Each view:
+The engine supports multiple simultaneous views (main camera, shadow views,
+editor viewports, tool overlays). Each view:
 
-* Has a unique `ViewId` registered via `Renderer::RegisterView()`
-* Provides a `ViewResolver` to extract camera/frustum information
-* Provides a `RenderGraphFactory` that defines its render pass sequence
-* Gets its own `PreparedSceneFrame` with view-specific culling and SRV indices
+- Has a unique `ViewId` assigned by the `ViewLifecycleService`.
+- Is described by a `CompositionView` descriptor (camera, viewport, z-order,
+  render mode, feature flags).
+- Gets its own `PreparedSceneFrame` with view-specific culling results.
+- Executes its own render coroutine with a per-view `RenderContext` state.
 
-Data flow is **strictly per-view**: culling, transforms, draw lists, and
-bindless descriptor slots are all captured per-view during scene preparation.
+View lifecycle (creation, SDR/HDR texture allocation, registration,
+unpublication) is managed by internal pipeline services, not by individual
+render passes.
 
-## Phase 1: Application Setup
+## Phase 1: FrameStart
 
-Applications register each view with the renderer by providing two components:
+The pipeline commits staged configuration changes atomically at frame start.
+Settings are staged from any thread via the pipeline API and applied on the
+engine thread in `OnFrameStart`. This includes:
 
-```cpp
-renderer->RegisterView(
-    view_id,
-    [](const ViewContext& ctx) -> ResolvedView { /* resolve camera */ },
-    [](ViewId id, const RenderContext& rc, CommandRecorder& rec) -> co::Co<void> {
-        /* execute render passes */
-    }
-);
-```
+- Render mode (solid / wireframe / overlay wireframe)
+- Shader debug mode
+- Exposure mode and parameters
+- Tone-mapping operator
+- Ground grid configuration
+- Depth pre-pass policy
 
-**Data Flow**:
+## Phase 2: PublishViews
 
-* `ViewId` → identifies the view throughout the frame
-* `ViewResolver` → extracts camera position, matrices, frustum
-* `RenderGraphFactory` → defines which passes execute and in what order
+`OnPublishViews` synchronizes the active view set for the current frame:
 
-## Phase 2: Scene Preparation (OnPreRender)
+1. **SyncActiveViews** — Reconciles `CompositionView` descriptors with the
+   internal view registry. Creates/destroys HDR and SDR textures as needed.
+2. **PublishViews** — Registers each active view with the `Renderer`, providing
+   a per-view render coroutine (`ExecuteRegisteredView`).
+3. **RegisterRenderGraphs** — Binds each view's render coroutine to the
+   renderer for later execution.
 
-For each registered view, the renderer runs the **ScenePrepPipeline**, which
-transforms scene graph data into GPU-ready structures.
+## Phase 3: PreRender
 
-### 2.1 Collection Stage
+### 3.1 Frame Plan Construction
 
-The pipeline traverses the scene graph in **two phases**:
+`BuildFramePlan` evaluates each active view's descriptor and settings to
+produce a `ViewRenderPlan`:
+
+- **`HasSceneLinearPath()`** — Does this view render 3D scene content (HDR)?
+- **`WantsDepthPrePass()`** — Should the depth pre-pass execute?
+- **`RunSkyPass()`** — Should sky rendering execute?
+- **`RunOverlayWireframe()`** — Should overlay wireframe execute after
+  tonemapping?
+- **`GetToneMapPolicy()`** — Normal vs. neutral (debug mode) tonemapping.
+- **`EffectiveRenderMode()`** — Solid, wireframe, or overlay wireframe.
+
+### 3.2 Scene Preparation (ScenePrepPipeline)
+
+For each registered view, the renderer runs the `ScenePrepPipeline`, which
+transforms scene graph data into GPU-ready arrays.
 
 #### Frame Phase (First View Only)
 
 Extracts **frame-global data** shared across all views:
 
 ```mermaid
-graph LR
-    SceneNodes[Scene Node Table] --> LightCheck{Has Light?}
-    LightCheck -->|Yes| LightMgr[LightManager::CollectFromNode]
-    LightCheck -->|No| RenderCheck{Has Renderable?}
-    LightMgr --> RenderCheck
-    RenderCheck -->|Yes| Pipeline[Collection Pipeline]
-    RenderCheck -->|No| Skip[Skip Node]
-    Pipeline --> Filter[AddFilteredSceneNode]
-    Filter --> Cache[(Filtered Node Cache)]
+flowchart LR
+    Nodes[Scene Node Table] --> LightQ{Has Light?}
+    LightQ -->|Yes| LightMgr["LightManager::CollectFromNode"]
+    LightQ -->|No| RenderQ{Has Renderable?}
+    LightMgr --> RenderQ
+    RenderQ -->|Yes| Filter["AddFilteredSceneNode"]
+    RenderQ -->|No| Skip[Skip]
+    Filter --> Cache["Filtered Node Cache"]
 ```
 
-**Frame Phase Activities**:
+**Frame phase activities:**
 
-* **Light Extraction** (`LightManager`): Collects directional, point, and spot
-  lights into CPU arrays. Applies gating rules:
-  * Node must have `kVisible` flag
-  * Light `affects_world` must be true
-  * Excludes `Baked` mobility lights
-  * Shadow eligibility requires both `casts_shadows` and node `kCastsShadows`
-* **Renderable Filtering**: Identifies nodes with geometry for view-phase
-  processing
-* **Cached Node List**: Builds `filtered_scene_nodes` to avoid redundant
-  traversal per view
+- **Light extraction** (`LightManager`): Collects directional, point, and
+  spot lights into CPU arrays. Gating: node `kVisible`, light
+  `affects_world`, excludes `Baked` mobility. Shadow eligibility requires
+  both `casts_shadows` and node `kCastsShadows`.
+- **Renderable filtering**: Identifies nodes with geometry for the view phase.
+- **Cached node list**: Builds `filtered_scene_nodes` to avoid redundant
+  traversal per view.
 
 #### View Phase (Per View)
 
-Processes **view-specific geometry** using the cached node list:
+Processes **view-specific geometry** from the cached node list:
 
 ```mermaid
-graph LR
-    Cache[(Filtered Node Cache)] --> PreFilter[Pre-Filter]
-    PreFilter --> |Transform| Resolve[Transform Resolve]
-    Resolve --> |Mesh| MeshRes[Mesh Resolver]
-    MeshRes --> |Frustum| VisCull[Visibility Filter]
-    VisCull --> |Produce| RenderItem[RenderItemData]
-
-    RenderItem --> State[(ScenePrepState)]
+flowchart LR
+    Cache[Filtered Node Cache] --> PreFilter[Pre-Filter]
+    PreFilter --> Transform[Transform Resolve]
+    Transform --> Mesh[Mesh Resolver]
+    Mesh --> Frustum[Frustum Cull]
+    Frustum --> Producer["RenderItemData"]
+    Producer --> State["ScenePrepState"]
 ```
 
-**View Phase Extractors** (per-node pipeline):
+**View phase extractors** (per-node pipeline):
 
-* **Pre-Filter**: Skip disabled/invisible nodes
-* **Transform Resolve**: Build world matrices from scene hierarchy
-* **Mesh Resolver**: Locate mesh/material assets
-* **Visibility Filter**: CPU frustum culling against view frustum
-* **Producer**: Generate `RenderItemData` entries in `ScenePrepState`
+| Extractor | Responsibility |
+| --- | --- |
+| Pre-Filter | Skip disabled/invisible nodes |
+| Transform Resolve | Build world matrices from scene hierarchy |
+| Mesh Resolver | Locate mesh/material assets |
+| Visibility Filter | CPU frustum culling against view frustum |
+| Producer | Generate `RenderItemData` entries |
 
-### 2.2 Finalization Stage
+### 3.3 Finalization
 
-After collection, the pipeline finalizes GPU-ready data:
+After collection, the pipeline finalizes GPU data through a sequence of
+resource binders and uploaders:
 
 ```mermaid
-graph LR
-    State[(ScenePrepState)] --> GeoUp[Geometry Upload]
-    GeoUp --> TransUp[Transform Upload]
-    TransUp --> MatUp[Material Upload]
-    MatUp --> DrawMD[DrawMetadata Emit]
-    DrawMD --> Sort[Sort & Partition]
-    Sort --> MDUp[DrawMetadata Upload]
-    MDUp --> SRV[Capture SRV Indices]
-    SRV --> PrepFrame[PreparedSceneFrame]
+flowchart LR
+    State["ScenePrepState"] --> Geo[GeometryUploader]
+    Geo --> Xform[TransformUploader]
+    Xform --> Mat[MaterialBinder]
+    Mat --> Tex[TextureBinder]
+    Tex --> DM[DrawMetadataEmitter]
+    DM --> Sort[Sort & Partition]
+    Sort --> Upload[GPU Upload]
+    Upload --> SRV[Capture SRV Indices]
+    SRV --> PSF["PreparedSceneFrame"]
 
-    style PrepFrame stroke:#90EE90
+    style PSF stroke:#90EE90
 ```
 
-**Finalization Steps**:
+**Finalization steps:**
 
-1. **Geometry Upload**: Ensure vertex/index buffers on GPU (lazy, cached)
-2. **Transform Upload**: Upload world & normal matrices as structured buffers
-3. **Material Upload**: Upload material constant buffers (if needed)
-4. **Light Upload** (frame phase only): Upload `DirectionalLightBasic[]`,
-   `DirectionalShadowMetadata[]`, and `PositionalLightData[]` to GPU
-   structured buffers via `LightManager::EnsureFrameResources()`
-5. **DrawMetadata Emit**: Generate per-draw GPU metadata (indices, flags)
-6. **Sort & Partition**: Sort draws by pass/material/depth; build partition map
-7. **DrawMetadata Upload**: Upload sorted metadata to GPU structured buffer
-8. **Capture SRV Indices**: Record bindless descriptor slots for this view
+1. **GeometryUploader** — Ensures vertex/index buffers are on the GPU (lazy,
+   cached by geometry handle).
+2. **TransformUploader** — Uploads world and normal matrices as structured
+   buffers; captures `bindless_worlds_slot` and `bindless_normals_slot`.
+3. **MaterialBinder** — Resolves material constants and uploaded textures;
+   captures `bindless_material_shading_slot`.
+4. **TextureBinder** — Ensures material textures are registered in the
+   descriptor heap.
+5. **Light upload** (frame phase only) — `LightManager::EnsureFrameResources`
+   uploads `DirectionalLightBasic[]`, `DirectionalShadowMetadata[]`, and
+   `PositionalLightData[]` to GPU structured buffers.
+6. **DrawMetadataEmitter** — Generates per-draw `DrawMetadata` records (64
+   bytes each) with bindless indices, geometry offsets, material handles,
+   transform indices, and `PassMask` flags.
+7. **Sort & partition** — Sorts draws by `PassMask` and material; builds
+   `PartitionRange[]` mapping each `PassMask` group to a contiguous draw
+   range `[begin, end)`.
+8. **GPU upload** — Uploads sorted `DrawMetadata[]` to a structured buffer;
+   captures `bindless_draw_metadata_slot`.
+9. **Capture SRV indices** — Records all bindless descriptor slots into the
+   per-view `PreparedSceneFrame`.
 
-Output: `PreparedSceneFrame` — immutable, view-specific snapshot containing
-spans over finalized data and bindless descriptor indices.
-all views are prepared, the renderer populates `ViewConstants` with
-bindless descriptor slots:
+Output: `PreparedSceneFrame` — an immutable, non-owning view (spans) over
+renderer-owned arrays. Valid until end of frame.
 
-* **Application-Owned Fields**: View/projection matrices, camera position (set
-  per view by application)
-* **Renderer-Owned Fields**: Frame timing, bindless descriptor slots, frame
-  sequence number (injected by renderer with explicit tag)
+### 3.4 ViewFrameBindings Publication
 
-**Descriptor Slot Lifetimes**:
+After all views are prepared, the renderer populates `ViewFrameBindings` — a
+per-view structured buffer element referenced from `ViewConstants`:
 
-* **Frame-Global**: Light buffer slots (directional, positional, shadows) —
-  same across all views
-* **Per-View**: Transform and DrawMetadata slots — vary per view due to
-  view-specific culling
+**ViewFrameBindings layout (48 bytes):**
 
-The populated `ViewConstants` structure is uploaded to a GPU constant buffer
-(register `b1`) and referenced by `RenderContext::view_constants`. Shaders
-access this buffer to retrieve descriptor slots and view parameters.
+| Field | Points To | Scope |
+| --- | --- | --- |
+| `draw_frame_slot` | `DrawFrameBindings` | Per-view |
+| `lighting_frame_slot` | `LightingFrameBindings` | Frame-global, updated per-view for culling grid |
+| `environment_frame_slot` | `EnvironmentFrameBindings` | Frame-global |
+| `view_color_frame_slot` | `ViewColorData` | Per-view |
+| `scene_depth_slot` | Scene depth SRV | Per-view |
+| `shadow_frame_slot` | `ShadowFrameBindings` | Frame-global |
+| `virtual_shadow_frame_slot` | `VsmFrameBindings` | Per-view |
+| `post_process_frame_slot` | Post-process routing | Reserved |
+| `debug_frame_slot` | `DebugFrameBindings` | Per-view |
+| `history_frame_slot` | History textures | Reserved |
+| `ray_tracing_frame_slot` | RT routing | Reserved |
 
-## Phase 3: Rendering (OnRender)
+**DrawFrameBindings layout (32 bytes):**
 
-For each view, the renderer executes its registered `RenderGraphFactory`,
-passing a configured `RenderContext`.
+| Field | Points To |
+| --- | --- |
+| `draw_metadata_slot` | `DrawMetadata[]` structured buffer |
+| `transforms_slot` | World matrix array |
+| `normal_matrices_slot` | Normal matrix array |
+| `material_shading_constants_slot` | Material constants |
+| `procedural_grid_material_constants_slot` | Grid material data |
+| `instance_data_slot` | Per-draw instance metadata |
 
-### 3.1 RenderContext Structure
+**Descriptor slot lifetimes:**
 
-`RenderContext` is the **primary data carrier** for render passes, providing:
+- **Frame-global**: Light buffer slots (directional, positional, shadows) —
+  same across all views.
+- **Per-view**: Transform, DrawMetadata, depth, color, culling grid slots —
+  vary per view due to view-specific culling.
 
-* **GPU Buffers**: Scene constants (view/camera/descriptor slots), optional
-  material constants
-* **View State**: Current `ViewId`, resolved view (camera/frustum),
-  `PreparedSceneFrame` reference
-* **Render Targets**: Framebuffer reference for output surfaces
-* **Pass Control**: Enable/disable flags per pass type
+## Phase 4: Rendering (OnRender)
 
-### 3.2 Render Pass Execution
+For each view, the renderer invokes the registered render coroutine with a
+configured `RenderContext`.
 
-Passes consume `RenderContext` and use `PreparedSceneFrame` for draw dispatch:
+### 4.1 RenderContext
+
+`RenderContext` is the primary data carrier shared across all passes within
+a single view's render graph execution:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `view_constants` | `shared_ptr<Buffer>` | GPU CBV with view/projection/camera/bindings |
+| `pass_target` | `Framebuffer*` | Bound framebuffer for current pass |
+| `material_constants` | `shared_ptr<Buffer>` | Material constant buffer (optional) |
+| `current_view` | `ViewSpecific` | Active view state (see below) |
+| `frame_slot` | `frame::Slot` | Frame slot for transient resource coordination |
+| `frame_sequence` | `SequenceNumber` | Monotonic frame counter |
+| `delta_time` | `float` | Frame delta in seconds |
+| `scene` | `Scene*` | Active scene (read-only during rendering) |
+| `gpu_debug_manager` | `GpuDebugManager*` | Debug line buffer manager |
+
+**ViewSpecific** fields within `current_view`:
+
+| Field | Description |
+| --- | --- |
+| `view_id` | Current view identifier |
+| `exposure_view_id` | View that owns auto-exposure for this view |
+| `resolved_view` | Camera/frustum from view resolver |
+| `prepared_frame` | `PreparedSceneFrame*` — draw data spans |
+| `atmo_lut_manager` | Per-view atmosphere LUT state |
+| `depth_prepass_mode` | Planner-selected early depth policy |
+| `depth_prepass_completeness` | Live completeness state (updated by pipeline) |
+
+### 4.2 Pass Execution Pattern
+
+Every pass follows the same coroutine protocol:
 
 ```mermaid
-graph TB
-    RenderCtx[RenderContext] --> Pass[Render Pass]
+sequenceDiagram
+    participant Pipeline as ForwardPipeline
+    participant Pass as RenderPass
+    participant Rec as CommandRecorder
 
-    subgraph Pass Execution
-        Pass --> Bind[Bind Resources]
-        Bind --> Partition{For each Partition}
-        Partition --> CheckFlags[Check PassMask Flags]
-        CheckFlags --> SelectPSO[Select PSO Variant]
-        SelectPSO --> SetPSO[Set Pipeline State]
-        SetPSO --> DrawRange[Draw Range of Items]
-        DrawRange --> Partition
-    end
+    Pipeline->>Pass: PrepareResources(ctx, rec)
+    activate Pass
+    Pass->>Pass: ValidateConfig()
+    Pass->>Pass: OnPrepareResources(rec)
+    Note right of Pass: Rebuild PSO if needed
+    Pass->>Pass: DoPrepareResources(rec)
+    Note right of Pass: Barriers, descriptors, uploads
+    deactivate Pass
 
-    DrawRange --> GPU[GPU Command Buffer]
+    Pipeline->>Pass: Execute(ctx, rec)
+    activate Pass
+    Pass->>Pass: OnExecute(rec)
+    Note right of Pass: Set pipeline, bind root params
+    Pass->>Pass: DoExecute(rec)
+    Note right of Pass: Draw/Dispatch calls
+    deactivate Pass
+
+    Pipeline->>Pipeline: RegisterPass<T>(pass)
 ```
 
-**Pass Input/Output Summary**:
+### 4.3 Draw Dispatch Pattern
 
-| Pass | Inputs | Outputs |
-| ---- | ------ | ------- |
-| **DepthPrePass** | `PreparedSceneFrame` (opaque/masked draws); `view_constants`; Depth texture | Populated depth buffer |
-| **ShaderPass** | `PreparedSceneFrame` (opaque/masked draws), `view_constants`, Depth texture (read-only), Color texture | Rendered color buffer |
-| **TransparentPass** | `PreparedSceneFrame` (transparent draws), `view_constants`, Depth texture (read-only), Color texture | Blended transparent geometry |
+Scene geometry passes consume `PreparedSceneFrame` partitions:
 
-### 3.3 Render Graph Execution Model
-
-The render graph is a **coroutine** (`RenderGraphFactory`) that explicitly
-sequences pass execution.
-
-**Execution Pattern**:
-
-```cpp
-co_await pass->PrepareResources(context, recorder);
-co_await pass->Execute(context, recorder);
+```mermaid
+flowchart TB
+    PSF["PreparedSceneFrame.partitions"] --> Loop{For each partition}
+    Loop --> Check["Check PassMask vs pass criteria"]
+    Check -->|match| Select["SelectPipelineStateForPartition"]
+    Check -->|skip| Loop
+    Select --> SetPSO["Set Pipeline State"]
+    SetPSO --> Draw["EmitDrawRange(begin, end)"]
+    Draw --> Loop
+    Draw --> GPU["GPU Command Buffer"]
 ```
 
-**Pass Data Access**: Passes access `RenderContext` via `Context()` helper:
+**Partition iteration contract:**
 
-* `Context().framebuffer`: Render target configuration
-* `Context().current_view.prepared_frame`: Draw data spans
-* `Context().view_constants`: Bindless descriptor slots
-* Pass config: Explicit texture overrides (e.g., `ShaderPassConfig::color_texture`)
-* `Context().GetPass<T>()`: Type-safe query for other registered passes
+1. Check partition `PassMask` against the pass's accepted bits (e.g.,
+   `DepthPrePass` accepts `kOpaque | kMasked`; `TransparentPass` accepts
+   `kTransparent`).
+2. Select the appropriate PSO variant based on `kDoubleSided` and `kMasked`
+   flags.
+3. Set pipeline state once per partition.
+4. Bind `g_PassConstantsIndex` (DWORD1 at `b2`) once per pass.
+5. For each draw in `[begin, end)`: bind `g_DrawIndex` (DWORD0 at `b2`),
+   issue a `DrawIndexedInstanced` or `DrawInstanced` command.
 
-**Cross-Pass Communication**: `RenderContext` provides `GetPass<PassType>()`
-for querying previously-executed passes (e.g., retrieving depth texture from
-`DepthPrePass`). Render graph calls `RegisterPass()` after execution to make
-passes available. Current implementation prefers explicit config-based wiring
-over runtime queries.
+### 4.4 DrawMetadata (GPU-Facing)
 
-### 3.4 Pipeline State Selection (Shader Permutations)
+`DrawMetadata` is a 64-byte struct uploaded to a structured buffer SRV:
 
-The renderer uses **dynamic PSO selection** based on per-partition flags rather
-than compile-time shader permutations.
+| Field | Size | Description |
+| --- | --- | --- |
+| `vertex_buffer_index` | 4B | Bindless SRV into vertex buffer |
+| `index_buffer_index` | 4B | Bindless SRV into index buffer |
+| `first_index` | 4B | Start index within mesh index buffer |
+| `base_vertex` | 4B | Base vertex offset (signed) |
+| `is_indexed` | 4B | 0 = non-indexed, 1 = indexed |
+| `instance_count` | 4B | Number of instances (≥1) |
+| `index_count` | 4B | Index count (indexed draws) |
+| `vertex_count` | 4B | Vertex count (non-indexed draws) |
+| `material_handle` | 4B | Stable `MaterialRegistry` handle |
+| `transform_index` | 4B | Index into world/normal arrays |
+| `instance_metadata_buffer_index` | 4B | Bindless index into instance metadata |
+| `instance_metadata_offset` | 4B | Offset into instance metadata buffer |
+| `flags` | 4B | `PassMask` bitfield |
+| `transform_generation` | 4B | Transform-handle generation |
+| `submesh_index` | 4B | Stable submesh id within geometry |
+| `primitive_flags` | 4B | `DrawPrimitiveFlagBits` (shadow caster, main visible) |
 
-**PSO Variant Matrix**: Each pass pre-compiles 4 pipeline state variants:
+**Shader access:** Vertex shaders receive the draw index via root constant
+(`g_DrawIndex`). The shader fetches `DrawMetadata[g_DrawIndex]` from the
+bindless structured buffer (slot in `DrawFrameBindings.draw_metadata_slot`),
+then uses the metadata indices to access geometry, transforms, and materials
+through further bindless descriptors.
 
-| Alpha Mode | Culling |
-| ---------- | ------- |
-| Opaque | Back-face culling |
-| Opaque | Double-sided (no culling) |
-| Masked | Back-face culling |
-| Masked | Double-sided (no culling) |
+### 4.5 ViewConstants (GPU-Facing)
 
-**Selection Contract**: During rendering, passes inspect `PassMask` flags on
-each partition to select the appropriate PSO variant. Flags checked:
+`ViewConstants::GpuData` is a 256-byte struct uploaded to the root CBV at
+register `b1`:
 
-* `kMasked`: Use masked pixel shader (alpha testing)
-* `kDoubleSided`: Disable back-face culling
+| Field | Description |
+| --- | --- |
+| `frame_seq_num` | Monotonic frame sequence number |
+| `frame_slot` | Frame slot index for ring-buffer coordination |
+| `time_seconds` | Wall-clock time since start |
+| `view_matrix` | 4×4 view matrix |
+| `projection_matrix` | 4×4 projection matrix |
+| `camera_position` | World-space camera position (vec3) |
+| `view_frame_bindings_bslot` | Top-level bindless slot for `ViewFrameBindings` |
 
-**Data Flow Integration**:
-
-1. **Scene Prep**: Material alpha mode and double-sided properties encoded into
-   `PassMask` during `DrawMetadata` emission
-2. **Sorting**: Draws partitioned by `PassMask` to group similar materials
-3. **Rendering**: Pass switches PSO per partition, minimizing state changes
-
-### 3.4 PreparedSceneFrame Consumption
-
-**Partition Iteration Contract**: Passes iterate sorted partition ranges,
-filtering by pass-relevant `PassMask` bits. Each partition represents a
-contiguous range of draws with identical rendering properties.
-
-**Per-Partition Operations**:
-
-1. Check partition flags against pass criteria (opaque/masked/transparent)
-2. Select appropriate PSO variant based on flags
-3. Set pipeline state once per partition
-4. Issue draw commands for range `[begin, end)`
-
-**DrawMetadata Specification**: 64-byte GPU-facing struct containing per-draw
-indirection:
-
-* **Geometry**: Bindless vertex/index buffer SRV indices, mesh offsets/counts
-* **Material**: Material registry handle
-* **Transform**: Index into world/normal matrix arrays
-* **Classification**: PassMask flags for filtering and PSO selection
-
-**Shader Contract**: Vertex shaders receive draw index via root constant
-(`SV_InstanceID`). Shaders fetch `DrawMetadata` from bindless structured buffer
-(slot provided in `ViewConstants`), then use metadata indices to access
-geometry, transforms, and materials through additional bindless descriptors.
-
-This indirection enables GPU-driven rendering and minimizes CPU→GPU
-bandwidth—only indices are transmitted per-draw, not full vertex/matrix data.
+`ViewConstants` uses lazy snapshot semantics: any setter bumps a monotonic
+version, and `GetSnapshot()` rebuilds the GPU payload only when dirty.
+Application owns view/projection/camera; renderer owns time/frame/bindings
+(requires explicit `RendererTag` at call sites).
 
 ## Data Ownership & Lifetime
 
-* **Scene Graph**: Owned by application, read-only during rendering
-* **ScenePrepState**: Owned by renderer, per-frame reset, accumulates collected
-  data
-* **PreparedSceneFrame**: Immutable snapshot, spans valid until end of frame
-* **RenderContext**: Transient, constructed per-view during OnRender
-* **GPU Buffers**: Owned by renderer resource managers (UploadCoordinator,
-  TransformUploader, etc.)
+| Data | Owner | Lifetime |
+| --- | --- | --- |
+| Scene Graph | Application | Persistent, read-only during rendering |
+| `ScenePrepState` | Renderer | Per-frame reset, accumulates collected data |
+| `PreparedSceneFrame` | Renderer (spans over owned arrays) | Valid until end of frame |
+| `RenderContext` | Renderer (pooled) | Per-view, reset between views |
+| GPU buffers (geometry, transforms, materials, metadata) | Resource managers (`UploadCoordinator`, `TransformUploader`, etc.) | Managed per resource lifetime |
+| Render targets (HDR, SDR, depth) | `ViewLifecycleService` | Per-view, recreated on resize |
 
-Passes **never own** render targets or buffers; they only bind and transition
-resources provided via `RenderContext` or pass configuration.
-
-## Bindless Descriptor Architecture
-
-All draw data is accessed via **bindless descriptors** (unbounded SRV arrays).
-Descriptor slots are captured at different stages:
-
-**Per-View Draw Slots** (captured in `PreparedSceneFrame` after finalization):
-
-* `bindless_draw_metadata_slot`: DrawMetadata structured buffer
-* `bindless_worlds_slot`: World transformation matrices
-* `bindless_normals_slot`: Normal transformation matrices
-* `bindless_material_shading_slot`: Material shading data
-* `bindless_instance_data_slot`: Per-draw instance metadata buffer
-
-**Per-View Routed System Slots** (published after view preparation):
-
-* `ViewFrameBindings.draw_frame_slot`: `DrawFrameBindings`
-* `ViewFrameBindings.lighting_frame_slot`: `LightingFrameBindings`
-* `ViewFrameBindings.environment_frame_slot`: `EnvironmentFrameBindings`
-* `ViewFrameBindings.view_color_frame_slot`: `ViewColorData`
-* `ViewFrameBindings.debug_frame_slot`: `DebugFrameBindings`
-
-**Shader Access Pattern**: `ViewConstants` carries only the top-level
-`bindless_view_frame_bindings_slot` in the root CBV. Shaders resolve
-`ViewFrameBindings`, then `DrawFrameBindings`, and use those slot indices to
-access draw resources dynamically from the global descriptor heap without
-pipeline rebinds.
+Passes **never own** render targets or shared buffers. They bind and
+transition resources provided via `RenderContext`, pass configuration, or
+cross-pass queries.
 
 ## Frame Execution Timeline
 
 ```mermaid
 sequenceDiagram
     participant App as Application
+    participant Pipe as ForwardPipeline
     participant Renderer
     participant ScenePrep
-    participant Pass as Render Pass
+    participant Pass as Render Passes
+    participant Comp as Compositing
 
-    App->>Renderer: RegisterView(id, resolver, factory)
-    App->>App: Update scene graph
+    App->>Pipe: OnFrameStart (apply staged settings)
 
-    Note over Renderer: OnPreRender Phase
+    App->>Pipe: OnPublishViews(view_descs)
+    Pipe->>Renderer: RegisterView(id, resolver, coroutine)
+
+    App->>Pipe: OnPreRender()
+    Pipe->>Pipe: BuildFramePlan()
     loop For each registered view
         Renderer->>ScenePrep: Collect(scene, view)
-        ScenePrep-->>Renderer: RenderItemData in ScenePrepState
+        ScenePrep-->>Renderer: RenderItemData[]
         Renderer->>ScenePrep: Finalize()
         ScenePrep-->>Renderer: PreparedSceneFrame + SRV indices
-        Renderer->>Renderer: Populate ViewConstants
+        Renderer->>Renderer: Populate ViewConstants + ViewFrameBindings
     end
 
     Note over Renderer: OnRender Phase
     loop For each registered view
-        Renderer->>Renderer: Build RenderContext
-        Renderer->>Pass: factory(view_id, RenderContext, recorder)
-        loop Render graph execution
-            Pass->>Pass: Bind resources from RenderContext
-            Pass->>Pass: Iterate PreparedSceneFrame
-            Pass->>GPU: Issue draw commands
+        Renderer->>Renderer: Configure RenderContext.current_view
+        Renderer->>Pass: ExecuteRegisteredView(view_id, rc, rec)
+        loop Scene passes (HDR)
+            Pass->>Pass: PrepareResources + Execute
         end
+        Pass->>Pass: ToneMap HDR → SDR
+        loop SDR overlays
+            Pass->>Pass: Wireframe / ImGui / Debug
+        end
+        Pass->>Pass: Transition SDR → ShaderRead
     end
+
+    Note over Pipe: OnCompositing Phase
+    Pipe->>Comp: CompositingPass per view → swapchain
+    Comp->>App: Present
 ```
 
-## Related documentation
+## Related Documentation
 
-* [Bindless Conventions](../bindless_conventions.md)
+- [design-overview.md](design-overview.md) — Pass taxonomy and ordering
+- [Bindless Conventions](../bindless_conventions.md) — Root signature and
+  descriptor management
+- [depth_pre_pass.md](depth_pre_pass.md) — Depth Pre-Pass implementation
+- [shader_pass.md](shader_pass.md) — Forward Shading Pass
+- [light_culling.md](light_culling.md) — Light Culling Pass
