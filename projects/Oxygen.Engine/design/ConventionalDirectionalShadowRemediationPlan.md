@@ -8,114 +8,40 @@ a production-grade cascaded shadow-map path that is viable as a shipping
 fallback, without leaving behind a second temporary architecture or pushing the
 problem back into ScenePrep
 
-This document is intentionally discovery-heavy. It records the baseline
-artifacts, dead ends, exact commands, and design constraints needed to restart
-this work later without redoing the slow investigation.
+This document is intentionally restartable. It records the baseline package,
+the invalidated approach, the corrected architecture, the phase gates, and the
+evidence standards required to continue this work later without redoing the
+slow discovery.
 
-## 0. Current Snapshot (2026-04-01)
+## 0. Current State (2026-04-01)
 
 Truthful status:
 
-- `CSM-1` is implemented and validated.
-- No shadow GPU-time reduction from later phases is implemented yet; the
-  current work establishes the shadow-draw contract and telemetry without
-  changing raster behavior.
-- The benchmark hydration and analysis scaffolding needed for this plan is now
-  implemented and validated.
-- The canonical baseline is a fresh Release `NewSponza` capture at frame `320`
-  with exactly one authoritative scene sun and sequential RenderDoc analysis
-  using an isolated automation config root.
-- Canonical baseline metrics:
-  - `ConventionalShadowRasterPass`: `21.747520 ms`
-  - `ShaderPass`: `4.440512 ms`
-  - ratio: `4.90x`
-  - shadow work events: `1608`
-  - shadow draws: `1604`
-  - shadow clears: `4`
-  - unique shadow jobs/slices: `4`
-  - shadow viewport/scissor: `4096 x 4096`
-- Runtime state at the canonical capture:
-  - `405` retained shadow casters
-  - `18` visible receivers
-  - `1` shadowed directional light
-  - the authoritative directional is the scene node `SUN`
-- Capture stabilization window for the canonical baseline:
-  - scene build frame: `124`
-  - last texture repoint frame: `198`
-  - capture request frame: `320`
-  - post-scene-build stabilization: `196` frames / `8.638 s`
-  - post-last-repoint stabilization: `122` frames / `4.263 s`
-- Inference from the baseline capture plus runtime log:
-  - `1604 / 4 = 401` draws per shadow job on average
-  - this is still effectively a replay of almost the entire `405`-caster set
-    for every shadow job
+- The repository has been recovered to the state immediately after `CSM-1`.
+- `CSM-1` is implemented and remains valid.
+- The previously attempted `CSM-2` / `CSM-3` path was invalidated by
+  RenderDoc evidence and rolled back.
+- No shadow GPU-time reduction beyond the original conventional path currently
+  exists in code.
+- Every future phase must include:
+  - Release build validation
+  - a fresh frame-`320` RenderDoc capture of the canonical benchmark
+  - sequential RenderDoc Python-script analysis
+  - an explicit comparison against the canonical baseline package in this
+    document
 
-Current validation evidence:
+What survived rollback:
 
-- Release build command succeeded:
-  - `cmake --build out/build-ninja --parallel 8 --config Release --target Oxygen.Examples.RenderScene.exe Oxygen.Graphics.Direct3D12.ShaderBake.exe`
-- Fresh Release smoke run succeeded without the previously observed
-  `LightCulling.hlsl:CS [CLUSTERED=1]` failure:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_smoke_post_rebuild.stderr.log`
-- Canonical Release capture:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc`
-- Canonical benchmark log:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.benchmark.log`
-- Canonical sequential RenderDoc reports:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_timing.txt`
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shader_timing.txt`
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_parent_focus.txt`
-- RenderDoc automation scripts:
-  - `Examples/RenderScene/Invoke-RenderDocUiAnalysis.ps1`
-  - `Examples/RenderScene/Analyze-ConventionalShadowBaseline.ps1`
-- Validated sequential analysis command:
-  - `powershell -ExecutionPolicy Bypass -File .\Examples\RenderScene\Analyze-ConventionalShadowBaseline.ps1 -CapturePath out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc -OutputStem out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional`
-- DemoShell sun-policy validation:
-  - `cmake --build out/build-ninja --parallel 8 --config Release --target Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests`
-  - `out/build-ninja/bin/Release/Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests.exe`
-  - result: `9` tests passed
-- `CSM-1` validation:
-  - `cmake --build out/build-ninja --parallel 8 --config Release --target Oxygen.Renderer.ConventionalShadowDrawRecords.Tests Oxygen.Renderer.ConventionalShadowRasterPassConfig.Tests Oxygen.Examples.RenderScene.exe`
-  - `out/build-ninja/bin/Release/Oxygen.Renderer.ConventionalShadowDrawRecords.Tests.exe`
-    - result: `2` tests passed
-  - `out/build-ninja/bin/Release/Oxygen.Renderer.ConventionalShadowRasterPassConfig.Tests.exe`
-    - result: `3` tests passed
-  - fast `Track A` runtime validation:
-    - `powershell -ExecutionPolicy Bypass -File .\Examples\RenderScene\Run-ConventionalShadowBaseline.ps1 -Frame 256 -Output out/build-ninja/analysis/conventional_shadow_csm1_validation/release_frame256_csm1`
-    - artifact:
-      `out/build-ninja/analysis/conventional_shadow_csm1_validation/release_frame256_csm1.benchmark.log`
-    - validated production telemetry at steady state:
-      `conventional shadow draw records=401`
-      with partition distribution
-      `#0:Opaque|ShadowCaster@[0,331)=331, #1:DoubleSided|Opaque|ShadowCaster@[331,384)=53, #2:Opaque|ShadowCaster|MainViewVisible@[384,401)=17`
-    - this matches the previously captured frame-`256` shadow workload:
-      `1604` shadow draws / `4` jobs = `401` draws per job
+- the canonical benchmark harness and baseline artifacts
+- the single-sun benchmark policy for `RenderScene`
+- the `CSM-1` conventional shadow draw-record contract and tests
 
-Artifacts that must not be reused as closure evidence:
+What did not survive rollback:
 
-- `out/build-ninja/analysis/conventional_shadow_regression/*`
-  - old debug capture
-  - contains `invalid camera depth span ...; skipping directional shadows`
-  - not representative of a valid shadow frame
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame180_conventional_frame180.rdc`
-  - captured during the earlier Release shader mismatch failure
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame220_conventional_frame220.rdc`
-  - user-reviewed as still inside scene-streaming churn
-  - keep for history only, not as baseline evidence
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame500_conventional_frame500.rdc`
-  - captured after streaming settled, but invalid for closure because
-    RenderScene persisted a synthetic-sun override and benchmarked two
-    shadowed directional lights
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_conventional*`
-  - earlier ad hoc capture/analyze path
-  - keep for history only
-  - superseded by the fresh frame-`320` baseline captured with the stabilized
-    benchmark and sequential analysis scripts
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame256_conventional*`
-  - useful fast-iteration capture path only
-  - not the canonical baseline for this plan
-  - timing is materially different despite matching structural workload, so it
-    must not replace the explicit frame-`320` baseline without fresh review
+- receiver-sphere-based cull jobs
+- sphere-vs-rect-slab `CSM-3` compute compaction
+- any claim that the rolled-back `CSM-2` / `CSM-3` design was a viable
+  production direction
 
 ## 1. Canonical Baseline Package
 
@@ -126,16 +52,6 @@ Canonical scene for this plan:
 - file: `Examples/RenderScene/demo_settings.json`
 - key: `e74ea312-0b6f-928f-8864-e3f44af2a8b7`
 - scene: `/.cooked/Scenes/NewSponza_Main_glTF_003.oscene`
-- source index:
-  `H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\.cooked\container.index.bin`
-
-The benchmark scene is already configured in `RenderScene`, but benchmark runs
-must not trust the persisted environment state blindly. Before every capture:
-
-- save the current `Examples/RenderScene/demo_settings.json`
-- apply the benchmark sun policy in `demo_settings.json`
-- run the benchmark
-- restore the original `demo_settings.json`
 
 Benchmark sun policy for this plan:
 
@@ -148,7 +64,7 @@ Benchmark sun policy for this plan:
 - else use a synthetic sun, and when synthetic override is active it must be
   the only shadow-casting `is_sun_light` node
 
-### 1.2 Build And Smoke Commands
+### 1.2 Canonical Build And Capture Commands
 
 Release build:
 
@@ -158,27 +74,7 @@ cmake --build out/build-ninja --parallel 8 --config Release --target `
   Oxygen.Graphics.Direct3D12.ShaderBake.exe
 ```
 
-Release smoke:
-
-```powershell
-out/build-ninja/bin/Release/Oxygen.Examples.RenderScene.exe `
-  -v=0 `
-  --frames 120 `
-  --fps 30 `
-  --vsync false `
-  --directional-shadows conventional
-```
-
-Validated smoke log:
-
-- `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_smoke_post_rebuild.stderr.log`
-
-### 1.3 Canonical Baseline Capture Command
-
-Use the benchmark runner with an explicit frame `320` output stem. The runner
-already backs up and restores `demo_settings.json`, forces the authoritative
-scene-sun policy, validates the positive and negative sun-selection logs, and
-records the stabilization window in the benchmark log.
+Canonical frame-`320` capture:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File `
@@ -188,35 +84,7 @@ powershell -ExecutionPolicy Bypass -File `
   out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional
 ```
 
-Canonical capture artifacts:
-
-- capture:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc`
-- benchmark log:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.benchmark.log`
-
-Canonical stabilization facts from the benchmark log:
-
-- scene build:
-  `21:24:57.860`, frame `124`
-- last texture repoint:
-  `21:25:02.235`, frame `198`
-- capture request:
-  `21:25:06.498`, frame `320`
-- post-last-repoint slack:
-  `122` frames / `4.263 s`
-
-Fast-iteration capture path:
-
-- the benchmark runner defaults to frame `256`
-- that path is intentionally kept for quicker profiling iteration
-- it is not the canonical baseline for this plan
-- when using the fast path, keep its artifacts separate from baseline artifacts
-
-### 1.4 RenderDoc Analysis Commands
-
-Run analysis sequentially through the automation wrapper so RenderDoc uses an
-isolated config root instead of the interactive user profile.
+Canonical sequential analysis:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File `
@@ -225,517 +93,563 @@ powershell -ExecutionPolicy Bypass -File `
   out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc
 ```
 
-The wrapper emits:
+### 1.3 Canonical Baseline Artifacts
 
-- `*.shadow_timing.txt`
-- `*.shader_timing.txt`
-- `*.shadow_parent_focus.txt`
+Authoritative baseline artifacts:
 
-### 1.5 Baseline Snapshot
+- capture:
+  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc`
+- benchmark log:
+  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.benchmark.log`
+- RenderDoc focus report:
+  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_parent_focus.txt`
+- RenderDoc timing reports:
+  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_timing.txt`
+  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shader_timing.txt`
 
-Canonical frame-`320` baseline:
+### 1.4 Authoritative Structural Baseline
+
+These values are the current authoritative baseline because they are consistent
+across the benchmark log and the RenderDoc focus report:
 
 | Metric | Value | Evidence |
 | --- | ---: | --- |
-| `ConventionalShadowRasterPass` GPU time | `21.747520 ms` | `release_frame320_refresh_conventional.shadow_timing.txt` |
-| `ShaderPass` GPU time | `4.440512 ms` | `release_frame320_refresh_conventional.shader_timing.txt` |
-| Shadow/Shading ratio | `4.90x` | derived from the two timing reports |
-| Shadow work events | `1608` | `release_frame320_refresh_conventional.shadow_timing.txt` |
-| Shadow draws | `1604` | derived from report line classification |
-| Shadow clears | `4` | derived from report line classification |
-| Unique shadow jobs | `4` | extracted from `Job[..].Slice[..]` scopes |
-| Shader draws | `17` | `release_frame320_refresh_conventional.shader_timing.txt` |
-| Retained shadow casters | `405` | `release_frame320_refresh_conventional.benchmark.log` |
-| Visible receivers | `18` | `release_frame320_refresh_conventional.benchmark.log` |
-| Shadowed directional lights | `1` | `release_frame320_refresh_conventional.benchmark.log` |
-| Shadow viewport/scissor | `4096 x 4096` | `release_frame320_refresh_conventional.shadow_parent_focus.txt` |
+| Shadowed directional lights | `1` | benchmark log |
+| Raster jobs / cascades | `4` | benchmark log + RenderDoc event naming |
+| Shadow work events | `1608` | RenderDoc timing report |
+| Shadow draws | `1604` | RenderDoc timing report classification |
+| Shadow clears | `4` | RenderDoc timing report classification |
+| Average draws per job | `401` | `1604 / 4` |
+| Retained shadow casters | `405` | benchmark log |
+| Visible receiver items | `18` | benchmark log |
+| Shadow viewport / scissor | `4096 x 4096` | RenderDoc focus report |
 
-Baseline interpretation:
+Canonical stabilization facts:
 
-- The authoritative single-sun benchmark is now correct and reproducible.
-- The pass is still the dominant GPU cost relative to the main shading pass.
-- The workload shape is the real problem:
-  - `405` retained casters
-  - `4` raster jobs
-  - `401` draws per job on average
-- The focus report confirms that each inspected job slice still rasterizes a
-  full `4096 x 4096` viewport into one layer of `DirectionalShadowDepthArray`.
-- The root-cause target for remediation remains unchanged:
-  the pass is replaying almost the entire caster population for every cascade.
+- scene build frame: `124`
+- last texture repoint frame: `198`
+- capture frame: `320`
+- post-scene-build stabilization: `196` frames / `8.638 s`
+- post-last-repoint stabilization: `122` frames / `4.263 s`
 
-Non-baseline but preserved for context:
+### 1.5 Timing Baseline Status
 
-- `release_frame256_conventional_*`
-  - validated fast-iteration capture
-  - same structural workload (`1604` draws, `4` clears, `4` jobs,
-    `405` retained casters, `18` visible receivers)
-  - materially different timing, so preserved for investigation only
-- `release_frame500_conventional_*`
-  - invalidated by the pre-fix two-directional-light benchmark state
+The currently stored pass-timing text files are not trustworthy closure
+evidence for GPU timing deltas:
 
-## 2. Root-Cause Summary
+- `release_frame320_refresh_conventional.shadow_timing.txt` currently reports
+  `507.133568 ms`
+- `release_frame320_refresh_conventional.shader_timing.txt` currently reports
+  `12.981472 ms`
 
-The current failure mode is architectural, not cosmetic.
+Those numbers are inconsistent with the accepted baseline session and with the
+later rolled-back `CSM-3` capture, which showed a structurally identical
+workload but a `ConventionalShadowRasterPass` cost around `21.7 ms`.
 
-What the current code does:
+Conclusion:
 
-- `ConventionalShadowBackend` uses receiver bounds and caster bounds to size
-  the orthographic cascade and tighten depth range.
-- `ConventionalShadowRasterPass` then loops over every raster job and replays
-  every `kShadowCaster` partition range.
-- ScenePrep keeps off-frustum shadow casters alive as `shadow_only_submeshes`,
-  which is correct in principle but currently too broad.
-- The result is `shadow jobs x almost all shadow casters`.
+- structural baseline metrics above are authoritative today
+- timing closure is blocked on normalization of the RenderDoc timing analysis
+  so that a single canonical frame-`320` capture yields reproducible pass
+  timings
+- no future phase may claim a timing improvement until that normalization is
+  done and the baseline timing report is regenerated from the canonical capture
 
-Concrete evidence in the current codebase:
+This is now part of the new `CSM-2` scope.
 
-- `src/Oxygen/Renderer/Passes/ConventionalShadowRasterPass.cpp`
-  - loops jobs first, then loops every shadow-caster partition
-  - emits the entire partition range for each job
-- `src/Oxygen/Renderer/ScenePrep/Extractors.h`
-  - keeps non-main-view shadow casters as `shadow_only_submeshes`
-  - explicitly notes GPU Hi-Z as future work, not current reality
-- `src/Oxygen/Renderer/Internal/ConventionalShadowBackend.cpp`
-  - sizes cascade extents and depth range from receiver/caster bounds
-  - does not publish a per-job compacted draw list
+### 1.6 Per-Phase Evidence Rule
 
-In other words:
+Every future phase must produce all of the following:
 
-- the backend already computes enough information to size a better shadow
-  volume,
-- but the raster path never converts that information into per-job draw
-  eligibility,
-- so the GPU still rasterizes almost the same set of casters into every slice.
+1. Release build evidence.
+2. Fresh frame-`320` capture of the canonical benchmark.
+3. Sequential RenderDoc Python-script analysis.
+4. A comparison against the canonical baseline package in this document.
+5. Updated design status in this document.
 
-## 3. Non-Negotiable Decisions
+Structural phases may close without a shadow-GPU-time reduction only if they
+show:
 
-1. This remediation ends with one final conventional directional-shadow path.
-   No long-lived "temporary CPU culling path" and no second shadow backend.
-2. ScenePrep must not gain an `O(cascades x full-scene)` per-submesh shadow
-   filter. That would move the bottleneck instead of fixing it.
-3. Reuse existing renderer data and infrastructure before adding new systems:
-   - `PreparedSceneFrame.render_items`
-   - `PreparedSceneFrame.shadow_caster_bounding_spheres`
-   - `PreparedSceneFrame.visible_receiver_bounding_spheres`
-   - draw bounds already emitted by `DrawMetadataEmitter`
-   - existing `ExecuteIndirectCounted` public API
-   - existing VSM counted-indirect command shape and resource lifecycle pattern
-4. Offscreen casters remain allowed, but only if they can affect currently
-   visible receivers for the shadow job being rasterized.
-5. The raster pass must consume compacted per-job work. Replaying full
-   partitions per job is the behavior being deleted.
-6. Static and dynamic shadow casters must be budgeted separately. If static
-   caching is needed to hit budget, it must be deliberate and measurable, not a
-   hidden side path.
-7. Multi-directional-light shadow policy must be explicit before closure:
-   either Oxygen budgets more than one shadowed directional light on purpose,
-   or it enforces one primary directional shadow caster. Silent multiplication
-   is not acceptable.
+- no unexplained structural regression versus baseline
+- the expected new GPU-visible data product is present in the capture and is
+  analyzed by a Python RenderDoc script
 
-## 4. Final Target Architecture
+Performance phases must additionally show:
 
-### 4.1 CPU/GPU Ownership Split
+- normalized timing comparison versus the canonical baseline capture
+- draw/job reduction or raster reduction consistent with the phase goal
 
-CPU responsibilities:
+## 2. Invalidated Approach And Why It Failed
+
+The rolled-back approach must not be revived.
+
+What it attempted:
+
+- build per-cascade receiver volumes from `visible_receiver_bounding_spheres`
+- use those volumes to publish `ConventionalShadowCullJob`
+- test each `ConventionalShadowDrawRecord` bounding sphere against a light-space
+  rect + depth slab
+- compact surviving draw indices on the GPU
+
+Why it was invalidated:
+
+- RenderDoc analysis of the rolled-back `CSM-3` capture showed zero useful
+  culling on the canonical benchmark:
+  - artifact:
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame320_csm3.shadow_culling_report.txt`
+  - aggregate input draw records: `401`
+  - aggregate compacted draws: `1604`
+  - average eligible draws per job: `401`
+  - aggregate compaction ratio: `1.000000`
+- The same failure mode reproduced on a second large scene according to user
+  validation.
+
+Root bugs in the invalidated design:
+
+1. Receiver truth was wrong.
+   `visible_receiver_bounding_spheres` represented whole visible receiver
+   objects, not the actual visible receiver footprint from the main view.
+2. Receiver bounds were too coarse.
+   Large world-space spheres on roofs, walls, and architectural pieces expanded
+   the light-space receiver rects until they behaved like "almost the entire
+   scene".
+3. Full-split scale still leaked into the light setup.
+   The published job geometry remained coupled to the full cascade slice size,
+   so narrowing the receiver proxy did not actually produce a tight culling
+   volume.
+4. The culling predicate was too weak.
+   Caster-sphere vs receiver-rect-slab tests are too conservative once both
+   sides are whole-object spheres.
+5. The test gate was insufficient.
+   Synthetic GPU contract tests validated append/compaction mechanics, not that
+   real-scene descriptors were selective enough.
+
+The important conclusion is not "Sponza is special". The conclusion is that
+receiver-object-sphere culling is the wrong contract for this problem.
+
+## 3. Corrected Strategy
+
+The new direction is to cull shadow casters against actual visible receiver
+samples from the main view, not against visible receiver object bounds.
+
+The strategy combines three proven ideas:
+
+- Sample Distribution Shadow Maps:
+  derive tight light-space bounds from the distribution of visible samples
+  instead of from coarse frustum or object bounds.
+  Reference:
+  `Lauritzen, Sample Distribution Shadow Maps, Advances in Real-Time Rendering 2010`
+  `https://advances.realtimerendering.com/s2010/Lauritzen-SDSM%28SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course%29.pdf`
+- Receiver-mask-based caster culling:
+  cull casters that cannot project onto visible receivers.
+  Reference:
+  `Bittner et al., Shadow Caster Culling for Efficient Shadow Mapping, I3D 2011`
+  `https://www.cg.tuwien.ac.at/research/publications/2011/bittner-2011-scc/`
+- GPU hierarchical visibility:
+  use existing depth / HZB style visibility products and GPU-side hierarchical
+  tests instead of pushing new per-cascade walks into CPU scene prep.
+  Reference:
+  `Hill and Collin, Practical, Dynamic Visibility for Games`
+  `https://blog.selfshadow.com/publications/practical-visibility/`
+
+What this means for Oxygen:
+
+- Keep `CSM-1` as the authoritative draw-record stream.
+- Use the main-view depth path as the receiver ground truth.
+- Build per-cascade receiver analysis on GPU from visible samples.
+- Build a conservative light-space receiver mask per cascade.
+- Cull and compact casters against that mask on GPU.
+- Feed conventional shadow raster through counted indirect draws only.
+
+## 4. Non-Negotiable Design Rules
+
+1. `CSM-1` stays.
+   The conventional shadow draw-record contract is still the right foundation.
+2. Do not put new `O(cascades x scene)` work into ScenePrep.
+3. Do not reintroduce receiver-object-sphere cull jobs.
+4. Do not depend on CPU readback for per-frame shadow culling.
+5. Do not leave a CPU replay fallback on the hot raster path.
+6. Reuse existing renderer systems first:
+   - `DepthPrePass`
+   - `ScreenHzbBuildPass`
+   - `PreparedSceneFrame`
+   - `ExecuteIndirectCounted`
+   - existing VSM-style counted-indirect resource patterns
+7. All new analysis must use RenderDoc Python scripts, not ad hoc runtime
+   telemetry.
+
+## 5. Target Architecture
+
+### 5.1 CPU Responsibilities
 
 - keep current ScenePrep extraction model
-- build per-frame shadow draw records once from existing prepared-frame data
-- build per-light, per-cascade conservative shadow job descriptors
-- choose the directional-light budget policy
-- publish stable telemetry
+- keep `CSM-1` draw-record publication
+- publish any static metadata the GPU needs to interpret draw records
+- schedule shadow analysis / culling / raster passes
+- never do per-cascade per-draw CPU filtering
 
-GPU responsibilities:
+### 5.2 GPU Responsibilities
 
-- perform per-job fine eligibility testing for shadow casters
-- compact eligible casters into per-job, per-partition indirect-command streams
-- drive raster through counted indirect draws
+- derive receiver-driven per-cascade bounds from actual visible depth samples
+- build conservative receiver occupancy masks in light space
+- cull shadow casters against those masks and compact surviving draw indices
+- drive conventional shadow raster through counted indirect execution
 
-What must not happen:
+### 5.3 Renderer Data Products
 
-- no new per-cascade ScenePrep walk
-- no CPU readback of GPU cull results
-- no CPU-side per-job draw emission after compaction lands
+Existing valid product:
 
-### 4.2 Data Products
-
-The final path should add the following renderer-owned data products:
-
-- `ConventionalShadowCullJob`
-  - one record per raster job
-  - contains light-space culling planes or equivalent conservative volume,
-    target slice, resolution, and any partition offsets needed by the compute
-    stage
 - `ConventionalShadowDrawRecord`
-  - one record per shadow-caster draw
-  - contains:
-    - draw index / root-constant payload
-    - partition slot or pass-mask class
-    - world bounding sphere
-    - static/dynamic bit
-    - any geometry data needed to emit indirect draw arguments
-- per-job eligibility and count buffers
-- per-partition counted-indirect command buffers
+  - authoritative shadow-caster draw list
+  - draw identity
+  - partition identity
+  - world bounding sphere
+  - primitive flags
 
-These are renderer-internal data products. They are not new public runtime
-systems.
+New products to add:
 
-### 4.3 Execution Shape
+- `ConventionalShadowReceiverAnalysis`
+  - one record per raster job
+  - light-space XY min/max from actual visible samples
+  - light-space depth min/max from actual visible samples
+  - sample count
+  - dilation margin expressed in texels or world units
+  - flags describing fallback / empty / valid states
+- `ConventionalShadowReceiverMask`
+  - one sparse tile mask per raster job
+  - base occupancy plus one or more OR-reduced hierarchy levels
+- optional companion cull-bounds buffer if `CSM-1` spheres prove too coarse
+  for mask overlap tests
+  - this extends `CSM-1`; it does not invalidate it
+- per-job / per-partition compacted draw-index buffers
+- per-job / per-partition counted indirect argument buffers
 
-The target execution flow is:
+### 5.4 Execution Flow
 
-1. ScenePrep and resource upload build the normal prepared frame.
-2. `ConventionalShadowBackend` publishes raster jobs plus conservative
-   receiver-driven culling descriptors.
-3. A new compute stage tests each shadow draw record against each shadow job.
-4. A scan/compaction stage produces counted indirect commands per partition.
-5. `ConventionalShadowRasterPass` loops jobs and partitions but executes only
-   the compacted indirect streams via `ExecuteIndirectCounted`.
+Target flow:
 
-This should reuse the existing counted-indirect pattern already proven by
-`VsmShadowRasterizerPass`, specifically the `kDrawWithRootConstant` layout used
-with `VsmShaderIndirectDrawCommand`.
+1. `DepthPrePass` produces main-view depth.
+2. `ScreenHzbBuildPass` produces the main-view HZB.
+3. `CSM-2` receiver analysis derives tight per-cascade bounds from visible
+   samples.
+4. `CSM-3` receiver mask construction marks occupied shadow tiles per cascade.
+5. `CSM-4` caster culling tests draw records against receiver analysis and mask
+   and compacts survivors.
+6. `CSM-5` conventional raster executes only compacted work through counted
+   indirect.
 
-### 4.4 What Is Intentionally Out Of Scope First
+No CPU readback is allowed in this flow.
 
-These items are not phase-1 requirements:
-
-- screen-HZB-driven shadow-caster occlusion
-- page-based or virtualized shadow memory
-- any dependency on VSM cache invalidation
-
-They may become later optimizations only if the baseline budgets remain unmet
-after receiver-driven compaction and indirect raster are in place.
-
-## 5. Performance Targets
-
-Two benchmark tracks must be carried through the remediation:
-
-- `Track A: Sponza-Authored`
-  - the exact current `NewSponza` scene as captured
-  - currently includes `2` shadowed directional lights and `8` shadow jobs
-- `Track B: Sponza-PrimarySun`
-  - same scene, but with the final product-approved primary-directional policy
-  - this is required because many engines budget only one primary shadowed sun
-
-Baseline for Track A is fixed by the authoritative capture in this document.
-
-Final exit gates:
-
-- `Track A`
-  - shadow pass GPU time reduced by at least `65%` from baseline
-  - target: `<= 15.5 ms`
-  - average eligible draws per shadow job reduced from about `401` to `<= 128`
-- `Track B`
-  - shadow pass GPU time reduced by at least `75%` from Track A baseline
-  - target: `<= 11.0 ms`
-  - average eligible draws per shadow job `<= 96`
-
-These are merge gates, not aspirations. If a phase misses its gate, the plan
-stays `in_progress` and the next phase does not get to claim success.
-
-## 6. Phased Remediation
-
-### CSM-0. Baseline And Product Policy Lock
-
-Goals:
-
-- preserve the authoritative Release baseline package
-- lock the benchmark tracks
-- decide and document the shipping policy for more than one shadowed
-  directional light
-
-Tasks:
-
-- keep the frame-500 baseline artifacts referenced in this document
-- capture one normalized `Track B` baseline after the directional-light policy
-  is decided
-- add a small renderer telemetry dump for:
-  - shadow job count
-  - eligible draw count per job
-  - compacted indirect count per partition
-
-Exit gate:
-
-- baseline artifacts are stable and reproducible
-- the directional-light budget policy is documented
-- both benchmark tracks are defined
+## 6. Phase Plan
 
 ### CSM-1. Shadow Draw Record Contract
 
 Status:
 
 - implemented
+- retained after rollback
 
-Concrete contract:
+Purpose:
 
-- `PreparedSceneFrame` now publishes:
-  - `conventional_shadow_draw_records`
-  - `bindless_conventional_shadow_draw_records_slot`
-- `ConventionalShadowDrawRecord` is a `32`-byte shader-facing record with:
-  - `world_bounding_sphere`
-  - `draw_index`
-  - `partition_index`
-  - `partition_pass_mask`
-  - `primitive_flags`
-- the builder runs once per finalized view in renderer finalization, not per
-  shadow job
-- the builder derives draw-level records from finalized draw metadata,
-  partitions, and draw-bounds spans so the record count matches the actual
-  shadow raster population instead of the broader retained-item count
-- renderer telemetry now logs per-view record counts, static/dynamic split,
-  shadow-only count, and per-partition distribution
+- publish one authoritative conventional shadow draw stream per prepared view
+- avoid any new `ScenePrep x cascade` work
+- provide stable draw identity for future GPU culling and indirect raster
 
-Goals:
+Current validation evidence:
 
-- build one shadow-caster record stream per frame without touching ScenePrep's
-  asymptotic cost
-- make the shadow pass measurable before replacing the raster path
-
-Tasks:
-
-- publish a renderer-internal `ConventionalShadowDrawRecord` buffer
-- derive it from existing prepared-frame data and draw metadata
-- reuse:
-  - `RenderItemData.world_bounding_sphere`
-  - `RenderItemData.static_shadow_caster`
-  - draw root-constant / draw-index identity already used by the renderer
-- add tests proving:
-  - shadow-only casters are retained
-  - main-view visibility is not conflated with shadow eligibility
-  - static/dynamic bits survive into the record stream
-
-Exit gate:
-
-- record count matches current shadow-caster draw population
-- no new `ScenePrep` `O(jobs x scene)` work was introduced
-- telemetry reports record counts and partition distribution
-
-Validation evidence:
-
-- unit coverage:
-  - `src/Oxygen/Renderer/Test/ConventionalShadowDrawRecordBuilder_test.cpp`
 - implementation files:
   - `src/Oxygen/Renderer/Types/ConventionalShadowDrawRecord.h`
   - `src/Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.h`
   - `src/Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.cpp`
   - `src/Oxygen/Renderer/PreparedSceneFrame.h`
-  - `src/Oxygen/Renderer/Renderer.h`
   - `src/Oxygen/Renderer/Renderer.cpp`
-- fast Release runtime validation:
+- tests:
+  - `src/Oxygen/Renderer/Test/ConventionalShadowDrawRecordBuilder_test.cpp`
+- Release validation:
+  - `out/build-ninja/bin/Release/Oxygen.Renderer.ConventionalShadowDrawRecords.Tests.exe`
+  - result: `2` tests passed
+- runtime validation:
   - `out/build-ninja/analysis/conventional_shadow_csm1_validation/release_frame256_csm1.benchmark.log`
-  - steady-state view telemetry reports `401` conventional shadow draw records
-    against `405` retained caster bounds, which matches the known
-    rasterized-draw workload rather than the broader retained-item count
+  - steady-state record count: `401`
 
-### CSM-2. Receiver-Driven Conservative Job Volumes
+### CSM-2. Receiver Sample Foundation And Baseline Timing Normalization
+
+Status:
+
+- pending
 
 Goals:
 
-- turn the existing cascade-fit math into actual per-job culling descriptors
+- normalize the canonical baseline timing analysis so later phases can claim
+  real GPU-time deltas
+- replace receiver-object-bounds thinking with actual visible receiver samples
 
 Tasks:
 
-- extend `ConventionalShadowBackend` to publish per-job conservative culling
-  data:
-  - light-space XY receiver rect
-  - conservative depth slab
-  - extrusion length along light direction
-  - target slice and per-job transform
-- encode the volume so GPU testing is cheap:
-  - sphere-vs-rect-slab or sphere-vs-planes
-- keep CPU work `O(jobs)` and independent of shadow-caster count
+1. Repair the RenderDoc baseline timing analysis so it reports a single
+   authoritative `ConventionalShadowRasterPass` and `ShaderPass` duration for
+   the canonical frame-`320` capture.
+2. Add a GPU receiver-analysis pass that consumes the main-view depth path,
+   not `visible_receiver_bounding_spheres`.
+3. Use actual visible depth samples to derive, per cascade:
+   - sample count
+   - tight light-space XY bounds
+   - tight light-space depth min/max
+   - required dilation margin for filter / bias safety
+4. Publish `ConventionalShadowReceiverAnalysis` as a renderer-owned GPU buffer.
+5. Add a RenderDoc Python analysis script that reads back the receiver-analysis
+   buffer from the capture and reports:
+   - sample counts per job
+   - projected area ratio relative to the full cascade-fit rect
+   - depth-range ratio relative to the old full-slice range
+
+Implementation guidance:
+
+- use the existing main-view depth / HZB path, not new ScenePrep inputs
+- start with a GPU reduction over visible samples; do not iterate CPU-side over
+  render items
+- prefer one thread per selected sample or per small screen tile
+- use atomics or tiled reductions to produce one record per cascade
 
 Exit gate:
 
-- per-job culling descriptors are published and validated
-- no raster behavior change yet
-- telemetry can report the job volume for debugging and captures
+- canonical baseline timing reports are normalized and regenerated from the
+  canonical capture
+- receiver analysis is derived from actual visible samples, not object bounds
+- frame-`320` capture and analysis show that at least one near cascade is
+  materially tighter than the full cascade-fit rect
+- no unexplained structural regression versus the baseline package
 
-### CSM-3. GPU Eligibility And Compaction
+Required phase evidence:
+
+- Release build
+- fresh frame-`320` capture
+- refreshed baseline compare report
+- receiver-analysis RenderDoc report
+- doc update in this file
+
+### CSM-3. Light-Space Receiver Mask Construction
+
+Status:
+
+- pending
 
 Goals:
 
-- move repeated per-job shadow eligibility work onto the GPU
+- stop treating the entire tight receiver rect as uniformly occupied
+- capture the sparse distribution of visible receivers inside each shadow job
+
+Tasks:
+
+1. Build a light-space receiver tile mask per cascade from actual visible
+   samples.
+2. Start with a conservative base mask at `32 x 32` texel tiles for a
+   `4096 x 4096` shadow map.
+3. Dilate occupancy conservatively for filter footprint and bias margin.
+4. Build at least one OR-reduced hierarchy level for fast overlap tests.
+5. Add a RenderDoc Python analysis script that reports:
+   - occupied tile count per job
+   - occupied tile ratio versus full shadow-map coverage
+   - hierarchy occupancy summaries
+
+Implementation guidance:
+
+- build from the `CSM-2` receiver-analysis transform and visible samples
+- keep it GPU-only
+- do not encode this as runtime debug telemetry
+
+Exit gate:
+
+- canonical frame-`320` capture shows a sparse receiver mask for at least one
+  near cascade
+- aggregate occupied-tile ratio is materially below full-map coverage on the
+  canonical benchmark
+- no unexplained shadow-path timing regression versus normalized baseline
+
+Required phase evidence:
+
+- Release build
+- fresh frame-`320` capture
+- RenderDoc receiver-mask report
+- explicit baseline comparison
+
+### CSM-4. GPU Caster Culling And Compaction
+
+Status:
+
+- pending
+
+Goals:
+
+- cull shadow casters against actual receiver occupancy, not receiver object
+  bounds
 - reduce the live shadow-caster population before raster
 
 Tasks:
 
-- add a compute pass that tests `ConventionalShadowDrawRecord` against
-  `ConventionalShadowCullJob`
-- use a 1D or 2D dispatch with one thread per `(job, draw)` pair
-- initial kernel guidance:
-  - threadgroup size: `64`
-  - one bounds test per thread
-  - job descriptors read from a small structured buffer / root constants
-  - write job-local eligibility bits or counts
-- add a scan/compaction stage that produces:
-  - eligible-draw counts per job
-  - per-job per-partition compacted indices
+1. Add a GPU culling pass that tests each conventional shadow draw against:
+   - the `CSM-2` receiver analysis bounds
+   - the `CSM-3` receiver mask hierarchy
+2. Use `CSM-1` draw records as the authoritative draw stream.
+3. If sphere-only bounds are too coarse for mask overlap, add a companion
+   cull-bounds buffer without invalidating `CSM-1`.
+4. Compact surviving draws into per-job, per-partition index buffers.
+5. Add a RenderDoc Python analysis script that reads those compacted counts and
+   compares them to the canonical baseline `401` draws/job replay shape.
 
-Validation gates:
+Implementation guidance:
 
-- `Track A` eligible draws/job reduced to `<= 224`
-- capture proves the compacted counts are smaller than the input population
-- CPU time for the conventional path does not regress due to the new cull pass
+- keep the broad phase cheap
+- one thread per `(job, draw)` is acceptable for the first implementation
+- use the mask hierarchy to avoid fine tests when no receiver tiles overlap
 
-### CSM-4. Counted-Indirect Conventional Raster
+Exit gate:
+
+- canonical frame-`320` capture proves non-trivial real-scene rejection
+- no job on the canonical benchmark remains at full-input eligibility
+- average eligible draws/job is materially below the baseline `401`
+- no unexplained CPU-path regression versus baseline benchmark log
+
+Required phase evidence:
+
+- Release build
+- fresh frame-`320` capture
+- RenderDoc compacted-count report
+- explicit baseline comparison
+
+### CSM-5. Counted-Indirect Conventional Raster
+
+Status:
+
+- pending
 
 Goals:
 
 - delete CPU replay of full shadow partitions
-- raster only the compacted work
+- raster only compacted work
 
 Tasks:
 
-- convert `ConventionalShadowRasterPass` to consume counted indirect commands
-- reuse the existing public `CommandRecorder::ExecuteIndirectCounted` API
-- reuse the same packed root-constant + draw-arguments layout pattern already
-  used by `VsmShadowRasterizerPass`
-- keep PSO selection public-API-only, as already required by this codebase
-
-Expected result:
-
-- the pass still loops jobs and partitions,
-- but it no longer emits one direct draw per retained shadow caster
-
-Validation gates:
-
-- no direct `EmitDrawRange` replay remains on the hot path
-- RenderDoc shows counted indirect execution in the conventional pass
-- `Track A` shadow GPU time reduced to `<= 22 ms`
-
-### CSM-5. Static/Dynamic Split And Update Budget
-
-Goals:
-
-- stop paying the same price every frame for stable static casters if Phase 4
-  is still over budget
-
-Tasks:
-
-- leverage the existing `static_shadow_caster` bit already flowing through
-  renderer data
-- split static and dynamic shadow draw records
-- add stabilized-cascade reuse only if the camera/light policy makes it valid
-- if cross-frame reuse is adopted, keep it renderer-owned and explicit:
-  - no hidden persistent fallback path
-  - no cache that silently diverges from live dynamic content
-
-Important rule:
-
-- this phase is mandatory if Phase 4 does not hit the final budget
-- this phase may be skipped only if Phase 4 already satisfies the final exit
-  gates on both benchmark tracks
-
-### CSM-6. Shadow Material And LOD Specialization
-
-Goals:
-
-- remove expensive but low-value shadow work that remains after structural
-  culling
-
-Tasks:
-
-- add shadow-only LOD policy where the content pipeline supports it
-- add explicit masked-shadow budget controls
-- allow simplified shadow material paths for masked casters when correctness is
-  preserved
-- keep validation on:
-  - alpha-tested shadow correctness
-  - mismatch counts
-  - visible artifact review in the baseline capture scene
+1. Convert `ConventionalShadowRasterPass` to consume compacted work through the
+   existing public `ExecuteIndirectCounted` API.
+2. Reuse the same public counted-indirect usage pattern already proven by the
+   VSM raster path.
+3. Keep PSO usage within public graphics APIs only.
+4. Add RenderDoc analysis that proves:
+   - counted indirect execution is used
+   - raster draw count is reduced versus the canonical baseline
 
 Exit gate:
 
-- masked or specialized shadow work is measurable and justified
-- no correctness regression is accepted without capture-backed approval
+- no full-partition direct replay remains on the hot path
+- RenderDoc shows counted indirect execution in the conventional shadow pass
+- normalized shadow-pass GPU time is materially lower than the normalized
+  canonical baseline
 
-### CSM-7. Closure
+Required phase evidence:
+
+- Release build
+- fresh frame-`320` capture
+- RenderDoc indirect-raster report
+- normalized timing compare versus baseline
+
+### CSM-6. Static / Dynamic Update Budget
+
+Status:
+
+- pending
 
 Goals:
 
-- prove the final path on the same baseline workflow used to expose the
-  problem
+- stop paying the same full price every frame if `CSM-5` is still over budget
 
 Tasks:
 
-- rerun Release build
-- rerun both benchmark tracks
-- regenerate late-frame RenderDoc captures
-- update:
-  - `src/Oxygen/Renderer/Docs/shadows.md`
-  - any pass docs affected by the new cull/indirect path
-  - this design document with final measured numbers
+1. Split static and dynamic shadow workloads explicitly.
+2. Reuse the existing static-shadow-caster bit already flowing through the
+   renderer.
+3. Add deliberate, measurable update budgeting only if required by timing
+   results.
+
+Important rule:
+
+- this phase is mandatory if `CSM-5` misses the final performance gate
+- it may be skipped only if `CSM-5` already satisfies the final closure budget
+
+### CSM-7. Shadow Material / LOD Specialization
+
+Status:
+
+- pending
+
+Goals:
+
+- remove remaining expensive low-value shadow work after structural waste is
+  gone
+
+Tasks:
+
+1. Add shadow-only LOD policy where supported.
+2. Add explicit masked-shadow budget controls.
+3. Validate alpha-tested correctness against the canonical capture scene.
+
+### CSM-8. Closure
+
+Status:
+
+- pending
 
 Closure gate:
 
-- final budgets met
+- normalized timing baseline repaired
+- final conventional path uses receiver-sample analysis, receiver mask culling,
+  and counted indirect raster
+- Release frame-`320` capture proves improvement against the canonical
+  baseline
 - docs updated
-- tests and captures recorded
-- old baseline artifacts retained but clearly marked superseded
+- old invalidated approach remains documented as rejected
 
-## 7. Implementation Map
+## 7. Immediate Next Work
 
-Primary files likely touched by this remediation:
+The next meaningful execution order from the recovered state is:
 
-- planning and publication:
-  - `src/Oxygen/Renderer/Internal/ConventionalShadowBackend.cpp`
-  - `src/Oxygen/Renderer/ShadowManager.cpp`
-  - `src/Oxygen/Renderer/PreparedSceneFrame.h`
-  - `src/Oxygen/Renderer/Renderer.cpp`
-- raster execution:
-  - `src/Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h`
-  - `src/Oxygen/Renderer/Passes/ConventionalShadowRasterPass.cpp`
-- new compute path:
-  - `src/Oxygen/Renderer/Passes/` new conventional shadow cull/command build
-    pass
-  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/` new conventional shadow
-    cull / compact shaders
-- data preparation:
-  - `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.cpp`
-  - `src/Oxygen/Renderer/ScenePrep/RenderItemData.h`
-- testing:
-  - `src/Oxygen/Renderer/Test/` conventional shadow contract / live-scene /
-    telemetry tests
+1. Implement `CSM-2` baseline timing normalization.
+2. Implement `CSM-2` receiver analysis from actual visible samples.
+3. Capture and analyze the canonical benchmark at frame `320`.
+4. Only then proceed to `CSM-3` receiver mask construction.
 
-Existing code that should be reused as reference instead of duplicated:
+Do not restart with receiver object bounds. Do not attempt to tune the old
+rect/slab method. That path has already failed and been rolled back.
 
-- `src/Oxygen/Renderer/Passes/Vsm/VsmShadowRasterizerPass.cpp`
-- `src/Oxygen/Renderer/VirtualShadowMaps/VsmShaderTypes.h`
-- `src/Oxygen/Graphics/Common/CommandRecorder.h`
-- `src/Oxygen/Graphics/Direct3D12/CommandRecorder.cpp`
+## 8. References
 
-## 8. Immediate Next Work
+Primary references for the corrected direction:
 
-The next meaningful execution order is:
+- Microsoft Learn:
+  `Cascaded Shadow Maps`
+  `https://learn.microsoft.com/en-us/windows/win32/dxtecharts/cascaded-shadow-maps`
+- Lauritzen:
+  `Sample Distribution Shadow Maps`
+  `https://advances.realtimerendering.com/s2010/Lauritzen-SDSM%28SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course%29.pdf`
+- Bittner et al.:
+  `Shadow Caster Culling for Efficient Shadow Mapping`
+  `https://www.cg.tuwien.ac.at/research/publications/2011/bittner-2011-scc/`
+- Hill and Collin:
+  `Practical, Dynamic Visibility for Games`
+  `https://blog.selfshadow.com/publications/practical-visibility/`
+- GPU Gems 3:
+  `Parallel-Split Shadow Maps on Programmable GPUs`
+  `https://developer.nvidia.com/gpugems/gpugems3/part-ii-light-and-shadows/chapter-10-parallel-split-shadow-maps-programmable-gpus`
 
-1. Lock the multi-directional-light product policy and capture `Track B`.
-2. Add the shadow draw record contract and per-job telemetry.
-3. Add receiver-driven job descriptors.
-4. Implement GPU eligibility + compaction.
-5. Convert conventional raster to counted indirect.
+## 9. Archived Invalidation Evidence
 
-Do not start with cross-frame caching. The current baseline is dominated by
-replaying almost all casters for all jobs; that structural waste must be
-removed first.
+These artifacts are preserved to explain the rollback, not as closure evidence:
 
-## 9. References And Archived Discovery
+- rolled-back culling capture:
+  `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame320_csm3_frame320.rdc`
+- rolled-back culling report:
+  `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame320_csm3.shadow_culling_report.txt`
 
-Useful repo references:
-
-- `examples/RenderScene/README.md`
-- `src/Oxygen/Renderer/Docs/shadows.md`
-- `design/LightCullingRemediationPlan.md`
-
-Archived investigation artifacts kept for context:
-
-- earlier failed Release shader run:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame180_conventional.run.log`
-- earlier shader-archive smoke runs:
-  - `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_smoke_after_shader_refresh.stderr.log`
-- old invalid conventional regression capture:
-  - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_debuglayer.log`
-  - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60.shadow_timing.txt`
-
-These historical artifacts are useful for understanding the investigation, but
-they are not acceptable final evidence for this remediation.
+They show that the rejected receiver-object-sphere approach compacted nothing on
+the canonical benchmark and therefore is not an acceptable foundation for the
+next phase.
