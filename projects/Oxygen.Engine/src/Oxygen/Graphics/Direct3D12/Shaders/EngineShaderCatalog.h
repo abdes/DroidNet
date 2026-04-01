@@ -311,6 +311,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     }
   },
   ShaderFileSpec {
+    .path="Renderer/ConventionalShadowCasterCulling.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
+  },
+  ShaderFileSpec {
     .path="Renderer/Vsm/VsmInstanceCulling.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },

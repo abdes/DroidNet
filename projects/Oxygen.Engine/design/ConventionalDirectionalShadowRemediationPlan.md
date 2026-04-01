@@ -17,16 +17,17 @@ slow discovery.
 
 Current task focus:
 
-- Active phase is now `CSM-4`.
+- Active phase is now `CSM-5`.
 - Effective `2026-04-02`, the authoritative comparison baseline for later
   phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
   pre-`CSM-2` conventional package.
 - The next acceptable outputs are:
-  - `CSM-4` GPU caster culling and compaction implementation
-  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-4`
-  - compacted draw-count evidence compared against the locked `CSM-2`
-    baseline
-- `CSM-1`, `CSM-2`, and `CSM-3` are implemented and validated.
+  - `CSM-5` counted-indirect conventional raster wired to the validated
+    `CSM-4` compacted work buffers
+  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-5`
+  - counted-indirect raster evidence compared against the locked `CSM-2`
+    baseline and the validated `CSM-4` package
+- `CSM-1`, `CSM-2`, `CSM-3`, and `CSM-4` are implemented and validated.
 - `CSM-2` is the locked baseline package for future phases. It does not
   compare against an older capture package because it is the new authoritative
   baseline.
@@ -36,6 +37,9 @@ Current task focus:
 - `CSM-3` was then optimized and revalidated on the same canonical frame-`350`
   capture shape; receiver-mask occupancy stayed unchanged while receiver-mask
   GPU time dropped materially.
+- `CSM-4` now produces validated per-job / per-partition compacted command and
+  count buffers on the canonical frame-`350` capture, but conventional raster
+  still replays the full CPU partition stream until `CSM-5`.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -662,7 +666,7 @@ Conclusion:
 
 Status:
 
-- pending
+- complete
 
 Goals:
 
@@ -701,6 +705,112 @@ Required phase evidence:
 - fresh frame-`350` capture
 - RenderDoc compacted-count report
 - explicit baseline comparison
+
+Current validation evidence:
+
+- implementation files:
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h`
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.cpp`
+  - `src/Oxygen/Renderer/Types/ConventionalShadowIndirectDrawCommand.h`
+  - `src/Oxygen/Renderer/Types/ConventionalShadowCasterCullingPartition.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowCasterCulling.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowIndirectDrawCommand.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowCasterCullingPartition.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ConventionalShadowDrawRecord.hlsli`
+  - `src/Oxygen/Renderer/Test/ConventionalShadowCasterCullingPass_test.cpp`
+  - `Examples/RenderScene/Analyze-ConventionalShadowCsm4.ps1`
+  - `Examples/RenderScene/AnalyzeRenderDocConventionalShadowCulling.py`
+  - `Examples/RenderScene/CompareConventionalShadowCsm4Baseline.py`
+- synthetic validation:
+  - `Oxygen.Renderer.ConventionalShadowCasterCullingPass.Tests.exe`
+    `ConventionalShadowCasterCullingPassTest.CompactsConventionalShadowDrawsAgainstReceiverMask`
+    passed
+- Release validation:
+  - `cmake --build out/build-ninja --config Release --target`
+    `Oxygen.Examples.RenderScene.exe`
+    `Oxygen.Graphics.Direct3D12.ShaderBake.exe`
+    `oxygen-renderer`
+    succeeded
+- live validation artifacts:
+  - capture:
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50_frame350.rdc`
+  - benchmark log:
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.benchmark.log`
+  - timing reports:
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.shadow_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.shader_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.screen_hzb_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.receiver_analysis_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.receiver_mask_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.caster_culling_timing.txt`
+  - reports:
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.receiver_analysis_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.receiver_mask_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.caster_culling_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm4_validation/release_frame350_csm4_fps50.baseline_compare.txt`
+
+Current live `CSM-4` facts from the fresh canonical package:
+
+- scene build frame: `208`
+- last texture repoint frame: `282`
+- capture frame: `350`
+- post-scene-build stabilization: `142` frames / `6.070 s`
+- post-last-repoint stabilization: `68` frames / `1.374 s`
+- benchmark-log CPU-state checks versus locked `CSM-2`:
+  - directional light summary unchanged: `total=1 shadowed_total=1 shadowed_sun=1`
+  - prepared shadow bounds unchanged:
+    `collected=405 retained=405 cast_items=405 receive_items=405 visible_items=35`
+  - authoritative conventional draw stream unchanged: `401` draw records
+- culling workload:
+  - `job_count`: `4`
+  - `partition_count`: `4`
+  - `valid_job_count`: `2`
+  - `sampled_job_count`: `2`
+  - input draw records: `401`
+  - total emitted draws across all jobs: `165`
+  - total rejected draws versus full replay (`1604`): `1439`
+  - aggregate rejection ratio: `0.897132`
+  - average eligible draws/job: `41.250000`
+  - average eligible draws/sampled job: `82.500000`
+  - max eligible draws/job: `103`
+  - no job remained at full-input eligibility
+- per-job eligible draw counts:
+  - job `0`: `103`
+  - job `1`: `62`
+  - job `2`: `0`
+  - job `3`: `0`
+- per-partition emitted totals:
+  - partition `0` (`316` input draws): `108`
+  - partition `1` (`52` input draws): `8`
+  - partition `2` (`32` input draws): `48`
+  - partition `3` (`1` input draw): `1`
+- culling pass timing:
+  - `ConventionalShadowCasterCullingPass`: `3.273056 ms`
+  - `dispatch_event_count`: `4`
+  - dispatch durations: `0.803424 ms`, `0.751712 ms`, `0.860032 ms`,
+    `0.194592 ms`
+- baseline comparison against locked `CSM-2`:
+  - shadow work events unchanged: `1608`
+  - shader work events unchanged: `33`
+  - `ConventionalShadowRasterPass` delta: `+0.581760 ms`
+  - `ShaderPass` delta: `+1.493664 ms`
+  - `ScreenHzbBuildPass` delta: `-0.000992 ms`
+  - `ConventionalShadowReceiverAnalysisPass` delta: `+0.000608 ms`
+  - `ConventionalShadowReceiverMaskPass`: `0.439936 ms`
+  - `ConventionalShadowCasterCullingPass`: `3.273056 ms`
+  - auxiliary shadow-path delta versus locked `CSM-2`: `+3.712608 ms`
+
+Conclusion:
+
+- the canonical frame-`350` capture proves non-trivial real-scene caster
+  rejection
+- no job on the canonical benchmark remains at full-input eligibility
+- average eligible draws/job is materially below the baseline `401`
+- benchmark-log CPU-side scene/shadow state matches the locked `CSM-2`
+  baseline
+- `CSM-4` is validated as a producer of compacted conventional-shadow work
+  buffers
+- active implementation work now moves to `CSM-5`
 
 ### CSM-5. Counted-Indirect Conventional Raster
 

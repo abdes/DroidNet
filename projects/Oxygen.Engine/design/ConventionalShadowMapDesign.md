@@ -311,11 +311,48 @@ grid. Storage per cascade: `128 × 128 × 4 bytes = 64 KB` base + raw;
 `32 × 32 × 4 bytes = 4 KB` hierarchy — moderate but acceptable for the
 clear/dilate simplicity versus bit-packing
 
-### 4.5 CSM-4: Compacted Draw Buffers (GPU output, planned)
+### 4.5 CSM-4: ConventionalShadowCasterCullingPartition (32 bytes, CPU→GPU)
 
-- Per-job, per-partition compacted draw-index buffers
-- Per-job counted indirect argument buffers
-- Only survivors of the caster culling test
+```cpp
+struct ConventionalShadowCasterCullingPartition {
+  uint32   record_begin;           // first draw record in this partition
+  uint32   record_count;           // number of draw records
+  uint32   command_uav_index;      // bindless UAV for indirect commands
+  uint32   count_uav_index;        // bindless UAV for per-job counts
+  uint32   max_commands_per_job;   // overflow guard (= record_count)
+  uint32   partition_index;        // mesh partition identity
+  PassMask pass_mask;              // which passes this partition serves
+  uint32   _pad0;
+};
+```
+
+One per contiguous draw-record partition in the authoritative `CSM-1`
+stream. Carries the output UAV indices so the shader can append surviving
+commands independently per partition.
+
+### 4.5.1 CSM-4: ConventionalShadowIndirectDrawCommand (20 bytes, GPU output)
+
+```cpp
+struct ConventionalShadowIndirectDrawCommand {
+  uint32   draw_index;                   // root constant for bindless lookup
+  uint32   vertex_count_per_instance;    // DrawInstanced arg 0
+  uint32   instance_count;               // DrawInstanced arg 1
+  uint32   start_vertex_location;        // DrawInstanced arg 2
+  uint32   start_instance_location;      // DrawInstanced arg 3
+};
+```
+
+Matches the `ExecuteIndirect(kDrawWithRootConstant)` layout: DWORD0 is the
+per-draw root constant (`draw_index`), followed by the native draw arguments.
+One command buffer per partition, sized `job_count × max_commands_per_job`.
+
+### 4.5.2 CSM-4: Per-Job Count Buffers (GPU output)
+
+- One `uint32` per cascade per partition — the number of surviving commands
+  for that job.
+- Zeroed via upload-copy before culling.
+- Populated by atomic increment in the culling shader.
+- Consumed by CSM-5 as the count argument for `ExecuteIndirectCounted`.
 
 ## 5. Phase Detail
 
@@ -589,34 +626,120 @@ struct ConventionalShadowReceiverMaskPassConstants {
   significantly below 1.0)
 - No unexplained timing regression versus CSM-2 baseline
 
-### 5.4 CSM-4 — GPU Caster Culling And Compaction (Planned)
+### 5.4 CSM-4 — GPU Caster Culling And Compaction
 
-**Status:** pending
+**Status:** complete
 
 **Purpose:** Use the receiver analysis and mask to discard casters that cannot
-produce visible shadows, and compact the survivors into a dense draw buffer.
+produce visible shadows, and compact the survivors into a dense draw buffer
+ready for counted-indirect raster.
 
-**Design:**
+One GPU compute dispatch per partition per frame:
 
-1. **Broad phase.** Test each draw record's `world_bounding_sphere` against
-   the CSM-2 tight receiver rect (with dilation). Records that fall entirely
-   outside the receiver bounds are rejected immediately.
-2. **Fine phase.** For surviving records, project the bounding sphere into the
-   tile grid and test overlap against the CSM-3 receiver mask hierarchy.
-   Start with the coarse hierarchy level; descend to the base level only if
-   the coarse level indicates potential overlap.
-3. **Optional companion bounds.** If `CSM-1` world bounding spheres prove too
-   coarse for mask overlap (i.e., many false survivors), an additional
-   cull-bounds buffer can provide tighter light-space AABBs per draw record.
-   This extends CSM-1 without invalidating it.
-4. **Compaction.** Surviving draw indices are appended (via atomic counter or
-   prefix-sum) into per-job index buffers. Counted indirect argument buffers
-   are populated with the final surviving counts.
+| Dispatch | Thread group | Grid | Purpose |
+| - | - | - | - |
+| `CS` | 64×1×1 | `ceil(record_count/64) × job_count` | Per-(draw, cascade): cull against receiver data, append surviving commands |
 
-**Thread model:** One thread per `(job, draw_record)` — with 4 cascades and
-~400 records, this is ~1600 threads. Acceptable for a first implementation.
-Can be restructured to one thread per draw with a loop over jobs if warp
-occupancy is poor.
+The partition index is passed as a root constant. Each dispatch covers all
+draw records within one contiguous partition against all cascade jobs.
+
+#### Culling pipeline per thread
+
+1. **Early-out on degenerate draws.** Skip records with zero vertex/instance
+   count or zero-radius bounding sphere.
+2. **Skip invalid cascades.** If the mask summary for this job is not `VALID`
+   or has no samples, the thread exits — no shadow work is needed for an
+   empty cascade.
+3. **Broad phase A — dilated tight rect (XY).** Project the caster's world
+   bounding sphere into light space via the job's `light_rotation_matrix`.
+   Test sphere center ± radius against the CSM-2 tight bounds
+   (`raw_xy_min_max`) dilated by the XY dilation margin. Reject if fully
+   outside.
+4. **Broad phase B — dilated depth range (Z).** Test sphere center ± radius
+   against the CSM-2 tight depth range (`raw_depth_and_dilation.xy`) dilated
+   by the depth margin. Reject if fully outside.
+5. **Medium phase — hierarchy mask overlap.** Compute the sphere's tile-grid
+   footprint using `ComputeSphereTileBounds()` against the
+   `full_rect_center_half_extent` mapping domain (same coordinate system as
+   CSM-3). Divide by the hierarchy reduction factor and scan the hierarchy
+   mask. Reject if no hierarchy tile overlaps.
+6. **Fine phase — base mask overlap.** Scan the base mask tiles within the
+   sphere's tile footprint. Reject if no base tile overlaps.
+7. **Emit.** Atomically increment the per-job command count and append a
+   `ConventionalShadowIndirectDrawCommand` into the partition's command
+   buffer at `job_index × max_commands_per_job + slot`. Overflow is
+   guarded by `max_commands_per_job`.
+
+#### Partition model
+
+The CPU collects contiguous draw-record runs grouped by `partition_index` from
+the authoritative `CSM-1` stream. Each partition gets its own command buffer
+and count buffer. This preserves the existing raster-pass partition structure
+so CSM-5 can execute one `ExecuteIndirectCounted` call per (partition, cascade)
+pair without restructuring the raster pass.
+
+#### Coordinate system alignment
+
+The tile-bounds computation uses `full_rect_center_half_extent` — the same
+mapping domain used by CSM-3's `CS_Analyze` when building the mask. This
+ensures the caster's tile footprint is directly comparable to the mask
+without any coordinate remapping.
+
+#### Count buffer zeroing
+
+Per-job counts are zeroed via upload-copy from a pre-zeroed upload buffer
+rather than a separate GPU clear dispatch. This avoids an additional dispatch
+and barrier round-trip.
+
+#### GPU synchronization
+
+- Upload copies: job, partition, and count-clear buffers transition through
+  `kCopySource` / `kCopyDest`.
+- Before dispatch: job + partition → `kGenericRead`; mask summary, base mask,
+  hierarchy mask → `kShaderResource`; command + count buffers →
+  `kUnorderedAccess`.
+- After dispatch: command + count buffers → `kCommon`; job + partition →
+  `kCommon`.
+- No inter-partition barriers are needed — each partition writes to
+  independent command/count buffers.
+
+#### Constants structure (64 bytes)
+
+```cpp
+struct ConventionalShadowCasterCullingPassConstants {
+  uint32   draw_record_buffer_index;
+  uint32   draw_metadata_index;
+  uint32   job_buffer_index;
+  uint32   receiver_mask_summary_index;
+  uint32   receiver_mask_base_index;
+  uint32   receiver_mask_hierarchy_index;
+  uint32   partition_buffer_index;
+  uint32   job_count;
+  uint32   base_tile_resolution;
+  uint32   hierarchy_tile_resolution;
+  uint32   base_tiles_per_job;
+  uint32   hierarchy_tiles_per_job;
+  uint32   hierarchy_reduction;
+  uint32   partition_count;
+  uint32   _pad[2];
+};
+```
+
+#### Scaling characteristics
+
+At `~400 records × 4 cascades = ~1600 threads` per partition, the pass is
+extremely lightweight. The three-level culling chain (rect → hierarchy →
+base) keeps per-thread work short. At this scale the pass will be invisible
+in GPU timing. If draw counts grow to thousands, the thread model remains
+efficient — one thread per (draw, cascade) with independent output slots.
+
+#### Optional companion bounds (deferred)
+
+If `CSM-1` world bounding spheres prove too coarse for mask overlap (i.e.,
+many false survivors pass the mask test), an additional cull-bounds buffer
+can provide tighter light-space AABBs per draw record. This extends `CSM-1`
+without invalidating it. Currently deferred — sphere bounds are adequate
+for the canonical benchmark.
 
 **Exit criteria:**
 
