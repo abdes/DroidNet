@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -51,12 +52,8 @@ ConventionalShadowRasterPass::ConventionalShadowRasterPass(
 
 ConventionalShadowRasterPass::~ConventionalShadowRasterPass()
 {
-  if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
-    shadow_view_constants_buffer_->UnMap();
-    shadow_view_constants_mapped_ptr_ = nullptr;
-  }
-  shadow_view_constants_buffer_.reset();
-  shadow_view_constants_capacity_ = 0U;
+  ReleaseShadowViewConstantsBuffer();
+  shadow_view_constants_reclaimer_ = nullptr;
 }
 
 auto ConventionalShadowRasterPass::DoPrepareResources(
@@ -81,6 +78,7 @@ auto ConventionalShadowRasterPass::DoPrepareResources(
     co_return;
   }
 
+  CacheDeferredReclaimer();
   EnsureShadowViewConstantsCapacity(
     static_cast<std::uint32_t>(raster_plan->jobs.size()));
   UploadJobViewConstants(raster_plan->jobs);
@@ -208,12 +206,7 @@ auto ConventionalShadowRasterPass::EnsureShadowViewConstantsCapacity(
     return;
   }
 
-  if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
-    shadow_view_constants_buffer_->UnMap();
-    shadow_view_constants_mapped_ptr_ = nullptr;
-  }
-  shadow_view_constants_buffer_.reset();
-
+  ReleaseShadowViewConstantsBuffer();
   shadow_view_constants_capacity_ = required_jobs;
   const auto total_bytes
     = static_cast<std::uint64_t>(sizeof(ViewConstants::GpuData))
@@ -245,6 +238,35 @@ auto ConventionalShadowRasterPass::EnsureShadowViewConstantsCapacity(
       "ConventionalShadowRasterPass: failed to map shadow view constants "
       "buffer");
   }
+}
+
+auto ConventionalShadowRasterPass::CacheDeferredReclaimer() -> void
+{
+  shadow_view_constants_reclaimer_
+    = observer_ptr(&Context().GetGraphics().GetDeferredReclaimer());
+}
+
+auto ConventionalShadowRasterPass::ReleaseShadowViewConstantsBuffer() noexcept
+  -> void
+{
+  shadow_view_constants_capacity_ = 0U;
+
+  if (shadow_view_constants_buffer_ && shadow_view_constants_mapped_ptr_) {
+    shadow_view_constants_buffer_->UnMap();
+  }
+  shadow_view_constants_mapped_ptr_ = nullptr;
+
+  if (!shadow_view_constants_buffer_) {
+    return;
+  }
+
+  if (shadow_view_constants_reclaimer_) {
+    graphics::DeferredObjectRelease(
+      shadow_view_constants_buffer_, *shadow_view_constants_reclaimer_);
+    return;
+  }
+
+  shadow_view_constants_buffer_.reset();
 }
 
 auto ConventionalShadowRasterPass::UploadJobViewConstants(
