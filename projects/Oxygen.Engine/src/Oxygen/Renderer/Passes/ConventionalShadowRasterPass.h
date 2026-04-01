@@ -8,7 +8,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -77,7 +76,6 @@ private:
   std::uint32_t shadow_view_constants_capacity_ { 0U };
   observer_ptr<graphics::detail::DeferredReclaimer>
     shadow_view_constants_reclaimer_ { nullptr };
-  std::vector<ViewConstants::GpuData> job_view_constants_upload_;
 };
 
 } // namespace oxygen::engine

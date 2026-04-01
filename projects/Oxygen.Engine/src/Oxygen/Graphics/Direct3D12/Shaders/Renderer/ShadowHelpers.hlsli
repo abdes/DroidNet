@@ -27,6 +27,12 @@ struct DirectionalShadowProjection
     bool valid;
 };
 
+struct DirectionalShadowCascadeSample
+{
+    DirectionalShadowProjection projection;
+    uint filter_radius_texels;
+};
+
 static inline ShadowFrameBindings LoadResolvedShadowFrameBindings()
 {
     const ViewFrameBindings view_bindings =
@@ -141,6 +147,36 @@ static inline uint SelectDirectionalShadowFilterRadiusTexels(
     return texel_ratio > 2.5 ? 2u : 1u;
 }
 
+static inline DirectionalShadowCascadeSample PrepareDirectionalShadowCascadeSample(
+    DirectionalShadowMetadata metadata,
+    uint cascade_index,
+    float3 world_pos,
+    float3 normal_ws,
+    float3 light_dir_ws)
+{
+    DirectionalShadowCascadeSample sample;
+    sample.filter_radius_texels =
+        SelectDirectionalShadowFilterRadiusTexels(metadata, cascade_index);
+
+    const float texel_world =
+        max(metadata.cascade_world_texel_size[cascade_index], 0.0);
+    const float ndotl = saturate(dot(normal_ws, light_dir_ws));
+    const float slope_factor = 1.0 - ndotl;
+    const float filter_bias_scale = sample.filter_radius_texels <= 1u ? 0.85 : 1.0;
+    const float renderer_normal_bias = texel_world
+        * lerp(0.55, 1.5, slope_factor) * filter_bias_scale;
+    const float renderer_constant_bias = texel_world
+        * lerp(0.03, 0.18, slope_factor) * filter_bias_scale;
+    const float normal_bias = metadata.normal_bias + renderer_normal_bias;
+    const float constant_bias = metadata.constant_bias + renderer_constant_bias;
+
+    const float3 biased_world_pos =
+        world_pos + normal_ws * normal_bias + light_dir_ws * constant_bias;
+    sample.projection =
+        ProjectDirectionalShadowCascade(metadata, cascade_index, biased_world_pos);
+    return sample;
+}
+
 static inline float SampleDirectionalShadowPcf3x3(
     Texture2DArray<float> shadow_texture,
     float2 uv,
@@ -251,42 +287,32 @@ static inline float SampleDirectionalShadowCascadeVisibility(
     DirectionalShadowMetadata metadata,
     Texture2DArray<float> shadow_texture,
     uint cascade_index,
-    float3 world_pos,
-    float3 normal_ws,
-    float3 light_dir_ws)
+    DirectionalShadowCascadeSample cascade_sample)
 {
-    const float texel_world = max(metadata.cascade_world_texel_size[cascade_index], 0.0);
-    const uint filter_radius_texels =
-        SelectDirectionalShadowFilterRadiusTexels(metadata, cascade_index);
-    const float ndotl = saturate(dot(normal_ws, light_dir_ws));
-    const float slope_factor = 1.0 - ndotl;
-    const float filter_bias_scale = filter_radius_texels <= 1u ? 0.85 : 1.0;
-    const float renderer_normal_bias = texel_world
-        * lerp(0.55, 1.5, slope_factor) * filter_bias_scale;
-    const float renderer_constant_bias = texel_world
-        * lerp(0.03, 0.18, slope_factor) * filter_bias_scale;
-    const float normal_bias = metadata.normal_bias + renderer_normal_bias;
-    const float constant_bias = metadata.constant_bias + renderer_constant_bias;
-
-    const float3 biased_world_pos =
-        world_pos + normal_ws * normal_bias + light_dir_ws * constant_bias;
-    const DirectionalShadowProjection projection =
-        ProjectDirectionalShadowCascade(metadata, cascade_index, biased_world_pos);
-    if (!projection.valid) {
+    if (!cascade_sample.projection.valid) {
         return 1.0;
     }
 
     const uint layer = metadata.resource_index + cascade_index;
 #if OXYGEN_SHADOW_USE_MANUAL_COMPARE_FALLBACK
     return SampleDirectionalShadowPcf3x3(
-        shadow_texture, projection.uv, projection.receiver_depth, layer);
+        shadow_texture,
+        cascade_sample.projection.uv,
+        cascade_sample.projection.receiver_depth,
+        layer);
 #else
-    if (filter_radius_texels <= 1u) {
+    if (cascade_sample.filter_radius_texels <= 1u) {
         return SampleDirectionalShadowComparisonTent3x3(
-            shadow_texture, projection.uv, projection.receiver_depth, layer);
+            shadow_texture,
+            cascade_sample.projection.uv,
+            cascade_sample.projection.receiver_depth,
+            layer);
     }
     return SampleDirectionalShadowComparisonTent5x5(
-        shadow_texture, projection.uv, projection.receiver_depth, layer);
+        shadow_texture,
+        cascade_sample.projection.uv,
+        cascade_sample.projection.receiver_depth,
+        layer);
 #endif
 }
 
@@ -321,38 +347,43 @@ static inline float ComputeConventionalDirectionalShadowVisibility(
     Texture2DArray<float> shadow_texture =
         ResourceDescriptorHeap[shadow_bindings.directional_shadow_texture_slot];
 
+    // ViewConstants uses the renderer's canonical eye space with camera-forward
+    // on -Z, so linear eye depth remains -view_space.z even though world space
+    // uses +Z up / -Y forward.
     const float view_depth = max(0.0, -mul(view_matrix, float4(world_pos, 1.0)).z);
     const uint interval_index = SelectDirectionalShadowCascade(metadata, view_depth);
     const uint cascade_count = max(1u, metadata.cascade_count);
 
     uint cascade_index = min(interval_index, cascade_count - 1u);
-    DirectionalShadowProjection cascade_projection =
-        ProjectDirectionalShadowCascade(metadata, cascade_index, world_pos);
-    if (!cascade_projection.valid) {
+    DirectionalShadowCascadeSample cascade_sample = PrepareDirectionalShadowCascadeSample(
+        metadata, cascade_index, world_pos, normal_ws, light_dir_ws);
+    if (!cascade_sample.projection.valid) {
         if (cascade_index + 1u < cascade_count) {
-            const DirectionalShadowProjection next_projection =
-                ProjectDirectionalShadowCascade(metadata, cascade_index + 1u, world_pos);
-            if (next_projection.valid) {
+            const DirectionalShadowCascadeSample next_sample =
+                PrepareDirectionalShadowCascadeSample(
+                    metadata, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
+            if (next_sample.projection.valid) {
                 cascade_index += 1u;
-                cascade_projection = next_projection;
+                cascade_sample = next_sample;
             }
         }
-        if (!cascade_projection.valid && cascade_index > 0u) {
-            const DirectionalShadowProjection prev_projection =
-                ProjectDirectionalShadowCascade(metadata, cascade_index - 1u, world_pos);
-            if (prev_projection.valid) {
+        if (!cascade_sample.projection.valid && cascade_index > 0u) {
+            const DirectionalShadowCascadeSample prev_sample =
+                PrepareDirectionalShadowCascadeSample(
+                    metadata, cascade_index - 1u, world_pos, normal_ws, light_dir_ws);
+            if (prev_sample.projection.valid) {
                 cascade_index -= 1u;
-                cascade_projection = prev_projection;
+                cascade_sample = prev_sample;
             }
         }
     }
 
-    if (!cascade_projection.valid) {
+    if (!cascade_sample.projection.valid) {
         return 1.0;
     }
 
     const float visibility = SampleDirectionalShadowCascadeVisibility(
-        metadata, shadow_texture, cascade_index, world_pos, normal_ws, light_dir_ws);
+        metadata, shadow_texture, cascade_index, cascade_sample);
 
     if (cascade_index + 1u >= cascade_count || cascade_index != interval_index) {
         return visibility;
@@ -365,14 +396,15 @@ static inline float ComputeConventionalDirectionalShadowVisibility(
         return visibility;
     }
 
-    const DirectionalShadowProjection next_projection = ProjectDirectionalShadowCascade(
-        metadata, cascade_index + 1u, world_pos);
-    if (!next_projection.valid) {
+    const DirectionalShadowCascadeSample next_sample =
+        PrepareDirectionalShadowCascadeSample(
+            metadata, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
+    if (!next_sample.projection.valid) {
         return visibility;
     }
 
     const float next_visibility = SampleDirectionalShadowCascadeVisibility(
-        metadata, shadow_texture, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
+        metadata, shadow_texture, cascade_index + 1u, next_sample);
     const float blend_t = saturate((view_depth - blend_start) / max(blend_band, 1.0e-4));
     return lerp(visibility, next_visibility, blend_t);
 }

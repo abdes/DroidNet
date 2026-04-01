@@ -7,8 +7,10 @@
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
-#include <string_view>
+#include <string>
 #include <utility>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.h>
@@ -31,14 +33,22 @@ namespace oxygen::engine {
 
 namespace {
 
-  // Conventional shadow maps now rasterize into reversed-Z depth. The legacy
-  // forward-Z bias sign pushes stored caster depths toward the light in this
-  // convention, which manifests as widespread self-shadow acne on receivers.
-  // Keep the existing bias magnitude, but flip the raster bias sign so stored
-  // depths are biased away from the light under GREATER_EQUAL comparison.
-  constexpr float kDirectionalShadowRasterDepthBias = -1500.0F;
-  constexpr float kDirectionalShadowRasterSlopeBias = -2.0F;
-  constexpr float kDirectionalShadowRasterDepthBiasClamp = 0.0025F;
+  struct ShadowRasterDepthBias {
+    float depth;
+    float slope;
+    float clamp;
+  };
+
+  // Conventional shadow maps now rasterize into reversed-Z depth, so the
+  // raster depth bias must remain negative to push stored caster depths away
+  // from the light under GREATER_EQUAL comparison. In D3D, a positive clamp
+  // only caps positive bias results, so keeping it positive here intentionally
+  // leaves the current always-negative bias path unclamped.
+  constexpr ShadowRasterDepthBias kDirectionalShadowRasterBias {
+    .depth = -1500.0F,
+    .slope = -2.0F,
+    .clamp = 0.0025F,
+  };
 
 } // namespace
 
@@ -46,8 +56,7 @@ ConventionalShadowRasterPass::ConventionalShadowRasterPass(
   std::shared_ptr<Config> config)
   : DepthPrePass(std::move(config))
 {
-  constexpr std::string_view kPassName = "ConventionalShadowRasterPass";
-  SetName(kPassName);
+  SetName("ConventionalShadowRasterPass");
 }
 
 ConventionalShadowRasterPass::~ConventionalShadowRasterPass()
@@ -78,10 +87,10 @@ auto ConventionalShadowRasterPass::DoPrepareResources(
     co_return;
   }
 
+  const auto job_count = raster_plan->jobs.size();
   ValidateRasterPlan(raster_plan->jobs);
   CacheDeferredReclaimer();
-  EnsureShadowViewConstantsCapacity(
-    static_cast<std::uint32_t>(raster_plan->jobs.size()));
+  EnsureShadowViewConstantsCapacity(static_cast<std::uint32_t>(job_count));
   UploadJobViewConstants(raster_plan->jobs);
 
   co_return;
@@ -102,9 +111,9 @@ auto ConventionalShadowRasterPass::BuildRasterizerStateDesc(
   const graphics::CullMode cull_mode) const -> graphics::RasterizerStateDesc
 {
   auto desc = DepthPrePass::BuildRasterizerStateDesc(cull_mode);
-  desc.depth_bias = kDirectionalShadowRasterDepthBias;
-  desc.depth_bias_clamp = kDirectionalShadowRasterDepthBiasClamp;
-  desc.slope_scaled_depth_bias = kDirectionalShadowRasterSlopeBias;
+  desc.depth_bias = kDirectionalShadowRasterBias.depth;
+  desc.depth_bias_clamp = kDirectionalShadowRasterBias.clamp;
+  desc.slope_scaled_depth_bias = kDirectionalShadowRasterBias.slope;
   return desc;
 }
 
@@ -148,6 +157,7 @@ auto ConventionalShadowRasterPass::DoExecute(
   }
 
   ValidateRasterPlan(raster_plan->jobs);
+  const auto job_count = raster_plan->jobs.size();
   auto& depth_texture = GetDepthTextureMutable();
   SetupViewPortAndScissors(recorder);
   const graphics::GpuEventScopeOptions scope_options {};
@@ -159,14 +169,21 @@ auto ConventionalShadowRasterPass::DoExecute(
   std::uint32_t emitted_count = 0U;
   std::uint32_t skipped_invalid = 0U;
   std::uint32_t draw_errors = 0U;
+  // Track the last public descriptor we bound so partition traversal only
+  // reissues SetPipelineState when the selected variant actually changes.
+  auto current_pso = LastBuiltPsoDesc();
 
-  for (std::uint32_t job_index = 0U; job_index < raster_plan->jobs.size();
-    ++job_index) {
+  for (std::uint32_t job_index = 0U; job_index < job_count; ++job_index) {
     const auto& job = raster_plan->jobs[job_index];
     const auto dsv = PrepareJobDepthStencilView(depth_texture, job);
+    const auto job_scope_name
+      = fmt::format("ConventionalShadowRasterPass.Job[{}].Slice[{}]", job_index,
+        job.target_array_slice);
+    graphics::GpuEventScope job_scope(recorder, job_scope_name, scope_options);
 
     recorder.SetRenderTargets({}, dsv);
     ClearDepthStencilView(recorder, dsv);
+    BindJobViewConstants(recorder, job_index);
 
     for (const auto& pr : psf->partitions) {
       if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
@@ -177,9 +194,16 @@ auto ConventionalShadowRasterPass::DoExecute(
         continue;
       }
 
-      recorder.SetPipelineState(SelectPipelineStateForPartition(pr.pass_mask));
-      RebindCommonRootParameters(recorder);
-      BindJobViewConstants(recorder, job_index);
+      const auto& pso_desc = SelectPipelineStateForPartition(pr.pass_mask);
+      if (!current_pso.has_value() || *current_pso != pso_desc) {
+        recorder.SetPipelineState(pso_desc);
+        // CommandRecorder::SetPipelineState rebinds the PSO's root signature.
+        // Restore the shared pass bindings, then override view constants with
+        // the current shadow job CBV again.
+        RebindCommonRootParameters(recorder);
+        BindJobViewConstants(recorder, job_index);
+        current_pso = pso_desc;
+      }
       EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
         skipped_invalid, draw_errors);
     }
@@ -193,8 +217,8 @@ auto ConventionalShadowRasterPass::DoExecute(
     LOG_F(WARNING,
       "ConventionalShadowRasterPass: view {} produced no shadow-caster draws "
       "(jobs={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), raster_plan->jobs.size(),
-      skipped_invalid, draw_errors);
+      Context().current_view.view_id.get(), job_count, skipped_invalid,
+      draw_errors);
   }
 
   Context().RegisterPass(this);
@@ -372,17 +396,14 @@ auto ConventionalShadowRasterPass::UploadJobViewConstants(
                              "for shadow view constants upload");
   }
 
-  job_view_constants_upload_.resize(jobs.size());
-  for (std::size_t i = 0; i < jobs.size(); ++i) {
-    job_view_constants_upload_[i] = jobs[i].view_constants;
-  }
-
   const auto base_index = static_cast<std::uint64_t>(Context().frame_slot.get())
     * static_cast<std::uint64_t>(shadow_view_constants_capacity_);
   auto* dst = static_cast<std::byte*>(shadow_view_constants_mapped_ptr_)
     + base_index * sizeof(ViewConstants::GpuData);
-  std::memcpy(dst, job_view_constants_upload_.data(),
-    job_view_constants_upload_.size() * sizeof(ViewConstants::GpuData));
+  for (std::size_t i = 0; i < jobs.size(); ++i) {
+    std::memcpy(dst + i * sizeof(ViewConstants::GpuData),
+      &jobs[i].view_constants, sizeof(ViewConstants::GpuData));
+  }
 }
 
 auto ConventionalShadowRasterPass::BindJobViewConstants(
