@@ -13,6 +13,8 @@
 #include <string>
 #include <string_view>
 
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -22,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/ShadowManager.h>
@@ -77,6 +80,44 @@ auto MakeShadowViewConstants(const oxygen::ResolvedView& resolved_view,
     .SetStableProjectionMatrix(resolved_view.StableProjectionMatrix())
     .SetCameraPosition(resolved_view.CameraPosition());
   return view_constants;
+}
+
+[[nodiscard]] auto MakeShadowResolvedView(
+  const std::uint32_t width, const std::uint32_t height) -> oxygen::ResolvedView
+{
+  const auto aspect_ratio = height == 0U
+    ? 1.0F
+    : static_cast<float>(width) / static_cast<float>(height);
+  const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
+  const auto projection_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+    glm::radians(90.0F), aspect_ratio, 0.1F, 100.0F);
+
+  auto view_config = oxygen::View {};
+  view_config.viewport = oxygen::ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(width),
+    .height = static_cast<float>(height),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  view_config.scissor = oxygen::Scissors {
+    .left = 0,
+    .top = 0,
+    .right = static_cast<std::int32_t>(width),
+    .bottom = static_cast<std::int32_t>(height),
+  };
+
+  return oxygen::ResolvedView(oxygen::ResolvedView::Params {
+    .view_config = view_config,
+    .view_matrix = view_matrix,
+    .proj_matrix = projection_matrix,
+    .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
+    .depth_range = oxygen::NdcDepthRange::ZeroToOne,
+    .near_plane = 0.1F,
+    .far_plane = 100.0F,
+  });
 }
 
 auto CreateShadowCastingDirectionalNode(Scene& scene) -> SceneNode
@@ -146,7 +187,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   auto offscreen = renderer->BeginOffscreenFrame(
     { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 1U } });
   offscreen.SetCurrentView(
-    kTestViewId, MakeResolvedView(8U, 8U), prepared_frame);
+    kTestViewId, MakeShadowResolvedView(8U, 8U), prepared_frame);
   auto& render_context = offscreen.GetRenderContext();
 
   auto recorder = AcquireRecorder("shadow-pass.invalid-depth.prepare");
@@ -178,7 +219,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   auto offscreen = renderer->BeginOffscreenFrame(
     { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 2U } });
   offscreen.SetCurrentView(
-    kTestViewId, MakeResolvedView(8U, 8U), prepared_frame);
+    kTestViewId, MakeShadowResolvedView(8U, 8U), prepared_frame);
   auto& render_context = offscreen.GetRenderContext();
 
   auto recorder = AcquireRecorder("shadow-pass.array-depth.prepare");
@@ -204,7 +245,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   constexpr std::uint32_t kWidth = 8U;
   constexpr std::uint32_t kHeight = 8U;
 
-  const auto resolved_view = MakeResolvedView(kWidth, kHeight);
+  const auto resolved_view = MakeShadowResolvedView(kWidth, kHeight);
   const auto view_constants
     = MakeShadowViewConstants(resolved_view, kFrameSlot, kFrameSequence);
   auto prepared_frame = PreparedSceneFrame {};
@@ -223,12 +264,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
     directional_node.GetHandle(), directional_impl->get());
 
   const auto shadow_manager = renderer->GetShadowManager();
-  if (shadow_manager.get() == nullptr) {
-    GTEST_SKIP()
-      << "Renderer::BeginOffscreenFrame() does not initialize ShadowManager; "
-         "the authoritative depth-texture sync path still needs a full "
-         "renderer integration harness.";
-  }
+  ASSERT_NE(shadow_manager.get(), nullptr);
   shadow_manager->ReserveFrameResources(1U, *light_manager);
 
   const auto shadow_caster_bounds

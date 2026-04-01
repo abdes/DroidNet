@@ -48,6 +48,25 @@ m_gtest_program(ShaderDebugMode SOURCES "ShaderDebugMode_test.cpp")
 
 m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
+gtest_program(
+  "Oxygen.Renderer.ConventionalShadowRasterPassContract.Tests"
+  SOURCES
+    "Fakes/Graphics.h"
+    "ConventionalShadowRasterPassContract_test.cpp"
+  DEPS
+    oxygen::renderer
+    oxygen::testing
+    oxygen::scripting
+)
+
+source_group(
+  TREE ${CMAKE_CURRENT_SOURCE_DIR}
+  PREFIX ConventionalShadowRasterPassContract
+  FILES
+    "Fakes/Graphics.h"
+    "ConventionalShadowRasterPassContract_test.cpp"
+)
+
 m_gtest_program(
   SceneCameraViewResolver
   SOURCES

@@ -501,6 +501,7 @@ private:
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
   auto EnsureOffscreenFrameServicesInitialized() -> void;
+  auto EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx) -> void;
   auto BeginFrameServices(
     frame::Slot frame_slot, frame::SequenceNumber frame_sequence) -> void;
   auto EndOffscreenFrame() noexcept -> void;
@@ -704,6 +705,7 @@ private:
   std::uint64_t compositing_profile_frames_ { 0 };
   std::uint64_t compositing_profile_total_ns_ { 0 };
   std::uint64_t compositing_last_frame_ns_ { 0 };
+  bool offscreen_frame_used_ { false };
   bool offscreen_frame_active_ { false };
 };
 

@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -63,6 +64,23 @@ struct TextureCommandLog {
   const Buffer* src { nullptr };
   Texture* dst { nullptr };
   std::vector<TextureUploadRegion> regions;
+};
+
+//! Logs graphics PSO descriptor binds captured by the fake command recorder.
+struct GraphicsPipelineCommandLog {
+  struct Event {
+    graphics::GraphicsPipelineDesc desc;
+  };
+  std::vector<Event> binds;
+};
+
+//! Logs graphics root CBV bindings captured by the fake command recorder.
+struct RootConstantBufferViewLog {
+  struct Event {
+    uint32_t root_parameter_index { 0U };
+    uint64_t buffer_gpu_address { 0U };
+  };
+  std::vector<Event> binds;
 };
 
 //! Logs SRV view creations for bindless indices.
@@ -152,10 +170,13 @@ class FakeCommandRecorder final : public CommandRecorder {
 public:
   FakeCommandRecorder(std::shared_ptr<CommandList> command_list,
     const observer_ptr<CommandQueue> target_queue, BufferCommandLog* buffer_log,
-    TextureCommandLog* texture_log)
+    TextureCommandLog* texture_log, GraphicsPipelineCommandLog* pipeline_log,
+    RootConstantBufferViewLog* root_cbv_log)
     : CommandRecorder(std::move(command_list), target_queue)
     , buffer_log_(buffer_log)
     , texture_log_(texture_log)
+    , pipeline_log_(pipeline_log)
+    , root_cbv_log_(root_cbv_log)
   {
   }
 
@@ -164,16 +185,26 @@ public:
   auto EndEvent() -> void override { }
   auto SetMarker(std::string_view /*name*/) -> void override { }
 
-  auto SetPipelineState(graphics::GraphicsPipelineDesc /*desc*/)
+  auto SetPipelineState(graphics::GraphicsPipelineDesc desc)
     -> void override
   {
+    if (pipeline_log_ != nullptr) {
+      pipeline_log_->binds.push_back(
+        GraphicsPipelineCommandLog::Event { .desc = std::move(desc) });
+    }
   }
   auto SetPipelineState(graphics::ComputePipelineDesc /*desc*/) -> void override
   {
   }
-  auto SetGraphicsRootConstantBufferView(uint32_t /*root_parameter_index*/,
-    uint64_t /*buffer_gpu_address*/) -> void override
+  auto SetGraphicsRootConstantBufferView(const uint32_t root_parameter_index,
+    const uint64_t buffer_gpu_address) -> void override
   {
+    if (root_cbv_log_ != nullptr) {
+      root_cbv_log_->binds.push_back(RootConstantBufferViewLog::Event {
+        .root_parameter_index = root_parameter_index,
+        .buffer_gpu_address = buffer_gpu_address,
+      });
+    }
   }
   auto SetComputeRootConstantBufferView(uint32_t /*root_parameter_index*/,
     uint64_t /*buffer_gpu_address*/) -> void override
@@ -311,6 +342,8 @@ protected:
 private:
   BufferCommandLog* buffer_log_ { nullptr };
   TextureCommandLog* texture_log_ { nullptr };
+  GraphicsPipelineCommandLog* pipeline_log_ { nullptr };
+  RootConstantBufferViewLog* root_cbv_log_ { nullptr };
 };
 
 // Minimal in-memory descriptor allocator for tests
@@ -580,7 +613,8 @@ public:
       }
       [[nodiscard]] auto GetGPUVirtualAddress() const -> uint64_t override
       {
-        return 0;
+        return static_cast<uint64_t>(
+          reinterpret_cast<std::uintptr_t>(this));
       }
 
     protected:
@@ -688,12 +722,15 @@ public:
     auto q = GetCommandQueue(queue_key);
     auto cl = std::make_shared<FakeCommandList>(
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
-    auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_);
+    auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
+      &graphics_pipeline_log_, &root_cbv_log_);
     return { raw, [](CommandRecorder* p) -> void { delete p; } };
   }
 
   BufferCommandLog buffer_log_ {};
   TextureCommandLog texture_log_ {};
+  GraphicsPipelineCommandLog graphics_pipeline_log_ {};
+  RootConstantBufferViewLog root_cbv_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_ {};
