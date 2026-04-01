@@ -66,10 +66,14 @@ namespace {
     ShaderVisibleIndex depth_texture_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex job_buffer_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex analysis_buffer_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex raw_mask_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex raw_mask_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex base_mask_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex base_mask_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex hierarchy_mask_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex hierarchy_mask_srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex count_buffer_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex count_buffer_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex summary_buffer_uav_index { kInvalidShaderVisibleIndex };
     glm::uvec2 screen_dimensions { 0U, 0U };
     std::uint32_t job_count { 0U };
@@ -84,10 +88,10 @@ namespace {
 
   static_assert(offsetof(ConventionalShadowReceiverMaskPassConstants,
                   inverse_view_projection)
-    == 64U);
+    == 80U);
   static_assert(
-    offsetof(ConventionalShadowReceiverMaskPassConstants, view_matrix) == 128U);
-  static_assert(sizeof(ConventionalShadowReceiverMaskPassConstants) == 192U);
+    offsetof(ConventionalShadowReceiverMaskPassConstants, view_matrix) == 144U);
+  static_assert(sizeof(ConventionalShadowReceiverMaskPassConstants) == 208U);
   static_assert(sizeof(ConventionalShadowReceiverMaskPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
@@ -162,6 +166,10 @@ struct ConventionalShadowReceiverMaskPass::Impl {
     void* job_upload_mapped_ptr { nullptr };
     ShaderVisibleIndex job_srv_index { kInvalidShaderVisibleIndex };
 
+    std::shared_ptr<Buffer> raw_mask_buffer {};
+    ShaderVisibleIndex raw_mask_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex raw_mask_srv_index { kInvalidShaderVisibleIndex };
+
     std::shared_ptr<Buffer> base_mask_buffer {};
     ShaderVisibleIndex base_mask_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex base_mask_srv_index { kInvalidShaderVisibleIndex };
@@ -169,6 +177,10 @@ struct ConventionalShadowReceiverMaskPass::Impl {
     std::shared_ptr<Buffer> hierarchy_mask_buffer {};
     ShaderVisibleIndex hierarchy_mask_uav_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex hierarchy_mask_srv_index { kInvalidShaderVisibleIndex };
+
+    std::shared_ptr<Buffer> count_buffer {};
+    ShaderVisibleIndex count_buffer_uav_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex count_buffer_srv_index { kInvalidShaderVisibleIndex };
 
     std::shared_ptr<Buffer> summary_buffer {};
     ShaderVisibleIndex summary_uav_index { kInvalidShaderVisibleIndex };
@@ -208,6 +220,7 @@ struct ConventionalShadowReceiverMaskPass::Impl {
 
   std::optional<graphics::ComputePipelineDesc> clear_pso {};
   std::optional<graphics::ComputePipelineDesc> analyze_pso {};
+  std::optional<graphics::ComputePipelineDesc> dilate_pso {};
   std::optional<graphics::ComputePipelineDesc> hierarchy_pso {};
   std::optional<graphics::ComputePipelineDesc> finalize_pso {};
 
@@ -253,21 +266,29 @@ auto ConventionalShadowReceiverMaskPass::Impl::ReleaseViewResources(
   }
 
   UnregisterResourceIfPresent(*gfx, state.summary_buffer);
+  UnregisterResourceIfPresent(*gfx, state.count_buffer);
   UnregisterResourceIfPresent(*gfx, state.hierarchy_mask_buffer);
   UnregisterResourceIfPresent(*gfx, state.base_mask_buffer);
+  UnregisterResourceIfPresent(*gfx, state.raw_mask_buffer);
   UnregisterResourceIfPresent(*gfx, state.job_upload_buffer);
   UnregisterResourceIfPresent(*gfx, state.job_buffer);
 
   state.job_buffer.reset();
   state.job_upload_buffer.reset();
+  state.raw_mask_buffer.reset();
   state.base_mask_buffer.reset();
   state.hierarchy_mask_buffer.reset();
+  state.count_buffer.reset();
   state.summary_buffer.reset();
   state.job_srv_index = kInvalidShaderVisibleIndex;
+  state.raw_mask_uav_index = kInvalidShaderVisibleIndex;
+  state.raw_mask_srv_index = kInvalidShaderVisibleIndex;
   state.base_mask_uav_index = kInvalidShaderVisibleIndex;
   state.base_mask_srv_index = kInvalidShaderVisibleIndex;
   state.hierarchy_mask_uav_index = kInvalidShaderVisibleIndex;
   state.hierarchy_mask_srv_index = kInvalidShaderVisibleIndex;
+  state.count_buffer_uav_index = kInvalidShaderVisibleIndex;
+  state.count_buffer_srv_index = kInvalidShaderVisibleIndex;
   state.summary_uav_index = kInvalidShaderVisibleIndex;
   state.summary_srv_index = kInvalidShaderVisibleIndex;
   state.capacity = 0U;
@@ -341,8 +362,9 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
     && state.base_tile_resolution == required_base_tile_resolution
     && state.hierarchy_tile_resolution == required_hierarchy_tile_resolution
     && state.hierarchy_reduction == required_hierarchy_reduction
-    && state.job_buffer && state.job_upload_buffer && state.base_mask_buffer
-    && state.hierarchy_mask_buffer && state.summary_buffer) {
+    && state.job_buffer && state.job_upload_buffer && state.raw_mask_buffer
+    && state.base_mask_buffer && state.hierarchy_mask_buffer
+    && state.count_buffer && state.summary_buffer) {
     return state;
   }
 
@@ -380,6 +402,8 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
     = static_cast<std::uint64_t>(
         required_capacity * required_base_tiles_per_job)
     * sizeof(std::uint32_t);
+  state.raw_mask_buffer = create_buffer("RawMask", base_mask_buffer_size,
+    BufferUsage::kStorage, BufferMemory::kDeviceLocal);
   state.base_mask_buffer = create_buffer("BaseMask", base_mask_buffer_size,
     BufferUsage::kStorage, BufferMemory::kDeviceLocal);
 
@@ -390,6 +414,11 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
   state.hierarchy_mask_buffer
     = create_buffer("HierarchyMask", hierarchy_mask_buffer_size,
       BufferUsage::kStorage, BufferMemory::kDeviceLocal);
+
+  const auto count_buffer_size = static_cast<std::uint64_t>(required_capacity)
+    * 2U * sizeof(std::uint32_t);
+  state.count_buffer = create_buffer("Counts", count_buffer_size,
+    BufferUsage::kStorage, BufferMemory::kDeviceLocal);
 
   const auto summary_buffer_size = static_cast<std::uint64_t>(required_capacity)
     * sizeof(ConventionalShadowReceiverMaskSummary);
@@ -407,6 +436,26 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
   registry.RegisterView(*state.job_buffer, std::move(job_srv),
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
       job_buffer_size, sizeof(ConventionalShadowReceiverAnalysisJob)));
+
+  auto raw_mask_uav
+    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  CHECK_F(raw_mask_uav.IsValid(),
+    "Failed to allocate conventional receiver-mask raw UAV");
+  state.raw_mask_uav_index = allocator.GetShaderVisibleIndex(raw_mask_uav);
+  registry.RegisterView(*state.raw_mask_buffer, std::move(raw_mask_uav),
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
+      base_mask_buffer_size, sizeof(std::uint32_t)));
+
+  auto raw_mask_srv
+    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  CHECK_F(raw_mask_srv.IsValid(),
+    "Failed to allocate conventional receiver-mask raw SRV");
+  state.raw_mask_srv_index = allocator.GetShaderVisibleIndex(raw_mask_srv);
+  registry.RegisterView(*state.raw_mask_buffer, std::move(raw_mask_srv),
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
+      base_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto base_mask_uav
     = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
@@ -451,6 +500,28 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
     std::move(hierarchy_mask_srv),
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
       hierarchy_mask_buffer_size, sizeof(std::uint32_t)));
+
+  auto count_buffer_uav
+    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  CHECK_F(count_buffer_uav.IsValid(),
+    "Failed to allocate conventional receiver-mask count UAV");
+  state.count_buffer_uav_index
+    = allocator.GetShaderVisibleIndex(count_buffer_uav);
+  registry.RegisterView(*state.count_buffer, std::move(count_buffer_uav),
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
+      count_buffer_size, sizeof(std::uint32_t)));
+
+  auto count_buffer_srv
+    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
+  CHECK_F(count_buffer_srv.IsValid(),
+    "Failed to allocate conventional receiver-mask count SRV");
+  state.count_buffer_srv_index
+    = allocator.GetShaderVisibleIndex(count_buffer_srv);
+  registry.RegisterView(*state.count_buffer, std::move(count_buffer_srv),
+    MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
+      count_buffer_size, sizeof(std::uint32_t)));
 
   auto summary_uav = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
     graphics::DescriptorVisibility::kShaderVisible);
@@ -659,10 +730,14 @@ auto ConventionalShadowReceiverMaskPass::DoPrepareResources(
     .depth_texture_index = hzb_output.closest_srv_index,
     .job_buffer_index = view_state.job_srv_index,
     .analysis_buffer_index = analysis_output.analysis_srv_index,
+    .raw_mask_uav_index = view_state.raw_mask_uav_index,
+    .raw_mask_srv_index = view_state.raw_mask_srv_index,
     .base_mask_uav_index = view_state.base_mask_uav_index,
     .base_mask_srv_index = view_state.base_mask_srv_index,
     .hierarchy_mask_uav_index = view_state.hierarchy_mask_uav_index,
     .hierarchy_mask_srv_index = view_state.hierarchy_mask_srv_index,
+    .count_buffer_uav_index = view_state.count_buffer_uav_index,
+    .count_buffer_srv_index = view_state.count_buffer_srv_index,
     .summary_buffer_uav_index = view_state.summary_uav_index,
     .screen_dimensions = { hzb_output.width, hzb_output.height },
     .job_count = job_count,
@@ -685,6 +760,10 @@ auto ConventionalShadowReceiverMaskPass::DoPrepareResources(
     recorder.BeginTrackingResourceState(
       *view_state.job_upload_buffer, ResourceStates::kGenericRead, true);
   }
+  if (!recorder.IsResourceTracked(*view_state.raw_mask_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *view_state.raw_mask_buffer, ResourceStates::kCommon, true);
+  }
   if (!recorder.IsResourceTracked(*view_state.base_mask_buffer)) {
     recorder.BeginTrackingResourceState(
       *view_state.base_mask_buffer, ResourceStates::kCommon, true);
@@ -692,6 +771,10 @@ auto ConventionalShadowReceiverMaskPass::DoPrepareResources(
   if (!recorder.IsResourceTracked(*view_state.hierarchy_mask_buffer)) {
     recorder.BeginTrackingResourceState(
       *view_state.hierarchy_mask_buffer, ResourceStates::kCommon, true);
+  }
+  if (!recorder.IsResourceTracked(*view_state.count_buffer)) {
+    recorder.BeginTrackingResourceState(
+      *view_state.count_buffer, ResourceStates::kCommon, true);
   }
   if (!recorder.IsResourceTracked(*view_state.summary_buffer)) {
     recorder.BeginTrackingResourceState(
@@ -737,8 +820,8 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
   if (!impl_->resources_prepared || impl_->active_view_state == nullptr
     || impl_->active_analysis_buffer == nullptr
     || impl_->active_depth_texture == nullptr || impl_->active_job_count == 0U
-    || !impl_->clear_pso || !impl_->analyze_pso || !impl_->hierarchy_pso
-    || !impl_->finalize_pso) {
+    || !impl_->clear_pso || !impl_->analyze_pso || !impl_->dilate_pso
+    || !impl_->hierarchy_pso || !impl_->finalize_pso) {
     DLOG_F(2, "Conventional receiver-mask pass skipped execute");
     co_return;
   }
@@ -748,13 +831,19 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
     = DivideRoundUp(impl_->active_screen_dimensions.x, kScreenThreadGroupSize);
   const auto dispatch_y
     = DivideRoundUp(impl_->active_screen_dimensions.y, kScreenThreadGroupSize);
+  const auto total_raw_entries
+    = impl_->active_job_count * impl_->active_base_tiles_per_job;
   const auto total_base_entries
     = impl_->active_job_count * impl_->active_base_tiles_per_job;
   const auto total_hierarchy_entries
     = impl_->active_job_count * impl_->active_hierarchy_tiles_per_job;
+  const auto total_count_entries = impl_->active_job_count * 2U;
   const auto clear_dispatch
-    = DivideRoundUp(std::max(total_base_entries, total_hierarchy_entries),
+    = DivideRoundUp(std::max({ total_raw_entries, total_base_entries,
+                      total_hierarchy_entries, total_count_entries }),
       kLinearThreadGroupSize);
+  const auto dilate_dispatch
+    = DivideRoundUp(total_base_entries, kLinearThreadGroupSize);
   const auto hierarchy_dispatch
     = DivideRoundUp(total_hierarchy_entries, kLinearThreadGroupSize);
   const auto job_dispatch
@@ -771,9 +860,13 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
       * sizeof(ConventionalShadowReceiverAnalysisJob));
 
   recorder.RequireResourceState(
+    *view_state.raw_mask_buffer, ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
     *view_state.base_mask_buffer, ResourceStates::kUnorderedAccess);
   recorder.RequireResourceState(
     *view_state.hierarchy_mask_buffer, ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
+    *view_state.count_buffer, ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
   BindComputeStage(
     recorder, *impl_->clear_pso, GetPassConstantsIndex(), Context());
@@ -785,19 +878,34 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
   recorder.RequireResourceState(
     *view_state.job_buffer, ResourceStates::kGenericRead);
   recorder.RequireResourceState(
-    *std::const_pointer_cast<Buffer>(impl_->active_analysis_buffer),
-    ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *view_state.base_mask_buffer, ResourceStates::kUnorderedAccess);
+    *view_state.raw_mask_buffer, ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
   BindComputeStage(
     recorder, *impl_->analyze_pso, GetPassConstantsIndex(), Context());
   recorder.Dispatch(dispatch_x, dispatch_y, 1U);
 
   recorder.RequireResourceState(
+    *view_state.job_buffer, ResourceStates::kGenericRead);
+  recorder.RequireResourceState(
+    *std::const_pointer_cast<Buffer>(impl_->active_analysis_buffer),
+    ResourceStates::kShaderResource);
+  recorder.RequireResourceState(
+    *view_state.raw_mask_buffer, ResourceStates::kGenericRead);
+  recorder.RequireResourceState(
+    *view_state.base_mask_buffer, ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
+    *view_state.count_buffer, ResourceStates::kUnorderedAccess);
+  recorder.FlushBarriers();
+  BindComputeStage(
+    recorder, *impl_->dilate_pso, GetPassConstantsIndex(), Context());
+  recorder.Dispatch(dilate_dispatch, 1U, 1U);
+
+  recorder.RequireResourceState(
     *view_state.base_mask_buffer, ResourceStates::kGenericRead);
   recorder.RequireResourceState(
     *view_state.hierarchy_mask_buffer, ResourceStates::kUnorderedAccess);
+  recorder.RequireResourceState(
+    *view_state.count_buffer, ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
   BindComputeStage(
     recorder, *impl_->hierarchy_pso, GetPassConstantsIndex(), Context());
@@ -809,9 +917,7 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
     *std::const_pointer_cast<Buffer>(impl_->active_analysis_buffer),
     ResourceStates::kShaderResource);
   recorder.RequireResourceState(
-    *view_state.base_mask_buffer, ResourceStates::kGenericRead);
-  recorder.RequireResourceState(
-    *view_state.hierarchy_mask_buffer, ResourceStates::kGenericRead);
+    *view_state.count_buffer, ResourceStates::kGenericRead);
   recorder.RequireResourceState(
     *view_state.summary_buffer, ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
@@ -820,18 +926,22 @@ auto ConventionalShadowReceiverMaskPass::DoExecute(CommandRecorder& recorder)
   recorder.Dispatch(job_dispatch, 1U, 1U);
 
   recorder.RequireResourceStateFinal(
+    *view_state.raw_mask_buffer, ResourceStates::kCommon);
+  recorder.RequireResourceStateFinal(
     *view_state.base_mask_buffer, ResourceStates::kShaderResource);
   recorder.RequireResourceStateFinal(
     *view_state.hierarchy_mask_buffer, ResourceStates::kShaderResource);
+  recorder.RequireResourceStateFinal(
+    *view_state.count_buffer, ResourceStates::kCommon);
   recorder.RequireResourceStateFinal(
     *view_state.summary_buffer, ResourceStates::kShaderResource);
   view_state.has_current_output = true;
 
   DLOG_F(2,
     "Executed conventional receiver-mask pass view={} jobs={} dispatch={}x{} "
-    "base_entries={} hierarchy_entries={}",
+    "base_entries={} hierarchy_entries={} dilate_dispatch={}",
     impl_->active_view_id.get(), impl_->active_job_count, dispatch_x,
-    dispatch_y, total_base_entries, total_hierarchy_entries);
+    dispatch_y, total_base_entries, total_hierarchy_entries, dilate_dispatch);
 
   co_return;
 }
@@ -857,6 +967,8 @@ auto ConventionalShadowReceiverMaskPass::CreatePipelineStateDesc()
     = build_pso("CS_ClearMasks", "ConventionalShadowReceiverMaskClear_PSO");
   impl_->analyze_pso
     = build_pso("CS_Analyze", "ConventionalShadowReceiverMaskAnalyze_PSO");
+  impl_->dilate_pso
+    = build_pso("CS_DilateMasks", "ConventionalShadowReceiverMaskDilate_PSO");
   impl_->hierarchy_pso = build_pso(
     "CS_BuildHierarchy", "ConventionalShadowReceiverMaskHierarchy_PSO");
   impl_->finalize_pso

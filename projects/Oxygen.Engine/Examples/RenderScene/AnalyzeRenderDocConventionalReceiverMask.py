@@ -224,17 +224,18 @@ def build_report(
     ]
     copy_records = [record for record in work_records if record.flags & rd.ActionFlags.Copy]
 
-    if len(dispatch_records) != 4:
+    if len(dispatch_records) != 5:
         raise RuntimeError(
-            "Expected exactly four dispatch work events for {} but found {}".format(
+            "Expected exactly five dispatch work events for {} but found {}".format(
                 PASS_NAME, len(dispatch_records)
             )
         )
 
     clear_event = dispatch_records[0]
     analyze_event = dispatch_records[1]
-    hierarchy_event = dispatch_records[2]
-    finalize_event = dispatch_records[3]
+    dilate_event = dispatch_records[2]
+    hierarchy_event = dispatch_records[3]
+    finalize_event = dispatch_records[4]
 
     summary_binding = find_buffer_binding(
         controller, resource_names, work_records, (PASS_NAME.lower(), "summary")
@@ -423,6 +424,7 @@ def build_report(
     report.append("copy_events={}".format(summarize_event_ids(copy_records)))
     report.append("clear_event_id={}".format(clear_event.event_id))
     report.append("analyze_event_id={}".format(analyze_event.event_id))
+    report.append("dilate_event_id={}".format(dilate_event.event_id))
     report.append("hierarchy_event_id={}".format(hierarchy_event.event_id))
     report.append("finalize_event_id={}".format(finalize_event.event_id))
     report.append(
@@ -433,6 +435,11 @@ def build_report(
     report.append(
         "analyze_event_gpu_duration_ms={:.6f}".format(
             durations.get(analyze_event.event_id, 0.0)
+        )
+    )
+    report.append(
+        "dilate_event_gpu_duration_ms={:.6f}".format(
+            durations.get(dilate_event.event_id, 0.0)
         )
     )
     report.append(

@@ -33,6 +33,9 @@ Current task focus:
 - `CSM-3` has a fresh frame-`350` capture package, sequential RenderDoc
   analysis, and an explicit baseline comparison against the locked `CSM-2`
   package.
+- `CSM-3` was then optimized and revalidated on the same canonical frame-`350`
+  capture shape; receiver-mask occupancy stayed unchanged while receiver-mask
+  GPU time dropped materially.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -569,31 +572,48 @@ Current validation evidence:
     succeeded
 - live validation artifacts:
   - capture:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50_frame350.rdc`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50_frame350.rdc`
   - benchmark log:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.benchmark.log`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.benchmark.log`
   - timing reports:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.shadow_timing.txt`
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.shader_timing.txt`
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.screen_hzb_timing.txt`
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_analysis_timing.txt`
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_mask_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.shadow_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.shader_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.screen_hzb_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.receiver_analysis_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.receiver_mask_timing.txt`
   - receiver-analysis report:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_analysis_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.receiver_analysis_report.txt`
   - receiver-mask report:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.receiver_mask_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.receiver_mask_report.txt`
   - baseline comparison:
-    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_fps50.baseline_compare.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm3_validation/release_frame350_csm3_optimized_fps50.baseline_compare.txt`
+
+Optimization follow-up validated on `2026-04-02`:
+
+- `CSM-3` no longer performs per-pixel dilation in `CS_Analyze`.
+- `CS_Analyze` now writes only undilated raw occupancy.
+- `CS_DilateMasks` performs tile-space dilation and writes the base mask.
+- hierarchy construction counts occupied hierarchy tiles while it builds them.
+- `CS_Finalize` consumes counted occupancy instead of rescanning the full base
+  and hierarchy masks.
+- canonical frame-`350` live validation preserved receiver-mask semantics:
+  job counts, sampled jobs, occupied tile counts, and per-job occupancy ratios
+  match the pre-optimization validated `CSM-3` package.
 
 Current live `CSM-3` facts from the fresh canonical package:
 
-- scene build frame: `207`
-- last texture repoint frame: `281`
+- scene build frame: `210`
+- last texture repoint frame: `284`
 - capture frame: `350`
-- post-scene-build stabilization: `143` frames / `6.292 s`
-- post-last-repoint stabilization: `69` frames / `1.541 s`
+- post-scene-build stabilization: `140` frames / `5.870 s`
+- post-last-repoint stabilization: `66` frames / `1.337 s`
 - receiver-mask timing:
-  - `ConventionalShadowReceiverMaskPass`: `5.460544 ms`
+  - `ConventionalShadowReceiverMaskPass`: `0.441344 ms`
+  - `work_event_count`: `6`
+  - `CS_Analyze`: `0.408736 ms`
+  - `CS_DilateMasks`: `0.011328 ms`
+  - `CS_BuildHierarchy`: `0.007936 ms`
+  - `CS_Finalize`: `0.005760 ms`
 - receiver-mask occupancy:
   - `job_count`: `4`
   - `valid_job_count`: `2`
@@ -608,12 +628,20 @@ Current live `CSM-3` facts from the fresh canonical package:
   - job `0` occupied-tile ratio: `0.133606`
   - job `1` occupied-tile ratio: `0.001343`
   - jobs `2` and `3` are empty
+- optimization delta versus the previously validated `CSM-3` package:
+  - receiver-mask pass GPU time: `5.258752 ms -> 0.441344 ms`
+  - receiver-mask delta: `-4.817408 ms` (`-91.607438%`)
+  - `CS_Analyze`: `4.260032 ms -> 0.408736 ms`
+  - `CS_Finalize`: `2.275968 ms -> 0.005760 ms`
 - baseline comparison against locked `CSM-2`:
   - shadow work events unchanged: `1608`
   - shader work events unchanged: `33`
-  - `ConventionalShadowRasterPass` delta: `+1.313728 ms`
-  - `ShaderPass` delta: `+0.205728 ms`
-  - new receiver-mask pass cost is explicit and accounted for in the capture
+  - `ConventionalShadowRasterPass` delta: `+0.272960 ms`
+  - `ShaderPass` delta: `+0.156928 ms`
+  - `ScreenHzbBuildPass` delta: `-0.001536 ms`
+  - `ConventionalShadowReceiverAnalysisPass` delta: `+0.477376 ms`
+  - `ConventionalShadowReceiverMaskPass`: `0.441344 ms`
+  - auxiliary shadow-path delta versus locked `CSM-2`: `+0.917184 ms`
 
 Conclusion:
 
@@ -621,9 +649,13 @@ Conclusion:
   sampled cascades
 - aggregate occupied-tile coverage is materially below full-map coverage on the
   canonical benchmark
+- the optimized implementation preserves the same receiver-mask occupancy
+  results as the previous validated `CSM-3` package
+- the optimization removed the prior `CSM-3` bottleneck by moving dilation to
+  tile space and by eliminating full-mask scans from finalize
 - structural work counts match the locked `CSM-2` baseline
-- the new shadow-path overhead is explained by the added `CSM-3` receiver-mask
-  pass itself
+- the remaining `CSM-3` cost is explicit, bounded, and materially lower than
+  the previous validated `CSM-3` package
 - active implementation work now moves to `CSM-4`
 
 ### CSM-4. GPU Caster Culling And Compaction
