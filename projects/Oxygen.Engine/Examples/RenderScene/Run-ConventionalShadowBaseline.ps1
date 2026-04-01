@@ -16,7 +16,11 @@ param(
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
-  [int]$RunFrames = 320
+  [int]$RunFrames = 320,
+
+  [Parameter()]
+  [ValidateRange(1, [int]::MaxValue)]
+  [int]$Fps = 30
 )
 
 Set-StrictMode -Version Latest
@@ -120,49 +124,17 @@ function Get-NewOrUpdatedCaptures {
   )
 }
 
-function Get-OrAddObjectProperty {
-  param(
-    [Parameter(Mandatory = $true)]
-    [psobject]$Object,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Name
-  )
-
-  $property = $Object.PSObject.Properties[$Name]
-  if ($null -eq $property -or $null -eq $property.Value) {
-    $value = [pscustomobject]@{}
-    if ($null -eq $property) {
-      $Object | Add-Member -NotePropertyName $Name -NotePropertyValue $value
-    } else {
-      $property.Value = $value
-    }
-    return $value
-  }
-
-  return $property.Value
-}
-
-function Write-BenchmarkSettings {
+function Get-BenchmarkSettingsSummary {
   param(
     [Parameter(Mandatory = $true)]
     [string]$Path
   )
 
   $settings = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
-  $content = Get-OrAddObjectProperty -Object $settings -Name 'content'
-  $activeScene = Get-OrAddObjectProperty -Object $content -Name 'active_scene'
-  $env = Get-OrAddObjectProperty -Object $settings -Name 'env'
-  $envSettings = Get-OrAddObjectProperty -Object $env -Name 'settings'
-  $sun = Get-OrAddObjectProperty -Object $env -Name 'sun'
-
-  $envSettings.custom_state_present = $true
-  $envSettings.schema_version = 2.0
-  $sun.enabled = $true
-  $sun.source = 0.0
-  $settings.environment_preset_index = -1.0
-
-  $settings | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $Path -Encoding utf8
+  $activeScene = $settings.content.active_scene
+  $env = $settings.env
+  $envSettings = $env.settings
+  $sun = $env.sun
 
   return [pscustomobject]@{
     ActiveSceneName = $activeScene.name
@@ -314,12 +286,20 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildRoot = Join-Path $repoRoot 'out\build-ninja'
 $renderSceneExe = Join-Path $buildRoot 'bin\Release\Oxygen.Examples.RenderScene.exe'
 $settingsPath = Join-Path $repoRoot 'Examples\RenderScene\demo_settings.json'
+$benchmarkSettingsPath = Join-Path $repoRoot 'Examples\RenderScene\demo_settings.benchmark.json'
+$settingsBackupPath = Join-Path (Split-Path -Parent $settingsPath) 'demo_settings.sav'
 
 if (-not (Test-Path -LiteralPath $renderSceneExe)) {
   throw "RenderScene Release executable not found: $renderSceneExe"
 }
 if (-not (Test-Path -LiteralPath $settingsPath)) {
   throw "RenderScene demo settings not found: $settingsPath"
+}
+if (-not (Test-Path -LiteralPath $benchmarkSettingsPath)) {
+  throw "RenderScene benchmark demo settings not found: $benchmarkSettingsPath"
+}
+if (Test-Path -LiteralPath $settingsBackupPath) {
+  throw "Refusing to overwrite existing settings backup: $settingsBackupPath"
 }
 
 $minimumRunFrames = $Frame + $Count + 120
@@ -338,27 +318,39 @@ $captureFilter = "$captureOutputStem*.rdc"
 $benchmarkLogPath = "$captureOutputTemplate.benchmark.log"
 $stdoutPath = "$captureOutputTemplate.stdout.log"
 $stderrPath = "$captureOutputTemplate.stderr.log"
-$settingsBackupPath = "$settingsPath.benchmark-backup"
 
 New-Item -ItemType Directory -Force -Path $captureOutputDirectory | Out-Null
 $captureSnapshotBefore = Get-CaptureSnapshot -Directory $captureOutputDirectory -Filter $captureFilter
-
-Copy-Item -LiteralPath $settingsPath -Destination $settingsBackupPath -Force
+$liveSettingsHashBefore = (Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash
 
 try {
-  $benchmarkSettings = Write-BenchmarkSettings -Path $settingsPath
+  Move-Item -LiteralPath $settingsPath -Destination $settingsBackupPath
+  Copy-Item -LiteralPath $benchmarkSettingsPath -Destination $settingsPath
+
+  $appliedSettings = Get-BenchmarkSettingsSummary -Path $settingsPath
+  $benchmarkSettingsHash = (Get-FileHash -LiteralPath $benchmarkSettingsPath -Algorithm SHA256).Hash
+  $appliedSettingsHash = (Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash
+
+  if ($benchmarkSettingsHash -ne $appliedSettingsHash) {
+    throw "Applied benchmark demo settings hash does not match saved benchmark settings: $benchmarkSettingsPath"
+  }
 
   @(
     "Started: $(Get-Date -Format o)"
     "RenderScene executable: $renderSceneExe"
+    "Target FPS: $Fps"
     "Frames requested: start=$Frame count=$Count total_run_frames=$RunFrames"
     "Capture output stem: $captureOutputTemplate"
-    "Settings path: $settingsPath"
-    "Settings backup: $settingsBackupPath"
-    "Active scene key: $($benchmarkSettings.ActiveSceneKey)"
-    "Active scene name: $($benchmarkSettings.ActiveSceneName)"
-    "Benchmark sun source: $($benchmarkSettings.SunSource)"
-    "Environment preset index: $($benchmarkSettings.EnvironmentPresetIndex)"
+    "Live settings path: $settingsPath"
+    "Saved live settings backup: $settingsBackupPath"
+    "Benchmark settings path: $benchmarkSettingsPath"
+    "Original live settings SHA256: $liveSettingsHashBefore"
+    "Benchmark settings SHA256: $benchmarkSettingsHash"
+    "Applied settings SHA256: $appliedSettingsHash"
+    "Active scene key: $($appliedSettings.ActiveSceneKey)"
+    "Active scene name: $($appliedSettings.ActiveSceneName)"
+    "Benchmark sun source: $($appliedSettings.SunSource)"
+    "Environment preset index: $($appliedSettings.EnvironmentPresetIndex)"
   ) | Set-Content -LiteralPath $benchmarkLogPath -Encoding ascii
 
   if (Test-Path -LiteralPath $stdoutPath) {
@@ -371,7 +363,7 @@ try {
   $renderSceneArgs = @(
     '-v=0'
     '--frames', $RunFrames
-    '--fps', '30'
+    '--fps', $Fps
     '--vsync', 'false'
     '--directional-shadows', 'conventional'
     '--capture-provider', 'renderdoc'
@@ -536,8 +528,9 @@ try {
   }
 
   Write-Host "RenderScene executable: $renderSceneExe"
+  Write-Host "Target FPS: $Fps"
   Write-Host "Frames requested: start=$Frame count=$Count total_run_frames=$RunFrames"
-  Write-Host "Settings restored from backup after run: pending"
+  Write-Host "Settings restore file: $settingsBackupPath"
   Write-Host "Benchmark log: $benchmarkLogPath"
   Write-Host "Directional summary: $($summary.Line)"
   Write-Host "Capture files:"
@@ -547,10 +540,22 @@ try {
 }
 finally {
   if (Test-Path -LiteralPath $settingsBackupPath) {
+    if (Test-Path -LiteralPath $settingsPath) {
+      Remove-Item -LiteralPath $settingsPath -Force
+    }
+
     Move-Item -LiteralPath $settingsBackupPath -Destination $settingsPath -Force
-  }
-  if (Test-Path -LiteralPath $benchmarkLogPath) {
-    "Restored demo settings: $settingsPath" |
-      Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
+
+    $restoredSettingsHash = (Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash
+    if ($restoredSettingsHash -ne $liveSettingsHashBefore) {
+      throw "Restored demo settings hash mismatch after benchmark run. expected=$liveSettingsHashBefore actual=$restoredSettingsHash"
+    }
+
+    if (Test-Path -LiteralPath $benchmarkLogPath) {
+      "Restored demo settings: $settingsPath" |
+        Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
+      "Restored demo settings SHA256: $restoredSettingsHash" |
+        Add-Content -LiteralPath $benchmarkLogPath -Encoding ascii
+    }
   }
 }

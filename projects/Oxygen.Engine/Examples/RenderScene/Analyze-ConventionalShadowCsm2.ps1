@@ -4,7 +4,10 @@ param(
   [string]$CapturePath,
 
   [Parameter()]
-  [string]$OutputStem = ''
+  [string]$OutputStem = '',
+
+  [Parameter()]
+  [string]$BaselineStem = ''
 )
 
 Set-StrictMode -Version Latest
@@ -63,6 +66,24 @@ function Invoke-StableTimingAnalysis {
   )
 }
 
+function Invoke-PythonCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$ScriptPath,
+
+    [Parameter(Mandatory = $true)]
+    [string[]]$Arguments
+  )
+
+  & python $ScriptPath @Arguments
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) {
+    throw "python exited with code $exitCode while running $ScriptPath"
+  }
+
+  $global:LASTEXITCODE = 0
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $captureFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $CapturePath
 
@@ -77,6 +98,7 @@ if ([string]::IsNullOrWhiteSpace($OutputStem)) {
 }
 
 $outputStemFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $OutputStem
+$compareReportPath = "$outputStemFullPath.baseline_compare.txt"
 $invokeScript = Join-Path $PSScriptRoot 'Invoke-RenderDocUiAnalysis.ps1'
 
 Invoke-StableTimingAnalysis `
@@ -93,10 +115,29 @@ Invoke-StableTimingAnalysis `
   -PassName 'ShaderPass' `
   -ReportPath "$outputStemFullPath.shader_timing.txt"
 
+Invoke-StableTimingAnalysis `
+  -InvokeScript $invokeScript `
+  -CapturePath $captureFullPath `
+  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -PassName 'ConventionalShadowReceiverAnalysisPass' `
+  -ReportPath "$outputStemFullPath.receiver_analysis_timing.txt"
+
 & $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassFocus.py') `
-  -PassName 'ConventionalShadowRasterPass' `
-  -ReportPath "$outputStemFullPath.shadow_parent_focus.txt"
+  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocConventionalReceiverAnalysis.py') `
+  -PassName 'ConventionalShadowReceiverAnalysisPass' `
+  -ReportPath "$outputStemFullPath.receiver_analysis_report.txt"
 
-Write-Output "Baseline analysis complete for $captureFullPath"
+if (-not [string]::IsNullOrWhiteSpace($BaselineStem)) {
+  Invoke-PythonCommand `
+    -ScriptPath (Join-Path $PSScriptRoot 'CompareConventionalShadowBaseline.py') `
+    -Arguments @(
+      '--baseline-stem', (Resolve-RepoPath -RepoRoot $repoRoot -Path $BaselineStem),
+      '--current-stem', $outputStemFullPath,
+      '--output', $compareReportPath
+    )
+} elseif (Test-Path -LiteralPath $compareReportPath) {
+  Remove-Item -LiteralPath $compareReportPath -Force
+}
+
+Write-Output "CSM-2 analysis complete for $captureFullPath"

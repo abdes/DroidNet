@@ -361,6 +361,20 @@ auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
     : nullptr;
 }
 
+auto ShadowManager::TryGetReceiverAnalysisPlan(
+  const ViewId view_id) const noexcept
+  -> const ConventionalShadowReceiverAnalysisPlan*
+{
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    static_cast<void>(view_id);
+    return nullptr;
+  }
+  return conventional_backend_
+    ? conventional_backend_->TryGetReceiverAnalysisPlan(view_id)
+    : nullptr;
+}
+
 auto ShadowManager::TryGetShadowInstanceMetadata(
   const ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*
 {

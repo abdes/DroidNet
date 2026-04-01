@@ -494,6 +494,14 @@ auto ConventionalShadowBackend::TryGetRasterRenderPlan(
   return it != view_cache_.end() ? &it->second.raster_plan : nullptr;
 }
 
+auto ConventionalShadowBackend::TryGetReceiverAnalysisPlan(
+  const ViewId view_id) const noexcept
+  -> const ConventionalShadowReceiverAnalysisPlan*
+{
+  const auto it = view_cache_.find(view_id);
+  return it != view_cache_.end() ? &it->second.receiver_analysis_plan : nullptr;
+}
+
 auto ConventionalShadowBackend::GetDirectionalShadowTexture() const noexcept
   -> const std::shared_ptr<graphics::Texture>&
 {
@@ -572,6 +580,7 @@ auto ConventionalShadowBackend::RefreshViewExports(ViewCacheEntry& state) const
   state.raster_plan.depth_texture
     = observer_ptr { directional_shadow_texture_.get() };
   state.raster_plan.jobs = state.raster_jobs;
+  state.receiver_analysis_plan.jobs = state.receiver_analysis_jobs;
 }
 
 auto ConventionalShadowBackend::RefreshAllViewExports() -> void
@@ -824,12 +833,13 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
 
     for (std::uint32_t cascade_index = 0; cascade_index < cascade_count;
       ++cascade_index) {
+      const float cascade_begin_depth = prev_depth;
       const float end_depth = ResolveCascadeEndDepth(
-        candidate, cascade_index, prev_depth, near_depth, far_depth);
+        candidate, cascade_index, cascade_begin_depth, near_depth, far_depth);
       const float depth_range
         = std::max(far_depth - near_depth, kMinCascadeSpan);
-      const float t0
-        = std::clamp((prev_depth - near_depth) / depth_range, 0.0F, 1.0F);
+      const float t0 = std::clamp(
+        (cascade_begin_depth - near_depth) / depth_range, 0.0F, 1.0F);
       const float t1
         = std::clamp((end_depth - near_depth) / depth_range, 0.0F, 1.0F);
 
@@ -950,6 +960,22 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
         .target_array_slice = resource_index + cascade_index,
         .view_constants = cascade_view_constants.GetSnapshot(),
       });
+
+      state.receiver_analysis_jobs.push_back(
+        ConventionalShadowReceiverAnalysisJob {
+          .light_rotation_matrix = light_rotation,
+          .full_rect_center_half_extent = { slice_center_ls.x,
+            slice_center_ls.y, padded_half_extent_x, padded_half_extent_y },
+          .legacy_rect_center_half_extent = { snapped_center_ls.x,
+            snapped_center_ls.y, ortho_half_extent_x, ortho_half_extent_y },
+          .split_and_full_depth_range
+          = { cascade_begin_depth, end_depth, slice_center_ls.z - sphere_radius,
+            slice_center_ls.z + sphere_radius },
+          .shading_margins = { world_units_per_texel, candidate.bias,
+            candidate.normal_bias, 0.0F },
+          .target_array_slice = resource_index + cascade_index,
+          .flags = kConventionalShadowReceiverAnalysisFlagValid,
+        });
 
       prev_depth = end_depth;
     }
