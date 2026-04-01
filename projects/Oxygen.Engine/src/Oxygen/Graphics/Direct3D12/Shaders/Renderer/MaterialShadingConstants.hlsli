@@ -36,9 +36,9 @@ struct MaterialShadingConstants
 
     // Register 4
     uint ambient_occlusion_texture_index;
-    uint _pad2;
     uint emissive_texture_index;
     float alpha_cutoff;
+    uint _pad2;
 
     // Register 5
     float2 uv_scale;
