@@ -10,10 +10,15 @@
 #include <memory>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
+
+namespace oxygen::graphics::detail {
+class DeferredReclaimer;
+}
 
 namespace oxygen::engine {
 
@@ -53,6 +58,8 @@ protected:
     -> graphics::RasterizerStateDesc override;
 
 private:
+  auto CacheDeferredReclaimer() -> void;
+  auto ReleaseShadowViewConstantsBuffer() noexcept -> void;
   auto EnsureShadowViewConstantsCapacity(std::uint32_t required_jobs) -> void;
   auto UploadJobViewConstants(std::span<const renderer::RasterShadowJob> jobs)
     -> void;
@@ -64,6 +71,8 @@ private:
   std::shared_ptr<graphics::Buffer> shadow_view_constants_buffer_;
   void* shadow_view_constants_mapped_ptr_ { nullptr };
   std::uint32_t shadow_view_constants_capacity_ { 0U };
+  observer_ptr<graphics::detail::DeferredReclaimer>
+    shadow_view_constants_reclaimer_ { nullptr };
   std::vector<ViewConstants::GpuData> job_view_constants_upload_;
 };
 
