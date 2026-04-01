@@ -123,8 +123,7 @@ NOLINT_TEST_F(
   EnsureBuildRootLayout(layout);
 
   const std::array artifacts {
-    MakeArtifact(ShaderType::kCompute, "Lighting/LightCulling.hlsl", "CS",
-      { ShaderDefine { .name = "CLUSTERED", .value = std::string("1") } },
+    MakeArtifact(ShaderType::kCompute, "Lighting/LightCulling.hlsl", "CS", {},
       0x3333333333333333ULL),
     MakeArtifact(ShaderType::kPixel, "Ui/ImGui.hlsl", "PS",
       { ShaderDefine { .name = "DEBUG_PASS", .value = std::nullopt } },

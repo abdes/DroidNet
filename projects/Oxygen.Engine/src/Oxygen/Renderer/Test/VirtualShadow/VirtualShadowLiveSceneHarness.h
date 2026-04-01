@@ -1301,13 +1301,6 @@ protected:
           oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
           std::make_shared<oxygen::engine::LightCullingPassConfig>(
             oxygen::engine::LightCullingPassConfig {
-              .cluster =
-                [] {
-                  auto config = oxygen::engine::LightCullingConfig::Default();
-                  config.cluster_dim_z = 1U;
-                  config.tile_size_px = 16U;
-                  return config;
-                }(),
               .debug_name = "early-stage-two-box.light-culling",
             }));
         render_context.RegisterPass(&(*light_culling_pass));

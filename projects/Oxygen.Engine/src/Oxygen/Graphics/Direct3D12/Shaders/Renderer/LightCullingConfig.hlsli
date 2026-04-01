@@ -14,12 +14,12 @@ struct LightCullingConfig
     uint cluster_dim_x;
     uint cluster_dim_y;
     uint cluster_dim_z;
-    uint tile_size_px;
-    float z_near;
-    float z_far;
-    float z_scale;
-    float z_bias;
-    uint max_lights_per_cluster;
+    uint light_grid_pixel_size_shift;
+    float light_grid_z_params_b;
+    float light_grid_z_params_o;
+    float light_grid_z_params_s;
+    uint max_lights_per_cell;
+    uint light_grid_pixel_size_px;
     uint _pad;
 };
 

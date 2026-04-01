@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
@@ -41,43 +42,36 @@ OXYGEN_DEFINE_BINDLESS_SLOT_TYPE(ClusterIndexListSlot)
 
 #undef OXYGEN_DEFINE_BINDLESS_SLOT_TYPE
 
-//! Configuration for clustered light culling.
+//! Shader-facing clustered light-grid routing payload.
 /*!
- Defines the grid dimensions and depth slicing parameters for Clustered Forward
- light culling.
+ Publishes the final clustered light-grid product to downstream consumers.
 
- ### Z-Binning
+ The implementation shape is intentionally fixed to the engine-owned shipping
+ path:
 
- The depth range is divided using logarithmic slicing:
+ - 64px XY cells (`LightGridPixelSizeShift = 6`)
+ - 32 Z slices
+ - UE-style `LightGridZParams = (B, O, S)` mapping
+ - one flat grid/list output contract
 
-   slice = log(z / near) * scale + bias
-
- This concentrates precision near the camera where it matters most.
-
- ### Future: Override Attachment Integration
-
- This configuration can be set per-scene or per-node via `OverrideAttachment`
- with domain `kRendering`:
-
- | Property Key           | Type     | Description                          |
- | ---------------------- | -------- | ------------------------------------ |
- | `rndr_cluster_depth`   | uint32_t | Number of depth slices (1-64)        |
- | `rndr_cluster_tile_px` | uint32_t | Tile size in pixels (8, 16, 32)      |
+ There are no runtime knobs here for alternate cell sizes, slice counts, or
+ manual Z-range overrides. A zero-initialized instance represents "light grid
+ unavailable for this view".
 
  @see LightCullingPass, LightingFrameBindings
 */
 struct LightCullingConfig {
   static constexpr size_t kSize = 48;
 
-  static constexpr uint32_t kDefaultTileSizePx = 16;
-  static constexpr uint32_t kDefaultDepthSlices = 24;
-  static constexpr uint32_t kDefaultMaxLightsPerCluster = 64;
-  static constexpr float kUseCameraPlanes = 0.0F;
-  static constexpr float kDefaultClusteredZNear = 0.01F;
-  static constexpr float kDefaultClusteredZFar = 1000.0F;
-
-  static constexpr uint32_t kHighDensityDepthSlices = 32;
-  static constexpr float kHighDensityZFarScale = 0.5F;
+  static constexpr uint32_t kLightGridPixelSizeShift = 6U;
+  static constexpr uint32_t kLightGridPixelSize = 1U
+    << kLightGridPixelSizeShift;
+  static constexpr uint32_t kLightGridSizeZ = 32U;
+  static constexpr uint32_t kMaxCulledLightsPerCell = 32U;
+  static constexpr uint32_t kThreadGroupSize = 4U;
+  static constexpr float kSliceDistributionScale = 4.05F;
+  static constexpr float kNearOffsetMeters = 0.095F;
+  static constexpr float kFarPlanePadMeters = 0.1F;
 
   // --- GPU-Compatible Data (Keep in sync with LightCulling.hlsl) ---
 
@@ -85,13 +79,13 @@ struct LightCullingConfig {
   ClusterIndexListSlot bindless_cluster_index_list_slot;
   uint32_t cluster_dim_x { 0 };
   uint32_t cluster_dim_y { 0 };
-  uint32_t cluster_dim_z { kDefaultDepthSlices };
-  uint32_t tile_size_px { kDefaultTileSizePx };
-  float z_near { kUseCameraPlanes };
-  float z_far { kUseCameraPlanes };
-  float z_scale { 0.0F };
-  float z_bias { 0.0F };
-  uint32_t max_lights_per_cluster { kDefaultMaxLightsPerCluster };
+  uint32_t cluster_dim_z { 0 };
+  uint32_t light_grid_pixel_size_shift { 0 };
+  float light_grid_z_params_b { 0.0F };
+  float light_grid_z_params_o { 0.0F };
+  float light_grid_z_params_s { 0.0F };
+  uint32_t max_lights_per_cell { 0 };
+  uint32_t light_grid_pixel_size_px { 0 };
   uint32_t _pad { 0 };
 
   //=== Computed Properties ===----------------------------------------------//
@@ -104,14 +98,20 @@ struct LightCullingConfig {
     uint32_t total_clusters;
   };
 
+  struct ZParams {
+    float b { 0.0F };
+    float o { 0.0F };
+    float s { 0.0F };
+  };
+
   [[nodiscard]] constexpr auto ComputeGridDimensions(
     Extent<uint32_t> screen_size) const noexcept -> GridDimensions
   {
     const uint32_t items_x
-      = (screen_size.width + tile_size_px - 1) / tile_size_px;
+      = (screen_size.width + kLightGridPixelSize - 1) / kLightGridPixelSize;
     const uint32_t items_y
-      = (screen_size.height + tile_size_px - 1) / tile_size_px;
-    const uint32_t items_z = cluster_dim_z;
+      = (screen_size.height + kLightGridPixelSize - 1) / kLightGridPixelSize;
+    const uint32_t items_z = kLightGridSizeZ;
     return {
       .x = items_x,
       .y = items_y,
@@ -120,53 +120,80 @@ struct LightCullingConfig {
     };
   }
 
-  //! Compute Z-binning scale for logarithmic depth slicing.
-  [[nodiscard]] constexpr auto ComputeZScale(
-    float effective_z_near, float effective_z_far) const noexcept -> float
+  //! Compute UE-style LightGridZParams adapted to Oxygen's meter-scale world.
+  [[nodiscard]] static auto ComputeLightGridZParams(
+    float near_plane, float far_plane) noexcept -> ZParams
   {
-    if (cluster_dim_z <= 1 || effective_z_near <= 0.0F
-      || effective_z_far <= effective_z_near) {
-      return 0.0F;
+    const float clamped_near = std::max(near_plane, 1.0e-4F);
+    const float clamped_far = std::max(
+      far_plane + kFarPlanePadMeters, clamped_near + kFarPlanePadMeters);
+    const float n = clamped_near + kNearOffsetMeters;
+    const float f = std::max(clamped_far, n + 1.0e-3F);
+    const double s = static_cast<double>(kSliceDistributionScale);
+    const double exponent = static_cast<double>(kLightGridSizeZ - 1U) / s;
+    const double o
+      = (static_cast<double>(f) - static_cast<double>(n) * std::exp2(exponent))
+      / static_cast<double>(f - n);
+    const double b = (1.0 - o) / static_cast<double>(n);
+    return ZParams {
+      .b = static_cast<float>(b),
+      .o = static_cast<float>(o),
+      .s = static_cast<float>(s),
+    };
+  }
+
+  [[nodiscard]] static auto ComputeZSlice(float linear_depth,
+    const ZParams& z_params, uint32_t slice_count = kLightGridSizeZ) noexcept
+    -> uint32_t
+  {
+    if (slice_count == 0U || linear_depth <= 0.0F || z_params.b <= 0.0F
+      || z_params.s <= 0.0F) {
+      return 0U;
     }
-    // scale = depth_slices / log2(far / near)
-    const float log_ratio = std::log2(effective_z_far / effective_z_near);
-    return static_cast<float>(cluster_dim_z) / log_ratio;
+
+    const float encoded_depth = linear_depth * z_params.b + z_params.o;
+    if (!(encoded_depth > 0.0F) || !std::isfinite(encoded_depth)) {
+      return 0U;
+    }
+
+    const float slice_f = std::log2(encoded_depth) * z_params.s;
+    if (!std::isfinite(slice_f)) {
+      return 0U;
+    }
+
+    const float clamped_slice
+      = std::clamp(slice_f, 0.0F, static_cast<float>(slice_count - 1U));
+    return static_cast<uint32_t>(clamped_slice);
   }
 
-  //! Compute Z-binning bias for logarithmic depth slicing.
-  [[nodiscard]] constexpr auto ComputeZBias() const noexcept -> float
-  {
-    return 0.0F; // Not used in current implementation
-  }
-
-  //=== Presets ===----------------------------------------------------------//
-
-  //! Default clustered configuration (16×16 tiles with 24 depth slices).
-  static constexpr auto Default() noexcept -> LightCullingConfig
+  [[nodiscard]] static constexpr auto MakePublishedConfig(
+    const ClusterGridSlot cluster_grid_slot,
+    const ClusterIndexListSlot cluster_index_list_slot,
+    const GridDimensions& grid_dimensions, const ZParams& z_params) noexcept
+    -> LightCullingConfig
   {
     return LightCullingConfig {
-      .bindless_cluster_grid_slot = ClusterGridSlot {},
-      .bindless_cluster_index_list_slot = ClusterIndexListSlot {},
-      .cluster_dim_z = kDefaultDepthSlices,
-      .tile_size_px = kDefaultTileSizePx,
-      .z_near = kDefaultClusteredZNear,
-      .z_far = kDefaultClusteredZFar,
-      .max_lights_per_cluster = kDefaultMaxLightsPerCluster,
+      .bindless_cluster_grid_slot = cluster_grid_slot,
+      .bindless_cluster_index_list_slot = cluster_index_list_slot,
+      .cluster_dim_x = grid_dimensions.x,
+      .cluster_dim_y = grid_dimensions.y,
+      .cluster_dim_z = grid_dimensions.z,
+      .light_grid_pixel_size_shift = kLightGridPixelSizeShift,
+      .light_grid_z_params_b = z_params.b,
+      .light_grid_z_params_o = z_params.o,
+      .light_grid_z_params_s = z_params.s,
+      .max_lights_per_cell = kMaxCulledLightsPerCell,
+      .light_grid_pixel_size_px = kLightGridPixelSize,
+      ._pad = 0U,
     };
   }
 
-  //! High-density clustered for complex indoor scenes.
-  static constexpr auto HighDensity() noexcept -> LightCullingConfig
+  [[nodiscard]] constexpr auto IsAvailable() const noexcept -> bool
   {
-    return LightCullingConfig {
-      .bindless_cluster_grid_slot = ClusterGridSlot {},
-      .bindless_cluster_index_list_slot = ClusterIndexListSlot {},
-      .cluster_dim_z = kHighDensityDepthSlices,
-      .tile_size_px = kDefaultTileSizePx,
-      .z_near = kDefaultClusteredZNear,
-      .z_far = kDefaultClusteredZFar * kHighDensityZFarScale,
-      .max_lights_per_cluster = kDefaultMaxLightsPerCluster * 2,
-    };
+    return bindless_cluster_grid_slot.IsValid()
+      && bindless_cluster_index_list_slot.IsValid() && cluster_dim_x > 0U
+      && cluster_dim_y > 0U && cluster_dim_z > 0U
+      && light_grid_pixel_size_shift > 0U && max_lights_per_cell > 0U;
   }
 };
 

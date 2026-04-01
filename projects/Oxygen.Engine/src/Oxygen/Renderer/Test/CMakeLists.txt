@@ -358,6 +358,24 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
+    "LightCullingPassContract"
+    SOURCES
+      "LightCullingPassContract_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
+    "LightCullingPassMembership"
+    SOURCES
+      "LightCullingPassMembership_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
     VirtualShadowGpuLifecycle
     SOURCES
       "VirtualShadow/VirtualShadowGpuTestFixtures.h"
@@ -373,6 +391,8 @@ if(TARGET oxygen::graphics-direct3d12)
 endif()
 
 m_gtest_program(SunResolver SOURCES "SunResolver_basic_test.cpp")
+
+m_gtest_program(LightCullingConfig SOURCES "LightCullingConfig_test.cpp")
 
 m_gtest_program(
   ShadowManagerPolicy

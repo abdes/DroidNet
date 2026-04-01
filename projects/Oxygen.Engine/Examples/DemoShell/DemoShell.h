@@ -33,7 +33,6 @@ namespace engine {
   class InputSystem;
   class Renderer;
   struct ShaderPassConfig;
-  struct LightCullingPassConfig;
 }
 namespace renderer {
   class RenderingPipeline;

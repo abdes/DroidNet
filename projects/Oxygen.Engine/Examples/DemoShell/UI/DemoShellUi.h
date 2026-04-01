@@ -18,7 +18,6 @@ class IAsyncEngine;
 namespace engine {
   class FrameContext;
   struct ShaderPassConfig;
-  struct LightCullingPassConfig;
 }
 namespace imgui {
   class ImGuiModule;

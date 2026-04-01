@@ -32,7 +32,6 @@ struct PipelineSettings {
   renderer::DepthPrePassMode depth_prepass_mode {
     renderer::DepthPrePassMode::kOpaqueAndMasked
   };
-  std::uint32_t cluster_depth_slices { 24 };
   engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
   float exposure_value { 1.0F };
   engine::ToneMapper tonemapping_mode { engine::ToneMapper::kAcesFitted };

@@ -250,11 +250,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
-  // Light culling compute shader (tile-based or clustered mode)
+  // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } },
-    .permutations=std::array<std::string_view, 1> { "CLUSTERED" }
+    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
   // Renderer-level screen-space HZB build shader
   ShaderFileSpec {
@@ -437,7 +436,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardDebug_PS DEBUG_*: 4 each (required debug define x ALPHA_TEST x
 //   OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
-// - LightCulling: 2 (1 entry x 2 permutations)
+// - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
 // - MultiScatLut_CS: 1 entry

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -22,11 +20,7 @@ LightingPanel::LightingPanel(observer_ptr<LightCullingVm> vm)
   DCHECK_NOTNULL_F(vm, "LightingPanel requires LightCullingVm");
 }
 
-auto LightingPanel::DrawContents() -> void
-{
-  DrawVisualizationModes();
-  DrawLightCullingSettings();
-}
+auto LightingPanel::DrawContents() -> void { DrawVisualizationModes(); }
 
 auto LightingPanel::GetName() const noexcept -> std::string_view
 {
@@ -85,85 +79,6 @@ void LightingPanel::DrawVisualizationModes()
   if (ImGui::RadioButton(
         "Clusters", current_mode == ShaderDebugMode::kClusterIndex)) {
     vm_->SetVisualizationMode(ShaderDebugMode::kClusterIndex);
-  }
-}
-
-void LightingPanel::DrawLightCullingSettings() { DrawClusterConfigControls(); }
-
-void LightingPanel::DrawClusterConfigControls()
-{
-  ImGui::SeparatorText("Cluster Configuration");
-
-  // Tile size is fixed at 16x16 (compile-time constant in compute shader)
-  ImGui::TextColored(
-    ImVec4(0.7F, 0.7F, 0.7F, 1.0F), "Tile Size: 16x16 (fixed)");
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip(
-      "Tile size is a compile-time constant in the compute shader.\n"
-      "16x16 is the optimal choice for most GPUs.");
-  }
-
-  int depth_slices = vm_->GetDepthSlices();
-  if (ImGui::SliderInt("Depth Slices", &depth_slices, 2, 64)) {
-    vm_->SetDepthSlices(depth_slices);
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Number of depth slices for 3D clustering.\n"
-                      "More slices = finer depth granularity.\n"
-                      "16-32 is typical, 24 is default.");
-  }
-
-  // Z range controls
-  ImGui::Text("Depth Range:");
-
-  // Checkbox for automatic camera-based depth range
-  bool use_camera_z = vm_->GetUseCameraZ();
-  if (ImGui::Checkbox("Use Camera Planes", &use_camera_z)) {
-    vm_->SetUseCameraZ(use_camera_z);
-  }
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("Automatically use camera near/far planes.\n"
-                      "Recommended for most scenes.");
-  }
-
-  if (!use_camera_z) {
-    float z_near = vm_->GetZNear();
-    float z_far = vm_->GetZFar();
-    float z_near_log = std::log10(z_near);
-    float z_far_log = std::log10(z_far);
-
-    if (ImGui::SliderFloat("Z Near", &z_near_log, -2.0F, 2.0F, "10^%.2F")) {
-      z_near = std::pow(10.0F, z_near_log);
-      // Ensure z_near < z_far
-      if (z_near >= z_far) {
-        z_near = z_far * 0.1F;
-      }
-      vm_->SetZNear(z_near);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Near plane for depth slicing (%.3F units).\n"
-        "Should match or be slightly less than camera near plane.",
-        z_near);
-    }
-
-    if (ImGui::SliderFloat("Z Far", &z_far_log, 1.0F, 4.0F, "10^%.2F")) {
-      z_far = std::pow(10.0F, z_far_log);
-      // Ensure z_far > z_near
-      if (z_far <= z_near) {
-        z_far = z_near * 10.0F;
-      }
-      vm_->SetZFar(z_far);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Far plane for depth slicing (%.1F units).\n"
-                        "Should match or exceed camera far plane.",
-        z_far);
-    }
-
-    // Show actual values
-    ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
-      "Range: %.3F - %.1F (ratio: %.0Fx)", z_near, z_far, z_far / z_near);
   }
 }
 

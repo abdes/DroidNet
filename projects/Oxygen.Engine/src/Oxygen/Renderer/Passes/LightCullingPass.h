@@ -35,42 +35,19 @@ struct RenderContext;
 
 //! Configuration for the light culling compute pass.
 /*!
- Specifies the cluster configuration and required resource bindings for
- the Clustered Forward light culling pass.
+ Holds only pass-local metadata for the final clustered light-grid build.
 
- ### Default Behavior
 
- By default, the renderer uses **clustered** Forward light culling (3D grid).
- 16×16 tiles with 24 depth slices.
+ * The grid shape is engine-owned and fixed to the shipping implementation.
+ * This
+ config intentionally does not expose runtime tuning knobs for slice
+ * count, cell
+ size, or manual depth range.
 
- ### Scene-Level Override via Attachment
-
- To override clustered culling parameters for a specific scene, attach an
- override to the **scene root node** with domain `kRendering`:
-
- ```cpp
- // In scene loading or game code:
- OverrideAttachment cluster_override;
- cluster_override.domain = OverrideDomain::kRendering;
- cluster_override.inheritable = true;
- cluster_override.properties["rndr_cluster_depth"] = uint32_t{32};
-  scene.GetOverrideAttachments().Attach(scene.GetRootNode().Id(),
-                                        std::move(cluster_override));
-
-  // In Renderer (reads from scene root):
-  LightCullingConfig cfg = LightCullingConfig::Default();
-  if (auto* att = scene.GetOverrideAttachments().Get(
-        scene.GetRootNode().Id(), OverrideDomain::kRendering)) {
-    cfg.cluster_dim_z = att->GetOr<uint32_t>("rndr_cluster_depth", 24);
-  }
-  ```
-
-  @see LightCullingConfig, LightingFrameBindings, override_slots.md
+ @see LightCullingConfig,
+ * LightingFrameBindings
  */
 struct LightCullingPassConfig {
-  //! Cluster configuration. Defaults to Clustered Forward.
-  LightCullingConfig cluster { LightCullingConfig::Default() };
-
   //! Optional name for debugging purposes.
   std::string debug_name { "LightCullingPass" };
 };
@@ -84,11 +61,13 @@ struct LightCullingPassConfig {
  ### Pipeline Position
 
  ```text
- DepthPrePass → [LightCullingPass] → ShaderPass → TransparentPass
+ [LightCullingPass] → ShaderPass → TransparentPass
  ```
 
- The pass requires a valid depth buffer from DepthPrePass to compute
- per-cluster membership.
+ The pass builds the
+ clustered light grid analytically from the view frustum.
+ It does not consume
+ scene depth or scene HZB.
 
  ### Outputs
 
@@ -101,14 +80,10 @@ struct LightCullingPassConfig {
  2. **Light Index List** (`GetLightIndexListSrvIndex()`):
     - `uint` array containing light indices packed contiguously per cluster
 
- ### Configuration via Override Attachments
-
- The cluster configuration can be overridden per-scene using the rendering
- domain attachment system. See `override_slots.md` for the complete design.
-
  ### Upload Services Pattern
 
- This pass accesses staging and transfer services via `RenderContext`:
+ This pass accesses staging and transfer services
+ via `RenderContext`:
 
  ```cpp
  // In PrepareResources() - lazy buffer creation:
@@ -131,7 +106,7 @@ public:
   //! Constructor.
   /*!
    @param gfx Graphics system for resource creation.
-   @param config Pass configuration including cluster settings.
+   @param config Pass configuration.
   */
   OXGN_RNDR_API LightCullingPass(
     observer_ptr<Graphics> gfx, std::shared_ptr<Config> config);
@@ -172,13 +147,16 @@ public:
   OXGN_RNDR_NDAPI auto GetLightIndexListBuffer() const noexcept
     -> std::shared_ptr<const graphics::Buffer>;
 
-  //! Get the current cluster configuration.
+  //! Get the current published light-grid configuration.
   OXGN_RNDR_NDAPI auto GetClusterConfig() const noexcept
     -> const LightCullingConfig&;
 
   //! Get computed grid dimensions for the current frame.
   OXGN_RNDR_NDAPI auto GetGridDimensions() const noexcept
     -> LightCullingConfig::GridDimensions;
+
+  //! Build a human-readable telemetry dump for the current pass instance.
+  OXGN_RNDR_NDAPI auto BuildTelemetryDump() const -> std::string;
 
 protected:
   //=== ComputeRenderPass Interface
