@@ -545,7 +545,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   DCHECK_F(dsv->IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
-  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  const graphics::GpuEventScopeOptions scope_options {};
   graphics::GpuEventScope scene_depth_work_scope(
     recorder, "DepthPrePass.SceneDepthWork", scope_options);
   ClearDepthStencilView(recorder, dsv);

@@ -150,7 +150,7 @@ auto ConventionalShadowRasterPass::DoExecute(
 
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
   SetupViewPortAndScissors(recorder);
-  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
+  const graphics::GpuEventScopeOptions scope_options {};
   graphics::GpuEventScope shadow_depth_work_scope(
     recorder, "ConventionalShadowRasterPass.ShadowDepthWork", scope_options);
 

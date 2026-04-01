@@ -105,9 +105,11 @@ auto RenderPass::PrepareResources(
   detail::RenderScope ctx_scope(context_, context);
 
   const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
-  graphics::GpuEventScope pass_scope(recorder, GetName(), scope_options);
+  auto marker_scope_options = scope_options;
+  marker_scope_options.timestamp_enabled = false;
+  graphics::GpuEventScope pass_scope(recorder, GetName(), marker_scope_options);
   graphics::GpuEventScope phase_scope(
-    recorder, "PrepareResources", scope_options);
+    recorder, "PrepareResources", marker_scope_options);
 
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
   DLOG_F(2, "pass: {}", GetName());
@@ -134,7 +136,10 @@ auto RenderPass::Execute(
 
   const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
   graphics::GpuEventScope pass_scope(recorder, GetName(), scope_options);
-  graphics::GpuEventScope phase_scope(recorder, "Execute", scope_options);
+  auto marker_scope_options = scope_options;
+  marker_scope_options.timestamp_enabled = false;
+  graphics::GpuEventScope phase_scope(
+    recorder, "Execute", marker_scope_options);
 
   DLOG_SCOPE_F(2, "RenderPass Execute");
   DLOG_F(2, "pass: {}", GetName());

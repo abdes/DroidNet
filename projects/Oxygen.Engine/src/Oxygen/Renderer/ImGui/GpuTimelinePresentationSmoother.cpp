@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <string_view>
 #include <unordered_set>
@@ -17,19 +18,39 @@ namespace {
 
   constexpr uint32_t kInvalidScopeId = 0xFFFFFFFFU;
 
-  auto BlendValue(const float previous, const float current, const float alpha)
-    -> float
+  auto ComputeEffectiveAlpha(
+    const float base_alpha, const float dt, const float reference_dt) -> float
   {
-    return previous + ((current - previous) * alpha);
+    if (dt <= 0.0F || reference_dt <= 0.0F) {
+      return base_alpha;
+    }
+    const float exponent = dt / reference_dt;
+    return 1.0F - std::pow(1.0F - base_alpha, exponent);
   }
 
-  auto BlendWithDeadband(const float previous, const float current,
-    const float alpha, const float deadband) -> float
+  auto ComputeDeadband(const float previous, const float current,
+    const float absolute_min, const float relative_ratio) -> float
   {
-    if (std::abs(current - previous) <= deadband) {
-      return previous;
+    return std::max(absolute_min,
+      std::max(std::abs(previous), std::abs(current)) * relative_ratio);
+  }
+
+  auto SmoothValue(const float previous, const float current, const float alpha,
+    const float settle_alpha, const float deadband, const float snap_threshold)
+    -> float
+  {
+    const float delta = current - previous;
+    const float abs_delta = std::abs(delta);
+    if (abs_delta <= snap_threshold) {
+      return current;
     }
-    return BlendValue(previous, current, alpha);
+
+    const float effective_alpha = abs_delta <= deadband ? settle_alpha : alpha;
+    const float blended = previous + (delta * effective_alpha);
+    if (std::abs(blended - current) <= snap_threshold) {
+      return current;
+    }
+    return blended;
   }
 
   auto HashCombine(const uint64_t seed, const uint64_t value) -> uint64_t
@@ -80,6 +101,26 @@ namespace {
 auto GpuTimelinePresentationSmoother::Apply(
   const internal::GpuTimelineFrame& frame) -> GpuTimelinePresentationFrame
 {
+  const auto now = Clock::now();
+  float dt_seconds = kReferenceDtSeconds;
+  if (has_last_apply_time_) {
+    const auto elapsed
+      = std::chrono::duration<float>(now - last_apply_time_).count();
+    if (elapsed > 0.0F) {
+      dt_seconds = std::max(elapsed, kReferenceDtSeconds);
+    }
+  }
+  last_apply_time_ = now;
+  has_last_apply_time_ = true;
+  const float alpha = ComputeEffectiveAlpha(
+    kDefaultBlendFactor, dt_seconds, kReferenceDtSeconds);
+  const float settle_alpha = ComputeEffectiveAlpha(
+    kDefaultSettleBlendFactor, dt_seconds, kReferenceDtSeconds);
+  const float frame_span_alpha = ComputeEffectiveAlpha(
+    kFrameSpanBlendFactor, dt_seconds, kReferenceDtSeconds);
+  const float frame_span_settle_alpha = ComputeEffectiveAlpha(
+    kFrameSpanSettleBlendFactor, dt_seconds, kReferenceDtSeconds);
+
   GpuTimelinePresentationFrame presentation {};
   presentation.frame_sequence = frame.frame_sequence;
   presentation.scopes.reserve(frame.scopes.size());
@@ -118,20 +159,24 @@ auto GpuTimelinePresentationSmoother::Apply(
     if (scope.valid) {
       const auto [state_it, inserted] = scope_state_.try_emplace(stable_key,
         SmoothedScopeState {
-          .start_ms = scope.start_ms,
-          .duration_ms = scope.duration_ms,
-        });
+          .start_ms = scope.start_ms, .end_ms = scope.end_ms });
       if (!inserted) {
-        state_it->second.start_ms = BlendWithDeadband(state_it->second.start_ms,
-          scope.start_ms, kDefaultBlendFactor, kDefaultJitterDeadbandMs);
-        state_it->second.duration_ms
-          = BlendWithDeadband(state_it->second.duration_ms, scope.duration_ms,
-            kDefaultBlendFactor, kDefaultJitterDeadbandMs);
+        const float start_deadband = ComputeDeadband(state_it->second.start_ms,
+          scope.start_ms, kValueDeadbandMinMs, kValueDeadbandRatio);
+        const float end_deadband = ComputeDeadband(state_it->second.end_ms,
+          scope.end_ms, kValueDeadbandMinMs, kValueDeadbandRatio);
+        state_it->second.start_ms
+          = SmoothValue(state_it->second.start_ms, scope.start_ms, alpha,
+            settle_alpha, start_deadband, kSnapThresholdMs);
+        state_it->second.end_ms = SmoothValue(state_it->second.end_ms,
+          scope.end_ms, alpha, settle_alpha, end_deadband, kSnapThresholdMs);
       }
 
       entry.display_start_ms = std::max(0.0F, state_it->second.start_ms);
-      entry.display_duration_ms = std::max(0.0F, state_it->second.duration_ms);
-      entry.display_end_ms = entry.display_start_ms + entry.display_duration_ms;
+      entry.display_end_ms
+        = std::max(entry.display_start_ms, state_it->second.end_ms);
+      entry.display_duration_ms
+        = std::max(0.0F, entry.display_end_ms - entry.display_start_ms);
       raw_frame_span_ms = std::max(raw_frame_span_ms, scope.end_ms);
       seen_scope_keys.insert(stable_key);
     }
@@ -140,15 +185,18 @@ auto GpuTimelinePresentationSmoother::Apply(
   }
 
   presentation.raw_frame_span_ms = raw_frame_span_ms;
+  const float desired_frame_span_ms = raw_frame_span_ms + kFrameSpanHeadroomMs;
   if (has_smoothed_frame_span_) {
-    smoothed_frame_span_ms_ = BlendWithDeadband(smoothed_frame_span_ms_,
-      raw_frame_span_ms, kDefaultBlendFactor, kDefaultJitterDeadbandMs);
+    const float frame_span_deadband = ComputeDeadband(smoothed_frame_span_ms_,
+      desired_frame_span_ms, kFrameSpanDeadbandMinMs, kFrameSpanDeadbandRatio);
+    smoothed_frame_span_ms_ = SmoothValue(smoothed_frame_span_ms_,
+      desired_frame_span_ms, frame_span_alpha, frame_span_settle_alpha,
+      frame_span_deadband, kSnapThresholdMs);
   } else {
-    smoothed_frame_span_ms_ = raw_frame_span_ms;
+    smoothed_frame_span_ms_ = desired_frame_span_ms;
     has_smoothed_frame_span_ = true;
   }
-  presentation.display_frame_span_ms
-    = std::max(presentation.raw_frame_span_ms, smoothed_frame_span_ms_);
+  presentation.display_frame_span_ms = std::max(0.0F, smoothed_frame_span_ms_);
 
   for (auto it = scope_state_.begin(); it != scope_state_.end();) {
     if (!seen_scope_keys.contains(it->first)) {
@@ -170,6 +218,42 @@ auto GpuTimelinePresentationSmoother::Apply(
   for (std::size_t i = 0; i < presentation.scopes.size(); ++i) {
     child_indices_by_parent[presentation.scopes[i].parent_scope_id].push_back(
       i);
+  }
+
+  const auto stitch_adjacent_siblings
+    = [&](const std::vector<std::size_t>& sibling_scope_indices) -> void {
+    if (sibling_scope_indices.size() < 2U) {
+      return;
+    }
+
+    for (std::size_t i = 1; i < sibling_scope_indices.size(); ++i) {
+      auto& previous_scope = presentation.scopes[sibling_scope_indices[i - 1U]];
+      auto& current_scope = presentation.scopes[sibling_scope_indices[i]];
+      if (!previous_scope.valid || !current_scope.valid
+        || previous_scope.stream_id != current_scope.stream_id) {
+        continue;
+      }
+
+      const float raw_gap_ms
+        = current_scope.raw_start_ms - previous_scope.raw_end_ms;
+      if (std::abs(raw_gap_ms) > kSiblingStitchRawGapToleranceMs) {
+        continue;
+      }
+
+      const float stitched_boundary_ms = std::clamp(
+        0.5F * (previous_scope.display_end_ms + current_scope.display_start_ms),
+        previous_scope.display_start_ms, current_scope.display_end_ms);
+      previous_scope.display_end_ms = stitched_boundary_ms;
+      previous_scope.display_duration_ms = std::max(
+        0.0F, previous_scope.display_end_ms - previous_scope.display_start_ms);
+      current_scope.display_start_ms = stitched_boundary_ms;
+      current_scope.display_duration_ms = std::max(
+        0.0F, current_scope.display_end_ms - current_scope.display_start_ms);
+    }
+  };
+
+  for (const auto& [_, sibling_scope_indices] : child_indices_by_parent) {
+    stitch_adjacent_siblings(sibling_scope_indices);
   }
 
   const auto is_groupable_pass_scope

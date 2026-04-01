@@ -117,8 +117,8 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest,
     first.scopes[0].display_start_ms, 0.002F);
   EXPECT_NEAR(second.scopes[0].display_duration_ms,
     first.scopes[0].display_duration_ms, 0.002F);
-  EXPECT_NEAR(second.display_frame_span_ms, first.display_frame_span_ms,
-    0.002F);
+  EXPECT_NEAR(
+    second.display_frame_span_ms, first.display_frame_span_ms, 0.002F);
 }
 
 NOLINT_TEST(GpuTimelinePresentationSmootherTest,
@@ -235,6 +235,40 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest,
   EXPECT_EQ(presentation.rows[2].display_name, "Execute");
   EXPECT_EQ(presentation.rows[2].depth, 1U);
   EXPECT_FALSE(presentation.rows[2].is_grouped_pass);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  RawContiguousSiblingScopesRemainDisplayContiguousAfterSmoothing)
+{
+  GpuTimelinePresentationSmoother smoother;
+
+  GpuTimelineFrame first {};
+  first.frame_sequence = 1U;
+  first.scopes = {
+    MakeScope(0U, 0xFFFFFFFFU, 100U, "Composite Root", 0U, 0.0F, 3.0F),
+    MakeScope(1U, 0U, 101U, "Composite A", 1U, 0.0F, 1.0F),
+    MakeScope(2U, 0U, 102U, "Composite B", 1U, 1.3F, 1.0F),
+  };
+  static_cast<void>(smoother.Apply(first));
+
+  GpuTimelineFrame second {};
+  second.frame_sequence = 2U;
+  second.scopes = {
+    MakeScope(0U, 0xFFFFFFFFU, 100U, "Composite Root", 0U, 0.0F, 3.0F),
+    MakeScope(1U, 0U, 101U, "Composite A", 1U, 0.2F, 1.0F),
+    MakeScope(2U, 0U, 102U, "Composite B", 1U, 1.2F, 1.0F),
+  };
+
+  const auto presentation = smoother.Apply(second);
+
+  ASSERT_EQ(presentation.scopes.size(), 3U);
+  EXPECT_NEAR(presentation.scopes[1].display_end_ms,
+    presentation.scopes[2].display_start_ms, 0.0001F);
+  EXPECT_NEAR(presentation.scopes[1].display_duration_ms
+      + presentation.scopes[2].display_duration_ms,
+    presentation.scopes[2].display_end_ms
+      - presentation.scopes[1].display_start_ms,
+    0.0001F);
 }
 
 } // namespace
