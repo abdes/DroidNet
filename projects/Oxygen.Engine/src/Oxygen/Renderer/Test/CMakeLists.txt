@@ -44,6 +44,12 @@ m_gtest_program(
 
 m_gtest_program(PassDebugNames SOURCES "PassDebugNames_test.cpp")
 
+m_gtest_program(
+  ConventionalShadowDrawRecords
+  SOURCES
+    "ConventionalShadowDrawRecordBuilder_test.cpp"
+)
+
 m_gtest_program(ShaderDebugMode SOURCES "ShaderDebugMode_test.cpp")
 
 m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
