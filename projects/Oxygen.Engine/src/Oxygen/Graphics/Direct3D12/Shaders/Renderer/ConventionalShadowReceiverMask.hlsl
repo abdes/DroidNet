@@ -27,10 +27,14 @@ struct ConventionalShadowReceiverMaskPassConstants
     uint depth_texture_index;
     uint job_buffer_index;
     uint analysis_buffer_index;
+    uint raw_mask_uav_index;
+    uint raw_mask_srv_index;
     uint base_mask_uav_index;
     uint base_mask_srv_index;
     uint hierarchy_mask_uav_index;
     uint hierarchy_mask_srv_index;
+    uint count_buffer_uav_index;
+    uint count_buffer_srv_index;
     uint summary_buffer_uav_index;
     uint2 screen_dimensions;
     uint job_count;
@@ -99,6 +103,11 @@ static int2 ComputeFullRectTileCoord(
         int2(base_tile_resolution - 1u, base_tile_resolution - 1u));
 }
 
+static uint CountBufferBaseIndex(const uint job_index)
+{
+    return job_index * 2u;
+}
+
 [shader("compute")]
 [numthreads(CONVENTIONAL_SHADOW_RECEIVER_MASK_LINEAR_THREAD_GROUP_SIZE, 1, 1)]
 void CS_ClearMasks(uint3 dispatch_thread_id : SV_DispatchThreadID)
@@ -109,26 +118,41 @@ void CS_ClearMasks(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     ConstantBuffer<ConventionalShadowReceiverMaskPassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
-    if (!BX_IsValidSlot(pass_constants.base_mask_uav_index)
-        || !BX_IsValidSlot(pass_constants.hierarchy_mask_uav_index)) {
+    if (!BX_IsValidSlot(pass_constants.raw_mask_uav_index)
+        || !BX_IsValidSlot(pass_constants.base_mask_uav_index)
+        || !BX_IsValidSlot(pass_constants.hierarchy_mask_uav_index)
+        || !BX_IsValidSlot(pass_constants.count_buffer_uav_index)) {
         return;
     }
 
+    RWStructuredBuffer<uint> raw_mask
+        = ResourceDescriptorHeap[pass_constants.raw_mask_uav_index];
     RWStructuredBuffer<uint> base_mask
         = ResourceDescriptorHeap[pass_constants.base_mask_uav_index];
     RWStructuredBuffer<uint> hierarchy_mask
         = ResourceDescriptorHeap[pass_constants.hierarchy_mask_uav_index];
+    RWStructuredBuffer<uint> count_buffer
+        = ResourceDescriptorHeap[pass_constants.count_buffer_uav_index];
 
+    const uint total_raw_entries
+        = pass_constants.job_count * pass_constants.base_tiles_per_job;
     const uint total_base_entries
         = pass_constants.job_count * pass_constants.base_tiles_per_job;
     const uint total_hierarchy_entries
         = pass_constants.job_count * pass_constants.hierarchy_tiles_per_job;
+    const uint total_count_entries = pass_constants.job_count * 2u;
 
+    if (dispatch_thread_id.x < total_raw_entries) {
+        raw_mask[dispatch_thread_id.x] = 0u;
+    }
     if (dispatch_thread_id.x < total_base_entries) {
         base_mask[dispatch_thread_id.x] = 0u;
     }
     if (dispatch_thread_id.x < total_hierarchy_entries) {
         hierarchy_mask[dispatch_thread_id.x] = 0u;
+    }
+    if (dispatch_thread_id.x < total_count_entries) {
+        count_buffer[dispatch_thread_id.x] = 0u;
     }
 }
 
@@ -147,18 +171,15 @@ void CS_Analyze(uint3 dispatch_thread_id : SV_DispatchThreadID)
         || dispatch_thread_id.y >= pass_constants.screen_dimensions.y
         || !BX_IsValidSlot(pass_constants.depth_texture_index)
         || !BX_IsValidSlot(pass_constants.job_buffer_index)
-        || !BX_IsValidSlot(pass_constants.analysis_buffer_index)
-        || !BX_IsValidSlot(pass_constants.base_mask_uav_index)) {
+        || !BX_IsValidSlot(pass_constants.raw_mask_uav_index)) {
         return;
     }
 
     Texture2D<float> depth_texture = ResourceDescriptorHeap[pass_constants.depth_texture_index];
     StructuredBuffer<ConventionalShadowReceiverAnalysisJob> jobs
         = ResourceDescriptorHeap[pass_constants.job_buffer_index];
-    StructuredBuffer<ConventionalShadowReceiverAnalysis> analysis_buffer
-        = ResourceDescriptorHeap[pass_constants.analysis_buffer_index];
-    RWStructuredBuffer<uint> base_mask
-        = ResourceDescriptorHeap[pass_constants.base_mask_uav_index];
+    RWStructuredBuffer<uint> raw_mask
+        = ResourceDescriptorHeap[pass_constants.raw_mask_uav_index];
 
     const float depth = depth_texture.Load(int3(dispatch_thread_id.xy, 0)).r;
     if (depth <= 0.0f) {
@@ -175,10 +196,7 @@ void CS_Analyze(uint3 dispatch_thread_id : SV_DispatchThreadID)
     [loop]
     for (uint job_index = 0u; job_index < pass_constants.job_count; ++job_index) {
         const ConventionalShadowReceiverAnalysisJob job = jobs[job_index];
-        const ConventionalShadowReceiverAnalysis analysis = analysis_buffer[job_index];
-        if ((job.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) == 0u
-            || (analysis.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) == 0u
-            || analysis.sample_count == 0u) {
+        if ((job.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) == 0u) {
             continue;
         }
 
@@ -193,30 +211,95 @@ void CS_Analyze(uint3 dispatch_thread_id : SV_DispatchThreadID)
         const float3 light_space = mul(job.light_rotation_matrix, float4(world_position_ws, 1.0f)).xyz;
         const int2 tile_coord = ComputeFullRectTileCoord(
             light_space.xy, job.full_rect_center_half_extent, pass_constants.base_tile_resolution);
-        const uint dilation_tile_radius = ComputeDilationTileRadius(
-            job.full_rect_center_half_extent.zw,
-            analysis.raw_depth_and_dilation.z,
-            pass_constants.base_tile_resolution);
-        const int radius = int(dilation_tile_radius);
         const uint job_offset = job_index * pass_constants.base_tiles_per_job;
+        const uint flat_index = job_offset
+            + uint(tile_coord.y) * pass_constants.base_tile_resolution
+            + uint(tile_coord.x);
+        InterlockedOr(raw_mask[flat_index], 1u);
+    }
+}
 
+[shader("compute")]
+[numthreads(CONVENTIONAL_SHADOW_RECEIVER_MASK_LINEAR_THREAD_GROUP_SIZE, 1, 1)]
+void CS_DilateMasks(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    if (!BX_IsValidSlot(g_PassConstantsIndex)) {
+        return;
+    }
+
+    ConstantBuffer<ConventionalShadowReceiverMaskPassConstants> pass_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const uint total_base_entries
+        = pass_constants.job_count * pass_constants.base_tiles_per_job;
+    if (dispatch_thread_id.x >= total_base_entries
+        || !BX_IsValidSlot(pass_constants.job_buffer_index)
+        || !BX_IsValidSlot(pass_constants.analysis_buffer_index)
+        || !BX_IsValidSlot(pass_constants.raw_mask_srv_index)
+        || !BX_IsValidSlot(pass_constants.base_mask_uav_index)
+        || !BX_IsValidSlot(pass_constants.count_buffer_uav_index)) {
+        return;
+    }
+
+    StructuredBuffer<ConventionalShadowReceiverAnalysisJob> jobs
+        = ResourceDescriptorHeap[pass_constants.job_buffer_index];
+    StructuredBuffer<ConventionalShadowReceiverAnalysis> analysis_buffer
+        = ResourceDescriptorHeap[pass_constants.analysis_buffer_index];
+    StructuredBuffer<uint> raw_mask
+        = ResourceDescriptorHeap[pass_constants.raw_mask_srv_index];
+    RWStructuredBuffer<uint> base_mask
+        = ResourceDescriptorHeap[pass_constants.base_mask_uav_index];
+    RWStructuredBuffer<uint> count_buffer
+        = ResourceDescriptorHeap[pass_constants.count_buffer_uav_index];
+
+    const uint job_index = dispatch_thread_id.x / pass_constants.base_tiles_per_job;
+    const uint local_index = dispatch_thread_id.x % pass_constants.base_tiles_per_job;
+    const uint tile_x = local_index % pass_constants.base_tile_resolution;
+    const uint tile_y = local_index / pass_constants.base_tile_resolution;
+    const uint job_offset = job_index * pass_constants.base_tiles_per_job;
+    const ConventionalShadowReceiverAnalysisJob job = jobs[job_index];
+    const ConventionalShadowReceiverAnalysis analysis = analysis_buffer[job_index];
+
+    if ((job.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) == 0u
+        || (analysis.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) == 0u
+        || analysis.sample_count == 0u) {
+        base_mask[dispatch_thread_id.x] = 0u;
+        return;
+    }
+
+    const uint dilation_tile_radius = ComputeDilationTileRadius(
+        job.full_rect_center_half_extent.zw,
+        analysis.raw_depth_and_dilation.z,
+        pass_constants.base_tile_resolution);
+    const int radius = int(dilation_tile_radius);
+
+    uint occupied = 0u;
+    [loop]
+    for (int y = int(tile_y) - radius; y <= int(tile_y) + radius; ++y) {
+        if (y < 0 || y >= int(pass_constants.base_tile_resolution)) {
+            continue;
+        }
         [loop]
-        for (int y = tile_coord.y - radius; y <= tile_coord.y + radius; ++y) {
-            if (y < 0 || y >= int(pass_constants.base_tile_resolution)) {
+        for (int x = int(tile_x) - radius; x <= int(tile_x) + radius; ++x) {
+            if (x < 0 || x >= int(pass_constants.base_tile_resolution)) {
                 continue;
             }
-            [loop]
-            for (int x = tile_coord.x - radius; x <= tile_coord.x + radius; ++x) {
-                if (x < 0 || x >= int(pass_constants.base_tile_resolution)) {
-                    continue;
-                }
 
-                const uint flat_index = job_offset
-                    + uint(y) * pass_constants.base_tile_resolution
-                    + uint(x);
-                InterlockedOr(base_mask[flat_index], 1u);
+            const uint raw_index = job_offset
+                + uint(y) * pass_constants.base_tile_resolution
+                + uint(x);
+            if (raw_mask[raw_index] != 0u) {
+                occupied = 1u;
+                break;
             }
         }
+        if (occupied != 0u) {
+            break;
+        }
+    }
+
+    base_mask[dispatch_thread_id.x] = occupied;
+    if (occupied != 0u) {
+        InterlockedAdd(count_buffer[CountBufferBaseIndex(job_index)], 1u);
     }
 }
 
@@ -231,7 +314,8 @@ void CS_BuildHierarchy(uint3 dispatch_thread_id : SV_DispatchThreadID)
     ConstantBuffer<ConventionalShadowReceiverMaskPassConstants> pass_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     if (!BX_IsValidSlot(pass_constants.base_mask_srv_index)
-        || !BX_IsValidSlot(pass_constants.hierarchy_mask_uav_index)) {
+        || !BX_IsValidSlot(pass_constants.hierarchy_mask_uav_index)
+        || !BX_IsValidSlot(pass_constants.count_buffer_uav_index)) {
         return;
     }
 
@@ -245,6 +329,8 @@ void CS_BuildHierarchy(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass_constants.base_mask_srv_index];
     RWStructuredBuffer<uint> hierarchy_mask
         = ResourceDescriptorHeap[pass_constants.hierarchy_mask_uav_index];
+    RWStructuredBuffer<uint> count_buffer
+        = ResourceDescriptorHeap[pass_constants.count_buffer_uav_index];
 
     const uint job_index = dispatch_thread_id.x / pass_constants.hierarchy_tiles_per_job;
     const uint local_index = dispatch_thread_id.x % pass_constants.hierarchy_tiles_per_job;
@@ -282,6 +368,9 @@ void CS_BuildHierarchy(uint3 dispatch_thread_id : SV_DispatchThreadID)
     }
 
     hierarchy_mask[dispatch_thread_id.x] = occupied;
+    if (occupied != 0u) {
+        InterlockedAdd(count_buffer[CountBufferBaseIndex(job_index) + 1u], 1u);
+    }
 }
 
 [shader("compute")]
@@ -297,8 +386,7 @@ void CS_Finalize(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if (dispatch_thread_id.x >= pass_constants.job_count
         || !BX_IsValidSlot(pass_constants.job_buffer_index)
         || !BX_IsValidSlot(pass_constants.analysis_buffer_index)
-        || !BX_IsValidSlot(pass_constants.base_mask_srv_index)
-        || !BX_IsValidSlot(pass_constants.hierarchy_mask_srv_index)
+        || !BX_IsValidSlot(pass_constants.count_buffer_srv_index)
         || !BX_IsValidSlot(pass_constants.summary_buffer_uav_index)) {
         return;
     }
@@ -307,32 +395,17 @@ void CS_Finalize(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass_constants.job_buffer_index];
     StructuredBuffer<ConventionalShadowReceiverAnalysis> analysis_buffer
         = ResourceDescriptorHeap[pass_constants.analysis_buffer_index];
-    StructuredBuffer<uint> base_mask
-        = ResourceDescriptorHeap[pass_constants.base_mask_srv_index];
-    StructuredBuffer<uint> hierarchy_mask
-        = ResourceDescriptorHeap[pass_constants.hierarchy_mask_srv_index];
+    StructuredBuffer<uint> count_buffer
+        = ResourceDescriptorHeap[pass_constants.count_buffer_srv_index];
     RWStructuredBuffer<ConventionalShadowReceiverMaskSummary> summary_buffer
         = ResourceDescriptorHeap[pass_constants.summary_buffer_uav_index];
 
     const uint job_index = dispatch_thread_id.x;
     const ConventionalShadowReceiverAnalysisJob job = jobs[job_index];
     const ConventionalShadowReceiverAnalysis analysis = analysis_buffer[job_index];
-    const uint base_job_offset = job_index * pass_constants.base_tiles_per_job;
-    const uint hierarchy_job_offset
-        = job_index * pass_constants.hierarchy_tiles_per_job;
-
-    uint occupied_tile_count = 0u;
-    [loop]
-    for (uint i = 0u; i < pass_constants.base_tiles_per_job; ++i) {
-        occupied_tile_count += base_mask[base_job_offset + i] != 0u ? 1u : 0u;
-    }
-
-    uint hierarchy_occupied_tile_count = 0u;
-    [loop]
-    for (uint i = 0u; i < pass_constants.hierarchy_tiles_per_job; ++i) {
-        hierarchy_occupied_tile_count
-            += hierarchy_mask[hierarchy_job_offset + i] != 0u ? 1u : 0u;
-    }
+    const uint occupied_tile_count = count_buffer[CountBufferBaseIndex(job_index)];
+    const uint hierarchy_occupied_tile_count
+        = count_buffer[CountBufferBaseIndex(job_index) + 1u];
 
     uint flags = 0u;
     if ((analysis.flags & CONVENTIONAL_SHADOW_RECEIVER_ANALYSIS_FLAG_VALID) != 0u

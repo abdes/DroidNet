@@ -305,6 +305,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="CS_ClearMasks" },
       EntryPoint { .type=kCompute, .name="CS_Analyze" },
+      EntryPoint { .type=kCompute, .name="CS_DilateMasks" },
       EntryPoint { .type=kCompute, .name="CS_BuildHierarchy" },
       EntryPoint { .type=kCompute, .name="CS_Finalize" }
     }
