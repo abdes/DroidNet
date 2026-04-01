@@ -4,22 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// Forward+ Light Culling Compute Shader
-// Performs tiled or clustered light culling for Forward+ rendering.
+// Clustered light-grid build for Forward+ rendering.
 //
-// === Shader Permutations ===
-// - CLUSTERED=0 (default): Tile-based 2D grid with per-tile min/max depth bounds
-// - CLUSTERED=1: Full 3D clustered grid with logarithmic Z-slices (froxels)
-//
-// The permutation is selected at compile time via EngineShaderCatalog.h.
-// C++ code selects the appropriate PSO based on ClusterConfig::depth_slices.
-//
-// === Bindless-only Discipline (final) ===
-// - ViewConstants is bound as a root CBV at b1, space0 (authoritative include).
-// - RootConstants is bound at b2, space0 (fixed ABI).
-// - All SRVs/UAVs are accessed via SM 6.6 descriptor heaps using heap indices
-//   stored in pass constants.
-// - This shader declares zero register-bound SRVs/UAVs/samplers.
+// This shader implements one shipping path only:
+// - analytic XY frustum subdivision
+// - UE-style `LightGridZParams = (B, O, S)` Z slicing
+// - no scene depth or HZB dependency
+// - flat `uint2(offset, count)` grid + flat light-index list outputs
 
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawMetadata.hlsli" // Required by BindlessHelpers.hlsl.
@@ -29,59 +20,44 @@
 #define BX_VERTEX_TYPE uint4
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
-// Root constants b2 (shared root param index with engine)
-// ABI layout:
-//   g_DrawIndex          : unused for dispatch
-//   g_PassConstantsIndex : heap index of a CBV holding pass constants
 cbuffer RootConstants : register(b2, space0) {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
 
-// Tile/cluster configuration for Forward+ light culling
-// These can be overridden by the pass constants for clustered mode
-static const uint TILE_SIZE = 16;
-static const uint MAX_LIGHTS_PER_CLUSTER = 64;
+static const uint LIGHT_GRID_THREADGROUP_SIZE = 4u;
 
-// Pass constants for the light culling dispatch.
-// This CBV is fetched via ResourceDescriptorHeap[g_PassConstantsIndex].
-// Layout must match C++ LightCullingPassConstants in LightCullingPass.cpp.
 struct LightCullingPassConstants
 {
-    // Resources (heap indices)
-    uint closest_hzb_texture_index; // GLOBAL_SRV domain: Texture2D<float> closest HZB
-    uint furthest_hzb_texture_index; // GLOBAL_SRV domain: Texture2D<float> furthest HZB
-    uint light_buffer_index;      // GLOBAL_SRV domain: StructuredBuffer<PositionalLightData>
-    uint light_list_uav_index;    // GLOBAL_SRV domain: RWStructuredBuffer<uint>
-    uint light_count_uav_index;   // GLOBAL_SRV domain: RWStructuredBuffer<uint2>
-    uint hzb_width;
-    uint hzb_height;
-    uint hzb_mip_count;
-
-    // Dispatch parameters
-    float4x4 inv_projection_matrix;
-    float2 screen_dimensions;     // pixels
-    uint num_lights;
+    uint light_buffer_index;
+    uint light_list_uav_index;
+    uint light_count_uav_index;
     uint _pad0;
 
-    // Cluster configuration (for 3D clustering)
-    uint cluster_dim_x;           // Number of tiles/clusters in X
-    uint cluster_dim_y;           // Number of tiles/clusters in Y
-    uint cluster_dim_z;           // Depth slices (1 = tile-based, >1 = clustered)
-    uint tile_size_px;            // Tile size in pixels
+    float4x4 inv_projection_matrix;
+    float2 screen_dimensions;
+    uint num_lights;
+    uint _pad1;
 
-    float z_near;                 // Near plane for Z-binning
-    float z_far;                  // Far plane for Z-binning
-    float z_scale;                // Logarithmic Z scale
-    float z_bias;                 // Logarithmic Z bias
+    uint cluster_dim_x;
+    uint cluster_dim_y;
+    uint cluster_dim_z;
+    uint light_grid_pixel_size_shift;
+
+    float light_grid_z_params_b;
+    float light_grid_z_params_o;
+    float light_grid_z_params_s;
+    uint max_lights_per_cell;
 };
 
-// Group shared memory for tile/cluster-based processing
-groupshared uint s_ClusterLightCount;
-groupshared uint s_ClusterLightIndices[MAX_LIGHTS_PER_CLUSTER];
-groupshared float s_ClusterDepthNear;
-groupshared float s_ClusterDepthFar;
-groupshared uint s_ClusterActive;
+float3 SafeNormalize3(float3 value)
+{
+    const float len_sq = dot(value, value);
+    if (len_sq <= 1.0e-8f) {
+        return 0.0.xxx;
+    }
+    return value * rsqrt(len_sq);
+}
 
 float DeviceDepthFromLinearViewDepth(float linear_depth)
 {
@@ -89,334 +65,227 @@ float DeviceDepthFromLinearViewDepth(float linear_depth)
     return clip.z / max(clip.w, 1.0e-6);
 }
 
-uint CeilLog2(uint value)
+float3 ClipToView(float2 clip_xy, float device_depth, float4x4 inv_projection_matrix)
 {
-    if (value <= 1u) {
-        return 0u;
+    const float4 view = mul(inv_projection_matrix, float4(clip_xy, device_depth, 1.0));
+    return view.xyz / max(view.w, 1.0e-6f);
+}
+
+float ComputeCellNearViewDepthFromZSlice(
+    uint z_slice,
+    float3 light_grid_z_params,
+    uint cluster_dim_z)
+{
+    float slice_depth
+        = (exp2(z_slice / light_grid_z_params.z) - light_grid_z_params.y)
+        / light_grid_z_params.x;
+
+    if (z_slice == cluster_dim_z) {
+        slice_depth = 2000000.0f;
     }
 
-    uint result = 0u;
-    uint remaining = value - 1u;
-    while (remaining > 0u) {
-        remaining >>= 1u;
-        ++result;
+    if (z_slice == 0u) {
+        slice_depth = 0.0f;
     }
-    return result;
+
+    return slice_depth;
 }
 
-uint ComputeClusterIndex(uint3 clusterID, uint cluster_dim_x, uint cluster_dim_y)
+void ComputeCellViewAabb(
+    uint3 cluster_id,
+    float2 screen_dimensions,
+    float4x4 inv_projection_matrix,
+    uint light_grid_pixel_size_shift,
+    float3 light_grid_z_params,
+    uint cluster_dim_z,
+    out float3 view_tile_min,
+    out float3 view_tile_max)
 {
-    return clusterID.z * (cluster_dim_x * cluster_dim_y)
-         + clusterID.y * cluster_dim_x
-         + clusterID.x;
-}
+    const float2 inv_grid_size
+        = (1u << light_grid_pixel_size_shift) / screen_dimensions;
+    const float2 tile_size = float2(2.0f, -2.0f) * inv_grid_size;
+    const float2 clip_origin = float2(-1.0f, 1.0f);
 
-bool DepthRangesOverlapReversedZ(
-    float lhs_near, float lhs_far, float rhs_near, float rhs_far)
-{
-    return max(lhs_far, rhs_far) <= min(lhs_near, rhs_near);
-}
+    const float2 clip_tile_min = cluster_id.xy * tile_size + clip_origin;
+    const float2 clip_tile_max = (cluster_id.xy + 1u) * tile_size + clip_origin;
 
-// Convert screen coordinates to view space position
-float3 ScreenToView(float2 screenPos, float depth, float2 screenDimensions,
-                    float4x4 invProjectionMatrix) {
-    // Convert screen coordinates to normalized device coordinates
-    float2 ndc = (screenPos / screenDimensions) * 2.0 - 1.0;
-    ndc.y = -ndc.y; // Flip Y coordinate for typical DirectX-style screen coords
+    const float min_tile_z = ComputeCellNearViewDepthFromZSlice(
+        cluster_id.z, light_grid_z_params, cluster_dim_z);
+    const float max_tile_z = ComputeCellNearViewDepthFromZSlice(
+        cluster_id.z + 1u, light_grid_z_params, cluster_dim_z);
 
-    // Convert NDC to view space
-    float4 viewPos = mul(invProjectionMatrix, float4(ndc, depth, 1.0));
-    return viewPos.xyz / viewPos.w;
-}
+    const float min_tile_device_z = DeviceDepthFromLinearViewDepth(min_tile_z);
+    const float max_tile_device_z = DeviceDepthFromLinearViewDepth(max_tile_z);
 
-// Helper to compute a plane from three points (pA, pB, pC) on the plane.
-// The normal is calculated from cross(pB-pA, pC-pA).
-static float4 ComputeOrientedPlane(float3 pA, float3 pB, float3 pC, float3 frustumCenter) {
-    float3 candNormal = normalize(cross(pB - pA, pC - pA));
-    float candD = -dot(candNormal, pA);
-    // If frustumCenter is on the negative side of the plane (i.e., outside), flip normal and d.
-    if (dot(candNormal, frustumCenter) + candD < 0.0f) {
-        return float4(-candNormal, -candD);
+    const float3 corners[8] = {
+        ClipToView(float2(clip_tile_min.x, clip_tile_min.y), min_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_max.x, clip_tile_min.y), min_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_min.x, clip_tile_max.y), min_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_max.x, clip_tile_max.y), min_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_min.x, clip_tile_min.y), max_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_max.x, clip_tile_min.y), max_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_min.x, clip_tile_max.y), max_tile_device_z, inv_projection_matrix),
+        ClipToView(float2(clip_tile_max.x, clip_tile_max.y), max_tile_device_z, inv_projection_matrix)
+    };
+
+    view_tile_min = corners[0];
+    view_tile_max = corners[0];
+    [unroll]
+    for (uint i = 1u; i < 8u; ++i) {
+        view_tile_min = min(view_tile_min, corners[i]);
+        view_tile_max = max(view_tile_max, corners[i]);
     }
-    return float4(candNormal, candD);
 }
 
-// Calculate tile/cluster frustum bounds in view space
-// Outputs 6 view-space planes with normals pointing inward into the frustum.
-void CalculateTileFrustum(uint2 tileID, float2 screen_dimensions,
-                          float4x4 inv_projection_matrix,
-                          out float4 frustumPlanes[6]) {
-    // Calculate tile bounds in screen space
-    float2 tileMin = tileID * TILE_SIZE;
-    float2 tileMax = (tileID + 1) * TILE_SIZE;
-
-    // Clamp to screen bounds
-    tileMin = max(tileMin, float2(0, 0));
-    tileMax = min(tileMax, screen_dimensions);
-
-    // Use shared memory depth bounds (these are normalized 0-1 depth values)
-    float normNearDepth = s_ClusterDepthNear;
-    float normFarDepth = s_ClusterDepthFar;
-
-    // Calculate frustum corner points in view space
-    float3 frustumCorners[8];
-    frustumCorners[0] = ScreenToView(float2(tileMin.x, tileMin.y), normNearDepth,
-                                     screen_dimensions, inv_projection_matrix); // NBL
-    frustumCorners[1] = ScreenToView(float2(tileMax.x, tileMin.y), normNearDepth,
-                                     screen_dimensions, inv_projection_matrix); // NBR
-    frustumCorners[2] = ScreenToView(float2(tileMax.x, tileMax.y), normNearDepth,
-                                     screen_dimensions, inv_projection_matrix); // NTR
-    frustumCorners[3] = ScreenToView(float2(tileMin.x, tileMax.y), normNearDepth,
-                                     screen_dimensions, inv_projection_matrix); // NTL
-    frustumCorners[4] = ScreenToView(float2(tileMin.x, tileMin.y), normFarDepth,
-                                     screen_dimensions, inv_projection_matrix); // FBL
-    frustumCorners[5] = ScreenToView(float2(tileMax.x, tileMin.y), normFarDepth,
-                                     screen_dimensions, inv_projection_matrix); // FBR
-    frustumCorners[6] = ScreenToView(float2(tileMax.x, tileMax.y), normFarDepth,
-                                     screen_dimensions, inv_projection_matrix); // FTR
-    frustumCorners[7] = ScreenToView(float2(tileMin.x, tileMax.y), normFarDepth,
-                                     screen_dimensions, inv_projection_matrix); // FTL
-
-    // Calculate the geometric center of the frustum, used to ensure normals point inward.
-    float3 frustumCenter = (frustumCorners[0] + frustumCorners[1] + frustumCorners[2] + frustumCorners[3] +
-                            frustumCorners[4] + frustumCorners[5] + frustumCorners[6] + frustumCorners[7]) * 0.125f;
-
-    // Left plane: (NBL, FBL, NTL)
-    frustumPlanes[0] = ComputeOrientedPlane(frustumCorners[0], frustumCorners[4], frustumCorners[3], frustumCenter);
-    // Right plane: (NBR, NTR, FBR)
-    frustumPlanes[1] = ComputeOrientedPlane(frustumCorners[1], frustumCorners[2], frustumCorners[5], frustumCenter);
-    // Bottom plane: (NBL, NBR, FBL)
-    frustumPlanes[2] = ComputeOrientedPlane(frustumCorners[0], frustumCorners[1], frustumCorners[4], frustumCenter);
-    // Top plane: (NTL, FTL, NTR)
-    frustumPlanes[3] = ComputeOrientedPlane(frustumCorners[3], frustumCorners[7], frustumCorners[2], frustumCenter);
-    // Near plane: (NBL, NBR, NTL)
-    frustumPlanes[4] = ComputeOrientedPlane(frustumCorners[0], frustumCorners[1], frustumCorners[3], frustumCenter);
-    // Far plane: (FBL, FTL, FBR)
-    frustumPlanes[5] = ComputeOrientedPlane(frustumCorners[4], frustumCorners[7], frustumCorners[5], frustumCenter);
+float ComputeSquaredDistanceFromBoxToPoint(
+    float3 center,
+    float3 extents,
+    float3 probe_position)
+{
+    const float3 delta = abs(probe_position - center) - extents;
+    const float3 clamped = max(delta, 0.0.xxx);
+    return dot(clamped, clamped);
 }
 
-// Test if a positional light intersects with the cluster frustum
-bool TestLightInFrustum(PositionalLightData light, float4 frustumPlanes[6]) {
-    // Skip lights that don't affect the world
+bool AabbOutsidePlane(float3 center, float3 extents, float4 plane)
+{
+    const float dist = dot(float4(center, 1.0f), plane);
+    const float radius = dot(extents, abs(plane.xyz));
+    return dist > radius;
+}
+
+bool IsAabbOutsideInfiniteAcuteConeApprox(
+    float3 cone_vertex,
+    float3 cone_axis,
+    float tan_cone_angle,
+    float3 aabb_center,
+    float3 aabb_extents)
+{
+    const float3 d = aabb_center - cone_vertex;
+    const float3 cross_axis = cross(d, cone_axis);
+    const float3 m = -SafeNormalize3(cross(cross_axis, cone_axis));
+    const float3 n = -tan_cone_angle * cone_axis + m;
+    return AabbOutsidePlane(d, aabb_extents, float4(n, 0.0f));
+}
+
+uint ComputeLinearClusterIndex(uint3 cluster_id, uint3 cluster_dims)
+{
+    return (cluster_id.z * cluster_dims.y + cluster_id.y) * cluster_dims.x
+         + cluster_id.x;
+}
+
+bool TestLightAgainstCell(
+    PositionalLightData light,
+    float3 view_tile_center,
+    float3 view_tile_extent)
+{
     if ((light.flags & POSITIONAL_LIGHT_FLAG_AFFECTS_WORLD) == 0u) {
         return false;
     }
 
-    // Transform light position to view space for frustum testing
-    float3 lightPosView = mul(view_matrix, float4(light.position_ws, 1.0)).xyz;
+    const float3 view_space_light_position
+        = mul(view_matrix, float4(light.position_ws, 1.0f)).xyz;
+    const float light_radius = max(light.range, 0.0f);
+    const float box_distance_sq = ComputeSquaredDistanceFromBoxToPoint(
+        view_tile_center, view_tile_extent, view_space_light_position);
+    if (box_distance_sq >= light_radius * light_radius) {
+        return false;
+    }
 
-    // Get light type from flags
-    uint lightType = (light.flags & POSITIONAL_LIGHT_TYPE_MASK) >> POSITIONAL_LIGHT_TYPE_SHIFT;
-
-    // FUTURE IMPROVEMENT: For spotlights, implement more accurate cone-frustum
-    // intersection instead of treating them as point lights (spheres). This
-    // would involve using light.direction_ws, light.inner_cone_cos, and
-    // light.outer_cone_cos for more precise culling.
-
-    float lightRadius = light.range;
-
-    // Test against frustum planes (sphere vs. plane).
-    // Normals of frustumPlanes are assumed to point inward towards the frustum's interior.
-    // A sphere is outside a plane if its signed distance from the plane is less than -radius.
-    // distance = dot(plane_normal, sphere_center) + plane_d.
-    //
-    // CRITICAL: We do NOT test against the near plane (index 4).
-    // Lights behind the camera can still illuminate geometry in front of the camera.
-    // Testing against near plane causes the diagonal lighting boundary artifact.
-    // Only test side frustum planes (left/right/top/bottom) and far plane.
-    // frustumPlanes indices: [0]=left, [1]=right, [2]=bottom, [3]=top, [4]=near, [5]=far
-    for (int i = 0; i < 6; i++) {
-        if (i == 4) continue; // Skip near plane test - critical for correct lighting
-
-        float distance = dot(frustumPlanes[i].xyz, lightPosView) + frustumPlanes[i].w;
-        if (distance < -lightRadius) {
-            return false; // Sphere is entirely outside this plane, thus outside the frustum
+    if ((light.flags & POSITIONAL_LIGHT_TYPE_MASK) == POSITIONAL_LIGHT_TYPE_SPOT
+        && light.outer_cone_cos > 0.0f) {
+        const float cone_sin = sqrt(saturate(1.0f - light.outer_cone_cos * light.outer_cone_cos));
+        const float tan_cone_angle = cone_sin / max(light.outer_cone_cos, 1.0e-4f);
+        const float3 view_space_light_direction = -SafeNormalize3(
+            mul(view_matrix, float4(light.direction_ws, 0.0f)).xyz);
+        if (dot(view_space_light_direction, view_space_light_direction) > 0.5f
+            && IsAabbOutsideInfiniteAcuteConeApprox(
+                view_space_light_position,
+                view_space_light_direction,
+                tan_cone_angle,
+                view_tile_center,
+                view_tile_extent)) {
+            return false;
         }
     }
 
-    return true; // Light intersects or is inside the frustum
+    return true;
 }
 
-// Main compute shader entry point
 [shader("compute")]
-[numthreads(TILE_SIZE, TILE_SIZE, 1)]
-void CS(uint3 groupID : SV_GroupID, uint3 groupThreadID : SV_GroupThreadID, uint groupIndex : SV_GroupIndex) {
-    // Fetch pass constants from the bindless heap.
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
-        return;
-    }
-    if (!BX_IN_GLOBAL_SRV(g_PassConstantsIndex)) {
-        return;
-    }
-
-    ConstantBuffer<LightCullingPassConstants> pass_constants =
-        ResourceDescriptorHeap[g_PassConstantsIndex];
-
-    const float2 screen_dimensions = pass_constants.screen_dimensions;
-    const float4x4 inv_projection_matrix = pass_constants.inv_projection_matrix;
-    const uint num_lights = pass_constants.num_lights;
-
-    // Validate required resources.
-    const uint closest_hzb_texture_index = pass_constants.closest_hzb_texture_index;
-    const uint furthest_hzb_texture_index = pass_constants.furthest_hzb_texture_index;
-    const uint light_buffer_index = pass_constants.light_buffer_index;
-    const uint light_list_uav_index = pass_constants.light_list_uav_index;
-    const uint light_count_uav_index = pass_constants.light_count_uav_index;
-
-    // Validate resource indices are in valid bindless ranges.
-    if (!BX_IN_GLOBAL_SRV(closest_hzb_texture_index) ||
-        !BX_IN_GLOBAL_SRV(furthest_hzb_texture_index) ||
-        !BX_IN_GLOBAL_SRV(light_buffer_index) ||
-        !BX_IN_GLOBAL_SRV(light_list_uav_index) ||
-        !BX_IN_GLOBAL_SRV(light_count_uav_index)) {
+[numthreads(
+    LIGHT_GRID_THREADGROUP_SIZE,
+    LIGHT_GRID_THREADGROUP_SIZE,
+    LIGHT_GRID_THREADGROUP_SIZE)]
+void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
+{
+    if (!BX_IsValidSlot(g_PassConstantsIndex)) {
         return;
     }
 
-    // Calculate tile/cluster coordinates
-    // For tile-based (cluster_dim_z == 1): groupID.z is always 0
-    // For clustered: groupID.z indexes the depth slice
-    uint3 clusterID = groupID;
-    uint2 pixelCoord = groupID.xy * TILE_SIZE + groupThreadID.xy;
+    ConstantBuffer<LightCullingPassConstants> pass_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
 
-    // Get cluster configuration from pass constants
-    const uint cluster_dim_x = pass_constants.cluster_dim_x;
-    const uint cluster_dim_y = pass_constants.cluster_dim_y;
-    const uint cluster_dim_z = pass_constants.cluster_dim_z;
-    const uint tile_size = pass_constants.tile_size_px;
-
-    // Initialize shared memory on first thread
-    if (groupIndex == 0) {
-        s_ClusterLightCount = 0;
-        s_ClusterDepthNear = 0.0f;
-        s_ClusterDepthFar = 0.0f;
-        s_ClusterActive = 0u;
+    const uint3 cluster_dims = uint3(
+        pass_constants.cluster_dim_x,
+        pass_constants.cluster_dim_y,
+        pass_constants.cluster_dim_z);
+    if (any(dispatch_thread_id >= cluster_dims)
+        || pass_constants.num_lights == 0u
+        || !BX_IsValidSlot(pass_constants.light_buffer_index)
+        || !BX_IsValidSlot(pass_constants.light_list_uav_index)
+        || !BX_IsValidSlot(pass_constants.light_count_uav_index)
+        || pass_constants.max_lights_per_cell == 0u
+        || pass_constants.light_grid_pixel_size_shift == 0u) {
+        return;
     }
 
-    GroupMemoryBarrierWithGroupSync(); // Sync after init
+    StructuredBuffer<PositionalLightData> lights
+        = ResourceDescriptorHeap[pass_constants.light_buffer_index];
+    RWStructuredBuffer<uint2> cluster_grid
+        = ResourceDescriptorHeap[pass_constants.light_count_uav_index];
+    RWStructuredBuffer<uint> light_list
+        = ResourceDescriptorHeap[pass_constants.light_list_uav_index];
 
-    if (groupIndex == 0) {
-        Texture2D<float> closest_hzb = ResourceDescriptorHeap[closest_hzb_texture_index];
-        Texture2D<float> furthest_hzb = ResourceDescriptorHeap[furthest_hzb_texture_index];
-        const uint2 screen_dimensions_u = uint2(screen_dimensions);
-        const uint2 tile_origin = groupID.xy * tile_size;
-        const uint2 tile_extent = max(
-            min(screen_dimensions_u - min(tile_origin, screen_dimensions_u),
-                uint2(tile_size, tile_size)),
-            uint2(1u, 1u));
-        const uint tile_hzb_mip = min(
-            CeilLog2(max(tile_extent.x, tile_extent.y)),
-            max(pass_constants.hzb_mip_count, 1u) - 1u);
-        const uint mip_width = max(pass_constants.hzb_width >> tile_hzb_mip, 1u);
-        const uint mip_height = max(pass_constants.hzb_height >> tile_hzb_mip, 1u);
-        const uint2 hzb_coord = min(
-            tile_origin >> tile_hzb_mip, uint2(mip_width - 1u, mip_height - 1u));
-        const float tile_depth_near = clamp(
-            closest_hzb.Load(int3(hzb_coord, tile_hzb_mip)).r, 0.0f, 1.0f);
-        const float tile_depth_far = clamp(
-            furthest_hzb.Load(int3(hzb_coord, tile_hzb_mip)).r, 0.0f, 1.0f);
+    const float3 light_grid_z_params = float3(
+        pass_constants.light_grid_z_params_b,
+        pass_constants.light_grid_z_params_o,
+        pass_constants.light_grid_z_params_s);
+    const uint cluster_index = ComputeLinearClusterIndex(
+        dispatch_thread_id, cluster_dims);
+    const uint light_list_offset
+        = cluster_index * pass_constants.max_lights_per_cell;
 
-        // Tile-based: use per-tile depth reduction from depth prepass
-        // Clustered: compute slice bounds from logarithmic Z config
-#if CLUSTERED
-        // Clustered: compute depth bounds for this Z-slice
-        // Logarithmic slicing formula: slice = log2(z / z_near) * scale
-        // where scale = depth_slices / log2(z_far / z_near)
-        //
-        // Inverse: z = z_near * 2^(slice / scale)
-        float z_scale = pass_constants.z_scale;
-        float z_near = pass_constants.z_near;
-        float z_far = pass_constants.z_far;
+    float3 view_tile_min = 0.0.xxx;
+    float3 view_tile_max = 0.0.xxx;
+    ComputeCellViewAabb(
+        dispatch_thread_id,
+        pass_constants.screen_dimensions,
+        pass_constants.inv_projection_matrix,
+        pass_constants.light_grid_pixel_size_shift,
+        light_grid_z_params,
+        pass_constants.cluster_dim_z,
+        view_tile_min,
+        view_tile_max);
 
-        // Compute linear depth bounds for this slice
-        // slice_near_linear is the near edge of this slice (closer to camera)
-        // slice_far_linear is the far edge of this slice (farther from camera)
-        float slice_near_linear = z_near * exp2(float(clusterID.z) / z_scale);
-        float slice_far_linear = z_near * exp2(float(clusterID.z + 1) / z_scale);
+    const float3 view_tile_center = 0.5f * (view_tile_min + view_tile_max);
+    const float3 view_tile_extent = view_tile_max - view_tile_center;
 
-        // Clamp to valid range
-        slice_near_linear = clamp(slice_near_linear, z_near, z_far);
-        slice_far_linear = clamp(slice_far_linear, z_near, z_far);
-
-        // Convert linear view depth back to device depth through the active
-        // projection matrix so clustered frusta honor the engine's canonical
-        // reversed-Z convention without hardcoding forward-Z formulas.
-        s_ClusterDepthNear
-            = clamp(DeviceDepthFromLinearViewDepth(slice_near_linear), 0.0f, 1.0f);
-        s_ClusterDepthFar
-            = clamp(DeviceDepthFromLinearViewDepth(slice_far_linear), 0.0f, 1.0f);
-        s_ClusterActive = DepthRangesOverlapReversedZ(
-            s_ClusterDepthNear, s_ClusterDepthFar, tile_depth_near, tile_depth_far)
-            ? 1u
-            : 0u;
-#else
-        // Tile-based: use the per-tile device-depth extrema. Under reversed-Z
-        // the nearest surface has the largest device-depth value.
-        s_ClusterDepthNear = tile_depth_near;
-        s_ClusterDepthFar = tile_depth_far;
-        s_ClusterActive = s_ClusterDepthNear > 0.0f ? 1u : 0u;
-#endif
-        s_ClusterLightCount = 0;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (s_ClusterActive == 0u) {
-        if (groupIndex == 0) {
-            RWStructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[light_count_uav_index];
-            uint clusterIndex = ComputeClusterIndex(clusterID, cluster_dim_x, cluster_dim_y);
-            cluster_grid[clusterIndex] = uint2(clusterIndex * MAX_LIGHTS_PER_CLUSTER, 0u);
+    uint light_count = 0u;
+    [loop]
+    for (uint light_index = 0u; light_index < pass_constants.num_lights; ++light_index) {
+        const PositionalLightData light = lights[light_index];
+        if (!TestLightAgainstCell(light, view_tile_center, view_tile_extent)) {
+            continue;
         }
-        return;
-    }
 
-    // Calculate cluster frustum
-    float4 frustumPlanes[6];
-    CalculateTileFrustum(clusterID.xy, screen_dimensions, inv_projection_matrix, frustumPlanes);
-
-    // Process lights in batches (each thread processes multiple lights)
-    uint lightsPerThread = (num_lights + (TILE_SIZE * TILE_SIZE) - 1) / (TILE_SIZE * TILE_SIZE);
-    uint startLightIndex = groupIndex * lightsPerThread;
-    uint endLightIndex = min(startLightIndex + lightsPerThread, num_lights);
-
-    // Test lights against cluster frustum
-    StructuredBuffer<PositionalLightData> lights = ResourceDescriptorHeap[light_buffer_index];
-    for (uint lightIndex = startLightIndex; lightIndex < endLightIndex; lightIndex++) {
-        PositionalLightData light = lights[lightIndex];
-
-        if (TestLightInFrustum(light, frustumPlanes)) {
-            uint listIndex;
-            InterlockedAdd(s_ClusterLightCount, 1, listIndex);
-
-            // Store light index if there's space and index is in bounds
-            if (listIndex < MAX_LIGHTS_PER_CLUSTER) {
-                s_ClusterLightIndices[listIndex] = lightIndex;
-            }
+        if (light_count < pass_constants.max_lights_per_cell) {
+            light_list[light_list_offset + light_count] = light_index;
         }
+        ++light_count;
     }
 
-    GroupMemoryBarrierWithGroupSync(); // Sync after all threads in group culled lights
-
-    // Write results to output buffers (first thread in group)
-    if (groupIndex == 0) {
-        RWStructuredBuffer<uint2> cluster_grid = ResourceDescriptorHeap[light_count_uav_index];
-        RWStructuredBuffer<uint> light_list = ResourceDescriptorHeap[light_list_uav_index];
-
-        // Compute linear cluster index
-        // For tile-based: clusterIndex = y * tiles_x + x
-        // For clustered: clusterIndex = z * (tiles_x * tiles_y) + y * tiles_x + x
-        uint clusterIndex = ComputeClusterIndex(clusterID, cluster_dim_x, cluster_dim_y);
-
-        // Clamp light count to maximum
-        uint finalLightCount = min(s_ClusterLightCount, MAX_LIGHTS_PER_CLUSTER);
-
-        // Write cluster info (offset, count) as uint2
-        // The offset is: clusterIndex * MAX_LIGHTS_PER_CLUSTER
-        uint lightListOffset = clusterIndex * MAX_LIGHTS_PER_CLUSTER;
-        cluster_grid[clusterIndex] = uint2(lightListOffset, finalLightCount);
-
-        // Write light indices for this cluster
-        for (uint i = 0; i < finalLightCount; i++) {
-            light_list[lightListOffset + i] = s_ClusterLightIndices[i];
-        }
-    }
+    cluster_grid[cluster_index] = uint2(
+        light_list_offset,
+        min(light_count, pass_constants.max_lights_per_cell));
 }

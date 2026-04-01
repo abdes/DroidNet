@@ -104,6 +104,10 @@ Deep-dive scripts stay separate from the baseline:
 - `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
   - inspect Stage 15 mask presence, writer events, and any observed shader-side
     consumers
+- `Examples/RenderScene/AnalyzeRenderDocLightCulling.py`
+  - inspect `LightCullingPass` dispatch shape, bound resources, captured
+    cluster occupancy, `ShaderPass` consumption, and whether VSM light-grid
+    pruning was active in the capture
 
 Example deep dives:
 
@@ -132,6 +136,11 @@ $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
   'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocShaderPassDepthEqual.py' `
   'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\dp6\renderscene_debug_dp6_frame30.rdc'
+
+$env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\lightculling_validation\renderscene_debug_lightculling_explicit.light_culling_report.txt'
+& 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocLightCulling.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\lightculling_validation\renderscene_debug_lightculling_explicit_frame30.rdc'
 
 $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\k_a_baseline\k_a_vsm_40frames_frame10_stage15_masks_report.txt'
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `

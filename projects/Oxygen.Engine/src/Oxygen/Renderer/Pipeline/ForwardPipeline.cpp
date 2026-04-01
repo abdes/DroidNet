@@ -100,8 +100,6 @@ public:
 
   void UpdateShaderPassConfig(const engine::ShaderPassConfig& config);
   void UpdateTransparentPassConfig(const engine::TransparentPassConfig& config);
-  void UpdateLightCullingPassConfig(
-    const engine::LightCullingPassConfig& config);
 
   void SetShaderDebugMode(engine::ShaderDebugMode mode);
   void SetRenderMode(RenderMode mode);
@@ -110,7 +108,6 @@ public:
   void SetGpuDebugMouseDownPosition(std::optional<SubPixelPosition> position);
   void SetWireframeColor(const graphics::Color& color);
   void SetLightCullingVisualizationMode(engine::ShaderDebugMode mode);
-  void SetClusterDepthSlices(uint32_t slices);
   void SetDepthPrePassMode(DepthPrePassMode mode);
   void SetExposureMode(engine::ExposureMode mode);
   void SetExposureValue(float value);
@@ -127,6 +124,7 @@ public:
   void SetAutoExposureMeteringMode(engine::MeteringMode mode);
   void ResetAutoExposure(float initial_ev);
   void SetGamma(float gamma);
+  [[nodiscard]] auto DumpLightCullingTelemetry() const -> std::string;
   void ClearBackbufferReferences() const;
 
   auto GetImGuiPass() const -> observer_ptr<imgui::ImGuiPass>;
@@ -634,7 +632,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
     co_await sky_pass->Execute(rc, rec);
   }
 
-  if (light_culling_pass && early_depth_complete) {
+  if (light_culling_pass) {
     co_await light_culling_pass->PrepareResources(rc, rec);
     co_await light_culling_pass->Execute(rc, rec);
     rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
@@ -1089,11 +1087,6 @@ void ForwardPipeline::Impl::ApplyCommittedSettings(
     trans_pass_config->fill_mode = graphics::FillMode::kSolid;
   }
 
-  if (light_culling_pass_config) {
-    light_culling_pass_config->cluster.cluster_dim_z
-      = settings.cluster_depth_slices;
-  }
-
   if (wireframe_pass_config) {
     wireframe_pass_config->wire_color = settings.wire_color;
   }
@@ -1189,12 +1182,6 @@ void ForwardPipeline::Impl::SetLightCullingVisualizationMode(
   engine::ShaderDebugMode mode)
 {
   settings_draft.light_culling_debug_mode = mode;
-  settings_draft.dirty = true;
-}
-
-void ForwardPipeline::Impl::SetClusterDepthSlices(uint32_t slices)
-{
-  settings_draft.cluster_depth_slices = slices;
   settings_draft.dirty = true;
 }
 
@@ -1316,12 +1303,12 @@ void ForwardPipeline::Impl::UpdateTransparentPassConfig(
   }
 }
 
-void ForwardPipeline::Impl::UpdateLightCullingPassConfig(
-  const engine::LightCullingPassConfig& config)
+auto ForwardPipeline::Impl::DumpLightCullingTelemetry() const -> std::string
 {
-  if (light_culling_pass_config) {
-    *light_culling_pass_config = config;
+  if (!light_culling_pass) {
+    return "LightCullingPass is not available on this ForwardPipeline.";
   }
+  return light_culling_pass->BuildTelemetryDump();
 }
 
 void ForwardPipeline::Impl::ClearBackbufferReferences() const
@@ -1468,11 +1455,6 @@ auto ForwardPipeline::SetLightCullingVisualizationMode(
   impl_->SetLightCullingVisualizationMode(mode);
 }
 
-auto ForwardPipeline::SetClusterDepthSlices(uint32_t slices) -> void
-{
-  impl_->SetClusterDepthSlices(slices);
-}
-
 auto ForwardPipeline::SetDepthPrePassMode(DepthPrePassMode mode) -> void
 {
   impl_->SetDepthPrePassMode(mode);
@@ -1567,10 +1549,9 @@ auto ForwardPipeline::UpdateTransparentPassConfig(
   impl_->UpdateTransparentPassConfig(config);
 }
 
-auto ForwardPipeline::UpdateLightCullingPassConfig(
-  const engine::LightCullingPassConfig& config) -> void
+auto ForwardPipeline::DumpLightCullingTelemetry() const -> std::string
 {
-  impl_->UpdateLightCullingPassConfig(config);
+  return impl_->DumpLightCullingTelemetry();
 }
 
 } // namespace oxygen::renderer

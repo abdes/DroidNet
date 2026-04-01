@@ -9,77 +9,56 @@
 
 #include "Core/Bindless/Generated.BindlessLayout.hlsl"
 
-// Cluster/tile lookup utilities for Forward+ light culling.
+// Clustered light-grid lookup utilities shared by shading and debug consumers.
 //
-// This header provides functions to compute cluster indices from screen
-// coordinates and depth, and to iterate over lights affecting a cluster.
-//
-// === Tile-Based vs Clustered ===
-// - Tile-based (cluster_dim_z == 1): Only X/Y used, depth bounds from prepass
-// - Clustered (cluster_dim_z > 1): X/Y/Z with logarithmic depth slicing
-//
-// === Usage ===
-// 1. Call GetClusterIndex() with screen position and linear depth
-// 2. Call GetClusterLightInfo() to get offset and count
-// 3. Loop through lights using the light index list
+// The light grid is always a 3D clustered structure. XY cells are derived from
+// a fixed power-of-two pixel size; Z slices use the UE-style
+// `log2(depth * B + O) * S` mapping published in `LightCullingConfig`.
 
 //=== Cluster Index Computation ===-------------------------------------------//
 
+uint ComputeClusterZSlice(
+    float linear_depth,
+    float3 light_grid_z_params,
+    uint cluster_dim_z)
+{
+    if (cluster_dim_z == 0u || linear_depth <= 0.0f
+        || light_grid_z_params.x <= 0.0f
+        || light_grid_z_params.z <= 0.0f) {
+        return 0u;
+    }
+
+    const float encoded_depth
+        = linear_depth * light_grid_z_params.x + light_grid_z_params.y;
+    if (encoded_depth <= 0.0f) {
+        return 0u;
+    }
+
+    const float z_slice_f = log2(encoded_depth) * light_grid_z_params.z;
+    return min((uint)max(z_slice_f, 0.0f), cluster_dim_z - 1u);
+}
+
 // Compute cluster index from screen coordinates and linear depth.
-// For tile-based (cluster_dim_z == 1), z_slice is always 0.
-// For clustered, z_slice is computed using logarithmic depth distribution.
-//
-// @param screen_pos  Screen coordinates (pixels)
-// @param linear_depth  Linear depth value (world units from camera)
-// @param screen_dims  Screen dimensions (pixels)
-// @param cluster_dims  Cluster grid dimensions (tiles_x, tiles_y, depth_slices)
-// @param tile_size  Tile size in pixels
-// @param z_near  Near plane for Z-binning
-// @param z_scale  Logarithmic Z scale factor
-// @param z_bias  Logarithmic Z bias factor
-// @return Linear cluster index into the cluster grid
 uint ComputeClusterIndex(
     float2 screen_pos,
     float linear_depth,
-    float2 screen_dims,
     uint3 cluster_dims,
-    uint tile_size,
-    float z_near,
-    float z_scale,
-    float z_bias)
+    uint light_grid_pixel_size_shift,
+    float3 light_grid_z_params)
 {
-    // Compute tile X/Y from screen position
-    uint tile_x = uint(screen_pos.x) / tile_size;
-    uint tile_y = uint(screen_pos.y) / tile_size;
-
-    // Clamp to valid range
-    tile_x = min(tile_x, cluster_dims.x - 1);
-    tile_y = min(tile_y, cluster_dims.y - 1);
-
-    // Compute Z slice
-    uint z_slice = 0;
-    if (cluster_dims.z > 1) {
-        // Logarithmic depth slicing: slice = log2(z / z_near) * scale
-        // where scale = depth_slices / log2(z_far / z_near)
-        // Note: z_bias is not used in this simplified formula
-        float z_ratio = max(linear_depth / z_near, 1.0);
-        z_slice = uint(log2(z_ratio) * z_scale);
-        z_slice = clamp(z_slice, 0u, cluster_dims.z - 1u);
+    if (any(cluster_dims == 0u)) {
+        return 0u;
     }
 
-    // Linear cluster index: z * (x_dim * y_dim) + y * x_dim + x
-    return z_slice * (cluster_dims.x * cluster_dims.y)
-         + tile_y * cluster_dims.x
-         + tile_x;
-}
+    const uint2 cluster_xy = min(
+        uint2(screen_pos) >> light_grid_pixel_size_shift,
+        cluster_dims.xy - 1u);
+    const uint z_slice = ComputeClusterZSlice(
+        linear_depth, light_grid_z_params, cluster_dims.z);
 
-// Simplified cluster index for tile-based (no depth slicing)
-uint ComputeTileIndex(float2 screen_pos, float2 screen_dims, uint tile_size)
-{
-    uint tile_x = uint(screen_pos.x) / tile_size;
-    uint tile_y = uint(screen_pos.y) / tile_size;
-    uint tiles_x = (uint(screen_dims.x) + tile_size - 1) / tile_size;
-    return tile_y * tiles_x + tile_x;
+    return z_slice * (cluster_dims.x * cluster_dims.y)
+         + cluster_xy.y * cluster_dims.x
+         + cluster_xy.x;
 }
 
 //=== Light List Access ===---------------------------------------------------//

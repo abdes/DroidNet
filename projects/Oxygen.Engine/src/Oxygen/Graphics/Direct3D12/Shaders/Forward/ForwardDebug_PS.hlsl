@@ -218,7 +218,7 @@ float4 PS(VSOutput input) : SV_Target0 {
             const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
             const float screen_w = max(
                 1.0, (float)lighting.light_culling.cluster_dim_x
-                      * (float)lighting.light_culling.tile_size_px);
+                      * (float)lighting.light_culling.light_grid_pixel_size_px);
             const bool show_world = (input.position.x < 0.5 * screen_w);
             if (show_world) {
                 debug_out = input.world_normal * 0.5 + 0.5;
@@ -277,11 +277,14 @@ float4 PS(VSOutput input) : SV_Target0 {
             uint idx = GetClusterIndex(input.position.xy, linear_depth);
             uint3 dims = GetClusterDimensions();
             #if defined(DEBUG_LIGHT_HEATMAP)
-                debug_out = HeatMapColor(saturate((float)GetClusterLightInfo(grid, idx).light_count / (float)lighting.light_culling.max_lights_per_cluster));
+                debug_out = HeatMapColor(saturate((float)GetClusterLightInfo(grid, idx).light_count / (float)lighting.light_culling.max_lights_per_cell));
             #elif defined(DEBUG_DEPTH_SLICE)
                 debug_out = DepthSliceColor(idx / (dims.x * dims.y), dims.z);
             #elif defined(DEBUG_CLUSTER_INDEX)
-                debug_out = ClusterIndexColor(uint3(uint(input.position.x)/lighting.light_culling.tile_size_px, uint(input.position.y)/lighting.light_culling.tile_size_px, idx/(dims.x*dims.y)));
+                debug_out = ClusterIndexColor(uint3(
+                    uint(input.position.x) / max(lighting.light_culling.light_grid_pixel_size_px, 1u),
+                    uint(input.position.y) / max(lighting.light_culling.light_grid_pixel_size_px, 1u),
+                    idx / (dims.x * dims.y)));
             #endif
         }
     }

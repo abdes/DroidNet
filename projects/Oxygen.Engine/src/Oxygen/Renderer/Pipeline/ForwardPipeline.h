@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <span>
+#include <string>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
@@ -90,7 +91,6 @@ public:
   auto SetWireframeColor(const graphics::Color& color) -> void override;
   auto SetLightCullingVisualizationMode(engine::ShaderDebugMode mode)
     -> void override;
-  auto SetClusterDepthSlices(uint32_t slices) -> void override;
   auto SetDepthPrePassMode(DepthPrePassMode mode) -> void override;
   auto SetExposureMode(engine::ExposureMode mode) -> void override;
   auto SetExposureValue(float value) -> void override;
@@ -115,8 +115,9 @@ public:
     -> void override;
   auto UpdateTransparentPassConfig(const engine::TransparentPassConfig& config)
     -> void override;
-  auto UpdateLightCullingPassConfig(
-    const engine::LightCullingPassConfig& config) -> void override;
+
+  [[nodiscard]] OXGN_RNDR_API auto DumpLightCullingTelemetry() const
+    -> std::string;
 
 private:
   class Impl;

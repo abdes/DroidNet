@@ -9,6 +9,7 @@
 
 namespace {
 
+using oxygen::engine::imgui::GpuTimelinePresentationFrame;
 using oxygen::engine::imgui::GpuTimelinePresentationSmoother;
 using oxygen::engine::internal::GpuTimelineFrame;
 using oxygen::engine::internal::GpuTimelineScope;
@@ -41,7 +42,8 @@ auto MakeFrame(const uint64_t frame_sequence, const float start_ms,
   return frame;
 }
 
-NOLINT_TEST(GpuTimelinePresentationSmootherTest, FirstFrameUsesRawValues)
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  FirstFrameUsesRawBarValuesAndHeadroomSpan)
 {
   GpuTimelinePresentationSmoother smoother;
   const auto presentation = smoother.Apply(MakeFrame(1U, 1.0F, 4.0F));
@@ -49,7 +51,8 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest, FirstFrameUsesRawValues)
   ASSERT_EQ(presentation.scopes.size(), 1U);
   EXPECT_FLOAT_EQ(presentation.scopes[0].display_start_ms, 1.0F);
   EXPECT_FLOAT_EQ(presentation.scopes[0].display_duration_ms, 4.0F);
-  EXPECT_FLOAT_EQ(presentation.display_frame_span_ms, 5.0F);
+  EXPECT_FLOAT_EQ(presentation.display_frame_span_ms,
+    5.0F + GpuTimelinePresentationSmoother::kFrameSpanHeadroomMs);
 }
 
 NOLINT_TEST(
@@ -69,7 +72,25 @@ NOLINT_TEST(
   EXPECT_FLOAT_EQ(presentation.scopes[0].raw_duration_ms, 6.0F);
 }
 
-NOLINT_TEST(GpuTimelinePresentationSmootherTest, SubDeadbandChangesRemainStable)
+NOLINT_TEST(
+  GpuTimelinePresentationSmootherTest, RepeatedApplicationConvergesToTarget)
+{
+  GpuTimelinePresentationSmoother smoother;
+  static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
+
+  GpuTimelinePresentationFrame presentation;
+  for (uint64_t i = 2U; i <= 200U; ++i) {
+    presentation = smoother.Apply(MakeFrame(i, 3.0F, 8.0F));
+  }
+
+  ASSERT_EQ(presentation.scopes.size(), 1U);
+  EXPECT_NEAR(presentation.scopes[0].display_start_ms, 3.0F,
+    GpuTimelinePresentationSmoother::kSnapThresholdMs);
+  EXPECT_NEAR(presentation.scopes[0].display_duration_ms, 8.0F,
+    GpuTimelinePresentationSmoother::kSnapThresholdMs);
+}
+
+NOLINT_TEST(GpuTimelinePresentationSmootherTest, SmallChangesStillBlend)
 {
   GpuTimelinePresentationSmoother smoother;
   static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
@@ -77,22 +98,27 @@ NOLINT_TEST(GpuTimelinePresentationSmootherTest, SubDeadbandChangesRemainStable)
   const auto presentation = smoother.Apply(MakeFrame(2U, 1.4F, 4.3F));
 
   ASSERT_EQ(presentation.scopes.size(), 1U);
-  EXPECT_FLOAT_EQ(presentation.scopes[0].display_start_ms, 1.0F);
-  EXPECT_FLOAT_EQ(presentation.scopes[0].display_duration_ms, 4.0F);
+  EXPECT_GT(presentation.scopes[0].display_start_ms, 1.0F);
+  EXPECT_LT(presentation.scopes[0].display_start_ms, 1.4F);
+  EXPECT_GT(presentation.scopes[0].display_duration_ms, 4.0F);
+  EXPECT_LT(presentation.scopes[0].display_duration_ms, 4.3F);
 }
 
-NOLINT_TEST(GpuTimelinePresentationSmootherTest, OverDeadbandChangesBlend)
+NOLINT_TEST(GpuTimelinePresentationSmootherTest,
+  TinyJitterInsideDeadbandDoesNotMoveBarsOrRescaleSpan)
 {
   GpuTimelinePresentationSmoother smoother;
-  static_cast<void>(smoother.Apply(MakeFrame(1U, 1.0F, 4.0F)));
+  const auto first = smoother.Apply(MakeFrame(1U, 1.0F, 4.0F));
+  const auto second = smoother.Apply(MakeFrame(2U, 1.03F, 4.02F));
 
-  const auto presentation = smoother.Apply(MakeFrame(2U, 1.6F, 4.7F));
-
-  ASSERT_EQ(presentation.scopes.size(), 1U);
-  EXPECT_GT(presentation.scopes[0].display_start_ms, 1.0F);
-  EXPECT_LT(presentation.scopes[0].display_start_ms, 1.6F);
-  EXPECT_GT(presentation.scopes[0].display_duration_ms, 4.0F);
-  EXPECT_LT(presentation.scopes[0].display_duration_ms, 4.7F);
+  ASSERT_EQ(first.scopes.size(), 1U);
+  ASSERT_EQ(second.scopes.size(), 1U);
+  EXPECT_NEAR(second.scopes[0].display_start_ms,
+    first.scopes[0].display_start_ms, 0.002F);
+  EXPECT_NEAR(second.scopes[0].display_duration_ms,
+    first.scopes[0].display_duration_ms, 0.002F);
+  EXPECT_NEAR(second.display_frame_span_ms, first.display_frame_span_ms,
+    0.002F);
 }
 
 NOLINT_TEST(GpuTimelinePresentationSmootherTest,

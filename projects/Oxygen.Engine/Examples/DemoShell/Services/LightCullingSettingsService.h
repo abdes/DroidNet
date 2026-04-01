@@ -23,20 +23,7 @@ class RenderingPipeline;
 namespace oxygen::examples {
 class SettingsService;
 
-//! Settings persistence for light culling panel options.
-/*!
- Owns UI-facing settings for culling mode, cluster configuration, and
- visualization mode, delegating persistence to `SettingsService` and exposing
- an epoch for cache invalidation.
-
-### Key Features
-
-- **Passive state**: Reads and writes via SettingsService without caching.
-- **Epoch tracking**: Increments on each effective change.
-- **Testable**: Virtual getters and setters for overrides in tests.
-
-@see SettingsService
-*/
+//! Settings persistence for LightCulling debug visualization.
 class LightCullingSettingsService : public DomainService {
 public:
   LightCullingSettingsService() = default;
@@ -49,30 +36,6 @@ public:
   //! initial state.
   virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
     -> void;
-
-  //! Returns the number of depth slices for clustered culling.
-  [[nodiscard]] virtual auto GetDepthSlices() const -> int;
-
-  //! Sets the number of depth slices.
-  virtual auto SetDepthSlices(int slices) -> void;
-
-  //! Returns whether camera near/far planes should be used.
-  [[nodiscard]] virtual auto GetUseCameraZ() const -> bool;
-
-  //! Sets whether to use camera near/far planes.
-  virtual auto SetUseCameraZ(bool use_camera) -> void;
-
-  //! Returns the custom Z near value.
-  [[nodiscard]] virtual auto GetZNear() const -> float;
-
-  //! Sets the custom Z near value.
-  virtual auto SetZNear(float z_near) -> void;
-
-  //! Returns the custom Z far value.
-  [[nodiscard]] virtual auto GetZFar() const -> float;
-
-  //! Sets the custom Z far value.
-  virtual auto SetZFar(float z_far) -> void;
 
   //! Returns the visualization debug mode.
   [[nodiscard]] virtual auto GetVisualizationMode() const
@@ -92,16 +55,8 @@ public:
 private:
   auto ApplyPipelineSettings() -> void;
 
-  static constexpr auto kDepthSlicesKey = "light_culling.depth_slices";
-  static constexpr auto kUseCameraZKey = "light_culling.use_camera_z";
-  static constexpr auto kZNearKey = "light_culling.z_near";
-  static constexpr auto kZFarKey = "light_culling.z_far";
   static constexpr auto kVisualizationModeKey
     = "light_culling.visualization_mode";
-
-  static constexpr int kDefaultDepthSlices = 24;
-  static constexpr float kDefaultZNear = 0.1F;
-  static constexpr float kDefaultZFar = 1000.0F;
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };

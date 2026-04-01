@@ -556,8 +556,8 @@ auto DemoShellUi::EnsureLightingPanelReady(
   }
 
   // Create the ViewModel
-  impl_->light_culling_vm = std::make_unique<LightCullingVm>(
-    impl_->light_culling_settings_service, nullptr /* No callback needed */);
+  impl_->light_culling_vm
+    = std::make_unique<LightCullingVm>(impl_->light_culling_settings_service);
 
   // Create the Panel with the ViewModel
   impl_->lighting_panel = std::make_shared<LightingPanel>(

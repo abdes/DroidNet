@@ -17,6 +17,7 @@
 #include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/Vsm/VsmPageRequestFlags.hlsli"
 #include "Renderer/Vsm/VsmPageRequestProjection.hlsli"
+#include "Lighting/ClusterLookup.hlsli"
 
 #define BX_VERTEX_TYPE uint4
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -39,9 +40,14 @@ struct VsmPageRequestGeneratorPassConstants
     uint projection_count;
     uint virtual_page_count;
     float4x4 inverse_view_projection;
+    float4x4 view_matrix;
     uint cluster_dim_x;
     uint cluster_dim_y;
-    uint tile_size_px;
+    uint cluster_dim_z;
+    uint light_grid_pixel_size_shift;
+    float light_grid_z_params_b;
+    float light_grid_z_params_o;
+    float light_grid_z_params_s;
     uint enable_light_grid_pruning;
 };
 
@@ -172,14 +178,26 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = BX_IsValidSlot(pass_constants.cluster_grid_index)
         && BX_IsValidSlot(pass_constants.light_index_list_index)
         && pass_constants.cluster_dim_x != 0u
-        && pass_constants.cluster_dim_y != 0u;
+        && pass_constants.cluster_dim_y != 0u
+        && pass_constants.cluster_dim_z != 0u
+        && pass_constants.light_grid_pixel_size_shift != 0u;
 
     uint cluster_index = 0u;
     if (has_light_grid) {
-        const uint2 cluster_xy = min(
-            dispatch_thread_id.xy / max(pass_constants.tile_size_px, 1u),
-            uint2(pass_constants.cluster_dim_x - 1u, pass_constants.cluster_dim_y - 1u));
-        cluster_index = cluster_xy.y * pass_constants.cluster_dim_x + cluster_xy.x;
+        const float linear_depth = max(-mul(
+            pass_constants.view_matrix, float4(world_position_ws, 1.0f)).z, 0.0f);
+        cluster_index = ComputeClusterIndex(
+            float2(dispatch_thread_id.xy),
+            linear_depth,
+            uint3(
+                pass_constants.cluster_dim_x,
+                pass_constants.cluster_dim_y,
+                pass_constants.cluster_dim_z),
+            pass_constants.light_grid_pixel_size_shift,
+            float3(
+                pass_constants.light_grid_z_params_b,
+                pass_constants.light_grid_z_params_o,
+                pass_constants.light_grid_z_params_s));
     }
 
     for (uint i = 0u; i < pass_constants.projection_count; ++i) {

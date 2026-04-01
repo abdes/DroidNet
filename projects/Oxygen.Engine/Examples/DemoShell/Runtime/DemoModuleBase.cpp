@@ -6,9 +6,12 @@
 
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -27,6 +30,79 @@
 namespace oxygen::examples {
 
 namespace {
+  constexpr std::string_view kCommandDumpLightCullingTelemetry
+    = "rndr.light_culling.dump_telemetry";
+
+  struct LightCullingConsoleCommandState {
+    observer_ptr<renderer::RenderingPipeline> pipeline { nullptr };
+  };
+
+  [[nodiscard]] auto GetLightCullingConsoleCommandState()
+    -> const std::shared_ptr<LightCullingConsoleCommandState>&
+  {
+    static const auto state
+      = std::make_shared<LightCullingConsoleCommandState>();
+    return state;
+  }
+
+  auto RegisterLightCullingConsoleCommand(IAsyncEngine& engine) -> void
+  {
+    static std::once_flag once;
+    std::call_once(once, [&engine] {
+      std::weak_ptr<LightCullingConsoleCommandState> weak_state {
+        GetLightCullingConsoleCommandState(),
+      };
+      (void)engine.GetConsole().RegisterCommand(console::CommandDefinition {
+        .name = std::string(kCommandDumpLightCullingTelemetry),
+        .help
+        = "Dump LightCullingPass telemetry from the active ForwardPipeline",
+        .flags = console::CommandFlags::kDevOnly,
+        .handler
+        = [weak_state](const std::vector<std::string>& args,
+            const console::CommandContext&) -> console::ExecutionResult {
+          if (!args.empty()) {
+            return console::ExecutionResult {
+              .status = console::ExecutionStatus::kInvalidArguments,
+              .exit_code = 2,
+              .output = {},
+              .error = "usage: rndr.light_culling.dump_telemetry",
+            };
+          }
+
+          const auto state = weak_state.lock();
+          if (!state || state->pipeline == nullptr) {
+            return console::ExecutionResult {
+              .status = console::ExecutionStatus::kError,
+              .exit_code = 1,
+              .output = {},
+              .error = "no active rendering pipeline is bound",
+            };
+          }
+
+          if (state->pipeline->GetTypeId()
+            != renderer::ForwardPipeline::ClassTypeId()) {
+            return console::ExecutionResult {
+              .status = console::ExecutionStatus::kError,
+              .exit_code = 1,
+              .output = {},
+              .error
+              = "active pipeline does not expose LightCullingPass telemetry",
+            };
+          }
+          const auto& forward_pipeline
+            = static_cast<const renderer::ForwardPipeline&>(*state->pipeline);
+
+          return console::ExecutionResult {
+            .status = console::ExecutionStatus::kOk,
+            .exit_code = 0,
+            .output = forward_pipeline.DumpLightCullingTelemetry(),
+            .error = {},
+          };
+        },
+      });
+    });
+  }
+
   auto GetRendererFromEngine(AsyncEngine* engine) -> engine::Renderer*
   {
     DCHECK_NOTNULL_F(engine);
@@ -48,6 +124,7 @@ DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
 DemoModuleBase::~DemoModuleBase()
 {
   ClearViewIds();
+  GetLightCullingConsoleCommandState()->pipeline = nullptr;
   pipeline_.reset();
 }
 
@@ -83,12 +160,17 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     LOG_F(ERROR, "-failed- DemoShell initialization");
     return false;
   }
+
+  RegisterLightCullingConsoleCommand(*engine);
+  GetLightCullingConsoleCommandState()->pipeline
+    = observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
   return true;
 }
 
 auto DemoModuleBase::OnShutdown() noexcept -> void
 {
   shell_.reset();
+  GetLightCullingConsoleCommandState()->pipeline = nullptr;
   pipeline_.reset();
   view_registry_.clear();
 }

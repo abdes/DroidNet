@@ -18,15 +18,7 @@ class LightCullingVm;
 // Re-export ShaderDebugMode for convenience in UI code
 using ShaderDebugMode = engine::ShaderDebugMode;
 
-//! Lighting panel with light culling and visualization controls
-/*!
- Provides two collapsible sections: "Light Culling" and
- "Visualization Modes". Visualization modes toggle the shader debug
- mode automatically (Normal disables debug).
-
- This panel follows the MVVM pattern, receiving a LightCullingVm that owns
- the state and handles persistence.
-*/
+//! Lighting panel with final LightCulling debug visualization controls.
 class LightingPanel final : public DemoPanel {
 public:
   //! Create the panel bound to a light culling view model.
@@ -44,9 +36,6 @@ public:
 
 private:
   void DrawVisualizationModes();
-  void DrawLightCullingSettings();
-  void DrawCullingModeControls();
-  void DrawClusterConfigControls();
 
   observer_ptr<LightCullingVm> vm_ {};
 };

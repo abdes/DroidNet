@@ -106,15 +106,22 @@ namespace {
     // HLSL cbuffer packing aligns the matrix to the next 16-byte register.
     std::uint32_t _pad_after_counts[3] { 0U, 0U, 0U };
     glm::mat4 inverse_view_projection { 1.0F };
+    glm::mat4 view_matrix { 1.0F };
     std::uint32_t cluster_dim_x { 0U };
     std::uint32_t cluster_dim_y { 0U };
-    std::uint32_t tile_size_px { 16U };
+    std::uint32_t cluster_dim_z { 0U };
+    std::uint32_t light_grid_pixel_size_shift { 0U };
+    float light_grid_z_params_b { 0.0F };
+    float light_grid_z_params_o { 0.0F };
+    float light_grid_z_params_s { 0.0F };
     std::uint32_t enable_light_grid_pruning { 0U };
   };
   static_assert(
     offsetof(VsmPageRequestGeneratorPassConstants, inverse_view_projection)
     == 48U);
-  static_assert(sizeof(VsmPageRequestGeneratorPassConstants) == 128U);
+  static_assert(
+    offsetof(VsmPageRequestGeneratorPassConstants, view_matrix) == 112U);
+  static_assert(sizeof(VsmPageRequestGeneratorPassConstants) == 208U);
   static_assert(sizeof(VsmPageRequestGeneratorPassConstants)
       % packing::kShaderDataFieldAlignment
     == 0U);
@@ -504,17 +511,25 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
   std::shared_ptr<const graphics::Buffer> light_index_list_buffer;
   std::uint32_t cluster_dim_x = 0U;
   std::uint32_t cluster_dim_y = 0U;
-  std::uint32_t tile_size_px = 16U;
+  std::uint32_t cluster_dim_z = 0U;
+  std::uint32_t light_grid_pixel_size_shift = 0U;
+  float light_grid_z_params_b = 0.0F;
+  float light_grid_z_params_o = 0.0F;
+  float light_grid_z_params_s = 0.0F;
   if (const auto* light_culling = Context().GetPass<LightCullingPass>();
     light_culling != nullptr) {
     cluster_grid_index = light_culling->GetClusterGridSrvIndex();
     light_index_list_index = light_culling->GetLightIndexListSrvIndex();
     cluster_grid_buffer = light_culling->GetClusterGridBuffer();
     light_index_list_buffer = light_culling->GetLightIndexListBuffer();
-    const auto dims = light_culling->GetGridDimensions();
-    cluster_dim_x = dims.x;
-    cluster_dim_y = dims.y;
-    tile_size_px = light_culling->GetClusterConfig().tile_size_px;
+    const auto& light_grid = light_culling->GetClusterConfig();
+    cluster_dim_x = light_grid.cluster_dim_x;
+    cluster_dim_y = light_grid.cluster_dim_y;
+    cluster_dim_z = light_grid.cluster_dim_z;
+    light_grid_pixel_size_shift = light_grid.light_grid_pixel_size_shift;
+    light_grid_z_params_b = light_grid.light_grid_z_params_b;
+    light_grid_z_params_o = light_grid.light_grid_z_params_o;
+    light_grid_z_params_s = light_grid.light_grid_z_params_s;
   }
 
   const auto constants = VsmPageRequestGeneratorPassConstants {
@@ -528,9 +543,14 @@ auto VsmPageRequestGeneratorPass::DoPrepareResources(CommandRecorder& recorder)
     .projection_count = GetProjectionCount(),
     .virtual_page_count = impl_->virtual_page_count,
     .inverse_view_projection = resolved_view->InverseViewProjection(),
+    .view_matrix = resolved_view->ViewMatrix(),
     .cluster_dim_x = cluster_dim_x,
     .cluster_dim_y = cluster_dim_y,
-    .tile_size_px = tile_size_px,
+    .cluster_dim_z = cluster_dim_z,
+    .light_grid_pixel_size_shift = light_grid_pixel_size_shift,
+    .light_grid_z_params_b = light_grid_z_params_b,
+    .light_grid_z_params_o = light_grid_z_params_o,
+    .light_grid_z_params_s = light_grid_z_params_s,
     .enable_light_grid_pruning
     = impl_->config->enable_light_grid_pruning ? 1U : 0U,
   };

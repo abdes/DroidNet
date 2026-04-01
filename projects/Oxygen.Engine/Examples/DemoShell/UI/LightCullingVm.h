@@ -7,15 +7,10 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
 #include <mutex>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
-
-namespace oxygen::engine {
-struct LightCullingPassConfig;
-} // namespace oxygen::engine
 
 namespace oxygen::examples {
 class LightCullingSettingsService;
@@ -28,17 +23,13 @@ using ShaderDebugMode = engine::ShaderDebugMode;
 
 //! View model for light culling panel state.
 /*!
- Caches light culling settings retrieved from `LightCullingSettingsService`,
- invalidating the cache based on the service epoch and applying UI changes back
- to the service and pass configs.
+ Caches light-culling debug visualization settings retrieved from
+ `LightCullingSettingsService` and applies UI changes back to the service.
 
 ### Key Features
 
 - **Epoch-driven refresh**: Reacquires state when stale.
 - **Immediate persistence**: Setters forward changes to the service.
-- **Pass config sync**: Applies changes directly to shader and culling configs.
-- **Cluster mode callback**: Notifies when cluster mode changes (triggers PSO
-rebuild).
 - **Thread-safe**: Protected by a mutex.
 
 @see oxygen::examples::LightCullingSettingsService
@@ -46,55 +37,24 @@ rebuild).
 class LightCullingVm {
 public:
   //! Creates a view model backed by the provided settings service.
-  explicit LightCullingVm(observer_ptr<LightCullingSettingsService> service,
-    std::function<void()> on_cluster_mode_changed);
+  explicit LightCullingVm(observer_ptr<LightCullingSettingsService> service);
 
   //! Returns the cached visualization mode.
   [[nodiscard]] auto GetVisualizationMode() -> ShaderDebugMode;
 
-  //! Returns the cached depth slices count.
-  [[nodiscard]] auto GetDepthSlices() -> int;
-
-  //! Returns whether camera Z planes are used.
-  [[nodiscard]] auto GetUseCameraZ() -> bool;
-
-  //! Returns the cached Z near value.
-  [[nodiscard]] auto GetZNear() -> float;
-
-  //! Returns the cached Z far value.
-  [[nodiscard]] auto GetZFar() -> float;
-
   //! Sets visualization mode and forwards to service.
   auto SetVisualizationMode(ShaderDebugMode mode) -> void;
-
-  //! Sets depth slices and forwards to service.
-  auto SetDepthSlices(int slices) -> void;
-
-  //! Sets camera Z usage and forwards to service.
-  auto SetUseCameraZ(bool use_camera) -> void;
-
-  //! Sets Z near and forwards to service.
-  auto SetZNear(float z_near) -> void;
-
-  //! Sets Z far and forwards to service.
-  auto SetZFar(float z_far) -> void;
 
 private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
-  auto NotifyClusterModeChanged() -> void;
 
   mutable std::mutex mutex_ {};
   observer_ptr<LightCullingSettingsService> service_;
-  std::function<void()> on_cluster_mode_changed_;
   std::uint64_t epoch_ { 0 };
 
   // Cached state
   ShaderDebugMode visualization_mode_ { ShaderDebugMode::kDisabled };
-  int depth_slices_ { 24 };
-  bool use_camera_z_ { true };
-  float z_near_ { 0.1F };
-  float z_far_ { 1000.0F };
 };
 
 } // namespace oxygen::examples::ui

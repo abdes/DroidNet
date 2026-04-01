@@ -30,7 +30,6 @@ namespace engine {
   class Renderer;
   struct ShaderPassConfig;
   struct TransparentPassConfig;
-  struct LightCullingPassConfig;
   struct CompositionSubmission;
 }
 namespace scene {
@@ -77,9 +76,6 @@ public:
     engine::ShaderDebugMode /*mode*/) -> void
   {
   }
-
-  //! Sets the number of depth slices for clustered culling.
-  virtual auto SetClusterDepthSlices(uint32_t /*slices*/) -> void { }
 
   //! Sets the explicit scene depth-prepass policy for the pipeline.
   virtual auto SetDepthPrePassMode(DepthPrePassMode /*mode*/) -> void { }
@@ -130,10 +126,6 @@ public:
   }
   virtual auto UpdateTransparentPassConfig(
     const engine::TransparentPassConfig& /*config*/) -> void
-  {
-  }
-  virtual auto UpdateLightCullingPassConfig(
-    const engine::LightCullingPassConfig& /*config*/) -> void
   {
   }
 
