@@ -78,6 +78,7 @@ auto ConventionalShadowRasterPass::DoPrepareResources(
     co_return;
   }
 
+  ValidateRasterPlan(raster_plan->jobs);
   CacheDeferredReclaimer();
   EnsureShadowViewConstantsCapacity(
     static_cast<std::uint32_t>(raster_plan->jobs.size()));
@@ -146,6 +147,7 @@ auto ConventionalShadowRasterPass::DoExecute(
     co_return;
   }
 
+  ValidateRasterPlan(raster_plan->jobs);
   auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
   SetupViewPortAndScissors(recorder);
   const graphics::GpuEventScopeOptions scope_options {};
@@ -197,6 +199,52 @@ auto ConventionalShadowRasterPass::DoExecute(
 
   Context().RegisterPass(this);
   co_return;
+}
+
+auto ConventionalShadowRasterPass::ValidateConfig() -> void
+{
+  SyncConfiguredDepthTextureFromShadowManager();
+  DepthPrePass::ValidateConfig();
+
+  const auto& depth_desc = GetDepthTexture().GetDescriptor();
+  if (depth_desc.texture_type != TextureType::kTexture2DArray) {
+    throw std::invalid_argument(
+      "ConventionalShadowRasterPass: depth texture must be Texture2DArray");
+  }
+  if (depth_desc.array_size == 0U) {
+    throw std::invalid_argument(
+      "ConventionalShadowRasterPass: depth texture array must expose at least "
+      "one slice");
+  }
+}
+
+auto ConventionalShadowRasterPass::SyncConfiguredDepthTextureFromShadowManager()
+  -> void
+{
+  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
+  if (!shadow_manager) {
+    return;
+  }
+
+  const auto& manager_depth_texture
+    = shadow_manager->GetConventionalShadowDepthTexture();
+  if (!manager_depth_texture) {
+    return;
+  }
+
+  if (const auto* configured = TryGetConfiguredDepthTexture();
+    configured != manager_depth_texture.get()) {
+    SetConfiguredDepthTexture(manager_depth_texture);
+  }
+
+  if (const auto* raster_plan
+    = shadow_manager->TryGetRasterRenderPlan(Context().current_view.view_id);
+    raster_plan != nullptr && raster_plan->depth_texture != nullptr
+    && raster_plan->depth_texture.get() != manager_depth_texture.get()) {
+    throw std::runtime_error(
+      "ConventionalShadowRasterPass: raster shadow plan depth texture does "
+      "not match the ShadowManager conventional shadow texture");
+  }
 }
 
 auto ConventionalShadowRasterPass::EnsureShadowViewConstantsCapacity(
@@ -269,6 +317,45 @@ auto ConventionalShadowRasterPass::ReleaseShadowViewConstantsBuffer() noexcept
   shadow_view_constants_buffer_.reset();
 }
 
+auto ConventionalShadowRasterPass::ValidateRasterPlan(
+  const std::span<const renderer::RasterShadowJob> jobs) const -> void
+{
+  const auto shadow_manager = Context().GetRenderer().GetShadowManager();
+  if (!shadow_manager) {
+    throw std::runtime_error(
+      "ConventionalShadowRasterPass: raster plan validation requires an "
+      "active ShadowManager");
+  }
+
+  const auto* raster_plan
+    = shadow_manager->TryGetRasterRenderPlan(Context().current_view.view_id);
+  if (raster_plan == nullptr || raster_plan->depth_texture == nullptr) {
+    throw std::runtime_error(
+      "ConventionalShadowRasterPass: raster plan validation requires a "
+      "published depth texture");
+  }
+
+  if (raster_plan->depth_texture.get() != &GetDepthTexture()) {
+    throw std::runtime_error(
+      "ConventionalShadowRasterPass: configured depth texture diverged from "
+      "the published raster shadow plan texture");
+  }
+
+  const auto& depth_desc = GetDepthTexture().GetDescriptor();
+  for (const auto& job : jobs) {
+    if (job.target_kind
+      != renderer::RasterShadowTargetKind::kTexture2DArraySlice) {
+      throw std::runtime_error(
+        "ConventionalShadowRasterPass: unsupported raster shadow target kind");
+    }
+    if (job.target_array_slice >= depth_desc.array_size) {
+      throw std::out_of_range(
+        "ConventionalShadowRasterPass: raster shadow job targets an array "
+        "slice outside the configured depth texture");
+    }
+  }
+}
+
 auto ConventionalShadowRasterPass::UploadJobViewConstants(
   const std::span<const renderer::RasterShadowJob> jobs) -> void
 {
@@ -302,6 +389,9 @@ auto ConventionalShadowRasterPass::BindJobViewConstants(
   graphics::CommandRecorder& recorder, const std::uint32_t job_index) const
   -> void
 {
+  static_assert(sizeof(ViewConstants::GpuData) % 256U == 0U,
+    "ConventionalShadowRasterPass view constants must remain 256-byte "
+    "aligned for root CBV binding");
   if (!shadow_view_constants_buffer_
     || Context().frame_slot == frame::kInvalidSlot) {
     throw std::runtime_error("ConventionalShadowRasterPass: shadow view "

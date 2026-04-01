@@ -394,12 +394,30 @@ auto DepthPrePass::BuildRasterizerStateDesc(
 
 auto DepthPrePass::GetDepthTexture() const -> const Texture&
 {
-  if (config_ && config_->depth_texture) {
-    return *config_->depth_texture;
+  if (const auto* depth_texture = TryGetConfiguredDepthTexture();
+    depth_texture != nullptr) {
+    return *depth_texture;
   }
 
   throw std::runtime_error(
     "DepthPrePass requires an explicit config depth_texture.");
+}
+
+auto DepthPrePass::TryGetConfiguredDepthTexture() const noexcept
+  -> const graphics::Texture*
+{
+  return config_ && config_->depth_texture ? config_->depth_texture.get()
+                                           : nullptr;
+}
+
+auto DepthPrePass::SetConfiguredDepthTexture(
+  std::shared_ptr<const graphics::Texture> depth_texture) -> void
+{
+  if (!config_) {
+    throw std::runtime_error(
+      "DepthPrePass requires a valid config before updating depth_texture.");
+  }
+  config_->depth_texture = std::move(depth_texture);
 }
 
 auto DepthPrePass::GetEffectiveViewport() const -> ViewPort
