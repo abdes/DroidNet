@@ -179,7 +179,7 @@ The GPU side is responsible for:
 
 The complete target execution flow per frame:
 
-```
+```text
 DepthPrePass
     │
     ▼
@@ -189,8 +189,8 @@ ScreenHzbBuildPass          (produces main-view HZB)
 CSM-2: ReceiverAnalysis     (produces tight per-cascade bounds from visible
     │                        depth samples via GPU atomics)
     ▼
-CSM-3: ReceiverMask         (produces sparse tile occupancy mask per cascade
-    │                        with hierarchy)
+CSM-3: ReceiverMask         (five dispatches: clear → per-pixel tile marking
+    │                        → dilation → hierarchy build → finalize summary)
     ▼
 CSM-4: CasterCulling        (tests draw records against receiver bounds +
     │                        mask, compacts survivors)
@@ -204,7 +204,7 @@ No CPU readback occurs anywhere in this chain.
 
 ### 4.1 CSM-1: ConventionalShadowDrawRecord (32 bytes, GPU)
 
-```
+```cpp
 struct ConventionalShadowDrawRecord {
   vec4     world_bounding_sphere;     // center.xyz, radius.w
   uint32   draw_index;                // index into per-draw metadata
@@ -221,7 +221,7 @@ identity stream.
 
 ### 4.2 CSM-2: ConventionalShadowReceiverAnalysisJob (144 bytes, CPU→GPU)
 
-```
+```cpp
 struct ConventionalShadowReceiverAnalysisJob {
   mat4     light_rotation_matrix;          // pure light rotation (no translation)
   vec4     full_rect_center_half_extent;   // padded cascade sphere-fit reference
@@ -244,7 +244,7 @@ compare its sample-derived bounds against both.
 
 ### 4.3 CSM-2: ConventionalShadowReceiverAnalysis (96 bytes, GPU output)
 
-```
+```cpp
 struct ConventionalShadowReceiverAnalysis {
   vec4     raw_xy_min_max;                 // tight light-space XY bounds from
                                            //   actual visible samples
@@ -268,14 +268,48 @@ Produced entirely on GPU. The `full_depth_and_area_ratios` and
 cascade with `full_area_ratio ≪ 1.0` has significant room for shadow-map
 resolution improvement.
 
-### 4.4 CSM-3: ConventionalShadowReceiverMask (GPU output, planned)
+### 4.4 CSM-3: ConventionalShadowReceiverMaskSummary (96 bytes, GPU output)
 
-- One 2D tile mask per cascade in light space
-- Base resolution: `32 × 32` texel tiles for a `4096 × 4096` shadow map
-  (= `128 × 128` tile grid)
-- Dilated conservatively for filter footprint + bias margin
-- At least one OR-reduced hierarchy level for fast broad-phase overlap tests
-- Marks which regions of the shadow map contain visible receivers
+```cpp
+struct ConventionalShadowReceiverMaskSummary {
+  vec4     full_rect_center_half_extent;   // copy from analysis for downstream
+  vec4     raw_xy_min_max;                 // copy from analysis (tight bounds)
+  vec4     raw_depth_and_dilation;         // copy from analysis (dilation margins)
+  uint32   target_array_slice;
+  uint32   flags;                          // VALID, EMPTY, HIERARCHY_BUILT
+  uint32   sample_count;                   // visible samples (from CSM-2)
+  uint32   occupied_tile_count;            // base-level occupied tiles after
+                                           //   dilation
+  uint32   hierarchy_occupied_tile_count;  // hierarchy-level occupied tiles
+  uint32   base_tile_resolution;           // e.g. 128 for 4096/32
+  uint32   hierarchy_tile_resolution;      // e.g. 32 for 128/4
+  uint32   dilation_tile_radius;           // conservative tile dilation radius
+  uint32   hierarchy_reduction;            // e.g. 4
+  uint32   _pad0[3];
+};
+```
+
+Published one per cascade. Carries forward CSM-2 analysis data alongside the
+mask occupancy metrics.
+
+### 4.4.1 CSM-3: Mask Buffers (GPU intermediates)
+
+- **Raw mask buffer:** one `uint32` per tile per cascade. `CS_Analyze` writes
+  `1` via `InterlockedOr`. Represents the undilated per-pixel tile hits.
+- **Base mask buffer:** one `uint32` per tile per cascade. `CS_DilateMasks`
+  reads the raw mask and writes dilated occupancy. This is the authoritative
+  mask for downstream caster culling.
+- **Hierarchy mask buffer:** one `uint32` per hierarchy tile per cascade.
+  `CS_BuildHierarchy` OR-reduces the base mask. Used for fast broad-phase
+  overlap rejection.
+- **Count buffer:** two `uint32` per cascade — `[0]` = base occupied count,
+  `[1]` = hierarchy occupied count.
+
+Base resolution: `32 × 32` texel tiles for a `4096 × 4096` shadow map =
+`128 × 128` tile grid. Hierarchy reduction factor `4` → `32 × 32` hierarchy
+grid. Storage per cascade: `128 × 128 × 4 bytes = 64 KB` base + raw;
+`32 × 32 × 4 bytes = 4 KB` hierarchy — moderate but acceptable for the
+clear/dilate simplicity versus bit-packing
 
 ### 4.5 CSM-4: Compacted Draw Buffers (GPU output, planned)
 
@@ -313,7 +347,7 @@ Key properties:
 Three GPU compute dispatches per frame:
 
 | Dispatch | Thread group | Grid | Purpose |
-|---|---|---|---|
+| - | - | - | - |
 | `CS_Clear` | 64×1×1 | `ceil(jobs/64)` | Initialize raw atomic accumulators |
 | `CS_Analyze` | 8×8×1 | `ceil(W/8) × ceil(H/8)` | Per-pixel: reconstruct world pos, classify into cascade, project into light space, accumulate via atomics |
 | `CS_Finalize` | 64×1×1 | `ceil(jobs/64)` | Decode atomics, compute area/depth ratios, write final analysis |
@@ -393,9 +427,9 @@ acceptable for typical cascade counts (2–6). If cascade count exceeds ~8, a
 tile-classification pre-pass would amortize the per-pixel work, but that is
 outside current scope.
 
-### 5.3 CSM-3 — Light-Space Receiver Mask (Planned)
+### 5.3 CSM-3 — Light-Space Receiver Mask
 
-**Status:** pending (next phase)
+**Status:** complete
 
 **Purpose:** Convert the tight receiver bounds from CSM-2 into a sparse
 tile-granularity occupancy mask that enables fine-grained caster culling.
@@ -408,25 +442,151 @@ receivers cluster in specific regions of the shadow map — e.g., ground plane,
 nearby walls — leaving large regions of the tight rect unoccupied. A tile mask
 captures this sparsity.
 
-**Design:**
+Five GPU compute dispatches per frame:
 
-1. **Base mask resolution.** For a `4096 × 4096` shadow map with `32 × 32`
-   texel tiles → `128 × 128` tile grid per cascade. Each tile is one bit.
-2. **Population.** Reuse the CSM-2 analysis transform: for each visible depth
-   sample that falls within a cascade, project into light space, quantize to
-   the tile grid, and set the corresponding bit.
-3. **Conservative dilation.** Grow each occupied tile by the filter footprint
-   and bias margin (from CSM-2's dilation margin) to prevent false negatives
-   from filter-kernel overshoot.
-4. **Hierarchy.** Build at least one OR-reduced level (e.g., `4 × 4` tile
-   blocks → `32 × 32` hierarchy tiles) for fast broad-phase overlap rejection.
-5. **Storage.** Bit-packed uint buffer. At `128 × 128` bits per cascade ×
-   4 cascades = `8 KB` base + hierarchy overhead — negligible.
+| Dispatch | Thread group | Grid | Purpose |
+| - | - | - | - |
+| `CS_ClearMasks` | 64×1×1 | `ceil(max_entries/64)` | Zero raw, base, hierarchy masks and count buffer |
+| `CS_Analyze` | 8×8×1 | `ceil(W/8) × ceil(H/8)` | Per-pixel: classify into cascade, project to light space, mark raw tile via `InterlockedOr` |
+| `CS_DilateMasks` | 64×1×1 | `ceil(jobs×base_tiles/64)` | Per-tile: read raw mask, apply conservative dilation radius, write base mask, count occupied tiles |
+| `CS_BuildHierarchy` | 64×1×1 | `ceil(jobs×hier_tiles/64)` | Per-hierarchy-tile: OR-reduce base mask tiles, count hierarchy occupied tiles |
+| `CS_Finalize` | 64×1×1 | `ceil(jobs/64)` | Per-job: write `ConventionalShadowReceiverMaskSummary` from CSM-2 analysis + tile counts |
 
-**Exit criteria:**
+#### CS_ClearMasks
 
-- At least one near cascade shows materially sparse occupancy (occupied-tile
-  ratio significantly below 1.0)
+Zeros all entries in raw mask, base mask, hierarchy mask, and count buffers.
+The clear dispatch grid covers the maximum of all buffer sizes.
+
+#### CS_Analyze
+
+For each HZB mip-0 pixel:
+
+1. **Load depth.** Skip sky pixels (`depth ≤ 0` in reversed-Z).
+2. **Reconstruct world position.** Pixel → UV → NDC → clip → world via the
+   inverse view-projection matrix.
+3. **Compute eye depth.** `max(0, -(view_matrix × world_pos).z)`.
+4. **Classify into cascade.** Same split logic as CSM-2 — first cascade uses
+   `≥` at near boundary, subsequent use `>`.
+5. **Project into light space.** `light_rotation_matrix × world_pos`.
+6. **Quantize to tile coordinate.** Map the light-space XY position into the
+   tile grid using `full_rect_center_half_extent` as the mapping domain.
+7. **Mark tile.** `InterlockedOr(raw_mask[tile_index], 1)`.
+
+**Mapping domain choice:** The tile grid is defined over the
+`full_rect_center_half_extent` (the full cascade sphere-fit rectangle), not
+the CSM-2 tight bounds. This means the grid covers the entire cascade
+orthographic projection, and receiver occupancy within that grid reveals the
+true spatial sparsity. Using the full rect also ensures the mask coordinate
+system is stable and directly usable by CSM-4's caster bounding sphere tests
+without coordinate remapping.
+
+The per-pixel work mirrors CSM-2's `CS_Analyze` (world reconstruction,
+cascade classification, light-space projection). The write is a single
+`InterlockedOr` setting a tile to occupied — far cheaper than CSM-2's six
+ordered-float atomic min/max operations.
+
+#### CS_DilateMasks
+
+Per base-mask tile:
+
+1. Read the dilation radius from the CSM-2 analysis record's `xy_dilation_margin`
+   converted to tile units via `ComputeDilationTileRadius()`.
+2. For the current tile, scan the raw mask within a `±radius` neighborhood.
+3. If any raw-mask tile within the neighborhood is occupied, write `1` to the
+   base mask.
+4. Atomically increment the per-job occupied-tile count.
+
+By separating dilation into its own pass reading from the raw mask (SRV) and
+writing the base mask (UAV), the dilation neighborhood reads are coherent and
+free of write-after-write hazards.
+
+#### CS_BuildHierarchy
+
+Per hierarchy tile:
+
+1. Compute the base-tile origin for this hierarchy tile using the reduction
+   factor (default 4).
+2. Scan all base-mask tiles covered by this hierarchy tile.
+3. If any base-mask tile is occupied, write `1` to the hierarchy mask.
+4. Atomically increment the per-job hierarchy occupied-tile count.
+
+The hierarchy provides fast broad-phase overlap rejection for CSM-4. A caster
+whose light-space projection does not overlap any occupied hierarchy tile
+can be rejected without checking the full-resolution base mask.
+
+#### CS_Finalize
+
+Per job:
+
+1. Read the CSM-2 analysis record and the tile counts from the count buffer.
+2. Assemble a `ConventionalShadowReceiverMaskSummary` carrying forward the
+   analysis data alongside mask occupancy metrics.
+3. Set `VALID` + `HIERARCHY_BUILT` flags if the analysis was valid and had
+   samples; otherwise set `EMPTY`.
+
+#### GPU synchronization
+
+- Job upload: `CopySource` / `CopyDest` barriers for the upload → device copy.
+- ClearMasks: raw_mask, base_mask, hierarchy_mask, count_buffer all in
+  `kUnorderedAccess`.
+- Analyze: depth texture → `kShaderResource`, job_buffer → `kGenericRead`,
+  raw_mask → `kUnorderedAccess`.
+- DilateMasks: raw_mask → `kGenericRead`, base_mask → `kUnorderedAccess`,
+  count_buffer → `kUnorderedAccess`, analysis_buffer → `kShaderResource`.
+- BuildHierarchy: base_mask → `kGenericRead`, hierarchy_mask →
+  `kUnorderedAccess`, count_buffer → `kUnorderedAccess`.
+- Finalize: count_buffer → `kGenericRead`, summary_buffer →
+  `kUnorderedAccess`.
+- Final states: base_mask, hierarchy_mask, summary → `kShaderResource`;
+  raw_mask, count_buffer → `kCommon`.
+
+#### Storage trade-off
+
+The implementation uses one `uint32` per tile rather than bit-packing.
+At `128 × 128` tiles × 4 bytes × 4 cascades = `256 KB` for raw + `256 KB`
+for base + `16 KB` for hierarchy — modest GPU memory. The advantage is
+simpler atomic writes (`InterlockedOr` on a uint vs. bit-offset atomics) and
+cleaner dilation reads. Bit-packing can be revisited if memory pressure
+requires it.
+
+#### Scaling characteristics
+
+The per-pixel `CS_Analyze` dispatch is the dominant cost — same complexity as
+CSM-2's per-pixel pass. The remaining four dispatches (clear, dilate,
+hierarchy, finalize) are tile-count-proportional and negligible.
+
+#### Constants structure (208 bytes)
+
+```cpp
+struct ConventionalShadowReceiverMaskPassConstants {
+  uint32   depth_texture_index;
+  uint32   job_buffer_index;
+  uint32   analysis_buffer_index;
+  uint32   raw_mask_uav_index;
+  uint32   raw_mask_srv_index;
+  uint32   base_mask_uav_index;
+  uint32   base_mask_srv_index;
+  uint32   hierarchy_mask_uav_index;
+  uint32   hierarchy_mask_srv_index;
+  uint32   count_buffer_uav_index;
+  uint32   count_buffer_srv_index;
+  uint32   summary_buffer_uav_index;
+  uvec2    screen_dimensions;
+  uint32   job_count;
+  uint32   base_tile_resolution;
+  uint32   hierarchy_tile_resolution;
+  uint32   base_tiles_per_job;
+  uint32   hierarchy_tiles_per_job;
+  uint32   hierarchy_reduction;
+  mat4     inverse_view_projection;        // offset 80
+  mat4     view_matrix;                    // offset 144
+};
+```
+
+**Exit criteria (met):**
+
+- Near cascades show materially sparse occupancy (occupied-tile ratio
+  significantly below 1.0)
 - No unexplained timing regression versus CSM-2 baseline
 
 ### 5.4 CSM-4 — GPU Caster Culling And Compaction (Planned)
@@ -575,7 +735,7 @@ ensures each visible sample contributes to exactly one cascade.
 GPU atomics only support integer min/max. To perform atomic min/max on
 IEEE 754 floats:
 
-```
+```text
 FloatToOrdered(f):
     bits = asuint(f)
     if sign bit set: return ~bits        (flip all → monotonic negative range)
@@ -594,7 +754,7 @@ enabling `InterlockedMin` / `InterlockedMax` to compute float min/max.
 The CPU snaps each cascade's light-space center to texel boundaries before
 computing the final orthographic projection:
 
-```
+```cpp
 snapped.x = round(center.x / texel_size) * texel_size
 snapped.y = round(center.y / texel_size) * texel_size
 ```
@@ -607,7 +767,7 @@ while the unsnapped sphere-fit center defines the `full_rect_center_half_extent`
 
 The CSM-2 finalize pass computes conservative dilation margins:
 
-```
+```cpp
 xy_margin = max(world_units_per_texel,
                 constant_bias + normal_bias + 2 * world_units_per_texel)
 depth_margin = max(world_units_per_texel,
