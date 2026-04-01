@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -61,6 +62,7 @@
 #include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
+#include <Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/GpuDebugManager.h>
 #include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
@@ -106,6 +108,7 @@
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -815,6 +818,8 @@ auto Renderer::EnsureOffscreenFrameServicesInitialized() -> void
       observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
   }
 
+  EnsureConventionalShadowDrawRecordBufferInitialized(
+    observer_ptr { gfx.get() });
   EnsureShadowServicesInitialized(observer_ptr { gfx.get() });
 }
 
@@ -844,6 +849,30 @@ auto Renderer::EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx)
       internal::PerViewStructuredPublisher<ShadowFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "ShadowFrameBindings");
+  }
+}
+
+auto Renderer::EnsureConventionalShadowDrawRecordBufferInitialized(
+  observer_ptr<Graphics> gfx) -> void
+{
+  CHECK_NOTNULL_F(gfx.get(),
+    "Renderer::EnsureConventionalShadowDrawRecordBufferInitialized requires a "
+    "live Graphics backend");
+  CHECK_NOTNULL_F(inline_transfers_.get(),
+    "Renderer::EnsureConventionalShadowDrawRecordBufferInitialized requires "
+    "InlineTransfersCoordinator");
+  CHECK_NOTNULL_F(inline_staging_provider_.get(),
+    "Renderer::EnsureConventionalShadowDrawRecordBufferInitialized requires "
+    "inline staging provider");
+
+  if (!conventional_shadow_draw_record_buffer_) {
+    conventional_shadow_draw_record_buffer_
+      = std::make_unique<upload::TransientStructuredBuffer>(
+        observer_ptr { gfx.get() }, *inline_staging_provider_,
+        static_cast<std::uint32_t>(
+          sizeof(renderer::ConventionalShadowDrawRecord)),
+        observer_ptr { inline_transfers_.get() },
+        "ConventionalShadowDrawRecords");
   }
 }
 
@@ -880,6 +909,10 @@ auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
   }
   if (debug_frame_bindings_publisher_) {
     debug_frame_bindings_publisher_->OnFrameStart(frame_sequence, frame_slot);
+  }
+  if (conventional_shadow_draw_record_buffer_) {
+    conventional_shadow_draw_record_buffer_->OnFrameStart(
+      frame_sequence, frame_slot);
   }
   if (lighting_frame_bindings_publisher_) {
     lighting_frame_bindings_publisher_->OnFrameStart(
@@ -1082,6 +1115,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       internal::PerViewStructuredPublisher<DebugFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "DebugFrameBindings");
+    EnsureConventionalShadowDrawRecordBufferInitialized(
+      observer_ptr { gfx.get() });
     lighting_frame_bindings_publisher_ = std::make_unique<
       internal::PerViewStructuredPublisher<LightingFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
@@ -1408,6 +1443,7 @@ auto Renderer::OnShutdown() noexcept -> void
   draw_frame_bindings_publisher_.reset();
   view_color_data_publisher_.reset();
   debug_frame_bindings_publisher_.reset();
+  conventional_shadow_draw_record_buffer_.reset();
   lighting_frame_bindings_publisher_.reset();
   vsm_frame_bindings_publisher_.reset();
   shadow_manager_.reset();
@@ -3569,6 +3605,8 @@ auto Renderer::PublishPreparedFrameSpans(
     prepared_frame.draw_bounding_spheres = {};
   }
 
+  PublishConventionalShadowDrawRecords(view_id, prepared_frame);
+
   storage.render_item_storage.clear();
   storage.shadow_caster_bounds_storage.clear();
   storage.visible_receiver_bounds_storage.clear();
@@ -3657,6 +3695,107 @@ auto Renderer::PublishPreparedFrameSpans(
     main_view_visible_item_count, zero_radius_item_count,
     storage.shadow_caster_bounds_storage.size(),
     storage.visible_receiver_bounds_storage.size());
+}
+
+auto Renderer::PublishConventionalShadowDrawRecords(
+  ViewId view_id, PreparedSceneFrame& prepared_frame) -> void
+{
+  auto& storage = per_view_storage_[view_id];
+  storage.conventional_shadow_draw_record_storage.clear();
+  prepared_frame.conventional_shadow_draw_records = {};
+  prepared_frame.bindless_conventional_shadow_draw_records_slot
+    = kInvalidShaderVisibleIndex;
+
+  internal::BuildConventionalShadowDrawRecords(
+    prepared_frame, storage.conventional_shadow_draw_record_storage);
+
+  prepared_frame.conventional_shadow_draw_records
+    = std::span<const renderer::ConventionalShadowDrawRecord>(
+      storage.conventional_shadow_draw_record_storage.data(),
+      storage.conventional_shadow_draw_record_storage.size());
+
+  std::uint32_t static_record_count = 0U;
+  std::uint32_t shadow_only_record_count = 0U;
+  std::uint32_t opaque_record_count = 0U;
+  std::uint32_t masked_record_count = 0U;
+  std::vector<std::uint32_t> partition_counts(
+    prepared_frame.partitions.size(), 0U);
+  for (const auto& record : storage.conventional_shadow_draw_record_storage) {
+    if (renderer::IsStaticShadowCaster(record)) {
+      ++static_record_count;
+    }
+    if (!renderer::IsMainViewVisible(record)) {
+      ++shadow_only_record_count;
+    }
+    if (record.partition_pass_mask.IsSet(PassMaskBit::kOpaque)) {
+      ++opaque_record_count;
+    }
+    if (record.partition_pass_mask.IsSet(PassMaskBit::kMasked)) {
+      ++masked_record_count;
+    }
+    if (record.partition_index < partition_counts.size()) {
+      ++partition_counts[record.partition_index];
+    }
+  }
+
+  if (!storage.conventional_shadow_draw_record_storage.empty()) {
+    if (conventional_shadow_draw_record_buffer_ == nullptr) {
+      LOG_F(ERROR,
+        "Renderer: view={} shadow draw record buffer is unavailable; records "
+        "will not be published to the GPU",
+        view_id.get());
+    } else if (const auto allocation
+      = conventional_shadow_draw_record_buffer_->Allocate(
+        static_cast<std::uint32_t>(
+          storage.conventional_shadow_draw_record_storage.size()));
+      allocation) {
+      if (allocation->mapped_ptr != nullptr) {
+        std::memcpy(allocation->mapped_ptr,
+          storage.conventional_shadow_draw_record_storage.data(),
+          storage.conventional_shadow_draw_record_storage.size()
+            * sizeof(renderer::ConventionalShadowDrawRecord));
+        prepared_frame.bindless_conventional_shadow_draw_records_slot
+          = allocation->srv;
+      }
+    } else {
+      LOG_F(ERROR,
+        "Renderer: view={} failed to publish {} conventional shadow draw "
+        "records: {}",
+        view_id.get(), storage.conventional_shadow_draw_record_storage.size(),
+        allocation.error().message());
+    }
+  }
+
+  std::string partition_distribution {};
+  for (std::uint32_t partition_index = 0U;
+    partition_index < prepared_frame.partitions.size(); ++partition_index) {
+    const auto& partition = prepared_frame.partitions[partition_index];
+    if (!internal::IsConventionalShadowRasterPartition(partition.pass_mask)) {
+      continue;
+    }
+    if (!partition_distribution.empty()) {
+      partition_distribution += ", ";
+    }
+    partition_distribution += fmt::format("#{}:{}@[{},{})={}", partition_index,
+      to_string(partition.pass_mask), partition.begin, partition.end,
+      partition_counts[partition_index]);
+  }
+  if (partition_distribution.empty()) {
+    partition_distribution = "none";
+  }
+
+  LOG_F(INFO,
+    "Renderer: view={} conventional shadow draw records={} static={} "
+    "dynamic={} "
+    "shadow_only={} opaque={} masked={} slot={} partition_distribution={}",
+    view_id.get(), storage.conventional_shadow_draw_record_storage.size(),
+    static_record_count,
+    static_cast<std::uint32_t>(
+      storage.conventional_shadow_draw_record_storage.size())
+      - static_record_count,
+    shadow_only_record_count, opaque_record_count, masked_record_count,
+    prepared_frame.bindless_conventional_shadow_draw_records_slot.get(),
+    partition_distribution);
 }
 
 auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
