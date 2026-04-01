@@ -1949,8 +1949,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         if (atmo_lut_manager->IsDirty()
           || !atmo_lut_manager->HasBeenGenerated()) {
           try {
+            auto marker_scope_options = scope_options;
+            marker_scope_options.timestamp_enabled = false;
             graphics::GpuEventScope lut_scope(
-              *recorder, "Atmosphere LUT Compute", scope_options);
+              *recorder, "Atmosphere LUT Compute", marker_scope_options);
             co_await sky_atmo_lut_compute_pass_->PrepareResources(
               *render_context_, *recorder);
             co_await sky_atmo_lut_compute_pass_->Execute(
@@ -2001,8 +2003,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
             sky_capture_pass_->MarkDirty(view_id);
           }
           try {
+            auto marker_scope_options = scope_options;
+            marker_scope_options.timestamp_enabled = false;
             graphics::GpuEventScope capture_scope(
-              *recorder, "Sky Capture", scope_options);
+              *recorder, "Sky Capture", marker_scope_options);
             co_await sky_capture_pass_->PrepareResources(
               *render_context_, *recorder);
             co_await sky_capture_pass_->Execute(*render_context_, *recorder);
@@ -2032,8 +2036,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
           env_static->MarkIblRegenerationClean(view_id);
         }
         try {
+          auto marker_scope_options = scope_options;
+          marker_scope_options.timestamp_enabled = false;
           graphics::GpuEventScope ibl_scope(
-            *recorder, "IBL Compute", scope_options);
+            *recorder, "IBL Compute", marker_scope_options);
           co_await ibl_compute_pass_->PrepareResources(
             *render_context_, *recorder);
           co_await ibl_compute_pass_->Execute(*render_context_, *recorder);
