@@ -148,7 +148,7 @@ auto ConventionalShadowRasterPass::DoExecute(
   }
 
   ValidateRasterPlan(raster_plan->jobs);
-  auto& depth_texture = const_cast<graphics::Texture&>(GetDepthTexture());
+  auto& depth_texture = GetDepthTextureMutable();
   SetupViewPortAndScissors(recorder);
   const graphics::GpuEventScopeOptions scope_options {};
   graphics::GpuEventScope shadow_depth_work_scope(

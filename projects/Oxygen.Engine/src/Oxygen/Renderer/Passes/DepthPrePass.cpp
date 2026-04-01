@@ -420,6 +420,20 @@ auto DepthPrePass::SetConfiguredDepthTexture(
   config_->depth_texture = std::move(depth_texture);
 }
 
+auto DepthPrePass::GetDepthTextureMutable() -> graphics::Texture&
+{
+  // ResourceRegistry view registration still requires a non-const Resource&.
+  // Keep that const-escape localized here instead of repeating const_cast at
+  // each call site that needs to register or update depth views.
+  if (const auto* depth_texture = TryGetConfiguredDepthTexture();
+    depth_texture != nullptr) {
+    return const_cast<graphics::Texture&>(*depth_texture);
+  }
+
+  throw std::runtime_error(
+    "DepthPrePass requires an explicit config depth_texture.");
+}
+
 auto DepthPrePass::GetEffectiveViewport() const -> ViewPort
 {
   return viewport_.value_or(FullViewportForTexture(GetDepthTexture()));
@@ -477,7 +491,7 @@ auto DepthPrePass::EnsureCanonicalDepthSrv() -> ShaderVisibleIndex
   auto& graphics = Context().GetGraphics();
   auto& registry = graphics.GetResourceRegistry();
   auto& allocator = graphics.GetDescriptorAllocator();
-  auto& depth_texture = const_cast<graphics::Texture&>(*config_->depth_texture);
+  auto& depth_texture = GetDepthTextureMutable();
   const auto srv_desc = graphics::TextureViewDescription {
     .view_type = ResourceViewType::kTexture_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
@@ -560,7 +574,8 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       psf->world_matrices.size(), psf->normal_matrices.size());
   }
 
-  const auto dsv = PrepareDepthStencilView(GetDepthTexture());
+  auto& depth_texture = GetDepthTextureMutable();
+  const auto dsv = PrepareDepthStencilView(depth_texture);
   DCHECK_F(dsv->IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
@@ -631,7 +646,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
 // --- Private helper implementations for Execute() ---
 
-auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
+auto DepthPrePass::PrepareDepthStencilView(Texture& depth_texture_ref)
   -> graphics::NativeView
 {
   using graphics::DescriptorHandle;
@@ -675,8 +690,7 @@ auto DepthPrePass::PrepareDepthStencilView(const Texture& depth_texture_ref)
   }
   // Register the newly created view
   const auto dsv = registry.RegisterView(
-    const_cast<Texture&>(depth_texture_ref), // Added const_cast
-    std::move(dsv_desc_handle), dsv_view_desc);
+    depth_texture_ref, std::move(dsv_desc_handle), dsv_view_desc);
 
   if (!dsv->IsValid()) {
     throw std::runtime_error("Failed to register DSV with resource registry "
