@@ -179,6 +179,10 @@ protected:
     -> graphics::RasterizerStateDesc;
   virtual auto ExtendShaderDefines(
     std::vector<graphics::ShaderDefine>& defines) const -> void;
+  [[nodiscard]] auto TryGetConfiguredDepthTexture() const noexcept
+    -> const graphics::Texture*;
+  auto SetConfiguredDepthTexture(
+    std::shared_ptr<const graphics::Texture> depth_texture) -> void;
 
   // Helper methods for Execute()
   virtual auto PrepareDepthStencilView(

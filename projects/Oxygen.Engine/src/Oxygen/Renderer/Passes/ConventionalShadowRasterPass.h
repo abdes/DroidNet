@@ -52,14 +52,18 @@ protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
     -> co::Co<> override;
   auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> override;
+  auto ValidateConfig() -> void override;
   auto UsesFramebufferDepthAttachment() const -> bool override;
   auto PublishesCanonicalDepthOutput() const -> bool override;
   auto BuildRasterizerStateDesc(graphics::CullMode cull_mode) const
     -> graphics::RasterizerStateDesc override;
 
 private:
+  auto SyncConfiguredDepthTextureFromShadowManager() -> void;
   auto CacheDeferredReclaimer() -> void;
   auto ReleaseShadowViewConstantsBuffer() noexcept -> void;
+  auto ValidateRasterPlan(std::span<const renderer::RasterShadowJob> jobs) const
+    -> void;
   auto EnsureShadowViewConstantsCapacity(std::uint32_t required_jobs) -> void;
   auto UploadJobViewConstants(std::span<const renderer::RasterShadowJob> jobs)
     -> void;
