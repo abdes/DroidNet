@@ -24,6 +24,7 @@
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
+#include <Oxygen/Renderer/Types/ConventionalShadowReceiverAnalysis.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
@@ -92,6 +93,9 @@ public:
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetReceiverAnalysisPlan(
+    ViewId view_id) const noexcept
+    -> const ConventionalShadowReceiverAnalysisPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetShadowInstanceMetadata(
     ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto

@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Types/ConventionalShadowReceiverAnalysis.h>
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
@@ -74,6 +75,9 @@ public:
     ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetReceiverAnalysisPlan(
+    ViewId view_id) const noexcept
+    -> const ConventionalShadowReceiverAnalysisPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetDirectionalShadowTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
@@ -102,8 +106,10 @@ private:
     std::vector<engine::ShadowInstanceMetadata> shadow_instances;
     std::vector<engine::DirectionalShadowMetadata> directional_metadata;
     std::vector<RasterShadowJob> raster_jobs;
+    std::vector<ConventionalShadowReceiverAnalysisJob> receiver_analysis_jobs;
     ShadowFramePublication frame_publication {};
     RasterShadowRenderPlan raster_plan {};
+    ConventionalShadowReceiverAnalysisPlan receiver_analysis_plan {};
   };
 
   observer_ptr<Graphics> gfx_;

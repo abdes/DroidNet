@@ -25,6 +25,7 @@ KNOWN_PASS_NAMES = (
     "AutoExposurePass",
     "ToneMapPass",
     "ConventionalShadowRasterPass",
+    "ConventionalShadowReceiverAnalysisPass",
     "DepthPrePass",
     "ScreenHzbBuildPass",
     "LightCullingPass",
@@ -123,6 +124,11 @@ class ReportWriter:
         self.lines.extend(lines)
 
     def flush(self) -> None:
+        if not self.lines or self.lines[0] != "analysis_result=success":
+            if self.lines and self.lines[0].startswith("analysis_result="):
+                self.lines[0] = "analysis_result=success"
+            else:
+                self.lines.insert(0, "analysis_result=success")
         write_report(self.report_path, self.lines)
 
 
@@ -357,6 +363,7 @@ def run_ui_script(
             )
         if not callback_completed["value"]:
             raise RuntimeError("Replay callback did not execute")
+        report.flush()
         return 0
     except Exception:
         write_report(

@@ -104,16 +104,44 @@ def build_report(
     counter_results = controller.FetchCounters([rd.GPUCounter.EventGPUDuration])
     durations = {result.eventId: result.value.d for result in counter_results}
 
-    total_ms = sum(durations.get(action.event_id, 0.0) for action in work_records)
-    total_ms *= 1000.0
+    scope_ms_values = [
+        durations.get(action.event_id, 0.0) * 1000.0 for action in scope_records
+    ]
+    work_sum_ms = (
+        sum(durations.get(action.event_id, 0.0) for action in work_records) * 1000.0
+    )
+    authoritative_scope_ms = max(scope_ms_values) if scope_ms_values else 0.0
+    if authoritative_scope_ms <= 0.0 and work_sum_ms > 0.0:
+        authoritative_scope_ms = work_sum_ms
 
     report.append("analysis_profile=pass_timing")
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
     report.append("pass_name={}".format(pass_name))
     report.append("scope_events={}".format(summarize_event_ids(scope_records)))
+    report.append("scope_event_count={}".format(len(scope_records)))
     report.append("work_event_count={}".format(len(work_records)))
-    report.append("total_gpu_duration_ms={:.6f}".format(total_ms))
+    report.append(
+        "authoritative_scope_gpu_duration_ms={:.6f}".format(authoritative_scope_ms)
+    )
+    report.append("total_gpu_duration_ms={:.6f}".format(authoritative_scope_ms))
+    report.append("work_gpu_duration_sum_ms={:.6f}".format(work_sum_ms))
+    report.append(
+        "scope_gpu_duration_ms={}".format(
+            ", ".join("{:.6f}".format(value) for value in scope_ms_values)
+            if scope_ms_values
+            else "<none>"
+        )
+    )
+    report.blank()
+    report.append("scope_events_detail:")
+    for action in scope_records:
+        duration_ms = durations.get(action.event_id, 0.0) * 1000.0
+        report.append(
+            "{}|{:.6f}|{}|{}".format(
+                action.event_id, duration_ms, action.name, action.path
+            )
+        )
     report.blank()
     report.append("work_events:")
     for action in work_records:

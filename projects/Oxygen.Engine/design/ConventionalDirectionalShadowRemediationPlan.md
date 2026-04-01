@@ -13,45 +13,55 @@ the invalidated approach, the corrected architecture, the phase gates, and the
 evidence standards required to continue this work later without redoing the
 slow discovery.
 
-## 0. Current State (2026-04-01)
+## 0. Current State (2026-04-02)
 
-Truthful status:
+Current task focus:
 
-- The repository has been recovered to the state immediately after `CSM-1`.
-- `CSM-1` is implemented and remains valid.
-- The previously attempted `CSM-2` / `CSM-3` path was invalidated by
-  RenderDoc evidence and rolled back.
-- No shadow GPU-time reduction beyond the original conventional path currently
-  exists in code.
-- Every future phase must include:
-  - Release build validation
-  - a fresh frame-`320` RenderDoc capture of the canonical benchmark
-  - sequential RenderDoc Python-script analysis
-  - an explicit comparison against the canonical baseline package in this
-    document
+- Active phase is now `CSM-3`.
+- Effective `2026-04-02`, the authoritative comparison baseline for later
+  phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
+  pre-`CSM-2` conventional package.
+- The next acceptable outputs are:
+  - `CSM-3` light-space receiver-mask implementation
+  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-3`
+  - receiver-mask occupancy evidence compared against the locked `CSM-2`
+    baseline
+- `CSM-1` and `CSM-2` are implemented and validated.
+- `CSM-2` is the locked baseline package for future phases. It does not
+  compare against an older capture package because it is the new authoritative
+  baseline.
+- No later phase may be treated as complete until its code, document updates,
+  and validation evidence all satisfy this plan's gates.
+- The rejected receiver-object-bounds culling path stays rejected and is not
+  part of the active task.
+- No production claim, timing claim, or phase-complete claim is valid if it
+  depends on ignored script errors, missing validation, or parallel RenderDoc
+  analysis runs.
+- The archived pre-`CSM-2` conventional package is reference-only invalidation
+  context and is no longer a timing or structural baseline for future phases.
 
-What survived rollback:
-
-- the canonical benchmark harness and baseline artifacts
-- the single-sun benchmark policy for `RenderScene`
-- the `CSM-1` conventional shadow draw-record contract and tests
-
-What did not survive rollback:
-
-- receiver-sphere-based cull jobs
-- sphere-vs-rect-slab `CSM-3` compute compaction
-- any claim that the rolled-back `CSM-2` / `CSM-3` design was a viable
-  production direction
-
-## 1. Canonical Baseline Package
+## 1. Authoritative Baseline Package (`CSM-2`)
 
 ### 1.1 Scene Identity
 
 Canonical scene for this plan:
 
-- file: `Examples/RenderScene/demo_settings.json`
+- live settings file swapped by the harness: `Examples/RenderScene/demo_settings.json`
+- saved benchmark settings asset: `Examples/RenderScene/demo_settings.benchmark.json`
 - key: `e74ea312-0b6f-928f-8864-e3f44af2a8b7`
 - scene: `/.cooked/Scenes/NewSponza_Main_glTF_003.oscene`
+
+Benchmark settings swap protocol:
+
+- before every capture, rename the current live file to
+  `Examples/RenderScene/demo_settings.sav`
+- copy `Examples/RenderScene/demo_settings.benchmark.json` to
+  `Examples/RenderScene/demo_settings.json`
+- run the benchmark capture against that copied file
+- after the run, always restore `Examples/RenderScene/demo_settings.sav` back to
+  `Examples/RenderScene/demo_settings.json`
+- a capture is invalid if the harness does not restore the original live
+  settings file
 
 Benchmark sun policy for this plan:
 
@@ -74,23 +84,27 @@ cmake --build out/build-ninja --parallel 8 --config Release --target `
   Oxygen.Graphics.Direct3D12.ShaderBake.exe
 ```
 
-Canonical frame-`320` capture:
+Canonical frame-`350` capture:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File `
   .\Examples\RenderScene\Run-ConventionalShadowBaseline.ps1 `
-  -Frame 320 `
+  -Frame 350 `
+  -RunFrames 471 `
+  -Fps 50 `
   -Output `
-  out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional
+  out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50
 ```
 
 Canonical sequential analysis:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File `
-  .\Examples\RenderScene\Analyze-ConventionalShadowBaseline.ps1 `
+  .\Examples\RenderScene\Analyze-ConventionalShadowCsm2.ps1 `
   -CapturePath `
-  out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc
+  out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50_frame350.rdc `
+  -OutputStem `
+  out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50
 ```
 
 ### 1.3 Canonical Baseline Artifacts
@@ -98,64 +112,76 @@ powershell -ExecutionPolicy Bypass -File `
 Authoritative baseline artifacts:
 
 - capture:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional_frame320.rdc`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50_frame350.rdc`
 - benchmark log:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.benchmark.log`
-- RenderDoc focus report:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_parent_focus.txt`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.benchmark.log`
 - RenderDoc timing reports:
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shadow_timing.txt`
-  `out/build-ninja/analysis/conventional_shadow_sponza_baseline/release_frame320_refresh_conventional.shader_timing.txt`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.shadow_timing.txt`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.shader_timing.txt`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.screen_hzb_timing.txt`
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.receiver_analysis_timing.txt`
+- RenderDoc receiver-analysis report:
+  `out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50.receiver_analysis_report.txt`
 
 ### 1.4 Authoritative Structural Baseline
 
-These values are the current authoritative baseline because they are consistent
-across the benchmark log and the RenderDoc focus report:
+These values are the current authoritative `CSM-2` baseline because they are
+consistent across the benchmark log and the hardened sequential RenderDoc
+reports:
 
 | Metric | Value | Evidence |
 | --- | ---: | --- |
 | Shadowed directional lights | `1` | benchmark log |
-| Raster jobs / cascades | `4` | benchmark log + RenderDoc event naming |
+| Raster jobs / cascades | `4` | receiver-analysis report `job_count` |
 | Shadow work events | `1608` | RenderDoc timing report |
-| Shadow draws | `1604` | RenderDoc timing report classification |
-| Shadow clears | `4` | RenderDoc timing report classification |
+| Shadow draws | `1604` | `1608 - 4` |
+| Shadow clears | `4` | receiver-analysis jobs / one clear per job |
 | Average draws per job | `401` | `1604 / 4` |
+| Conventional shadow draw records | `401` | benchmark log |
 | Retained shadow casters | `405` | benchmark log |
-| Visible receiver items | `18` | benchmark log |
-| Shadow viewport / scissor | `4096 x 4096` | RenderDoc focus report |
+| Visible receiver bounds | `35` | benchmark log |
+| Receiver-analysis valid jobs | `2` | receiver-analysis report |
+| Receiver-analysis sampled jobs | `2` | receiver-analysis report |
 
 Canonical stabilization facts:
 
-- scene build frame: `124`
-- last texture repoint frame: `198`
-- capture frame: `320`
-- post-scene-build stabilization: `196` frames / `8.638 s`
-- post-last-repoint stabilization: `122` frames / `4.263 s`
+- scene build frame: `181`
+- last texture repoint frame: `255`
+- capture frame: `350`
+- post-scene-build stabilization: `169` frames / `6.057 s`
+- post-last-repoint stabilization: `95` frames / `1.893 s`
 
 ### 1.5 Timing Baseline Status
 
-The currently stored pass-timing text files are not trustworthy closure
-evidence for GPU timing deltas:
+The authoritative `CSM-2` baseline timing package produced by the hardened
+sequential run on `2026-04-02` is:
 
-- `release_frame320_refresh_conventional.shadow_timing.txt` currently reports
-  `507.133568 ms`
-- `release_frame320_refresh_conventional.shader_timing.txt` currently reports
-  `12.981472 ms`
+- `ConventionalShadowRasterPass`: `21.657248 ms`
+- `ScreenHzbBuildPass`: `0.419232 ms`
+- `ConventionalShadowReceiverAnalysisPass`: `0.553856 ms`
+- `ShaderPass`: `9.286432 ms`
 
-Those numbers are inconsistent with the accepted baseline session and with the
-later rolled-back `CSM-3` capture, which showed a structurally identical
-workload but a `ConventionalShadowRasterPass` cost around `21.7 ms`.
+Current receiver-analysis baseline status from the same package:
+
+- `job_count`: `4`
+- `valid_job_count`: `2`
+- `sampled_job_count`: `2`
+- `min_full_area_ratio`: `0.000321`
+- `max_full_area_ratio`: `0.245325`
+- `min_full_depth_ratio`: `0.026405`
+- `max_full_depth_ratio`: `0.387870`
 
 Conclusion:
 
-- structural baseline metrics above are authoritative today
-- timing closure is blocked on normalization of the RenderDoc timing analysis
-  so that a single canonical frame-`320` capture yields reproducible pass
-  timings
-- no future phase may claim a timing improvement until that normalization is
-  done and the baseline timing report is regenerated from the canonical capture
-
-This is now part of the new `CSM-2` scope.
+- the `CSM-2` package above is now the authoritative baseline for later phases
+- the old conventional package is archived only and is no longer a comparison
+  target
+- `CSM-2` timing is now recorded from a hardened sequential analysis package
+- `CSM-2` receiver analysis now proves near-cascade tightening versus the full
+  rect
+- `CSM-2` is the authoritative baseline and therefore has no baseline-compare
+  requirement against older stale captures
+- active implementation work now moves to `CSM-3`
 
 ### 1.6 Per-Phase Evidence Rule
 
@@ -164,8 +190,17 @@ Every future phase must produce all of the following:
 1. Release build evidence.
 2. Fresh frame-`320` capture of the canonical benchmark.
 3. Sequential RenderDoc Python-script analysis.
-4. A comparison against the canonical baseline package in this document.
+4. A comparison against the authoritative `CSM-2` baseline package in this
+   document.
 5. Updated design status in this document.
+
+Evidence is invalid if any of the following occurred during capture or
+analysis:
+
+- PowerShell or Python script errors were ignored
+- a script continued after a failed command without explicit handling
+- multiple RenderDoc analyses were run in parallel
+- the benchmark-settings swap protocol was not fully restored
 
 Structural phases may close without a shadow-GPU-time reduction only if they
 show:
@@ -176,7 +211,8 @@ show:
 
 Performance phases must additionally show:
 
-- normalized timing comparison versus the canonical baseline capture
+- normalized timing comparison versus the authoritative `CSM-2` baseline
+  capture
 - draw/job reduction or raster reduction consistent with the phase goal
 
 ## 2. Invalidated Approach And Why It Failed
@@ -261,7 +297,28 @@ What this means for Oxygen:
 - Cull and compact casters against that mask on GPU.
 - Feed conventional shadow raster through counted indirect draws only.
 
-## 4. Non-Negotiable Design Rules
+## 4. Non-Negotiable Rules
+
+### 4.1 Execution Guardrails
+
+1. This document's scope, phase gates, and evidence requirements are binding.
+   If implementation or validation work no longer fits this document, update
+   the document first before making new completion claims.
+2. No shortcuts.
+   Do not bypass a gate, skip a required artifact, or substitute ad hoc
+   evidence for the required capture-and-analysis package.
+3. RenderDoc execution is strictly sequential.
+   Do not run multiple RenderDoc captures, UI inspections, or Python-script
+   analyses in parallel.
+4. PowerShell scripts must be hardened.
+   Capture and analysis scripts must fail fast, propagate non-zero exit codes,
+   validate required paths and tools, and always restore the benchmark
+   settings file on every exit path.
+5. RenderDoc Python scripts are treated as fallible code, not trusted oracles.
+   Every run must check for script errors, incomplete output, and analysis
+   mismatches; phase progress is blocked until those errors are fixed.
+
+### 4.2 Design Rules
 
 1. `CSM-1` stays.
    The conventional shadow draw-record contract is still the right foundation.
@@ -376,28 +433,36 @@ Current validation evidence:
 
 Status:
 
-- pending
+- complete
 
 Goals:
 
+- harden the canonical capture and analysis toolchain so validation failures
+  stop immediately and surface actionable errors
 - normalize the canonical baseline timing analysis so later phases can claim
   real GPU-time deltas
 - replace receiver-object-bounds thinking with actual visible receiver samples
 
 Tasks:
 
-1. Repair the RenderDoc baseline timing analysis so it reports a single
+1. Harden the canonical PowerShell and RenderDoc Python tooling used by this
+   phase:
+   - fail fast on command, tool, or file errors
+   - reject parallel RenderDoc analysis execution
+   - verify the benchmark-settings swap is restored on all exit paths
+   - surface Python analysis errors as blocking failures
+2. Repair the RenderDoc baseline timing analysis so it reports a single
    authoritative `ConventionalShadowRasterPass` and `ShaderPass` duration for
-   the canonical frame-`320` capture.
-2. Add a GPU receiver-analysis pass that consumes the main-view depth path,
+   the canonical frame-`350` capture.
+3. Add a GPU receiver-analysis pass that consumes the main-view depth path,
    not `visible_receiver_bounding_spheres`.
-3. Use actual visible depth samples to derive, per cascade:
+4. Use actual visible depth samples to derive, per cascade:
    - sample count
    - tight light-space XY bounds
    - tight light-space depth min/max
    - required dilation margin for filter / bias safety
-4. Publish `ConventionalShadowReceiverAnalysis` as a renderer-owned GPU buffer.
-5. Add a RenderDoc Python analysis script that reads back the receiver-analysis
+5. Publish `ConventionalShadowReceiverAnalysis` as a renderer-owned GPU buffer.
+6. Add a RenderDoc Python analysis script that reads back the receiver-analysis
    buffer from the capture and reports:
    - sample counts per job
    - projected area ratio relative to the full cascade-fit rect
@@ -413,18 +478,19 @@ Implementation guidance:
 
 Exit gate:
 
+- capture and analysis scripts are hardened, error-checked, and executed
+  sequentially
 - canonical baseline timing reports are normalized and regenerated from the
   canonical capture
 - receiver analysis is derived from actual visible samples, not object bounds
-- frame-`320` capture and analysis show that at least one near cascade is
+- frame-`350` capture and analysis show that at least one near cascade is
   materially tighter than the full cascade-fit rect
 - no unexplained structural regression versus the baseline package
 
 Required phase evidence:
 
 - Release build
-- fresh frame-`320` capture
-- refreshed baseline compare report
+- fresh frame-`350` capture
 - receiver-analysis RenderDoc report
 - doc update in this file
 
@@ -460,7 +526,7 @@ Implementation guidance:
 
 Exit gate:
 
-- canonical frame-`320` capture shows a sparse receiver mask for at least one
+- canonical frame-`350` capture shows a sparse receiver mask for at least one
   near cascade
 - aggregate occupied-tile ratio is materially below full-map coverage on the
   canonical benchmark
@@ -469,7 +535,7 @@ Exit gate:
 Required phase evidence:
 
 - Release build
-- fresh frame-`320` capture
+- fresh frame-`350` capture
 - RenderDoc receiver-mask report
 - explicit baseline comparison
 
@@ -505,7 +571,7 @@ Implementation guidance:
 
 Exit gate:
 
-- canonical frame-`320` capture proves non-trivial real-scene rejection
+- canonical frame-`350` capture proves non-trivial real-scene rejection
 - no job on the canonical benchmark remains at full-input eligibility
 - average eligible draws/job is materially below the baseline `401`
 - no unexplained CPU-path regression versus baseline benchmark log
@@ -513,7 +579,7 @@ Exit gate:
 Required phase evidence:
 
 - Release build
-- fresh frame-`320` capture
+- fresh frame-`350` capture
 - RenderDoc compacted-count report
 - explicit baseline comparison
 
@@ -604,7 +670,7 @@ Closure gate:
 - normalized timing baseline repaired
 - final conventional path uses receiver-sample analysis, receiver mask culling,
   and counted indirect raster
-- Release frame-`320` capture proves improvement against the canonical
+- Release frame-`350` capture proves improvement against the canonical
   baseline
 - docs updated
 - old invalidated approach remains documented as rejected
@@ -613,10 +679,11 @@ Closure gate:
 
 The next meaningful execution order from the recovered state is:
 
-1. Implement `CSM-2` baseline timing normalization.
-2. Implement `CSM-2` receiver analysis from actual visible samples.
-3. Capture and analyze the canonical benchmark at frame `320`.
-4. Only then proceed to `CSM-3` receiver mask construction.
+1. Implement `CSM-3` light-space receiver-mask construction from the locked
+   `CSM-2` receiver-analysis output.
+2. Capture and analyze the canonical benchmark at frame `350` and `50 fps`.
+3. Prove sparse occupied-tile coverage on at least one near cascade.
+4. Only then proceed to `CSM-4` GPU caster culling and compaction.
 
 Do not restart with receiver object bounds. Do not attempt to tune the old
 rect/slab method. That path has already failed and been rolled back.
