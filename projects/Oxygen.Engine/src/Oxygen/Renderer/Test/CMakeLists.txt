@@ -412,6 +412,15 @@ if(TARGET oxygen::graphics-direct3d12)
   )
 
   m_gtest_program(
+    "ConventionalShadowReceiverMaskPass"
+    SOURCES
+      "ConventionalShadowReceiverMaskPass_test.cpp"
+      "Fixtures/RendererOffscreenGpuTestFixture.h"
+      DEPS
+      oxygen::graphics-direct3d12
+  )
+
+  m_gtest_program(
     "LightCullingPassContract"
     SOURCES
       "LightCullingPassContract_test.cpp"
