@@ -52,6 +52,9 @@ Current task focus:
 - `CSM-6` is now scoped as future-proofed optional work that should activate
   only when explicit static/dynamic authoring exists for the content path or
   when measured platform budgets still require more reduction after `CSM-5`.
+- `CSM-7` is now the next meaningful specialization phase, but it must stay on
+  the validated `CSM-1` through `CSM-5` architecture and must not introduce a
+  second shadow submission or visibility path.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -1064,22 +1067,126 @@ Important rule:
   reliable authored mobility data and the product needs the extra shadow budget
 - otherwise it should stay deferred rather than adding speculative complexity
 
-### CSM-7. Shadow Material / LOD Specialization
+### CSM-7. Authoring-Backed Shadow Specialization
 
 Status:
 
-- pending
+- planned
 
 Goals:
 
 - remove remaining expensive low-value shadow work after structural waste is
   gone
+- do this without reopening the solved visibility problem or introducing a
+  second shadow renderer
+
+Activation preconditions:
+
+- `CSM-5` must already be the active hot raster path
+- `CSM-6` remains deferred unless target budgets prove it is needed
+- at least one of the following must be true:
+  - target-platform budgets still need more reduction after `CSM-5`
+  - the editor/content pipeline can author reliable shadow-specialization
+    intent that imported GLTF/FBX scenes cannot provide today
+
+Design rules:
+
+1. `CSM-1` remains the one authoritative conventional shadow draw stream.
+2. `CSM-2` through `CSM-4` remain the only receiver-driven visibility and
+   compaction path.
+3. `CSM-5` remains the only counted-indirect hot raster path.
+4. `CSM-7` may only change which shadow representation is published into the
+   authoritative draw stream. It may not change how visibility is decided.
+5. No heuristic specialization based on "has not moved recently", import
+   provenance, or similar weak signals.
+6. Imported GLTF/FBX content remains conservative by default when explicit
+   authored shadow-specialization metadata is absent.
+
+Non-goals:
+
+- no new CPU per-cascade filtering path
+- no second "legacy" shadow replay path
+- no second compaction path dedicated only to specialized materials
+- no automatic degradation of silhouette-critical or alpha-tested assets
+  without explicit authoring support
 
 Tasks:
 
-1. Add shadow-only LOD policy where supported.
-2. Add explicit masked-shadow budget controls.
-3. Validate alpha-tested correctness against the canonical capture scene.
+1. Define the authoring contract for shadow specialization, ideally from the
+   editor:
+   - `shadow_cast_mode`
+     `Default | Off | ForceOpaque | AlphaTested | TwoSided`
+   - `shadow_lod_mode`
+     `MatchMainView | FixedShadowLod | ShadowLodBias`
+   - `shadow_lod_value`
+   - optional `shadow_material_override`
+   - optional `shadow_two_sided_override`
+2. Extend `CSM-1` draw metadata / draw-record publication so specialization is
+   expressed directly in the authoritative conventional shadow draw stream:
+   - shadow geometry view
+   - shadow material class
+   - shadow raster flags
+   - specialized shadow bounds if geometry differs from the main-view
+     representation
+3. Add shadow-only LOD selection where safe:
+   - choose the shadow LOD before `CSM-1` publication
+   - publish one authoritative shadow representation per submitted draw record
+   - recompute bounds from the selected shadow geometry when needed
+   - do not choose shadow LOD per cascade
+4. Add explicit material specialization controls:
+   - preserve masked materials by default
+   - allow `ForceOpaque` only through explicit authored shadow intent
+   - keep two-sided shadow rasterization opt-in and authored
+   - allow shadow-only material override only when silhouette/occlusion
+     correctness is preserved
+5. Validate that `CSM-2`, `CSM-3`, `CSM-4`, and `CSM-5` consume the specialized
+   records unchanged and remain the only visibility + raster path.
+6. Build a live validation package proving specialization reduces real raster
+   cost without reintroducing structural waste.
+
+Implementation guidance:
+
+- imported content with no explicit specialization metadata should resolve to:
+  - `shadow_cast_mode = Default`
+  - `shadow_lod_mode = MatchMainView`
+  - no shadow-only material override
+- prefer shadow-only LOD as the first specialization lever because it reduces
+  vertex/index work without changing the receiver-driven visibility design
+- bias toward stable silhouettes, not maximum decimation
+- if any dynamic LOD policy is introduced later, it must use hysteresis and
+  avoid frame-to-frame instability
+- specialization must be resolved before `CSM-1` publication, not after
+  compaction
+- post-culling mutation of indirect command layout is not allowed
+
+Relationship to CSM-6:
+
+- `CSM-6` decides when static and dynamic shadow work must be updated
+- `CSM-7` decides how expensive each submitted shadow representation should be
+
+These responsibilities must remain separate if both phases are ever active.
+
+Exit gate:
+
+- specialization is published through the authoritative `CSM-1` draw stream,
+  not through a second shadow path
+- `CSM-2` through `CSM-5` still operate correctly on specialized records
+- canonical live capture shows reduced raster work on specialized assets
+- no unexplained increase in compaction false positives or survivors
+- no correctness regressions on alpha-tested or silhouette-sensitive assets
+- no second hot-path submission architecture exists
+
+Required phase evidence:
+
+- Release build
+- synthetic validation proving specialized metadata resolves into the
+  authoritative shadow draw stream correctly
+- fresh canonical frame-`350` capture
+- sequential RenderDoc analysis proving the specialized path still uses the
+  validated `CSM-5` counted-indirect raster path
+- timing comparison against the locked `CSM-2` baseline and the latest
+  validated pre-`CSM-7` package
+- doc update in this file
 
 ### CSM-8. Closure
 
@@ -1105,10 +1212,13 @@ The next meaningful execution order from the recovered state is:
    closure budget on the intended platforms.
 2. Keep `CSM-6` deferred unless that budget decision or future editor-authored
    mobility data justifies activating it.
-3. If `CSM-6` is activated later, make imported content dynamic-by-default and
-   reuse the existing static-shadow-caster / VSM invalidation model instead of
-   inventing heuristics.
-4. If no further budget work is required, move directly to final closure with
+3. If more reduction is still required while `CSM-6` remains deferred, use the
+   expanded `CSM-7` design below as the next phase:
+   authoring-backed shadow-only LOD and material specialization published
+   through `CSM-1`.
+4. Keep imported content conservative by default until explicit
+   shadow-specialization metadata exists.
+5. If no further budget work is required, move directly to final closure with
    the locked `CSM-2` baseline and the validated `CSM-5` package as the final
    proof set.
 
