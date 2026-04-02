@@ -150,6 +150,12 @@ public:
     std::string_view virtual_path, std::string_view descriptor_relpath,
     std::span<const std::byte> bytes) -> void;
 
+  //! Emit an asset descriptor file and wait for the write to complete.
+  OXGN_COOK_NDAPI auto EmitSync(const data::AssetKey& key,
+    data::AssetType asset_type, std::string_view virtual_path,
+    std::string_view descriptor_relpath, std::span<const std::byte> bytes)
+    -> co::Co<void>;
+
   //=== State Query
   //===-------------------------------------------------------//
 
