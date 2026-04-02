@@ -365,7 +365,7 @@
             "meta": {
                 "version": "1.0.0",
                 "description": "Authoritative bindless slot/register mapping for Oxygen.",
-                "source": "src/Oxygen/Core/Bindless/Spec.yaml"
+                "source": "src/Oxygen/Core/Meta/Bindless.yaml"
             },
             "defaults": {
                 "invalid_index": 4294967295

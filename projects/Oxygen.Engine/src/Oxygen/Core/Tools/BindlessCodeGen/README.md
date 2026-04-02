@@ -11,7 +11,7 @@ centralized YAML specification.
 
 ## What It Generates
 
-From `src/Oxygen/Core/Bindless/Spec.yaml`, the tool generates:
+From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 
 - C++: `Generated.Constants.h` — domain constants and invalid index sentinel
 - HLSL: `Generated.BindlessLayout.hlsl` — matching shader constants and helpers
@@ -59,14 +59,14 @@ static const uint K_TEXTURES_CAPACITY = 65536;
 
 ```cpp
 // Generated file - do not edit.
-// Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
+// Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 1.0.0
 // Schema-Version: 1.0.0
 // Tool: BindlessCodeGen 1.0.0
 // Generated: 2025-08-17 20:52:23
 
 namespace oxygen::engine::binding {
-  static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml";
+  static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
   static constexpr const char kBindlessSourceVersion[] = "1.0.0";
   static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
   static constexpr const char kBindlessToolVersion[] = "1.0.0";
@@ -77,11 +77,11 @@ namespace oxygen::engine::binding {
 ## Key Locations
 
 - **Tool Package**: `src/Oxygen/Core/Tools/BindlessCodeGen/src/bindless_codegen`
-- **YAML Source**: `src/Oxygen/Core/Bindless/Spec.yaml`
+- **YAML Source**: `src/Oxygen/Core/Meta/Bindless.yaml`
 - **Generated C++**: `src/Oxygen/Core/Bindless/Generated.Constants.h`,
   `Generated.RootSignature.h`, `Generated.Meta.h`, `Generated.Heaps.D3D12.h`
 - **Generated HLSL**: `src/Oxygen/Core/Bindless/Generated.BindlessLayout.hlsl`
-- **Generated JSON**: `src/Oxygen/Core/Bindless/Generated.All.json`,
+- **Generated JSON**: `src/Oxygen/Core/Meta/Generated.All.json`,
   `Generated.Heaps.D3D12.json`
 
 ## Usage
@@ -92,7 +92,7 @@ Run the packaged CLI from the repository root:
 
 ```powershell
 python -m bindless_codegen.cli `
-  --input src/Oxygen/Core/Bindless/Spec.yaml `
+  --input src/Oxygen/Core/Meta/Bindless.yaml `
   --out-base src/Oxygen/Core/Bindless/Generated.
 ```
 
@@ -264,7 +264,7 @@ source directory to your Python analysis paths. The repository includes a
 
 - Schema version is declared inside the schema file as `x-oxygen-schema-version`
   and is emitted into all generated files.
-- The `Spec.yaml` file uses the following structure:
+- The `Bindless.yaml` file uses the following structure:
 
 ```yaml
 meta:
@@ -316,7 +316,7 @@ root_signature:
 ```json
 {
   "$meta": {
-    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
+    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
     "source_version": "1.0.0",
     "schema_version": "1.0.0",
     "tool_version": "1.0.0",
