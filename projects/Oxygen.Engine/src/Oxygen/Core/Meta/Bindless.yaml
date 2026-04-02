@@ -7,8 +7,8 @@
 #   - Install the YAML extension
 #   - Add the following config if you don't have already:
 #       "yaml.schemas": {
-#         "src/Oxygen/Core/Bindless/Spec.schema.json": [
-#           "**/Spec.yaml"
+#         "src/Oxygen/Core/Meta/Bindless.schema.json": [
+#           "**/Bindless.yaml"
 #         ]
 #       },
 #       "yaml.validate": true

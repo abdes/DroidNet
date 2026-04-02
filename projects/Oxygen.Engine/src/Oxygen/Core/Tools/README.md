@@ -34,21 +34,21 @@ cmake --build --preset=windows-debug --target generate_bindless_headers
 
 # Or run directly (requires manual setup):
 python -m bindless_codegen.cli `
-  --input src/Oxygen/Core/Bindless/Spec.yaml `
+  --input src/Oxygen/Core/Meta/Bindless.yaml `
   --out-base src/Oxygen/Core/Bindless/Generated.
 ```
 
-This produces (next to the Spec.yaml):
+This produces versioned artifacts in the Core source tree:
 
-- Generated.Constants.h (C++ constants)
-- Generated.BindlessLayout.hlsl (HLSL layout/macros)
-- Generated.RootSignature.h (C++ root signature helpers)
-- Generated.Meta.h (compile-time metadata)
-- Generated.All.json (normalized runtime descriptor)
-- Generated.Heaps.D3D12.json (if heaps are defined)
-- Generated.Heaps.D3D12.h (constexpr JSON embed, if heaps are defined)
+- `src/Oxygen/Core/Bindless/Generated.Constants.h` (C++ constants)
+- `src/Oxygen/Core/Bindless/Generated.BindlessLayout.hlsl` (HLSL layout/macros)
+- `src/Oxygen/Core/Bindless/Generated.RootSignature.h` (C++ root signature helpers)
+- `src/Oxygen/Core/Bindless/Generated.Meta.h` (compile-time metadata)
+- `src/Oxygen/Core/Meta/Generated.All.json` (normalized runtime descriptor)
+- `src/Oxygen/Core/Meta/Generated.Heaps.D3D12.json` (if heaps are defined)
+- `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h` (constexpr JSON embed, if heaps are defined)
 
-Schema location: the generator auto-discovers `Spec.schema.json` next to the input, or uses the repository default at `src/Oxygen/Core/Bindless/Spec.schema.json`.
+Schema location: the generator auto-discovers `Bindless.schema.json` next to the input, or uses the repository default at `src/Oxygen/Core/Meta/Bindless.schema.json`.
 
 **📖 Full Documentation:** See
 [`BindlessCodeGen/README.md`](BindlessCodeGen/README.md) for detailed usage,
