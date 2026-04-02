@@ -153,11 +153,17 @@ protected:
 
   [[nodiscard]] static auto MakeResolvedView() -> ResolvedView
   {
+    return MakeResolvedView(0.1F, 100.0F, 90.0F);
+  }
+
+  [[nodiscard]] static auto MakeResolvedView(const float near_plane,
+    const float far_plane, const float fov_degrees = 90.0F) -> ResolvedView
+  {
     const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
       glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
     const auto projection_matrix
       = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
-        glm::radians(90.0F), 1.0F, 0.1F, 100.0F);
+        glm::radians(fov_degrees), 1.0F, near_plane, far_plane);
 
     auto view_config = View {};
     view_config.viewport = ViewPort {
@@ -181,8 +187,8 @@ protected:
       .proj_matrix = projection_matrix,
       .camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F },
       .depth_range = NdcDepthRange::ZeroToOne,
-      .near_plane = 0.1F,
-      .far_plane = 100.0F,
+      .near_plane = near_plane,
+      .far_plane = far_plane,
     });
   }
 
@@ -507,6 +513,117 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
       != publication_right.shadow_instance_metadata_srv
     || publication_left.directional_shadow_metadata_srv
       != publication_right.directional_shadow_metadata_srv);
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyPublishesExpectedDirectionalCascadeSplitDepths)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView(1.0F, 300.0F, 75.0F);
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  auto& directional_light
+    = directional_impl->get().GetComponent<DirectionalLight>();
+  directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().cascade_count = 4U;
+  directional_light.CascadedShadows().cascade_distances
+    = { 8.0F, 24.0F, 64.0F, 160.0F };
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 14 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 14 }, Slot { 0 });
+
+  const auto publication = manager->PublishForView(oxygen::ViewId { 8 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, std::array { glm::vec4 { 0.0F, 0.0F, -40.0F, 8.0F } });
+  ASSERT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  const auto* analysis_plan
+    = manager->TryGetReceiverAnalysisPlan(oxygen::ViewId { 8 });
+  ASSERT_NE(analysis_plan, nullptr);
+  ASSERT_EQ(analysis_plan->jobs.size(), 4U);
+
+  constexpr auto kEpsilon = 1.0e-3F;
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.x, 1.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.y, 8.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.x, 8.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.y, 24.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[2].split_and_full_depth_range.x, 24.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[2].split_and_full_depth_range.y, 64.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[3].split_and_full_depth_range.x, 64.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[3].split_and_full_depth_range.y, 160.0F, kEpsilon);
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyPublishesIncreasingWorldTexelSizeAcrossCascades)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView(1.0F, 300.0F, 75.0F);
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  auto& directional_light
+    = directional_impl->get().GetComponent<DirectionalLight>();
+  directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().cascade_count = 4U;
+  directional_light.CascadedShadows().cascade_distances
+    = { 8.0F, 24.0F, 64.0F, 160.0F };
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 15 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 15 }, Slot { 0 });
+
+  const auto publication = manager->PublishForView(oxygen::ViewId { 9 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, std::array { glm::vec4 { 0.0F, 0.0F, -40.0F, 8.0F } });
+  ASSERT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  const auto* analysis_plan
+    = manager->TryGetReceiverAnalysisPlan(oxygen::ViewId { 9 });
+  ASSERT_NE(analysis_plan, nullptr);
+  ASSERT_EQ(analysis_plan->jobs.size(), 4U);
+
+  const float cascade0_texel_world = analysis_plan->jobs[0].shading_margins.x;
+  const float cascade1_texel_world = analysis_plan->jobs[1].shading_margins.x;
+  const float cascade2_texel_world = analysis_plan->jobs[2].shading_margins.x;
+  const float cascade3_texel_world = analysis_plan->jobs[3].shading_margins.x;
+
+  EXPECT_GT(cascade0_texel_world, 0.0F);
+  EXPECT_GT(cascade1_texel_world, cascade0_texel_world)
+    << "near cascades should publish finer texel density than farther cascades";
+  EXPECT_GT(cascade2_texel_world, cascade1_texel_world)
+    << "cascade 2 should be coarser than cascade 1";
+  EXPECT_GT(cascade3_texel_world, cascade2_texel_world)
+    << "cascade 3 should be coarser than cascade 2";
 }
 
 NOLINT_TEST_F(
