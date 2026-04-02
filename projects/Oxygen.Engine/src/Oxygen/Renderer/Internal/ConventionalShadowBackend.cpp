@@ -120,34 +120,27 @@ template <typename T>
   const std::size_t directional_candidate_count) -> std::uint32_t
 {
   const bool single_dominant_directional = directional_candidate_count <= 1U;
-  std::uint32_t preferred_min_resolution = authored_resolution;
-  std::uint32_t max_resolution = authored_resolution;
+  std::uint32_t max_resolution = 2048U;
 
   switch (quality_tier) {
   case oxygen::ShadowQualityTier::kLow:
-    preferred_min_resolution = 1024U;
     max_resolution = 1024U;
     break;
   case oxygen::ShadowQualityTier::kMedium:
-    preferred_min_resolution = 2048U;
     max_resolution = 2048U;
     break;
   case oxygen::ShadowQualityTier::kHigh:
-    preferred_min_resolution = single_dominant_directional ? 3072U : 2048U;
-    max_resolution = 3072U;
+    max_resolution = single_dominant_directional ? 3072U : 2048U;
     break;
   case oxygen::ShadowQualityTier::kUltra:
-    preferred_min_resolution = single_dominant_directional ? 4096U : 3072U;
-    max_resolution = 4096U;
+    max_resolution = single_dominant_directional ? 4096U : 3072U;
     break;
   default:
-    preferred_min_resolution = 2048U;
     max_resolution = 2048U;
     break;
   }
 
-  return std::clamp(std::max(authored_resolution, preferred_min_resolution),
-    1024U, max_resolution);
+  return std::clamp(authored_resolution, 1024U, max_resolution);
 }
 
 [[nodiscard]] auto TransformPoint(
@@ -204,15 +197,26 @@ template <typename T>
   return base_extent * (static_cast<float>(resolution) / usable_texels);
 }
 
-[[nodiscard]] auto MapDistributionExponentToPracticalLambda(
-  const float distribution_exponent) -> float
+[[nodiscard]] auto ResolveDirectionalCsmSplitMode(
+  const std::uint32_t split_mode) -> oxygen::scene::DirectionalCsmSplitMode
 {
-  if (distribution_exponent <= 1.0F) {
-    return 0.0F;
+  const auto mode
+    = static_cast<oxygen::scene::DirectionalCsmSplitMode>(split_mode);
+  return oxygen::scene::IsValidDirectionalCsmSplitMode(mode)
+    ? mode
+    : oxygen::scene::DirectionalCsmSplitMode::kGenerated;
+}
+
+[[nodiscard]] auto ApplyDirectionalShadowRuntimeResolutionClamp(
+  const std::uint32_t resolved_resolution,
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& runtime_settings)
+  -> std::uint32_t
+{
+  if (runtime_settings.max_resolution == 0U) {
+    return resolved_resolution;
   }
 
-  return std::clamp(
-    1.0F - (1.0F / std::max(distribution_exponent, 1.0F)), 0.0F, 0.95F);
+  return std::min(resolved_resolution, runtime_settings.max_resolution);
 }
 
 auto TightenDepthRangeWithShadowCasters(
@@ -289,33 +293,104 @@ auto AccumulateReceiverLightSpaceExtents(
   return found_receivers;
 }
 
-[[nodiscard]] auto ResolveCascadeEndDepth(
+[[nodiscard]] auto ResolveActiveCascadeCount(
   const oxygen::engine::DirectionalShadowCandidate& candidate,
-  const std::uint32_t cascade_index, const float prev_depth,
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& runtime_settings)
+  -> std::uint32_t
+{
+  return std::max(1U,
+    std::min(std::min(candidate.cascade_count, runtime_settings.max_cascades),
+      oxygen::scene::kMaxShadowCascades));
+}
+
+[[nodiscard]] auto ResolveEffectiveGeneratedMaxDistance(
+  const oxygen::engine::DirectionalShadowCandidate& candidate,
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& runtime_settings,
   const float near_depth, const float far_depth) -> float
 {
-  const auto cascade_count = std::max(
-    1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
-  const float authored_end = candidate.cascade_distances[cascade_index];
-  if (authored_end > prev_depth + kMinCascadeSpan) {
-    return std::min(authored_end, far_depth);
+  const float authored_max_distance
+    = std::max(candidate.max_shadow_distance, near_depth + kMinCascadeSpan);
+  const float effective_max_distance
+    = authored_max_distance * runtime_settings.distance_scale;
+  return std::max(
+    near_depth + kMinCascadeSpan, std::min(effective_max_distance, far_depth));
+}
+
+[[nodiscard]] auto ComputeGeometricSplitFraction(
+  const float distribution_exponent, const std::uint32_t cascade_index,
+  const std::uint32_t cascade_count) -> float
+{
+  CHECK_F(cascade_count > 0U, "cascade_count must be non-zero");
+  const float exponent = std::max(distribution_exponent, 1.0F);
+  if (std::abs(exponent - 1.0F) <= 1.0e-4F) {
+    return static_cast<float>(cascade_index + 1U)
+      / static_cast<float>(cascade_count);
   }
 
-  const float normalized_split = static_cast<float>(cascade_index + 1U)
-    / static_cast<float>(cascade_count);
-  const float stabilized_near_depth = std::max(near_depth, 0.001F);
-  const float stabilized_far_depth
-    = std::max(far_depth, stabilized_near_depth + kMinCascadeSpan);
-  const float linear_split
-    = glm::mix(stabilized_near_depth, stabilized_far_depth, normalized_split);
-  const float logarithmic_split = stabilized_near_depth
-    * std::pow(stabilized_far_depth / stabilized_near_depth, normalized_split);
-  const float practical_lambda
-    = MapDistributionExponentToPracticalLambda(candidate.distribution_exponent);
+  float total_weight = 0.0F;
+  float accumulated_weight = 0.0F;
+  float weight = 1.0F;
+  for (std::uint32_t i = 0U; i < cascade_count; ++i) {
+    total_weight += weight;
+    if (i <= cascade_index) {
+      accumulated_weight += weight;
+    }
+    weight *= exponent;
+  }
+
+  if (total_weight <= 0.0F) {
+    return 1.0F;
+  }
+  return accumulated_weight / total_weight;
+}
+
+[[nodiscard]] auto ResolveCascadeEndDepth(
+  const oxygen::engine::DirectionalShadowCandidate& candidate,
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& runtime_settings,
+  const std::uint32_t cascade_count, const std::uint32_t cascade_index,
+  const float prev_depth, const float near_depth, const float far_depth)
+  -> float
+{
+  const auto split_mode = ResolveDirectionalCsmSplitMode(candidate.split_mode);
+  if (split_mode == oxygen::scene::DirectionalCsmSplitMode::kManualDistances) {
+    const float authored_end = candidate.cascade_distances[cascade_index];
+    return std::max(
+      prev_depth + kMinCascadeSpan, std::min(authored_end, far_depth));
+  }
+
+  const float effective_max_distance = ResolveEffectiveGeneratedMaxDistance(
+    candidate, runtime_settings, near_depth, far_depth);
+  const float split_fraction = ComputeGeometricSplitFraction(
+    candidate.distribution_exponent, cascade_index, cascade_count);
   const float generated_end
-    = glm::mix(linear_split, logarithmic_split, practical_lambda);
+    = near_depth + split_fraction * (effective_max_distance - near_depth);
   return std::max(
     prev_depth + kMinCascadeSpan, std::min(generated_end, far_depth));
+}
+
+[[nodiscard]] auto ResolveFadeoutBeginDepth(
+  const oxygen::engine::DirectionalShadowCandidate& candidate,
+  const float last_cascade_begin_depth, const float shadow_end_depth) -> float
+{
+  const float fade_fraction
+    = std::clamp(candidate.distance_fadeout_fraction, 0.0F, 1.0F);
+  const float last_cascade_span
+    = std::max(shadow_end_depth - last_cascade_begin_depth, kMinCascadeSpan);
+  return std::clamp(shadow_end_depth - last_cascade_span * fade_fraction,
+    last_cascade_begin_depth, shadow_end_depth);
+}
+
+[[nodiscard]] auto ResolveTransitionWidth(
+  const oxygen::engine::DirectionalShadowCandidate& candidate,
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& runtime_settings,
+  const float cascade_begin_depth, const float cascade_end_depth) -> float
+{
+  const float cascade_span
+    = std::max(cascade_end_depth - cascade_begin_depth, kMinCascadeSpan);
+  const float transition_fraction = std::clamp(
+    candidate.transition_fraction * runtime_settings.transition_scale, 0.0F,
+    1.0F);
+  return cascade_span * transition_fraction;
 }
 
 } // namespace
@@ -358,6 +433,22 @@ auto ConventionalShadowBackend::OnFrameStart(RendererTag /*tag*/,
 auto ConventionalShadowBackend::ResetCachedState() -> void
 {
   view_cache_.clear();
+}
+
+auto ConventionalShadowBackend::SetDirectionalCsmRuntimeSettings(
+  const oxygen::renderer::DirectionalCsmRuntimeSettings& settings) -> void
+{
+  const auto canonical_settings
+    = oxygen::renderer::CanonicalizeDirectionalCsmRuntimeSettings(settings);
+  if (std::memcmp(&directional_csm_runtime_, &canonical_settings,
+        sizeof(canonical_settings))
+    == 0) {
+    return;
+  }
+
+  directional_csm_runtime_ = canonical_settings;
+  ReleaseDirectionalResources();
+  ResetCachedState();
 }
 
 auto ConventionalShadowBackend::ReserveFrameResources(
@@ -487,6 +578,16 @@ auto ConventionalShadowBackend::TryGetShadowInstanceMetadata(
     : nullptr;
 }
 
+auto ConventionalShadowBackend::TryGetDirectionalShadowMetadata(
+  const ViewId view_id) const noexcept
+  -> const engine::DirectionalShadowMetadata*
+{
+  const auto it = view_cache_.find(view_id);
+  return it != view_cache_.end() && !it->second.directional_metadata.empty()
+    ? &it->second.directional_metadata.front()
+    : nullptr;
+}
+
 auto ConventionalShadowBackend::TryGetRasterRenderPlan(
   const ViewId view_id) const noexcept -> const RasterShadowRenderPlan*
 {
@@ -519,10 +620,18 @@ auto ConventionalShadowBackend::BuildPublicationKey(
   PublicationKey key {};
   const auto view_hash_start
     = HashBytes(&shadow_quality_tier_, sizeof(shadow_quality_tier_));
+  auto runtime_hash = HashBytes(&directional_csm_runtime_.distance_scale,
+    sizeof(directional_csm_runtime_.distance_scale), view_hash_start);
+  runtime_hash = HashBytes(&directional_csm_runtime_.transition_scale,
+    sizeof(directional_csm_runtime_.transition_scale), runtime_hash);
+  runtime_hash = HashBytes(&directional_csm_runtime_.max_cascades,
+    sizeof(directional_csm_runtime_.max_cascades), runtime_hash);
+  runtime_hash = HashBytes(&directional_csm_runtime_.max_resolution,
+    sizeof(directional_csm_runtime_.max_resolution), runtime_hash);
   const auto view_matrix = view_constants.GetViewMatrix();
   const auto projection_matrix = view_constants.GetProjectionMatrix();
   const auto camera_position = view_constants.GetCameraPosition();
-  key.view_hash = HashBytes(&view_matrix, sizeof(view_matrix), view_hash_start);
+  key.view_hash = HashBytes(&view_matrix, sizeof(view_matrix), runtime_hash);
   key.view_hash
     = HashBytes(&projection_matrix, sizeof(projection_matrix), key.view_hash);
   key.view_hash
@@ -540,8 +649,8 @@ auto ConventionalShadowBackend::CountDirectionalLayers(
 {
   std::uint32_t required_layers = 0U;
   for (const auto& candidate : candidates) {
-    required_layers += std::max(
-      1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
+    required_layers
+      += ResolveActiveCascadeCount(candidate, directional_csm_runtime_);
   }
   return required_layers;
 }
@@ -600,10 +709,12 @@ auto ConventionalShadowBackend::BuildDirectionalResourceConfig(
   config.required_layers = required_layers;
   config.resolution = required_resolution;
   for (const auto& candidate : candidates) {
+    const auto resolved_resolution = ApplyDirectionalShadowQualityTier(
+      ShadowResolutionFromHint(candidate.resolution_hint), shadow_quality_tier_,
+      candidates.size());
     config.resolution = std::max(config.resolution,
-      ApplyDirectionalShadowQualityTier(
-        ShadowResolutionFromHint(candidate.resolution_hint),
-        shadow_quality_tier_, candidates.size()));
+      ApplyDirectionalShadowRuntimeResolutionClamp(
+        resolved_resolution, directional_csm_runtime_));
   }
   return config;
 }
@@ -617,7 +728,7 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
 
   const bool needs_recreate = !directional_shadow_texture_
     || config.required_layers > directional_shadow_capacity_layers_
-    || config.resolution > directional_shadow_resolution_;
+    || config.resolution != directional_shadow_resolution_;
   if (!needs_recreate) {
     return;
   }
@@ -788,8 +899,8 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
 
   std::uint32_t next_resource_layer = base_resource_layer;
   for (const auto& candidate : candidates) {
-    const auto cascade_count = std::max(
-      1U, std::min(candidate.cascade_count, oxygen::scene::kMaxShadowCascades));
+    const auto cascade_count
+      = ResolveActiveCascadeCount(candidate, directional_csm_runtime_);
     const auto shadow_instance_index
       = static_cast<std::uint32_t>(state.shadow_instances.size());
     const auto payload_index
@@ -815,10 +926,12 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
     metadata.normal_bias = candidate.normal_bias;
     metadata.cascade_count = cascade_count;
     metadata.flags = flags;
+    metadata.split_mode = candidate.split_mode;
     metadata.distribution_exponent = candidate.distribution_exponent;
     metadata.resource_index = resource_index;
 
     float prev_depth = std::max(near_depth, 0.0F);
+    float last_published_end_depth = prev_depth;
     const glm::vec3 light_dir_to_surface = NormalizeOrFallback(
       candidate.direction_ws, glm::vec3(0.0F, -1.0F, 0.0F));
     const glm::vec3 light_dir_to_light = -light_dir_to_surface;
@@ -834,8 +947,9 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
     for (std::uint32_t cascade_index = 0; cascade_index < cascade_count;
       ++cascade_index) {
       const float cascade_begin_depth = prev_depth;
-      const float end_depth = ResolveCascadeEndDepth(
-        candidate, cascade_index, cascade_begin_depth, near_depth, far_depth);
+      const float end_depth = ResolveCascadeEndDepth(candidate,
+        directional_csm_runtime_, cascade_count, cascade_index,
+        cascade_begin_depth, near_depth, far_depth);
       const float depth_range
         = std::max(far_depth - near_depth, kMinCascadeSpan);
       const float t0 = std::clamp(
@@ -943,8 +1057,14 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
           left, right, bottom, top, near_plane, far_plane);
 
       metadata.cascade_distances[cascade_index] = end_depth;
+      metadata.cascade_transition_widths[cascade_index]
+        = cascade_index + 1U < cascade_count
+        ? ResolveTransitionWidth(
+            candidate, directional_csm_runtime_, cascade_begin_depth, end_depth)
+        : 0.0F;
       metadata.cascade_world_texel_size[cascade_index] = world_units_per_texel;
       metadata.cascade_view_proj[cascade_index] = light_proj * light_view;
+      last_published_end_depth = end_depth;
 
       engine::ViewConstants cascade_view_constants = view_constants;
       cascade_view_constants.SetViewMatrix(light_view)
@@ -979,6 +1099,13 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
 
       prev_depth = end_depth;
     }
+
+    metadata.max_shadow_distance = last_published_end_depth;
+    const float last_cascade_begin_depth = cascade_count > 1U
+      ? metadata.cascade_distances[cascade_count - 2U]
+      : near_depth;
+    metadata.distance_fadeout_begin = ResolveFadeoutBeginDepth(
+      candidate, last_cascade_begin_depth, last_published_end_depth);
 
     state.directional_metadata.push_back(metadata);
   }

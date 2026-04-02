@@ -292,11 +292,16 @@ NOLINT_TEST(LightCommonDefaultsTest,
 {
   const oxygen::scene::CascadedShadowSettings defaults {};
   EXPECT_EQ(defaults.cascade_count, oxygen::scene::kMaxShadowCascades);
+  EXPECT_EQ(
+    defaults.split_mode, oxygen::scene::DirectionalCsmSplitMode::kGenerated);
+  EXPECT_FLOAT_EQ(defaults.max_shadow_distance, 160.0F);
   EXPECT_FLOAT_EQ(defaults.cascade_distances[0], 8.0F);
   EXPECT_FLOAT_EQ(defaults.cascade_distances[1], 24.0F);
   EXPECT_FLOAT_EQ(defaults.cascade_distances[2], 64.0F);
   EXPECT_FLOAT_EQ(defaults.cascade_distances[3], 160.0F);
-  EXPECT_FLOAT_EQ(defaults.distribution_exponent, 1.0F);
+  EXPECT_FLOAT_EQ(defaults.distribution_exponent, 3.0F);
+  EXPECT_FLOAT_EQ(defaults.transition_fraction, 0.1F);
+  EXPECT_FLOAT_EQ(defaults.distance_fadeout_fraction, 0.1F);
 }
 
 NOLINT_TEST_F(LightManagerTest,
@@ -312,6 +317,8 @@ NOLINT_TEST_F(LightManagerTest,
   impl->get().AddComponent<oxygen::scene::DirectionalLight>();
   auto& light = impl->get().GetComponent<oxygen::scene::DirectionalLight>();
   light.Common().casts_shadows = true;
+  light.CascadedShadows().split_mode
+    = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
   light.CascadedShadows().cascade_distances = { 0.0F, 0.0F, 0.0F, 0.0F };
   UpdateTransforms(node);
 
@@ -321,11 +328,17 @@ NOLINT_TEST_F(LightManagerTest,
   const auto& candidate = manager.GetDirectionalShadowCandidates().front();
   EXPECT_EQ(candidate.node_handle, node.GetHandle());
   EXPECT_EQ(candidate.cascade_count, oxygen::scene::kMaxShadowCascades);
+  EXPECT_EQ(candidate.split_mode,
+    static_cast<std::uint32_t>(
+      oxygen::scene::DirectionalCsmSplitMode::kManualDistances));
+  EXPECT_FLOAT_EQ(candidate.max_shadow_distance, 160.0F);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[0], 8.0F);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[1], 24.0F);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[2], 64.0F);
   EXPECT_FLOAT_EQ(candidate.cascade_distances[3], 160.0F);
-  EXPECT_FLOAT_EQ(candidate.distribution_exponent, 1.0F);
+  EXPECT_FLOAT_EQ(candidate.distribution_exponent, 3.0F);
+  EXPECT_FLOAT_EQ(candidate.transition_fraction, 0.1F);
+  EXPECT_FLOAT_EQ(candidate.distance_fadeout_fraction, 0.1F);
 }
 
 } // namespace

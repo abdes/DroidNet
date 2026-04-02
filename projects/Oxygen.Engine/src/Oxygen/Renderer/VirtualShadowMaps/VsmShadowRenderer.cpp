@@ -258,12 +258,12 @@ namespace {
     const oxygen::ShadowQualityTier quality_tier,
     const std::size_t directional_candidate_count) -> std::uint32_t
   {
-    const auto preferred_candidate_resolution = [&]() -> std::uint32_t {
+    const auto max_candidate_resolution = [&]() -> std::uint32_t {
       switch (quality_tier) {
       case oxygen::ShadowQualityTier::kLow:
         return 1024U;
       case oxygen::ShadowQualityTier::kMedium:
-        return directional_candidate_count > 1U ? 1024U : 2048U;
+        return 2048U;
       case oxygen::ShadowQualityTier::kHigh:
         return directional_candidate_count > 1U ? 2048U : 3072U;
       case oxygen::ShadowQualityTier::kUltra:
@@ -272,7 +272,7 @@ namespace {
       return 2048U;
     }();
 
-    return std::max(authored_resolution, preferred_candidate_resolution);
+    return std::clamp(authored_resolution, 1024U, max_candidate_resolution);
   }
 
   [[nodiscard]] auto PagesPerAxisForVirtualResolution(

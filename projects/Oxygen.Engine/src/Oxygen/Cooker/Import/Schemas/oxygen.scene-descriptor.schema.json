@@ -341,6 +341,15 @@
                     "minimum": 0,
                     "maximum": 4
                 },
+                "split_mode": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "max_shadow_distance": {
+                    "type": "number",
+                    "exclusiveMinimum": 0.0
+                },
                 "cascade_distances": {
                     "type": "array",
                     "items": {
@@ -352,6 +361,16 @@
                 "distribution_exponent": {
                     "type": "number",
                     "minimum": 0.0
+                },
+                "transition_fraction": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
+                },
+                "distance_fadeout_fraction": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0
                 },
                 "intensity_lux": {
                     "type": "number",

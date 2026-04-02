@@ -474,7 +474,8 @@ static_assert(sizeof(LightCommonRecord) == 35);
 //! Packed directional light component record.
 /*!
   Contains `intensity_lux` for physical illuminance in lux (lm/m²).
-  Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
+
+ * Typical values: 100,000 lux (bright sun), 10,000 lux (overcast).
 */
 #pragma pack(push, 1)
 struct DirectionalLightRecord {
@@ -487,12 +488,16 @@ struct DirectionalLightRecord {
 
   uint32_t cascade_count = 4;
   float cascade_distances[4] = { 8.0F, 24.0F, 64.0F, 160.0F };
-  float distribution_exponent = 1.0F;
+  float distribution_exponent = 3.0F;
+  uint8_t split_mode = 0;
+  float max_shadow_distance = 160.0F;
+  float transition_fraction = 0.1F;
+  float distance_fadeout_fraction = 0.1F;
 
   float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)
 };
 #pragma pack(pop)
-static_assert(sizeof(DirectionalLightRecord) == 79);
+static_assert(sizeof(DirectionalLightRecord) == 92);
 
 //! Packed point light component record.
 /*!

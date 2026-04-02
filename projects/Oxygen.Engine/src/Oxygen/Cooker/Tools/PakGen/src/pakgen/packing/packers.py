@@ -399,7 +399,23 @@ def _pack_directional_light_record(
     if not isinstance(distances, list) or len(distances) != 4:
         distances = [0.0, 0.0, 0.0, 0.0]
     cascade_distances = [float(d) for d in distances]
-    distribution = _f(light.get("distribution_exponent"), 1.0)
+    split_mode = int(light.get("split_mode", 1 if "cascade_distances" in light else 0) or 0)
+    if split_mode < 0 or split_mode > 1:
+        raise PakError(
+            "E_RANGE",
+            f"DirectionalLight split_mode out of range: {split_mode}",
+        )
+    max_shadow_distance_default = (
+        float(cascade_distances[3])
+        if "max_shadow_distance" not in light and split_mode == 1
+        else 160.0
+    )
+    max_shadow_distance = _f(
+        light.get("max_shadow_distance"), max_shadow_distance_default
+    )
+    distribution = _f(light.get("distribution_exponent"), 3.0)
+    transition_fraction = _f(light.get("transition_fraction"), 0.1)
+    distance_fadeout_fraction = _f(light.get("distance_fadeout_fraction"), 0.1)
 
     out = (
         struct.pack("<I", int(node_index))
@@ -410,9 +426,13 @@ def _pack_directional_light_record(
         + struct.pack("<I", int(cascade_count))
         + struct.pack("<4f", *cascade_distances)
         + struct.pack("<f", distribution)
+        + struct.pack("<B", int(split_mode))
+        + struct.pack("<f", max_shadow_distance)
+        + struct.pack("<f", transition_fraction)
+        + struct.pack("<f", distance_fadeout_fraction)
         + struct.pack("<f", intensity_lux)
     )
-    if len(out) != 79:
+    if len(out) != 92:
         raise PakError(
             "E_SIZE", f"DirectionalLightRecord size mismatch: {len(out)}"
         )
@@ -1103,7 +1123,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_DIRECTIONAL_LIGHT,
                 len(directional_lights),
-                79,
+                92,
                 directional_light_records,
             )
         )

@@ -526,6 +526,10 @@ inline auto Load(AnyReader& reader, data::pak::world::DirectionalLightRecord& r)
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(r.distribution_exponent));
+  CHECK_RESULT(reader.ReadInto(r.split_mode));
+  CHECK_RESULT(reader.ReadInto(r.max_shadow_distance));
+  CHECK_RESULT(reader.ReadInto(r.transition_fraction));
+  CHECK_RESULT(reader.ReadInto(r.distance_fadeout_fraction));
   CHECK_RESULT(reader.ReadInto(r.intensity_lux));
 
   return {};

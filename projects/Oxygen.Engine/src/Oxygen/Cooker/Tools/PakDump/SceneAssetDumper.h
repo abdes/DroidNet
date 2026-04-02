@@ -209,13 +209,25 @@ public:
       std::cout << "\n";
 
       for (size_t i = 0; i < lights.size(); ++i) {
-        DirectionalLightRecord rec {};
-        std::memcpy(&rec, lights.data() + i, sizeof(DirectionalLightRecord));
+        const auto& rec = lights[i];
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("IsSunLight", rec.is_sun_light != 0U, 10);
         PrintUtils::Field(
           "Environment Contrib", rec.environment_contribution != 0U, 10);
+        PrintUtils::Field("Cascade Count", rec.cascade_count, 10);
+        PrintUtils::Field(
+          "Split Mode", static_cast<uint32_t>(rec.split_mode), 10);
+        PrintUtils::Field("Max Shadow Distance", rec.max_shadow_distance, 10);
+        PrintUtils::Field(
+          "Distribution Exponent", rec.distribution_exponent, 10);
+        PrintUtils::Field("Transition Fraction", rec.transition_fraction, 10);
+        PrintUtils::Field(
+          "Fadeout Fraction", rec.distance_fadeout_fraction, 10);
+        PrintUtils::Field("Cascade Distance[0]", rec.cascade_distances[0], 10);
+        PrintUtils::Field("Cascade Distance[1]", rec.cascade_distances[1], 10);
+        PrintUtils::Field("Cascade Distance[2]", rec.cascade_distances[2], 10);
+        PrintUtils::Field("Cascade Distance[3]", rec.cascade_distances[3], 10);
       }
 
       std::cout << "\n";

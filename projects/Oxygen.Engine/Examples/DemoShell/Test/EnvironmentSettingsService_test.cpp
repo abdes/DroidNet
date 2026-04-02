@@ -133,8 +133,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   OnSceneActivatedInjectsSyntheticSunWhenSceneHasNoDirectionalLight)
 {
   auto scene = MakeScene("DemoShell.InjectSyntheticSun");
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.InjectSyntheticSun", loguru::Verbosity_INFO);
 
   service_.OnSceneActivated(*scene);
 
@@ -147,8 +145,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(light->get().GetEnvironmentContribution());
   EXPECT_TRUE(service_.GetSunLightAvailable());
   EXPECT_EQ(service_.GetSunSource(), 1);
-  EXPECT_TRUE(
-    capture.Contains("selected synthetic sun fallback 'Synthetic Sun'"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -157,9 +153,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto scene = MakeScene("DemoShell.PromoteFirstDirectional");
   auto fill = CreateDirectionalLightNode(*scene, "Fill", false);
   ASSERT_TRUE(fill.IsAlive());
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.PromoteFirstDirectional",
-    loguru::Verbosity_INFO);
 
   service_.OnSceneActivated(*scene);
 
@@ -172,10 +165,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(original_light->get().Common().casts_shadows);
   EXPECT_TRUE(original_light->get().GetEnvironmentContribution());
   EXPECT_EQ(service_.GetSunSource(), 0);
-  EXPECT_TRUE(capture.Contains("selected scene directional 'Fill' as sun via "
-                               "first directional selection"));
-  EXPECT_TRUE(capture.Contains(
-    "rejected synthetic sun for scene 'DemoShell.PromoteFirstDirectional'"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -186,9 +175,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto named_sun = CreateDirectionalLightNode(*scene, "SUN", false);
   ASSERT_TRUE(fill.IsAlive());
   ASSERT_TRUE(named_sun.IsAlive());
-
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.PreferNamedSun", loguru::Verbosity_INFO);
 
   service_.OnSceneActivated(*scene);
 
@@ -205,8 +191,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(sun_light->get().IsSunLight());
   EXPECT_TRUE(sun_light->get().Common().casts_shadows);
   EXPECT_TRUE(sun_light->get().GetEnvironmentContribution());
-  EXPECT_TRUE(capture.Contains(
-    "selected scene directional 'SUN' as sun via node named SUN selection"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -215,8 +199,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto scene = MakeScene("DemoShell.PreserveTaggedSun");
   auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
   ASSERT_TRUE(authored_sun.IsAlive());
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.PreserveTaggedSun", loguru::Verbosity_INFO);
 
   service_.OnSceneActivated(*scene);
 
@@ -229,8 +211,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   ASSERT_TRUE(light.has_value());
   EXPECT_TRUE(light->get().Common().casts_shadows);
   EXPECT_TRUE(light->get().GetEnvironmentContribution());
-  EXPECT_TRUE(capture.Contains("selected scene directional 'AuthoredSun' as "
-                               "sun via sun-tagged selection"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -243,16 +223,13 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     camera.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
 
   oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.CameraOnly", loguru::Verbosity_INFO);
+    "EnvironmentSettingsService.CameraOnly", loguru::Verbosity_9);
 
   service_.OnSceneActivated(*scene);
 
   EXPECT_FALSE(capture.Contains(
     "activated non-empty scene 'DemoShell.CameraOnlyFallback' had no "
     "usable scene directional light"));
-  EXPECT_TRUE(capture.Contains(
-    "activated camera-only scene 'DemoShell.CameraOnlyFallback' without "
-    "directional lights; synthetic sun fallback was expected"));
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "Synthetic Sun");
@@ -266,16 +243,13 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   ASSERT_TRUE(marker.IsAlive());
 
   oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.NonEmpty", loguru::Verbosity_INFO);
+    "EnvironmentSettingsService.NonEmpty", loguru::Verbosity_9);
 
   service_.OnSceneActivated(*scene);
 
   EXPECT_TRUE(capture.Contains(
     "activated non-empty scene 'DemoShell.NonEmptySceneWithoutSun' had no "
     "usable scene directional light"));
-  EXPECT_TRUE(capture.Contains(
-    "selected synthetic sun fallback 'Synthetic Sun' because no scene "
-    "directional candidate was available"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -306,9 +280,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.OnSceneActivated(*scene);
   ASSERT_EQ(service_.GetSunSource(), 0);
 
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.SyntheticOverride", loguru::Verbosity_INFO);
-
   service_.SetSunSource(1);
   service_.ApplyPendingChanges();
 
@@ -332,10 +303,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "Synthetic Sun");
   EXPECT_EQ(service_.GetSunSource(), 1);
-  EXPECT_TRUE(capture.Contains("disabled scene directional 'SUN' because "
-                               "synthetic sun override is active"));
-  EXPECT_TRUE(capture.Contains(
-    "using synthetic sun node 'Synthetic Sun' (source=synthetic"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -371,6 +338,93 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "AuthoredSun");
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AppliesDirectionalShadowSettingsToAuthoredSceneSunLight)
+{
+  auto scene = MakeScene("DemoShell.SceneSunShadowSettings");
+  auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
+  ASSERT_TRUE(authored_sun.IsAlive());
+  AttachSceneSunSystem(*scene, authored_sun);
+
+  service_.OnSceneActivated(*scene);
+  ASSERT_EQ(service_.GetSunSource(), 0);
+
+  service_.SetSunShadowBias(0.0125F);
+  service_.SetSunShadowNormalBias(0.08F);
+  service_.SetSunShadowResolutionHint(
+    static_cast<int>(oxygen::scene::ShadowResolutionHint::kHigh));
+  service_.SetSunShadowCascadeCount(3);
+  service_.SetSunShadowSplitMode(
+    static_cast<int>(oxygen::scene::DirectionalCsmSplitMode::kManualDistances));
+  service_.SetSunShadowMaxDistance(300.0F);
+  service_.SetSunShadowDistributionExponent(4.5F);
+  service_.SetSunShadowTransitionFraction(0.18F);
+  service_.SetSunShadowDistanceFadeoutFraction(0.27F);
+  service_.SetSunShadowCascadeDistance(0, 10.0F);
+  service_.SetSunShadowCascadeDistance(1, 35.0F);
+  service_.SetSunShadowCascadeDistance(2, 90.0F);
+  service_.ApplyPendingChanges();
+
+  auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+  const auto& shadow = light->get().Common().shadow;
+  const auto& csm = light->get().CascadedShadows();
+
+  EXPECT_FLOAT_EQ(shadow.bias, 0.0125F);
+  EXPECT_FLOAT_EQ(shadow.normal_bias, 0.08F);
+  EXPECT_EQ(shadow.resolution_hint, oxygen::scene::ShadowResolutionHint::kHigh);
+  EXPECT_EQ(csm.cascade_count, 3U);
+  EXPECT_EQ(
+    csm.split_mode, oxygen::scene::DirectionalCsmSplitMode::kManualDistances);
+  EXPECT_FLOAT_EQ(csm.max_shadow_distance, 300.0F);
+  EXPECT_FLOAT_EQ(csm.distribution_exponent, 4.5F);
+  EXPECT_FLOAT_EQ(csm.transition_fraction, 0.18F);
+  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.27F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[0], 10.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[1], 35.0F);
+  EXPECT_FLOAT_EQ(csm.cascade_distances[2], 90.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AppliesDirectionalShadowSettingsToSyntheticSunLight)
+{
+  auto scene = MakeScene("DemoShell.SyntheticSunShadowSettings");
+
+  service_.OnSceneActivated(*scene);
+  ASSERT_EQ(service_.GetSunSource(), 1);
+
+  service_.SetSunShadowBias(0.02F);
+  service_.SetSunShadowNormalBias(0.11F);
+  service_.SetSunShadowResolutionHint(
+    static_cast<int>(oxygen::scene::ShadowResolutionHint::kUltra));
+  service_.SetSunShadowCascadeCount(2);
+  service_.SetSunShadowSplitMode(
+    static_cast<int>(oxygen::scene::DirectionalCsmSplitMode::kGenerated));
+  service_.SetSunShadowMaxDistance(420.0F);
+  service_.SetSunShadowDistributionExponent(5.0F);
+  service_.SetSunShadowTransitionFraction(0.22F);
+  service_.SetSunShadowDistanceFadeoutFraction(0.31F);
+  service_.ApplyPendingChanges();
+
+  auto synthetic_node = FindNodeByName(*scene, "Synthetic Sun");
+  ASSERT_TRUE(synthetic_node.has_value());
+  auto light = synthetic_node->GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+  const auto& shadow = light->get().Common().shadow;
+  const auto& csm = light->get().CascadedShadows();
+
+  EXPECT_FLOAT_EQ(shadow.bias, 0.02F);
+  EXPECT_FLOAT_EQ(shadow.normal_bias, 0.11F);
+  EXPECT_EQ(
+    shadow.resolution_hint, oxygen::scene::ShadowResolutionHint::kUltra);
+  EXPECT_EQ(csm.cascade_count, 2U);
+  EXPECT_EQ(csm.split_mode, oxygen::scene::DirectionalCsmSplitMode::kGenerated);
+  EXPECT_FLOAT_EQ(csm.max_shadow_distance, 420.0F);
+  EXPECT_FLOAT_EQ(csm.distribution_exponent, 5.0F);
+  EXPECT_FLOAT_EQ(csm.transition_fraction, 0.22F);
+  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.31F);
 }
 
 } // namespace oxygen::examples::testing

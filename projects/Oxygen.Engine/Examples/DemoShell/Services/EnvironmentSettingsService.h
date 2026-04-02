@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -24,6 +25,7 @@
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Environment/Sun.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 
 #include "DemoShell/Services/DomainService.h"
 
@@ -38,6 +40,7 @@ namespace data {
   class SceneAsset;
 }
 namespace scene {
+  class DirectionalLight;
   class Scene;
   class SceneEnvironment;
 }
@@ -306,6 +309,38 @@ public:
   [[nodiscard]] virtual auto GetSunDiskRadiusDeg() const -> float;
   virtual auto SetSunDiskRadiusDeg(float value) -> void;
 
+  [[nodiscard]] virtual auto GetSunShadowBias() const -> float;
+  virtual auto SetSunShadowBias(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowNormalBias() const -> float;
+  virtual auto SetSunShadowNormalBias(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowResolutionHint() const -> int;
+  virtual auto SetSunShadowResolutionHint(int value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowCascadeCount() const -> int;
+  virtual auto SetSunShadowCascadeCount(int value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowSplitMode() const -> int;
+  virtual auto SetSunShadowSplitMode(int value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowMaxDistance() const -> float;
+  virtual auto SetSunShadowMaxDistance(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowDistributionExponent() const -> float;
+  virtual auto SetSunShadowDistributionExponent(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowTransitionFraction() const -> float;
+  virtual auto SetSunShadowTransitionFraction(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowDistanceFadeoutFraction() const
+    -> float;
+  virtual auto SetSunShadowDistanceFadeoutFraction(float value) -> void;
+
+  [[nodiscard]] virtual auto GetSunShadowCascadeDistance(int index) const
+    -> float;
+  virtual auto SetSunShadowCascadeDistance(int index, float value) -> void;
+
   [[nodiscard]] virtual auto GetSunLightAvailable() const -> bool;
   virtual auto UpdateSunLightCandidate() -> void;
 
@@ -367,6 +402,26 @@ private:
     float disk_radius_deg {
       scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
     };
+    float shadow_bias { 0.0F };
+    float shadow_normal_bias { 0.02F };
+    int shadow_resolution_hint { static_cast<int>(
+      scene::ShadowResolutionHint::kMedium) };
+    int shadow_cascade_count { static_cast<int>(scene::kMaxShadowCascades) };
+    int shadow_split_mode { static_cast<int>(
+      scene::DirectionalCsmSplitMode::kGenerated) };
+    float shadow_max_distance { scene::kDefaultDirectionalMaxShadowDistance };
+    std::array<float, scene::kMaxShadowCascades> shadow_cascade_distances {
+      scene::kDefaultDirectionalCascadeDistances
+    };
+    float shadow_distribution_exponent {
+      scene::kDefaultDirectionalDistributionExponent
+    };
+    float shadow_transition_fraction {
+      scene::kDefaultDirectionalTransitionFraction
+    };
+    float shadow_distance_fadeout_fraction {
+      scene::kDefaultDirectionalDistanceFadeoutFraction
+    };
   };
 
   auto SyncFromScene() -> void;
@@ -383,6 +438,10 @@ private:
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
   auto EnsureSyntheticSunLight() -> void;
   auto DestroySyntheticSunLight() -> void;
+  auto CaptureSunShadowSettingsFromLight(const scene::DirectionalLight& light)
+    -> void;
+  auto ApplySunShadowSettingsToLight(scene::DirectionalLight& light) const
+    -> void;
   auto GetSunSettingsForSource(int source) -> SunUiSettings&;
   auto LoadSunSettingsFromProfile(int source) -> void;
   auto SaveSunSettingsToProfile(int source) -> void;
@@ -500,6 +559,28 @@ private:
   float sun_temperature_kelvin_ { 6500.0F };
   float sun_component_disk_radius_deg_ {
     scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
+  };
+  float sun_shadow_bias_ { 0.0F };
+  float sun_shadow_normal_bias_ { 0.02F };
+  int sun_shadow_resolution_hint_ { static_cast<int>(
+    scene::ShadowResolutionHint::kMedium) };
+  int sun_shadow_cascade_count_ { static_cast<int>(scene::kMaxShadowCascades) };
+  int sun_shadow_split_mode_ { static_cast<int>(
+    scene::DirectionalCsmSplitMode::kGenerated) };
+  float sun_shadow_max_distance_ {
+    scene::kDefaultDirectionalMaxShadowDistance
+  };
+  std::array<float, scene::kMaxShadowCascades> sun_shadow_cascade_distances_ {
+    scene::kDefaultDirectionalCascadeDistances
+  };
+  float sun_shadow_distribution_exponent_ {
+    scene::kDefaultDirectionalDistributionExponent
+  };
+  float sun_shadow_transition_fraction_ {
+    scene::kDefaultDirectionalTransitionFraction
+  };
+  float sun_shadow_distance_fadeout_fraction_ {
+    scene::kDefaultDirectionalDistanceFadeoutFraction
   };
   scene::SceneNode sun_light_node_;
   bool sun_light_available_ { false };

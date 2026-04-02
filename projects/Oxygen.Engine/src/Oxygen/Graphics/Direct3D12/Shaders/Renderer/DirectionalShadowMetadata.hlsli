@@ -20,10 +20,16 @@ struct DirectionalShadowMetadata
 
     uint cascade_count;
     uint flags;
-    float distribution_exponent;
+    uint split_mode;
     uint resource_index;
 
+    float distribution_exponent;
+    float max_shadow_distance;
+    float distance_fadeout_begin;
+    float _padding0;
+
     float cascade_distances[OXYGEN_MAX_SHADOW_CASCADES];
+    float cascade_transition_widths[OXYGEN_MAX_SHADOW_CASCADES];
     float cascade_world_texel_size[OXYGEN_MAX_SHADOW_CASCADES];
     float4x4 cascade_view_proj[OXYGEN_MAX_SHADOW_CASCADES];
 };

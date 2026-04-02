@@ -73,13 +73,38 @@ struct CommonLightProperties {
 inline constexpr std::uint32_t kMaxShadowCascades = 4U;
 inline constexpr std::array<float, kMaxShadowCascades>
   kDefaultDirectionalCascadeDistances { 8.0F, 24.0F, 64.0F, 160.0F };
+inline constexpr float kDefaultDirectionalMaxShadowDistance = 160.0F;
+inline constexpr float kDefaultDirectionalDistributionExponent = 3.0F;
+inline constexpr float kDefaultDirectionalTransitionFraction = 0.1F;
+inline constexpr float kDefaultDirectionalDistanceFadeoutFraction = 0.1F;
+
+enum class DirectionalCsmSplitMode : std::uint8_t {
+  kGenerated = 0,
+  kManualDistances = 1,
+};
+
+[[nodiscard]] inline auto IsValidDirectionalCsmSplitMode(
+  const DirectionalCsmSplitMode split_mode) noexcept -> bool
+{
+  switch (split_mode) {
+  case DirectionalCsmSplitMode::kGenerated:
+  case DirectionalCsmSplitMode::kManualDistances:
+    return true;
+  default:
+    return false;
+  }
+}
 
 //! Cascaded shadow map (CSM) configuration for directional lights.
 struct CascadedShadowSettings {
   std::uint32_t cascade_count = kMaxShadowCascades;
+  DirectionalCsmSplitMode split_mode = DirectionalCsmSplitMode::kGenerated;
+  float max_shadow_distance = kDefaultDirectionalMaxShadowDistance;
   std::array<float, kMaxShadowCascades> cascade_distances
     = kDefaultDirectionalCascadeDistances;
-  float distribution_exponent = 1.0F;
+  float distribution_exponent = kDefaultDirectionalDistributionExponent;
+  float transition_fraction = kDefaultDirectionalTransitionFraction;
+  float distance_fadeout_fraction = kDefaultDirectionalDistanceFadeoutFraction;
 };
 
 [[nodiscard]] inline auto CanonicalizeCascadedShadowSettings(
@@ -87,6 +112,14 @@ struct CascadedShadowSettings {
 {
   settings.cascade_count
     = std::clamp(settings.cascade_count, 1U, kMaxShadowCascades);
+  if (!IsValidDirectionalCsmSplitMode(settings.split_mode)) {
+    settings.split_mode = DirectionalCsmSplitMode::kGenerated;
+  }
+
+  if (!std::isfinite(settings.max_shadow_distance)
+    || settings.max_shadow_distance <= 0.0F) {
+    settings.max_shadow_distance = kDefaultDirectionalMaxShadowDistance;
+  }
 
   bool has_valid_distances = true;
   float previous_distance = 0.0F;
@@ -103,9 +136,23 @@ struct CascadedShadowSettings {
   }
 
   if (!std::isfinite(settings.distribution_exponent)
-    || settings.distribution_exponent <= 0.0F) {
-    settings.distribution_exponent = 1.0F;
+    || settings.distribution_exponent < 1.0F) {
+    settings.distribution_exponent = kDefaultDirectionalDistributionExponent;
   }
+
+  if (!std::isfinite(settings.transition_fraction)) {
+    settings.transition_fraction = kDefaultDirectionalTransitionFraction;
+  }
+  settings.transition_fraction
+    = std::clamp(settings.transition_fraction, 0.0F, 1.0F);
+
+  if (!std::isfinite(settings.distance_fadeout_fraction)) {
+    settings.distance_fadeout_fraction
+      = kDefaultDirectionalDistanceFadeoutFraction;
+  }
+  settings.distance_fadeout_fraction
+    = std::clamp(settings.distance_fadeout_fraction, 0.0F, 1.0F);
+
   return settings;
 }
 

@@ -21,15 +21,18 @@ Current task focus:
 - The current recommendation is to keep `CSM-6` as a conditional follow-up,
   not an immediate implementation step on the current GLTF/FBX-driven content
   path.
-- The next decision is whether target-platform budgets still require `CSM-6`
-  before closure, or whether the remaining work is only final closure /
-  cleanup.
+- The next tuning decision is whether the remaining visual-quality gap should
+  activate `CSM-TUNING` before closure or before any later specialization
+  work.
 - Effective `2026-04-02`, the authoritative comparison baseline for later
   phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
   pre-`CSM-2` conventional package.
 - The next acceptable outputs are:
   - a decision on whether `CSM-6` static / dynamic update budgeting is still
     necessary after the validated `CSM-5` results
+  - if large-scene quality distribution still needs work, a `CSM-TUNING`
+    implementation and validation package for generated split distances,
+    runtime tuning CVars, and cascade-transition controls
   - if more budget work is required, a fresh canonical capture plus sequential
     RenderDoc analysis for that phase
   - else final closure evidence against the locked `CSM-2` baseline
@@ -52,8 +55,16 @@ Current task focus:
 - `CSM-6` is now scoped as future-proofed optional work that should activate
   only when explicit static/dynamic authoring exists for the content path or
   when measured platform budgets still require more reduction after `CSM-5`.
-- `CSM-7` is now the next meaningful specialization phase, but it must stay on
-  the validated `CSM-1` through `CSM-5` architecture and must not introduce a
+- `CSM-TUNING` is now the next meaningful quality / coverage phase for the
+  conventional path; it must stay on the validated `CSM-1` through `CSM-5`
+  architecture and must not reopen the structural visibility work.
+- The earlier `CSM-TUNING` importer gap is now closed: batch import injects a
+  same-cooked-root serialization fence between `script-sidecar` jobs so shared
+  `script-bindings.table` / `script-bindings.data` updates do not race.
+  `physics_domains` was revalidated without the serialization workaround and
+  succeeded at `--max-in-flight-jobs=8`.
+- `CSM-7` remains the later specialization phase, and it must stay on the
+  validated `CSM-1` through `CSM-5` architecture and must not introduce a
   second shadow submission or visibility path.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
@@ -1021,12 +1032,6 @@ Tasks:
 
 Industry comparison (`2026-04-02`):
 
-- Unreal Engine:
-  - uses explicit actor/light mobility (`Static`, `Stationary`, `Movable`)
-  - Virtual Shadow Maps support separate static caching and track cached static
-    vs cached dynamic pages
-  - Epic's guidance is to switch actors that invalidate static pages to
-    `Movable`
 - Unity HDRP:
   - exposes explicit `Renderer.staticShadowCaster`
   - supports light shadow update modes (`Every Frame`, `On Enable`,
@@ -1067,6 +1072,174 @@ Important rule:
   reliable authored mobility data and the product needs the extra shadow budget
 - otherwise it should stay deferred rather than adding speculative complexity
 
+### CSM-TUNING. Cascade Distance / Distribution Policy
+
+Status:
+
+- in_progress
+
+Goals:
+
+- make Oxygen's conventional cascade placement tunable like a shipping engine
+- make near/far effective shadow quality differences come from split policy and
+  range tuning, not from a fixed hard-coded split table
+- replace the current fallback-only split exponent model with a first-class
+  generated split policy
+- replace the current fixed cascade-transition heuristic with authored and
+  runtime-scaled transition controls
+
+Why this phase exists:
+
+- the current Oxygen defaults publish explicit
+  `cascade_distances = { 8, 24, 64, 160 }`
+- because those distances are already valid, the current
+  `distribution_exponent` is effectively dormant on the default path
+- Oxygen shares one raster resolution across cascades, which is normal, so the
+  visible near/far quality difference depends heavily on split placement and
+  world coverage
+- the current shader-side cascade blend band is derived from a hard-coded
+  heuristic instead of authored transition fractions plus runtime tuning
+- the required tuning model is:
+  - authored max shadow distance
+  - runtime distance scaling
+  - generated geometric-series split placement
+  - authored transition fraction
+  - runtime transition scaling
+
+Oxygen tuning contract:
+
+- authored max near-CSM distance maps to `max_shadow_distance`
+- runtime distance scaling maps to `rndr.shadow.csm.distance_scale`
+- authored cascade count maps to `cascade_count`, clamped by
+  `rndr.shadow.csm.max_cascades`
+- geometric-series camera bias maps to `distribution_exponent`, but only after
+  Oxygen gains an explicit generated-split mode
+- authored overlap fraction between neighboring cascades maps to
+  `transition_fraction`
+- runtime transition scaling maps to `rndr.shadow.csm.transition_scale`
+- end-of-range fadeout maps to `distance_fadeout_fraction`
+- optional global classic-CSM resolution cap maps to
+  `rndr.shadow.csm.max_resolution`, a final hard ceiling applied after Oxygen
+  clamps the authored resolution hint to the active `ShadowQualityTier` budget
+
+Current Oxygen classic CSM quality-tier budget, before any optional
+`rndr.shadow.csm.max_resolution` clamp:
+
+- `Low`: `1024`
+- `Medium` ("Normal"): `2048`
+- `High`: `3072` for one dominant directional light, else `2048`
+- `Ultra`: `4096` for one dominant directional light, else `3072`
+
+Current authored shadow-resolution hints map to:
+
+- `Low`: `1024`
+- `Medium`: `2048`
+- `High`: `3072`
+- `Ultra`: `4096`
+
+Out of scope for this phase:
+
+- no special preview-only shadow path
+- no far-shadow-cascade import
+- no changes to `CSM-2` through `CSM-5` structure
+- no content specialization work; that remains `CSM-7`
+
+Tasks:
+
+1. Extend the authored directional-light CSM settings so Oxygen can represent
+   both generated and manual split policies:
+   - add an explicit split mode
+   - add `max_shadow_distance`
+   - add `transition_fraction`
+   - add `distance_fadeout_fraction`
+   - keep manual `cascade_distances` for legacy / explicit override use
+2. Add Oxygen runtime CVars through the existing console system:
+   - `rndr.shadow.csm.distance_scale`
+   - `rndr.shadow.csm.transition_scale`
+   - `rndr.shadow.csm.max_cascades`
+   - optional `rndr.shadow.csm.max_resolution`
+      default `0` = disabled, recommended non-zero values are
+      `1024`, `2048`, `3072`, or `4096`; this is only a final scalability clamp
+      on the authored-hint result after `ShadowQualityTier` budget clamping, not
+      a second
+      resolution-selection policy
+3. Update the C++ authored-data path:
+   - `src/Oxygen/Scene/Light/LightCommon.h`
+   - `src/Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeLightBindings.cpp`
+   - import / serialization code that preserves legacy manual-distance content
+   - `src/Oxygen/Renderer/Types/DirectionalShadowCandidate.h`
+   - `src/Oxygen/Renderer/LightManager.cpp`
+4. Update the conventional shadow backend publication path:
+   - `src/Oxygen/Renderer/Internal/ConventionalShadowBackend.cpp`
+   - generated mode should compute split ends from:
+     `effective_max_distance = max_shadow_distance * distance_scale`
+   - generated mode should use a geometric-series accumulator for the
+     split fractions
+   - active cascades should be clamped by `rndr.shadow.csm.max_cascades`
+5. Publish transition and fade data explicitly to shaders:
+   - update `src/Oxygen/Renderer/Types/DirectionalShadowMetadata.h`
+   - update the matching HLSL layout
+   - stop relying only on the current fixed blend-band heuristic
+6. Update the shader-side selection / blending path:
+   - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli`
+   - consume published transition widths
+   - consume last-cascade fadeout parameters if present
+7. Add validation coverage:
+   - unit tests for generated split publication
+   - unit tests for increasing world-units-per-texel across cascades
+   - unit tests for runtime CVar clamping behavior
+   - live visual validation on a large scene proving near/far quality
+     distribution is materially different after tuning
+8. Close the importer validation gap before claiming this phase complete:
+   - completed `2026-04-02`
+   - batch import now injects same-cooked-root serialization fences between
+     `script-sidecar` jobs before execution
+   - regression coverage added in `Oxygen.Cooker.ImportToolBatchDag.Tests`
+   - `physics_domains` recook revalidated at `--max-in-flight-jobs=8`, with no
+     reliance on `--max-in-flight-jobs=1`
+
+Implementation guidance:
+
+- use generated split mode as the recommended default for newly authored
+  directional lights
+- keep manual split mode for legacy compatibility and technical-art override
+- do not remove equal per-cascade raster resolution; fix split policy first
+- do not reopen receiver analysis, receiver mask, caster culling, or counted
+  indirect raster architecture
+- compute transition widths on the CPU and publish them explicitly to shaders;
+  the current heuristic may remain only as a safety minimum
+
+Exit gate:
+
+- generated split mode is implemented and validated
+- runtime tuning CVars are wired and clamped correctly
+- live large-scene validation shows materially different near vs far shadow
+  quality after tuning
+- no structural regression is introduced into the validated `CSM-2` through
+  `CSM-5` path
+
+Required phase evidence:
+
+- implementation in the C++ and HLSL areas listed above
+- synthetic/unit validation for generated split publication and transition
+  policy
+- Release build
+- fresh live validation package on a large scene
+- user visual confirmation that the tuned path restores meaningful near/far
+  quality difference
+- sequential RenderDoc analysis if any shader-visible structural behavior
+  changes need confirmation
+
+Relationship to adjacent phases:
+
+- `CSM-6` decides whether static and dynamic shadow work should update at
+  different rates
+- `CSM-TUNING` decides how the shared cascade budget is distributed across
+  camera distance
+- `CSM-7` decides how expensive each submitted shadow representation should be
+
+These responsibilities must remain separate.
+
 ### CSM-7. Authoring-Backed Shadow Specialization
 
 Status:
@@ -1084,6 +1257,8 @@ Activation preconditions:
 
 - `CSM-5` must already be the active hot raster path
 - `CSM-6` remains deferred unless target budgets prove it is needed
+- if the active issue is cascade-quality distribution or shadow distance
+  coverage, complete `CSM-TUNING` before activating `CSM-7`
 - at least one of the following must be true:
   - target-platform budgets still need more reduction after `CSM-5`
   - the editor/content pipeline can author reliable shadow-specialization
@@ -1212,13 +1387,18 @@ The next meaningful execution order from the recovered state is:
    closure budget on the intended platforms.
 2. Keep `CSM-6` deferred unless that budget decision or future editor-authored
    mobility data justifies activating it.
-3. If more reduction is still required while `CSM-6` remains deferred, use the
-   expanded `CSM-7` design below as the next phase:
+3. If large-scene quality distribution still needs work, activate
+   `CSM-TUNING` next:
+   generated split mode, distance / transition CVars, and explicit cascade
+   transition publication.
+4. If more reduction is still required after tuning while `CSM-6` remains
+   deferred, use the expanded `CSM-7` design below as the next specialization
+   phase:
    authoring-backed shadow-only LOD and material specialization published
    through `CSM-1`.
-4. Keep imported content conservative by default until explicit
+5. Keep imported content conservative by default until explicit
    shadow-specialization metadata exists.
-5. If no further budget work is required, move directly to final closure with
+6. If no further budget work is required, move directly to final closure with
    the locked `CSM-2` baseline and the validated `CSM-5` package as the final
    proof set.
 

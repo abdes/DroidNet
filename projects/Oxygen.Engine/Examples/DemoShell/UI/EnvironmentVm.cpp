@@ -1162,6 +1162,106 @@ auto EnvironmentVm::SetSunDiskRadiusDeg(float value) -> void
   service_->SetSunDiskRadiusDeg(value);
 }
 
+auto EnvironmentVm::GetSunShadowBias() const -> float
+{
+  return service_->GetSunShadowBias();
+}
+
+auto EnvironmentVm::SetSunShadowBias(float value) -> void
+{
+  service_->SetSunShadowBias(value);
+}
+
+auto EnvironmentVm::GetSunShadowNormalBias() const -> float
+{
+  return service_->GetSunShadowNormalBias();
+}
+
+auto EnvironmentVm::SetSunShadowNormalBias(float value) -> void
+{
+  service_->SetSunShadowNormalBias(value);
+}
+
+auto EnvironmentVm::GetSunShadowResolutionHint() const -> int
+{
+  return service_->GetSunShadowResolutionHint();
+}
+
+auto EnvironmentVm::SetSunShadowResolutionHint(int value) -> void
+{
+  service_->SetSunShadowResolutionHint(value);
+}
+
+auto EnvironmentVm::GetSunShadowCascadeCount() const -> int
+{
+  return service_->GetSunShadowCascadeCount();
+}
+
+auto EnvironmentVm::SetSunShadowCascadeCount(int value) -> void
+{
+  service_->SetSunShadowCascadeCount(value);
+}
+
+auto EnvironmentVm::GetSunShadowSplitMode() const -> int
+{
+  return service_->GetSunShadowSplitMode();
+}
+
+auto EnvironmentVm::SetSunShadowSplitMode(int value) -> void
+{
+  service_->SetSunShadowSplitMode(value);
+}
+
+auto EnvironmentVm::GetSunShadowMaxDistance() const -> float
+{
+  return service_->GetSunShadowMaxDistance();
+}
+
+auto EnvironmentVm::SetSunShadowMaxDistance(float value) -> void
+{
+  service_->SetSunShadowMaxDistance(value);
+}
+
+auto EnvironmentVm::GetSunShadowDistributionExponent() const -> float
+{
+  return service_->GetSunShadowDistributionExponent();
+}
+
+auto EnvironmentVm::SetSunShadowDistributionExponent(float value) -> void
+{
+  service_->SetSunShadowDistributionExponent(value);
+}
+
+auto EnvironmentVm::GetSunShadowTransitionFraction() const -> float
+{
+  return service_->GetSunShadowTransitionFraction();
+}
+
+auto EnvironmentVm::SetSunShadowTransitionFraction(float value) -> void
+{
+  service_->SetSunShadowTransitionFraction(value);
+}
+
+auto EnvironmentVm::GetSunShadowDistanceFadeoutFraction() const -> float
+{
+  return service_->GetSunShadowDistanceFadeoutFraction();
+}
+
+auto EnvironmentVm::SetSunShadowDistanceFadeoutFraction(float value) -> void
+{
+  service_->SetSunShadowDistanceFadeoutFraction(value);
+}
+
+auto EnvironmentVm::GetSunShadowCascadeDistance(const int index) const -> float
+{
+  return service_->GetSunShadowCascadeDistance(index);
+}
+
+auto EnvironmentVm::SetSunShadowCascadeDistance(int index, float value) -> void
+{
+  service_->SetSunShadowCascadeDistance(index, value);
+}
+
 auto EnvironmentVm::GetSunLightAvailable() const -> bool
 {
   return service_->GetSunLightAvailable();

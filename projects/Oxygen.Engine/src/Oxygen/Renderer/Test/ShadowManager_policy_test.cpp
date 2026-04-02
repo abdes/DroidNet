@@ -69,12 +69,14 @@ using oxygen::renderer::LightManager;
 using oxygen::renderer::ShadowManager;
 using oxygen::renderer::internal::RendererTagFactory;
 using oxygen::renderer::testing::FakeGraphics;
+using oxygen::scene::DirectionalCsmSplitMode;
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::PointLight;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
+using oxygen::scene::ShadowResolutionHint;
 
 class ShadowManagerPolicyTest : public testing::Test {
 protected:
@@ -532,6 +534,8 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
   auto& directional_light
     = directional_impl->get().GetComponent<DirectionalLight>();
   directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().split_mode
+    = DirectionalCsmSplitMode::kManualDistances;
   directional_light.CascadedShadows().cascade_count = 4U;
   directional_light.CascadedShadows().cascade_distances
     = { 8.0F, 24.0F, 64.0F, 160.0F };
@@ -590,6 +594,8 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
   auto& directional_light
     = directional_impl->get().GetComponent<DirectionalLight>();
   directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().split_mode
+    = DirectionalCsmSplitMode::kManualDistances;
   directional_light.CascadedShadows().cascade_count = 4U;
   directional_light.CascadedShadows().cascade_distances
     = { 8.0F, 24.0F, 64.0F, 160.0F };
@@ -624,6 +630,214 @@ NOLINT_TEST_F(ShadowManagerPolicyTest,
     << "cascade 2 should be coarser than cascade 1";
   EXPECT_GT(cascade3_texel_world, cascade2_texel_world)
     << "cascade 3 should be coarser than cascade 2";
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyPublishesGeneratedDirectionalCascadeSplitDepths)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView(1.0F, 300.0F, 75.0F);
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  auto& directional_light
+    = directional_impl->get().GetComponent<DirectionalLight>();
+  directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().split_mode
+    = DirectionalCsmSplitMode::kGenerated;
+  directional_light.CascadedShadows().cascade_count = 4U;
+  directional_light.CascadedShadows().max_shadow_distance = 160.0F;
+  directional_light.CascadedShadows().distribution_exponent = 3.0F;
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 16 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 16 }, Slot { 0 });
+
+  const auto publication = manager->PublishForView(oxygen::ViewId { 10 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, std::array { glm::vec4 { 0.0F, 0.0F, -40.0F, 8.0F } });
+  ASSERT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  const auto* analysis_plan
+    = manager->TryGetReceiverAnalysisPlan(oxygen::ViewId { 10 });
+  ASSERT_NE(analysis_plan, nullptr);
+  ASSERT_EQ(analysis_plan->jobs.size(), 4U);
+
+  constexpr auto kEpsilon = 1.0e-3F;
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.x, 1.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.y, 4.975F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.x, 4.975F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.y, 16.9F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[2].split_and_full_depth_range.x, 16.9F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[2].split_and_full_depth_range.y, 52.675F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[3].split_and_full_depth_range.x, 52.675F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[3].split_and_full_depth_range.y, 160.0F, kEpsilon);
+}
+
+NOLINT_TEST_F(
+  ShadowManagerPolicyTest, ConventionalPolicyAppliesDirectionalCsmRuntimeClamps)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  manager->SetDirectionalCsmRuntimeSettings(
+    oxygen::renderer::DirectionalCsmRuntimeSettings {
+      .distance_scale = 0.5F,
+      .transition_scale = 1.5F,
+      .max_cascades = 2U,
+      .max_resolution = 2048U,
+    });
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView(1.0F, 300.0F, 75.0F);
+  auto view_constants = MakeViewConstants(resolved_view);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  auto& directional_light
+    = directional_impl->get().GetComponent<DirectionalLight>();
+  directional_light.Common().casts_shadows = true;
+  directional_light.Common().shadow.resolution_hint
+    = oxygen::scene::ShadowResolutionHint::kUltra;
+  directional_light.CascadedShadows().split_mode
+    = DirectionalCsmSplitMode::kGenerated;
+  directional_light.CascadedShadows().cascade_count = 4U;
+  directional_light.CascadedShadows().max_shadow_distance = 160.0F;
+  directional_light.CascadedShadows().distribution_exponent = 3.0F;
+  directional_light.CascadedShadows().transition_fraction = 0.1F;
+  directional_light.CascadedShadows().distance_fadeout_fraction = 0.1F;
+  UpdateTransforms(directional_node);
+
+  lights.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 17 }, Slot { 0 });
+  lights.CollectFromNode(directional_node.GetHandle(), directional_impl->get());
+  manager->OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 17 }, Slot { 0 });
+
+  const auto publication = manager->PublishForView(oxygen::ViewId { 11 },
+    view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+    {}, std::array { glm::vec4 { 0.0F, 0.0F, -40.0F, 8.0F } });
+  ASSERT_NE(publication.shadow_instance_metadata_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  const auto* analysis_plan
+    = manager->TryGetReceiverAnalysisPlan(oxygen::ViewId { 11 });
+  ASSERT_NE(analysis_plan, nullptr);
+  ASSERT_EQ(analysis_plan->jobs.size(), 2U);
+
+  constexpr auto kEpsilon = 1.0e-3F;
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.x, 1.0F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[0].split_and_full_depth_range.y, 20.75F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.x, 20.75F, kEpsilon);
+  EXPECT_NEAR(
+    analysis_plan->jobs[1].split_and_full_depth_range.y, 80.0F, kEpsilon);
+
+  const auto* metadata
+    = manager->TryGetDirectionalShadowMetadata(oxygen::ViewId { 11 });
+  ASSERT_NE(metadata, nullptr);
+  EXPECT_EQ(metadata->cascade_count, 2U);
+  EXPECT_NEAR(metadata->cascade_transition_widths[0], 2.9625F, kEpsilon);
+  EXPECT_FLOAT_EQ(metadata->cascade_transition_widths[1], 0.0F);
+  EXPECT_NEAR(metadata->max_shadow_distance, 80.0F, kEpsilon);
+  EXPECT_NEAR(metadata->distance_fadeout_begin, 74.075F, kEpsilon);
+
+  const auto* plan = manager->TryGetRasterRenderPlan(oxygen::ViewId { 11 });
+  ASSERT_NE(plan, nullptr);
+  ASSERT_NE(plan->depth_texture, nullptr);
+  EXPECT_EQ(plan->depth_texture->GetDescriptor().width, 2048U);
+  EXPECT_EQ(plan->depth_texture->GetDescriptor().height, 2048U);
+}
+
+NOLINT_TEST_F(ShadowManagerPolicyTest,
+  ConventionalPolicyRespectsDirectionalResolutionHintAndReallocatesDownward)
+{
+  auto manager = MakeShadowManager(
+    DirectionalShadowImplementationPolicy::kConventionalOnly);
+  auto lights = MakeLightManager();
+  const auto resolved_view = MakeResolvedView(1.0F, 300.0F, 75.0F);
+
+  auto directional_node
+    = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto directional_impl = directional_node.GetImpl();
+  ASSERT_TRUE(directional_impl.has_value());
+  directional_impl->get().AddComponent<DirectionalLight>();
+  auto& directional_light
+    = directional_impl->get().GetComponent<DirectionalLight>();
+  directional_light.Common().casts_shadows = true;
+  directional_light.CascadedShadows().split_mode
+    = DirectionalCsmSplitMode::kGenerated;
+  directional_light.CascadedShadows().cascade_count = 4U;
+  directional_light.CascadedShadows().max_shadow_distance = 160.0F;
+  directional_light.CascadedShadows().distribution_exponent = 3.0F;
+  directional_light.CascadedShadows().transition_fraction = 0.1F;
+  directional_light.CascadedShadows().distance_fadeout_fraction = 0.1F;
+  UpdateTransforms(directional_node);
+
+  const auto publish_for_hint
+    = [&](const ShadowResolutionHint hint,
+        const std::uint64_t frame_number) -> std::uint32_t {
+    directional_light.Common().shadow.resolution_hint = hint;
+
+    auto view_constants = MakeViewConstants(resolved_view);
+    view_constants.SetFrameSequenceNumber(
+      SequenceNumber { frame_number }, ViewConstants::kRenderer);
+
+    lights.OnFrameStart(
+      RendererTagFactory::Get(), SequenceNumber { frame_number }, Slot { 0 });
+    lights.CollectFromNode(
+      directional_node.GetHandle(), directional_impl->get());
+    manager->OnFrameStart(
+      RendererTagFactory::Get(), SequenceNumber { frame_number }, Slot { 0 });
+
+    const auto publication = manager->PublishForView(oxygen::ViewId { 11 },
+      view_constants, lights, observer_ptr<Scene> { GetScene().get() }, 1280.0F,
+      {}, std::array { glm::vec4 { 0.0F, 0.0F, -40.0F, 8.0F } });
+    EXPECT_NE(publication.shadow_instance_metadata_srv,
+      oxygen::kInvalidShaderVisibleIndex);
+
+    const auto* plan = manager->TryGetRasterRenderPlan(oxygen::ViewId { 11 });
+    EXPECT_NE(plan, nullptr);
+    if (plan == nullptr) {
+      return 0U;
+    }
+
+    EXPECT_NE(plan->depth_texture, nullptr);
+    if (plan->depth_texture == nullptr) {
+      return 0U;
+    }
+
+    EXPECT_EQ(plan->depth_texture->GetDescriptor().height,
+      plan->depth_texture->GetDescriptor().width);
+    return plan->depth_texture->GetDescriptor().width;
+  };
+
+  EXPECT_EQ(publish_for_hint(ShadowResolutionHint::kLow, 21U), 1024U);
+  EXPECT_EQ(publish_for_hint(ShadowResolutionHint::kMedium, 22U), 2048U);
+  EXPECT_EQ(publish_for_hint(ShadowResolutionHint::kHigh, 23U), 3072U);
+  EXPECT_EQ(publish_for_hint(ShadowResolutionHint::kUltra, 24U), 3072U);
+  EXPECT_EQ(publish_for_hint(ShadowResolutionHint::kLow, 25U), 1024U);
 }
 
 NOLINT_TEST_F(
@@ -748,6 +962,74 @@ NOLINT_TEST_F(
   EXPECT_EQ(prepared_view->gpu_budget, std::chrono::milliseconds { 23 });
   EXPECT_EQ(prepared_view->shadow_caster_content_hash, 0xBEEFULL);
   EXPECT_TRUE(prepared_view->has_virtual_shadow_work);
+}
+
+NOLINT_TEST_F(
+  ShadowManagerPolicyTest, VsmPublishRespectsDirectionalResolutionHintBudget)
+{
+  const auto pages_per_axis_for_hint
+    = [&](const ShadowResolutionHint hint) -> std::uint32_t {
+    auto manager = MakeShadowManager(
+      DirectionalShadowImplementationPolicy::kVirtualShadowMap);
+    auto lights = MakeLightManager();
+    auto view_constants = MakeViewConstants();
+
+    auto directional_node
+      = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+    auto directional_impl = directional_node.GetImpl();
+    EXPECT_TRUE(directional_impl.has_value());
+    if (!directional_impl.has_value()) {
+      return 0U;
+    }
+
+    directional_impl->get().AddComponent<DirectionalLight>();
+    auto& directional_light
+      = directional_impl->get().GetComponent<DirectionalLight>();
+    directional_light.Common().casts_shadows = true;
+    directional_light.Common().shadow.resolution_hint = hint;
+    directional_light.CascadedShadows().cascade_count = 4U;
+    directional_light.CascadedShadows().split_mode
+      = DirectionalCsmSplitMode::kGenerated;
+    UpdateTransforms(directional_node);
+
+    lights.OnFrameStart(
+      RendererTagFactory::Get(), SequenceNumber { 31 }, Slot { 0 });
+    lights.CollectFromNode(
+      directional_node.GetHandle(), directional_impl->get());
+    manager->OnFrameStart(
+      RendererTagFactory::Get(), SequenceNumber { 31 }, Slot { 0 });
+
+    const auto publication
+      = manager->PublishForView(oxygen::ViewId { 19 }, view_constants, lights,
+        observer_ptr<Scene> { GetScene().get() }, 1920.0F);
+    EXPECT_NE(publication.shadow_instance_metadata_srv,
+      oxygen::kInvalidShaderVisibleIndex);
+
+    const auto vsm_renderer = manager->GetVirtualShadowRenderer();
+    EXPECT_NE(vsm_renderer.get(), nullptr);
+    if (vsm_renderer == nullptr) {
+      return 0U;
+    }
+
+    const auto products
+      = vsm_renderer->BuildPreparedViewProducts(oxygen::ViewId { 19 });
+    EXPECT_TRUE(products.has_value());
+    if (!products.has_value()) {
+      return 0U;
+    }
+
+    EXPECT_EQ(products->virtual_frame.directional_layouts.size(), 1U);
+    if (products->virtual_frame.directional_layouts.empty()) {
+      return 0U;
+    }
+
+    return products->virtual_frame.directional_layouts.front().pages_per_axis;
+  };
+
+  EXPECT_EQ(pages_per_axis_for_hint(ShadowResolutionHint::kLow), 8U);
+  EXPECT_EQ(pages_per_axis_for_hint(ShadowResolutionHint::kMedium), 16U);
+  EXPECT_EQ(pages_per_axis_for_hint(ShadowResolutionHint::kHigh), 24U);
+  EXPECT_EQ(pages_per_axis_for_hint(ShadowResolutionHint::kUltra), 24U);
 }
 
 NOLINT_TEST_F(

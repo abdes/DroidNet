@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -25,6 +27,7 @@
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/ConventionalShadowReceiverAnalysis.h>
+#include <Oxygen/Renderer/Types/DirectionalShadowMetadata.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ShadowInstanceMetadata.h>
@@ -54,6 +57,37 @@ namespace vsm {
   class VsmShadowRenderer;
 }
 
+struct DirectionalCsmRuntimeSettings {
+  float distance_scale { 1.0F };
+  float transition_scale { 1.0F };
+  std::uint32_t max_cascades { oxygen::scene::kMaxShadowCascades };
+  std::uint32_t max_resolution { 0U };
+};
+
+[[nodiscard]] inline auto CanonicalizeDirectionalCsmRuntimeSettings(
+  DirectionalCsmRuntimeSettings settings) noexcept
+  -> DirectionalCsmRuntimeSettings
+{
+  if (!std::isfinite(settings.distance_scale)) {
+    settings.distance_scale = 1.0F;
+  }
+  settings.distance_scale = std::clamp(settings.distance_scale, 0.0F, 2.0F);
+
+  if (!std::isfinite(settings.transition_scale)) {
+    settings.transition_scale = 1.0F;
+  }
+  settings.transition_scale = std::clamp(settings.transition_scale, 0.0F, 2.0F);
+
+  settings.max_cascades
+    = std::clamp(settings.max_cascades, 1U, oxygen::scene::kMaxShadowCascades);
+
+  if (settings.max_resolution != 0U) {
+    settings.max_resolution = std::clamp(settings.max_resolution, 1024U, 4096U);
+  }
+
+  return settings;
+}
+
 //! Renderer-owned shadow-product scheduler and backend coordinator.
 class ShadowManager {
 public:
@@ -77,6 +111,8 @@ public:
   OXGN_RNDR_API auto ResetCachedState() -> void;
   OXGN_RNDR_API auto ReserveFrameResources(
     std::uint32_t scene_view_count, const LightManager& lights) -> void;
+  OXGN_RNDR_API auto SetDirectionalCsmRuntimeSettings(
+    DirectionalCsmRuntimeSettings settings) -> void;
 
   OXGN_RNDR_API auto PublishForView(ViewId view_id,
     const engine::ViewConstants& view_constants, const LightManager& lights,
@@ -98,6 +134,8 @@ public:
     -> const ConventionalShadowReceiverAnalysisPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetShadowInstanceMetadata(
     ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalShadowMetadata(
+    ViewId view_id) const noexcept -> const engine::DirectionalShadowMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto
   GetConventionalShadowDepthTexture() const noexcept
     -> const std::shared_ptr<graphics::Texture>&;
