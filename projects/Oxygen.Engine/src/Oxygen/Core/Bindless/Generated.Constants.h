@@ -6,10 +6,10 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.1.0
-// Schema-Version: 1.0.1
+// Source-Version: 2.0.0
+// Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 17:33:12
+// Generated: 2026-04-02 13:22:39
 
 #pragma once
 
@@ -21,23 +21,22 @@ namespace oxygen {
 static constexpr uint32_t kInvalidBindlessIndex = 0XFFFFFFFFU;
 
 namespace engine::binding {
-  // View constants CBV
-
-  static constexpr uint32_t kViewDomainBase = 0U;
-  static constexpr uint32_t kViewCapacity = 1U;
-
   // Unified global bindless table
 
   static constexpr uint32_t kGlobalSrvDomainBase = 1U;
   static constexpr uint32_t kGlobalSrvCapacity = 2048U;
 
-  // Unified bindless table domains
+  // Material and metadata buffer ranges
 
   static constexpr uint32_t kMaterialsDomainBase = 2049U;
   static constexpr uint32_t kMaterialsCapacity = 3047U;
 
+  // Unified texture bindless range
+
   static constexpr uint32_t kTexturesDomainBase = 5096U;
   static constexpr uint32_t kTexturesCapacity = 65536U;
+
+  // Global sampler table
 
   static constexpr uint32_t kSamplersDomainBase = 0U;
   static constexpr uint32_t kSamplersCapacity = 256U;

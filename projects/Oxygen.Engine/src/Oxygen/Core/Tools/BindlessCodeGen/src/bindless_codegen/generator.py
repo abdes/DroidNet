@@ -37,6 +37,7 @@ except Exception:
 from . import schema as schema_mod
 from . import domains as domains_mod
 from . import root_signature as rs_mod
+from . import vulkan as vk_mod
 from . import model as model_mod
 from .templates import (
     TEMPLATE_CPP,
@@ -251,15 +252,29 @@ def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
     return schema_mod.find_schema(explicit_path, script_path)
 
 
-def validate_domain_references(doc):
-    """Cross-validate domains vs root_signature using specialized modules."""
-    domains = doc.get("domains", [])
-    root_sig = doc.get("root_signature", [])
-    domains_mod.validate_root_table_references(domains, root_sig)
-    domains_mod.validate_domain_overlaps_per_root_table(domains)
-    rs_mod.validate_params_vs_domains(
-        root_sig, {d.get("id"): d for d in domains}
+def validate_authored_model(doc):
+    """Cross-validate the authored ABI plus backend realizations."""
+    abi = doc.get("abi", {}) or {}
+    index_spaces = abi.get("index_spaces", []) or []
+    domains = abi.get("domains", []) or []
+    domains_mod.validate_abi_domains(index_spaces, domains)
+    domains_by_id = {str(d.get("id")): d for d in domains}
+
+    backends = doc.get("backends", {}) or {}
+    d3d12 = backends.get("d3d12", {}) or {}
+    d3d12_runtime = heaps_module.validate_d3d12_backend(d3d12, domains_by_id)
+    rs_mod.validate_root_signature(
+        d3d12.get("root_signature", []) or [], d3d12_runtime["tables"]
     )
+
+    vulkan = backends.get("vulkan", {}) or {}
+    vulkan_runtime = vk_mod.validate_vulkan_backend(vulkan, domains_by_id)
+
+    return {
+        "domains": domains_by_id,
+        "d3d12": d3d12_runtime,
+        "vulkan": vulkan_runtime,
+    }
 
 
 def generate(
@@ -364,8 +379,8 @@ def generate(
         )
     rep.info("Spec version: %s", src_ver)
     # Semantic validations across sections
-    rep.progress("Validating cross-references (domains/root-signature/heaps)")
-    validate_domain_references(doc)
+    rep.progress("Validating authored ABI and backend realizations")
+    validated = validate_authored_model(doc)
     # Build typed model (normalized) for downstream use
     rep.progress("Building normalized model")
     mdl = model_mod.build_model(doc)
@@ -375,18 +390,9 @@ def generate(
         if mdl
         else defaults.get("invalid_index", 0xFFFFFFFF)
     )
-    domains = doc.get("domains", [])
-    # Build domain lookup by id for cross-validation with root_signature ranges
-    domain_by_id = {d.get("id"): d for d in domains}
-    # Validate optional root_signature cross-links
-    root_sig = doc.get("root_signature", [])
-    # removed: duplicated validations now live in modules
-
-    # removed: handled in domains module
-
-    # removed: handled in root_signature module
-
-    # removed: handled in root_signature module
+    domains = ((doc.get("abi") or {}).get("domains") or [])
+    d3d12_backend = ((doc.get("backends") or {}).get("d3d12") or {})
+    root_sig = d3d12_backend.get("root_signature", []) or []
     # Determine timestamp string according to strategy
     if ts_strategy == "omit":
         ts = ""
@@ -456,7 +462,9 @@ def generate(
     # RootSignature C++ header content (rich metadata)
     rep.progress("Rendering C++ RootSignature header")
     try:
-        rich = rs_mod.render_cpp_root_signature(root_sig or [])
+        rich = rs_mod.render_cpp_root_signature(
+            root_sig or [], validated["d3d12"]["tables"]
+        )
     except Exception:
         # Fallback to basic rendering
         rs_enum, rs_counts, rs_regs = _render_root_sig_cpp(root_sig)
@@ -481,17 +489,12 @@ def generate(
         root_param_table=rich.get("root_param_table"),
     )
 
-    # Prepare runtime JSON descriptor (machine-friendly)
-    # Include heaps/mappings runtime fragment when present and keep the
-    # normalized fragment for rendering during dry-run.
-    heaps_runtime_fragment = {}
+    # Prepare runtime JSON descriptor (machine-friendly).
     strategy_json = {}
-    if doc.get("heaps"):
-        rep.progress("Validating heaps + mappings and building strategy JSON")
-        heaps_runtime_fragment = heaps_module.validate_heaps_and_mappings(doc)
-        # Build D3D12 strategy description wrapped under top-level 'heaps'
+    if validated["d3d12"]["heaps"]:
+        rep.progress("Building D3D12 strategy JSON")
         strategy_json = heaps_module.build_d3d12_strategy_json(
-            heaps_runtime_fragment.get("heaps", {})
+            validated["d3d12"]["heaps"]
         )
         # Attach metadata for traceability; keep entries at top-level for compatibility
         strategy_with_meta = {
@@ -517,11 +520,8 @@ def generate(
         "generated": ts,
         **({"schema_version": schema_version} if schema_version else {}),
         "defaults": defaults,
-        "domains": domains,
-        # include heaps/mappings runtime fragment when present
-        **heaps_runtime_fragment,
-        "symbols": doc.get("symbols", {}),
-        "root_signature": doc.get("root_signature", []),
+        "abi": doc.get("abi", {}),
+        "backends": doc.get("backends", {}),
     }
 
     # Derive output paths with the new harmonized naming

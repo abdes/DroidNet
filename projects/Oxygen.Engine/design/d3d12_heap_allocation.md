@@ -2,16 +2,16 @@
 
 ## Status
 
-- Status: proposed design
+- Status: phase 1 implemented; later migration phases pending
 - Scope: bindless allocation, generated bindless metadata, backend realization, and Nexus keying
 - Compatibility: intentionally breaking; the goal is a cleaner API and a stricter contract, not legacy preservation
-- Validation status: design-only; no code was changed and no build or tests were run in this step
+- Validation status: authored-model reset validated via BindlessCodeGen pytest, CLI verbose dry-run, and the MSVC compile-check behind `oxygen-core_bindless_gen`; runtime migration phases remain pending
 
 ## Purpose
 
 This design exists to make one guarantee true across the engine:
 
-- if a runtime system allocates a bindless resource in domain `D`, the shader-visible index returned for that allocation is always inside domain `D`'s generated range
+- if a runtime system allocates a bindless resource in domain `D`, the shader-visible index returned for that allocation is always inside domain `D`'s generated range within `D`'s generated index space
 
 Everything else in this document is in service of that guarantee.
 
@@ -45,7 +45,7 @@ The core issue is therefore not "allocation by view type and visibility" in the 
 
 The core issue is:
 
-- bindless-facing stable indices are not guaranteed to lie inside the range of their owning generated domain
+- bindless-facing stable indices are not guaranteed to lie inside the range of their owning generated domain and generated index space
 
 That is what this design fixes.
 
@@ -253,6 +253,7 @@ It defines:
 
 - domain ids
 - generated token order
+- index-space id per domain
 - shader-visible range base per domain
 - capacity per domain
 - allowed `ResourceViewType` values per domain
@@ -283,26 +284,34 @@ defaults:
   invalid_index: 4294967295
 
 abi:
+  index_spaces:
+    - id: srv_uav_cbv
+    - id: sampler
+
   domains:
     - id: lighting_frame
+      index_space: srv_uav_cbv
       shader_index_base: 1
       capacity: 2048
-      shader_access_class: structured_buffer_srv
+      shader_access_class: buffer_srv
       view_types: [StructuredBuffer_SRV]
 
     - id: materials
+      index_space: srv_uav_cbv
       shader_index_base: 2049
       capacity: 3047
-      shader_access_class: structured_buffer_srv
+      shader_access_class: buffer_srv
       view_types: [StructuredBuffer_SRV, RawBuffer_SRV]
 
     - id: textures
+      index_space: srv_uav_cbv
       shader_index_base: 5096
       capacity: 65536
       shader_access_class: texture_srv
       view_types: [Texture_SRV]
 
     - id: samplers
+      index_space: sampler
       shader_index_base: 0
       capacity: 256
       shader_access_class: sampler
@@ -442,6 +451,7 @@ backends:
 
 - root CBV/root constants are no longer modeled as bindless domains
 - backend-neutral ABI no longer carries D3D12 placement details
+- shader-visible domain overlap is validated per generated index space, not across unrelated spaces such as SRV and SAMPLER
 - backend realization carries the physical placement details needed to derive slots
 - every bindless-visible domain declares the exact engine view types it accepts
 
@@ -725,7 +735,7 @@ Exit criterion:
 
 ### Generator validations
 
-- ABI domains do not overlap in shader-visible space
+- ABI domains do not overlap inside the same generated index space
 - every domain's allowed `ResourceViewType` set is compatible with its shader access class
 - every backend realization covers only declared ABI domains
 - backend-specific storage ranges do not overlap within one physical realization space

@@ -4,212 +4,95 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-import os
-import tempfile
-import json
 import pytest
+import yaml
 
 from bindless_codegen import generator
 
+from spec_fixtures import copy_document, create_full_example_document
 
-def write_yaml(tmpdir, content, name="Spec.yaml"):
-    path = tmpdir.join(name)
-    path.write(content)
+
+def write_yaml(path, content):
+    with open(path, "w", encoding="utf-8") as stream:
+        yaml.safe_dump(content, stream, sort_keys=False)
     return str(path)
 
 
-def test_domain_overlap_detection(tmp_path):
-    yaml = """
-meta:
-  version: "1.0.0"
-defaults:
-  invalid_index: 4294967295
-domains:
-  - id: a
-    name: A
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: Table0
-    domain_base: 0
-    capacity: 100
-  - id: b
-    name: B
-    kind: SRV
-    register: t1
-    space: space0
-    root_table: Table0
-    domain_base: 50
-    capacity: 100
-root_signature:
-  - type: descriptor_table
-    name: Table0
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [a,b]
-        base_shader_register: t0
-        register_space: space0
-        num_descriptors: 200
-"""
-    p = tmp_path / "bs.yaml"
-    p.write_text(yaml)
-    with pytest.raises(ValueError, match="overlap"):
-        generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+def test_abi_domain_overlap_detection(tmp_path):
+    doc = create_full_example_document()
+    doc["abi"]["domains"][1]["shader_index_base"] = 1024
+
+    path = write_yaml(tmp_path / "overlap.yaml", doc)
+    with pytest.raises(ValueError, match="ABI shader-visible range .* overlap"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)
 
 
-def test_uav_counter_and_unbounded_forbidden(tmp_path):
-    yaml = """
-meta:
-  version: "1.0.0"
-defaults:
-  invalid_index: 4294967295
-domains:
-  - id: u
-    name: U
-    kind: UAV
-    register: u0
-    space: space0
-    root_table: TableU
-    uav_counter_register: u1
-    domain_base: 0
-    capacity: 10
-root_signature:
-  - type: descriptor_table
-    name: TableU
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: UAV
-        domain: [u]
-        base_shader_register: u0
-        register_space: space0
-        num_descriptors: unbounded
-"""
-    p = tmp_path / "uav.yaml"
-    p.write_text(yaml)
-    with pytest.raises(ValueError, match="cannot be 'unbounded'"):
-        generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+def test_incompatible_view_types_vs_access_class(tmp_path):
+    doc = create_full_example_document()
+    doc["abi"]["domains"][0]["view_types"] = ["Texture_SRV"]
+
+    path = write_yaml(tmp_path / "view_types.yaml", doc)
+    with pytest.raises(ValueError, match="not compatible with shader_access_class"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)
 
 
-def test_cbv_array_size_exceeds_domain(tmp_path):
-    yaml = """
-meta:
-  version: "1.0.0"
-defaults:
-  invalid_index: 4294967295
-domains:
-  - id: cbvdom
-    name: CBVDomain
-    kind: CBV
-    register: b1
-    space: space0
-    root_table: CBVTable
-    domain_base: 0
-    capacity: 4
-root_signature:
-  - type: cbv
-    name: CBVTable
-    index: 2
-    visibility: ALL
-    shader_register: b1
-    register_space: space0
-    cbv_array_size: 8
-"""
-    p = tmp_path / "cbv.yaml"
-    p.write_text(yaml)
-    with pytest.raises(ValueError, match="cbv_array_size .* exceeds domain"):
-        generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+def test_d3d12_heap_ranges_overlap_detection(tmp_path):
+    doc = create_full_example_document()
+    doc["backends"]["d3d12"]["strategy"]["heaps"][1]["base_index"] = 1000100
+
+    path = write_yaml(tmp_path / "d3d12_heaps.yaml", doc)
+    with pytest.raises(ValueError, match="heap address ranges overlap"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)
 
 
-def test_heap_ranges_overlap_detection(tmp_path):
-    yaml = """
-meta:
-  version: "1.0.0"
-defaults:
-  invalid_index: 4294967295
-domains:
-  - id: tex
-    name: Tex
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: T
-    domain_base: 0
-    capacity: 1
-root_signature:
-  - type: descriptor_table
-    name: T
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [tex]
-        base_shader_register: t0
-        register_space: space0
-        num_descriptors: 1
-heaps:
-  - id: "CBV_SRV_UAV:gpu"
-    type: CBV_SRV_UAV
-    shader_visible: true
-    capacity: 100
-    base_index: 1000
-    allow_growth: false
-  - id: "SAMPLER:gpu"
-    type: SAMPLER
-    shader_visible: true
-    capacity: 64
-    base_index: 1050  # Overlaps with previous range [1000,1100)
-    allow_growth: false
-"""
-    p = tmp_path / "overlap.yaml"
-    p.write_text(yaml)
-    with pytest.raises(ValueError, match="overlap"):
-        generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+def test_d3d12_root_signature_unknown_table_rejected(tmp_path):
+    doc = create_full_example_document()
+    doc["backends"]["d3d12"]["root_signature"][0]["table"] = "MissingTable"
+
+    path = write_yaml(tmp_path / "root_sig.yaml", doc)
+    with pytest.raises(ValueError, match="references unknown table"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)
 
 
-def test_heap_ranges_with_gaps_ok(tmp_path):
-    yaml = """
-meta:
-  version: "1.0.0"
-defaults:
-  invalid_index: 4294967295
-domains:
-  - id: tex
-    name: Tex
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: T
-    domain_base: 0
-    capacity: 1
-root_signature:
-  - type: descriptor_table
-    name: T
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [tex]
-        base_shader_register: t0
-        register_space: space0
-        num_descriptors: 1
-heaps:
-  - id: "CBV_SRV_UAV:gpu"
-    type: CBV_SRV_UAV
-    shader_visible: true
-    capacity: 100
-    base_index: 1000
-    allow_growth: false
-  - id: "SAMPLER:gpu"
-    type: SAMPLER
-    shader_visible: true
-    capacity: 64
-    base_index: 1200  # Gap after previous range [1000,1100)
-    allow_growth: false
-"""
-    p = tmp_path / "gaps.yaml"
-    p.write_text(yaml)
-    # Should not raise (gaps allowed)
-    generator.generate(str(p), "out.cpp", "out.hlsl", dry_run=True)
+def test_vulkan_binding_overlap_detection(tmp_path):
+    doc = create_full_example_document()
+    doc["abi"]["domains"].append(
+        {
+            "id": "materials",
+            "name": "Materials",
+            "index_space": "srv_uav_cbv",
+            "shader_index_base": 2049,
+            "capacity": 512,
+            "shader_access_class": "buffer_srv",
+            "view_types": ["StructuredBuffer_SRV"],
+        }
+    )
+    doc["backends"]["d3d12"]["strategy"]["domain_realizations"].append(
+        {
+            "domain": "materials",
+            "table": "SrvTable",
+            "heap_local_base": 2049,
+        }
+    )
+    doc["backends"]["vulkan"]["strategy"]["domain_realizations"].append(
+        {
+            "domain": "materials",
+            "binding": "buffers_binding",
+            "array_element_base": 100,
+        }
+    )
+
+    path = write_yaml(tmp_path / "vk_overlap.yaml", doc)
+    with pytest.raises(ValueError, match="binding-local realization overlap"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)
+
+
+def test_missing_backend_domain_realization_rejected(tmp_path):
+    doc = create_full_example_document()
+    doc["backends"]["vulkan"]["strategy"]["domain_realizations"] = (
+        doc["backends"]["vulkan"]["strategy"]["domain_realizations"][:-1]
+    )
+
+    path = write_yaml(tmp_path / "missing_vk_domain.yaml", doc)
+    with pytest.raises(ValueError, match="missing domain realizations"):
+        generator.generate(path, "out.cpp", "out.hlsl", dry_run=True)

@@ -7,48 +7,17 @@
 """Tests for the CLI dry-run functionality."""
 
 import yaml
+
 from bindless_codegen import cli, generator
+
+from spec_fixtures import create_minimal_valid_document
 
 
 def create_test_yaml(path, content=None):
-    """Create a test YAML file with valid BindingSlots content."""
     if content is None:
-        content = {
-            "meta": {"version": "1.0.0"},
-            "defaults": {"invalid_index": 4294967295},
-            "domains": [
-                {
-                    "id": "test_domain",
-                    "name": "TestDomain",
-                    "kind": "SRV",
-                    "register": "t0",
-                    "space": "space0",
-                    "root_table": "Table0",
-                    "domain_base": 0,
-                    "capacity": 100,
-                }
-            ],
-            "root_signature": [
-                {
-                    "type": "descriptor_table",
-                    "name": "Table0",
-                    "index": 0,
-                    "visibility": "ALL",
-                    "ranges": [
-                        {
-                            "range_type": "SRV",
-                            "domain": ["test_domain"],
-                            "base_shader_register": "t0",
-                            "register_space": "space0",
-                            "num_descriptors": 100,
-                        }
-                    ],
-                }
-            ],
-        }
-
-    with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(content, f)
+        content = create_minimal_valid_document()
+    with open(path, "w", encoding="utf-8") as stream:
+        yaml.safe_dump(content, stream, sort_keys=False)
 
 
 def test_dry_run_no_files_created(tmp_path, capsys):
@@ -112,8 +81,7 @@ def test_normal_run_creates_files(tmp_path):
 
 def test_dry_run_with_invalid_input(tmp_path):
     input_yaml = tmp_path / "invalid.yaml"
-    invalid_content = {"defaults": {"invalid_index": 4294967295}}
-    create_test_yaml(input_yaml, invalid_content)
+    create_test_yaml(input_yaml, {"defaults": {"invalid_index": 4294967295}})
 
     out_cpp = tmp_path / "output.h"
     out_hlsl = tmp_path / "output.hlsl"
@@ -153,7 +121,6 @@ def test_generator_dry_run_function(tmp_path, capsys):
 
     captured = capsys.readouterr()
     assert "[DRY RUN]" in captured.err
-    # Paths are printed base-relative, so only the filenames appear
     assert "output.h" in captured.err
     assert "output.hlsl" in captured.err
 
