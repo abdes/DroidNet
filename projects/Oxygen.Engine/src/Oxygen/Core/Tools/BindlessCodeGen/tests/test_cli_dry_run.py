@@ -45,8 +45,8 @@ def test_dry_run_no_files_created(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "[DRY RUN]" in captured.err
     assert "Planned outputs:" in captured.err
-    assert "C++ header:" in captured.err
-    assert "HLSL layout:" in captured.err
+    assert "C++ ABI header:" in captured.err
+    assert "HLSL ABI header:" in captured.err
     assert "Validation successful" in captured.err
 
 
@@ -74,9 +74,9 @@ def test_normal_run_creates_files(tmp_path):
     cpp_content = out_cpp.read_text(encoding="utf-8")
     hlsl_content = out_hlsl.read_text(encoding="utf-8")
     assert "#pragma once" in cpp_content
-    assert "#ifndef OXYGEN_BINDLESS_LAYOUT_HLSL" in hlsl_content
-    assert "kTestDomainDomainBase" in cpp_content
-    assert "K_TEST_DOMAIN_DOMAIN_BASE" in hlsl_content
+    assert "#ifndef OXYGEN_BINDLESS_ABI_HLSL" in hlsl_content
+    assert "kTestDomainShaderIndexBase" in cpp_content
+    assert "K_TEST_DOMAIN_SHADER_INDEX_BASE" in hlsl_content
 
 
 def test_dry_run_with_invalid_input(tmp_path):

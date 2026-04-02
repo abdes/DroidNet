@@ -18,7 +18,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -639,7 +639,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   constants.sun_cos_zenith = manager->GetSunState().cos_zenith;
   constants.alt_mapping_mode = alt_mapping_mode;
 
-  using b = binding::RootParam;
+  using b = oxygen::bindless::generated::d3d12::RootParam;
 
   auto dispatch_pass
     = [&](const graphics::ComputePipelineDesc& pso, uint32_t slot,

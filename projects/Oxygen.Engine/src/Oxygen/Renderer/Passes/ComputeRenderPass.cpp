@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Renderer/Passes/ComputeRenderPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -39,15 +39,19 @@ auto ComputeRenderPass::OnExecute(CommandRecorder& recorder) -> void
   // Bind common resources expected by the engine root signature.
   DCHECK_NOTNULL_F(Context().view_constants);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
 
   // Root constants at b2, space0.
   // - DWORD0: g_DrawIndex (unused for compute)
   // - DWORD1: g_PassConstantsIndex
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    0U, 0);
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     GetPassConstantsIndex().get(), 1);
 }

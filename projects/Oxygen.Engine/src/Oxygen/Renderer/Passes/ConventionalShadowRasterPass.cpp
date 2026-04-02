@@ -13,7 +13,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -429,7 +429,8 @@ auto ConventionalShadowRasterPass::BindJobViewConstants(
     + job_index;
   const auto byte_offset = slot_offset * sizeof(ViewConstants::GpuData);
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<std::uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
 }
 

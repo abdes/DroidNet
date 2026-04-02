@@ -23,7 +23,7 @@
 //! - The integration uses the same single + multi-scattering source terms as the
 //!   view-ray integrators, ensuring consistent energy compensation.
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"

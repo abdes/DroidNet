@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Renderer/Passes/GraphicsRenderPass.h>
@@ -69,7 +69,8 @@ auto GraphicsRenderPass::BindViewConstantsBuffer(
   DCHECK_F(last_built_pso_desc_.has_value());
 
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
 }
 
@@ -87,22 +88,25 @@ auto GraphicsRenderPass::BindPassConstantsIndexConstant(
   DCHECK_F(last_built_pso_desc_.has_value());
 
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     pass_constants_index.get(), 1);
 }
 
 namespace {
-auto RangeTypeToViewType(oxygen::engine::binding::RangeType rt)
+namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+
+auto RangeTypeToViewType(bindless_d3d12::RangeType rt)
   -> oxygen::graphics::ResourceViewType
 {
   using oxygen::graphics::ResourceViewType;
 
   switch (rt) {
-  case oxygen::engine::binding::RangeType::SRV:
+  case bindless_d3d12::RangeType::SRV:
     return ResourceViewType::kRawBuffer_SRV;
-  case oxygen::engine::binding::RangeType::Sampler:
+  case bindless_d3d12::RangeType::Sampler:
     return ResourceViewType::kSampler;
-  case oxygen::engine::binding::RangeType::UAV:
+  case bindless_d3d12::RangeType::UAV:
     return ResourceViewType::kRawBuffer_UAV;
   default:
     return ResourceViewType::kNone;

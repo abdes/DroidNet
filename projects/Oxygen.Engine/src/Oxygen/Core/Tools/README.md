@@ -40,13 +40,15 @@ python -m bindless_codegen.cli `
 
 This produces versioned artifacts in the Core source tree:
 
-- `src/Oxygen/Core/Bindless/Generated.Constants.h` (C++ constants)
-- `src/Oxygen/Core/Bindless/Generated.BindlessLayout.hlsl` (HLSL layout/macros)
-- `src/Oxygen/Core/Bindless/Generated.RootSignature.h` (C++ root signature helpers)
+- `src/Oxygen/Core/Bindless/Generated.BindlessAbi.h` (C++ constants)
+- `src/Oxygen/Core/Bindless/Generated.BindlessAbi.hlsl` (HLSL layout/macros)
+- `src/Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h` (C++ root signature helpers)
+- `src/Oxygen/Core/Bindless/Generated.PipelineLayout.Vulkan.h` (C++ Vulkan pipeline-layout helpers)
 - `src/Oxygen/Core/Bindless/Generated.Meta.h` (compile-time metadata)
 - `src/Oxygen/Core/Meta/Generated.All.json` (normalized runtime descriptor)
-- `src/Oxygen/Core/Meta/Generated.Heaps.D3D12.json` (if heaps are defined)
-- `src/Oxygen/Core/Bindless/Generated.Heaps.D3D12.h` (constexpr JSON embed, if heaps are defined)
+- `src/Oxygen/Core/Meta/Generated.Strategy.D3D12.json` (if D3D12 strategy is defined)
+- `src/Oxygen/Core/Meta/Generated.Strategy.Vulkan.json` (if Vulkan strategy is defined)
+- `src/Oxygen/Core/Bindless/Generated.Strategy.D3D12.h` (constexpr D3D12 strategy JSON embed)
 
 Schema location: the generator auto-discovers `Bindless.schema.json` next to the input, or uses the repository default at `src/Oxygen/Core/Meta/Bindless.schema.json`.
 

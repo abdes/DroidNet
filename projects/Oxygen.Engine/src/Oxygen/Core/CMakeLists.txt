@@ -98,10 +98,11 @@ set(
   # Generated header
   "version-info.h"
   # Generated headers (Bindless)
-  "Bindless/Generated.Constants.h"
-  "Bindless/Generated.Heaps.D3D12.h"
+  "Bindless/Generated.BindlessAbi.h"
   "Bindless/Generated.Meta.h"
-  "Bindless/Generated.RootSignature.h"
+  "Bindless/Generated.PipelineLayout.Vulkan.h"
+  "Bindless/Generated.RootSignature.D3D12.h"
+  "Bindless/Generated.Strategy.D3D12.h"
   # Time subsystem
   "Time/AuditClock.h"
   "Time/Conversion.h"

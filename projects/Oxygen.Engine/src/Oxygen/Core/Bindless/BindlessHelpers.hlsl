@@ -62,7 +62,7 @@
 //   BX_TRY_TEXTURES(texIdx) from the generated layout to check/guard indices.
 // - Global indices are absolute—no per-domain base offsets are needed by shaders.
 
-#include "Generated.BindlessLayout.hlsl"
+#include "Generated.BindlessAbi.hlsl"
 
 // Generic helpers derived from the generated layout
 static inline bool BX_IsValid(uint idx) { return idx != K_INVALID_BINDLESS_INDEX; }

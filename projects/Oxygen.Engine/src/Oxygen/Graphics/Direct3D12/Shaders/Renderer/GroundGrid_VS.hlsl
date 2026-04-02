@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Renderer/FullscreenTriangle.hlsli"
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 struct GroundGridVSOutput
 {

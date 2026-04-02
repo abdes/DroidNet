@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
+from . import domains as domains_mod
+
 
 _DESCRIPTOR_TYPE_TO_ACCESS_CLASSES: dict[str, set[str]] = {
     "SAMPLED_IMAGE": {"texture_srv"},
@@ -213,4 +215,153 @@ def validate_vulkan_backend(
         "descriptor_sets": descriptor_sets,
         "bindings": bindings,
         "domain_realizations": realizations,
+    }
+
+
+def build_vulkan_strategy_json(
+    strategy_doc: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "descriptor_sets": list(strategy_doc.get("descriptor_sets") or []),
+        "bindings": list(strategy_doc.get("bindings") or []),
+        "domain_realizations": list(
+            strategy_doc.get("domain_realizations") or []
+        ),
+    }
+
+
+def render_cpp_pipeline_layout(
+    strategy_doc: Dict[str, Any],
+    pipeline_layout: List[Dict[str, Any]],
+    domains_by_id: Dict[str, Dict[str, Any]],
+) -> Dict[str, str]:
+    descriptor_sets = list(strategy_doc.get("descriptor_sets") or [])
+    bindings = list(strategy_doc.get("bindings") or [])
+    domain_realizations = list(strategy_doc.get("domain_realizations") or [])
+
+    descriptor_set_enums: List[str] = []
+    descriptor_set_entries: List[str] = []
+    set_token_by_id: Dict[str, str] = {}
+    set_index_by_id: Dict[str, int] = {}
+
+    for idx, descriptor_set in enumerate(descriptor_sets):
+        set_id = str(descriptor_set.get("id"))
+        enum_name = domains_mod._pascal_from_identifier(set_id)
+        token_name = f"k{enum_name}"
+        set_token_by_id[set_id] = token_name
+        set_index_by_id[set_id] = idx
+        descriptor_set_enums.append(f"  {token_name} = {idx},")
+        descriptor_set_entries.append(
+            "  DescriptorSetDesc{ "
+            f"DescriptorSet::{token_name}, "
+            f'"{set_id}", '
+            f"{int(descriptor_set.get('set', 0))}U "
+            "},"
+        )
+    descriptor_set_enums.append(
+        f"  kCount = {len(descriptor_sets)},"
+    )
+
+    descriptor_type_names: List[str] = []
+    for binding in bindings:
+        descriptor_type = str(binding.get("descriptor_type"))
+        if descriptor_type not in descriptor_type_names:
+            descriptor_type_names.append(descriptor_type)
+    descriptor_type_enums = [
+        f"  k{domains_mod._pascal_from_identifier(name)} = {idx},"
+        for idx, name in enumerate(descriptor_type_names)
+    ]
+    descriptor_type_enums.append(
+        f"  kCount = {len(descriptor_type_names)},"
+    )
+    descriptor_type_expr = {
+        name: f"DescriptorType::k{domains_mod._pascal_from_identifier(name)}"
+        for name in descriptor_type_names
+    }
+
+    binding_enums: List[str] = []
+    binding_entries: List[str] = []
+    binding_token_by_id: Dict[str, str] = {}
+
+    for idx, binding in enumerate(bindings):
+        binding_id = str(binding.get("id"))
+        enum_name = domains_mod._pascal_from_identifier(binding_id)
+        token_name = f"k{enum_name}"
+        binding_token_by_id[binding_id] = token_name
+        descriptor_count = binding.get("descriptor_count")
+        if descriptor_count is None:
+            descriptor_count = 0
+        binding_enums.append(f"  {token_name} = {idx},")
+        binding_entries.append(
+            "  BindingDesc{ "
+            f"Binding::{token_name}, "
+            f'"{binding_id}", '
+            f"DescriptorSet::{set_token_by_id[str(binding.get('set'))]}, "
+            f"{int(binding.get('binding', 0))}U, "
+            f"{descriptor_type_expr[str(binding.get('descriptor_type'))]}, "
+            f"{int(descriptor_count)}U, "
+            f"{str(bool(binding.get('variable_count', False))).lower()}, "
+            f"{str(bool(binding.get('update_after_bind', False))).lower()} "
+            "},"
+        )
+    binding_enums.append(f"  kCount = {len(bindings)},")
+
+    domain_binding_entries: List[str] = []
+    for realization in domain_realizations:
+        domain_id = str(realization.get("domain"))
+        binding_id = str(realization.get("binding"))
+        domain = domains_by_id[domain_id]
+        domain_binding_entries.append(
+            "  DomainBindingDesc{ "
+            f'"{domain_id}", '
+            f"Binding::{binding_token_by_id[binding_id]}, "
+            f"{int(realization.get('array_element_base', 0))}U, "
+            f"{int(domain.get('capacity', 0))}U "
+            "},"
+        )
+
+    layout_entry_enums: List[str] = []
+    layout_entry_entries: List[str] = []
+    for idx, entry in enumerate(pipeline_layout):
+        entry_id = str(entry.get("id"))
+        token_name = f"k{domains_mod._pascal_from_identifier(entry_id)}"
+        layout_entry_enums.append(f"  {token_name} = {idx},")
+        if str(entry.get("type")) == "descriptor_set":
+            descriptor_set_index = set_index_by_id[str(entry.get("set_ref"))]
+            kind_expr = "LayoutEntryKind::DescriptorSet"
+            size_bytes = 0
+            stages = ""
+        else:
+            descriptor_set_index = 0xFFFFFFFF
+            kind_expr = "LayoutEntryKind::PushConstants"
+            size_bytes = int(entry.get("size_bytes", 0))
+            stages = "|".join(entry.get("stages") or [])
+        layout_entry_entries.append(
+            "  PipelineLayoutEntryDesc{ "
+            f"LayoutEntry::{token_name}, "
+            f'"{entry_id}", '
+            f"{kind_expr}, "
+            f"{descriptor_set_index}U, "
+            f"{size_bytes}U, "
+            f'"{stages}" '
+            "},"
+        )
+    layout_entry_enums.append(f"  kCount = {len(pipeline_layout)},")
+
+    return {
+        "descriptor_set_enums": "\n".join(descriptor_set_enums),
+        "descriptor_set_entries": "\n".join(descriptor_set_entries)
+        or "  // none",
+        "binding_enums": "\n".join(binding_enums),
+        "binding_entries": "\n".join(binding_entries) or "  // none",
+        "descriptor_type_enums": "\n".join(descriptor_type_enums),
+        "domain_binding_entries": "\n".join(domain_binding_entries)
+        or "  // none",
+        "layout_entry_enums": "\n".join(layout_entry_enums),
+        "layout_entry_entries": "\n".join(layout_entry_entries)
+        or "  // none",
+        "descriptor_set_count": str(len(descriptor_sets)),
+        "binding_count": str(len(bindings)),
+        "domain_binding_count": str(len(domain_realizations)),
+        "layout_entry_count": str(len(pipeline_layout)),
     }

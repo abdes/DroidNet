@@ -15,7 +15,7 @@ Target architecture note:
 ## Root bindings
 
 The common root binding order is defined by the generated enum
-`oxygen::engine::binding::RootParam` in `Generated.RootSignature.h`:
+`oxygen::bindless::generated::d3d12::RootParam` in `Generated.RootSignature.D3D12.h`:
 
 ```cpp
 enum class RootParam : uint32_t {
@@ -361,7 +361,7 @@ slots published in `DrawFrameBindings`):
 
 **Layered descriptor management:**
 
-- **Root parameters**: Stable across all passes; defined in `Generated.RootSignature.h`.
+- **Root parameters**: Stable across all passes; defined in `Generated.RootSignature.D3D12.h`.
 - **Bindless tables**: Assigned dynamically per frame; slots published via
   `ViewConstants`.
 - **Root constants**: `g_DrawIndex` is set per draw; `g_PassConstantsIndex` is

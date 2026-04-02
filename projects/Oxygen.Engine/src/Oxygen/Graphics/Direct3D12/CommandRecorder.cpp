@@ -11,7 +11,7 @@
 
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/VariantHelpers.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -242,15 +242,17 @@ CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
 }
 
 namespace {
-// Bindless root signature layout indices must match Generated.RootSignature.h
-// Root Param 0: Single unbounded SRV descriptor table (t0, space0)
-// Root Param 1: Sampler descriptor table (s0, space0)
-// Root Param 2: ViewConstants CBV (b1, space0)
-// Root Param 3: DrawIndex root constants (b2, space0)
+namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+
+// Bindless root signature layout indices must match
+// Generated.RootSignature.D3D12.h Root Param 0: Single unbounded SRV descriptor
+// table (t0, space0) Root Param 1: Sampler descriptor table (s0, space0) Root
+// Param 2: ViewConstants CBV (b1, space0) Root Param 3: DrawIndex root
+// constants (b2, space0)
 constexpr UINT kRootIndex_UnboundedSRV_Table
-  = static_cast<UINT>(oxygen::engine::binding::RootParam::kBindlessSrvTable);
+  = static_cast<UINT>(bindless_d3d12::RootParam::kBindlessSrvTable);
 constexpr UINT kRootIndex_Sampler_Table
-  = static_cast<UINT>(oxygen::engine::binding::RootParam::kSamplerTable);
+  = static_cast<UINT>(bindless_d3d12::RootParam::kSamplerTable);
 } // namespace
 
 auto CommandRecorder::SetupDescriptorHeaps(
