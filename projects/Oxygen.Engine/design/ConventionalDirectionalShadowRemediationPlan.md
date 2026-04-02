@@ -17,17 +17,20 @@ slow discovery.
 
 Current task focus:
 
-- Active phase is now `CSM-5`.
+- Active structural work is complete through `CSM-5`.
+- The next decision is whether `CSM-6` budget work is required before closure,
+  or whether the remaining work is only final closure / cleanup.
 - Effective `2026-04-02`, the authoritative comparison baseline for later
   phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
   pre-`CSM-2` conventional package.
 - The next acceptable outputs are:
-  - `CSM-5` counted-indirect conventional raster wired to the validated
-    `CSM-4` compacted work buffers
-  - fresh canonical capture plus sequential RenderDoc analysis for `CSM-5`
-  - counted-indirect raster evidence compared against the locked `CSM-2`
-    baseline and the validated `CSM-4` package
-- `CSM-1`, `CSM-2`, `CSM-3`, and `CSM-4` are implemented and validated.
+  - a decision on whether `CSM-6` static / dynamic update budgeting is still
+    necessary after the validated `CSM-5` results
+  - if more budget work is required, a fresh canonical capture plus sequential
+    RenderDoc analysis for that phase
+  - else final closure evidence against the locked `CSM-2` baseline
+- `CSM-1`, `CSM-2`, `CSM-3`, `CSM-4`, and `CSM-5` are implemented and
+  validated.
 - `CSM-2` is the locked baseline package for future phases. It does not
   compare against an older capture package because it is the new authoritative
   baseline.
@@ -38,8 +41,10 @@ Current task focus:
   capture shape; receiver-mask occupancy stayed unchanged while receiver-mask
   GPU time dropped materially.
 - `CSM-4` now produces validated per-job / per-partition compacted command and
-  count buffers on the canonical frame-`350` capture, but conventional raster
-  still replays the full CPU partition stream until `CSM-5`.
+  count buffers on the canonical frame-`350` capture.
+- `CSM-5` now consumes those compacted buffers through counted indirect
+  execution on the canonical frame-`350` capture, and the old direct full-
+  partition replay path is no longer the hot raster path.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -191,7 +196,7 @@ Conclusion:
   rect
 - `CSM-2` is the authoritative baseline and therefore has no baseline-compare
   requirement against older stale captures
-- active implementation work now moves to `CSM-4`
+- later phases compare against this locked baseline package
 
 ### 1.6 Per-Phase Evidence Rule
 
@@ -660,7 +665,7 @@ Conclusion:
 - structural work counts match the locked `CSM-2` baseline
 - the remaining `CSM-3` cost is explicit, bounded, and materially lower than
   the previous validated `CSM-3` package
-- active implementation work now moves to `CSM-4`
+- later phases consume this validated receiver-mask package
 
 ### CSM-4. GPU Caster Culling And Compaction
 
@@ -810,13 +815,13 @@ Conclusion:
   baseline
 - `CSM-4` is validated as a producer of compacted conventional-shadow work
   buffers
-- active implementation work now moves to `CSM-5`
+- `CSM-5` consumes these compacted buffers directly on the hot raster path
 
 ### CSM-5. Counted-Indirect Conventional Raster
 
 Status:
 
-- pending
+- complete
 
 Goals:
 
@@ -827,16 +832,22 @@ Tasks:
 
 1. Convert `ConventionalShadowRasterPass` to consume compacted work through the
    existing public `ExecuteIndirectCounted` API.
-2. Reuse the same public counted-indirect usage pattern already proven by the
+2. Move `ConventionalShadowRasterPass` to run only after
+   `ScreenHzbBuildPass -> ConventionalShadowReceiverAnalysisPass ->
+   ConventionalShadowReceiverMaskPass -> ConventionalShadowCasterCullingPass`,
+   while still completing before the main shaded lighting path consumes the
+   conventional shadow texture.
+3. Reuse the same public counted-indirect usage pattern already proven by the
    VSM raster path.
-3. Keep PSO usage within public graphics APIs only.
-4. Add RenderDoc analysis that proves:
+4. Keep PSO usage within public graphics APIs only.
+5. Add RenderDoc analysis that proves:
    - counted indirect execution is used
    - raster draw count is reduced versus the canonical baseline
 
 Exit gate:
 
 - no full-partition direct replay remains on the hot path
+- no pre-culling conventional shadow raster execution remains on the hot path
 - RenderDoc shows counted indirect execution in the conventional shadow pass
 - normalized shadow-pass GPU time is materially lower than the normalized
   canonical baseline
@@ -847,6 +858,100 @@ Required phase evidence:
 - fresh frame-`350` capture
 - RenderDoc indirect-raster report
 - normalized timing compare versus baseline
+
+Current validation evidence:
+
+- implementation files:
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h`
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowRasterPass.cpp`
+  - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp`
+  - `src/Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.cpp`
+  - `src/Oxygen/Renderer/Test/Fakes/Graphics.h`
+  - `src/Oxygen/Renderer/Test/ConventionalShadowRasterPassContract_test.cpp`
+  - `Examples/RenderScene/Analyze-ConventionalShadowCsm5.ps1`
+  - `Examples/RenderScene/AnalyzeRenderDocConventionalShadowRasterIndirect.py`
+  - `Examples/RenderScene/CompareConventionalShadowCsm5Baseline.py`
+- synthetic validation:
+  - `Oxygen.Renderer.ConventionalShadowRasterPassContract.Tests.exe`
+    `ConventionalShadowRasterPassContractTest.ExecutesPartitionVariantsWithRequiredRootCbvRebinds`
+    passed
+  - `Oxygen.Renderer.ConventionalShadowCasterCullingPass.Tests.exe`
+    `ConventionalShadowCasterCullingPassTest.CompactsConventionalShadowDrawsAgainstReceiverMask`
+    passed
+- Release validation:
+  - `cmake --build out/build-ninja --config Release --target`
+    `Oxygen.Examples.RenderScene.exe`
+    `Oxygen.Graphics.Direct3D12.ShaderBake.exe`
+    `oxygen-renderer`
+    succeeded
+- live validation artifacts:
+  - capture:
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50_frame350.rdc`
+  - benchmark log:
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.benchmark.log`
+  - timing reports:
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.shadow_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.shader_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.screen_hzb_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.receiver_analysis_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.receiver_mask_timing.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.caster_culling_timing.txt`
+  - reports:
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.receiver_analysis_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.receiver_mask_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.caster_culling_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.raster_indirect_report.txt`
+    `out/build-ninja/analysis/conventional_shadow_csm5_validation/release_frame350_csm5_fps50.baseline_compare.txt`
+
+Current live `CSM-5` facts from the fresh canonical package:
+
+- scene build frame: `213`
+- last texture repoint frame: `287`
+- capture frame: `350`
+- post-scene-build stabilization: `137` frames / `5.334 s`
+- post-last-repoint stabilization: `63` frames / `1.263 s`
+- benchmark-log CPU-state checks versus locked `CSM-2`:
+  - directional light summary unchanged: `total=1 shadowed_total=1 shadowed_sun=1`
+  - prepared shadow bounds unchanged:
+    `collected=405 retained=405 cast_items=405 receive_items=405 visible_items=35`
+  - authoritative conventional draw stream unchanged: `401` draw records
+- counted-indirect raster proof:
+  - `job_scope_count`: `4`
+  - counted-indirect marker event count: `16`
+  - `execute_indirect_path_event_count`: `165`
+  - raster clears: `4`
+  - raster draw work events: `165`
+  - indirect raster draw work events: `165`
+  - all draw work events are indirect: `true`
+  - direct full-partition replay is absent from the hot raster path
+- culling-to-raster alignment:
+  - total emitted compacted draws from `CSM-4`: `165`
+  - raster draw work events: `165`
+  - draw-work-event count matches emitted compacted draw count
+- normalized comparison against locked `CSM-2`:
+  - baseline shadow draw work events: `1604`
+  - current shadow draw work events: `165`
+  - shadow draw work event reduction: `1439`
+  - shadow draw work event ratio versus baseline: `0.102868`
+  - `ConventionalShadowRasterPass`: `21.657248 ms -> 2.078208 ms`
+  - shadow raster delta: `-19.579040 ms` (`-90.404099%`)
+  - `ShaderPass`: `9.286432 ms -> 9.164672 ms`
+  - shader delta: `-0.121760 ms` (`-1.311160%`)
+  - total analyzed shadow-path GPU duration:
+    `22.630336 ms -> 6.128928 ms`
+  - total shadow-path delta: `-16.501408 ms` (`-72.917203%`)
+
+Conclusion:
+
+- conventional shadow raster now runs only after the validated `CSM-4`
+  compacted work is available
+- the hot raster path now executes counted indirect only
+- RenderDoc proves every shadow draw in the conventional raster pass comes from
+  counted indirect expansion
+- raster draw count now matches the compacted `CSM-4` output exactly
+- normalized canonical timing is materially lower than the locked `CSM-2`
+  baseline
+- `CSM-5` is validated as complete
 
 ### CSM-6. Static / Dynamic Update Budget
 
@@ -908,12 +1013,15 @@ Closure gate:
 
 The next meaningful execution order from the recovered state is:
 
-1. Implement `CSM-4` GPU caster culling and compaction from the locked
-   `CSM-2` receiver-analysis output plus the completed `CSM-3` receiver mask.
-2. Capture and analyze the canonical benchmark at frame `350` and `50 fps`.
-3. Prove non-trivial real-scene caster rejection and reduced eligible
-   draws/job versus the baseline replay shape.
-4. Only then proceed to `CSM-5` counted-indirect conventional raster.
+1. Decide whether the validated `CSM-5` result is already sufficient for
+   closure, or whether `CSM-6` static / dynamic update budgeting is still
+   required.
+2. If more budget reduction is required, keep the counted-indirect `CSM-5`
+   path and layer `CSM-6` on top of it instead of reopening any earlier
+   structural phase.
+3. If no further budget work is required, move directly to final closure with
+   the locked `CSM-2` baseline and the validated `CSM-5` package as the final
+   proof set.
 
 Do not restart with receiver object bounds. Do not attempt to tune the old
 rect/slab method. That path has already failed and been rolled back.

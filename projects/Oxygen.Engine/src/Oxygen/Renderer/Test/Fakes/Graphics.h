@@ -83,10 +83,36 @@ struct RootConstantBufferViewLog {
   std::vector<Event> binds;
 };
 
+struct DrawCommandLog {
+  struct Event {
+    uint32_t vertex_num { 0U };
+    uint32_t instances_num { 0U };
+    uint32_t vertex_offset { 0U };
+    uint32_t instance_offset { 0U };
+  };
+  std::vector<Event> draws;
+};
+
+struct IndirectCommandLog {
+  struct Event {
+    const Buffer* argument_buffer { nullptr };
+    uint64_t argument_buffer_offset { 0U };
+    uint32_t max_command_count { 0U };
+    CommandRecorder::IndirectCommandLayout layout {
+      CommandRecorder::IndirectCommandLayout::kDraw
+    };
+    const Buffer* count_buffer { nullptr };
+    uint64_t count_buffer_offset { 0U };
+  };
+  std::vector<Event> counted_draws;
+};
+
 //! Logs SRV view creations for bindless indices.
 /*! This is used by higher-level tests (e.g., TextureBinder) to observe when a
-    descriptor slot is first registered and when it is repointed via
-    ResourceRegistry::UpdateView, without adding any test-only API surface to
+
+   descriptor slot is first registered and when it is repointed via
+
+   ResourceRegistry::UpdateView, without adding any test-only API surface to
     production code.
 
     The log records the bindless heap index (which maps 1:1 to shader-visible
@@ -171,12 +197,15 @@ public:
   FakeCommandRecorder(std::shared_ptr<CommandList> command_list,
     const observer_ptr<CommandQueue> target_queue, BufferCommandLog* buffer_log,
     TextureCommandLog* texture_log, GraphicsPipelineCommandLog* pipeline_log,
-    RootConstantBufferViewLog* root_cbv_log)
+    RootConstantBufferViewLog* root_cbv_log, DrawCommandLog* draw_log,
+    IndirectCommandLog* indirect_log)
     : CommandRecorder(std::move(command_list), target_queue)
     , buffer_log_(buffer_log)
     , texture_log_(texture_log)
     , pipeline_log_(pipeline_log)
     , root_cbv_log_(root_cbv_log)
+    , draw_log_(draw_log)
+    , indirect_log_(indirect_log)
   {
   }
 
@@ -225,9 +254,17 @@ public:
   }
   auto SetViewport(const ViewPort& /*viewport*/) -> void override { }
   auto SetScissors(const Scissors& /*scissors*/) -> void override { }
-  auto Draw(uint32_t /*vertex_num*/, uint32_t /*instances_num*/,
-    uint32_t /*vertex_offset*/, uint32_t /*instance_offset*/) -> void override
+  auto Draw(uint32_t vertex_num, uint32_t instances_num, uint32_t vertex_offset,
+    uint32_t instance_offset) -> void override
   {
+    if (draw_log_ != nullptr) {
+      draw_log_->draws.push_back(DrawCommandLog::Event {
+        .vertex_num = vertex_num,
+        .instances_num = instances_num,
+        .vertex_offset = vertex_offset,
+        .instance_offset = instance_offset,
+      });
+    }
   }
   auto Dispatch(uint32_t /*thread_group_count_x*/,
     uint32_t /*thread_group_count_y*/, uint32_t /*thread_group_count_z*/)
@@ -239,11 +276,21 @@ public:
     IndirectCommandLayout /*layout*/) -> void override
   {
   }
-  auto ExecuteIndirectCounted(const Buffer& /*argument_buffer*/,
-    uint64_t /*argument_buffer_offset*/, uint32_t /*max_command_count*/,
-    IndirectCommandLayout /*layout*/, const Buffer& /*count_buffer*/,
-    uint64_t /*count_buffer_offset*/) -> void override
+  auto ExecuteIndirectCounted(const Buffer& argument_buffer,
+    uint64_t argument_buffer_offset, uint32_t max_command_count,
+    IndirectCommandLayout layout, const Buffer& count_buffer,
+    uint64_t count_buffer_offset) -> void override
   {
+    if (indirect_log_ != nullptr) {
+      indirect_log_->counted_draws.push_back(IndirectCommandLog::Event {
+        .argument_buffer = &argument_buffer,
+        .argument_buffer_offset = argument_buffer_offset,
+        .max_command_count = max_command_count,
+        .layout = layout,
+        .count_buffer = &count_buffer,
+        .count_buffer_offset = count_buffer_offset,
+      });
+    }
   }
   auto SetVertexBuffers(uint32_t /*num*/,
     const std::shared_ptr<Buffer>* /*vertex_buffers*/,
@@ -343,6 +390,8 @@ private:
   TextureCommandLog* texture_log_ { nullptr };
   GraphicsPipelineCommandLog* pipeline_log_ { nullptr };
   RootConstantBufferViewLog* root_cbv_log_ { nullptr };
+  DrawCommandLog* draw_log_ { nullptr };
+  IndirectCommandLog* indirect_log_ { nullptr };
 };
 
 // Minimal in-memory descriptor allocator for tests
@@ -784,7 +833,7 @@ public:
     auto cl = std::make_shared<FakeCommandList>(
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
     auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
-      &graphics_pipeline_log_, &root_cbv_log_);
+      &graphics_pipeline_log_, &root_cbv_log_, &draw_log_, &indirect_log_);
     return { raw, [](CommandRecorder* p) -> void { delete p; } };
   }
 
@@ -792,6 +841,8 @@ public:
   TextureCommandLog texture_log_ {};
   GraphicsPipelineCommandLog graphics_pipeline_log_ {};
   RootConstantBufferViewLog root_cbv_log_ {};
+  DrawCommandLog draw_log_ {};
+  IndirectCommandLog indirect_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_ {};

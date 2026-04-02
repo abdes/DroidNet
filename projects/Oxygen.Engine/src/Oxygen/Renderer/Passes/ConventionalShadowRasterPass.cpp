@@ -23,11 +23,12 @@
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
-#include <Oxygen/Renderer/Types/DrawMetadata.h>
+#include <Oxygen/Renderer/Types/ConventionalShadowIndirectDrawCommand.h>
 
 namespace oxygen::engine {
 
@@ -65,9 +66,39 @@ ConventionalShadowRasterPass::~ConventionalShadowRasterPass()
   shadow_view_constants_reclaimer_ = nullptr;
 }
 
+auto ConventionalShadowRasterPass::GetCurrentOutput(const ViewId view_id) const
+  -> Output
+{
+  if (const auto it = view_states_.find(view_id);
+    it != view_states_.end() && it->second.has_current_output) {
+    return Output {
+      .job_count = it->second.job_count,
+      .partition_count
+      = static_cast<std::uint32_t>(it->second.inspection_partitions.size()),
+      .counted_indirect_used = it->second.counted_indirect_used,
+      .available = true,
+    };
+  }
+  return {};
+}
+
+auto ConventionalShadowRasterPass::GetIndirectPartitionsForInspection(
+  const ViewId view_id) const -> std::span<const IndirectPartitionInspection>
+{
+  if (const auto it = view_states_.find(view_id);
+    it != view_states_.end() && it->second.has_current_output) {
+    return std::span<const IndirectPartitionInspection> {
+      it->second.inspection_partitions.data(),
+      it->second.inspection_partitions.size(),
+    };
+  }
+  return {};
+}
+
 auto ConventionalShadowRasterPass::DoPrepareResources(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  ResetCurrentOutputState();
   auto& depth_texture = GetDepthTexture();
   if (!recorder.IsResourceTracked(depth_texture)) {
     recorder.BeginTrackingResourceState(
@@ -120,6 +151,7 @@ auto ConventionalShadowRasterPass::BuildRasterizerStateDesc(
 auto ConventionalShadowRasterPass::DoExecute(
   graphics::CommandRecorder& recorder) -> co::Co<>
 {
+  ResetCurrentOutputState();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (!shadow_manager) {
     LOG_F(INFO,
@@ -156,22 +188,79 @@ auto ConventionalShadowRasterPass::DoExecute(
     co_return;
   }
 
+  const auto* caster_culling_pass
+    = Context().GetPass<ConventionalShadowCasterCullingPass>();
+  if (caster_culling_pass == nullptr) {
+    LOG_F(WARNING,
+      "ConventionalShadowRasterPass: skipped for view {} because "
+      "ConventionalShadowCasterCullingPass is unavailable",
+      Context().current_view.view_id.get());
+    Context().RegisterPass(this);
+    co_return;
+  }
+
+  const auto culling_output
+    = caster_culling_pass->GetCurrentOutput(Context().current_view.view_id);
+  if (!culling_output.available || culling_output.job_count == 0U) {
+    LOG_F(WARNING,
+      "ConventionalShadowRasterPass: skipped for view {} because counted "
+      "indirect culling output is unavailable (available={} jobs={})",
+      Context().current_view.view_id.get(), culling_output.available,
+      culling_output.job_count);
+    Context().RegisterPass(this);
+    co_return;
+  }
+
   ValidateRasterPlan(raster_plan->jobs);
   const auto job_count = raster_plan->jobs.size();
+  CHECK_F(static_cast<std::uint32_t>(job_count) == culling_output.job_count,
+    "ConventionalShadowRasterPass: culling output job-count mismatch "
+    "(raster_plan={} culling={})",
+    job_count, culling_output.job_count);
+  const auto indirect_partitions
+    = caster_culling_pass->GetIndirectPartitionsForInspection(
+      Context().current_view.view_id);
+  if (indirect_partitions.empty()) {
+    LOG_F(WARNING,
+      "ConventionalShadowRasterPass: skipped for view {} because counted "
+      "indirect partitions are unavailable",
+      Context().current_view.view_id.get());
+    Context().RegisterPass(this);
+    co_return;
+  }
+
   auto& depth_texture = GetDepthTextureMutable();
   SetupViewPortAndScissors(recorder);
   const graphics::GpuEventScopeOptions scope_options {};
   graphics::GpuEventScope shadow_depth_work_scope(
     recorder, "ConventionalShadowRasterPass.ShadowDepthWork", scope_options);
-
-  const auto* records
-    = reinterpret_cast<const DrawMetadata*>(psf->draw_metadata_bytes.data());
-  std::uint32_t emitted_count = 0U;
-  std::uint32_t skipped_invalid = 0U;
-  std::uint32_t draw_errors = 0U;
   // Track the last public descriptor we bound so partition traversal only
   // reissues SetPipelineState when the selected variant actually changes.
   auto current_pso = LastBuiltPsoDesc();
+
+  for (const auto& partition : indirect_partitions) {
+    CHECK_NOTNULL_F(partition.command_buffer,
+      "ConventionalShadowRasterPass: counted indirect command buffer is "
+      "missing for partition {}",
+      partition.partition_index);
+    CHECK_NOTNULL_F(partition.count_buffer,
+      "ConventionalShadowRasterPass: counted indirect count buffer is missing "
+      "for partition {}",
+      partition.partition_index);
+    if (!recorder.IsResourceTracked(*partition.command_buffer)) {
+      recorder.BeginTrackingResourceState(
+        *partition.command_buffer, graphics::ResourceStates::kCommon, true);
+    }
+    if (!recorder.IsResourceTracked(*partition.count_buffer)) {
+      recorder.BeginTrackingResourceState(
+        *partition.count_buffer, graphics::ResourceStates::kCommon, true);
+    }
+    recorder.RequireResourceState(
+      *partition.command_buffer, graphics::ResourceStates::kIndirectArgument);
+    recorder.RequireResourceState(
+      *partition.count_buffer, graphics::ResourceStates::kIndirectArgument);
+  }
+  recorder.FlushBarriers();
 
   for (std::uint32_t job_index = 0U; job_index < job_count; ++job_index) {
     const auto& job = raster_plan->jobs[job_index];
@@ -185,16 +274,17 @@ auto ConventionalShadowRasterPass::DoExecute(
     ClearDepthStencilView(recorder, dsv);
     BindJobViewConstants(recorder, job_index);
 
-    for (const auto& pr : psf->partitions) {
-      if (!pr.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
+    for (const auto& partition : indirect_partitions) {
+      if (!partition.pass_mask.IsSet(PassMaskBit::kShadowCaster)) {
         continue;
       }
-      if (!pr.pass_mask.IsSet(PassMaskBit::kOpaque)
-        && !pr.pass_mask.IsSet(PassMaskBit::kMasked)) {
+      if (!partition.pass_mask.IsSet(PassMaskBit::kOpaque)
+        && !partition.pass_mask.IsSet(PassMaskBit::kMasked)) {
         continue;
       }
 
-      const auto& pso_desc = SelectPipelineStateForPartition(pr.pass_mask);
+      const auto& pso_desc
+        = SelectPipelineStateForPartition(partition.pass_mask);
       if (!current_pso.has_value() || *current_pso != pso_desc) {
         recorder.SetPipelineState(pso_desc);
         // CommandRecorder::SetPipelineState rebinds the PSO's root signature.
@@ -204,22 +294,46 @@ auto ConventionalShadowRasterPass::DoExecute(
         BindJobViewConstants(recorder, job_index);
         current_pso = pso_desc;
       }
-      EmitDrawRange(recorder, records, pr.begin, pr.end, emitted_count,
-        skipped_invalid, draw_errors);
+
+      const auto command_offset = static_cast<std::uint64_t>(job_index)
+        * static_cast<std::uint64_t>(partition.max_commands_per_job)
+        * sizeof(renderer::ConventionalShadowIndirectDrawCommand);
+      const auto count_offset
+        = static_cast<std::uint64_t>(job_index) * sizeof(std::uint32_t);
+      recorder.SetMarker("ConventionalShadowRasterPass.ExecuteIndirectCounted");
+      recorder.ExecuteIndirectCounted(*partition.command_buffer, command_offset,
+        partition.max_commands_per_job,
+        graphics::CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant,
+        *partition.count_buffer, count_offset);
     }
   }
 
+  for (const auto& partition : indirect_partitions) {
+    recorder.RequireResourceStateFinal(
+      *partition.command_buffer, graphics::ResourceStates::kIndirectArgument);
+    recorder.RequireResourceStateFinal(
+      *partition.count_buffer, graphics::ResourceStates::kIndirectArgument);
+  }
   recorder.RequireResourceState(
     depth_texture, graphics::ResourceStates::kShaderResource);
   recorder.FlushBarriers();
 
-  if (emitted_count == 0U) {
-    LOG_F(WARNING,
-      "ConventionalShadowRasterPass: view {} produced no shadow-caster draws "
-      "(jobs={} skipped_invalid={} errors={})",
-      Context().current_view.view_id.get(), job_count, skipped_invalid,
-      draw_errors);
+  auto& view_state = view_states_[Context().current_view.view_id];
+  view_state.inspection_partitions.clear();
+  view_state.inspection_partitions.reserve(indirect_partitions.size());
+  for (const auto& partition : indirect_partitions) {
+    view_state.inspection_partitions.push_back(IndirectPartitionInspection {
+      .pass_mask = partition.pass_mask,
+      .partition_index = partition.partition_index,
+      .draw_record_count = partition.draw_record_count,
+      .max_commands_per_job = partition.max_commands_per_job,
+      .command_buffer = partition.command_buffer,
+      .count_buffer = partition.count_buffer,
+    });
   }
+  view_state.job_count = static_cast<std::uint32_t>(job_count);
+  view_state.counted_indirect_used = true;
+  view_state.has_current_output = true;
 
   Context().RegisterPass(this);
   co_return;
@@ -432,6 +546,14 @@ auto ConventionalShadowRasterPass::BindJobViewConstants(
     static_cast<std::uint32_t>(
       oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
+}
+
+auto ConventionalShadowRasterPass::ResetCurrentOutputState() -> void
+{
+  if (const auto view_id = Context().current_view.view_id;
+    view_id != kInvalidViewId) {
+    view_states_[view_id] = {};
+  }
 }
 
 auto ConventionalShadowRasterPass::PrepareJobDepthStencilView(

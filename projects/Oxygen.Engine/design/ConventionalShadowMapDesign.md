@@ -698,8 +698,8 @@ and barrier round-trip.
 - Before dispatch: job + partition → `kGenericRead`; mask summary, base mask,
   hierarchy mask → `kShaderResource`; command + count buffers →
   `kUnorderedAccess`.
-- After dispatch: command + count buffers → `kCommon`; job + partition →
-  `kCommon`.
+- After dispatch: command + count buffers → `kIndirectArgument`
+  (ready for CSM-5 consumption); job + partition → `kCommon`.
 - No inter-partition barriers are needed — each partition writes to
   independent command/count buffers.
 
@@ -747,26 +747,57 @@ for the canonical benchmark.
   the baseline full-record count)
 - No unexplained CPU-path regression
 
-### 5.5 CSM-5 — Counted-Indirect Conventional Raster (Planned)
+### 5.5 CSM-5 — Counted-Indirect Conventional Raster
 
-**Status:** pending
+**Status:** complete
 
-**Purpose:** Execute only the compacted caster work, eliminating the current
-CPU replay of full shadow partitions.
+**Purpose:** Execute only the compacted caster work produced by CSM-4,
+replacing the previous CPU-driven full-partition direct draw replay.
 
-**Design:**
+**Pipeline reordering:**
 
-1. Convert `ConventionalShadowRasterPass` from direct CPU-driven draws to
-   `ExecuteIndirectCounted` execution.
-2. Reuse the same counted-indirect API and resource patterns already proven by
-   the VSM raster path.
-3. The indirect argument buffers are populated by CSM-4.
-4. Each cascade's raster work is a single `ExecuteIndirectCounted` call.
+The shadow raster pass was moved from before `DepthPrePass` to after the
+complete `ScreenHzb → ReceiverAnalysis → ReceiverMask → CasterCulling`
+chain, while still completing before the main shaded lighting path consumes
+the conventional shadow texture. This ensures the compacted indirect buffers
+are available when the raster pass executes.
 
-**Exit criteria:**
+**Execution model:**
 
-- No full-partition direct replay on the hot path
-- RenderDoc shows counted indirect execution
+For each cascade job:
+
+1. Set render target to the cascade's shadow-map array slice.
+2. Clear depth.
+3. Bind per-job shadow view constants.
+4. For each partition that participates in shadow casting:
+   - Select and bind the appropriate PSO (opaque or masked), with
+     change-tracking to avoid redundant PSO binds.
+   - Issue one `ExecuteIndirectCounted` call consuming:
+     - Command buffer at offset
+       `job_index × max_commands_per_job × sizeof(IndirectDrawCommand)`
+     - Count buffer at offset `job_index × sizeof(uint32)`
+     - Maximum command count = `max_commands_per_job`
+     - Layout = `kDrawWithRootConstant` (root constant carries `draw_index`
+       for bindless lookup)
+
+The old direct `Draw()` path is fully removed. No fallback to CPU-driven
+replay exists.
+
+**Resource state contract:**
+
+CSM-4 leaves command and count buffers in `kIndirectArgument`. The raster
+pass consumes them in `kIndirectArgument` and leaves them in that state.
+
+**Output:**
+
+The pass publishes an output record per view indicating whether counted-
+indirect execution was used, along with job and partition counts for
+downstream validation and analysis.
+
+**Exit criteria (met):**
+
+- No full-partition direct replay remains on the hot path
+- RenderDoc shows counted indirect execution in the conventional shadow pass
 - Normalized shadow-pass GPU time is materially lower than the CSM-2 baseline
 
 ### 5.6 CSM-6 — Static / Dynamic Update Budget (Planned)
