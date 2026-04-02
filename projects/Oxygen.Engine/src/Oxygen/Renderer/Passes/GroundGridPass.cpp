@@ -75,10 +75,10 @@ struct alignas(oxygen::packing::kShaderDataFieldAlignment)
   float horizon_boost { GroundGridPassConfig::kDefaultHorizonBoost };
   float pad_params2_0 { 0.0F };
 
-  // Register 7 (grid offset + SRVs)
+  // Register 7 (grid offset + exposure)
   float grid_offset_x { 0.0F };
   float grid_offset_y { 0.0F };
-  uint32_t depth_srv_index { oxygen::kInvalidShaderVisibleIndex.get() };
+  uint32_t reserved0 { 0U };
   uint32_t exposure_srv_index { oxygen::kInvalidShaderVisibleIndex.get() };
 
   // Register 8 (minor color)
@@ -161,57 +161,44 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
   return rtv;
 }
 
-auto PrepareDepthShaderResourceView(Texture& depth_texture,
-  ResourceRegistry& registry, DescriptorAllocator& allocator)
-  -> std::pair<oxygen::graphics::NativeView, uint32_t>
+auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
+  DescriptorAllocator& allocator) -> oxygen::graphics::NativeView
 {
   using oxygen::TextureType;
 
   const auto& tex_desc = depth_texture.GetDescriptor();
 
-  oxygen::Format srv_format = tex_desc.format;
-  if (tex_desc.format == oxygen::Format::kDepth32) {
-    srv_format = oxygen::Format::kR32Float;
-  }
-
-  oxygen::graphics::TextureViewDescription srv_view_desc {
-    .view_type = ResourceViewType::kTexture_SRV,
-    .visibility = DescriptorVisibility::kShaderVisible,
-    .format = srv_format,
+  oxygen::graphics::TextureViewDescription dsv_view_desc {
+    .view_type = ResourceViewType::kTexture_DSV,
+    .visibility = DescriptorVisibility::kCpuOnly,
+    .format = tex_desc.format,
     .dimension = tex_desc.texture_type,
     .sub_resources = { .base_mip_level = 0,
-      .num_mip_levels = 1,
+      .num_mip_levels = tex_desc.mip_levels,
       .base_array_slice = 0,
       .num_array_slices = (tex_desc.texture_type == TextureType::kTexture3D
           ? tex_desc.depth
           : tex_desc.array_size) },
-    .is_read_only_dsv = false,
+    .is_read_only_dsv = true,
   };
 
-  if (const auto srv = registry.Find(depth_texture, srv_view_desc);
-    srv->IsValid()) {
-    if (const auto existing_index
-      = registry.FindShaderVisibleIndex(depth_texture, srv_view_desc);
-      existing_index.has_value()) {
-      return { srv, existing_index->get() };
-    }
-    return { srv, oxygen::kInvalidShaderVisibleIndex.get() };
+  if (const auto dsv = registry.Find(depth_texture, dsv_view_desc);
+    dsv->IsValid()) {
+    return dsv;
   }
-  auto srv_desc_handle = allocator.AllocateRaw(
-    ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-  if (!srv_desc_handle.IsValid()) {
+  auto dsv_desc_handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+  if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(
-      "GroundGridPass: Failed to allocate SRV descriptor handle");
+      "GroundGridPass: Failed to allocate DSV descriptor handle");
   }
-  const uint32_t srv_index
-    = allocator.GetShaderVisibleIndex(srv_desc_handle).get();
-  const auto srv = registry.RegisterView(
-    depth_texture, std::move(srv_desc_handle), srv_view_desc);
-  if (!srv->IsValid()) {
-    throw std::runtime_error(
-      "GroundGridPass: Failed to register depth SRV with resource registry");
+  const auto dsv = registry.RegisterView(
+    depth_texture, std::move(dsv_desc_handle), dsv_view_desc);
+  if (!dsv->IsValid()) {
+    throw std::runtime_error("GroundGridPass: Failed to register read-only DSV "
+                             "with resource registry");
   }
-  return { srv, srv_index };
+  return dsv;
 }
 
 } // namespace
@@ -351,48 +338,6 @@ auto GroundGridPass::ComputeInvViewProj() const -> glm::mat4
 
   const auto& proj = Context().current_view.resolved_view->ProjectionMatrix();
   return glm::inverse(proj * view_no_trans);
-}
-
-auto GroundGridPass::UpdateDepthTexture(
-  Graphics& graphics, GroundGridPassConstants& constants) -> void
-{
-  if (const auto depth_output = ResolveDepthOutput(Context());
-    depth_output.has_value()) {
-    last_depth_texture_ = depth_output->depth_texture;
-    depth_srv_index_ = depth_output->has_canonical_srv
-      ? depth_output->canonical_srv_index
-      : oxygen::kInvalidShaderVisibleIndex;
-
-    if (!depth_output->has_canonical_srv) {
-      auto& registry = graphics.GetResourceRegistry();
-      auto& allocator = graphics.GetDescriptorAllocator();
-      const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-        const_cast<Texture&>(*depth_output->depth_texture), registry,
-        allocator);
-      if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
-        depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
-      }
-    }
-    constants.depth_srv_index = depth_srv_index_.get();
-  } else if (const Texture* depth_texture = GetDepthTexture();
-    depth_texture != nullptr) {
-    auto& registry = graphics.GetResourceRegistry();
-    auto& allocator = graphics.GetDescriptorAllocator();
-    const auto [srv_view, srv_index] = PrepareDepthShaderResourceView(
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-      const_cast<Texture&>(*depth_texture), registry, allocator);
-    last_depth_texture_ = depth_texture;
-    depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
-    if (srv_index != oxygen::kInvalidShaderVisibleIndex.get()) {
-      depth_srv_index_ = oxygen::ShaderVisibleIndex { srv_index };
-    }
-    constants.depth_srv_index = depth_srv_index_.get();
-  } else {
-    depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
-    last_depth_texture_ = nullptr;
-    constants.depth_srv_index = oxygen::kInvalidShaderVisibleIndex.get();
-  }
 }
 
 auto GroundGridPass::UpdateExposureIndex(
@@ -537,7 +482,6 @@ auto GroundGridPass::UpdatePassConstants() -> void
   constants.inv_view_proj = ComputeInvViewProj();
 
   // 2. Resource Updates
-  UpdateDepthTexture(Context().GetGraphics(), constants);
   UpdateExposureIndex(constants);
 
   // 3. Config & State Updates
@@ -563,8 +507,6 @@ auto GroundGridPass::ReleasePassConstantsBuffer() -> void
   pass_constants_buffer_.reset();
   pass_constants_index_ = oxygen::kInvalidShaderVisibleIndex;
   SetPassConstantsIndex(pass_constants_index_);
-  depth_srv_index_ = oxygen::kInvalidShaderVisibleIndex;
-  last_depth_texture_ = nullptr;
 }
 
 auto GroundGridPass::GetColorTexture() const -> const Texture&
@@ -596,12 +538,30 @@ auto GroundGridPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     = PrepareRenderTargetView(color_texture, registry, allocator);
   std::array rtvs { color_rtv };
 
-  recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+  graphics::NativeView dsv = {};
+  if (const auto* depth_texture = GetDepthTexture(); depth_texture != nullptr) {
+    dsv = PrepareDepthStencilView(
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+      const_cast<Texture&>(*depth_texture), registry, allocator);
+  }
+
+  if (dsv->IsValid()) {
+    recorder.SetRenderTargets(std::span(rtvs), dsv);
+  } else {
+    recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
+  }
 }
 
 auto GroundGridPass::SetupViewPortAndScissors(CommandRecorder& recorder) const
   -> void
 {
+  if (const auto depth_output = ResolveDepthOutput(Context());
+    depth_output.has_value()) {
+    recorder.SetViewport(depth_output->viewport);
+    recorder.SetScissors(depth_output->scissors);
+    return;
+  }
+
   const auto& tex_desc = GetColorTexture().GetDescriptor();
   const auto width = tex_desc.width;
   const auto height = tex_desc.height;
@@ -641,10 +601,22 @@ auto GroundGridPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::RasterizerStateDesc;
   using graphics::ShaderRequest;
 
+  bool has_depth = false;
+  auto depth_format = oxygen::Format::kUnknown;
+  uint32_t sample_count = 1U;
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
+    has_depth = true;
+    depth_format = depth_texture->GetDescriptor().format;
+    sample_count = depth_texture->GetDescriptor().sample_count;
+  } else {
+    sample_count = GetColorTexture().GetDescriptor().sample_count;
+  }
+
   DepthStencilStateDesc ds_desc {
-    .depth_test_enable = false,
+    .depth_test_enable = has_depth,
     .depth_write_enable = false,
-    .depth_func = CompareOp::kAlways,
+    .depth_func = CompareOp::kGreaterOrEqual,
     .stencil_enable = false,
     .stencil_read_mask = 0xFF, // NOLINT(*-magic-numbers)
     .stencil_write_mask = 0xFF, // NOLINT(*-magic-numbers)
@@ -671,8 +643,8 @@ auto GroundGridPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   const auto& color_tex_desc = GetColorTexture().GetDescriptor();
   const FramebufferLayoutDesc fb_layout_desc {
     .color_target_formats = { color_tex_desc.format },
-    .depth_stencil_format = oxygen::Format::kUnknown,
-    .sample_count = color_tex_desc.sample_count,
+    .depth_stencil_format = depth_format,
+    .sample_count = sample_count,
   };
 
   auto generated_bindings = BuildRootBindings();
@@ -722,7 +694,19 @@ auto GroundGridPass::NeedRebuildPipelineState() const -> bool
     return true;
   }
 
-  if (layout.sample_count != color_tex_desc.sample_count) {
+  auto current_sample_count = color_tex_desc.sample_count;
+  auto current_depth_format = oxygen::Format::kUnknown;
+  if (const Texture* depth_texture = GetDepthTexture();
+    depth_texture != nullptr) {
+    current_sample_count = depth_texture->GetDescriptor().sample_count;
+    current_depth_format = depth_texture->GetDescriptor().format;
+  }
+
+  if (layout.sample_count != current_sample_count) {
+    return true;
+  }
+
+  if (layout.depth_stencil_format != current_depth_format) {
     return true;
   }
 

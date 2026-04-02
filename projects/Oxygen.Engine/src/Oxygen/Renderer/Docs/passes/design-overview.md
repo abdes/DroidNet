@@ -325,7 +325,7 @@ reorder for binary compatibility).
 | `ShaderPass` | `DepthPrePass` | `ctx.GetPass<DepthPrePass>()->GetOutput()` → `DepthPrePassOutput` |
 | `SkyPass` | `DepthPrePass` | Same depth output (reads depth for sky-vs-geometry test) |
 | `TransparentPass` | `DepthPrePass` | Depth texture for read-only depth test |
-| `GroundGridPass` | `DepthPrePass` | Depth SRV for depth-aware grid fading |
+| `GroundGridPass` | `DepthPrePass` | Read-only DSV for fixed-function grid occlusion |
 | `ScreenHzbBuildPass` | `DepthPrePass` | Full-resolution depth as HZB source |
 | `VsmProjectionPass` | `DepthPrePass` | Scene depth for VSM screen-space projection |
 | `ShaderPass` | `LightCullingPass` | Cluster grid/index list SRV indices via `LightingFrameBindings` |
