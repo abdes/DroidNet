@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/LightingFrameBindings.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"

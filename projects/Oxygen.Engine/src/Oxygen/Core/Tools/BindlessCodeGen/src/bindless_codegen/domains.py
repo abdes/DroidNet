@@ -49,6 +49,13 @@ def _upper_snake(name: str) -> str:
     return snake.upper()
 
 
+def _pascal_from_identifier(name: str) -> str:
+    if not name:
+        return ""
+    parts = [part for part in re.split(r"[_\-\s]+", name) if part]
+    return "".join(_normalize_acronyms(part[:1].upper() + part[1:]) for part in parts)
+
+
 def _intervals_overlap(
     intervals: Iterable[tuple[int, int, str]], *, label: str
 ) -> None:
@@ -63,31 +70,71 @@ def _intervals_overlap(
             )
 
 
-def render_cpp_domains(domains: List[Dict[str, Any]]) -> str:
-    lines: List[str] = []
-    for domain in domains:
-        name = domain.get("name")
-        base = domain.get("shader_index_base")
-        cap = domain.get("capacity")
-        comment = domain.get("comment", "")
-        if base is None:
-            continue
-        if comment:
-            lines.append(f"  // {comment}")
-            lines.append("")
-        cpp_name = _normalize_acronyms(str(name)) if name else ""
-        lines.append(
-            f"  static constexpr uint32_t k{cpp_name}DomainBase = {int(base)}U;"
+def render_cpp_abi(
+    index_spaces: List[Dict[str, Any]],
+    domains: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    index_space_constants: List[str] = []
+    index_space_entries: List[str] = []
+    domain_constants: List[str] = []
+    domain_entries: List[str] = []
+
+    for idx, index_space in enumerate(index_spaces):
+        index_space_id = str(index_space.get("id"))
+        cpp_name = _pascal_from_identifier(index_space_id)
+        index_space_constants.append(
+            f"inline constexpr IndexSpaceToken k{cpp_name}IndexSpace {{ {idx}U }};"
         )
-        if cap is not None:
-            lines.append(
-                f"  static constexpr uint32_t k{cpp_name}Capacity = {int(cap)}U;"
-            )
-        lines.append("")
-    return "\n".join(lines)
+        index_space_entries.append(
+            f'  IndexSpaceDesc{{ k{cpp_name}IndexSpace, "{index_space_id}" }},'
+        )
+
+    for idx, domain in enumerate(domains):
+        domain_id = str(domain.get("id"))
+        domain_name = str(domain.get("name"))
+        cpp_name = _normalize_acronyms(domain_name)
+        index_space_cpp_name = _pascal_from_identifier(str(domain.get("index_space")))
+        shader_index_base = int(domain.get("shader_index_base", 0))
+        capacity = int(domain.get("capacity", 0))
+        access_class = str(domain.get("shader_access_class"))
+        comment = str(domain.get("comment") or "")
+
+        if comment:
+            domain_constants.append(f"// {comment}")
+        domain_constants.append(
+            f"inline constexpr DomainToken k{cpp_name}Domain {{ {idx}U }};"
+        )
+        domain_constants.append(
+            f"inline constexpr uint32_t k{cpp_name}ShaderIndexBase = {shader_index_base}U;"
+        )
+        domain_constants.append(
+            f"inline constexpr uint32_t k{cpp_name}Capacity = {capacity}U;"
+        )
+        domain_constants.append("")
+
+        domain_entries.append(
+            "  DomainDesc{ "
+            f"k{cpp_name}Domain, "
+            f'"{domain_id}", '
+            f'"{domain_name}", '
+            f"k{index_space_cpp_name}IndexSpace, "
+            f"k{cpp_name}ShaderIndexBase, "
+            f"k{cpp_name}Capacity, "
+            f'"{access_class}" '
+            "},"
+        )
+
+    return {
+        "index_space_constants": "\n".join(index_space_constants) or "// none",
+        "domain_constants": "\n".join(domain_constants).rstrip() or "// none",
+        "index_space_entries": "\n".join(index_space_entries) or "  // none",
+        "domain_entries": "\n".join(domain_entries) or "  // none",
+        "index_space_count": str(len(index_spaces)),
+        "domain_count": str(len(domains)),
+    }
 
 
-def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
+def render_hlsl_abi(domains: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     tags: List[str] = []
     for domain in domains:
@@ -101,7 +148,9 @@ def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
         if comment:
             lines.append(f"// {comment}")
             lines.append("")
-        lines.append(f"static const uint K_{tag}_DOMAIN_BASE = {int(base)};")
+        lines.append(
+            f"static const uint K_{tag}_SHADER_INDEX_BASE = {int(base)};"
+        )
         if cap is not None:
             lines.append(f"static const uint K_{tag}_CAPACITY = {int(cap)};")
         lines.append("")
@@ -111,7 +160,7 @@ def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
     if tags:
         lines.append("// Domain guard macros (generated)")
         lines.append("")
-        lines.append("#define BX_DOMAIN_BASE(TAG)   K_##TAG##_DOMAIN_BASE")
+        lines.append("#define BX_DOMAIN_BASE(TAG)   K_##TAG##_SHADER_INDEX_BASE")
         lines.append("#define BX_DOMAIN_CAP(TAG)    K_##TAG##_CAPACITY")
         lines.append(
             "#define BX_IN(TAG, IDX)       BX_IsInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))"
@@ -121,7 +170,9 @@ def render_hlsl_domains(domains: List[Dict[str, Any]]) -> str:
         )
         lines.append("")
         for tag in tags:
-            lines.append(f"#define BX_DOMAIN_{tag}_BASE K_{tag}_DOMAIN_BASE")
+            lines.append(
+                f"#define BX_DOMAIN_{tag}_BASE K_{tag}_SHADER_INDEX_BASE"
+            )
             lines.append(
                 f"#define BX_DOMAIN_{tag}_CAPACITY K_{tag}_CAPACITY"
             )

@@ -19,7 +19,7 @@
 //! - All resources accessed via SM 6.6 descriptor heaps
 //! - ViewConstants at b1, RootConstants at b2
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"

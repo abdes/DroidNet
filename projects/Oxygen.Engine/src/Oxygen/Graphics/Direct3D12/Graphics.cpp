@@ -11,7 +11,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Config/GraphicsConfig.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
@@ -39,6 +39,7 @@
 //===----------------------------------------------------------------------===//
 
 namespace {
+namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
 auto ParseFrameCaptureProvider(const std::string& value)
   -> oxygen::FrameCaptureProvider
@@ -526,7 +527,7 @@ auto Graphics::GetDrawRootConstantCommandSignature(
   D3D12_INDIRECT_ARGUMENT_DESC args[2] {};
   args[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
   args[0].Constant.RootParameterIndex
-    = static_cast<UINT>(engine::binding::RootParam::kRootConstants);
+    = static_cast<UINT>(bindless_d3d12::RootParam::kRootConstants);
   args[0].Constant.DestOffsetIn32BitValues = 0U;
   args[0].Constant.Num32BitValuesToSet = 1U;
   args[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;

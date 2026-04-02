@@ -8,7 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Core/Bindless/Generated.Heaps.D3D12.h>
+#include <Oxygen/Core/Bindless/Generated.Strategy.D3D12.h>
 
 using nlohmann::json;
 
@@ -18,7 +18,7 @@ namespace {
 NOLINT_TEST(BindlessHeapsTest, ParseEmbeddedJson_VerifyMetaAndHeaps)
 {
   // Arrange
-  const char* json_text = oxygen::engine::binding::kD3D12HeapStrategyJson;
+  const char* json_text = oxygen::bindless::generated::d3d12::kStrategyJson;
 
   // Act
   json parsed;
@@ -33,7 +33,7 @@ NOLINT_TEST(BindlessHeapsTest, ParseEmbeddedJson_VerifyMetaAndHeaps)
   const auto& meta = parsed["$meta"];
   ASSERT_TRUE(meta.is_object());
   ASSERT_TRUE(meta.contains("format"));
-  EXPECT_EQ(meta["format"], "D3D12HeapStrategy/2");
+  EXPECT_EQ(meta["format"], "BindlessStrategy.D3D12/1");
 
   // Required entries should exist under top-level 'heaps'
   ASSERT_TRUE(parsed.contains("heaps"));

@@ -20,7 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -225,12 +225,16 @@ namespace {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetPipelineState(pso_desc);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 

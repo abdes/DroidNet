@@ -15,7 +15,7 @@
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>

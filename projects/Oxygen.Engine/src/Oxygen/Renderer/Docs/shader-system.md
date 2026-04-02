@@ -18,7 +18,7 @@ This is the bindless root signature contract that all engine-owned passes share.
 
 ImGui is a deliberate exception: it is rendered through the upstream DX12 backend pipeline (own root signature/PSO) and is excluded from the ABI/reflection validation gates.
 
-**Source of truth (generated):** `src/Oxygen/Core/Bindless/Generated.RootSignature.h`.
+**Source of truth (generated):** `src/Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h`.
 
 **Required root signature flags (must remain enabled):**
 
@@ -305,7 +305,7 @@ data. It must not become a “feature bucket”.
 Bindless tooling is sourced from the Core module and included as specified in §5.
 
 - Use `K_INVALID_BINDLESS_INDEX` as the only invalid sentinel in HLSL.
-- Use the generated domain guards/macros from `Generated.BindlessLayout.hlsl`:
+- Use the generated domain guards/macros from `Generated.BindlessAbi.hlsl`:
   - `BX_IN_GLOBAL_SRV(idx)` / `BX_TRY_GLOBAL_SRV(idx)`
   - `BX_IN_MATERIALS(idx)` / `BX_TRY_MATERIALS(idx)`
   - `BX_IN_TEXTURES(idx)` / `BX_TRY_TEXTURES(idx)`
@@ -965,7 +965,7 @@ Shader compilation MUST set these include roots:
 **Core module bindless (must exist, used as-is):**
 
 - `src/Oxygen/Core/Bindless/BindlessHelpers.hlsl`
-- `src/Oxygen/Core/Bindless/Generated.BindlessLayout.hlsl`
+- `src/Oxygen/Core/Bindless/Generated.BindlessAbi.hlsl`
 
 **Direct3D12 module renderer contracts (must exist):**
 

@@ -24,7 +24,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
@@ -56,6 +56,7 @@ namespace {
 
 using oxygen::Graphics;
 using oxygen::NdcDepthRange;
+using oxygen::observer_ptr;
 using oxygen::ResolvedView;
 using oxygen::Scissors;
 using oxygen::ShaderVisibleIndex;
@@ -75,7 +76,6 @@ using oxygen::frame::Slot;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::QueueRole;
-using oxygen::observer_ptr;
 using oxygen::renderer::LightManager;
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::Scene;
@@ -107,8 +107,9 @@ auto RunPass(ConventionalShadowRasterPass& pass, const RenderContext& context,
     : static_cast<float>(width) / static_cast<float>(height);
   const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
     glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
-  const auto projection_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
-    glm::radians(90.0F), aspect_ratio, 0.1F, 100.0F);
+  const auto projection_matrix
+    = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+      glm::radians(90.0F), aspect_ratio, 0.1F, 100.0F);
 
   auto view_config = View {};
   view_config.viewport = ViewPort {
@@ -185,8 +186,8 @@ auto CreateShadowCastingDirectionalNode(Scene& scene) -> SceneNode
   return mask;
 }
 
-[[nodiscard]] auto HasShaderDefine(const GraphicsPipelineDesc& desc,
-  std::string_view name) -> bool
+[[nodiscard]] auto HasShaderDefine(
+  const GraphicsPipelineDesc& desc, std::string_view name) -> bool
 {
   const auto& shader = desc.PixelShader();
   if (!shader.has_value()) {
@@ -205,8 +206,8 @@ protected:
 
     auto config = oxygen::RendererConfig {};
     config.upload_queue_key = gfx_->QueueKeyFor(QueueRole::kGraphics).get();
-    renderer_
-      = std::make_shared<Renderer>(std::weak_ptr<Graphics>(gfx_), std::move(config));
+    renderer_ = std::make_shared<Renderer>(
+      std::weak_ptr<Graphics>(gfx_), std::move(config));
   }
 
   [[nodiscard]] auto AcquireRecorder(std::string_view name)
@@ -264,10 +265,9 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
   prepared_frame.partitions = std::span(partitions);
 
-  auto offscreen = renderer_->BeginOffscreenFrame(
-    { .frame_slot = kFrameSlot,
-      .frame_sequence = kFrameSequence,
-      .scene = observer_ptr<Scene> { scene.get() } });
+  auto offscreen = renderer_->BeginOffscreenFrame({ .frame_slot = kFrameSlot,
+    .frame_sequence = kFrameSequence,
+    .scene = observer_ptr<Scene> { scene.get() } });
   offscreen.SetCurrentView(
     kTestViewId, resolved_view, prepared_frame, view_constants);
   auto& render_context = offscreen.GetRenderContext();
@@ -297,7 +297,8 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   ASSERT_NE(raster_plan, nullptr);
   ASSERT_NE(raster_plan->depth_texture, nullptr);
   ASSERT_FALSE(raster_plan->jobs.empty());
-  EXPECT_EQ(raster_plan->depth_texture.get(), authoritative_depth_texture.get());
+  EXPECT_EQ(
+    raster_plan->depth_texture.get(), authoritative_depth_texture.get());
 
   auto pass = ConventionalShadowRasterPass(
     std::make_shared<ConventionalShadowRasterPass::Config>(
@@ -321,13 +322,14 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   for (std::size_t bind_index = 0U;
     bind_index < gfx_->graphics_pipeline_log_.binds.size(); ++bind_index) {
     const bool expect_masked = (bind_index % 2U) == 1U;
-    EXPECT_EQ(HasShaderDefine(gfx_->graphics_pipeline_log_.binds[bind_index].desc,
-                "ALPHA_TEST"),
+    EXPECT_EQ(
+      HasShaderDefine(
+        gfx_->graphics_pipeline_log_.binds[bind_index].desc, "ALPHA_TEST"),
       expect_masked);
   }
 
-  constexpr auto kViewConstantsRootParam
-    = static_cast<std::uint32_t>(oxygen::engine::binding::RootParam::kViewConstants);
+  constexpr auto kViewConstantsRootParam = static_cast<std::uint32_t>(
+    oxygen::bindless::generated::d3d12::RootParam::kViewConstants);
   std::vector<std::uint64_t> view_constant_addresses {};
   for (const auto& bind : gfx_->root_cbv_log_.binds) {
     if (bind.root_parameter_index == kViewConstantsRootParam) {
@@ -338,11 +340,12 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   ASSERT_EQ(view_constant_addresses.size(),
     static_cast<std::size_t>(5U * job_count - 1U));
 
-  const auto main_view_address = render_context.view_constants->GetGPUVirtualAddress();
+  const auto main_view_address
+    = render_context.view_constants->GetGPUVirtualAddress();
   EXPECT_EQ(view_constant_addresses.front(), main_view_address);
 
-  const auto main_view_binds = std::count(
-    view_constant_addresses.begin(), view_constant_addresses.end(), main_view_address);
+  const auto main_view_binds = std::count(view_constant_addresses.begin(),
+    view_constant_addresses.end(), main_view_address);
   EXPECT_EQ(main_view_binds, static_cast<std::ptrdiff_t>(2U * job_count));
 
   std::vector<std::uint64_t> shadow_view_addresses {};
@@ -378,11 +381,11 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   auto scene = std::make_shared<Scene>("renderer.offscreen.attach.guard", 8U);
   auto prepared_frame = PreparedSceneFrame {};
   {
-    auto offscreen = renderer_->BeginOffscreenFrame(
-      { .frame_slot = Slot { 0U },
-        .frame_sequence = SequenceNumber { 1U },
-        .scene = observer_ptr<Scene> { scene.get() } });
-    offscreen.SetCurrentView(kTestViewId, MakeResolvedView(4U, 4U), prepared_frame);
+    auto offscreen = renderer_->BeginOffscreenFrame({ .frame_slot = Slot { 0U },
+      .frame_sequence = SequenceNumber { 1U },
+      .scene = observer_ptr<Scene> { scene.get() } });
+    offscreen.SetCurrentView(
+      kTestViewId, MakeResolvedView(4U, 4U), prepared_frame);
   }
 
   auto engine = FakeAsyncEngine {};

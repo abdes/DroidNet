@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/GeometryAsset.h>

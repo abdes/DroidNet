@@ -20,17 +20,19 @@ using oxygen::engine::RenderPass;
 using oxygen::graphics::CommandRecorder;
 
 namespace {
-auto RangeTypeToViewType(oxygen::engine::binding::RangeType rt)
+namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+
+auto RangeTypeToViewType(bindless_d3d12::RangeType rt)
   -> oxygen::graphics::ResourceViewType
 {
   using oxygen::graphics::ResourceViewType;
 
   switch (rt) {
-  case oxygen::engine::binding::RangeType::SRV:
+  case bindless_d3d12::RangeType::SRV:
     return ResourceViewType::kRawBuffer_SRV;
-  case oxygen::engine::binding::RangeType::Sampler:
+  case bindless_d3d12::RangeType::Sampler:
     return ResourceViewType::kSampler;
-  case oxygen::engine::binding::RangeType::UAV:
+  case bindless_d3d12::RangeType::UAV:
     return ResourceViewType::kRawBuffer_UAV;
   default:
     return ResourceViewType::kNone;
@@ -55,7 +57,7 @@ auto RangeTypeToViewType(oxygen::engine::binding::RangeType rt)
 auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
 {
   namespace g = oxygen::graphics;
-  namespace b = oxygen::engine::binding;
+  namespace b = oxygen::bindless::generated::d3d12;
 
   std::vector<g::RootBindingItem> out;
   out.reserve(b::kRootParamTableCount);
@@ -250,8 +252,9 @@ auto RenderPass::BindDrawIndexConstant(
 {
   // Bind the draw index root constant (first 32-bit value)
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), draw_index.get(),
-    0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    draw_index.get(), 0);
 }
 
 /*!

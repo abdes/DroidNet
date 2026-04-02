@@ -15,7 +15,7 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
@@ -259,7 +259,8 @@ auto GroundGridPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
@@ -269,9 +270,12 @@ auto GroundGridPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     ? pass_constants_index_.get()
     : oxygen::kInvalidShaderVisibleIndex.get();
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    0U, 0);
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     pass_constants_index, 1);
 
   recorder.Draw(3, 1, 0, 0);

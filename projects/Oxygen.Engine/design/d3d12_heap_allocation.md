@@ -2,10 +2,10 @@
 
 ## Status
 
-- Status: phase 1 implemented; later migration phases pending
+- Status: phases 1-2 implemented; later migration phases pending
 - Scope: bindless allocation, generated bindless metadata, backend realization, and Nexus keying
 - Compatibility: intentionally breaking; the goal is a cleaner API and a stricter contract, not legacy preservation
-- Validation status: authored-model reset validated via BindlessCodeGen pytest, CLI verbose dry-run, and the MSVC compile-check behind `oxygen-core_bindless_gen`; runtime migration phases remain pending
+- Validation status: authored-model reset plus generated-contract reset validated via BindlessCodeGen pytest, CLI verbose dry-run, the MSVC compile-check behind `oxygen-core_bindless_gen`, runtime consumer builds (`oxygen-core`, `oxygen-graphics-direct3d12`, `oxygen-renderer`), and targeted test execution; runtime API/backend realization migration phases remain pending
 
 ## Purpose
 

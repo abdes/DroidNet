@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/Vsm/VsmShadowHelpers.hlsli"
 
 static const uint VSM_PROJECTION_THREAD_GROUP_SIZE = 8u;

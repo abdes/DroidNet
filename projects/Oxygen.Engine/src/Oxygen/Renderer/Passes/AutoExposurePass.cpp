@@ -15,7 +15,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -658,7 +658,9 @@ auto AutoExposurePass::UpdateHistogramConstants(
   SetPassConstantsIndex(index);
 
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), index.get(), 1);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    index.get(), 1);
 
   (void)recorder;
 }
@@ -696,7 +698,9 @@ auto AutoExposurePass::UpdateAverageConstants(
   SetPassConstantsIndex(index);
 
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), index.get(), 1);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    index.get(), 1);
 
   (void)recorder;
 }

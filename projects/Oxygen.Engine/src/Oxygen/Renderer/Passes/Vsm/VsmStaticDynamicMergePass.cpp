@@ -160,12 +160,16 @@ namespace {
     recorder.SetPipelineState(pso_desc);
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
