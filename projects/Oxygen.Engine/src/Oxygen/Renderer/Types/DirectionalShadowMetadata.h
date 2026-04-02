@@ -33,17 +33,31 @@ struct alignas(16) DirectionalShadowMetadata {
 
   std::uint32_t cascade_count { oxygen::scene::kMaxShadowCascades };
   std::uint32_t flags { 0U };
-  float distribution_exponent { 1.0F };
+  std::uint32_t split_mode { static_cast<std::uint32_t>(
+    oxygen::scene::DirectionalCsmSplitMode::kGenerated) };
   std::uint32_t resource_index { 0U };
 
+  float distribution_exponent {
+    oxygen::scene::kDefaultDirectionalDistributionExponent
+  };
+  float max_shadow_distance {
+    oxygen::scene::kDefaultDirectionalMaxShadowDistance
+  };
+  float distance_fadeout_begin {
+    oxygen::scene::kDefaultDirectionalMaxShadowDistance
+  };
+  float _padding0 { 0.0F };
+
   std::array<float, oxygen::scene::kMaxShadowCascades> cascade_distances {};
+  std::array<float, oxygen::scene::kMaxShadowCascades>
+    cascade_transition_widths {};
   std::array<float, oxygen::scene::kMaxShadowCascades>
     cascade_world_texel_size {};
   std::array<glm::mat4, oxygen::scene::kMaxShadowCascades> cascade_view_proj {};
 };
 static_assert(sizeof(DirectionalShadowMetadata) % 16 == 0,
   "DirectionalShadowMetadata size must be 16-byte aligned");
-static_assert(sizeof(DirectionalShadowMetadata) == 320,
+static_assert(sizeof(DirectionalShadowMetadata) == 352,
   "DirectionalShadowMetadata size must match HLSL packing");
 
 } // namespace oxygen::engine

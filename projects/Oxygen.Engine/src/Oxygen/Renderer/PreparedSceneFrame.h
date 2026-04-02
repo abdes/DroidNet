@@ -14,6 +14,7 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
+#include <Oxygen/Renderer/Types/ConventionalShadowDrawRecord.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 
 namespace oxygen::engine {
@@ -62,6 +63,8 @@ struct PreparedSceneFrame {
     shadow_caster_bounding_spheres; // xyz=center, w=radius
   std::span<const glm::vec4>
     visible_receiver_bounding_spheres; // xyz=center, w=radius
+  std::span<const renderer::ConventionalShadowDrawRecord>
+    conventional_shadow_draw_records;
 
   // Bindless SRV indices captured at ScenePrep finalization time
   // These must be captured immediately after Finalize to ensure consistency
@@ -81,6 +84,9 @@ struct PreparedSceneFrame {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_instance_data_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_conventional_shadow_draw_records_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
 

@@ -242,7 +242,7 @@ public:
     // into an aligned cache and return a stable view.
     const auto it = component_cache_.find(type);
     if (it == component_cache_.end()) {
-      const size_t bytes_size = entry->count * sizeof(T);
+      const size_t bytes_size = entry->count * entry->entry_size;
       const auto bytes = data_.subspan(entry->offset, bytes_size);
 
       std::vector<std::byte> buffer;

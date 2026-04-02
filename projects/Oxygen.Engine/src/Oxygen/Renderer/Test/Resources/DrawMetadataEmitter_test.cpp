@@ -197,7 +197,8 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
 }
 
 [[nodiscard]] auto MakeMaterial(const oxygen::data::MaterialDomain domain,
-  const std::string_view name = "RoutingMaterial")
+  const std::string_view name = "RoutingMaterial",
+  const std::uint32_t flags = 0U)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   oxygen::data::pak::render::MaterialAssetDesc desc {};
@@ -207,6 +208,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   desc.header.name[copy_count] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.material_domain = static_cast<std::uint8_t>(domain);
+  desc.flags = flags;
   desc.base_color[0] = 1.0F;
   desc.base_color[1] = 1.0F;
   desc.base_color[2] = 1.0F;
@@ -604,6 +606,81 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto partitions = Emitter().GetPartitions();
   ASSERT_EQ(partitions.size(), 1U);
   EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kMasked));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_DoubleSidedMaterialSetsDoubleSidedShadowRoutingBit)
+{
+  namespace d = oxygen::data;
+
+  std::vector<d::Vertex> vertices(3);
+  vertices[0].position = { -1.0F, 0.0F, 0.0F };
+  vertices[1].position = { 1.0F, 0.0F, 0.0F };
+  vertices[2].position = { 0.0F, 1.0F, 0.0F };
+
+  const std::vector<std::uint32_t> indices { 0U, 1U, 2U };
+  const auto material = MakeMaterial(d::MaterialDomain::kOpaque,
+    "DoubleSidedRouting", oxygen::data::pak::render::kMaterialFlag_DoubleSided);
+
+  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.DoubleSidedRouting")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("default", material)
+                .WithMeshView({ .first_index = 0U,
+                  .index_count = 3U,
+                  .first_vertex = 0U,
+                  .vertex_count = 3U })
+                .EndSubMesh()
+                .Build();
+
+  const auto geometry = oxygen::engine::sceneprep::GeometryRef {
+    .asset_key = oxygen::data::AssetKey {},
+    .lod_index = 0U,
+    .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
+  };
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices_srv = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices_srv.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices_srv.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::engine::sceneprep::RenderItemData item {};
+  item.geometry = geometry;
+  item.submesh_index = 0U;
+  item.material = oxygen::engine::sceneprep::MaterialRef {
+    .source_asset_key = material->GetAssetKey(),
+    .resolved_asset_key = material->GetAssetKey(),
+    .resolved_asset = material,
+  };
+  item.transform_handle = oxygen::engine::sceneprep::TransformHandle {
+    oxygen::engine::sceneprep::TransformHandle::Index { 45U },
+    oxygen::engine::sceneprep::TransformHandle::Generation { 1U },
+  };
+  item.cast_shadows = true;
+
+  Emitter().EmitDrawMetadata(item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::engine::DrawMetadata));
+
+  const auto* draws
+    = reinterpret_cast<const oxygen::engine::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kDoubleSided));
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kTransparent));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 1U);
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kOpaque));
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kDoubleSided));
   EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
 }
 

@@ -547,6 +547,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_EQ(directional.size(), 1U);
       if (directional.size() == 1U) {
         EXPECT_EQ(directional[0].node_index, 1U);
+        EXPECT_EQ(directional[0].split_mode, 1U);
+        EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
+        EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
+        EXPECT_FLOAT_EQ(directional[0].distance_fadeout_fraction, 0.1F);
       }
 
       const auto points

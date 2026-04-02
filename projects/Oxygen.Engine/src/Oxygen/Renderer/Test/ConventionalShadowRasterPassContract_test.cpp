@@ -28,22 +28,38 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.h>
 #include <Oxygen/Renderer/LightManager.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowReceiverAnalysisPass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowReceiverMaskPass.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/RenderPass.h>
+#include <Oxygen/Renderer/Passes/ScreenHzbBuildPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
+#include <Oxygen/Renderer/Types/ConventionalShadowIndirectDrawCommand.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
@@ -60,22 +76,41 @@ using oxygen::observer_ptr;
 using oxygen::ResolvedView;
 using oxygen::Scissors;
 using oxygen::ShaderVisibleIndex;
+using oxygen::TextureType;
 using oxygen::View;
 using oxygen::ViewId;
 using oxygen::ViewPort;
+using oxygen::engine::ConventionalShadowCasterCullingPass;
+using oxygen::engine::ConventionalShadowCasterCullingPassConfig;
 using oxygen::engine::ConventionalShadowRasterPass;
+using oxygen::engine::ConventionalShadowReceiverAnalysisPass;
+using oxygen::engine::ConventionalShadowReceiverAnalysisPassConfig;
+using oxygen::engine::ConventionalShadowReceiverMaskPass;
+using oxygen::engine::ConventionalShadowReceiverMaskPassConfig;
+using oxygen::engine::DepthPrePass;
 using oxygen::engine::DrawMetadata;
 using oxygen::engine::PassMask;
 using oxygen::engine::PassMaskBit;
 using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::RenderContext;
 using oxygen::engine::Renderer;
+using oxygen::engine::ScreenHzbBuildPass;
+using oxygen::engine::ScreenHzbBuildPassConfig;
 using oxygen::engine::ViewConstants;
+using oxygen::engine::internal::BuildConventionalShadowDrawRecords;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
+using oxygen::graphics::Buffer;
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
+using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::QueueRole;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::ResourceViewType;
+using oxygen::graphics::Texture;
 using oxygen::renderer::LightManager;
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::Scene;
@@ -88,7 +123,12 @@ constexpr ViewId kTestViewId { 31U };
 constexpr Slot kFrameSlot { 0U };
 constexpr SequenceNumber kFrameSequence { 11U };
 
-auto RunPass(ConventionalShadowRasterPass& pass, const RenderContext& context,
+template <typename T> struct UploadedStructuredBuffer {
+  std::shared_ptr<Buffer> buffer {};
+  ShaderVisibleIndex slot { oxygen::kInvalidShaderVisibleIndex };
+};
+
+auto RunPass(oxygen::engine::RenderPass& pass, const RenderContext& context,
   CommandRecorder& recorder) -> void
 {
   oxygen::co::testing::TestEventLoop loop {};
@@ -186,6 +226,16 @@ auto CreateShadowCastingDirectionalNode(Scene& scene) -> SceneNode
   return mask;
 }
 
+[[nodiscard]] auto MakeShadowCasterMask(
+  const bool masked, const bool double_sided) -> PassMask
+{
+  auto mask = MakeShadowCasterMask(masked);
+  if (double_sided) {
+    mask.Set(PassMaskBit::kDoubleSided);
+  }
+  return mask;
+}
+
 [[nodiscard]] auto HasShaderDefine(
   const GraphicsPipelineDesc& desc, std::string_view name) -> bool
 {
@@ -195,6 +245,78 @@ auto CreateShadowCastingDirectionalNode(Scene& scene) -> SceneNode
   }
   return std::any_of(shader->defines.begin(), shader->defines.end(),
     [name](const auto& define) { return define.name == name; });
+}
+
+auto CreateRegisteredDepthTexture(oxygen::renderer::testing::FakeGraphics& gfx,
+  const std::uint32_t width, const std::uint32_t height,
+  std::string_view debug_name) -> std::shared_ptr<Texture>
+{
+  auto desc = oxygen::graphics::TextureDesc {};
+  desc.width = width;
+  desc.height = height;
+  desc.format = oxygen::Format::kDepth32;
+  desc.texture_type = TextureType::kTexture2D;
+  desc.is_shader_resource = true;
+  desc.is_render_target = true;
+  desc.is_typeless = true;
+  desc.use_clear_value = true;
+  desc.clear_value = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  desc.initial_state = ResourceStates::kCommon;
+  desc.debug_name = std::string(debug_name);
+
+  auto texture = gfx.CreateTexture(desc);
+  EXPECT_NE(texture, nullptr);
+  if (texture != nullptr) {
+    gfx.GetResourceRegistry().Register(texture);
+  }
+  return texture;
+}
+
+template <typename T>
+auto UploadStructuredSrvBuffer(oxygen::renderer::testing::FakeGraphics& gfx,
+  std::span<const T> elements, std::string_view debug_name)
+  -> UploadedStructuredBuffer<T>
+{
+  const auto element_count = std::max<std::size_t>(elements.size(), 1U);
+  auto buffer = gfx.CreateBuffer(BufferDesc {
+    .size_bytes = static_cast<std::uint64_t>(element_count * sizeof(T)),
+    .usage = BufferUsage::kStorage,
+    .memory = BufferMemory::kDeviceLocal,
+    .debug_name = std::string(debug_name),
+  });
+  EXPECT_NE(buffer, nullptr);
+  if (buffer == nullptr) {
+    return {};
+  }
+
+  gfx.GetResourceRegistry().Register(buffer);
+  if (!elements.empty()) {
+    buffer->Update(elements.data(), elements.size_bytes(), 0U);
+  }
+
+  auto& allocator = gfx.GetDescriptorAllocator();
+  auto handle = allocator.AllocateBindless(
+    oxygen::bindless::generated::kGlobalSrvDomain,
+    ResourceViewType::kStructuredBuffer_SRV);
+  EXPECT_TRUE(handle.IsValid());
+  if (!handle.IsValid()) {
+    return { .buffer = std::move(buffer) };
+  }
+
+  const auto slot = allocator.GetShaderVisibleIndex(handle);
+  auto view = gfx.GetResourceRegistry().RegisterView(*buffer, std::move(handle),
+    oxygen::graphics::BufferViewDescription {
+      .view_type = ResourceViewType::kStructuredBuffer_SRV,
+      .visibility = DescriptorVisibility::kShaderVisible,
+      .range = { 0U, static_cast<std::uint64_t>(element_count * sizeof(T)) },
+      .stride = static_cast<std::uint32_t>(sizeof(T)),
+    });
+  EXPECT_TRUE(view->IsValid());
+
+  return UploadedStructuredBuffer<T> {
+    .buffer = std::move(buffer),
+    .slot = slot,
+  };
 }
 
 class ConventionalShadowRasterPassContractTest : public ::testing::Test {
@@ -237,6 +359,9 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   const auto resolved_view = MakeResolvedView(kWidth, kHeight);
   const auto view_constants
     = MakeShadowViewConstants(resolved_view, kFrameSlot, kFrameSequence);
+  const auto main_depth_texture = CreateRegisteredDepthTexture(
+    *gfx_, kWidth, kHeight, "shadow-pass.contract.main-depth");
+  ASSERT_NE(main_depth_texture, nullptr);
 
   auto opaque_draw = DrawMetadata {};
   opaque_draw.is_indexed = 0U;
@@ -245,7 +370,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   opaque_draw.flags = MakeShadowCasterMask(false);
 
   auto masked_draw = opaque_draw;
-  masked_draw.flags = MakeShadowCasterMask(true);
+  masked_draw.flags = MakeShadowCasterMask(true, true);
 
   const auto draws = std::array { opaque_draw, masked_draw };
   const auto partitions = std::array {
@@ -255,15 +380,24 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
       .end = 1U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = MakeShadowCasterMask(true),
+      .pass_mask = MakeShadowCasterMask(true, true),
       .begin = 1U,
       .end = 2U,
     },
+  };
+  const auto draw_bounds = std::array {
+    glm::vec4 { 0.0F, 0.0F, -2.0F, 1.0F },
+    glm::vec4 { 0.0F, 0.0F, -6.0F, 1.5F },
   };
 
   auto prepared_frame = PreparedSceneFrame {};
   prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draws));
   prepared_frame.partitions = std::span(partitions);
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+  const auto uploaded_draw_metadata = UploadStructuredSrvBuffer(*gfx_,
+    std::span<const DrawMetadata>(draws.data(), draws.size()),
+    "shadow-pass.contract.draw-metadata");
+  prepared_frame.bindless_draw_metadata_slot = uploaded_draw_metadata.slot;
 
   auto offscreen = renderer_->BeginOffscreenFrame({ .frame_slot = kFrameSlot,
     .frame_sequence = kFrameSequence,
@@ -284,9 +418,12 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
 
   const auto shadow_caster_bounds
     = std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } };
+  const auto visible_receiver_bounds
+    = std::array { glm::vec4 { 0.0F, 0.0F, -2.0F, 4.0F } };
   const auto publication = shadow_manager->PublishForView(kTestViewId,
     view_constants, *light_manager, observer_ptr<Scene> { scene.get() },
-    static_cast<float>(kWidth), {}, shadow_caster_bounds);
+    static_cast<float>(kWidth), {}, shadow_caster_bounds,
+    visible_receiver_bounds);
   EXPECT_TRUE(publication.directional_shadow_texture_srv.IsValid());
 
   const auto authoritative_depth_texture
@@ -300,6 +437,49 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   EXPECT_EQ(
     raster_plan->depth_texture.get(), authoritative_depth_texture.get());
 
+  auto conventional_draw_records
+    = std::vector<oxygen::renderer::ConventionalShadowDrawRecord> {};
+  BuildConventionalShadowDrawRecords(prepared_frame, conventional_draw_records);
+  ASSERT_EQ(conventional_draw_records.size(), draws.size());
+  const auto uploaded_draw_records = UploadStructuredSrvBuffer(*gfx_,
+    std::span<const oxygen::renderer::ConventionalShadowDrawRecord>(
+      conventional_draw_records.data(), conventional_draw_records.size()),
+    "shadow-pass.contract.draw-records");
+  prepared_frame.conventional_shadow_draw_records
+    = std::span(conventional_draw_records);
+  prepared_frame.bindless_conventional_shadow_draw_records_slot
+    = uploaded_draw_records.slot;
+  offscreen.SetCurrentView(
+    kTestViewId, resolved_view, prepared_frame, view_constants);
+
+  auto depth_pass
+    = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
+      .depth_texture = main_depth_texture,
+      .debug_name = "shadow-pass.contract.depth",
+    }));
+  auto screen_hzb_pass
+    = ScreenHzbBuildPass(observer_ptr<Graphics> { gfx_.get() },
+      std::make_shared<ScreenHzbBuildPassConfig>(ScreenHzbBuildPassConfig {
+        .debug_name = "shadow-pass.contract.screen-hzb",
+      }));
+  auto receiver_analysis_pass = ConventionalShadowReceiverAnalysisPass(
+    observer_ptr<Graphics> { gfx_.get() },
+    std::make_shared<ConventionalShadowReceiverAnalysisPassConfig>(
+      ConventionalShadowReceiverAnalysisPassConfig {
+        .debug_name = "shadow-pass.contract.receiver-analysis",
+      }));
+  auto receiver_mask_pass
+    = ConventionalShadowReceiverMaskPass(observer_ptr<Graphics> { gfx_.get() },
+      std::make_shared<ConventionalShadowReceiverMaskPassConfig>(
+        ConventionalShadowReceiverMaskPassConfig {
+          .debug_name = "shadow-pass.contract.receiver-mask",
+        }));
+  auto caster_culling_pass
+    = ConventionalShadowCasterCullingPass(observer_ptr<Graphics> { gfx_.get() },
+      std::make_shared<ConventionalShadowCasterCullingPassConfig>(
+        ConventionalShadowCasterCullingPassConfig {
+          .debug_name = "shadow-pass.contract.caster-culling",
+        }));
   auto pass = ConventionalShadowRasterPass(
     std::make_shared<ConventionalShadowRasterPass::Config>(
       ConventionalShadowRasterPass::Config {
@@ -307,8 +487,65 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
         .debug_name = "shadow-pass.contract.execute",
       }));
 
+  {
+    auto recorder = AcquireRecorder("shadow-pass.contract.depth.run");
+    ASSERT_NE(recorder, nullptr);
+    recorder->BeginTrackingResourceState(
+      *main_depth_texture, ResourceStates::kCommon, true);
+    NOLINT_EXPECT_NO_THROW(RunPass(depth_pass, render_context, *recorder));
+    render_context.RegisterPass<DepthPrePass>(&depth_pass);
+  }
+  {
+    auto recorder = AcquireRecorder("shadow-pass.contract.screen-hzb.run");
+    ASSERT_NE(recorder, nullptr);
+    NOLINT_EXPECT_NO_THROW(RunPass(screen_hzb_pass, render_context, *recorder));
+    render_context.RegisterPass<ScreenHzbBuildPass>(&screen_hzb_pass);
+  }
+  {
+    auto recorder
+      = AcquireRecorder("shadow-pass.contract.receiver-analysis.run");
+    ASSERT_NE(recorder, nullptr);
+    NOLINT_EXPECT_NO_THROW(
+      RunPass(receiver_analysis_pass, render_context, *recorder));
+    render_context.RegisterPass<ConventionalShadowReceiverAnalysisPass>(
+      &receiver_analysis_pass);
+  }
+  {
+    auto recorder = AcquireRecorder("shadow-pass.contract.receiver-mask.run");
+    ASSERT_NE(recorder, nullptr);
+    NOLINT_EXPECT_NO_THROW(
+      RunPass(receiver_mask_pass, render_context, *recorder));
+    render_context.RegisterPass<ConventionalShadowReceiverMaskPass>(
+      &receiver_mask_pass);
+  }
+  {
+    auto recorder = AcquireRecorder("shadow-pass.contract.caster-culling.run");
+    ASSERT_NE(recorder, nullptr);
+    NOLINT_EXPECT_NO_THROW(
+      RunPass(caster_culling_pass, render_context, *recorder));
+    render_context.RegisterPass<ConventionalShadowCasterCullingPass>(
+      &caster_culling_pass);
+  }
+
+  const auto hzb_output = screen_hzb_pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(hzb_output.available);
+  const auto receiver_analysis_output
+    = receiver_analysis_pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(receiver_analysis_output.available);
+  const auto receiver_mask_output
+    = receiver_mask_pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(receiver_mask_output.available);
+  const auto culling_output = caster_culling_pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(culling_output.available);
+
+  const auto culling_partitions
+    = caster_culling_pass.GetIndirectPartitionsForInspection(kTestViewId);
+  ASSERT_EQ(culling_partitions.size(), partitions.size());
+
   gfx_->graphics_pipeline_log_.binds.clear();
   gfx_->root_cbv_log_.binds.clear();
+  gfx_->draw_log_.draws.clear();
+  gfx_->indirect_log_.counted_draws.clear();
 
   auto recorder = AcquireRecorder("shadow-pass.contract.execute");
   ASSERT_NE(recorder, nullptr);
@@ -316,16 +553,58 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
 
   const auto job_count = static_cast<std::uint32_t>(raster_plan->jobs.size());
   ASSERT_GT(job_count, 0U);
+  const auto raster_output = pass.GetCurrentOutput(kTestViewId);
+  ASSERT_TRUE(raster_output.available);
+  EXPECT_TRUE(raster_output.counted_indirect_used);
+  EXPECT_EQ(raster_output.partition_count, culling_partitions.size());
+  EXPECT_EQ(raster_output.job_count, job_count);
+
+  const auto raster_partitions
+    = pass.GetIndirectPartitionsForInspection(kTestViewId);
+  ASSERT_EQ(raster_partitions.size(), culling_partitions.size());
+  EXPECT_EQ(gfx_->draw_log_.draws.size(), 0U);
+  ASSERT_EQ(gfx_->indirect_log_.counted_draws.size(),
+    static_cast<std::size_t>(job_count) * raster_partitions.size());
+
+  for (std::uint32_t job_index = 0U; job_index < job_count; ++job_index) {
+    for (std::size_t partition_index = 0U;
+      partition_index < raster_partitions.size(); ++partition_index) {
+      const auto event_index
+        = static_cast<std::size_t>(job_index) * raster_partitions.size()
+        + partition_index;
+      const auto& partition = raster_partitions[partition_index];
+      const auto& event = gfx_->indirect_log_.counted_draws[event_index];
+      EXPECT_EQ(event.argument_buffer, partition.command_buffer);
+      EXPECT_EQ(event.count_buffer, partition.count_buffer);
+      EXPECT_EQ(event.max_command_count, partition.max_commands_per_job);
+      EXPECT_EQ(event.layout,
+        CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant);
+      EXPECT_EQ(event.argument_buffer_offset,
+        static_cast<std::uint64_t>(job_index)
+          * static_cast<std::uint64_t>(partition.max_commands_per_job)
+          * sizeof(oxygen::renderer::ConventionalShadowIndirectDrawCommand));
+      EXPECT_EQ(
+        event.count_buffer_offset, static_cast<std::uint64_t>(job_index) * 4U);
+    }
+  }
+
   ASSERT_EQ(gfx_->graphics_pipeline_log_.binds.size(),
     static_cast<std::size_t>(2U * job_count));
 
   for (std::size_t bind_index = 0U;
     bind_index < gfx_->graphics_pipeline_log_.binds.size(); ++bind_index) {
     const bool expect_masked = (bind_index % 2U) == 1U;
+    const auto expected_cull_mode = expect_masked
+      ? oxygen::graphics::CullMode::kNone
+      : oxygen::graphics::CullMode::kBack;
     EXPECT_EQ(
       HasShaderDefine(
         gfx_->graphics_pipeline_log_.binds[bind_index].desc, "ALPHA_TEST"),
       expect_masked);
+    EXPECT_EQ(gfx_->graphics_pipeline_log_.binds[bind_index]
+                .desc.RasterizerState()
+                .cull_mode,
+      expected_cull_mode);
   }
 
   constexpr auto kViewConstantsRootParam = static_cast<std::uint32_t>(
