@@ -655,9 +655,17 @@ draw records within one contiguous partition against all cascade jobs.
    Test sphere center ± radius against the CSM-2 tight bounds
    (`raw_xy_min_max`) dilated by the XY dilation margin. Reject if fully
    outside.
-4. **Broad phase B — dilated depth range (Z).** Test sphere center ± radius
-   against the CSM-2 tight depth range (`raw_depth_and_dilation.xy`) dilated
-   by the depth margin. Reject if fully outside.
+4. **Broad phase B — one-sided receiver depth gate (Z).** Treat the CSM-2
+   tight depth interval as a receiver lower bound, not as a symmetric overlap
+   slab. In Oxygen's directional-light view, larger light-space `z` is closer
+   to the light. A caster can still project onto the receiver set while
+   sitting anywhere in front of the receiver interval, so it must not be
+   rejected merely because it extends past the receiver maximum depth.
+   Reject only when the caster sphere's maximum light-space `z` is still
+   behind the dilated receiver minimum depth. This preserves legitimate
+   occluders in dense scenes such as Sponza, where nearby architectural
+   details often sit in front of the visible receiver interval while still
+   casting onto it.
 5. **Medium phase — hierarchy mask overlap.** Compute the sphere's tile-grid
    footprint using `ComputeSphereTileBounds()` against the
    `full_rect_center_half_extent` mapping domain (same coordinate system as
@@ -684,6 +692,13 @@ The tile-bounds computation uses `full_rect_center_half_extent` — the same
 mapping domain used by CSM-3's `CS_Analyze` when building the mask. This
 ensures the caster's tile footprint is directly comparable to the mask
 without any coordinate remapping.
+
+The same light-space convention also governs the depth gate: with the
+directional-light `lookAtRH` basis used by Oxygen, moving toward the light
+increases light-space `z`. That means the culling test is intentionally
+one-sided in depth: "fully behind the nearest receiver depth" is rejectable;
+"in front of the receiver interval" is still eligible and must continue to
+mask overlap testing.
 
 #### Count buffer zeroing
 

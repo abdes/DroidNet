@@ -477,6 +477,37 @@ protected:
     return glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
   }
 
+  [[nodiscard]] static auto BuildFrontAcceptedWorldSphere(
+    const ConventionalShadowReceiverAnalysisJob& job,
+    const ConventionalShadowReceiverMaskSummary& summary,
+    const std::span<const std::uint32_t> base_mask) -> glm::vec4
+  {
+    const auto [tile_x, tile_y]
+      = FindRepresentativeOccupiedTile(summary, base_mask);
+    const auto full_min_x = summary.full_rect_center_half_extent.x
+      - summary.full_rect_center_half_extent.z;
+    const auto full_min_y = summary.full_rect_center_half_extent.y
+      - summary.full_rect_center_half_extent.w;
+    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
+      / static_cast<float>(summary.base_tile_resolution);
+    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
+      / static_cast<float>(summary.base_tile_resolution);
+    const auto radius
+      = std::max(0.01F, 0.2F * std::min(tile_extent_x, tile_extent_y));
+    const auto receiver_max_z
+      = summary.raw_depth_and_dilation.y + summary.raw_depth_and_dilation.w;
+    const auto sphere_center_ls = glm::vec3 {
+      full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x,
+      full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y,
+      receiver_max_z + radius + 0.25F,
+    };
+
+    const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
+    const auto center_ws
+      = inverse_light_rotation * glm::vec4(sphere_center_ls, 1.0F);
+    return glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
+  }
+
   [[nodiscard]] static auto BuildRejectedWorldSphere(
     const ConventionalShadowReceiverAnalysisJob& job,
     const ConventionalShadowReceiverMaskSummary& summary) -> glm::vec4
@@ -660,10 +691,7 @@ protected:
 
     const auto receiver_min_z
       = summary.raw_depth_and_dilation.x - summary.raw_depth_and_dilation.w;
-    const auto receiver_max_z
-      = summary.raw_depth_and_dilation.y + summary.raw_depth_and_dilation.w;
-    if (sphere_center_ls.z + radius < receiver_min_z
-      || sphere_center_ls.z - radius > receiver_max_z) {
+    if (sphere_center_ls.z + radius < receiver_min_z) {
       return false;
     }
 
@@ -880,7 +908,7 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
       + static_cast<std::size_t>(secondary_job_index) * hierarchy_tiles_per_job,
     hierarchy_tiles_per_job);
   draw_bounding_spheres[0]
-    = BuildAcceptedWorldSphere(plan->jobs[primary_job_index],
+    = BuildFrontAcceptedWorldSphere(plan->jobs[primary_job_index],
       summaries[primary_job_index], primary_base_mask);
   draw_bounding_spheres[1] = BuildRejectedWorldSphere(
     plan->jobs[primary_job_index], summaries[primary_job_index]);

@@ -231,10 +231,12 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
 
     const float receiver_min_z
         = summary.raw_depth_and_dilation.x - summary.raw_depth_and_dilation.w;
-    const float receiver_max_z
-        = summary.raw_depth_and_dilation.y + summary.raw_depth_and_dilation.w;
-    if (sphere_center_ls.z + radius < receiver_min_z
-        || sphere_center_ls.z - radius > receiver_max_z) {
+    // `light_rotation_matrix` maps positions into a light-aligned space where
+    // larger Z is closer to the light and smaller Z is farther from it.
+    // A directional caster can shadow a receiver while sitting anywhere in
+    // front of the receiver interval along the light direction, so reject only
+    // when the caster lies fully behind the receiver interval.
+    if (sphere_center_ls.z + radius < receiver_min_z) {
         return;
     }
 
