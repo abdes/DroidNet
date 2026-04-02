@@ -5,7 +5,7 @@ Run only inside RenderDoc UI:
 PowerShell:
     $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:/path/receiver_mask_report.txt'
     & 'C:/Program Files/RenderDoc/qrenderdoc.exe' --ui-python `
-        'H:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/AnalyzeRenderDocConventionalReceiverMask.py' `
+        'H:/projects/DroidNet/projects/Oxygen.Engine/tools/csm/AnalyzeRenderDocConventionalReceiverMask.py' `
         'H:/path/capture.rdc'
 """
 
@@ -60,12 +60,16 @@ def resolve_script_dir():
         if (candidate_root / "renderdoc_ui_analysis.py").exists():
             return candidate_root
 
+        candidate = candidate_root / "tools" / "csm"
+        if (candidate / "renderdoc_ui_analysis.py").exists():
+            return candidate
+
         candidate = candidate_root / "Examples" / "RenderScene"
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
     raise RuntimeError(
-        "Unable to locate Examples/RenderScene from the RenderDoc script path. "
+        "Unable to locate tools/csm from the RenderDoc script path. "
         "Launch qrenderdoc with the repository script path."
     )
 
@@ -224,9 +228,9 @@ def build_report(
     ]
     copy_records = [record for record in work_records if record.flags & rd.ActionFlags.Copy]
 
-    if len(dispatch_records) != 5:
+    if len(dispatch_records) not in (4, 5):
         raise RuntimeError(
-            "Expected exactly five dispatch work events for {} but found {}".format(
+            "Expected four or five dispatch work events for {} but found {}".format(
                 PASS_NAME, len(dispatch_records)
             )
         )
@@ -235,7 +239,7 @@ def build_report(
     analyze_event = dispatch_records[1]
     dilate_event = dispatch_records[2]
     hierarchy_event = dispatch_records[3]
-    finalize_event = dispatch_records[4]
+    finalize_event = dispatch_records[4] if len(dispatch_records) == 5 else None
 
     summary_binding = find_buffer_binding(
         controller, resource_names, work_records, (PASS_NAME.lower(), "summary")
@@ -421,12 +425,21 @@ def build_report(
     report.append("work_event_count={}".format(len(work_records)))
     report.append("copy_event_count={}".format(len(copy_records)))
     report.append("dispatch_event_count={}".format(len(dispatch_records)))
+    report.append(
+        "finalize_dispatch_present={}".format(
+            str(finalize_event is not None).lower()
+        )
+    )
     report.append("copy_events={}".format(summarize_event_ids(copy_records)))
     report.append("clear_event_id={}".format(clear_event.event_id))
     report.append("analyze_event_id={}".format(analyze_event.event_id))
     report.append("dilate_event_id={}".format(dilate_event.event_id))
     report.append("hierarchy_event_id={}".format(hierarchy_event.event_id))
-    report.append("finalize_event_id={}".format(finalize_event.event_id))
+    report.append(
+        "finalize_event_id={}".format(
+            finalize_event.event_id if finalize_event is not None else ""
+        )
+    )
     report.append(
         "clear_event_gpu_duration_ms={:.6f}".format(
             durations.get(clear_event.event_id, 0.0)
@@ -450,6 +463,8 @@ def build_report(
     report.append(
         "finalize_event_gpu_duration_ms={:.6f}".format(
             durations.get(finalize_event.event_id, 0.0)
+            if finalize_event is not None
+            else 0.0
         )
     )
     report.append("summary_binding_name={}".format(summary_binding["binding"]["name"]))

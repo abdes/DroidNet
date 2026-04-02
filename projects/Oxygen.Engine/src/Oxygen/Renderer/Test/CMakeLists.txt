@@ -44,33 +44,26 @@ m_gtest_program(
 
 m_gtest_program(PassDebugNames SOURCES "PassDebugNames_test.cpp")
 
-m_gtest_program(
-  ConventionalShadowDrawRecords
-  SOURCES
-    "ConventionalShadowDrawRecordBuilder_test.cpp"
-)
-
 m_gtest_program(ShaderDebugMode SOURCES "ShaderDebugMode_test.cpp")
 
 m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
-gtest_program(
-  "Oxygen.Renderer.ConventionalShadowRasterPassContract.Tests"
+m_gtest_program(
+  "ConventionalShadows"
   SOURCES
     "Fakes/Graphics.h"
+    "Fixtures/RendererOffscreenGpuTestFixture.h"
+    "Fixtures/SyntheticSceneBuilder.h"
+    "ConventionalShadowDrawRecordBuilder_test.cpp"
     "ConventionalShadowRasterPassContract_test.cpp"
-  DEPS
-    oxygen::renderer
-    oxygen::testing
+    "DepthPrePass/DepthPrePassGpuTestFixture.h"
+    "ConventionalShadowRasterPassConfig_test.cpp"
+    "ConventionalShadowReceiverAnalysisPass_test.cpp"
+    "ConventionalShadowReceiverMaskPass_test.cpp"
+    "ConventionalShadowCasterCullingPass_test.cpp"
+    DEPS
+    oxygen::graphics-direct3d12
     oxygen::scripting
-)
-
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  PREFIX ConventionalShadowRasterPassContract
-  FILES
-    "Fakes/Graphics.h"
-    "ConventionalShadowRasterPassContract_test.cpp"
 )
 
 m_gtest_program(
@@ -145,19 +138,9 @@ m_gtest_program(
     "VirtualShadow/VsmPageAllocationPlanner_test.cpp"
 )
 
-gtest_program(
+m_gtest_program(
   "Oxygen.Renderer.VirtualShadowSceneObserver.Tests"
   SOURCES
-    "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
-  DEPS
-    oxygen::renderer
-    oxygen::testing
-)
-
-source_group(
-  TREE ${CMAKE_CURRENT_SOURCE_DIR}
-  PREFIX VirtualShadowsIntegration
-  FILES
     "VirtualShadow/VsmSceneObserverIntegration_test.cpp"
 )
 
@@ -388,44 +371,6 @@ if(TARGET oxygen::graphics-direct3d12)
       "ShaderPass/ShaderPassDepthState_test.cpp"
       "DepthPrePass/DepthPrePassGpuTestFixture.h"
       "Fixtures/RendererOffscreenGpuTestFixture.h"
-      DEPS
-      oxygen::graphics-direct3d12
-  )
-
-  m_gtest_program(
-    "ConventionalShadowRasterPassConfig"
-    SOURCES
-      "ConventionalShadowRasterPassConfig_test.cpp"
-      "DepthPrePass/DepthPrePassGpuTestFixture.h"
-      "Fixtures/RendererOffscreenGpuTestFixture.h"
-      DEPS
-      oxygen::graphics-direct3d12
-  )
-
-  m_gtest_program(
-    "ConventionalShadowReceiverAnalysisPass"
-    SOURCES
-      "ConventionalShadowReceiverAnalysisPass_test.cpp"
-      "Fixtures/RendererOffscreenGpuTestFixture.h"
-      DEPS
-      oxygen::graphics-direct3d12
-  )
-
-  m_gtest_program(
-    "ConventionalShadowReceiverMaskPass"
-    SOURCES
-      "ConventionalShadowReceiverMaskPass_test.cpp"
-      "Fixtures/RendererOffscreenGpuTestFixture.h"
-      DEPS
-      oxygen::graphics-direct3d12
-  )
-
-  m_gtest_program(
-    "ConventionalShadowCasterCullingPass"
-    SOURCES
-      "ConventionalShadowCasterCullingPass_test.cpp"
-      "Fixtures/RendererOffscreenGpuTestFixture.h"
-      "Fixtures/SyntheticSceneBuilder.h"
       DEPS
       oxygen::graphics-direct3d12
   )

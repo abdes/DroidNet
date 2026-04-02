@@ -1,3 +1,12 @@
+<#
+.SYNOPSIS
+Captures a steady-state conventional-shadow baseline from RenderScene.
+
+.DESCRIPTION
+Launches the RenderScene example in conventional-shadow mode, requests a
+RenderDoc frame capture, and writes the capture plus benchmark logs under the
+requested output stem.
+#>
 [CmdletBinding()]
 param(
   [Parameter()]
@@ -155,14 +164,14 @@ function Get-LastDirectionalSummary {
     return $null
   }
 
-  $matches = @(
+  $searchResults = @(
     Select-String -Path $Path -Pattern 'directional light summary total=(\d+).*shadowed_total=(\d+).*shadowed_sun=(\d+)'
   )
-  if ($matches.Count -eq 0) {
+  if ($searchResults.Count -eq 0) {
     return $null
   }
 
-  $last = $matches[-1]
+  $last = $searchResults[-1]
   return [pscustomobject]@{
     Total = [int]$last.Matches[0].Groups[1].Value
     ShadowedTotal = [int]$last.Matches[0].Groups[2].Value
@@ -181,12 +190,12 @@ function Get-LastTextureRepoint {
     return $null
   }
 
-  $matches = @(Select-String -Path $Path -Pattern 'TextureBinder\.cpp:1112\s+\|\s+Repointed descriptor')
-  if ($matches.Count -eq 0) {
+  $searchResults = @(Select-String -Path $Path -Pattern 'TextureBinder\.cpp:1112\s+\|\s+Repointed descriptor')
+  if ($searchResults.Count -eq 0) {
     return $null
   }
 
-  $last = $matches[-1]
+  $last = $searchResults[-1]
   return [pscustomobject]@{
     LineNumber = $last.LineNumber
     Line = $last.Line.Trim()
@@ -203,12 +212,12 @@ function Get-LastSceneBuild {
     return $null
   }
 
-  $matches = @(Select-String -Path $Path -Pattern 'RenderScene: Scene build staged successfully')
-  if ($matches.Count -eq 0) {
+  $searchResults = @(Select-String -Path $Path -Pattern 'RenderScene: Scene build staged successfully')
+  if ($searchResults.Count -eq 0) {
     return $null
   }
 
-  $last = $matches[-1]
+  $last = $searchResults[-1]
   return [pscustomobject]@{
     LineNumber = $last.LineNumber
     Line = $last.Line.Trim()
@@ -229,12 +238,12 @@ function Get-CaptureRequest {
   }
 
   $pattern = "RenderDoc configured frame capture requested for frame $Frame"
-  $matches = @(Select-String -Path $Path -Pattern $pattern)
-  if ($matches.Count -eq 0) {
+  $searchResults = @(Select-String -Path $Path -Pattern $pattern)
+  if ($searchResults.Count -eq 0) {
     return $null
   }
 
-  $last = $matches[-1]
+  $last = $searchResults[-1]
   return [pscustomobject]@{
     LineNumber = $last.LineNumber
     Line = $last.Line.Trim()
@@ -268,8 +277,8 @@ function Get-FrameMarkerAfterLine {
     return $null
   }
 
-  $matches = @(Select-String -Path $Path -Pattern 'Renderer: frame=Frame\(seq:(\d+)\)')
-  foreach ($match in $matches) {
+  $searchResults = @(Select-String -Path $Path -Pattern 'Renderer: frame=Frame\(seq:(\d+)\)')
+  foreach ($match in $searchResults) {
     if ($match.LineNumber -gt $LineNumber) {
       return [pscustomobject]@{
         LineNumber = $match.LineNumber
@@ -286,7 +295,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildRoot = Join-Path $repoRoot 'out\build-ninja'
 $renderSceneExe = Join-Path $buildRoot 'bin\Release\Oxygen.Examples.RenderScene.exe'
 $settingsPath = Join-Path $repoRoot 'Examples\RenderScene\demo_settings.json'
-$benchmarkSettingsPath = Join-Path $repoRoot 'Examples\RenderScene\demo_settings.benchmark.json'
+$baselineSettingsPath = Join-Path $PSScriptRoot 'demo_settings.json'
 $settingsBackupPath = Join-Path (Split-Path -Parent $settingsPath) 'demo_settings.sav'
 
 if (-not (Test-Path -LiteralPath $renderSceneExe)) {
@@ -295,8 +304,8 @@ if (-not (Test-Path -LiteralPath $renderSceneExe)) {
 if (-not (Test-Path -LiteralPath $settingsPath)) {
   throw "RenderScene demo settings not found: $settingsPath"
 }
-if (-not (Test-Path -LiteralPath $benchmarkSettingsPath)) {
-  throw "RenderScene benchmark demo settings not found: $benchmarkSettingsPath"
+if (-not (Test-Path -LiteralPath $baselineSettingsPath)) {
+  throw "CSM baseline demo settings not found: $baselineSettingsPath"
 }
 if (Test-Path -LiteralPath $settingsBackupPath) {
   throw "Refusing to overwrite existing settings backup: $settingsBackupPath"
@@ -308,7 +317,7 @@ if ($RunFrames -lt $minimumRunFrames) {
 }
 
 if ([string]::IsNullOrWhiteSpace($Output)) {
-  $Output = Join-Path $buildRoot 'analysis\conventional_shadow_sponza_baseline\release_frame256_conventional'
+  $Output = Join-Path $buildRoot 'analysis\csm\baseline_capture\release_frame256_conventional'
 }
 
 $captureOutputTemplate = [System.IO.Path]::GetFullPath($Output)
@@ -325,14 +334,14 @@ $liveSettingsHashBefore = (Get-FileHash -LiteralPath $settingsPath -Algorithm SH
 
 try {
   Move-Item -LiteralPath $settingsPath -Destination $settingsBackupPath
-  Copy-Item -LiteralPath $benchmarkSettingsPath -Destination $settingsPath
+  Copy-Item -LiteralPath $baselineSettingsPath -Destination $settingsPath
 
   $appliedSettings = Get-BenchmarkSettingsSummary -Path $settingsPath
-  $benchmarkSettingsHash = (Get-FileHash -LiteralPath $benchmarkSettingsPath -Algorithm SHA256).Hash
+  $baselineSettingsHash = (Get-FileHash -LiteralPath $baselineSettingsPath -Algorithm SHA256).Hash
   $appliedSettingsHash = (Get-FileHash -LiteralPath $settingsPath -Algorithm SHA256).Hash
 
-  if ($benchmarkSettingsHash -ne $appliedSettingsHash) {
-    throw "Applied benchmark demo settings hash does not match saved benchmark settings: $benchmarkSettingsPath"
+  if ($baselineSettingsHash -ne $appliedSettingsHash) {
+    throw "Applied benchmark demo settings hash does not match baseline settings: $baselineSettingsPath"
   }
 
   @(
@@ -343,9 +352,9 @@ try {
     "Capture output stem: $captureOutputTemplate"
     "Live settings path: $settingsPath"
     "Saved live settings backup: $settingsBackupPath"
-    "Benchmark settings path: $benchmarkSettingsPath"
+    "Baseline settings path: $baselineSettingsPath"
     "Original live settings SHA256: $liveSettingsHashBefore"
-    "Benchmark settings SHA256: $benchmarkSettingsHash"
+    "Baseline settings SHA256: $baselineSettingsHash"
     "Applied settings SHA256: $appliedSettingsHash"
     "Active scene key: $($appliedSettings.ActiveSceneKey)"
     "Active scene name: $($appliedSettings.ActiveSceneName)"

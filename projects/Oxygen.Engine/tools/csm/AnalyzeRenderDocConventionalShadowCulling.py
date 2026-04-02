@@ -5,7 +5,7 @@ Run only inside RenderDoc UI:
 PowerShell:
     $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:/path/caster_culling_report.txt'
     & 'C:/Program Files/RenderDoc/qrenderdoc.exe' --ui-python `
-        'H:/projects/DroidNet/projects/Oxygen.Engine/Examples/RenderScene/AnalyzeRenderDocConventionalShadowCulling.py' `
+        'H:/projects/DroidNet/projects/Oxygen.Engine/tools/csm/AnalyzeRenderDocConventionalShadowCulling.py' `
         'H:/path/capture.rdc'
 """
 
@@ -60,12 +60,16 @@ def resolve_script_dir():
         if (candidate_root / "renderdoc_ui_analysis.py").exists():
             return candidate_root
 
+        candidate = candidate_root / "tools" / "csm"
+        if (candidate / "renderdoc_ui_analysis.py").exists():
+            return candidate
+
         candidate = candidate_root / "Examples" / "RenderScene"
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
     raise RuntimeError(
-        "Unable to locate Examples/RenderScene from the RenderDoc script path. "
+        "Unable to locate tools/csm from the RenderDoc script path. "
         "Launch qrenderdoc with the repository script path."
     )
 

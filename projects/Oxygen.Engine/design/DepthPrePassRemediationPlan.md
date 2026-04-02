@@ -783,20 +783,20 @@ Validation evidence so far:
   - `Oxygen.Renderer.ShadowManagerPolicy.Tests` passes after the reversed-Z
     conventional-shadow fixes
   - runtime evidence:
-    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_debuglayer.log`
+    - `out/build-ninja/analysis/csm/regression/renderscene_conventional_debuglayer.log`
       captured the pre-fix failure:
       - `invalid camera depth span ... skipping directional shadows`
       - `no shadow products were published`
-    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_debuglayer_postfix2.log`
+    - `out/build-ninja/analysis/csm/regression/renderscene_conventional_debuglayer_postfix2.log`
       shows that failure is gone on the rebuilt binary
   - replay evidence:
-    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60_frame60.rdc`
-    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60.shadow_inner_timing.txt`
-    - `out/build-ninja/analysis/conventional_shadow_regression/renderscene_conventional_frame60.shadow_inner_focus.txt`
+    - `out/build-ninja/analysis/csm/regression/renderscene_conventional_frame60_frame60.rdc`
+    - `out/build-ninja/analysis/csm/regression/renderscene_conventional_frame60.shadow_inner_timing.txt`
+    - `out/build-ninja/analysis/csm/regression/renderscene_conventional_frame60.shadow_inner_focus.txt`
     - this proves `ConventionalShadowRasterPass.ShadowDepthWork` is executing
       again with 4 clear events and 4 draw events on shadow slices `0..3`
   - post-fix runtime smoke on the current `Debug` binary:
-    - `out/build-ninja/analysis/conventional_shadow_runtime_debug_after_biasfix.log`
+    - `out/build-ninja/analysis/csm/regression/conventional_shadow_runtime_debug_after_biasfix.log`
     - no D3D12 warnings/errors, no invalid depth-span publication failure, and
       stable conventional-shadow execution through the frame run
   - live visual validation:

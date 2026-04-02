@@ -226,6 +226,16 @@ auto CreateShadowCastingDirectionalNode(Scene& scene) -> SceneNode
   return mask;
 }
 
+[[nodiscard]] auto MakeShadowCasterMask(
+  const bool masked, const bool double_sided) -> PassMask
+{
+  auto mask = MakeShadowCasterMask(masked);
+  if (double_sided) {
+    mask.Set(PassMaskBit::kDoubleSided);
+  }
+  return mask;
+}
+
 [[nodiscard]] auto HasShaderDefine(
   const GraphicsPipelineDesc& desc, std::string_view name) -> bool
 {
@@ -360,7 +370,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   opaque_draw.flags = MakeShadowCasterMask(false);
 
   auto masked_draw = opaque_draw;
-  masked_draw.flags = MakeShadowCasterMask(true);
+  masked_draw.flags = MakeShadowCasterMask(true, true);
 
   const auto draws = std::array { opaque_draw, masked_draw };
   const auto partitions = std::array {
@@ -370,7 +380,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
       .end = 1U,
     },
     PreparedSceneFrame::PartitionRange {
-      .pass_mask = MakeShadowCasterMask(true),
+      .pass_mask = MakeShadowCasterMask(true, true),
       .begin = 1U,
       .end = 2U,
     },
@@ -584,10 +594,17 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
   for (std::size_t bind_index = 0U;
     bind_index < gfx_->graphics_pipeline_log_.binds.size(); ++bind_index) {
     const bool expect_masked = (bind_index % 2U) == 1U;
+    const auto expected_cull_mode = expect_masked
+      ? oxygen::graphics::CullMode::kNone
+      : oxygen::graphics::CullMode::kBack;
     EXPECT_EQ(
       HasShaderDefine(
         gfx_->graphics_pipeline_log_.binds[bind_index].desc, "ALPHA_TEST"),
       expect_masked);
+    EXPECT_EQ(gfx_->graphics_pipeline_log_.binds[bind_index]
+                .desc.RasterizerState()
+                .cull_mode,
+      expected_cull_mode);
   }
 
   constexpr auto kViewConstantsRootParam = static_cast<std::uint32_t>(

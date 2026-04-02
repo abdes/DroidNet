@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Replays a CSM-4 capture and emits caster-culling validation reports.
+
+.DESCRIPTION
+Runs the RenderDoc timing and proof scripts needed for the CSM-4 caster-culling
+workflow and writes the comparison report next to the output stem.
+#>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
@@ -7,7 +15,7 @@ param(
   [string]$OutputStem = '',
 
   [Parameter()]
-  [string]$BaselineStem = 'out/build-ninja/analysis/conventional_shadow_csm2_validation/release_frame350_csm2_fps50'
+  [string]$BaselineStem = 'out/build-ninja/analysis/csm/csm2_validation/release_frame350_csm2_fps50'
 )
 
 Set-StrictMode -Version Latest
@@ -179,18 +187,12 @@ Invoke-StableTimingAnalysis `
   -PassName 'ConventionalShadowCasterCullingPass' `
   -ReportPath "$outputStemFullPath.caster_culling_report.txt"
 
-& $invokeScript `
-  -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocConventionalShadowRasterIndirect.py') `
-  -PassName 'ConventionalShadowRasterPass' `
-  -ReportPath "$outputStemFullPath.raster_indirect_report.txt"
-
 Invoke-PythonCommand `
-  -ScriptPath (Join-Path $PSScriptRoot 'CompareConventionalShadowCsm5Baseline.py') `
+  -ScriptPath (Join-Path $PSScriptRoot 'CompareConventionalShadowCsm4Baseline.py') `
   -Arguments @(
     '--baseline-stem', $baselineStemFullPath,
     '--current-stem', $outputStemFullPath,
     '--output', $compareReportPath
   )
 
-Write-Output "CSM-5 analysis complete for $captureFullPath"
+Write-Output "CSM-4 analysis complete for $captureFullPath"

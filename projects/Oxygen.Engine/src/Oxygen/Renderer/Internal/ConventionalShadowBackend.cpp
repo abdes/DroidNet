@@ -499,9 +499,7 @@ auto ConventionalShadowBackend::PublishView(const ViewId view_id,
     = BuildDirectionalResourceConfig(directional_candidates, 0U, 0U).resolution;
 
   if (directional_candidates.empty()) {
-    LOG_F(INFO,
-      "ConventionalShadowBackend: view {} has no eligible directional shadow "
-      "candidates",
+    LOG_F(INFO, "View {} has no eligible directional shadow candidates",
       view_id.get());
   }
 
@@ -519,8 +517,8 @@ auto ConventionalShadowBackend::PublishView(const ViewId view_id,
 
   if (!directional_candidates.empty() && state.shadow_instances.empty()) {
     LOG_F(WARNING,
-      "ConventionalShadowBackend: view {} had {} directional shadow "
-      "candidate(s), but no shadow products were published",
+      "View {} had {} directional shadow candidate(s), but no shadow products "
+      "were published",
       view_id.get(), directional_candidates.size());
   }
 
@@ -810,9 +808,7 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
   }
   RefreshAllViewExports();
 
-  LOG_F(INFO,
-    "ConventionalShadowBackend: created directional shadow texture {}x{} "
-    "layers={} srv={}",
+  LOG_F(INFO, "Created directional shadow texture {}x{} layers={} srv={}",
     directional_shadow_resolution_, directional_shadow_resolution_,
     directional_shadow_capacity_layers_, directional_shadow_texture_srv_.get());
 }
@@ -888,8 +884,8 @@ auto ConventionalShadowBackend::BuildDirectionalViewState(const ViewId view_id,
   far_depth /= static_cast<float>(view_far_corners.size());
   if (far_depth <= near_depth + kMinCascadeSpan) {
     LOG_F(WARNING,
-      "ConventionalShadowBackend: invalid camera depth span for view {} "
-      "(near_depth={} far_depth={}); skipping directional shadows",
+      "Invalid camera depth span for view {} (near_depth={} far_depth={}); "
+      "skipping directional shadows",
       view_id.get(), near_depth, far_depth);
     return;
   }
@@ -1122,9 +1118,7 @@ auto ConventionalShadowBackend::PublishShadowInstances(
   const auto result = shadow_instance_buffer_.Allocate(
     static_cast<std::uint32_t>(instances.size()));
   if (!result) {
-    LOG_F(ERROR,
-      "ConventionalShadowBackend: failed to allocate shadow instance metadata "
-      "buffer: {}",
+    LOG_F(ERROR, "Failed to allocate shadow instance metadata buffer: {}",
       result.error().message());
     return kInvalidShaderVisibleIndex;
   }
@@ -1148,9 +1142,7 @@ auto ConventionalShadowBackend::PublishDirectionalMetadata(
   const auto result = directional_shadow_metadata_buffer_.Allocate(
     static_cast<std::uint32_t>(metadata.size()));
   if (!result) {
-    LOG_F(ERROR,
-      "ConventionalShadowBackend: failed to allocate directional shadow "
-      "metadata buffer: {}",
+    LOG_F(ERROR, "Failed to allocate directional shadow metadata buffer: {}",
       result.error().message());
     return kInvalidShaderVisibleIndex;
   }

@@ -64,7 +64,7 @@ NOLINT_TEST(ConventionalShadowDrawRecordBuilderTest,
                PassMaskBit::kMainViewVisible },
       kMainViewVisible),
     MakeDraw(PassMask { PassMaskBit::kShadowCaster, PassMaskBit::kMasked,
-               PassMaskBit::kMainViewVisible },
+               PassMaskBit::kDoubleSided, PassMaskBit::kMainViewVisible },
       kStaticShadowCaster | kMainViewVisible),
     MakeDraw(
       PassMask { PassMaskBit::kTransparent, PassMaskBit::kMainViewVisible },
@@ -93,7 +93,7 @@ NOLINT_TEST(ConventionalShadowDrawRecordBuilderTest,
     },
     PreparedSceneFrame::PartitionRange {
       .pass_mask = PassMask { PassMaskBit::kShadowCaster, PassMaskBit::kMasked,
-        PassMaskBit::kMainViewVisible },
+        PassMaskBit::kDoubleSided, PassMaskBit::kMainViewVisible },
       .begin = 2U,
       .end = 3U,
     },
@@ -135,6 +135,7 @@ NOLINT_TEST(ConventionalShadowDrawRecordBuilderTest,
   EXPECT_TRUE(oxygen::renderer::IsStaticShadowCaster(records[2]));
   EXPECT_TRUE(oxygen::renderer::IsMainViewVisible(records[2]));
   EXPECT_TRUE(records[2].partition_pass_mask.IsSet(PassMaskBit::kMasked));
+  EXPECT_TRUE(records[2].partition_pass_mask.IsSet(PassMaskBit::kDoubleSided));
 }
 
 NOLINT_TEST(ConventionalShadowDrawRecordBuilderTest,

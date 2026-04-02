@@ -13,6 +13,7 @@
 #include <cstring>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <set>
 #include <span>
 #include <sstream>
@@ -375,139 +376,6 @@ protected:
     return node;
   }
 
-  [[nodiscard]] static auto FindRepresentativeOccupiedTile(
-    const ConventionalShadowReceiverMaskSummary& summary,
-    const std::span<const std::uint32_t> base_mask)
-    -> std::pair<std::uint32_t, std::uint32_t>
-  {
-    CHECK_F(summary.base_tile_resolution > 0U,
-      "receiver-mask summary has no base-tile resolution");
-    CHECK_F(base_mask.size()
-        == static_cast<std::size_t>(summary.base_tile_resolution)
-          * summary.base_tile_resolution,
-      "receiver-mask base slice size does not match summary resolution");
-
-    const auto full_min_x = summary.full_rect_center_half_extent.x
-      - summary.full_rect_center_half_extent.z;
-    const auto full_min_y = summary.full_rect_center_half_extent.y
-      - summary.full_rect_center_half_extent.w;
-    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto raw_center_x
-      = 0.5F * (summary.raw_xy_min_max.x + summary.raw_xy_min_max.z);
-    const auto raw_center_y
-      = 0.5F * (summary.raw_xy_min_max.y + summary.raw_xy_min_max.w);
-
-    auto found_inside_raw = false;
-    auto best_inside_raw = std::pair { 0U, 0U };
-    auto best_inside_raw_distance = std::numeric_limits<float>::max();
-    auto found_any = false;
-    auto best_any = std::pair { 0U, 0U };
-    auto best_any_distance = std::numeric_limits<float>::max();
-    for (std::uint32_t tile_y = 0U; tile_y < summary.base_tile_resolution;
-      ++tile_y) {
-      for (std::uint32_t tile_x = 0U; tile_x < summary.base_tile_resolution;
-        ++tile_x) {
-        const auto flat_index
-          = static_cast<std::size_t>(tile_y) * summary.base_tile_resolution
-          + tile_x;
-        if (base_mask[flat_index] == 0U) {
-          continue;
-        }
-
-        const auto tile_center_x
-          = full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x;
-        const auto tile_center_y
-          = full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y;
-        const auto dx = tile_center_x - raw_center_x;
-        const auto dy = tile_center_y - raw_center_y;
-        const auto distance = dx * dx + dy * dy;
-        if (!found_any || distance < best_any_distance) {
-          found_any = true;
-          best_any = { tile_x, tile_y };
-          best_any_distance = distance;
-        }
-
-        const auto inside_raw = tile_center_x >= summary.raw_xy_min_max.x
-          && tile_center_x <= summary.raw_xy_min_max.z
-          && tile_center_y >= summary.raw_xy_min_max.y
-          && tile_center_y <= summary.raw_xy_min_max.w;
-        if (inside_raw
-          && (!found_inside_raw || distance < best_inside_raw_distance)) {
-          found_inside_raw = true;
-          best_inside_raw = { tile_x, tile_y };
-          best_inside_raw_distance = distance;
-        }
-      }
-    }
-
-    CHECK_F(found_any, "receiver-mask slice has no occupied tiles");
-    return found_inside_raw ? best_inside_raw : best_any;
-  }
-
-  [[nodiscard]] static auto BuildAcceptedWorldSphere(
-    const ConventionalShadowReceiverAnalysisJob& job,
-    const ConventionalShadowReceiverMaskSummary& summary,
-    const std::span<const std::uint32_t> base_mask) -> glm::vec4
-  {
-    const auto [tile_x, tile_y]
-      = FindRepresentativeOccupiedTile(summary, base_mask);
-    const auto full_min_x = summary.full_rect_center_half_extent.x
-      - summary.full_rect_center_half_extent.z;
-    const auto full_min_y = summary.full_rect_center_half_extent.y
-      - summary.full_rect_center_half_extent.w;
-    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto sphere_center_ls = glm::vec3 {
-      full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x,
-      full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y,
-      0.5F
-        * (summary.raw_depth_and_dilation.x + summary.raw_depth_and_dilation.y),
-    };
-    const auto radius
-      = std::max(0.01F, 0.2F * std::min(tile_extent_x, tile_extent_y));
-
-    const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
-    const auto center_ws
-      = inverse_light_rotation * glm::vec4(sphere_center_ls, 1.0F);
-    return glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
-  }
-
-  [[nodiscard]] static auto BuildFrontAcceptedWorldSphere(
-    const ConventionalShadowReceiverAnalysisJob& job,
-    const ConventionalShadowReceiverMaskSummary& summary,
-    const std::span<const std::uint32_t> base_mask) -> glm::vec4
-  {
-    const auto [tile_x, tile_y]
-      = FindRepresentativeOccupiedTile(summary, base_mask);
-    const auto full_min_x = summary.full_rect_center_half_extent.x
-      - summary.full_rect_center_half_extent.z;
-    const auto full_min_y = summary.full_rect_center_half_extent.y
-      - summary.full_rect_center_half_extent.w;
-    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto radius
-      = std::max(0.01F, 0.2F * std::min(tile_extent_x, tile_extent_y));
-    const auto receiver_max_z
-      = summary.raw_depth_and_dilation.y + summary.raw_depth_and_dilation.w;
-    const auto sphere_center_ls = glm::vec3 {
-      full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x,
-      full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y,
-      receiver_max_z + radius + 0.25F,
-    };
-
-    const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
-    const auto center_ws
-      = inverse_light_rotation * glm::vec4(sphere_center_ls, 1.0F);
-    return glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
-  }
-
   [[nodiscard]] static auto BuildRejectedWorldSphere(
     const ConventionalShadowReceiverAnalysisJob& job,
     const ConventionalShadowReceiverMaskSummary& summary) -> glm::vec4
@@ -708,6 +576,93 @@ protected:
       && BaseMaskOverlaps(summary, base_mask, tile_min, tile_max);
   }
 
+  [[nodiscard]] static auto FindAcceptedWorldSphere(
+    const ConventionalShadowReceiverAnalysisJob& job,
+    const ConventionalShadowReceiverMaskSummary& summary,
+    const std::span<const std::uint32_t> base_mask,
+    const std::span<const std::uint32_t> hierarchy_mask) -> glm::vec4
+  {
+    CHECK_F(summary.base_tile_resolution > 0U,
+      "receiver-mask summary has no base-tile resolution");
+    CHECK_F(base_mask.size()
+        == static_cast<std::size_t>(summary.base_tile_resolution)
+          * summary.base_tile_resolution,
+      "receiver-mask base slice size does not match summary resolution");
+
+    const auto full_min_x = summary.full_rect_center_half_extent.x
+      - summary.full_rect_center_half_extent.z;
+    const auto full_min_y = summary.full_rect_center_half_extent.y
+      - summary.full_rect_center_half_extent.w;
+    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
+      / static_cast<float>(summary.base_tile_resolution);
+    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
+      / static_cast<float>(summary.base_tile_resolution);
+    const auto radius_unit
+      = std::max(0.01F, 0.1F * std::min(tile_extent_x, tile_extent_y));
+    const auto center_z = 0.5F
+      * (summary.raw_depth_and_dilation.x + summary.raw_depth_and_dilation.y);
+    const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
+
+    const auto try_light_space_center
+      = [&](const glm::vec3& center_ls) -> std::optional<glm::vec4> {
+      for (const auto radius_scale : std::array { 1.0F, 0.5F, 0.25F }) {
+        const auto radius = std::max(0.01F, radius_scale * radius_unit);
+        const auto center_ws
+          = inverse_light_rotation * glm::vec4(center_ls, 1.0F);
+        const auto sphere_ws
+          = glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
+        if (CpuAcceptsSphere(
+              job, summary, base_mask, hierarchy_mask, sphere_ws)) {
+          return sphere_ws;
+        }
+      }
+      return std::nullopt;
+    };
+
+    if (const auto raw_center_candidate = try_light_space_center(glm::vec3 {
+          0.5F * (summary.raw_xy_min_max.x + summary.raw_xy_min_max.z),
+          0.5F * (summary.raw_xy_min_max.y + summary.raw_xy_min_max.w),
+          center_z,
+        });
+      raw_center_candidate.has_value()) {
+      return *raw_center_candidate;
+    }
+
+    for (std::uint32_t tile_y = 0U; tile_y < summary.base_tile_resolution;
+      ++tile_y) {
+      for (std::uint32_t tile_x = 0U; tile_x < summary.base_tile_resolution;
+        ++tile_x) {
+        const auto flat_index
+          = static_cast<std::size_t>(tile_y) * summary.base_tile_resolution
+          + tile_x;
+        if (base_mask[flat_index] == 0U) {
+          continue;
+        }
+
+        const auto candidate = try_light_space_center(glm::vec3 {
+          full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x,
+          full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y,
+          center_z,
+        });
+        if (candidate.has_value()) {
+          return *candidate;
+        }
+      }
+    }
+
+    return glm::vec4 { 0.0F, 0.0F, 0.0F, 0.0F };
+  }
+
+  [[nodiscard]] static auto JobContainsEyeDepth(const std::size_t job_index,
+    const ConventionalShadowReceiverAnalysisJob& job, const float eye_depth)
+    -> bool
+  {
+    const auto split_begin = job.split_and_full_depth_range.x;
+    const auto split_end = job.split_and_full_depth_range.y;
+    return eye_depth <= split_end
+      && (job_index == 0U ? eye_depth >= split_begin : eye_depth > split_begin);
+  }
+
   [[nodiscard]] static auto DescribeCounts(
     const std::span<const std::uint32_t> counts) -> std::string
   {
@@ -889,40 +844,54 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
   }
   ASSERT_FALSE(sampled_jobs.empty());
 
-  const auto primary_job_index = sampled_jobs.front();
-  const auto secondary_job_index
-    = sampled_jobs.size() > 1U ? sampled_jobs[1] : primary_job_index;
+  auto primary_job_index = std::optional<std::uint32_t> {};
+  auto secondary_job_index = std::optional<std::uint32_t> {};
+  for (const auto job_index : sampled_jobs) {
+    if (!primary_job_index.has_value()
+      && JobContainsEyeDepth(job_index, plan->jobs[job_index], 1.25F)) {
+      primary_job_index = job_index;
+    }
+    if (!secondary_job_index.has_value()
+      && JobContainsEyeDepth(job_index, plan->jobs[job_index], 3.50F)) {
+      secondary_job_index = job_index;
+    }
+  }
+  ASSERT_TRUE(primary_job_index.has_value());
+  ASSERT_TRUE(secondary_job_index.has_value());
   const auto primary_base_mask = std::span<const std::uint32_t>(base_mask.data()
-      + static_cast<std::size_t>(primary_job_index) * base_tiles_per_job,
+      + static_cast<std::size_t>(*primary_job_index) * base_tiles_per_job,
     base_tiles_per_job);
   const auto secondary_base_mask
     = std::span<const std::uint32_t>(base_mask.data()
-        + static_cast<std::size_t>(secondary_job_index) * base_tiles_per_job,
+        + static_cast<std::size_t>(*secondary_job_index) * base_tiles_per_job,
       base_tiles_per_job);
-  const auto primary_hierarchy_mask
-    = std::span<const std::uint32_t>(hierarchy_mask.data()
-        + static_cast<std::size_t>(primary_job_index) * hierarchy_tiles_per_job,
-      hierarchy_tiles_per_job);
-  const auto secondary_hierarchy_mask = std::span<const std::uint32_t>(
+  const auto primary_hierarchy_mask = std::span<const std::uint32_t>(
     hierarchy_mask.data()
-      + static_cast<std::size_t>(secondary_job_index) * hierarchy_tiles_per_job,
+      + static_cast<std::size_t>(*primary_job_index) * hierarchy_tiles_per_job,
     hierarchy_tiles_per_job);
+  const auto secondary_hierarchy_mask
+    = std::span<const std::uint32_t>(hierarchy_mask.data()
+        + static_cast<std::size_t>(*secondary_job_index)
+          * hierarchy_tiles_per_job,
+      hierarchy_tiles_per_job);
   draw_bounding_spheres[0]
-    = BuildFrontAcceptedWorldSphere(plan->jobs[primary_job_index],
-      summaries[primary_job_index], primary_base_mask);
+    = FindAcceptedWorldSphere(plan->jobs[*primary_job_index],
+      summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask);
   draw_bounding_spheres[1] = BuildRejectedWorldSphere(
-    plan->jobs[primary_job_index], summaries[primary_job_index]);
-  draw_bounding_spheres[2]
-    = BuildAcceptedWorldSphere(plan->jobs[secondary_job_index],
-      summaries[secondary_job_index], secondary_base_mask);
-  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[primary_job_index],
-    summaries[primary_job_index], primary_base_mask, primary_hierarchy_mask,
+    plan->jobs[*primary_job_index], summaries[*primary_job_index]);
+  draw_bounding_spheres[2] = FindAcceptedWorldSphere(
+    plan->jobs[*secondary_job_index], summaries[*secondary_job_index],
+    secondary_base_mask, secondary_hierarchy_mask);
+  ASSERT_GT(draw_bounding_spheres[0].w, 0.0F);
+  ASSERT_GT(draw_bounding_spheres[2].w, 0.0F);
+  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
+    summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
     draw_bounding_spheres[0]));
-  ASSERT_FALSE(CpuAcceptsSphere(plan->jobs[primary_job_index],
-    summaries[primary_job_index], primary_base_mask, primary_hierarchy_mask,
+  ASSERT_FALSE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
+    summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
     draw_bounding_spheres[1]));
-  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[secondary_job_index],
-    summaries[secondary_job_index], secondary_base_mask,
+  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*secondary_job_index],
+    summaries[*secondary_job_index], secondary_base_mask,
     secondary_hierarchy_mask, draw_bounding_spheres[2]));
 
   BuildConventionalShadowDrawRecords(prepared_frame, conventional_draw_records);
@@ -1005,12 +974,12 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
   ASSERT_EQ(opaque_counts.size(), output.job_count);
   ASSERT_EQ(masked_counts.size(), output.job_count);
 
-  EXPECT_EQ(opaque_counts[primary_job_index], 1U)
+  EXPECT_EQ(opaque_counts[*primary_job_index], 1U)
     << DescribeCounts(opaque_counts);
   EXPECT_LT(
-    opaque_counts[primary_job_index], opaque_partition->draw_record_count)
+    opaque_counts[*primary_job_index], opaque_partition->draw_record_count)
     << DescribeCounts(opaque_counts);
-  EXPECT_EQ(masked_counts[secondary_job_index], 1U)
+  EXPECT_EQ(masked_counts[*secondary_job_index], 1U)
     << DescribeCounts(masked_counts);
 
   EXPECT_TRUE(emitted_draw_indices.contains(0U));
