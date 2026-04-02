@@ -18,8 +18,12 @@ slow discovery.
 Current task focus:
 
 - Active structural work is complete through `CSM-5`.
-- The next decision is whether `CSM-6` budget work is required before closure,
-  or whether the remaining work is only final closure / cleanup.
+- The current recommendation is to keep `CSM-6` as a conditional follow-up,
+  not an immediate implementation step on the current GLTF/FBX-driven content
+  path.
+- The next decision is whether target-platform budgets still require `CSM-6`
+  before closure, or whether the remaining work is only final closure /
+  cleanup.
 - Effective `2026-04-02`, the authoritative comparison baseline for later
   phases is the frame-`350` at `50 fps` `CSM-2` package, not the archived
   pre-`CSM-2` conventional package.
@@ -45,6 +49,9 @@ Current task focus:
 - `CSM-5` now consumes those compacted buffers through counted indirect
   execution on the canonical frame-`350` capture, and the old direct full-
   partition replay path is no longer the hot raster path.
+- `CSM-6` is now scoped as future-proofed optional work that should activate
+  only when explicit static/dynamic authoring exists for the content path or
+  when measured platform budgets still require more reduction after `CSM-5`.
 - No later phase may be treated as complete until its code, document updates,
   and validation evidence all satisfy this plan's gates.
 - The rejected receiver-object-bounds culling path stays rejected and is not
@@ -957,24 +964,105 @@ Conclusion:
 
 Status:
 
-- pending
+- deferred
 
 Goals:
 
 - stop paying the same full price every frame if `CSM-5` is still over budget
+- do this in a way that matches future editor-authored scene workflows instead
+  of inventing a fragile temporary classification model for imported content
+
+Decision as of `2026-04-02`:
+
+- do not implement `CSM-6` immediately on the current GLTF/FBX ingestion path
+- keep `CSM-6` in the remediation plan as a future-proofed optional phase
+- activate `CSM-6` only if either:
+  - measured target-platform budgets still miss the closure gate after
+    `CSM-5`, or
+  - editor-authored scene content can reliably mark static vs dynamic shadow
+    casters
+
+Why this is the current recommendation:
+
+- `CSM-5` already removed most of the conventional shadow waste on the
+  canonical benchmark:
+  - `ConventionalShadowRasterPass`: `21.657248 ms -> 2.078208 ms`
+  - total analyzed shadow path: `22.630336 ms -> 6.128928 ms`
+- current imported scenes do not yet provide a trustworthy authored mobility
+  contract for shadow casters
+- the engine is already future-ready for this phase:
+  - `CSM-1` carries `kStaticShadowCaster`
+  - scene extraction already forwards the scene `Static` flag into
+    `static_shadow_caster`
+  - the VSM architecture already defines a static/dynamic two-slice caching
+    model that conventional shadows can align with later
+- a rushed `CSM-6` implemented on inference rather than authored truth would
+  increase invalidation complexity and create a second policy problem instead
+  of reducing risk
 
 Tasks:
 
-1. Split static and dynamic shadow workloads explicitly.
+1. Define the authoring contract for shadow mobility:
+   - explicit static-shadow-caster vs dynamic-shadow-caster semantics
+   - dynamic-by-default behavior when imported content lacks authored metadata
 2. Reuse the existing static-shadow-caster bit already flowing through the
-   renderer.
-3. Add deliberate, measurable update budgeting only if required by timing
-   results.
+   renderer; do not invent a second parallel classification path.
+3. Align conventional-shadow invalidation and cache semantics with the existing
+   VSM static/dynamic model where possible.
+4. Add deliberate, measurable update budgeting only if timing evidence still
+   requires it after `CSM-5`.
+5. Require a cache-utility validation package before implementation closure:
+   - static-cache hit rate / reuse
+   - invalidation reasons
+   - timing delta versus locked `CSM-2` and validated `CSM-5`
+
+Industry comparison (`2026-04-02`):
+
+- Unreal Engine:
+  - uses explicit actor/light mobility (`Static`, `Stationary`, `Movable`)
+  - Virtual Shadow Maps support separate static caching and track cached static
+    vs cached dynamic pages
+  - Epic's guidance is to switch actors that invalidate static pages to
+    `Movable`
+- Unity HDRP:
+  - exposes explicit `Renderer.staticShadowCaster`
+  - supports light shadow update modes (`Every Frame`, `On Enable`,
+    `On Demand`)
+  - supports cached shadow atlases and even per-cascade update requests for
+    directional shadows
+- O3DE:
+  - exposes per-light shadow caching modes
+  - cached shadows use persistent textures and update only when changes are
+    detected
+- Godot:
+  - currently does not separate static shadow rendering from dynamic shadow
+    rendering in real time
+  - the Godot docs explicitly say this is planned for a future release
+
+Recommendation:
+
+- for Oxygen's current conventional path, do **not** implement static/dynamic
+  shadow splitting immediately
+- keep imported content dynamic by default when explicit authored mobility is
+  absent
+- do **not** infer static shadow casters from temporary heuristics such as
+  "has not moved recently" or import provenance alone
+- when editor-authored mobility becomes available, implement `CSM-6` by
+  reusing:
+  - `kStaticShadowCaster`
+  - the existing scene `Static` flag pipeline
+  - VSM-style invalidation and cache semantics
+- if target-platform budgets are already satisfied with `CSM-5`, skip `CSM-6`
+  and move to closure instead of adding structural complexity without proof of
+  need
 
 Important rule:
 
-- this phase is mandatory if `CSM-5` misses the final performance gate
-- it may be skipped only if `CSM-5` already satisfies the final closure budget
+- this phase is mandatory only if `CSM-5` misses the final performance gate on
+  target platforms
+- it may also become mandatory later if the editor/content pipeline gains
+  reliable authored mobility data and the product needs the extra shadow budget
+- otherwise it should stay deferred rather than adding speculative complexity
 
 ### CSM-7. Shadow Material / LOD Specialization
 
@@ -1013,13 +1101,14 @@ Closure gate:
 
 The next meaningful execution order from the recovered state is:
 
-1. Decide whether the validated `CSM-5` result is already sufficient for
-   closure, or whether `CSM-6` static / dynamic update budgeting is still
-   required.
-2. If more budget reduction is required, keep the counted-indirect `CSM-5`
-   path and layer `CSM-6` on top of it instead of reopening any earlier
-   structural phase.
-3. If no further budget work is required, move directly to final closure with
+1. Decide whether the validated `CSM-5` result already satisfies the target
+   closure budget on the intended platforms.
+2. Keep `CSM-6` deferred unless that budget decision or future editor-authored
+   mobility data justifies activating it.
+3. If `CSM-6` is activated later, make imported content dynamic-by-default and
+   reuse the existing static-shadow-caster / VSM invalidation model instead of
+   inventing heuristics.
+4. If no further budget work is required, move directly to final closure with
    the locked `CSM-2` baseline and the validated `CSM-5` package as the final
    proof set.
 

@@ -818,18 +818,212 @@ dynamic casters and apply explicit update budgeting.
 **Contingency:** This phase is mandatory only if CSM-5 misses the performance
 target. It may be skipped if CSM-5 already achieves the required GPU budget.
 
-### 5.7 CSM-7 — Shadow Material / LOD Specialization (Planned)
+### 5.7 CSM-7 — Authoring-Backed Shadow Specialization (Planned)
 
-**Status:** pending
+**Status:** planned
 
-**Purpose:** Remove remaining expensive low-value shadow work after structural
-waste is eliminated.
+**Purpose:** Remove the remaining high-cost, low-value shadow work after the
+receiver-driven culling and counted-indirect raster path are already in place.
+This phase is not allowed to replace `CSM-1` through `CSM-5`; it only
+specializes what those phases already submit.
 
-**Design:**
+**When to activate this phase:**
 
-- Shadow-only LOD policy where mesh LOD chains are available.
-- Explicit alpha-tested shadow material budget controls.
-- Validate alpha-tested correctness against the canonical capture scene.
+- Only after `CSM-5` is in place and the remaining conventional shadow cost is
+  still meaningful on target platforms, or
+- when the editor/content pipeline can author reliable shadow-specialization
+  intent that imported GLTF/FBX scenes cannot provide today.
+
+If neither condition is true, this phase should remain dormant.
+
+#### Design intent
+
+This phase should make the conventional shadow path cheaper by simplifying the
+representation of shadow casters, not by reopening the already-solved
+visibility problem.
+
+The important architectural rule is:
+
+- `CSM-1` remains the one authoritative conventional shadow draw stream.
+- `CSM-2` through `CSM-4` remain the only visibility and compaction path.
+- `CSM-5` remains the only hot raster execution path.
+- `CSM-7` is only allowed to change *which shadow representation* a draw record
+  uses, not *how the pipeline decides visibility*.
+
+This keeps the design aligned with the validated architecture and avoids
+introducing a second parallel shadow renderer.
+
+#### Non-goals
+
+- No new CPU per-cascade filtering path.
+- No second "legacy" shadow submission path.
+- No heuristic mobility or shadow specialization inferred from "has not moved
+  recently".
+- No automatic degradation of alpha-tested or silhouette-critical assets
+  without explicit authoring support.
+- No reopening of the rejected receiver-object-bounds design.
+
+#### Future authoring contract
+
+This phase should depend on explicit shadow authoring, ideally from the editor.
+Imported content that does not carry explicit shadow-specialization metadata
+must fall back to the current unspecialized path.
+
+Recommended authoring concepts:
+
+- `shadow_cast_mode`
+  - `Default`
+  - `Off`
+  - `ForceOpaque`
+  - `AlphaTested`
+  - `TwoSided`
+- `shadow_lod_mode`
+  - `MatchMainView`
+  - `FixedShadowLod`
+  - `ShadowLodBias`
+- `shadow_lod_value`
+  - fixed index or bias, depending on `shadow_lod_mode`
+- optional `shadow_material_override`
+  - used only for an explicitly authored shadow-only material variant
+- optional `shadow_two_sided_override`
+  - only when the authored silhouette requires it
+
+Imported GLTF/FBX content should default to:
+
+- `shadow_cast_mode = Default`
+- `shadow_lod_mode = MatchMainView`
+- no shadow-only material override
+
+That fallback keeps imported scenes conservative and prevents accidental
+specialization based on weak assumptions.
+
+#### Recommended data-path changes
+
+The specialization should be expressed as an extension of the existing
+`CSM-1` draw metadata / draw-record publication, not as a new downstream
+override system.
+
+Recommended additions to the draw metadata contract:
+
+- `shadow_geometry_view`
+  - the geometry view used by the conventional shadow path
+- `shadow_material_class`
+  - opaque / alpha-tested / authored override
+- `shadow_raster_flags`
+  - shadow-only two-sided, alpha-test enable, etc.
+- `shadow_bounds`
+  - bounds matching the specialized shadow geometry, if they differ from the
+    main-view geometry
+
+Recommended rule:
+
+- if no specialization is authored, `shadow_geometry_view` and shadow material
+  state resolve to the same representation already used by `CSM-1` through
+  `CSM-5`
+
+This keeps the existing culling and raster passes stable while allowing future
+specialization to flow through the same authoritative draw stream.
+
+#### Shadow-only LOD specialization
+
+Shadow-only LOD is the preferred first optimization inside this phase because
+it preserves the receiver-driven visibility architecture while directly cutting
+vertex and index work.
+
+Recommended behavior:
+
+- choose the shadow LOD before `CSM-1` publication
+- publish the chosen shadow geometry into the same authoritative draw stream
+- keep one draw record per submitted shadow representation
+- recompute the draw record bounds from the selected shadow geometry if needed
+- do not choose shadow LOD per cascade; choose it once per prepared view /
+  shadow submission path
+
+Recommended policy order:
+
+1. `MatchMainView` for unspecialized content
+2. explicit `FixedShadowLod` when authored
+3. small authored `ShadowLodBias` where the asset has a known safe shadow
+   simplification path
+
+Developer note:
+
+- the future implementation should bias toward stable silhouettes, not maximum
+  decimation
+- avoid shadow LOD selection that changes every frame for camera noise-level
+  movement; hysteresis is required if a dynamic policy is ever introduced
+
+#### Shadow material specialization
+
+Shadow material specialization should be limited to cases where the cost is
+high and the visual contract is understood.
+
+Recommended material classes:
+
+- fully opaque fast path
+- alpha-tested shadow path
+- authored shadow-only material override
+
+Recommended rules:
+
+- masked materials remain masked by default
+- forcing a masked material to opaque is allowed only through explicit authored
+  shadow intent
+- two-sided shadow rendering is opt-in and authored
+- shadow-only material overrides must preserve the intended silhouette and
+  occlusion behavior
+
+This phase should reduce expensive low-value masked work by content policy, not
+by hidden runtime guessing.
+
+#### Pipeline integration rules
+
+The future implementation should integrate with the validated pipeline like
+this:
+
+1. Scene extraction resolves shadow specialization intent per render item.
+2. `CSM-1` publishes specialized shadow draw metadata and bounds into the
+   authoritative conventional shadow draw stream.
+3. `CSM-2`, `CSM-3`, and `CSM-4` consume those records unchanged.
+4. `CSM-5` rasters the specialized compacted work through the existing
+   counted-indirect path.
+
+Not allowed:
+
+- a second shadow compaction pass just for specialized materials
+- CPU-side replay of unspecialized vs specialized buckets as separate systems
+- post-culling mutation of draw layout that invalidates the `CSM-4` indirect
+  command contract
+
+#### Relationship to CSM-6
+
+If `CSM-6` is ever activated later, `CSM-7` should layer on top of it cleanly:
+
+- `CSM-6` decides *when* static and dynamic shadow work must be updated
+- `CSM-7` decides *how expensive each submitted shadow representation should be*
+
+These responsibilities must remain separate.
+
+#### Validation package expected from the future implementation
+
+The implementer should not close this phase on code inspection alone. A valid
+phase package should include:
+
+- synthetic validation proving specialized geometry/material metadata is
+  published correctly into the authoritative draw stream
+- canonical live capture proving `CSM-4` and `CSM-5` still operate correctly on
+  specialized records
+- RenderDoc evidence showing reduced raster work for the specialized content
+- explicit correctness checks on silhouette-sensitive and alpha-tested assets
+- timing comparison against the locked `CSM-2` baseline and the latest
+  validated pre-`CSM-7` conventional package
+
+Recommended success metrics:
+
+- reduced shadow raster vertex / index work or draw cost on specialized assets
+- no unexplained increase in compaction false positives
+- no correctness regressions on authored alpha-tested casters
+- no second hot-path submission architecture introduced
 
 ### 5.8 CSM-8 — Closure
 
