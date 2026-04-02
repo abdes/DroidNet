@@ -311,8 +311,9 @@ protected:
 
     auto& allocator
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      DescriptorVisibility::kShaderVisible);
+    auto handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(handle.IsValid(), "Failed to allocate SRV for `{}`", debug_name);
     const auto slot = allocator.GetShaderVisibleIndex(handle);
     auto view = Backend().GetResourceRegistry().RegisterView(*device_buffer,

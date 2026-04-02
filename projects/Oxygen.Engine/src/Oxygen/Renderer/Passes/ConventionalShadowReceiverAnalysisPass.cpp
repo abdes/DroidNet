@@ -18,7 +18,7 @@
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -151,12 +151,16 @@ namespace {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetPipelineState(pso_desc);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -277,7 +281,7 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
     CHECK_NOTNULL_F(pass_constants_mapped_ptr,
       "Failed to map conventional receiver-analysis constants buffer");
 
-    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(cbv_handle.IsValid(),
       "Failed to allocate conventional receiver-analysis constants CBV");
@@ -350,8 +354,9 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
     auto& allocator = gfx->GetDescriptorAllocator();
     auto& registry = gfx->GetResourceRegistry();
 
-    auto job_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto job_srv
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(job_srv.IsValid(),
       "Failed to allocate conventional receiver-analysis job SRV");
     state.job_srv_index = allocator.GetShaderVisibleIndex(job_srv);
@@ -359,8 +364,9 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
       MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
         job_buffer_size, sizeof(ConventionalShadowReceiverAnalysisJob)));
 
-    auto raw_uav = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto raw_uav
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(raw_uav.IsValid(),
       "Failed to allocate conventional receiver-analysis raw UAV");
     state.raw_uav_index = allocator.GetShaderVisibleIndex(raw_uav);
@@ -368,8 +374,9 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
       MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
         raw_buffer_size, sizeof(ConventionalShadowReceiverAnalysisRaw)));
 
-    auto raw_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto raw_srv
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(raw_srv.IsValid(),
       "Failed to allocate conventional receiver-analysis raw SRV");
     state.raw_srv_index = allocator.GetShaderVisibleIndex(raw_srv);
@@ -378,7 +385,7 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
         raw_buffer_size, sizeof(ConventionalShadowReceiverAnalysisRaw)));
 
     auto analysis_uav
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
         graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(analysis_uav.IsValid(),
       "Failed to allocate conventional receiver-analysis UAV");
@@ -388,7 +395,7 @@ struct ConventionalShadowReceiverAnalysisPass::Impl {
         analysis_buffer_size, sizeof(ConventionalShadowReceiverAnalysis)));
 
     auto analysis_srv
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(analysis_srv.IsValid(),
       "Failed to allocate conventional receiver-analysis SRV");

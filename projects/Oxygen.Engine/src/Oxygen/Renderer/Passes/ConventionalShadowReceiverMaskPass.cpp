@@ -18,7 +18,7 @@
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -148,12 +148,16 @@ namespace {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetPipelineState(pso_desc);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -327,7 +331,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsurePassConstantsBuffer()
   CHECK_NOTNULL_F(pass_constants_mapped_ptr,
     "Failed to map conventional receiver-mask constants buffer");
 
-  auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+  auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
     graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(cbv_handle.IsValid(),
     "Failed to allocate conventional receiver-mask constants CBV");
@@ -428,7 +432,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
 
-  auto job_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+  auto job_srv = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
     graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(
     job_srv.IsValid(), "Failed to allocate conventional receiver-mask job SRV");
@@ -438,7 +442,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       job_buffer_size, sizeof(ConventionalShadowReceiverAnalysisJob)));
 
   auto raw_mask_uav
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(raw_mask_uav.IsValid(),
     "Failed to allocate conventional receiver-mask raw UAV");
@@ -448,7 +452,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       base_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto raw_mask_srv
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(raw_mask_srv.IsValid(),
     "Failed to allocate conventional receiver-mask raw SRV");
@@ -458,7 +462,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       base_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto base_mask_uav
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(base_mask_uav.IsValid(),
     "Failed to allocate conventional receiver-mask base UAV");
@@ -468,7 +472,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       base_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto base_mask_srv
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(base_mask_srv.IsValid(),
     "Failed to allocate conventional receiver-mask base SRV");
@@ -478,7 +482,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       base_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto hierarchy_mask_uav
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(hierarchy_mask_uav.IsValid(),
     "Failed to allocate conventional receiver-mask hierarchy UAV");
@@ -490,7 +494,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       hierarchy_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto hierarchy_mask_srv
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(hierarchy_mask_srv.IsValid(),
     "Failed to allocate conventional receiver-mask hierarchy SRV");
@@ -502,7 +506,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       hierarchy_mask_buffer_size, sizeof(std::uint32_t)));
 
   auto count_buffer_uav
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(count_buffer_uav.IsValid(),
     "Failed to allocate conventional receiver-mask count UAV");
@@ -513,7 +517,7 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
       count_buffer_size, sizeof(std::uint32_t)));
 
   auto count_buffer_srv
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(count_buffer_srv.IsValid(),
     "Failed to allocate conventional receiver-mask count SRV");
@@ -523,8 +527,9 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
       count_buffer_size, sizeof(std::uint32_t)));
 
-  auto summary_uav = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto summary_uav
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(summary_uav.IsValid(),
     "Failed to allocate conventional receiver-mask summary UAV");
   state.summary_uav_index = allocator.GetShaderVisibleIndex(summary_uav);
@@ -532,8 +537,9 @@ auto ConventionalShadowReceiverMaskPass::Impl::EnsureViewResources(
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
       summary_buffer_size, sizeof(ConventionalShadowReceiverMaskSummary)));
 
-  auto summary_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto summary_srv
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(summary_srv.IsValid(),
     "Failed to allocate conventional receiver-mask summary SRV");
   state.summary_srv_index = allocator.GetShaderVisibleIndex(summary_srv);
