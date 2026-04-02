@@ -84,6 +84,9 @@ class GpuDebugClearPass;
 class GpuDebugDrawPass;
 class GroundGridPass;
 class ScreenHzbBuildPass;
+class ConventionalShadowReceiverAnalysisPass;
+class ConventionalShadowReceiverMaskPass;
+class ConventionalShadowCasterCullingPass;
 class VsmPageRequestGeneratorPass;
 class VsmInvalidationPass;
 class VsmPageManagementPass;
@@ -105,7 +108,8 @@ using KnownPassTypes = PassTypeList<DepthPrePass, LightCullingPass, ShaderPass,
   ConventionalShadowRasterPass, ScreenHzbBuildPass, VsmPageRequestGeneratorPass,
   VsmInvalidationPass, VsmPageManagementPass, VsmPageFlagPropagationPass,
   VsmPageInitializationPass, VsmShadowRasterizerPass, VsmStaticDynamicMergePass,
-  VsmHzbUpdaterPass, VsmProjectionPass>;
+  VsmHzbUpdaterPass, VsmProjectionPass, ConventionalShadowReceiverAnalysisPass,
+  ConventionalShadowReceiverMaskPass, ConventionalShadowCasterCullingPass>;
 
 //! The number of known pass types, used for static array sizing and sanity
 //! checks.

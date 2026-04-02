@@ -132,7 +132,9 @@ static inline float ComputeDirectionalCascadeBlendBand(
         max(metadata.cascade_world_texel_size[cascade_index], 1.0e-4);
     const float texel_band = cascade_texel_world * 12.0;
     const float proportional_band = cascade_span * 0.03;
-    return min(proportional_band, max(texel_band, 0.05));
+    const float heuristic_band = min(proportional_band, max(texel_band, 0.05));
+    const float authored_band = metadata.cascade_transition_widths[cascade_index];
+    return min(cascade_span, max(authored_band, heuristic_band));
 }
 
 static inline uint SelectDirectionalShadowFilterRadiusTexels(
@@ -382,31 +384,36 @@ static inline float ComputeConventionalDirectionalShadowVisibility(
         return 1.0;
     }
 
-    const float visibility = SampleDirectionalShadowCascadeVisibility(
+    float visibility = SampleDirectionalShadowCascadeVisibility(
         metadata, shadow_texture, cascade_index, cascade_sample);
-
-    if (cascade_index + 1u >= cascade_count || cascade_index != interval_index) {
-        return visibility;
+    if (cascade_index + 1u < cascade_count && cascade_index == interval_index) {
+        const float cascade_end = metadata.cascade_distances[cascade_index];
+        const float blend_band = ComputeDirectionalCascadeBlendBand(metadata, cascade_index);
+        const float blend_start = cascade_end - blend_band;
+        if (view_depth > blend_start) {
+            const DirectionalShadowCascadeSample next_sample =
+                PrepareDirectionalShadowCascadeSample(
+                    metadata, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
+            if (next_sample.projection.valid) {
+                const float next_visibility = SampleDirectionalShadowCascadeVisibility(
+                    metadata, shadow_texture, cascade_index + 1u, next_sample);
+                const float blend_t = saturate(
+                    (view_depth - blend_start) / max(blend_band, 1.0e-4));
+                visibility = lerp(visibility, next_visibility, blend_t);
+            }
+        }
     }
 
-    const float cascade_end = metadata.cascade_distances[cascade_index];
-    const float blend_band = ComputeDirectionalCascadeBlendBand(metadata, cascade_index);
-    const float blend_start = cascade_end - blend_band;
-    if (view_depth <= blend_start) {
-        return visibility;
+    const uint last_cascade = cascade_count - 1u;
+    const float fade_end = metadata.cascade_distances[last_cascade];
+    if (interval_index == last_cascade && metadata.distance_fadeout_begin < fade_end) {
+        const float fade_t = saturate(
+            (view_depth - metadata.distance_fadeout_begin)
+            / max(fade_end - metadata.distance_fadeout_begin, 1.0e-4));
+        visibility = lerp(visibility, 1.0, fade_t);
     }
 
-    const DirectionalShadowCascadeSample next_sample =
-        PrepareDirectionalShadowCascadeSample(
-            metadata, cascade_index + 1u, world_pos, normal_ws, light_dir_ws);
-    if (!next_sample.projection.valid) {
-        return visibility;
-    }
-
-    const float next_visibility = SampleDirectionalShadowCascadeVisibility(
-        metadata, shadow_texture, cascade_index + 1u, next_sample);
-    const float blend_t = saturate((view_depth - blend_start) / max(blend_band, 1.0e-4));
-    return lerp(visibility, next_visibility, blend_t);
+    return visibility;
 }
 
 static inline float ComputeVirtualDirectionalShadowVisibility(float3 world_pos)

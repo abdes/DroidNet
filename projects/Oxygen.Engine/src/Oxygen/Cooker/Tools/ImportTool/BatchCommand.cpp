@@ -593,6 +593,32 @@ namespace {
     }
   }
 
+  auto BuildSameCookedRootScriptSidecarFenceEdges(
+    const std::vector<PreparedJob>& jobs,
+    std::vector<std::vector<size_t>>& inferred_producers) -> void
+  {
+    auto last_sidecar_by_root = std::unordered_map<std::string, size_t> {};
+
+    for (size_t sidecar_index = 0; sidecar_index < jobs.size();
+      ++sidecar_index) {
+      if (jobs[sidecar_index].job_type != "script-sidecar") {
+        continue;
+      }
+
+      const auto sidecar_root = ResolveCookedRootKey(jobs[sidecar_index]);
+      if (!sidecar_root.has_value()) {
+        continue;
+      }
+
+      if (const auto it = last_sidecar_by_root.find(*sidecar_root);
+        it != last_sidecar_by_root.end()) {
+        inferred_producers[sidecar_index].push_back(it->second);
+      }
+
+      last_sidecar_by_root.insert_or_assign(*sidecar_root, sidecar_index);
+    }
+  }
+
   auto DisplayJobNumber(const size_t job_index) -> size_t
   {
     return job_index + 1;
@@ -1120,6 +1146,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   BuildInferredPhysicsDependencyEdges(
     jobs, producers_by_path, inferred_producers, writer, validation_failures);
   BuildSameCookedRootPhysicsSidecarFenceEdges(jobs, inferred_producers);
+  BuildSameCookedRootScriptSidecarFenceEdges(jobs, inferred_producers);
 
   std::vector<std::vector<size_t>> dependents(jobs.size());
   std::vector<size_t> dependency_remaining(jobs.size(), 0U);

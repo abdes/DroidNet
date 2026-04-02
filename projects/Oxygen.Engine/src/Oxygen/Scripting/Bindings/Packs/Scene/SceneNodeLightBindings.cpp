@@ -625,11 +625,19 @@ namespace {
       return 1;
     }
 
-    lua_createtable(state, 0, 3);
+    lua_createtable(state, 0, 7);
     lua_pushinteger(state, static_cast<lua_Integer>(csm.cascade_count));
     lua_setfield(state, -2, "cascade_count");
+    lua_pushinteger(state, static_cast<lua_Integer>(csm.split_mode));
+    lua_setfield(state, -2, "split_mode");
+    lua_pushnumber(state, csm.max_shadow_distance);
+    lua_setfield(state, -2, "max_shadow_distance");
     lua_pushnumber(state, csm.distribution_exponent);
     lua_setfield(state, -2, "distribution_exponent");
+    lua_pushnumber(state, csm.transition_fraction);
+    lua_setfield(state, -2, "transition_fraction");
+    lua_pushnumber(state, csm.distance_fadeout_fraction);
+    lua_setfield(state, -2, "distance_fadeout_fraction");
     lua_createtable(state, static_cast<int>(csm.cascade_count), 0);
     for (std::uint32_t i = 0; i < csm.cascade_count; ++i) {
       lua_pushnumber(state, csm.cascade_distances.at(i));
@@ -660,9 +668,35 @@ namespace {
           }
           lua_pop(state, 1);
 
+          lua_getfield(state, 2, "split_mode");
+          if (lua_isnumber(state, -1) != 0) {
+            const auto split_mode
+              = static_cast<std::uint32_t>(lua_tointeger(state, -1));
+            csm.split_mode
+              = oxygen::scene::IsValidDirectionalCsmSplitMode(
+                  static_cast<scene::DirectionalCsmSplitMode>(split_mode))
+              ? static_cast<scene::DirectionalCsmSplitMode>(split_mode)
+              : scene::DirectionalCsmSplitMode::kGenerated;
+            changed = true;
+          }
+          lua_pop(state, 1);
+
           float number = 0.0F;
+          if (TryGetNumberField(state, 2, "max_shadow_distance", number)) {
+            csm.max_shadow_distance = number;
+            changed = true;
+          }
           if (TryGetNumberField(state, 2, "distribution_exponent", number)) {
             csm.distribution_exponent = number;
+            changed = true;
+          }
+          if (TryGetNumberField(state, 2, "transition_fraction", number)) {
+            csm.transition_fraction = number;
+            changed = true;
+          }
+          if (TryGetNumberField(
+                state, 2, "distance_fadeout_fraction", number)) {
+            csm.distance_fadeout_fraction = number;
             changed = true;
           }
 

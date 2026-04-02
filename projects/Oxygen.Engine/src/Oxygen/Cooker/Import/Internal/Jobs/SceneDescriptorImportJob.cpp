@@ -724,15 +724,37 @@ namespace {
           if (light_doc.contains("cascade_count")) {
             light.cascade_count = light_doc.at("cascade_count").get<uint32_t>();
           }
+          if (light_doc.contains("split_mode")) {
+            light.split_mode = static_cast<uint8_t>(
+              light_doc.at("split_mode").get<uint32_t>());
+          }
+          if (light_doc.contains("max_shadow_distance")) {
+            light.max_shadow_distance
+              = light_doc.at("max_shadow_distance").get<float>();
+          }
           if (light_doc.contains("cascade_distances")) {
             const auto& distances = light_doc.at("cascade_distances");
             for (size_t d = 0; d < 4U; ++d) {
               light.cascade_distances[d] = distances.at(d).get<float>();
             }
+            if (!light_doc.contains("split_mode")) {
+              light.split_mode = 1U;
+            }
+            if (!light_doc.contains("max_shadow_distance")) {
+              light.max_shadow_distance = light.cascade_distances[3];
+            }
           }
           if (light_doc.contains("distribution_exponent")) {
             light.distribution_exponent
               = light_doc.at("distribution_exponent").get<float>();
+          }
+          if (light_doc.contains("transition_fraction")) {
+            light.transition_fraction
+              = light_doc.at("transition_fraction").get<float>();
+          }
+          if (light_doc.contains("distance_fadeout_fraction")) {
+            light.distance_fadeout_fraction
+              = light_doc.at("distance_fadeout_fraction").get<float>();
           }
           if (light_doc.contains("intensity_lux")) {
             light.intensity_lux = light_doc.at("intensity_lux").get<float>();

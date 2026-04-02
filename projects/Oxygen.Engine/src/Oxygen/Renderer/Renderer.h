@@ -77,6 +77,10 @@ class Mesh;
 class MaterialAsset;
 } // namespace oxygen::data
 
+namespace oxygen::engine::upload {
+class TransientStructuredBuffer;
+}
+
 namespace oxygen::engine {
 class RenderContextPool;
 namespace imgui {
@@ -496,12 +500,16 @@ private:
   //! the view id so we can put backing bytes into per-view storage.
   auto PublishPreparedFrameSpans(
     ViewId view_id, PreparedSceneFrame& prepared_frame) -> void;
+  auto PublishConventionalShadowDrawRecords(
+    ViewId view_id, PreparedSceneFrame& prepared_frame) -> void;
 
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
   auto EnsureOffscreenFrameServicesInitialized() -> void;
   auto EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx) -> void;
+  auto EnsureConventionalShadowDrawRecordBufferInitialized(
+    observer_ptr<Graphics> gfx) -> void;
   auto BeginFrameServices(
     frame::Slot frame_slot, frame::SequenceNumber frame_sequence) -> void;
   auto EndOffscreenFrame() noexcept -> void;
@@ -553,6 +561,8 @@ private:
     view_color_data_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<DebugFrameBindings>>
     debug_frame_bindings_publisher_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    conventional_shadow_draw_record_buffer_;
   std::unique_ptr<internal::PerViewStructuredPublisher<LightingFrameBindings>>
     lighting_frame_bindings_publisher_;
   std::unique_ptr<renderer::ShadowManager> shadow_manager_;
@@ -670,6 +680,8 @@ private:
     std::vector<std::byte> draw_metadata_storage;
     std::vector<PreparedSceneFrame::PartitionRange> partition_storage;
     std::vector<glm::vec4> draw_bounding_sphere_storage;
+    std::vector<renderer::ConventionalShadowDrawRecord>
+      conventional_shadow_draw_record_storage;
     std::vector<sceneprep::RenderItemData> render_item_storage;
     std::vector<glm::vec4> shadow_caster_bounds_storage;
     std::vector<glm::vec4> visible_receiver_bounds_storage;

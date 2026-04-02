@@ -167,6 +167,15 @@ auto ShadowManager::ReserveFrameResources(
     directional_candidates, scene_view_count);
 }
 
+auto ShadowManager::SetDirectionalCsmRuntimeSettings(
+  DirectionalCsmRuntimeSettings settings) -> void
+{
+  settings = CanonicalizeDirectionalCsmRuntimeSettings(settings);
+  if (conventional_backend_) {
+    conventional_backend_->SetDirectionalCsmRuntimeSettings(settings);
+  }
+}
+
 auto ShadowManager::PublishForView(const ViewId view_id,
   const engine::ViewConstants& view_constants, const LightManager& lights,
   const observer_ptr<scene::Scene> active_scene,
@@ -361,6 +370,20 @@ auto ShadowManager::TryGetRasterRenderPlan(const ViewId view_id) const noexcept
     : nullptr;
 }
 
+auto ShadowManager::TryGetReceiverAnalysisPlan(
+  const ViewId view_id) const noexcept
+  -> const ConventionalShadowReceiverAnalysisPlan*
+{
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    static_cast<void>(view_id);
+    return nullptr;
+  }
+  return conventional_backend_
+    ? conventional_backend_->TryGetReceiverAnalysisPlan(view_id)
+    : nullptr;
+}
+
 auto ShadowManager::TryGetShadowInstanceMetadata(
   const ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*
 {
@@ -374,6 +397,20 @@ auto ShadowManager::TryGetShadowInstanceMetadata(
   }
   return conventional_backend_ != nullptr
     ? conventional_backend_->TryGetShadowInstanceMetadata(view_id)
+    : nullptr;
+}
+
+auto ShadowManager::TryGetDirectionalShadowMetadata(
+  const ViewId view_id) const noexcept
+  -> const engine::DirectionalShadowMetadata*
+{
+  if (directional_policy_
+    == oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap) {
+    static_cast<void>(view_id);
+    return nullptr;
+  }
+  return conventional_backend_ != nullptr
+    ? conventional_backend_->TryGetDirectionalShadowMetadata(view_id)
     : nullptr;
 }
 

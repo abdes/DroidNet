@@ -28,7 +28,10 @@
 #include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Passes/AutoExposurePass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowReceiverAnalysisPass.h>
+#include <Oxygen/Renderer/Passes/ConventionalShadowReceiverMaskPass.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugClearPass.h>
 #include <Oxygen/Renderer/Passes/GpuDebugDrawPass.h>
@@ -196,6 +199,12 @@ private:
   std::shared_ptr<engine::TransparentPassConfig> trans_pass_config;
   std::shared_ptr<engine::LightCullingPassConfig> light_culling_pass_config;
   std::shared_ptr<engine::ScreenHzbBuildPassConfig> screen_hzb_pass_config;
+  std::shared_ptr<engine::ConventionalShadowReceiverAnalysisPassConfig>
+    conventional_shadow_receiver_analysis_pass_config;
+  std::shared_ptr<engine::ConventionalShadowReceiverMaskPassConfig>
+    conventional_shadow_receiver_mask_pass_config;
+  std::shared_ptr<engine::ConventionalShadowCasterCullingPassConfig>
+    conventional_shadow_caster_culling_pass_config;
   std::shared_ptr<engine::ToneMapPassConfig> tone_map_pass_config;
   std::shared_ptr<engine::AutoExposurePassConfig> auto_exposure_config;
 
@@ -209,6 +218,12 @@ private:
   std::shared_ptr<engine::TransparentPass> transparent_pass;
   std::shared_ptr<engine::LightCullingPass> light_culling_pass;
   std::shared_ptr<engine::ScreenHzbBuildPass> screen_hzb_pass;
+  std::shared_ptr<engine::ConventionalShadowReceiverAnalysisPass>
+    conventional_shadow_receiver_analysis_pass;
+  std::shared_ptr<engine::ConventionalShadowReceiverMaskPass>
+    conventional_shadow_receiver_mask_pass;
+  std::shared_ptr<engine::ConventionalShadowCasterCullingPass>
+    conventional_shadow_caster_culling_pass;
   std::shared_ptr<engine::ToneMapPass> tone_map_pass;
   std::shared_ptr<engine::AutoExposurePass> auto_exposure_pass;
   std::shared_ptr<engine::GpuDebugClearPass> gpu_debug_clear_pass;
@@ -547,14 +562,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
         }
       }
 
-      if (shadow_raster_pass && shadow_raster_pass_config
-        && shadow_raster_pass_config->depth_texture) {
-        co_await shadow_raster_pass->PrepareResources(rc, rec);
-        co_await shadow_raster_pass->Execute(rc, rec);
-        rc.RegisterPass<engine::ConventionalShadowRasterPass>(
-          shadow_raster_pass.get());
-      }
-
       co_await depth_pass->PrepareResources(rc, rec);
       co_await depth_pass->Execute(rc, rec);
       rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
@@ -578,6 +585,39 @@ auto ForwardPipeline::Impl::RunScenePasses(
         co_await screen_hzb_pass->PrepareResources(rc, rec);
         co_await screen_hzb_pass->Execute(rc, rec);
         rc.RegisterPass<engine::ScreenHzbBuildPass>(screen_hzb_pass.get());
+
+        if (conventional_shadow_receiver_analysis_pass) {
+          co_await conventional_shadow_receiver_analysis_pass->PrepareResources(
+            rc, rec);
+          co_await conventional_shadow_receiver_analysis_pass->Execute(rc, rec);
+          rc.RegisterPass<engine::ConventionalShadowReceiverAnalysisPass>(
+            conventional_shadow_receiver_analysis_pass.get());
+
+          if (conventional_shadow_receiver_mask_pass) {
+            co_await conventional_shadow_receiver_mask_pass->PrepareResources(
+              rc, rec);
+            co_await conventional_shadow_receiver_mask_pass->Execute(rc, rec);
+            rc.RegisterPass<engine::ConventionalShadowReceiverMaskPass>(
+              conventional_shadow_receiver_mask_pass.get());
+
+            if (conventional_shadow_caster_culling_pass) {
+              co_await conventional_shadow_caster_culling_pass
+                ->PrepareResources(rc, rec);
+              co_await conventional_shadow_caster_culling_pass->Execute(
+                rc, rec);
+              rc.RegisterPass<engine::ConventionalShadowCasterCullingPass>(
+                conventional_shadow_caster_culling_pass.get());
+            }
+          }
+        }
+      }
+
+      if (shadow_raster_pass && shadow_raster_pass_config
+        && shadow_raster_pass_config->depth_texture) {
+        co_await shadow_raster_pass->PrepareResources(rc, rec);
+        co_await shadow_raster_pass->Execute(rc, rec);
+        rc.RegisterPass<engine::ConventionalShadowRasterPass>(
+          shadow_raster_pass.get());
       }
     }
   }
@@ -968,6 +1008,18 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
   trans_pass_config = std::make_shared<p::TransparentPassConfig>();
   light_culling_pass_config = std::make_shared<p::LightCullingPassConfig>();
   screen_hzb_pass_config = std::make_shared<p::ScreenHzbBuildPassConfig>();
+  conventional_shadow_receiver_analysis_pass_config
+    = std::make_shared<p::ConventionalShadowReceiverAnalysisPassConfig>();
+  conventional_shadow_receiver_analysis_pass_config->debug_name
+    = "ConventionalShadowReceiverAnalysisPass";
+  conventional_shadow_receiver_mask_pass_config
+    = std::make_shared<p::ConventionalShadowReceiverMaskPassConfig>();
+  conventional_shadow_receiver_mask_pass_config->debug_name
+    = "ConventionalShadowReceiverMaskPass";
+  conventional_shadow_caster_culling_pass_config
+    = std::make_shared<p::ConventionalShadowCasterCullingPassConfig>();
+  conventional_shadow_caster_culling_pass_config->debug_name
+    = "ConventionalShadowCasterCullingPass";
   tone_map_pass_config = std::make_shared<p::ToneMapPassConfig>();
   auto_exposure_config = std::make_shared<p::AutoExposurePassConfig>();
 
@@ -986,6 +1038,15 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
     = std::make_shared<p::LightCullingPass>(gfx_ptr, light_culling_pass_config);
   screen_hzb_pass
     = std::make_shared<p::ScreenHzbBuildPass>(gfx_ptr, screen_hzb_pass_config);
+  conventional_shadow_receiver_analysis_pass
+    = std::make_shared<p::ConventionalShadowReceiverAnalysisPass>(
+      gfx_ptr, conventional_shadow_receiver_analysis_pass_config);
+  conventional_shadow_receiver_mask_pass
+    = std::make_shared<p::ConventionalShadowReceiverMaskPass>(
+      gfx_ptr, conventional_shadow_receiver_mask_pass_config);
+  conventional_shadow_caster_culling_pass
+    = std::make_shared<p::ConventionalShadowCasterCullingPass>(
+      gfx_ptr, conventional_shadow_caster_culling_pass_config);
   tone_map_pass = std::make_shared<p::ToneMapPass>(tone_map_pass_config);
   auto_exposure_pass
     = std::make_shared<p::AutoExposurePass>(gfx_ptr, auto_exposure_config);
