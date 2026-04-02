@@ -35,8 +35,7 @@ auto BuildConventionalShadowDrawRecords(
 
   if (prepared_frame.draw_metadata_bytes.size() % sizeof(DrawMetadata) != 0U) {
     LOG_F(ERROR,
-      "ConventionalShadowDrawRecordBuilder: draw metadata byte count {} is not "
-      "a multiple of DrawMetadata ({})",
+      "Draw metadata byte count {} is not a multiple of DrawMetadata ({})",
       prepared_frame.draw_metadata_bytes.size(), sizeof(DrawMetadata));
     return;
   }
@@ -44,9 +43,7 @@ auto BuildConventionalShadowDrawRecords(
   const auto draw_count
     = prepared_frame.draw_metadata_bytes.size() / sizeof(DrawMetadata);
   if (prepared_frame.draw_bounding_spheres.size() != draw_count) {
-    LOG_F(ERROR,
-      "ConventionalShadowDrawRecordBuilder: draw metadata count {} does not "
-      "match draw-bounds count {}",
+    LOG_F(ERROR, "Draw metadata count {} does not match draw-bounds count {}",
       draw_count, prepared_frame.draw_bounding_spheres.size());
     return;
   }
@@ -57,9 +54,7 @@ auto BuildConventionalShadowDrawRecords(
       continue;
     }
     if (partition.begin > partition.end || partition.end > draw_count) {
-      LOG_F(ERROR,
-        "ConventionalShadowDrawRecordBuilder: invalid partition range "
-        "[{}, {}) for draw_count {}",
+      LOG_F(ERROR, "Invalid partition range [{}, {}) for draw_count {}",
         partition.begin, partition.end, draw_count);
       out_records.clear();
       return;

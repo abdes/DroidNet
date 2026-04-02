@@ -154,8 +154,7 @@ auto ConventionalShadowRasterPass::DoExecute(
   ResetCurrentOutputState();
   const auto shadow_manager = Context().GetRenderer().GetShadowManager();
   if (!shadow_manager) {
-    LOG_F(INFO,
-      "ConventionalShadowRasterPass: skipped for view {} (no ShadowManager)",
+    LOG_F(INFO, "Skipped view {} because no ShadowManager is available",
       Context().current_view.view_id.get());
     Context().RegisterPass(this);
     co_return;
@@ -165,9 +164,7 @@ auto ConventionalShadowRasterPass::DoExecute(
     = shadow_manager->TryGetRasterRenderPlan(Context().current_view.view_id);
   if (raster_plan == nullptr || raster_plan->jobs.empty()
     || raster_plan->depth_texture == nullptr) {
-    LOG_F(INFO,
-      "ConventionalShadowRasterPass: skipped for view {} "
-      "(published={} jobs={} depth_texture={})",
+    LOG_F(INFO, "Skipped view {} (published={} jobs={} depth_texture={})",
       Context().current_view.view_id.get(), raster_plan != nullptr,
       raster_plan ? raster_plan->jobs.size() : 0U,
       raster_plan && raster_plan->depth_texture != nullptr);
@@ -179,8 +176,7 @@ auto ConventionalShadowRasterPass::DoExecute(
   if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()
     || psf->partitions.empty()) {
     LOG_F(INFO,
-      "ConventionalShadowRasterPass: skipped for view {} "
-      "(prepared={} valid={} draw_bytes={} partitions={})",
+      "Skipped view {} (prepared={} valid={} draw_bytes={} partitions={})",
       Context().current_view.view_id.get(), psf != nullptr,
       psf ? psf->IsValid() : false, psf ? psf->draw_metadata_bytes.size() : 0U,
       psf ? psf->partitions.size() : 0U);
@@ -192,8 +188,8 @@ auto ConventionalShadowRasterPass::DoExecute(
     = Context().GetPass<ConventionalShadowCasterCullingPass>();
   if (caster_culling_pass == nullptr) {
     LOG_F(WARNING,
-      "ConventionalShadowRasterPass: skipped for view {} because "
-      "ConventionalShadowCasterCullingPass is unavailable",
+      "Skipped view {} because ConventionalShadowCasterCullingPass is "
+      "unavailable",
       Context().current_view.view_id.get());
     Context().RegisterPass(this);
     co_return;
@@ -203,8 +199,8 @@ auto ConventionalShadowRasterPass::DoExecute(
     = caster_culling_pass->GetCurrentOutput(Context().current_view.view_id);
   if (!culling_output.available || culling_output.job_count == 0U) {
     LOG_F(WARNING,
-      "ConventionalShadowRasterPass: skipped for view {} because counted "
-      "indirect culling output is unavailable (available={} jobs={})",
+      "Skipped view {} because counted indirect culling output is unavailable "
+      "(available={} jobs={})",
       Context().current_view.view_id.get(), culling_output.available,
       culling_output.job_count);
     Context().RegisterPass(this);
@@ -222,8 +218,7 @@ auto ConventionalShadowRasterPass::DoExecute(
       Context().current_view.view_id);
   if (indirect_partitions.empty()) {
     LOG_F(WARNING,
-      "ConventionalShadowRasterPass: skipped for view {} because counted "
-      "indirect partitions are unavailable",
+      "Skipped view {} because counted indirect partitions are unavailable",
       Context().current_view.view_id.get());
     Context().RegisterPass(this);
     co_return;

@@ -1,3 +1,12 @@
+<#
+.SYNOPSIS
+Runs one RenderDoc UI analysis script against a capture and validates its report.
+
+.DESCRIPTION
+Launches qrenderdoc with a UI-python script, serializes concurrent analysis
+through a process-wide mutex, and fails if the generated report is missing,
+stale, empty, or reports an exception.
+#>
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
@@ -103,7 +112,7 @@ function Restore-ScopedProcessEnvironmentVariables {
   }
 }
 
-function Acquire-RenderDocAnalysisLock {
+function Enter-RenderDocAnalysisLock {
   param(
     [Parameter()]
     [int]$TimeoutMinutes = 60
@@ -133,7 +142,7 @@ function Acquire-RenderDocAnalysisLock {
   }
 }
 
-function Release-RenderDocAnalysisLock {
+function Exit-RenderDocAnalysisLock {
   param(
     [Parameter(Mandatory = $true)]
     $Lock
@@ -169,7 +178,7 @@ if (-not (Test-Path -LiteralPath $uiScriptFullPath)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ConfigRoot)) {
-  $ConfigRoot = Join-Path $repoRoot 'out\build-ninja\analysis\renderdoc-automation-config'
+  $ConfigRoot = Join-Path $repoRoot 'out\build-ninja\analysis\csm\renderdoc-automation-config'
 }
 
 $configRootFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $ConfigRoot
@@ -185,7 +194,7 @@ $environmentSnapshot = @{}
 $analysisLock = $null
 
 try {
-  $analysisLock = Acquire-RenderDocAnalysisLock
+  $analysisLock = Enter-RenderDocAnalysisLock
 
   if (Test-Path -LiteralPath $reportFullPath) {
     Remove-Item -LiteralPath $reportFullPath -Force
@@ -253,7 +262,7 @@ try {
   }
 } finally {
   Restore-ScopedProcessEnvironmentVariables -OriginalValues $environmentSnapshot
-  Release-RenderDocAnalysisLock -Lock $analysisLock
+  Exit-RenderDocAnalysisLock -Lock $analysisLock
 }
 
 $global:LASTEXITCODE = 0

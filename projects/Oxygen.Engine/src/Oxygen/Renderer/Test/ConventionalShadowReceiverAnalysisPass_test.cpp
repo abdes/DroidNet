@@ -80,6 +80,7 @@ using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
 using oxygen::renderer::ConventionalShadowReceiverAnalysis;
+using oxygen::renderer::ConventionalShadowReceiverAnalysisJob;
 using oxygen::renderer::ConventionalShadowReceiverAnalysisPlan;
 using oxygen::renderer::LightManager;
 using oxygen::scene::DirectionalLight;
@@ -329,6 +330,16 @@ protected:
     return stream.str();
   }
 
+  [[nodiscard]] static auto JobContainsEyeDepth(const std::size_t job_index,
+    const ConventionalShadowReceiverAnalysisJob& job, const float eye_depth)
+    -> bool
+  {
+    const auto split_begin = job.split_and_full_depth_range.x;
+    const auto split_end = job.split_and_full_depth_range.y;
+    return eye_depth <= split_end
+      && (job_index == 0U ? eye_depth >= split_begin : eye_depth > split_begin);
+  }
+
   [[nodiscard]] static auto DescribeAnalysisRecords(
     const std::span<const ConventionalShadowReceiverAnalysis> records)
     -> std::string
@@ -435,12 +446,16 @@ NOLINT_TEST_F(ConventionalShadowReceiverAnalysisPassTest,
   const auto* plan = shadow_manager->TryGetReceiverAnalysisPlan(kTestViewId);
   ASSERT_NE(plan, nullptr);
   ASSERT_FALSE(plan->jobs.empty()) << "receiver-analysis plan is empty";
-  const auto covers_seeded_depths
-    = std::any_of(plan->jobs.begin(), plan->jobs.end(), [](const auto& job) {
-        return job.split_and_full_depth_range.x <= 1.25F
-          && job.split_and_full_depth_range.y >= 3.5F;
-      });
-  ASSERT_TRUE(covers_seeded_depths) << DescribeJobPlan(*plan);
+  auto covers_near_seeded_depth = false;
+  auto covers_mid_seeded_depth = false;
+  for (std::size_t job_index = 0U; job_index < plan->jobs.size(); ++job_index) {
+    covers_near_seeded_depth = covers_near_seeded_depth
+      || JobContainsEyeDepth(job_index, plan->jobs[job_index], 1.25F);
+    covers_mid_seeded_depth = covers_mid_seeded_depth
+      || JobContainsEyeDepth(job_index, plan->jobs[job_index], 3.50F);
+  }
+  ASSERT_TRUE(covers_near_seeded_depth) << DescribeJobPlan(*plan);
+  ASSERT_TRUE(covers_mid_seeded_depth) << DescribeJobPlan(*plan);
 
   auto hzb_pass
     = ScreenHzbBuildPass(oxygen::observer_ptr<oxygen::Graphics>(&Backend()),
@@ -510,6 +525,22 @@ NOLINT_TEST_F(ConventionalShadowReceiverAnalysisPassTest,
   auto records = std::vector<ConventionalShadowReceiverAnalysis>(
     bytes->size() / sizeof(ConventionalShadowReceiverAnalysis));
   std::memcpy(records.data(), bytes->data(), bytes->size());
+  ASSERT_EQ(records.size(), plan->jobs.size());
+
+  auto near_depth_sampled = false;
+  auto mid_depth_sampled = false;
+  for (std::size_t job_index = 0U; job_index < records.size(); ++job_index) {
+    if (records[job_index].sample_count == 0U) {
+      continue;
+    }
+
+    near_depth_sampled = near_depth_sampled
+      || JobContainsEyeDepth(job_index, plan->jobs[job_index], 1.25F);
+    mid_depth_sampled = mid_depth_sampled
+      || JobContainsEyeDepth(job_index, plan->jobs[job_index], 3.50F);
+  }
+  ASSERT_TRUE(near_depth_sampled) << DescribeJobPlan(*plan);
+  ASSERT_TRUE(mid_depth_sampled) << DescribeJobPlan(*plan);
 
   const auto sampled_record = std::find_if(records.begin(), records.end(),
     [](const ConventionalShadowReceiverAnalysis& record) {
