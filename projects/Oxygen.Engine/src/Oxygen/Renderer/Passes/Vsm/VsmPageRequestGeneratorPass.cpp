@@ -235,9 +235,9 @@ struct VsmPageRequestGeneratorPass::Impl {
       projection_mapped_ptr, "Failed to map VSM projection buffer");
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto srv_handle = allocator.AllocateBindless(
-      oxygen::bindless::generated::kGlobalSrvDomain,
-      ResourceViewType::kStructuredBuffer_SRV);
+    auto srv_handle
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM projection SRV");
     projection_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -321,9 +321,9 @@ struct VsmPageRequestGeneratorPass::Impl {
     registry.RegisterView(
       *request_flags_buffer, std::move(uav_handle), uav_desc);
 
-    auto srv_handle = allocator.AllocateBindless(
-      oxygen::bindless::generated::kGlobalSrvDomain,
-      ResourceViewType::kStructuredBuffer_SRV);
+    auto srv_handle
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM request flag SRV");
     request_flags_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
