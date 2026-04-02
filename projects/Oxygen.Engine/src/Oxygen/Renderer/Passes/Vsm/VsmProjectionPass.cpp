@@ -399,9 +399,9 @@ struct VsmProjectionPass::Impl {
       "Failed to map VSM projection upload buffer");
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto srv_handle = allocator.AllocateBindless(
-      oxygen::bindless::generated::kGlobalSrvDomain,
-      ResourceViewType::kStructuredBuffer_SRV);
+    auto srv_handle
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM projection SRV");
     projection_buffer_srv_index = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -507,12 +507,14 @@ struct VsmProjectionPass::Impl {
       = make_mask_texture(".DirectionalShadowMask");
     state.shadow_mask_texture = make_mask_texture(".ShadowMask");
 
-    state.directional_shadow_mask_srv_index = EnsureTextureViewIndex(
-      *state.directional_shadow_mask_texture, ShadowMaskSrvDesc());
+    state.directional_shadow_mask_srv_index
+      = EnsureBindlessTextureSrvIndex(*state.directional_shadow_mask_texture,
+        ShadowMaskSrvDesc(), oxygen::bindless::generated::kGlobalSrvDomain);
     state.directional_shadow_mask_uav_index = EnsureTextureViewIndex(
       *state.directional_shadow_mask_texture, ShadowMaskUavDesc());
     state.shadow_mask_srv_index
-      = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskSrvDesc());
+      = EnsureBindlessTextureSrvIndex(*state.shadow_mask_texture,
+        ShadowMaskSrvDesc(), oxygen::bindless::generated::kGlobalSrvDomain);
     state.shadow_mask_uav_index
       = EnsureTextureViewIndex(*state.shadow_mask_texture, ShadowMaskUavDesc());
     state.width = width;
@@ -559,6 +561,30 @@ struct VsmProjectionPass::Impl {
     const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
     auto view = registry.RegisterView(texture, std::move(handle), desc);
     CHECK_F(view->IsValid(), "Failed to register VSM projection texture view");
+    return shader_visible_index;
+  }
+
+  auto EnsureBindlessTextureSrvIndex(Texture& texture,
+    const graphics::TextureViewDescription& desc,
+    const bindless::DomainToken domain) -> ShaderVisibleIndex
+  {
+    auto& registry = gfx->GetResourceRegistry();
+    if (!registry.Contains(texture)) {
+      registry.Register(std::shared_ptr<Texture>(&texture, [](Texture*) { }));
+    }
+    if (const auto existing = registry.FindShaderVisibleIndex(texture, desc);
+      existing.has_value()) {
+      return *existing;
+    }
+
+    auto& allocator = gfx->GetDescriptorAllocator();
+    auto handle = allocator.AllocateBindless(domain, desc.view_type);
+    CHECK_F(handle.IsValid(),
+      "Failed to allocate VSM projection bindless texture SRV");
+    const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
+    auto view = registry.RegisterView(texture, std::move(handle), desc);
+    CHECK_F(view->IsValid(),
+      "Failed to register VSM projection bindless texture SRV");
     return shader_visible_index;
   }
 
