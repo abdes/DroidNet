@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-02 21:10:18
+// Generated: 2026-04-02 21:33:20
 
 #pragma once
 
@@ -22,10 +22,12 @@
 namespace oxygen::bindless::generated {
 
 namespace detail {
-  using DomainTokenBase
-    = NamedType<uint16_t, struct DomainTokenTag, Comparable, Hashable>;
-  using IndexSpaceTokenBase
-    = NamedType<uint16_t, struct IndexSpaceTokenTag, Comparable, Hashable>;
+using DomainTokenBase = NamedType<uint16_t, struct DomainTokenTag,
+  Comparable,
+  Hashable>;
+using IndexSpaceTokenBase = NamedType<uint16_t, struct IndexSpaceTokenTag,
+  Comparable,
+  Hashable>;
 } // namespace detail
 
 struct DomainToken : detail::DomainTokenBase {
@@ -81,13 +83,12 @@ struct DomainDesc {
 inline constexpr IndexSpaceToken kSrvUavCbvIndexSpace { 0U };
 inline constexpr IndexSpaceToken kSamplerIndexSpace { 1U };
 
-inline constexpr std::array<IndexSpaceDesc, 2> kIndexSpaceTable = { {
-  IndexSpaceDesc { kSrvUavCbvIndexSpace, "srv_uav_cbv" },
-  IndexSpaceDesc { kSamplerIndexSpace, "sampler" },
-} };
+inline constexpr std::array<IndexSpaceDesc, 2> kIndexSpaceTable = {{
+  IndexSpaceDesc{ kSrvUavCbvIndexSpace, "srv_uav_cbv" },
+  IndexSpaceDesc{ kSamplerIndexSpace, "sampler" },
+}};
 
-// Unified global bindless table sized for production large geometry-heavy
-// scenes
+// Unified global bindless table sized for production large geometry-heavy scenes
 inline constexpr DomainToken kGlobalSrvDomain { 0U };
 inline constexpr uint32_t kGlobalSrvShaderIndexBase = 1U;
 inline constexpr uint32_t kGlobalSrvCapacity = 32768U;
@@ -107,21 +108,17 @@ inline constexpr DomainToken kSamplersDomain { 3U };
 inline constexpr uint32_t kSamplersShaderIndexBase = 0U;
 inline constexpr uint32_t kSamplersCapacity = 256U;
 
-inline constexpr std::array<DomainDesc, 4> kDomainTable = { {
-  DomainDesc { kGlobalSrvDomain, "srv_global", "GlobalSRV",
-    kSrvUavCbvIndexSpace, kGlobalSrvShaderIndexBase, kGlobalSrvCapacity,
-    "buffer_srv" },
-  DomainDesc { kMaterialsDomain, "materials", "Materials", kSrvUavCbvIndexSpace,
-    kMaterialsShaderIndexBase, kMaterialsCapacity, "buffer_srv" },
-  DomainDesc { kTexturesDomain, "textures", "Textures", kSrvUavCbvIndexSpace,
-    kTexturesShaderIndexBase, kTexturesCapacity, "texture_srv" },
-  DomainDesc { kSamplersDomain, "samplers", "Samplers", kSamplerIndexSpace,
-    kSamplersShaderIndexBase, kSamplersCapacity, "sampler" },
-} };
+inline constexpr std::array<DomainDesc, 4> kDomainTable = {{
+  DomainDesc{ kGlobalSrvDomain, "srv_global", "GlobalSRV", kSrvUavCbvIndexSpace, kGlobalSrvShaderIndexBase, kGlobalSrvCapacity, "buffer_srv" },
+  DomainDesc{ kMaterialsDomain, "materials", "Materials", kSrvUavCbvIndexSpace, kMaterialsShaderIndexBase, kMaterialsCapacity, "buffer_srv" },
+  DomainDesc{ kTexturesDomain, "textures", "Textures", kSrvUavCbvIndexSpace, kTexturesShaderIndexBase, kTexturesCapacity, "texture_srv" },
+  DomainDesc{ kSamplersDomain, "samplers", "Samplers", kSamplerIndexSpace, kSamplersShaderIndexBase, kSamplersCapacity, "sampler" },
+}};
 
 inline constexpr auto kIndexSpaceCount
   = static_cast<uint32_t>(kIndexSpaceTable.size());
-inline constexpr auto kDomainCount = static_cast<uint32_t>(kDomainTable.size());
+inline constexpr auto kDomainCount
+  = static_cast<uint32_t>(kDomainTable.size());
 
 [[nodiscard]] constexpr auto TryGetIndexSpaceDesc(
   IndexSpaceToken token) noexcept -> const IndexSpaceDesc*
@@ -131,8 +128,8 @@ inline constexpr auto kDomainCount = static_cast<uint32_t>(kDomainTable.size());
     : nullptr;
 }
 
-[[nodiscard]] constexpr auto TryGetDomainDesc(DomainToken token) noexcept
-  -> const DomainDesc*
+[[nodiscard]] constexpr auto TryGetDomainDesc(
+  DomainToken token) noexcept -> const DomainDesc*
 {
   return token.IsValid() && token.get() < kDomainTable.size()
     ? &kDomainTable[token.get()]

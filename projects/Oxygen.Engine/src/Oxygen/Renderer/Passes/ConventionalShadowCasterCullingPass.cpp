@@ -17,7 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -144,13 +144,16 @@ namespace {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetPipelineState(pso_desc);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
       partition_slot, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -429,7 +432,7 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePassConstantsBuffer()
   CHECK_NOTNULL_F(pass_constants_mapped_ptr,
     "Failed to map conventional caster-culling constants buffer");
 
-  auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+  auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
     graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(cbv_handle.IsValid(),
     "Failed to allocate conventional caster-culling constants CBV");
@@ -510,7 +513,7 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsureViewResources(
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
 
-  auto job_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+  auto job_srv = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
     graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(job_srv.IsValid(),
     "Failed to allocate conventional caster-culling job SRV");
@@ -521,7 +524,7 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsureViewResources(
       sizeof(renderer::ConventionalShadowReceiverAnalysisJob)));
 
   auto partition_srv
-    = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(partition_srv.IsValid(),
     "Failed to allocate conventional caster-culling partition SRV");
@@ -624,8 +627,9 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
 
-  auto command_uav = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto command_uav
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(command_uav.IsValid(),
     "Failed to allocate conventional caster-culling command UAV");
   state.command_uav_index = allocator.GetShaderVisibleIndex(command_uav);
@@ -633,8 +637,9 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV,
       command_bytes, sizeof(ConventionalShadowIndirectDrawCommand)));
 
-  auto command_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto command_srv
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(command_srv.IsValid(),
     "Failed to allocate conventional caster-culling command SRV");
   state.command_srv_index = allocator.GetShaderVisibleIndex(command_srv);
@@ -642,8 +647,9 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_SRV,
       command_bytes, sizeof(ConventionalShadowIndirectDrawCommand)));
 
-  auto count_uav = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto count_uav
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(count_uav.IsValid(),
     "Failed to allocate conventional caster-culling count UAV");
   state.count_uav_index = allocator.GetShaderVisibleIndex(count_uav);
@@ -651,8 +657,9 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
     MakeStructuredViewDesc(ResourceViewType::kStructuredBuffer_UAV, count_bytes,
       sizeof(std::uint32_t)));
 
-  auto count_srv = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto count_srv
+    = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   CHECK_F(count_srv.IsValid(),
     "Failed to allocate conventional caster-culling count SRV");
   state.count_srv_index = allocator.GetShaderVisibleIndex(count_srv);
