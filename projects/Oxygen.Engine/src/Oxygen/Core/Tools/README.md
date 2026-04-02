@@ -30,7 +30,7 @@ consistency between CPU and GPU code when accessing bindless resources.
 
 ```powershell
 # Install and generate headers (recommended):
-cmake --build --preset=windows-debug --target generate_bindless_headers
+cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 
 # Or run directly (requires manual setup):
 python -m bindless_codegen.cli `

@@ -39,13 +39,16 @@ def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
     if candidate.exists():
         return candidate
     # repository layout fallbacks
-    fallback_candidates = (
-        sdir.parents[1] / "Meta" / "Bindless.schema.json",
-        sdir.parents[1] / "Bindless" / "Bindless.schema.json",
-    )
-    for fallback in fallback_candidates:
-        if fallback.exists():
-            return fallback
+    for parent in sdir.parents:
+        fallback_candidates = (
+            parent / "Meta" / "Bindless.schema.json",
+            parent / "Bindless" / "Bindless.schema.json",
+            parent / "src" / "Oxygen" / "Core" / "Meta" / "Bindless.schema.json",
+            parent / "src" / "Oxygen" / "Core" / "Bindless" / "Bindless.schema.json",
+        )
+        for fallback in fallback_candidates:
+            if fallback.exists():
+                return fallback
     return None
 
 
@@ -58,7 +61,7 @@ def _as_list(val: Any) -> List[Any]:
 
 
 def _normalize_visibility(vis: Any) -> List[str]:
-    """Normalize visibility to canonical D3D12 tokens and order."""
+    """Normalize D3D12 visibility to canonical tokens and order."""
     vis_map = {
         "VS": "VERTEX",
         "HS": "HULL",
@@ -87,38 +90,80 @@ def _normalize_visibility(vis: Any) -> List[str]:
     return [v for v in canonical_order if v in present]
 
 
+def _normalize_vulkan_stages(stages: Any) -> List[str]:
+    """Normalize Vulkan pipeline stage flags to a canonical order."""
+    stage_map = {
+        "ALL": "ALL",
+        "VERTEX": "VERTEX",
+        "TESSELLATION_CONTROL": "TESSELLATION_CONTROL",
+        "TESSELLATION_EVALUATION": "TESSELLATION_EVALUATION",
+        "GEOMETRY": "GEOMETRY",
+        "FRAGMENT": "FRAGMENT",
+        "COMPUTE": "COMPUTE",
+    }
+    canonical_order = [
+        "ALL",
+        "VERTEX",
+        "TESSELLATION_CONTROL",
+        "TESSELLATION_EVALUATION",
+        "GEOMETRY",
+        "FRAGMENT",
+        "COMPUTE",
+    ]
+    items = _as_list(stages)
+    norm = []
+    for stage in items:
+        if not isinstance(stage, str):
+            raise ValueError(f"Invalid Vulkan stage entry: {stage}")
+        up = stage.upper()
+        if up not in stage_map:
+            raise ValueError(f"Unsupported Vulkan stage '{stage}'")
+        norm.append(stage_map[up])
+    present = {v: True for v in norm}
+    return [v for v in canonical_order if v in present]
+
+
 def normalize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
     """One-pass normalization of doc in-place and return it.
 
-    - domain.kind -> uppercase SRV/CBV/UAV/SAMPLER
-    - root_signature.visibility -> canonical list in D3D12 order
-    - normalize domain references on parameters/ranges to lists
+    - d3d12 root signature visibility -> canonical list in D3D12 order
+    - vulkan pipeline stages -> canonical list in Vulkan stage order
+    - d3d12 strategy kinds -> uppercase tokens
+    - abi shader access class -> lowercase token
     """
-    # domains: best-effort kind normalization (don't raise here; schema handles constraints)
-    allowed = {"SRV", "CBV", "UAV", "SAMPLER"}
-    lower_map = {k.lower(): k for k in allowed}
-    for d in doc.get("domains", []) or []:
-        k = d.get("kind")
-        if isinstance(k, str):
-            k_low = k.lower()
-            if k_low in lower_map:
-                d["kind"] = lower_map[k_low]
+    abi = doc.get("abi") or {}
+    for domain in abi.get("domains", []) or []:
+        access_class = domain.get("shader_access_class")
+        if isinstance(access_class, str):
+            domain["shader_access_class"] = access_class.lower()
 
-    # root_signature
-    rs = doc.get("root_signature", []) or []
-    for idx, param in enumerate(rs):
-        # visibility is required by schema but normalize defensively here
+    backends = doc.get("backends") or {}
+    d3d12 = backends.get("d3d12") or {}
+    d3d12_strategy = d3d12.get("strategy") or {}
+
+    for heap in d3d12_strategy.get("heaps", []) or []:
+        heap_type = heap.get("type")
+        if isinstance(heap_type, str):
+            heap["type"] = heap_type.upper()
+
+    for table in d3d12_strategy.get("tables", []) or []:
+        descriptor_kind = table.get("descriptor_kind")
+        if isinstance(descriptor_kind, str):
+            table["descriptor_kind"] = descriptor_kind.upper()
+
+    for param in d3d12.get("root_signature", []) or []:
         if "visibility" in param:
             param["visibility"] = _normalize_visibility(param.get("visibility"))
-        # normalize param-level domains property to list
-        if "domains" in param:
-            param["domains"] = _as_list(param.get("domains"))
-        # normalize ranges[].domain to list
-        if param.get("type") == "descriptor_table":
-            ranges = param.get("ranges", []) or []
-            for r in ranges:
-                if "domain" in r:
-                    r["domain"] = _as_list(r.get("domain"))
+
+    vulkan = backends.get("vulkan") or {}
+    for binding in ((vulkan.get("strategy") or {}).get("bindings", []) or []):
+        descriptor_type = binding.get("descriptor_type")
+        if isinstance(descriptor_type, str):
+            binding["descriptor_type"] = descriptor_type.upper()
+
+    for entry in vulkan.get("pipeline_layout", []) or []:
+        if entry.get("type") == "push_constants" and "stages" in entry:
+            entry["stages"] = _normalize_vulkan_stages(entry.get("stages"))
 
     return doc
 

@@ -30,13 +30,18 @@ From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 **YAML Input:**
 
 ```yaml
-domains:
-  - id: textures
-    name: "Textures"
-    kind: SRV
-    domain_base: 5096
-    capacity: 65536
-    comment: "Texture SRV array"
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: textures
+      name: "Textures"
+      index_space: srv_uav_cbv
+      shader_index_base: 5096
+      capacity: 65536
+      shader_access_class: texture_srv
+      view_types: [Texture_SRV]
+      comment: "Texture SRV array"
 ```
 
 **Generated C++ Output (Constants):**
@@ -60,16 +65,16 @@ static const uint K_TEXTURES_CAPACITY = 65536;
 ```cpp
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.0.0
-// Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.0.0
+// Source-Version: 2.0.0
+// Schema-Version: 2.0.0
+// Tool: BindlessCodeGen 1.2.2
 // Generated: 2025-08-17 20:52:23
 
 namespace oxygen::engine::binding {
   static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
-  static constexpr const char kBindlessSourceVersion[] = "1.0.0";
-  static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
-  static constexpr const char kBindlessToolVersion[] = "1.0.0";
+  static constexpr const char kBindlessSourceVersion[] = "2.0.0";
+  static constexpr const char kBindlessSchemaVersion[] = "2.0.0";
+  static constexpr const char kBindlessToolVersion[] = "1.2.2";
   static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 20:52:23";
 }
 ```
@@ -123,7 +128,7 @@ This target:
 **Generate Bindless Outputs (Recommended):**
 
 ```powershell
-cmake --build --preset=windows-debug --target generate_bindless_headers
+cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 ```
 
 This target:
@@ -135,7 +140,7 @@ This target:
 
 ### Compile-check (header validation)
 
-When you build the `generate_bindless_headers` target, the tool also runs a
+When you build the `oxygen-core_bindless_gen` target, the tool also runs a
 small compile-only check that includes the generated headers (kept under the
 tool). This ensures the generated C++ headers remain syntactically and
 semantically valid for the engine build. The compile-check is implemented as
@@ -144,14 +149,14 @@ tool and will fail the generation step if compilation of the generated
 headers fails.
 
 If you prefer to run generation without running the compile-check (for a
-one-off quick generation), build only the `generate_bindless_headers` files by
+one-off quick generation), build only the generated files by
 invoking the Python CLI directly rather than the CMake target, or adjust CMake
 configuration in environments where the check should be skipped.
 
 Example (build generation and compile-check via CMake):
 
 ```powershell
-cmake --build --preset=windows-debug --target generate_bindless_headers
+cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 ```
 
 ## Requirements
@@ -268,44 +273,58 @@ source directory to your Python analysis paths. The repository includes a
 
 ```yaml
 meta:
-  version: "1.0.0"          # Spec version (from schema)
-  description: "Description of the binding slots"
+  version: "2.0.0"
+  description: "Description of the bindless ABI"
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: domain_id           # Unique identifier
-    name: "DisplayName"     # Human-readable name
-    kind: SRV|CBV|SAMPLER|UAV # Resource type (enum)
-    register: t0|b0|s0|u0   # HLSL register (optional)
-    space: space0           # Register space token (optional)
-    domain_base: 0          # Base index in the domain
-    capacity: 1000          # Maximum number of resources
-    comment: "Description"  # Documentation
-symbols:
-  SymbolName:
-    domain: domain_id       # Reference to domain
-    comment: "Description"
-  ConstantName:
-    value: invalid_index    # Direct value assignment
-    comment: "Description"
-root_signature:
-  - type: descriptor_table
-    name: GlobalSRVTable
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [domain_id] # Or a single string
-        base_shader_register: t0
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+    - id: sampler
+  domains:
+    - id: domain_id
+      name: "DisplayName"
+      index_space: srv_uav_cbv
+      shader_index_base: 1
+      capacity: 1000
+      shader_access_class: buffer_srv|buffer_uav|texture_srv|texture_uav|constant_buffer|sampler|ray_tracing_accel_structure_srv
+      view_types: [StructuredBuffer_SRV]
+      comment: "Description"
+backends:
+  d3d12:
+    strategy:
+      heaps: [...]
+      tables: [...]
+      domain_realizations: [...]
+    root_signature:
+      - type: descriptor_table
+        id: GlobalSRVTable
+        table: GlobalSRVTable
+        index: 0
+        visibility: ALL
+      - type: cbv
+        id: SceneConstants
+        index: 1
+        shader_register: b1
         register_space: space0
-        num_descriptors: unbounded
-  - type: cbv
-    name: SceneConstants
-    index: 1
-    shader_register: b1
-    register_space: space0
-    visibility: ALL
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets: [...]
+      bindings: [...]
+      domain_realizations: [...]
+    pipeline_layout:
+      - type: descriptor_set
+        id: BindlessMain
+        set_ref: bindless_main
 ```
+
+Notes:
+
+- ABI domain overlap is validated per `index_space`, not globally across
+  unrelated spaces such as SRV/UAV/CBV versus SAMPLER.
+- Root CBVs and root constants are backend realization data, not bindless
+  domains.
 
 ### D3D12 Heaps Strategy JSON
 

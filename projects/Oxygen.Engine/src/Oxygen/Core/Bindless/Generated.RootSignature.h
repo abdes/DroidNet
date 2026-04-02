@@ -7,10 +7,10 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.1.0
-// Schema-Version: 1.0.1
+// Source-Version: 2.0.0
+// Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 17:33:12
+// Generated: 2026-04-02 13:22:58
 
 #pragma once
 
@@ -32,13 +32,13 @@ enum class RootParam : uint32_t {
 };
 
 // Root constants counts (32-bit values)
-// Root constants at b2, space0 (2x32-bit).
-// - DWORD0: g_DrawIndex (per-draw index into DrawMetadata).
-// - DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless
-//   index for pass-level constants).
 static constexpr uint32_t kRootConstantsConstantsCount = 2U;
 
 // Register/space bindings (for validation or RS construction)
+static constexpr uint32_t kBindlessSrvTableRegister = 0u; // 't0'
+static constexpr uint32_t kBindlessSrvTableSpace = 0u; // 'space0'
+static constexpr uint32_t kSamplerTableRegister = 0u; // 's0'
+static constexpr uint32_t kSamplerTableSpace = 0u; // 'space0'
 static constexpr uint32_t kViewConstantsRegister = 1u; // 'b1'
 static constexpr uint32_t kViewConstantsSpace = 0u; // 'space0'
 static constexpr uint32_t kRootConstantsRegister = 2u; // 'b2'
@@ -49,7 +49,7 @@ static constexpr uint32_t kRootConstantsSpace = 0u; // 'space0'
 // Root parameter runtime descriptors (C++20 idiomatic)
 enum class RootParamKind : uint8_t { DescriptorTable = 0, CBV = 1, RootConstants = 2 };
 
-enum class RangeType : uint8_t { SRV = 0, Sampler = 1, UAV = 2 };
+enum class RangeType : uint8_t { SRV = 0, Sampler = 1, UAV = 2, CBV = 3 };
 
 struct RootParamRange {
   RangeType range_type;
