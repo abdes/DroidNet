@@ -141,7 +141,9 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
         Texture2D<float> depth_tex = ResourceDescriptorHeap[pass.depth_srv_index];
         const int2 pixel = int2(input.position.xy);
         const float scene_depth = depth_tex.Load(int3(pixel, 0)).r;
-        if (ndc_depth > scene_depth) {
+        // Scene depth uses reversed-Z: larger values are closer to the camera.
+        // Discard the grid only when already-populated scene depth is nearer.
+        if (scene_depth > ndc_depth) {
             discard;
         }
     }
