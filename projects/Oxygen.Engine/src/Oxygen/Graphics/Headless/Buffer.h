@@ -126,14 +126,14 @@ protected:
   OXGN_HDLS_NDAPI auto DoUnMap() noexcept -> void override;
 
   [[nodiscard]] auto CreateConstantBufferView(
-    const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-    -> NativeView override;
+    const DescriptorAllocationHandle& view_handle,
+    const BufferRange& range = {}) const -> NativeView override;
   [[nodiscard]] auto CreateShaderResourceView(
-    const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeView override;
+    const DescriptorAllocationHandle& view_handle, Format format,
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeView override;
+    const DescriptorAllocationHandle& view_handle, Format format,
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
 
 private:
   BufferDesc desc_ {};

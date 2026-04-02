@@ -26,7 +26,7 @@ NOLINT_TEST(HeadlessBindless, AllocateRelease)
   const auto type = ResourceViewType::kShaderResourceView;
   const auto vis = DescriptorVisibility::kShaderVisible;
 
-  std::vector<DescriptorHandle> handles;
+  std::vector<DescriptorAllocationHandle> handles;
   for (int i = 0; i < 10; ++i) {
     auto h = alloc->Allocate(type, vis);
     EXPECT_TRUE(h.IsValid());

@@ -2165,6 +2165,159 @@ namespace {
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportTest,
+    ConcurrentSidecarImportsKeepDistinctParamsAcrossScenes)
+  {
+    using data::loose_cooked::FileKind;
+    using data::pak::scripting::ScriptingComponentRecord;
+    using data::pak::scripting::ScriptParamRecord;
+    using data::pak::scripting::ScriptSlotRecord;
+
+    auto config = AsyncImportService::Config {};
+    config.thread_pool_size = 2;
+    config.max_in_flight_jobs = 2;
+    auto service = ScopedImportService(config);
+
+    const auto cooked_root = MakeTempCookedRoot(
+      "script_sidecar_multiscene_distinct_params_parallel");
+    const auto model_path = ModelPath();
+    ASSERT_TRUE(std::filesystem::exists(model_path));
+
+    const auto input_dir = cooked_root / "input";
+    std::filesystem::create_directories(input_dir);
+    const auto scene_a_source = input_dir / "scene_a.glb";
+    const auto scene_b_source = input_dir / "scene_b.glb";
+    std::filesystem::copy_file(model_path, scene_a_source);
+    std::filesystem::copy_file(model_path, scene_b_source);
+
+    const auto script_source = input_dir / "rotate_shared.luau";
+    WriteTextFile(script_source, "return 1");
+
+    ASSERT_TRUE(SubmitAndWait(
+      service.Service(), MakeSceneRequest(scene_a_source, cooked_root))
+        .success);
+    ASSERT_TRUE(SubmitAndWait(
+      service.Service(), MakeSceneRequest(scene_b_source, cooked_root))
+        .success);
+    ASSERT_TRUE(SubmitAndWait(service.Service(),
+      MakeScriptRequest(
+        script_source, cooked_root, ScriptStorageMode::kExternal, false))
+        .success);
+
+    const auto inspection_before = LoadInspection(cooked_root);
+    const auto script_asset = FindScriptAssetByDescriptorName(
+      inspection_before, "rotate_shared.oscript");
+    ASSERT_TRUE(script_asset.has_value());
+
+    auto scene_a = std::optional<AssetRef> {};
+    auto scene_b = std::optional<AssetRef> {};
+    for (const auto& entry : inspection_before.Assets()) {
+      if (static_cast<AssetType>(entry.asset_type) != AssetType::kScene) {
+        continue;
+      }
+      const auto descriptor_name
+        = std::filesystem::path(entry.descriptor_relpath).filename().string();
+      if (descriptor_name == "scene_a.oscene") {
+        scene_a = AssetRef {
+          .key = entry.key,
+          .virtual_path = entry.virtual_path,
+          .descriptor_relpath = entry.descriptor_relpath,
+          .type = AssetType::kScene,
+        };
+      } else if (descriptor_name == "scene_b.oscene") {
+        scene_b = AssetRef {
+          .key = entry.key,
+          .virtual_path = entry.virtual_path,
+          .descriptor_relpath = entry.descriptor_relpath,
+          .type = AssetType::kScene,
+        };
+      }
+    }
+    ASSERT_TRUE(scene_a.has_value());
+    ASSERT_TRUE(scene_b.has_value());
+
+    const auto sidecar_a = input_dir / "scene_a_parallel.sidescript.json";
+    const auto sidecar_b = input_dir / "scene_b_parallel.sidescript.json";
+    WriteTextFile(sidecar_a,
+      MakeSidecarPayloadWithFloatParam(script_asset->virtual_path, 1.0F));
+    WriteTextFile(sidecar_b,
+      MakeSidecarPayloadWithFloatParam(script_asset->virtual_path, 7.5F));
+
+    auto report_a = ImportReport {};
+    auto report_b = ImportReport {};
+    std::latch done(2);
+
+    const auto submit_a = service.Service().SubmitImport(
+      MakeSidecarRequest(sidecar_a, cooked_root, scene_a->virtual_path),
+      [&report_a, &done](const auto /*job_id*/, const ImportReport& report) {
+        report_a = report;
+        done.count_down();
+      });
+    ASSERT_TRUE(submit_a.has_value());
+
+    const auto submit_b = service.Service().SubmitImport(
+      MakeSidecarRequest(sidecar_b, cooked_root, scene_b->virtual_path),
+      [&report_b, &done](const auto /*job_id*/, const ImportReport& report) {
+        report_b = report;
+        done.count_down();
+      });
+    ASSERT_TRUE(submit_b.has_value());
+
+    done.wait();
+    ASSERT_TRUE(report_a.success);
+    ASSERT_TRUE(report_b.success);
+
+    const auto inspection_after = LoadInspection(cooked_root);
+    const auto table_relpath
+      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsTable);
+    const auto data_relpath
+      = FindFileRelPathByKind(inspection_after, FileKind::kScriptBindingsData);
+    ASSERT_TRUE(table_relpath.has_value());
+    ASSERT_TRUE(data_relpath.has_value());
+
+    const auto slots
+      = ReadPackedRecords<ScriptSlotRecord>(cooked_root / *table_relpath);
+    const auto params
+      = ReadPackedRecords<ScriptParamRecord>(cooked_root / *data_relpath);
+    ASSERT_FALSE(slots.empty());
+    ASSERT_FALSE(params.empty());
+
+    const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) {
+      const auto scene_bytes
+        = ReadAllBytes(cooked_root / scene_ref.descriptor_relpath);
+      EXPECT_FALSE(scene_bytes.empty());
+      if (scene_bytes.empty()) {
+        return 0.0F;
+      }
+      auto scene = data::SceneAsset(scene_ref.key, scene_bytes);
+      const auto components = scene.GetComponents<ScriptingComponentRecord>();
+      const auto component = std::find_if(components.begin(), components.end(),
+        [](const auto& candidate) { return candidate.node_index == 0U; });
+      EXPECT_NE(component, components.end());
+      if (component == components.end()) {
+        return 0.0F;
+      }
+      const auto slot_index = static_cast<size_t>(component->slot_start_index);
+      EXPECT_LT(slot_index, slots.size());
+      if (slot_index >= slots.size()) {
+        return 0.0F;
+      }
+      const auto& slot = slots.at(slot_index);
+      EXPECT_EQ(slot.params_array_offset % sizeof(ScriptParamRecord), 0U);
+      const auto param_index = static_cast<size_t>(
+        slot.params_array_offset / sizeof(ScriptParamRecord));
+      EXPECT_GT(slot.params_count, 0U);
+      EXPECT_LT(param_index, params.size());
+      if (slot.params_count == 0U || param_index >= params.size()) {
+        return 0.0F;
+      }
+      return params.at(param_index).value.as_float;
+    };
+
+    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_a), 1.0F);
+    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_b), 7.5F);
+  }
+
+  NOLINT_TEST_F(ScriptingSidecarImportTest,
     ScriptingSidecarRejectsUnresolvedScriptReference)
   {
     const auto cooked_root

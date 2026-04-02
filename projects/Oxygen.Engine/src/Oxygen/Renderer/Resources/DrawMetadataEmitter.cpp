@@ -31,8 +31,7 @@
 namespace {
 
 constexpr oxygen::nexus::DomainKey kDrawMetadataDomain {
-  .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-  .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+  .domain = oxygen::bindless::generated::kMaterialsDomain,
 };
 
 constexpr std::uint8_t kOpaqueBucketOrder = 0U;
@@ -157,13 +156,16 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
       slot_reclaimer_)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
-      inline_transfers_, "DrawMetadataEmitter.Draws")
+      inline_transfers_, "DrawMetadataEmitter.Draws",
+      oxygen::bindless::generated::kMaterialsDomain)
   , draw_bounds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::vec4)), inline_transfers_,
-      "DrawMetadataEmitter.DrawBounds")
+      "DrawMetadataEmitter.DrawBounds",
+      oxygen::bindless::generated::kMaterialsDomain)
   , instance_data_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers_,
-      "DrawMetadataEmitter.InstanceData")
+      "DrawMetadataEmitter.InstanceData",
+      oxygen::bindless::generated::kGlobalSrvDomain)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");

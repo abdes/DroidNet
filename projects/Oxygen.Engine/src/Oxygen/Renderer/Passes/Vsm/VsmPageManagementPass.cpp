@@ -15,7 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -36,7 +36,7 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::ComputePipelineDesc;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
 using oxygen::renderer::vsm::VsmAllocationAction;
@@ -173,12 +173,16 @@ namespace {
     recorder.SetPipelineState(pso_desc);
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -229,19 +233,19 @@ struct VsmPageManagementPass::Impl {
   void* pack_constants_ptr { nullptr };
   void* allocate_constants_ptr { nullptr };
 
-  DescriptorHandle reuse_decision_srv_handle {};
-  DescriptorHandle allocation_decision_srv_handle {};
-  DescriptorHandle available_page_count_uav_handle {};
-  DescriptorHandle available_page_count_srv_handle {};
-  DescriptorHandle reuse_constants_cbv_handle {};
-  DescriptorHandle pack_constants_cbv_handle {};
-  DescriptorHandle allocate_constants_cbv_handle {};
-  DescriptorHandle page_table_uav_handle {};
-  DescriptorHandle page_flags_uav_handle {};
-  DescriptorHandle metadata_uav_handle {};
-  DescriptorHandle metadata_seed_srv_handle {};
-  DescriptorHandle available_pages_uav_handle {};
-  DescriptorHandle available_pages_srv_handle {};
+  DescriptorAllocationHandle reuse_decision_srv_handle {};
+  DescriptorAllocationHandle allocation_decision_srv_handle {};
+  DescriptorAllocationHandle available_page_count_uav_handle {};
+  DescriptorAllocationHandle available_page_count_srv_handle {};
+  DescriptorAllocationHandle reuse_constants_cbv_handle {};
+  DescriptorAllocationHandle pack_constants_cbv_handle {};
+  DescriptorAllocationHandle allocate_constants_cbv_handle {};
+  DescriptorAllocationHandle page_table_uav_handle {};
+  DescriptorAllocationHandle page_flags_uav_handle {};
+  DescriptorAllocationHandle metadata_uav_handle {};
+  DescriptorAllocationHandle metadata_seed_srv_handle {};
+  DescriptorAllocationHandle available_pages_uav_handle {};
+  DescriptorAllocationHandle available_pages_srv_handle {};
 
   ShaderVisibleIndex reuse_decision_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex allocation_decision_srv { kInvalidShaderVisibleIndex };
@@ -288,11 +292,12 @@ struct VsmPageManagementPass::Impl {
   auto EnsureClearBuffer(std::uint64_t required_size) -> void;
   auto EnsureAvailablePageCountBuffer() -> void;
   auto EnsureConstantsBuffer(std::shared_ptr<Buffer>& buffer, void*& mapped_ptr,
-    DescriptorHandle& handle, ShaderVisibleIndex& index,
+    DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
     const std::string& debug_name) -> void;
   auto EnsureBufferView(Buffer& buffer,
-    const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-    ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex;
+    const graphics::BufferViewDescription& desc,
+    DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+    const Buffer*& owner) -> ShaderVisibleIndex;
   auto BuildStageUploads() -> void;
 };
 
@@ -397,8 +402,9 @@ auto VsmPageManagementPass::Impl::EnsureAvailablePageCountBuffer() -> void
 }
 
 auto VsmPageManagementPass::Impl::EnsureConstantsBuffer(
-  std::shared_ptr<Buffer>& buffer, void*& mapped_ptr, DescriptorHandle& handle,
-  ShaderVisibleIndex& index, const std::string& debug_name) -> void
+  std::shared_ptr<Buffer>& buffer, void*& mapped_ptr,
+  DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+  const std::string& debug_name) -> void
 {
   if (buffer == nullptr) {
     buffer = gfx->CreateBuffer(BufferDesc {
@@ -414,7 +420,7 @@ auto VsmPageManagementPass::Impl::EnsureConstantsBuffer(
 
   if (!handle.IsValid()) {
     auto& allocator = gfx->GetDescriptorAllocator();
-    handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(), "Failed to allocate {}", debug_name);
     index = allocator.GetShaderVisibleIndex(handle);
@@ -426,15 +432,16 @@ auto VsmPageManagementPass::Impl::EnsureConstantsBuffer(
 }
 
 auto VsmPageManagementPass::Impl::EnsureBufferView(Buffer& buffer,
-  const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-  ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex
+  const graphics::BufferViewDescription& desc,
+  DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+  const Buffer*& owner) -> ShaderVisibleIndex
 {
   if (handle.IsValid() && owner == &buffer) {
     return index;
   }
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  handle = allocator.Allocate(desc.view_type, desc.visibility);
+  handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate VSM page-management buffer view");
     return kInvalidShaderVisibleIndex;

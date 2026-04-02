@@ -34,6 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
@@ -804,6 +805,37 @@ namespace {
       }
     }
 
+    if (!state.scripts_table_relpath.has_value()
+      && !state.scripts_data_relpath.has_value()) {
+      const auto fallback_table_relpath
+        = BuildScriptBindingsTableRelPath(request);
+      const auto fallback_data_relpath
+        = BuildScriptBindingsDataRelPath(request);
+      const auto table_exists
+        = co_await reader.Exists(inspection_root / fallback_table_relpath);
+      if (!table_exists.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.scripts_table_exists_check_failed",
+          "Failed checking script-bindings.table existence: "
+            + table_exists.error().ToString());
+        co_return std::nullopt;
+      }
+      const auto data_exists
+        = co_await reader.Exists(inspection_root / fallback_data_relpath);
+      if (!data_exists.has_value()) {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.sidecar.scripts_data_exists_check_failed",
+          "Failed checking script-bindings.data existence: "
+            + data_exists.error().ToString());
+        co_return std::nullopt;
+      }
+
+      if (table_exists.value() && data_exists.value()) {
+        state.scripts_table_relpath = fallback_table_relpath;
+        state.scripts_data_relpath = fallback_data_relpath;
+      }
+    }
+
     state.has_existing_script_tables = state.scripts_table_relpath.has_value()
       || state.scripts_data_relpath.has_value();
 
@@ -1391,21 +1423,21 @@ namespace {
 
   auto EmitPatchedScene(ImportSession& session, const ImportRequest& request,
     const SidecarResolvedSceneState& scene_state,
-    std::span<const std::byte> patched_scene_bytes) -> bool
+    std::span<const std::byte> patched_scene_bytes) -> co::Co<bool>
   {
     using data::AssetType;
 
     try {
-      session.AssetEmitter().Emit(scene_state.scene_key, AssetType::kScene,
-        scene_state.scene_virtual_path, scene_state.scene_descriptor_relpath,
-        patched_scene_bytes);
+      co_await session.AssetEmitter().EmitSync(scene_state.scene_key,
+        AssetType::kScene, scene_state.scene_virtual_path,
+        scene_state.scene_descriptor_relpath, patched_scene_bytes);
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.scene_emit_failed", ex.what());
-      return false;
+      co_return false;
     }
 
-    return true;
+    co_return true;
   }
 
   auto WriteScriptsTables(ImportSession& session, const ImportRequest& request,
@@ -1610,7 +1642,7 @@ namespace {
       co_return false;
     }
 
-    if (!EmitPatchedScene(session, request, resolved_scene_state,
+    if (!co_await EmitPatchedScene(session, request, resolved_scene_state,
           std::span<const std::byte>(*patched_scene_descriptor))) {
       co_return false;
     }
@@ -1806,6 +1838,17 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
         *session, req, cooked_contexts, resolver)) {
     co_return false;
   }
+
+  auto* const table_registry = session->TableRegistry().get();
+  if (table_registry == nullptr) {
+    AddDiagnostic(*session, req, ImportSeverity::kError,
+      "script.sidecar.table_registry_unavailable",
+      "Scripting sidecar import requires ResourceTableRegistry");
+    co_return false;
+  }
+
+  auto script_bindings_lock
+    = co_await table_registry->LockScriptBindingsTable(session->CookedRoot());
 
   const auto resolved_scene_state = co_await detail::ResolveTargetSceneState(
     *session, req, resolver, cooked_contexts, *io_handles->reader,

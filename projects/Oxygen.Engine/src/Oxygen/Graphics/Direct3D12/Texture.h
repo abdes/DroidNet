@@ -16,7 +16,7 @@
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
 namespace oxygen::graphics {
-class DescriptorHandle;
+class DescriptorAllocationHandle;
 
 namespace d3d12 {
   class Graphics;
@@ -87,21 +87,21 @@ namespace d3d12 {
   protected:
     // Abstract method implementations from base class
     OXGN_D3D12_NDAPI auto CreateShaderResourceView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
       -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateUnorderedAccessView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       TextureType texture_type, TextureSubResourceSet sub_resources) const
       -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateRenderTargetView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       TextureSubResourceSet sub_resources) const -> NativeView override;
 
     OXGN_D3D12_NDAPI auto CreateDepthStencilView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       TextureSubResourceSet sub_resources, bool is_read_only) const
       -> NativeView override;
 

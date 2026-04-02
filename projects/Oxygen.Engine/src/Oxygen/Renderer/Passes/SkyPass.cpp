@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -99,7 +99,7 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
     rtv->IsValid()) {
     return rtv;
   }
-  auto rtv_desc_handle = allocator.Allocate(
+  auto rtv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
   if (!rtv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -137,7 +137,7 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
     dsv->IsValid()) {
     return dsv;
   }
-  auto dsv_desc_handle = allocator.Allocate(
+  auto dsv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
   if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -189,7 +189,7 @@ auto PrepareDepthShaderResourceView(Texture& depth_texture,
     // safer to re-allocate if srv index is not known.
     return { srv, oxygen::kInvalidShaderVisibleIndex.get() };
   }
-  auto srv_desc_handle = allocator.Allocate(
+  auto srv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   if (!srv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -292,7 +292,8 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
@@ -302,9 +303,12 @@ auto SkyPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     ? pass_constants_index_.get()
     : oxygen::kInvalidShaderVisibleIndex.get();
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    0U, 0);
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     pass_constants_index, 1);
 
   recorder.Draw(3, 1, 0, 0);
@@ -349,7 +353,7 @@ auto SkyPass::EnsurePassConstantsBuffer() -> void
   cbv_view_desc.range = { 0U, desc.size_bytes };
 
   auto cbv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+    = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
   if (!cbv_handle.IsValid()) {
     throw std::runtime_error("SkyPass: Failed to allocate CBV handle");

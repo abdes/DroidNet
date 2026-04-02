@@ -141,7 +141,7 @@ auto DescriptorSegment::Release(oxygen::bindless::HeapIndex index) noexcept
 }
 
 // [[nodiscard]] auto DescriptorSegment::GetShaderVisibleIndex(
-//   const DescriptorHandle& handle) const noexcept ->
+//   const DescriptorAllocationHandle& handle) const noexcept ->
 //   oxygen::bindless::HeapIndex
 // {
 //   // For headless, shader-visible index equals the global handle index

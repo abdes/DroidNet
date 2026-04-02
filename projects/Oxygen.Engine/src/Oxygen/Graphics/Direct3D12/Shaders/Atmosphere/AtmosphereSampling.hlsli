@@ -21,7 +21,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"

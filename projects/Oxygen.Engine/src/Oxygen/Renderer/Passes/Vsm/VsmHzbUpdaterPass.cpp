@@ -19,7 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -388,12 +388,16 @@ namespace {
     recorder.SetPipelineState(pso_desc);
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -514,7 +518,7 @@ auto VsmHzbUpdaterPass::Impl::EnsurePassConstantsBuffer(
   auto& allocator = gfx->GetDescriptorAllocator();
   auto& registry = gfx->GetResourceRegistry();
   for (std::uint32_t slot = 0U; slot < pass_constants_slot_count; ++slot) {
-    auto handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    auto handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(),
       "Failed to allocate VSM HZB pass-constants CBV descriptor");
@@ -669,7 +673,7 @@ auto VsmHzbUpdaterPass::Impl::EnsureBufferViewIndex(Buffer& buffer,
   }
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+  auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
   CHECK_F(handle.IsValid(), "Failed to allocate VSM HZB buffer view");
   const auto index = allocator.GetShaderVisibleIndex(handle);
   const auto view = registry.RegisterView(buffer, std::move(handle), desc);
@@ -687,7 +691,7 @@ auto VsmHzbUpdaterPass::Impl::EnsureTextureViewIndex(Texture& texture,
   }
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+  auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
   CHECK_F(handle.IsValid(), "Failed to allocate VSM HZB texture view");
   const auto index = allocator.GetShaderVisibleIndex(handle);
   const auto view = registry.RegisterView(texture, std::move(handle), desc);

@@ -37,7 +37,8 @@ namespace oxygen::graphics::detail {
 
  - **State Integrity**:
     - `Allocate()`: If no descriptors are available (i.e., the segment is full),
-      it must return a sentinel value (`DescriptorHandle::kInvalidIndex`).
+      it must return a sentinel value
+ (`DescriptorAllocationHandle::kInvalidIndex`).
     - `Release(index)`: Must return `true` if the given `index` was valid
       (within segment bounds, currently allocated) and successfully made
       available. It must return `false` if the index is out of bounds, was not
@@ -131,11 +132,11 @@ public:
   //  \return The local (shader-visible) index within this segment, if the
   //  handle
   //          is valid, was allocated from this segment and is still allocated;
-  //          otherwise returns `DescriptorHandle::kInvalidIndex`.
+  //          otherwise returns `DescriptorAllocationHandle::kInvalidIndex`.
   // */
   // [[nodiscard]] virtual auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept -> bindless::HeapIndex
-  //   = 0;
+  //   const DescriptorAllocationHandle& handle) const noexcept ->
+  //   bindless::HeapIndex = 0;
 };
 
 } // namespace oxygen::graphics::detail

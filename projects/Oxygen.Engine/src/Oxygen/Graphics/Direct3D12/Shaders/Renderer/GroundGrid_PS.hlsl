@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/PristineGrid.hlsli"

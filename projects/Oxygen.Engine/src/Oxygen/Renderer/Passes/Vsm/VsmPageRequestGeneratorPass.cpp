@@ -15,7 +15,7 @@
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -235,9 +235,9 @@ struct VsmPageRequestGeneratorPass::Impl {
       projection_mapped_ptr, "Failed to map VSM projection buffer");
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto srv_handle
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM projection SRV");
     projection_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -308,7 +308,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     std::memset(request_clear_mapped_ptr, 0, clear_desc.size_bytes);
 
     auto uav_handle
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+      = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
         graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(uav_handle.IsValid(), "Failed to allocate VSM request flag UAV");
     request_flags_uav = allocator.GetShaderVisibleIndex(uav_handle);
@@ -321,9 +321,9 @@ struct VsmPageRequestGeneratorPass::Impl {
     registry.RegisterView(
       *request_flags_buffer, std::move(uav_handle), uav_desc);
 
-    auto srv_handle
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM request flag SRV");
     request_flags_srv = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -367,7 +367,7 @@ struct VsmPageRequestGeneratorPass::Impl {
     cbv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     cbv_desc.range = { 0U, desc.size_bytes };
 
-    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(
       cbv_handle.IsValid(), "Failed to allocate VSM request constants CBV");

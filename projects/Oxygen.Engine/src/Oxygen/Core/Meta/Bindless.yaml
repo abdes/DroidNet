@@ -1,215 +1,232 @@
 # ------------------------------------------------------------------------------
-# Source of truth for the Oxygen Engine Bindless bindings
+# Source of truth for the Oxygen Engine bindless ABI and backend realizations.
 # ------------------------------------------------------------------------------
-# cmake --build --preset=windows-debug --target generate_bindless_headers
+# cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 #
 # To get validation in vscode:
 #   - Install the YAML extension
 #   - Add the following config if you don't have already:
 #       "yaml.schemas": {
-#         "src/Oxygen/Core/Bindless/Spec.schema.json": [
-#           "**/Spec.yaml"
+#         "src/Oxygen/Core/Meta/Bindless.schema.json": [
+#           "**/Bindless.yaml"
 #         ]
 #       },
 #       "yaml.validate": true
 # ------------------------------------------------------------------------------
 meta:
-  version: "1.1.0"
+  version: "2.0.0"
   description: >
     Authoritative bindless system specification for Oxygen.
-    Generated headers files should be used by C++ and HLSL.
-    Additional metadata is also provided as JSON files.
+    The ABI is backend-neutral. Backend realizations are authored separately and
+    generated into typed headers plus backend strategy JSON.
 
 defaults:
   invalid_index: 4294967295
 
-domains:
-  - id: view
-    name: "View"
-    kind: CBV
-    register: b1
-    heap_index: 0
-    root_table: BindlessSRVTable
-    domain_base: 0
-    capacity: 1
-    comment: "View constants CBV"
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+    - id: sampler
 
-  - id: srv_global
-    name: "GlobalSRV"
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: BindlessSRVTable
-    domain_base: 1
-    capacity: 2048
-    comment: "Unified global bindless table"
+  domains:
+    - id: srv_global
+      name: "GlobalSRV"
+      index_space: srv_uav_cbv
+      shader_index_base: 1
+      capacity: 32768
+      shader_access_class: buffer_srv
+      view_types: [StructuredBuffer_SRV]
+      comment: "Unified global bindless table sized for production large geometry-heavy scenes"
 
-  - id: materials
-    name: "Materials"
-    kind: SRV
-    # Place materials after srv_global (which occupies 1..2049) and before
-    # textures (which start at 5096). Use domain_base 2049 and capacity 3047
-    # to end at 5096 (exclusive): [2049, 5096)
-    domain_base: 2049
-    capacity: 3047
-    register: t1
-    space: space0
-    root_table: BindlessSRVTable
-    comment: "Unified bindless table domains"
+    - id: materials
+      name: "Materials"
+      index_space: srv_uav_cbv
+      shader_index_base: 32769
+      capacity: 3047
+      shader_access_class: buffer_srv
+      view_types: [StructuredBuffer_SRV, RawBuffer_SRV]
+      comment: "Material and metadata buffer ranges"
 
-  - id: textures
-    name: "Textures"
-    kind: SRV
-    domain_base: 5096
-    capacity: 65536
-    register: t2
-    space: space0
-    root_table: BindlessSRVTable
+    - id: textures
+      name: "Textures"
+      index_space: srv_uav_cbv
+      shader_index_base: 35816
+      capacity: 65536
+      shader_access_class: texture_srv
+      view_types: [Texture_SRV]
+      comment: "Unified texture bindless range"
 
-  - id: samplers
-    name: "Samplers"
-    kind: SAMPLER
-    register: s0
-    space: space0
-    root_table: SamplerTable
-    domain_base: 0
-    capacity: 256
+    - id: samplers
+      name: "Samplers"
+      index_space: sampler
+      shader_index_base: 0
+      capacity: 256
+      shader_access_class: sampler
+      view_types: [Sampler]
+      comment: "Global sampler table"
 
-symbols:
-  ViewConstantsSlot:
-    domain: view
-    comment: "CBV view slot (b1)"
-  kInvalidBindlessIndex:
-    value: invalid_index
-    comment: "invalid sentinel (0xFFFFFFFF)"
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: "CBV_SRV_UAV:cpu"
+          type: CBV_SRV_UAV
+          shader_visible: false
+          capacity: 1000000
+          base_index: 0
+          allow_growth: false
 
-# Descriptor heap allocator specification for D3D12
-# This section mirrors the C++ `D3D12HeapAllocationStrategy` defaults and
-# creation order. The C++ strategy creates the following heaps (in order):
-# 0: CBV_SRV_UAV cpu-only
-# 1: CBV_SRV_UAV shader-visible
-# 2: SAMPLER cpu-only
-# 3: SAMPLER shader-visible
-# 4: RTV cpu-only
-# 5: DSV cpu-only
-# Capacities and base indices below match the conservative defaults used in
-# `D3D12HeapAllocationStrategy.cpp` when no device overrides are present.
-#
-# Heap id/key format (must match runtime BuildHeapKey):
-#   "<TYPE>:<vis>" where TYPE in {CBV_SRV_UAV, SAMPLER, RTV, DSV}
-#   and <vis> is "gpu" for shader-visible or "cpu" otherwise.
-#
-# Global index ranges per heap are [base_index, base_index + capacity).
-# These ranges MUST NOT overlap across any heaps.
-# Gaps are allowed; adjacency is not required.
-heaps:
-  - id: "CBV_SRV_UAV:cpu"
-    type: CBV_SRV_UAV
-    shader_visible: false
-    capacity: 1000000
-    base_index: 0
-    allow_growth: false
+        - id: "CBV_SRV_UAV:gpu"
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 1000000
+          base_index: 1000000
+          allow_growth: false
 
-  - id: "CBV_SRV_UAV:gpu"
-    type: CBV_SRV_UAV
-    shader_visible: true
-    capacity: 1000000
-    base_index: 1000000
-    allow_growth: false
+        - id: "SAMPLER:cpu"
+          type: SAMPLER
+          shader_visible: false
+          capacity: 2048
+          base_index: 2000000
+          allow_growth: false
 
-  - id: "SAMPLER:cpu"
-    type: SAMPLER
-    shader_visible: false
-    capacity: 2048
-    base_index: 2000000
-    allow_growth: false
+        - id: "SAMPLER:gpu"
+          type: SAMPLER
+          shader_visible: true
+          capacity: 2048
+          base_index: 2002048
+          allow_growth: false
 
-  - id: "SAMPLER:gpu"
-    type: SAMPLER
-    shader_visible: true
-    capacity: 2048
-    base_index: 2002048
-    allow_growth: false
+        - id: "RTV:cpu"
+          type: RTV
+          shader_visible: false
+          capacity: 1024
+          base_index: 2004096
+          allow_growth: false
 
-  - id: "RTV:cpu"
-    type: RTV
-    shader_visible: false
-    capacity: 1024
-    base_index: 2004096
-    allow_growth: false
+        - id: "DSV:cpu"
+          type: DSV
+          shader_visible: false
+          capacity: 1024
+          base_index: 2005120
+          allow_growth: false
 
-  - id: "DSV:cpu"
-    type: DSV
-    shader_visible: false
-    capacity: 1024
-    base_index: 2005120
-    allow_growth: false
+      tables:
+        - id: BindlessSRVTable
+          descriptor_kind: SRV
+          heap: "CBV_SRV_UAV:gpu"
+          shader_register: t0
+          register_space: space0
+          unbounded: true
 
-# Mappings tie logical domains to the authoritative C++ heaps.
-# Domains that back descriptor tables and are visible to shaders map to the
-# shader-visible heaps; other domains (or root CBVs) map to cpu-only heaps.
-mappings:
-  - domain: view
-    heap: "CBV_SRV_UAV:cpu"
-    local_base: 0
+        - id: SamplerTable
+          descriptor_kind: SAMPLER
+          heap: "SAMPLER:gpu"
+          shader_register: s0
+          register_space: space0
+          descriptor_count: 256
 
-  - domain: srv_global
-    heap: "CBV_SRV_UAV:gpu"
-    local_base: 1
+      domain_realizations:
+        - domain: srv_global
+          table: BindlessSRVTable
+          heap_local_base: 1
 
-  - domain: materials
-    heap: "CBV_SRV_UAV:gpu"
-    local_base: 2049
+        - domain: materials
+          table: BindlessSRVTable
+          heap_local_base: 32769
 
-  - domain: textures
-    heap: "CBV_SRV_UAV:gpu"
-    local_base: 5096
+        - domain: textures
+          table: BindlessSRVTable
+          heap_local_base: 35816
 
-  - domain: samplers
-    heap: "SAMPLER:gpu"
-    local_base: 0
+        - domain: samplers
+          table: SamplerTable
+          heap_local_base: 0
 
-# Root signature description (ordered parameters). This is an optional,
-# machine-friendly description that the generator can emit for the runtime.
-root_signature:
-  - type: descriptor_table
-    name: "BindlessSRVTable"
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [srv_global, materials, textures]
-        base_shader_register: t0
+    root_signature:
+      - type: descriptor_table
+        id: BindlessSrvTable
+        table: BindlessSRVTable
+        index: 0
+        visibility: ALL
+
+      - type: descriptor_table
+        id: SamplerTable
+        table: SamplerTable
+        index: 1
+        visibility: ALL
+
+      - type: cbv
+        id: ViewConstants
+        index: 2
+        visibility: ALL
+        shader_register: b1
         register_space: space0
-        num_descriptors: unbounded
 
-  - type: descriptor_table
-    name: "SamplerTable"
-    index: 1
-    visibility: ALL
-    ranges:
-      - range_type: SAMPLER
-        domain: samplers
-        base_shader_register: s0
+      - type: root_constants
+        id: RootConstants
+        index: 3
+        visibility: ALL
+        shader_register: b2
         register_space: space0
-        num_descriptors: 256
+        num_32bit_values: 2
 
-  - type: cbv
-    name: "ViewConstants"
-    index: 2
-    visibility: ALL
-    shader_register: b1
-    register_space: space0
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: bindless_main
+          set: 0
 
-  - type: root_constants
-    name: "RootConstants"
-    index: 3
-    visibility: ALL
-    shader_register: b2
-    register_space: space0
-    num_32bit_values: 2
-    comment: |
-      Root constants at b2, space0 (2x32-bit).
-      - DWORD0: g_DrawIndex (per-draw index into DrawMetadata).
-      - DWORD1: g_PassConstantsIndex (per-pass payload; typically a bindless
-        index for pass-level constants).
+      bindings:
+        - id: textures_binding
+          set: bindless_main
+          binding: 0
+          descriptor_type: SAMPLED_IMAGE
+          variable_count: true
+          update_after_bind: true
+
+        - id: global_buffers_binding
+          set: bindless_main
+          binding: 1
+          descriptor_type: STORAGE_BUFFER
+          variable_count: true
+          update_after_bind: true
+
+        - id: samplers_binding
+          set: bindless_main
+          binding: 2
+          descriptor_type: SAMPLER
+          descriptor_count: 256
+
+        - id: view_constants_binding
+          set: bindless_main
+          binding: 3
+          descriptor_type: UNIFORM_BUFFER
+          descriptor_count: 1
+
+      domain_realizations:
+        - domain: textures
+          binding: textures_binding
+          array_element_base: 35816
+
+        - domain: srv_global
+          binding: global_buffers_binding
+          array_element_base: 1
+
+        - domain: materials
+          binding: global_buffers_binding
+          array_element_base: 32769
+
+        - domain: samplers
+          binding: samplers_binding
+          array_element_base: 0
+
+    pipeline_layout:
+      - type: descriptor_set
+        id: BindlessMain
+        set_ref: bindless_main
+
+      - type: push_constants
+        id: RootConstants
+        size_bytes: 8
+        stages: ALL

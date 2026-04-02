@@ -98,7 +98,7 @@ namespace {
     }
 
     auto rtv_desc_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_RTV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_RTV,
         graphics::DescriptorVisibility::kCpuOnly);
     if (!rtv_desc_handle.IsValid()) {
       throw std::runtime_error(
@@ -320,7 +320,7 @@ auto ToneMapPass::EnsurePassConstantsBuffer() -> void
     cbv_view_desc.range = { offset, kPassConstantsStride };
 
     auto cbv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
@@ -396,8 +396,9 @@ auto ToneMapPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
       "index");
   }
 
-  auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error(
       "ToneMapPass: Failed to allocate source SRV handle");

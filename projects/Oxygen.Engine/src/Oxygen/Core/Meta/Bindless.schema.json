@@ -1,400 +1,838 @@
 {
-    "$id": "https://example.org/bindless/Spec.schema.json",
-    "x-oxygen-schema-version": "1.0.1",
-    "title": "BindingSlots",
-    "description": "JSON Schema for the BindingSlots YAML used by BindlessCodeGen",
-    "type": "object",
-    "required": [
-        "meta",
-        "defaults",
-        "domains",
-        "root_signature"
-    ],
-    "properties": {
-        "meta": {
-            "type": "object",
-            "description": "Metadata for this spec.",
-            "properties": {
-                "version": {
-                    "type": "string",
-                    "pattern": "^\\d+\\.\\d+\\.\\d+$",
-                    "description": "Semantic version (major.minor.patch) of the binding slots specification."
-                },
-                "description": {
-                    "type": "string"
-                }
-            },
-            "required": ["version"],
-            "additionalProperties": true
+  "$id": "https://example.org/bindless/Spec.schema.json",
+  "x-oxygen-schema-version": "2.0.0",
+  "title": "BindlessSpec",
+  "description": "JSON Schema for the Oxygen bindless authored model.",
+  "type": "object",
+  "required": [
+    "meta",
+    "defaults",
+    "abi",
+    "backends"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
         },
-        "defaults": {
+        "description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "invalid_index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "invalid_index"
+      ],
+      "additionalProperties": false
+    },
+    "abi": {
+      "type": "object",
+      "required": [
+        "index_spaces",
+        "domains"
+      ],
+      "properties": {
+        "index_spaces": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
             "type": "object",
-            "description": "Default constants used by the generator.",
-            "properties": {
-                "invalid_index": {
-                    "type": "integer",
-                    "minimum": 0
-                }
-            },
             "required": [
-                "invalid_index"
+              "id"
             ],
-            "additionalProperties": true
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            },
+            "additionalProperties": false
+          }
         },
         "domains": {
-            "type": "array",
-            "description": "List of domain definitions. Each domain defines a contiguous range (domain_base..domain_base+capacity-1) for a resource kind.",
-            "items": {
-                "type": "object",
-                "required": [
-                    "id",
-                    "name",
-                    "domain_base",
-                    "capacity",
-                    "kind"
-                ],
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
-                    },
-                    "name": {
-                        "type": "string"
-                    },
-                    "kind": {
-                        "type": "string",
-                        "enum": [
-                            "SRV",
-                            "CBV",
-                            "SAMPLER",
-                            "UAV"
-                        ]
-                    },
-                    "register": {
-                        "type": "string",
-                        "pattern": "^[tbsu]\\d+$",
-                        "description": "Register token (e.g. 't0','b1','s0','u0')"
-                    },
-                    "space": {
-                        "type": "string",
-                        "pattern": "^space\\d+$",
-                        "description": "Register space token (e.g. 'space0','space1')"
-                    },
-                    "heap_index": {
-                        "type": "integer",
-                        "minimum": 0
-                    },
-                    "uav_counter_register": {
-                        "type": "string",
-                        "pattern": "^u\\d+$",
-                        "description": "Optional UAV counter register token (e.g. 'u0') for UAV domains that expose a separate counter resource. Only valid for kind == UAV."
-                    },
-                    "root_table": {
-                        "type": "string",
-                        "description": "Optional name of a root_signature parameter (descriptor_table) that this domain is placed in."
-                    },
-                    "domain_base": {
-                        "type": "integer",
-                        "minimum": 0
-                    },
-                    "capacity": {
-                        "type": "integer",
-                        "minimum": 0
-                    },
-                    "comment": {
-                        "type": "string"
-                    }
-                },
-                "additionalProperties": false,
-                "allOf": [
-                    {
-                        "if": {
-                            "properties": { "kind": { "enum": ["SRV","UAV","SAMPLER"] } },
-                            "required": ["kind"]
-                        },
-                        "then": {
-                            "required": ["register","space","root_table"]
-                        }
-                    }
-                ]
-            }
-        },
-        "symbols": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
             "type": "object",
-            "description": "Optional named symbols; values may reference defaults or be explicit values.",
-            "additionalProperties": {
-                "type": "object",
-                "properties": {
-                    "domain": {
-                        "type": "string"
-                    },
-                    "value": {
-                        "oneOf": [
-                            {
-                                "type": "integer"
-                            },
-                            {
-                                "type": "string"
-                            }
-                        ]
-                    },
-                    "comment": {
-                        "type": "string"
-                    }
-                },
-                "additionalProperties": false,
-                "allOf": [
-                    {
-                        "if": {
-                            "properties": { "type": { "const": "descriptor_table" } },
-                            "required": ["type"]
-                        },
-                        "then": {
-                            "oneOf": [
-                                {
-                                    "properties": {
-                                        "domains": {
-                                            "oneOf": [
-                                                { "type": "string" },
-                                                { "type": "array", "items": { "type": "string" } }
-                                            ]
-                                        }
-                                    },
-                                    "required": ["domains"]
-                                },
-                                {
-                                    "properties": {
-                                        "ranges": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "required": ["domain"]
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                ]
-            }
-        }
-        ,
-        "root_signature": {
-            "type": "array",
-            "description": "Ordered list of root signature parameters. Each entry describes a parameter and its ranges or root descriptors.",
-            "items": {
-                "type": "object",
-                "required": ["type","name","index","visibility"],
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "enum": ["descriptor_table", "cbv", "root_constants", "root_descriptor"]
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Optional human-friendly name for the parameter"
-                    },
-                    "ranges": {
-                        "type": "array",
-                        "description": "For descriptor_table: list of ranges (SRV/CBV/UAV/SAMPLER)",
-                        "items": {
-                            "type": "object",
-                            "required": ["range_type","domain","base_shader_register","register_space","num_descriptors"],
-                            "properties": {
-                                "range_type": {
-                                    "type": "string",
-                                    "enum": ["SRV","CBV","UAV","SAMPLER"]
-                                },
-                                "domain": {
-                                    "oneOf": [
-                                        { "type": "string" },
-                                        { "type": "array", "items": { "type": "string" } }
-                                    ],
-                                    "description": "Domain id or array of domain ids this range is backed by (e.g. ['materials','textures'])."
-                                },
-                                "base_shader_register": {
-                                    "type": "string",
-                                    "pattern": "^[tbsu]\\d+$",
-                                    "description": "Register token for base shader register (e.g. 't0')"
-                                },
-                                "register_space": {
-                                    "type": "string",
-                                    "pattern": "^space\\d+$",
-                                    "description": "Register space token (e.g. 'space0')"
-                                },
-
-                                "num_descriptors": {
-                                    "anyOf": [
-                                        {"type": "integer","minimum": 1},
-                                        {"type": "string","enum": ["unbounded"]}
-                                    ],
-                                    "description": "Number of descriptors in the range, or 'unbounded' for append/heap-size semantics"
-                                }
-                            },
-                            "additionalProperties": false
-                        }
-                    },
-                    "shader_register": {
-                        "type": "string",
-                        "pattern": "^[tb]\\d+$",
-                        "description": "Register token for CBV/root_descriptor/root_constants (e.g. 'b1')"
-                    },
-                    "register_space": {
-                        "type": "string",
-                        "pattern": "^space\\d+$"
-                    },
-                    "visibility": {
-                        "oneOf": [
-                            {
-                                "type": "string",
-                                "enum": ["ALL","VERTEX","HULL","DOMAIN","GEOMETRY","PIXEL","VS","HS","DS","GS","PS"]
-                            },
-                            {
-                                "type": "array",
-                                "items": {
-                                    "type": "string",
-                                    "enum": ["ALL","VERTEX","HULL","DOMAIN","GEOMETRY","PIXEL","VS","HS","DS","GS","PS"]
-                                }
-                            }
-                        ],
-                        "description": "Shader-stage visibility; matches D3D12_SHADER_VISIBILITY full names or common short aliases. Required for D3D12 root parameters."
-                    },
-                    "index": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "description": "Explicit root parameter index. Parameter order is not used when this is present."
-                    },
-                    "num_32bit_values": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "description": "For root_constants: number of 32-bit values"
-                    },
-                    "cbv_array_size": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "description": "If type == cbv and this field is present, defines an array root descriptor"
-                    },
-                    "comment": {
-                        "type": "string",
-                        "description": "Optional documentation for this root signature parameter; may be emitted into generated headers."
-                    }
-                },
-                "additionalProperties": false,
-                "allOf": [
-                    {
-                        "if": {
-                            "properties": { "type": { "const": "descriptor_table" } },
-                            "required": ["type"]
-                        },
-                        "then": {
-                            "oneOf": [
-                                {
-                                    "properties": {
-                                        "domains": {
-                                            "oneOf": [
-                                                { "type": "string" },
-                                                { "type": "array", "items": { "type": "string" } }
-                                            ]
-                                        }
-                                    },
-                                    "required": ["domains"]
-                                },
-                                {
-                                    "properties": {
-                                        "ranges": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "required": ["domain"]
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                ]
-            }
-        },
-    "heaps": {
-        "type": "array",
-        "description": "Optional heap allocation strategy SSoT. Defines named heaps and their capacities, base indices and policies. Global bindless indices are derived per-heap from [base_index, base_index + capacity). These ranges MUST NOT overlap across any heaps. Gaps are allowed (no requirement for adjacency). The runtime JSON uses a unified 'capacity' per heap; visibility is implied by the heap key suffix (:cpu or :gpu).",
-            "items": {
-                "type": "object",
-                "required": [
-                    "id",
-                    "type",
-                    "shader_visible",
-            "capacity",
-                    "base_index",
-                    "allow_growth"
-                ],
-                "properties": {
-                    "id": { "type": "string" },
-                    "type": { "type": "string", "enum": ["CBV_SRV_UAV","SAMPLER","RTV","DSV","Other"] },
-                    "shader_visible": { "type": "boolean" },
-            "capacity": { "type": "integer", "minimum": 1 },
-                    "base_index": { "type": "integer", "minimum": 0 },
-                    "allow_growth": { "type": "boolean" },
-                    "growth_factor": { "type": "number", "exclusiveMinimum": 1.0 },
-                    "max_growth_iterations": { "type": "integer", "minimum": 0 },
-                    "debug_name": { "type": "string" }
-                },
-                "additionalProperties": false
-            }
-        },
-        "mappings": {
-            "type": "array",
-            "description": "Maps domains to a named heap and a local base index.",
-            "items": {
-                "type": "object",
-                "required": ["domain","heap","local_base"],
-                "properties": {
-                    "domain": { "type": "string" },
-                    "heap": { "type": "string" },
-                    "local_base": { "type": "integer", "minimum": 0 }
-                },
-                "additionalProperties": false
-            }
-        }
-    },
-    "additionalProperties": false,
-    "examples": [
-        {
-            "meta": {
-                "version": "1.0.0",
-                "description": "Authoritative bindless slot/register mapping for Oxygen.",
-                "source": "src/Oxygen/Core/Bindless/Spec.yaml"
-            },
-            "defaults": {
-                "invalid_index": 4294967295
-            },
-            "domains": [
-                {
-                    "id": "textures",
-                    "name": "Textures",
-                    "kind": "SRV",
-                    "register": "t0",
-                    "space": "space0",
-                    "domain_base": 5096,
-                    "capacity": 65536,
-                    "comment": "Texture SRV array"
-                }
+            "required": [
+              "id",
+              "name",
+              "index_space",
+              "shader_index_base",
+              "capacity",
+              "shader_access_class",
+              "view_types"
             ],
-            "symbols": {
-                "kInvalidBindlessIndex": {
-                    "value": "invalid_index",
-                    "comment": "invalid sentinel"
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "index_space": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "shader_index_base": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "capacity": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "shader_access_class": {
+                "type": "string",
+                "enum": [
+                  "buffer_srv",
+                  "buffer_uav",
+                  "texture_srv",
+                  "texture_uav",
+                  "constant_buffer",
+                  "sampler",
+                  "ray_tracing_accel_structure_srv"
+                ]
+              },
+              "view_types": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "Texture_SRV",
+                    "Texture_UAV",
+                    "TypedBuffer_SRV",
+                    "TypedBuffer_UAV",
+                    "StructuredBuffer_SRV",
+                    "StructuredBuffer_UAV",
+                    "RawBuffer_SRV",
+                    "RawBuffer_UAV",
+                    "ConstantBuffer",
+                    "Sampler",
+                    "SamplerFeedbackTexture_UAV",
+                    "RayTracingAccelStructure"
+                  ]
                 }
-            }
-            ,
-            "psos": {
-                "MyDefaultPSO": {
-                    "domains": ["textures", "materials"],
-                    "comment": "Example PSO that uses texture and material domains"
-                }
-            }
+              },
+              "comment": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
         }
-    ]
+      },
+      "additionalProperties": false
+    },
+    "backends": {
+      "type": "object",
+      "required": [
+        "d3d12",
+        "vulkan"
+      ],
+      "properties": {
+        "d3d12": {
+          "$ref": "#/$defs/d3d12_backend"
+        },
+        "vulkan": {
+          "$ref": "#/$defs/vulkan_backend"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "shader_visibility": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "VERTEX",
+            "HULL",
+            "DOMAIN",
+            "GEOMETRY",
+            "PIXEL",
+            "VS",
+            "HS",
+            "DS",
+            "GS",
+            "PS"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "VERTEX",
+              "HULL",
+              "DOMAIN",
+              "GEOMETRY",
+              "PIXEL",
+              "VS",
+              "HS",
+              "DS",
+              "GS",
+              "PS"
+            ]
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "vulkan_stage_flags": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "VERTEX",
+            "TESSELLATION_CONTROL",
+            "TESSELLATION_EVALUATION",
+            "GEOMETRY",
+            "FRAGMENT",
+            "COMPUTE"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "ALL",
+              "VERTEX",
+              "TESSELLATION_CONTROL",
+              "TESSELLATION_EVALUATION",
+              "GEOMETRY",
+              "FRAGMENT",
+              "COMPUTE"
+            ]
+          },
+          "minItems": 1
+        }
+      ]
+    },
+    "d3d12_heap": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "shader_visible",
+        "capacity",
+        "base_index",
+        "allow_growth"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "CBV_SRV_UAV",
+            "SAMPLER",
+            "RTV",
+            "DSV",
+            "Other"
+          ]
+        },
+        "shader_visible": {
+          "type": "boolean"
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "base_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allow_growth": {
+          "type": "boolean"
+        },
+        "growth_factor": {
+          "type": "number",
+          "exclusiveMinimum": 1.0
+        },
+        "max_growth_iterations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "debug_name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "d3d12_table": {
+      "type": "object",
+      "required": [
+        "id",
+        "descriptor_kind",
+        "heap",
+        "shader_register",
+        "register_space"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "descriptor_kind": {
+          "type": "string",
+          "enum": [
+            "SRV",
+            "UAV",
+            "CBV",
+            "SAMPLER"
+          ]
+        },
+        "heap": {
+          "type": "string"
+        },
+        "shader_register": {
+          "type": "string",
+          "pattern": "^[tbsu]\\d+$"
+        },
+        "register_space": {
+          "type": "string",
+          "pattern": "^space\\d+$"
+        },
+        "unbounded": {
+          "type": "boolean"
+        },
+        "descriptor_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "unbounded": {
+                  "const": true
+                }
+              },
+              "required": [
+                "unbounded"
+              ]
+            },
+            {
+              "required": [
+                "descriptor_count"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "d3d12_domain_realization": {
+      "type": "object",
+      "required": [
+        "domain",
+        "table",
+        "heap_local_base"
+      ],
+      "properties": {
+        "domain": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "heap_local_base": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "d3d12_root_param": {
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "index",
+        "visibility"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "descriptor_table",
+            "cbv",
+            "root_constants"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "visibility": {
+          "$ref": "#/$defs/shader_visibility"
+        },
+        "table": {
+          "type": "string"
+        },
+        "shader_register": {
+          "type": "string",
+          "pattern": "^[tb]\\d+$"
+        },
+        "register_space": {
+          "type": "string",
+          "pattern": "^space\\d+$"
+        },
+        "num_32bit_values": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "descriptor_table"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "table"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "cbv"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "shader_register",
+              "register_space"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "root_constants"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "shader_register",
+              "register_space",
+              "num_32bit_values"
+            ]
+          }
+        }
+      ]
+    },
+    "d3d12_backend": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "root_signature"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "object",
+          "required": [
+            "heaps",
+            "tables",
+            "domain_realizations"
+          ],
+          "properties": {
+            "heaps": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/d3d12_heap"
+              }
+            },
+            "tables": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/d3d12_table"
+              }
+            },
+            "domain_realizations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/d3d12_domain_realization"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "root_signature": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/d3d12_root_param"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vulkan_descriptor_set": {
+      "type": "object",
+      "required": [
+        "id",
+        "set"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "set": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "vulkan_binding": {
+      "type": "object",
+      "required": [
+        "id",
+        "set",
+        "binding",
+        "descriptor_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "set": {
+          "type": "string"
+        },
+        "binding": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "descriptor_type": {
+          "type": "string",
+          "enum": [
+            "SAMPLED_IMAGE",
+            "STORAGE_IMAGE",
+            "UNIFORM_TEXEL_BUFFER",
+            "STORAGE_TEXEL_BUFFER",
+            "UNIFORM_BUFFER",
+            "STORAGE_BUFFER",
+            "SAMPLER",
+            "ACCELERATION_STRUCTURE_KHR"
+          ]
+        },
+        "descriptor_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "variable_count": {
+          "type": "boolean"
+        },
+        "update_after_bind": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "vulkan_domain_realization": {
+      "type": "object",
+      "required": [
+        "domain",
+        "binding",
+        "array_element_base"
+      ],
+      "properties": {
+        "domain": {
+          "type": "string"
+        },
+        "binding": {
+          "type": "string"
+        },
+        "array_element_base": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "vulkan_pipeline_entry": {
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "descriptor_set",
+            "push_constants"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "set_ref": {
+          "type": "string"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stages": {
+          "$ref": "#/$defs/vulkan_stage_flags"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "descriptor_set"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "set_ref"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "push_constants"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "size_bytes",
+              "stages"
+            ]
+          }
+        }
+      ]
+    },
+    "vulkan_backend": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "pipeline_layout"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "object",
+          "required": [
+            "descriptor_sets",
+            "bindings",
+            "domain_realizations"
+          ],
+          "properties": {
+            "descriptor_sets": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/vulkan_descriptor_set"
+              }
+            },
+            "bindings": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/vulkan_binding"
+              }
+            },
+            "domain_realizations": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/vulkan_domain_realization"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "pipeline_layout": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/vulkan_pipeline_entry"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "examples": [
+    {
+      "meta": {
+        "version": "2.0.0",
+        "description": "Authoritative bindless system specification for Oxygen."
+      },
+      "defaults": {
+        "invalid_index": 4294967295
+      },
+      "abi": {
+        "index_spaces": [
+          {
+            "id": "srv_uav_cbv"
+          },
+          {
+            "id": "sampler"
+          }
+        ],
+        "domains": [
+          {
+            "id": "srv_global",
+            "name": "GlobalSRV",
+            "index_space": "srv_uav_cbv",
+            "shader_index_base": 1,
+            "capacity": 2048,
+            "shader_access_class": "buffer_srv",
+            "view_types": [
+              "StructuredBuffer_SRV"
+            ]
+          }
+        ]
+      },
+      "backends": {
+        "d3d12": {
+          "strategy": {
+            "heaps": [
+              {
+                "id": "CBV_SRV_UAV:gpu",
+                "type": "CBV_SRV_UAV",
+                "shader_visible": true,
+                "capacity": 1000000,
+                "base_index": 1000000,
+                "allow_growth": false
+              }
+            ],
+            "tables": [
+              {
+                "id": "BindlessSRVTable",
+                "descriptor_kind": "SRV",
+                "heap": "CBV_SRV_UAV:gpu",
+                "shader_register": "t0",
+                "register_space": "space0",
+                "unbounded": true
+              }
+            ],
+            "domain_realizations": [
+              {
+                "domain": "srv_global",
+                "table": "BindlessSRVTable",
+                "heap_local_base": 1
+              }
+            ]
+          },
+          "root_signature": [
+            {
+              "type": "descriptor_table",
+              "id": "BindlessSrvTable",
+              "table": "BindlessSRVTable",
+              "index": 0,
+              "visibility": "ALL"
+            }
+          ]
+        },
+        "vulkan": {
+          "strategy": {
+            "descriptor_sets": [
+              {
+                "id": "bindless_main",
+                "set": 0
+              }
+            ],
+            "bindings": [
+              {
+                "id": "global_buffers_binding",
+                "set": "bindless_main",
+                "binding": 0,
+                "descriptor_type": "STORAGE_BUFFER",
+                "variable_count": true,
+                "update_after_bind": true
+              }
+            ],
+            "domain_realizations": [
+              {
+                "domain": "srv_global",
+                "binding": "global_buffers_binding",
+                "array_element_base": 1
+              }
+            ]
+          },
+          "pipeline_layout": [
+            {
+              "type": "descriptor_set",
+              "id": "BindlessMain",
+              "set_ref": "bindless_main"
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

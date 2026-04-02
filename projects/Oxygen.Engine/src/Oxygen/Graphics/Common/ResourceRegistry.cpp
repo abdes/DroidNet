@@ -94,8 +94,8 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
 }
 
 auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
-  DescriptorHandle view_handle, std::any view_description, size_t key_hash,
-  [[maybe_unused]] ResourceViewType view_type,
+  DescriptorAllocationHandle view_handle, std::any view_description,
+  size_t key_hash, [[maybe_unused]] ResourceViewType view_type,
   [[maybe_unused]] DescriptorVisibility visibility) -> NativeView
 {
   // The resource native object is constructed from a reference to the resource
@@ -396,7 +396,7 @@ auto ResourceRegistry::PurgeCachedViewsForResource(
 
 auto ResourceRegistry::AttachDescriptorWithView(
   const NativeResource& dst_resource, const bindless::HeapIndex index,
-  DescriptorHandle descriptor_handle, const NativeView& view,
+  DescriptorAllocationHandle descriptor_handle, const NativeView& view,
   std::any description, const std::size_t key_hash) -> void
 {
   DCHECK_F(view->IsValid(), "invalid native view object");

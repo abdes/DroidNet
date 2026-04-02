@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -119,7 +119,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   if (auto found = registry.Find(color_tex, rtv_desc); found->IsValid()) {
     rtv = found;
   } else {
-    auto handle = allocator.Allocate(
+    auto handle = allocator.AllocateRaw(
       ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
     if (!handle.IsValid()) {
       throw std::runtime_error(
@@ -147,7 +147,7 @@ auto TransparentPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     if (auto found = registry.Find(depth_tex, dsv_desc); found->IsValid()) {
       dsv = found;
     } else {
-      auto handle = allocator.Allocate(
+      auto handle = allocator.AllocateRaw(
         ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
       if (!handle.IsValid()) {
         throw std::runtime_error(

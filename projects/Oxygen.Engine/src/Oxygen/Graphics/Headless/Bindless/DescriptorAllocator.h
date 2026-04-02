@@ -25,7 +25,7 @@ public:
   OXGN_HDLS_API ~DescriptorAllocator() override = default;
 
   OXGN_HDLS_NDAPI auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept
+    const DescriptorAllocationHandle& handle) const noexcept
     -> oxygen::bindless::ShaderVisibleIndex override;
 
 protected:
@@ -36,8 +36,8 @@ protected:
 
   // Copy a descriptor from one handle to another. Headless backend has no
   // native descriptor objects, so this is a validation-only no-op.
-  auto CopyDescriptor(const DescriptorHandle& source,
-    const DescriptorHandle& destination) -> void override;
+  auto CopyDescriptor(const DescriptorAllocationHandle& source,
+    const DescriptorAllocationHandle& destination) -> void override;
 };
 
 } // namespace oxygen::graphics::headless::bindless

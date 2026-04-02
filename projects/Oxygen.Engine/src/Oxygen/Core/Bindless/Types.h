@@ -14,10 +14,13 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/api_export.h>
 
 namespace oxygen {
+
+inline constexpr uint32_t kInvalidBindlessIndex
+  = bindless::generated::kInvalidBindlessIndex;
 
 namespace detail {
   using BindlessHeapIndexBase = NamedType<uint32_t, struct BindlessHeapIndexTag,
@@ -329,6 +332,8 @@ namespace bindless {
   using Count = BindlessItemCount;
   using Capacity = BindlessHeapCapacity;
   using Generation = VersionedBindlessHandle::Generation;
+  using DomainToken = generated::DomainToken;
+  using IndexSpaceToken = generated::IndexSpaceToken;
 
   //! Maximum exclusive bindless handle value. This sentinel marks the upper
   //! bound (exclusive) for shader-visible bindless indices and is chosen to

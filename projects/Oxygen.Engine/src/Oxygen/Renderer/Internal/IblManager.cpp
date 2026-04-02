@@ -147,8 +147,7 @@ auto IblManager::EnsureViewResourcesCreated(const ViewId view_id) -> bool
   }
 
   state.resources_created = true;
-  DLOG_F(2,
-    "IblManager: Created per-view resources (view={}, Err={}, Pref={})",
+  DLOG_F(2, "IblManager: Created per-view resources (view={}, Err={}, Pref={})",
     view_id.get(), config_.irradiance_size, config_.prefilter_size);
   return true;
 }
@@ -187,8 +186,9 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   auto& registry = gfx_->GetResourceRegistry();
 
   {
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
       return false;
     }
@@ -214,8 +214,9 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   map.uav_indices.resize(mips);
 
   for (uint32_t i = 0; i < mips; ++i) {
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
       return false;
     }
@@ -238,8 +239,9 @@ auto IblManager::CreateViews(MapResources& map) -> bool
   return true;
 }
 
-auto IblManager::GetPrefilterMapUavSlot(IblPassTag /*tag*/, const ViewId view_id,
-  const uint32_t mip_level) const noexcept -> ShaderVisibleIndex
+auto IblManager::GetPrefilterMapUavSlot(IblPassTag /*tag*/,
+  const ViewId view_id, const uint32_t mip_level) const noexcept
+  -> ShaderVisibleIndex
 {
   const auto it = view_states_.find(view_id);
   if (it == view_states_.end() || !it->second) {
@@ -266,9 +268,8 @@ auto IblManager::GetIrradianceMapUavSlot(
   return kInvalidShaderVisibleIndex;
 }
 
-auto IblManager::GetIrradianceMap(
-  IblPassTag /*tag*/, const ViewId view_id) const noexcept
-  -> observer_ptr<graphics::Texture>
+auto IblManager::GetIrradianceMap(IblPassTag /*tag*/,
+  const ViewId view_id) const noexcept -> observer_ptr<graphics::Texture>
 {
   const auto it = view_states_.find(view_id);
   if (it == view_states_.end() || !it->second) {
@@ -277,9 +278,8 @@ auto IblManager::GetIrradianceMap(
   return observer_ptr(it->second->irradiance_map.texture.get());
 }
 
-auto IblManager::GetPrefilterMap(
-  IblPassTag /*tag*/, const ViewId view_id) const noexcept
-  -> observer_ptr<graphics::Texture>
+auto IblManager::GetPrefilterMap(IblPassTag /*tag*/,
+  const ViewId view_id) const noexcept -> observer_ptr<graphics::Texture>
 {
   const auto it = view_states_.find(view_id);
   if (it == view_states_.end() || !it->second) {

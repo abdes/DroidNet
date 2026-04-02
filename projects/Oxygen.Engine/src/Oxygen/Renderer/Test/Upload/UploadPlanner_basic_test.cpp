@@ -80,21 +80,21 @@ protected:
   }
   auto DoUnMap() noexcept -> void override { }
   [[nodiscard]] auto CreateConstantBufferView(
-    const oxygen::graphics::DescriptorHandle&,
+    const oxygen::graphics::DescriptorAllocationHandle&,
     const oxygen::graphics::BufferRange&) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::BufferRange, uint32_t) const
     -> oxygen::graphics::NativeView override
   {
@@ -125,28 +125,28 @@ public:
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
     -> oxygen::graphics::NativeView override
   {

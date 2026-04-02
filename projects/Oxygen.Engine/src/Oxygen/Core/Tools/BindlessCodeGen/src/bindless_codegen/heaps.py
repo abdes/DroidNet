@@ -1,333 +1,290 @@
-"""Heap allocation strategy validation and rendering helpers.
+"""D3D12 backend strategy validation and rendering helpers."""
 
-This module implements semantic checks for the `heaps` and `mappings`
-sections of the BindingSlots SSoT and produces runtime JSON fragments and
-small C++/HLSL constant snippets consumed by the main generator.
-"""
+from __future__ import annotations
 
-from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 
-def _normalize_heaps(raw_heaps: Any) -> Dict[str, Any]:
-    """Normalize `heaps` section to a dict keyed by heap id."""
-    raw = raw_heaps or {}
-    if isinstance(raw, list):
-        heaps: Dict[str, Any] = {}
-        for h in raw:
-            if not isinstance(h, dict):
-                continue
-            hid = h.get("id")
-            if not hid:
-                raise ValueError(
-                    "Heap entry in 'heaps' array missing required 'id' field"
-                )
-            heaps[hid] = h
-        return heaps
-    if isinstance(raw, dict):
-        return raw
-    raise ValueError("'heaps' must be an array or object")
+_TABLE_KIND_TO_ACCESS_CLASSES: dict[str, set[str]] = {
+    "SRV": {"buffer_srv", "texture_srv", "ray_tracing_accel_structure_srv"},
+    "UAV": {"buffer_uav", "texture_uav"},
+    "CBV": {"constant_buffer"},
+    "SAMPLER": {"sampler"},
+}
 
 
-def _normalize_mappings(raw_mappings: Any) -> Dict[str, Any]:
-    """Normalize `mappings` to a dict keyed by domain id."""
-    raw = raw_mappings or {}
-    if isinstance(raw, list):
-        mappings: Dict[str, Any] = {}
-        for m in raw:
-            if not isinstance(m, dict):
-                continue
-            domain = m.get("domain")
-            if not domain:
-                raise ValueError(
-                    "Mapping entry missing required 'domain' field"
-                )
-            mappings[domain] = m
-        return mappings
-    if isinstance(raw, dict):
-        return raw
-    raise ValueError("'mappings' must be an array or object")
+def _normalize_heaps(raw_heaps: Any) -> Dict[str, Dict[str, Any]]:
+    heaps: Dict[str, Dict[str, Any]] = {}
+    for heap in raw_heaps or []:
+        if not isinstance(heap, dict):
+            continue
+        heap_id = heap.get("id")
+        if not heap_id:
+            raise ValueError(
+                "D3D12 heap entry missing required 'id' field"
+            )
+        if heap_id in heaps:
+            raise ValueError(f"Duplicate D3D12 heap id '{heap_id}'")
+        heaps[str(heap_id)] = heap
+    return heaps
 
 
-def _validate_heap_entries(heaps: Dict[str, Any]) -> List[Tuple[int, int, str]]:
-    """Validate individual heap entries and return their global index ranges."""
+def _normalize_tables(raw_tables: Any) -> Dict[str, Dict[str, Any]]:
+    tables: Dict[str, Dict[str, Any]] = {}
+    for table in raw_tables or []:
+        if not isinstance(table, dict):
+            continue
+        table_id = table.get("id")
+        if not table_id:
+            raise ValueError(
+                "D3D12 table entry missing required 'id' field"
+            )
+        if table_id in tables:
+            raise ValueError(f"Duplicate D3D12 table id '{table_id}'")
+        tables[str(table_id)] = table
+    return tables
+
+
+def _normalize_domain_realizations(
+    raw_realizations: Any,
+) -> Dict[str, Dict[str, Any]]:
+    realizations: Dict[str, Dict[str, Any]] = {}
+    for realization in raw_realizations or []:
+        if not isinstance(realization, dict):
+            continue
+        domain = realization.get("domain")
+        if not domain:
+            raise ValueError(
+                "D3D12 domain_realization missing required 'domain' field"
+            )
+        if domain in realizations:
+            raise ValueError(
+                f"Duplicate D3D12 domain realization for '{domain}'"
+            )
+        realizations[str(domain)] = realization
+    return realizations
+
+
+def _validate_heap_entries(
+    heaps: Dict[str, Dict[str, Any]],
+) -> List[Tuple[int, int, str]]:
     ranges: List[Tuple[int, int, str]] = []
-    for name, h in heaps.items():
-        htype = h.get("type")
-        shader_visible = h.get("shader_visible")
-        capacity = int(h.get("capacity", 0))
-        base = int(h.get("base_index"))
+    for name, heap in heaps.items():
+        heap_type = str(heap.get("type"))
+        shader_visible = bool(heap.get("shader_visible"))
+        capacity = int(heap.get("capacity", 0))
+        base = int(heap.get("base_index", 0))
 
-        # Validate heap id consistency if it encodes type:visibility
-        if isinstance(name, str) and ":" in name:
-            try:
-                id_type, id_vis = name.split(":", 1)
-            except ValueError:
-                id_type, id_vis = name, ""
-            id_type = id_type.strip()
-            id_vis = id_vis.strip().lower()
-            expected_vis = "gpu" if bool(shader_visible) else "cpu"
-            if id_vis not in ("gpu", "cpu"):
+        if ":" in name:
+            heap_type_from_id, heap_vis = name.split(":", 1)
+            expected_vis = "gpu" if shader_visible else "cpu"
+            if heap_vis not in ("gpu", "cpu"):
                 raise ValueError(
-                    f"Heap id '{name}' visibility suffix '{id_vis}' must be 'gpu' or 'cpu'"
+                    f"D3D12 heap '{name}' visibility suffix must be 'gpu' or "
+                    "'cpu'"
                 )
-            if id_vis != expected_vis:
+            if heap_type_from_id != heap_type:
                 raise ValueError(
-                    f"Heap id '{name}' visibility suffix '{id_vis}' conflicts with shader_visible={bool(shader_visible)}"
+                    f"D3D12 heap '{name}' type prefix '{heap_type_from_id}' "
+                    f"does not match heap type '{heap_type}'"
+                )
+            if heap_vis != expected_vis:
+                raise ValueError(
+                    f"D3D12 heap '{name}' visibility suffix '{heap_vis}' "
+                    f"conflicts with shader_visible={shader_visible}"
                 )
 
-        # Type/visibility constraints
-        if htype in ("RTV", "DSV") and shader_visible:
+        if heap_type in ("RTV", "DSV") and shader_visible:
             raise ValueError(
-                f"Heap '{name}' type '{htype}' cannot be shader_visible"
+                f"D3D12 heap '{name}' type '{heap_type}' cannot be "
+                "shader_visible"
             )
-        if shader_visible and htype not in ("CBV_SRV_UAV", "SAMPLER"):
+        if shader_visible and heap_type not in ("CBV_SRV_UAV", "SAMPLER"):
             raise ValueError(
-                f"Heap '{name}' is shader_visible but type '{htype}' does not allow shader visibility"
+                f"D3D12 heap '{name}' is shader_visible but type '{heap_type}' "
+                "does not permit shader visibility"
             )
-
-        # Capacity must be positive
         if capacity <= 0:
-            raise ValueError(f"Heap '{name}' capacity must be > 0")
+            raise ValueError(f"D3D12 heap '{name}' capacity must be > 0")
 
         ranges.append((base, base + capacity, name))
     return ranges
 
 
 def _check_global_heap_overlaps(ranges: List[Tuple[int, int, str]]) -> None:
-    """Ensure no two heaps overlap in global index space."""
-    ranges.sort(key=lambda t: t[0])
-    for i in range(1, len(ranges)):
-        prev = ranges[i - 1]
-        cur = ranges[i]
+    ordered = sorted(ranges, key=lambda item: item[0])
+    for idx in range(1, len(ordered)):
+        prev = ordered[idx - 1]
+        cur = ordered[idx]
         if cur[0] < prev[1]:
             raise ValueError(
-                f"Heap address ranges overlap: '{prev[2]}' [{prev[0]},{prev[1]}) overlaps '{cur[2]}' [{cur[0]},{cur[1]})"
+                f"D3D12 heap address ranges overlap: '{prev[2]}' "
+                f"[{prev[0]},{prev[1]}) overlaps '{cur[2]}' "
+                f"[{cur[0]},{cur[1]})"
             )
 
 
-def _validate_mapping_heap_names(
-    mappings: Dict[str, Any], heaps: Dict[str, Any]
+def _validate_tables(
+    heaps: Dict[str, Dict[str, Any]], tables: Dict[str, Dict[str, Any]]
 ) -> None:
-    """Validate that every mapping references an existing heap."""
-    for rv, m in mappings.items():
-        heap_name = m.get("heap")
-        if heap_name not in heaps:
+    for table_id, table in tables.items():
+        heap_id = str(table.get("heap"))
+        if heap_id not in heaps:
             raise ValueError(
-                f"Mapping for '{rv}' references unknown heap '{heap_name}'"
+                f"D3D12 table '{table_id}' references unknown heap '{heap_id}'"
             )
 
+        heap = heaps[heap_id]
+        descriptor_kind = str(table.get("descriptor_kind"))
+        if bool(table.get("unbounded")) and table.get("descriptor_count") is not None:
+            raise ValueError(
+                f"D3D12 table '{table_id}' cannot specify both 'unbounded' and "
+                "'descriptor_count'"
+            )
 
-def _validate_per_heap_domain_capacity(
-    doc: Dict[str, Any],
-    heaps: Dict[str, Any],
-    mappings: Dict[str, Any],
+        if not bool(heap.get("shader_visible")):
+            raise ValueError(
+                f"D3D12 table '{table_id}' must reference a shader-visible heap"
+            )
+
+        heap_type = str(heap.get("type"))
+        if descriptor_kind == "SAMPLER":
+            if heap_type != "SAMPLER":
+                raise ValueError(
+                    f"D3D12 table '{table_id}' kind SAMPLER must use a "
+                    "SAMPLER heap"
+                )
+        else:
+            if heap_type != "CBV_SRV_UAV":
+                raise ValueError(
+                    f"D3D12 table '{table_id}' kind '{descriptor_kind}' must "
+                    "use a CBV_SRV_UAV heap"
+                )
+
+
+def _validate_domain_realizations(
+    domains_by_id: Dict[str, Dict[str, Any]],
+    heaps: Dict[str, Dict[str, Any]],
+    tables: Dict[str, Dict[str, Any]],
+    realizations: Dict[str, Dict[str, Any]],
 ) -> None:
-    """Ensure domains mapped into a heap fit and do not exceed heap capacity.
+    missing = sorted(set(domains_by_id) - set(realizations))
+    if missing:
+        raise ValueError(
+            f"D3D12 strategy is missing domain realizations for {missing}"
+        )
 
-    Checks each heap's local ranges for containment, total capacity, and overlaps.
-    """
-    domains_list = doc.get("domains", []) or []
-    domains_by_id = {
-        d.get("id"): d for d in domains_list if isinstance(d, dict)
-    }
+    intervals_by_heap: Dict[str, List[Tuple[int, int, str]]] = {}
 
-    # Group mappings by heap id
-    mappings_by_heap: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
-    for dom_id, m in mappings.items():
-        heap_name = m.get("heap")
-        mappings_by_heap.setdefault(heap_name, []).append((dom_id, m))
-
-    for heap_name, entries in mappings_by_heap.items():
-        h = heaps.get(heap_name)
-        if not h:
-            raise ValueError(f"Mapping references unknown heap '{heap_name}'")
-        heap_cap = int(h.get("capacity", 0))
-        if heap_cap <= 0:
-            raise ValueError(f"Heap '{heap_name}' capacity must be > 0")
-
-        total_caps = 0
-        intervals_local: List[Tuple[int, int, str]] = []
-        for dom_id, m in entries:
-            d = domains_by_id.get(dom_id)
-            if not d:
-                raise ValueError(
-                    f"Mapping for domain '{dom_id}' has no corresponding domain entry"
-                )
-            dom_cap = d.get("capacity")
-            if dom_cap is None:
-                raise ValueError(
-                    f"Domain '{dom_id}' used in heap mapping must define 'capacity'"
-                )
-            dom_cap_i = int(dom_cap)
-            if dom_cap_i < 0:
-                raise ValueError(
-                    f"Domain '{dom_id}' capacity must be non-negative"
-                )
-            local_base = int(m.get("local_base", 0))
-            if local_base < 0:
-                raise ValueError(
-                    f"Mapping for domain '{dom_id}' has negative local_base {local_base}"
-                )
-            local_end = local_base + dom_cap_i
-            if local_end > heap_cap:
-                raise ValueError(
-                    f"Mapping for domain '{dom_id}' exceeds heap '{heap_name}' capacity: "
-                    f"[{local_base},{local_end}) with capacity {dom_cap_i} > heap capacity {heap_cap}"
-                )
-            total_caps += dom_cap_i
-            intervals_local.append((local_base, local_end, dom_id))
-
-        if total_caps > heap_cap:
+    for domain_id, realization in realizations.items():
+        domain = domains_by_id.get(domain_id)
+        if domain is None:
             raise ValueError(
-                f"Sum of capacities for domains mapped to heap '{heap_name}' ({total_caps}) exceeds heap capacity ({heap_cap})"
+                f"D3D12 domain realization references unknown ABI domain "
+                f"'{domain_id}'"
             )
 
-        intervals_local.sort(key=lambda t: t[0])
-        for i in range(1, len(intervals_local)):
-            prev = intervals_local[i - 1]
-            cur = intervals_local[i]
+        table_id = str(realization.get("table"))
+        table = tables.get(table_id)
+        if table is None:
+            raise ValueError(
+                f"D3D12 domain realization for '{domain_id}' references "
+                f"unknown table '{table_id}'"
+            )
+
+        descriptor_kind = str(table.get("descriptor_kind"))
+        access_class = str(domain.get("shader_access_class"))
+        allowed_access_classes = _TABLE_KIND_TO_ACCESS_CLASSES[descriptor_kind]
+        if access_class not in allowed_access_classes:
+            raise ValueError(
+                f"D3D12 domain realization for '{domain_id}' uses table "
+                f"'{table_id}' kind '{descriptor_kind}', which is not "
+                f"compatible with shader_access_class '{access_class}'"
+            )
+
+        heap_id = str(table.get("heap"))
+        heap = heaps[heap_id]
+        local_base = int(realization.get("heap_local_base", 0))
+        capacity = int(domain.get("capacity", 0))
+        local_end = local_base + capacity
+
+        if local_end > int(heap.get("capacity", 0)):
+            raise ValueError(
+                f"D3D12 domain realization for '{domain_id}' exceeds heap "
+                f"'{heap_id}' capacity: [{local_base},{local_end})"
+            )
+
+        descriptor_count = table.get("descriptor_count")
+        if descriptor_count is not None and local_end > int(descriptor_count):
+            raise ValueError(
+                f"D3D12 domain realization for '{domain_id}' exceeds table "
+                f"'{table_id}' descriptor_count: [{local_base},{local_end})"
+            )
+
+        intervals_by_heap.setdefault(heap_id, []).append(
+            (local_base, local_end, domain_id)
+        )
+
+    for heap_id, intervals in intervals_by_heap.items():
+        ordered = sorted(intervals, key=lambda item: item[0])
+        for idx in range(1, len(ordered)):
+            prev = ordered[idx - 1]
+            cur = ordered[idx]
             if cur[0] < prev[1]:
                 raise ValueError(
-                    f"Heap-local mapping overlap in heap '{heap_name}': "
-                    f"domain '{prev[2]}' [{prev[0]},{prev[1]}) overlaps domain '{cur[2]}' [{cur[0]},{cur[1]})"
+                    f"D3D12 heap-local realization overlap in heap '{heap_id}': "
+                    f"domain '{prev[2]}' [{prev[0]},{prev[1]}) overlaps "
+                    f"domain '{cur[2]}' [{cur[0]},{cur[1]})"
                 )
 
 
-def validate_heaps_and_mappings(doc: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate `heaps` and `mappings` and return runtime fragment.
-
-    Keeps this function small by delegating to helpers for normalization and
-    validations to maintain low cyclomatic complexity.
-    """
-    heaps = _normalize_heaps(doc.get("heaps"))
-    mappings = _normalize_mappings(doc.get("mappings"))
+def validate_d3d12_backend(
+    backend_doc: Dict[str, Any],
+    domains_by_id: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    strategy = backend_doc.get("strategy") or {}
+    heaps = _normalize_heaps(strategy.get("heaps"))
+    tables = _normalize_tables(strategy.get("tables"))
+    realizations = _normalize_domain_realizations(
+        strategy.get("domain_realizations")
+    )
 
     ranges = _validate_heap_entries(heaps)
     _check_global_heap_overlaps(ranges)
-    _validate_mapping_heap_names(mappings, heaps)
-    _validate_per_heap_domain_capacity(doc, heaps, mappings)
+    _validate_tables(heaps, tables)
+    _validate_domain_realizations(domains_by_id, heaps, tables, realizations)
 
-    return {"heaps": heaps, "mappings": mappings}
-
-
-def render_cpp_heaps(heaps: Dict[str, Any]) -> str:
-    """Render C++ snippets for heaps.
-
-    Accept either a dict keyed by heap id or a list of heap objects. Normalize
-    to a dict internally for clarity.
-    """
-    # Normalize if a list was passed
-    if isinstance(heaps, list):
-        _heaps = {}
-        for h in heaps:
-            if not isinstance(h, dict):
-                continue
-            hid = h.get("id")
-            if not hid:
-                continue
-            _heaps[hid] = h
-    else:
-        _heaps = heaps
-
-    lines: List[str] = []
-    for name, h in _heaps.items():
-        # ensure the analyzer understands h is a mapping
-        h_dict: Dict[str, Any] = h  # type: ignore
-        dbg = h_dict.get("debug_name")
-        if dbg:
-            lines.append(f"// {dbg}")
-        # C++ constants: kUpperCamelCase
-        lines.append(
-            f"static constexpr uint32_t k{name}HeapBase = {int(h_dict['base_index'])}U;"
-        )
-        lines.append(
-            f"static constexpr uint32_t k{name}HeapCapacity = {int(h_dict['capacity'])}U;"
-        )
-        lines.append(
-            f"static constexpr bool k{name}HeapShaderVisible = {str(bool(h_dict['shader_visible'])).lower()};"
-        )
-        lines.append("")
-    return "\n".join(lines)
+    return {
+        "heaps": heaps,
+        "tables": tables,
+        "domain_realizations": realizations,
+    }
 
 
-def render_hlsl_heaps(heaps: Dict[str, Any]) -> str:
-    """Render HLSL snippets for heaps.
-
-    Accept either a dict keyed by heap id or a list of heap objects. Normalize
-    to a dict internally for clarity.
-    """
-    if isinstance(heaps, list):
-        _heaps = {}
-        for h in heaps:
-            if not isinstance(h, dict):
-                continue
-            hid = h.get("id")
-            if not hid:
-                continue
-            _heaps[hid] = h
-    else:
-        _heaps = heaps
-
-    lines: List[str] = []
-    for name, h in _heaps.items():
-        up = name.upper()
-        h_dict: Dict[str, Any] = h  # type: ignore
-        dbg = h_dict.get("debug_name")
-        if dbg:
-            lines.append(f"// {dbg}")
-        # HLSL constants: K_UPPER_SNAKE_CASE
-        lines.append(
-            f"static const uint K_{up}_HEAP_BASE = {int(h_dict['base_index'])};"
-        )
-        lines.append(
-            f"static const uint K_{up}_HEAP_CAPACITY = {int(h_dict['capacity'])};"
-        )
-        lines.append("")
-    return "\n".join(lines)
-
-
-def _build_heap_key(htype: str, shader_visible: bool) -> str:
-    """Mimic D3D12HeapAllocationStrategy::BuildHeapKey format.
-
-    Keys look like: "CBV_SRV_UAV:gpu" or "SAMPLER:cpu".
-    """
-    vis = "gpu" if shader_visible else "cpu"
-    return f"{htype}:{vis}"
+def _build_heap_key(heap_type: str, shader_visible: bool) -> str:
+    visibility = "gpu" if shader_visible else "cpu"
+    return f"{heap_type}:{visibility}"
 
 
 def build_d3d12_strategy_json(heaps: Dict[str, Any]) -> Dict[str, Any]:
-    """Compose a D3D12 heap strategy JSON fragment wrapped under top-level 'heaps'.
-
-    Input `heaps` may be a dict keyed by heap id or a list of heap objects.
-    Output structure is: { "heaps": { key -> { capacity, base_index, policy... } } }
-    where key looks like "CBV_SRV_UAV:gpu" or "SAMPLER:cpu".
-    """
-    # Normalize
-    if isinstance(heaps, list):
-        _heaps = {
-            h.get("id"): h for h in heaps if isinstance(h, dict) and h.get("id")
-        }
-    else:
-        _heaps = heaps or {}
-
+    """Build the runtime D3D12 heap strategy JSON fragment."""
     flat: Dict[str, Any] = {}
-    for _, h in _heaps.items():
-        htype = str(h.get("type"))
-        shader_vis = bool(h.get("shader_visible"))
-        key = _build_heap_key(htype, shader_vis)
-        cap = int(h.get("capacity", 0))
+    for heap in (heaps or {}).values():
+        heap_type = str(heap.get("type"))
+        shader_vis = bool(heap.get("shader_visible"))
+        key = _build_heap_key(heap_type, shader_vis)
         entry = {
-            "capacity": cap,
+            "capacity": int(heap.get("capacity", 0)),
             "shader_visible": shader_vis,
-            "allow_growth": bool(h.get("allow_growth", False)),
-            # Conservative defaults; engine currently sets fixed, non-growing heaps
-            "growth_factor": float(h.get("growth_factor", 0.0)),
-            "max_growth_iterations": int(h.get("max_growth_iterations", 0)),
-            "base_index": int(h.get("base_index", 0)),
+            "allow_growth": bool(heap.get("allow_growth", False)),
+            "growth_factor": float(heap.get("growth_factor", 0.0)),
+            "max_growth_iterations": int(
+                heap.get("max_growth_iterations", 0)
+            ),
+            "base_index": int(heap.get("base_index", 0)),
         }
-        dbg = h.get("debug_name")
-        if dbg:
-            entry["debug_name"] = dbg
+        debug_name = heap.get("debug_name")
+        if debug_name:
+            entry["debug_name"] = debug_name
         flat[key] = entry
     return {"heaps": flat}

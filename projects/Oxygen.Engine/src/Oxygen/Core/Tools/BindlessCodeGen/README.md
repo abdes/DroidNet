@@ -11,39 +11,45 @@ centralized YAML specification.
 
 ## What It Generates
 
-From `src/Oxygen/Core/Bindless/Spec.yaml`, the tool generates:
+From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 
-- C++: `Generated.Constants.h` — domain constants and invalid index sentinel
-- HLSL: `Generated.BindlessLayout.hlsl` — matching shader constants and helpers
-- C++: `Generated.RootSignature.h` — root param indices, constants counts,
+- C++: `Generated.BindlessAbi.h` — domain constants and invalid index sentinel
+- HLSL: `Generated.BindlessAbi.hlsl` — matching shader constants and helpers
+- C++: `Generated.RootSignature.D3D12.h` — root param indices, constants counts,
   register/space hints
 - C++: `Generated.Meta.h` — compile-time meta constants (source path, versions,
   timestamp)
 - JSON: `Generated.All.json` — machine-friendly normalized descriptor of the
   spec
-- JSON: `Generated.Heaps.D3D12.json` — D3D12 heap allocation strategy with
-  metadata
-- C++: `Generated.Heaps.D3D12.h` — constexpr-embedded copy of the heaps JSON
+- JSON: `Generated.Strategy.D3D12.json` — D3D12 strategy JSON with metadata
+- JSON: `Generated.Strategy.Vulkan.json` — Vulkan strategy JSON with metadata
+- C++: `Generated.Strategy.D3D12.h` — constexpr-embedded copy of the D3D12
+  strategy JSON
 
 ### Example
 
 **YAML Input:**
 
 ```yaml
-domains:
-  - id: textures
-    name: "Textures"
-    kind: SRV
-    domain_base: 5096
-    capacity: 65536
-    comment: "Texture SRV array"
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: textures
+      name: "Textures"
+      index_space: srv_uav_cbv
+      shader_index_base: 5096
+      capacity: 65536
+      shader_access_class: texture_srv
+      view_types: [Texture_SRV]
+      comment: "Texture SRV array"
 ```
 
 **Generated C++ Output (Constants):**
 
 ```cpp
-namespace oxygen::engine::binding {
-  static constexpr uint32_t kTexturesDomainBase = 5096u;
+namespace oxygen::bindless::generated {
+  inline constexpr uint32_t kTexturesShaderIndexBase = 5096u;
   static constexpr uint32_t kTexturesCapacity = 65536u;
 }
 ```
@@ -51,7 +57,7 @@ namespace oxygen::engine::binding {
 **Generated HLSL Output:**
 
 ```hlsl
-static const uint K_TEXTURES_DOMAIN_BASE = 5096;
+static const uint K_TEXTURES_SHADER_INDEX_BASE = 5096;
 static const uint K_TEXTURES_CAPACITY = 65536;
 ```
 
@@ -59,17 +65,17 @@ static const uint K_TEXTURES_CAPACITY = 65536;
 
 ```cpp
 // Generated file - do not edit.
-// Source: projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml
-// Source-Version: 1.0.0
-// Schema-Version: 1.0.0
-// Tool: BindlessCodeGen 1.0.0
+// Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
+// Source-Version: 2.0.0
+// Schema-Version: 2.0.0
+// Tool: BindlessCodeGen 1.2.2
 // Generated: 2025-08-17 20:52:23
 
-namespace oxygen::engine::binding {
-  static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml";
-  static constexpr const char kBindlessSourceVersion[] = "1.0.0";
-  static constexpr const char kBindlessSchemaVersion[] = "1.0.0";
-  static constexpr const char kBindlessToolVersion[] = "1.0.0";
+namespace oxygen::bindless::generated {
+  static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
+  static constexpr const char kBindlessSourceVersion[] = "2.0.0";
+  static constexpr const char kBindlessSchemaVersion[] = "2.0.0";
+  static constexpr const char kBindlessToolVersion[] = "1.2.2";
   static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 20:52:23";
 }
 ```
@@ -77,12 +83,13 @@ namespace oxygen::engine::binding {
 ## Key Locations
 
 - **Tool Package**: `src/Oxygen/Core/Tools/BindlessCodeGen/src/bindless_codegen`
-- **YAML Source**: `src/Oxygen/Core/Bindless/Spec.yaml`
-- **Generated C++**: `src/Oxygen/Core/Bindless/Generated.Constants.h`,
-  `Generated.RootSignature.h`, `Generated.Meta.h`, `Generated.Heaps.D3D12.h`
-- **Generated HLSL**: `src/Oxygen/Core/Bindless/Generated.BindlessLayout.hlsl`
-- **Generated JSON**: `src/Oxygen/Core/Bindless/Generated.All.json`,
-  `Generated.Heaps.D3D12.json`
+- **YAML Source**: `src/Oxygen/Core/Meta/Bindless.yaml`
+- **Generated C++**: `src/Oxygen/Core/Bindless/Generated.BindlessAbi.h`,
+  `Generated.RootSignature.D3D12.h`, `Generated.PipelineLayout.Vulkan.h`,
+  `Generated.Meta.h`, `Generated.Strategy.D3D12.h`
+- **Generated HLSL**: `src/Oxygen/Core/Bindless/Generated.BindlessAbi.hlsl`
+- **Generated JSON**: `src/Oxygen/Core/Meta/Generated.All.json`,
+  `Generated.Strategy.D3D12.json`, `Generated.Strategy.Vulkan.json`
 
 ## Usage
 
@@ -92,14 +99,15 @@ Run the packaged CLI from the repository root:
 
 ```powershell
 python -m bindless_codegen.cli `
-  --input src/Oxygen/Core/Bindless/Spec.yaml `
+  --input src/Oxygen/Core/Meta/Bindless.yaml `
   --out-base src/Oxygen/Core/Bindless/Generated.
 ```
 
 Notes:
 
-- Use `--out-base` to emit the full set in one go (Constants.h,
-  BindlessLayout.hlsl, RootSignature.h, Meta.h, All.json, Heaps.D3D12.json/.h).
+- Use `--out-base` to emit the full set in one go (BindlessAbi.h,
+  BindlessAbi.hlsl, RootSignature.D3D12.h, PipelineLayout.Vulkan.h, Meta.h,
+  All.json, Strategy.D3D12.json/.h, Strategy.Vulkan.json).
 - Flags: `-v/--verbose` for more logs, `-q/--quiet`,
   `--color=auto|always|never`.
 
@@ -123,7 +131,7 @@ This target:
 **Generate Bindless Outputs (Recommended):**
 
 ```powershell
-cmake --build --preset=windows-debug --target generate_bindless_headers
+cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 ```
 
 This target:
@@ -135,7 +143,7 @@ This target:
 
 ### Compile-check (header validation)
 
-When you build the `generate_bindless_headers` target, the tool also runs a
+When you build the `oxygen-core_bindless_gen` target, the tool also runs a
 small compile-only check that includes the generated headers (kept under the
 tool). This ensures the generated C++ headers remain syntactically and
 semantically valid for the engine build. The compile-check is implemented as
@@ -144,14 +152,14 @@ tool and will fail the generation step if compilation of the generated
 headers fails.
 
 If you prefer to run generation without running the compile-check (for a
-one-off quick generation), build only the `generate_bindless_headers` files by
+one-off quick generation), build only the generated files by
 invoking the Python CLI directly rather than the CMake target, or adjust CMake
 configuration in environments where the check should be skipped.
 
 Example (build generation and compile-check via CMake):
 
 ```powershell
-cmake --build --preset=windows-debug --target generate_bindless_headers
+cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 ```
 
 ## Requirements
@@ -264,64 +272,78 @@ source directory to your Python analysis paths. The repository includes a
 
 - Schema version is declared inside the schema file as `x-oxygen-schema-version`
   and is emitted into all generated files.
-- The `Spec.yaml` file uses the following structure:
+- The `Bindless.yaml` file uses the following structure:
 
 ```yaml
 meta:
-  version: "1.0.0"          # Spec version (from schema)
-  description: "Description of the binding slots"
+  version: "2.0.0"
+  description: "Description of the bindless ABI"
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: domain_id           # Unique identifier
-    name: "DisplayName"     # Human-readable name
-    kind: SRV|CBV|SAMPLER|UAV # Resource type (enum)
-    register: t0|b0|s0|u0   # HLSL register (optional)
-    space: space0           # Register space token (optional)
-    domain_base: 0          # Base index in the domain
-    capacity: 1000          # Maximum number of resources
-    comment: "Description"  # Documentation
-symbols:
-  SymbolName:
-    domain: domain_id       # Reference to domain
-    comment: "Description"
-  ConstantName:
-    value: invalid_index    # Direct value assignment
-    comment: "Description"
-root_signature:
-  - type: descriptor_table
-    name: GlobalSRVTable
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: [domain_id] # Or a single string
-        base_shader_register: t0
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+    - id: sampler
+  domains:
+    - id: domain_id
+      name: "DisplayName"
+      index_space: srv_uav_cbv
+      shader_index_base: 1
+      capacity: 1000
+      shader_access_class: buffer_srv|buffer_uav|texture_srv|texture_uav|constant_buffer|sampler|ray_tracing_accel_structure_srv
+      view_types: [StructuredBuffer_SRV]
+      comment: "Description"
+backends:
+  d3d12:
+    strategy:
+      heaps: [...]
+      tables: [...]
+      domain_realizations: [...]
+    root_signature:
+      - type: descriptor_table
+        id: GlobalSRVTable
+        table: GlobalSRVTable
+        index: 0
+        visibility: ALL
+      - type: cbv
+        id: SceneConstants
+        index: 1
+        shader_register: b1
         register_space: space0
-        num_descriptors: unbounded
-  - type: cbv
-    name: SceneConstants
-    index: 1
-    shader_register: b1
-    register_space: space0
-    visibility: ALL
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets: [...]
+      bindings: [...]
+      domain_realizations: [...]
+    pipeline_layout:
+      - type: descriptor_set
+        id: BindlessMain
+        set_ref: bindless_main
 ```
 
-### D3D12 Heaps Strategy JSON
+Notes:
 
-- Emitted as `Generated.Heaps.D3D12.json` and embedded in
-  `Generated.Heaps.D3D12.h`.
+- ABI domain overlap is validated per `index_space`, not globally across
+  unrelated spaces such as SRV/UAV/CBV versus SAMPLER.
+- Root CBVs and root constants are backend realization data, not bindless
+  domains.
+
+### D3D12 Strategy JSON
+
+- Emitted as `Generated.Strategy.D3D12.json` and embedded in
+  `Generated.Strategy.D3D12.h`.
 - Structure:
 
 ```json
 {
   "$meta": {
-    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Bindless/Spec.yaml",
+    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
     "source_version": "1.0.0",
     "schema_version": "1.0.0",
     "tool_version": "1.0.0",
     "generated": "YYYY-MM-DD HH:MM:SS",
-    "format": "D3D12HeapStrategy/2"
+    "format": "BindlessStrategy.D3D12/1"
   },
   "heaps": {
   "CBV_SRV_UAV:cpu": { "capacity": 1000000, ... },
@@ -334,7 +356,7 @@ root_signature:
 }
 ```
 
-Use `oxygen::engine::binding::kD3D12HeapStrategyJson` to parse at runtime.
+Use `oxygen::bindless::generated::d3d12::kStrategyJson` to parse at runtime.
 
 ## References
 

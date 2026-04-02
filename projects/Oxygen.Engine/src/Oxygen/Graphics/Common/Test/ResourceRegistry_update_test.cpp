@@ -12,14 +12,14 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::NativeView;
 using oxygen::graphics::ResourceRegistry;
@@ -83,15 +83,16 @@ protected:
 
   struct RegisteredViewInfo {
     NativeView view;
-    decltype(std::declval<DescriptorHandle>().GetBindlessHandle()) index;
+    decltype(std::declval<DescriptorAllocationHandle>()
+        .GetBindlessHandle()) index;
   };
 
   // Helper: register a view and return both the native view and bindless index
   auto RegisterViewGetIndex(FakeResource& resource,
     const TestViewDesc& desc) const -> RegisteredViewInfo
   {
-    DescriptorHandle descriptor
-      = allocator_->Allocate(desc.view_type, desc.visibility);
+    DescriptorAllocationHandle descriptor
+      = allocator_->AllocateRaw(desc.view_type, desc.visibility);
     if (!descriptor.IsValid()) {
       ADD_FAILURE() << "failed to allocate descriptor";
       return {};

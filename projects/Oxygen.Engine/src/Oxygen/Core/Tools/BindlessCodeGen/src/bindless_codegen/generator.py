@@ -37,24 +37,26 @@ except Exception:
 from . import schema as schema_mod
 from . import domains as domains_mod
 from . import root_signature as rs_mod
+from . import vulkan as vk_mod
 from . import model as model_mod
 from .templates import (
-    TEMPLATE_CPP,
-    TEMPLATE_HLSL,
-    TEMPLATE_RS_CPP,
-    TEMPLATE_HEAPS_D3D12_CPP,
+    TEMPLATE_ABI_CPP,
+    TEMPLATE_ABI_HLSL,
+    TEMPLATE_RS_D3D12_CPP,
+    TEMPLATE_STRATEGY_D3D12_CPP,
+    TEMPLATE_PIPELINE_LAYOUT_VULKAN_CPP,
     TEMPLATE_META_CPP,
 )
 from ._version import __version__ as TOOL_VERSION
 import re
 
 
-def render_cpp_domains(domains):
-    return domains_mod.render_cpp_domains(domains)
+def render_cpp_abi(index_spaces, domains):
+    return domains_mod.render_cpp_abi(index_spaces, domains)
 
 
-def render_hlsl_domains(domains):
-    return domains_mod.render_hlsl_domains(domains)
+def render_hlsl_abi(domains):
+    return domains_mod.render_hlsl_abi(domains)
 
 
 def _render_root_sig_cpp(root_sig: list[dict]) -> tuple[str, str, str]:
@@ -251,15 +253,29 @@ def find_schema(explicit_path: str | None, script_path: str) -> Path | None:
     return schema_mod.find_schema(explicit_path, script_path)
 
 
-def validate_domain_references(doc):
-    """Cross-validate domains vs root_signature using specialized modules."""
-    domains = doc.get("domains", [])
-    root_sig = doc.get("root_signature", [])
-    domains_mod.validate_root_table_references(domains, root_sig)
-    domains_mod.validate_domain_overlaps_per_root_table(domains)
-    rs_mod.validate_params_vs_domains(
-        root_sig, {d.get("id"): d for d in domains}
+def validate_authored_model(doc):
+    """Cross-validate the authored ABI plus backend realizations."""
+    abi = doc.get("abi", {}) or {}
+    index_spaces = abi.get("index_spaces", []) or []
+    domains = abi.get("domains", []) or []
+    domains_mod.validate_abi_domains(index_spaces, domains)
+    domains_by_id = {str(d.get("id")): d for d in domains}
+
+    backends = doc.get("backends", {}) or {}
+    d3d12 = backends.get("d3d12", {}) or {}
+    d3d12_runtime = heaps_module.validate_d3d12_backend(d3d12, domains_by_id)
+    rs_mod.validate_root_signature(
+        d3d12.get("root_signature", []) or [], d3d12_runtime["tables"]
     )
+
+    vulkan = backends.get("vulkan", {}) or {}
+    vulkan_runtime = vk_mod.validate_vulkan_backend(vulkan, domains_by_id)
+
+    return {
+        "domains": domains_by_id,
+        "d3d12": d3d12_runtime,
+        "vulkan": vulkan_runtime,
+    }
 
 
 def generate(
@@ -364,8 +380,8 @@ def generate(
         )
     rep.info("Spec version: %s", src_ver)
     # Semantic validations across sections
-    rep.progress("Validating cross-references (domains/root-signature/heaps)")
-    validate_domain_references(doc)
+    rep.progress("Validating authored ABI and backend realizations")
+    validated = validate_authored_model(doc)
     # Build typed model (normalized) for downstream use
     rep.progress("Building normalized model")
     mdl = model_mod.build_model(doc)
@@ -375,18 +391,9 @@ def generate(
         if mdl
         else defaults.get("invalid_index", 0xFFFFFFFF)
     )
-    domains = doc.get("domains", [])
-    # Build domain lookup by id for cross-validation with root_signature ranges
-    domain_by_id = {d.get("id"): d for d in domains}
-    # Validate optional root_signature cross-links
-    root_sig = doc.get("root_signature", [])
-    # removed: duplicated validations now live in modules
-
-    # removed: handled in domains module
-
-    # removed: handled in root_signature module
-
-    # removed: handled in root_signature module
+    domains = ((doc.get("abi") or {}).get("domains") or [])
+    d3d12_backend = ((doc.get("backends") or {}).get("d3d12") or {})
+    root_sig = d3d12_backend.get("root_signature", []) or []
     # Determine timestamp string according to strategy
     if ts_strategy == "omit":
         ts = ""
@@ -430,20 +437,27 @@ def generate(
 
     src_rel = _compute_repo_rel(input_yaml)
     rep.debug("Source path (repo-relative): %s", src_rel)
-    rep.progress("Rendering C++ domain constants")
-    domain_consts = render_cpp_domains(domains)
-    content_cpp = TEMPLATE_CPP.format(
+    rep.progress("Rendering C++ bindless ABI")
+    abi_cpp = render_cpp_abi(
+        ((doc.get("abi") or {}).get("index_spaces") or []), domains
+    )
+    content_cpp = TEMPLATE_ABI_CPP.format(
         src=src_rel,
         src_ver=src_ver,
         schema_ver=schema_version or "",
         tool_ver=TOOL_VERSION,
         ts=ts,
         invalid=invalid,
-        domain_consts=domain_consts,
+        index_space_constants=abi_cpp["index_space_constants"],
+        index_space_entries=abi_cpp["index_space_entries"],
+        index_space_count=abi_cpp["index_space_count"],
+        domain_constants=abi_cpp["domain_constants"],
+        domain_entries=abi_cpp["domain_entries"],
+        domain_count=abi_cpp["domain_count"],
     )
-    rep.progress("Rendering HLSL bindless layout")
-    domain_defs = render_hlsl_domains(domains)
-    content_hlsl = TEMPLATE_HLSL.format(
+    rep.progress("Rendering HLSL bindless ABI")
+    domain_defs = render_hlsl_abi(domains)
+    content_hlsl = TEMPLATE_ABI_HLSL.format(
         src=src_rel,
         src_ver=src_ver,
         schema_ver=schema_version or "",
@@ -454,9 +468,11 @@ def generate(
     )
 
     # RootSignature C++ header content (rich metadata)
-    rep.progress("Rendering C++ RootSignature header")
+    rep.progress("Rendering D3D12 root-signature header")
     try:
-        rich = rs_mod.render_cpp_root_signature(root_sig or [])
+        rich = rs_mod.render_cpp_root_signature(
+            root_sig or [], validated["d3d12"]["tables"]
+        )
     except Exception:
         # Fallback to basic rendering
         rs_enum, rs_counts, rs_regs = _render_root_sig_cpp(root_sig)
@@ -468,7 +484,7 @@ def generate(
             "root_param_table": "// none",
         }
 
-    content_rs = TEMPLATE_RS_CPP.format(
+    content_rs = TEMPLATE_RS_D3D12_CPP.format(
         src=src_rel,
         src_ver=src_ver,
         schema_ver=schema_version or "",
@@ -481,34 +497,74 @@ def generate(
         root_param_table=rich.get("root_param_table"),
     )
 
-    # Prepare runtime JSON descriptor (machine-friendly)
-    # Include heaps/mappings runtime fragment when present and keep the
-    # normalized fragment for rendering during dry-run.
-    heaps_runtime_fragment = {}
-    strategy_json = {}
-    if doc.get("heaps"):
-        rep.progress("Validating heaps + mappings and building strategy JSON")
-        heaps_runtime_fragment = heaps_module.validate_heaps_and_mappings(doc)
-        # Build D3D12 strategy description wrapped under top-level 'heaps'
-        strategy_json = heaps_module.build_d3d12_strategy_json(
-            heaps_runtime_fragment.get("heaps", {})
+    # Prepare runtime JSON descriptor (machine-friendly).
+    d3d12_strategy_json = {}
+    if validated["d3d12"]["heaps"]:
+        rep.progress("Building D3D12 strategy JSON")
+        d3d12_strategy_json = heaps_module.build_d3d12_strategy_json(
+            validated["d3d12"]["heaps"]
         )
-        # Attach metadata for traceability; keep entries at top-level for compatibility
         strategy_with_meta = {
             "$meta": {
                 "source": src_rel,
                 "source_version": src_ver,
                 "tool_version": TOOL_VERSION,
                 "generated": ts,
-                "format": "D3D12HeapStrategy/2",
+                "format": "BindlessStrategy.D3D12/1",
             },
-            # strategy_json already has {"heaps": {...}}
         }
         if schema_version:
             strategy_with_meta["$meta"]["schema_version"] = schema_version
-        # Merge without flattening 'heaps'
-        strategy_with_meta.update(strategy_json)
-        strategy_json = strategy_with_meta
+        strategy_with_meta.update(d3d12_strategy_json)
+        d3d12_strategy_json = strategy_with_meta
+
+    vulkan_backend = ((doc.get("backends") or {}).get("vulkan") or {})
+    vulkan_strategy_doc = vulkan_backend.get("strategy") or {}
+    vulkan_strategy_json = {}
+    if validated["vulkan"]["bindings"]:
+        rep.progress("Building Vulkan strategy JSON")
+        vulkan_strategy_json = vk_mod.build_vulkan_strategy_json(
+            vulkan_strategy_doc
+        )
+        strategy_with_meta = {
+            "$meta": {
+                "source": src_rel,
+                "source_version": src_ver,
+                "tool_version": TOOL_VERSION,
+                "generated": ts,
+                "format": "BindlessStrategy.Vulkan/1",
+            }
+        }
+        if schema_version:
+            strategy_with_meta["$meta"]["schema_version"] = schema_version
+        strategy_with_meta.update(vulkan_strategy_json)
+        vulkan_strategy_json = strategy_with_meta
+
+    rep.progress("Rendering Vulkan pipeline-layout header")
+    pipeline_layout_cpp = vk_mod.render_cpp_pipeline_layout(
+        vulkan_strategy_doc,
+        vulkan_backend.get("pipeline_layout") or [],
+        validated["domains"],
+    )
+    content_vk_pipeline_layout = TEMPLATE_PIPELINE_LAYOUT_VULKAN_CPP.format(
+        src=src_rel,
+        src_ver=src_ver,
+        schema_ver=schema_version or "",
+        tool_ver=TOOL_VERSION,
+        ts=ts,
+        descriptor_set_enums=pipeline_layout_cpp["descriptor_set_enums"],
+        descriptor_set_entries=pipeline_layout_cpp["descriptor_set_entries"],
+        descriptor_set_count=pipeline_layout_cpp["descriptor_set_count"],
+        binding_enums=pipeline_layout_cpp["binding_enums"],
+        binding_entries=pipeline_layout_cpp["binding_entries"],
+        binding_count=pipeline_layout_cpp["binding_count"],
+        descriptor_type_enums=pipeline_layout_cpp["descriptor_type_enums"],
+        domain_binding_entries=pipeline_layout_cpp["domain_binding_entries"],
+        domain_binding_count=pipeline_layout_cpp["domain_binding_count"],
+        layout_entry_enums=pipeline_layout_cpp["layout_entry_enums"],
+        layout_entry_entries=pipeline_layout_cpp["layout_entry_entries"],
+        layout_entry_count=pipeline_layout_cpp["layout_entry_count"],
+    )
 
     runtime_desc = {
         "source": src_rel,
@@ -517,11 +573,8 @@ def generate(
         "generated": ts,
         **({"schema_version": schema_version} if schema_version else {}),
         "defaults": defaults,
-        "domains": domains,
-        # include heaps/mappings runtime fragment when present
-        **heaps_runtime_fragment,
-        "symbols": doc.get("symbols", {}),
-        "root_signature": doc.get("root_signature", []),
+        "abi": doc.get("abi", {}),
+        "backends": doc.get("backends", {}),
     }
 
     # Derive output paths with the new harmonized naming
@@ -532,12 +585,14 @@ def generate(
 
     if out_base:
         base = _ensure_generated_prefix(out_base)
-        out_cpp_path = base + "Constants.h"
-        out_hlsl_path = base + "BindlessLayout.hlsl"
+        out_cpp_path = base + "BindlessAbi.h"
+        out_hlsl_path = base + "BindlessAbi.hlsl"
         out_json = base + "All.json"
-        out_strategy = base + "Heaps.D3D12.json"
-        out_rs_path = base + "RootSignature.h"
-        out_strategy_hpp = base + "Heaps.D3D12.h"
+        out_strategy = base + "Strategy.D3D12.json"
+        out_vk_strategy = base + "Strategy.Vulkan.json"
+        out_rs_path = base + "RootSignature.D3D12.h"
+        out_vk_pipeline = base + "PipelineLayout.Vulkan.h"
+        out_strategy_hpp = base + "Strategy.D3D12.h"
         out_meta_h = base + "Meta.h"
     else:
         if not (out_cpp and out_hlsl):
@@ -550,21 +605,26 @@ def generate(
         base_dir = os.path.dirname(out_cpp_path)
         base = os.path.join(base_dir, "Generated.")
         out_json = base + "All.json"
-        out_strategy = base + "Heaps.D3D12.json"
-        out_rs_path = base + "RootSignature.h"
-        out_strategy_hpp = base + "Heaps.D3D12.h"
+        out_strategy = base + "Strategy.D3D12.json"
+        out_vk_strategy = base + "Strategy.Vulkan.json"
+        out_rs_path = base + "RootSignature.D3D12.h"
+        out_vk_pipeline = base + "PipelineLayout.Vulkan.h"
+        out_strategy_hpp = base + "Strategy.D3D12.h"
         out_meta_h = base + "Meta.h"
 
     if dry_run:
         rep.info("[DRY RUN] Planned outputs:")
-        rep.info("    C++ header: %s", _short(out_cpp_path))
-        rep.info("    HLSL layout: %s", _short(out_hlsl_path))
+        rep.info("    C++ ABI header: %s", _short(out_cpp_path))
+        rep.info("    HLSL ABI header: %s", _short(out_hlsl_path))
         rep.info("    Runtime JSON: %s", _short(out_json))
-        rep.info("    RootSignature C++: %s", _short(out_rs_path))
+        rep.info("    D3D12 RootSignature C++: %s", _short(out_rs_path))
+        rep.info("    Vulkan PipelineLayout C++: %s", _short(out_vk_pipeline))
         rep.info("    Meta C++: %s", _short(out_meta_h))
-        if strategy_json:
+        if d3d12_strategy_json:
             rep.info("    D3D12 strategy JSON: %s", _short(out_strategy))
             rep.info("    D3D12 strategy C++: %s", _short(out_strategy_hpp))
+        if vulkan_strategy_json:
+            rep.info("    Vulkan strategy JSON: %s", _short(out_vk_strategy))
         rep.info("Validation successful, templates processed")
         return False
     # Serialize content strings first (no side effects yet)
@@ -573,6 +633,7 @@ def generate(
         out_json: js,
         out_cpp_path: content_cpp,
         out_hlsl_path: content_hlsl,
+        out_vk_pipeline: content_vk_pipeline_layout,
     }
     files[out_rs_path] = content_rs
     # Meta header (always generated)
@@ -584,18 +645,20 @@ def generate(
         ts=ts,
     )
     files[out_meta_h] = content_meta_h
-    if strategy_json:
-        sj = json.dumps(strategy_json, indent=2) + "\n"
+    if d3d12_strategy_json:
+        sj = json.dumps(d3d12_strategy_json, indent=2) + "\n"
         files[out_strategy] = sj
-        # Embedded C++ header with constexpr JSON body
-        content_strategy_hpp = TEMPLATE_HEAPS_D3D12_CPP.format(
+        content_strategy_hpp = TEMPLATE_STRATEGY_D3D12_CPP.format(
             src=src_rel,
             src_ver=src_ver,
+            schema_ver=schema_version or "",
             tool_ver=TOOL_VERSION,
             ts=ts,
             json_body=sj,
         )
         files[out_strategy_hpp] = content_strategy_hpp
+    if vulkan_strategy_json:
+        files[out_vk_strategy] = json.dumps(vulkan_strategy_json, indent=2) + "\n"
 
     # Transactional write for all outputs
     rep.progress("Writing outputs transactionally")

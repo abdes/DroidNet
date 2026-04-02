@@ -103,8 +103,9 @@ protected:
 
     auto& allocator
       = static_cast<Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_DSV,
-      graphics::DescriptorVisibility::kCpuOnly);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
+        graphics::DescriptorVisibility::kCpuOnly);
     ASSERT_TRUE(handle.IsValid());
 
     const auto dsv_desc = graphics::TextureViewDescription {

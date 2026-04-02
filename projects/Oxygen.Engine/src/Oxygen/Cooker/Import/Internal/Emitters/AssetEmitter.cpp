@@ -76,9 +76,9 @@ namespace {
   //! Validate virtual path (e.g., "/.cooked/Materials/Wood").
   auto ValidateVirtualPath(const std::string_view virtual_path) -> void
   {
-    if (const auto error = oxygen::content::ValidateCanonicalVirtualPath(
-          virtual_path,
-          oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
+    if (const auto error
+      = oxygen::content::ValidateCanonicalVirtualPath(virtual_path,
+        oxygen::content::VirtualPathRuleSet::kSyntaxAndStandardMountRoot);
       error.has_value()) {
       throw std::runtime_error(
         "Virtual path is not canonical: " + std::string(*error));
@@ -146,6 +146,48 @@ auto AssetEmitter::Emit(const data::AssetKey& key, data::AssetType asset_type,
   RecordAsset(
     key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
   QueueDescriptorWrite(descriptor_path, descriptor_relpath, bytes);
+}
+
+auto AssetEmitter::EmitSync(const data::AssetKey& key,
+  const data::AssetType asset_type, std::string_view virtual_path,
+  std::string_view descriptor_relpath, std::span<const std::byte> bytes)
+  -> co::Co<void>
+{
+  if (finalize_started_.load(std::memory_order_acquire)) {
+    throw std::runtime_error("AssetEmitter is finalized");
+  }
+
+  ValidateVirtualPath(virtual_path);
+  ValidateRelativePath(descriptor_relpath);
+
+  if (const auto it = key_by_virtual_path_.find(std::string(virtual_path));
+    it != key_by_virtual_path_.end() && it->second != key) {
+    throw std::runtime_error(
+      "Conflicting virtual path mapping in loose cooked container");
+  }
+  if (const auto it
+    = key_by_descriptor_relpath_.find(std::string(descriptor_relpath));
+    it != key_by_descriptor_relpath_.end() && it->second != key) {
+    throw std::runtime_error(
+      "Conflicting descriptor path mapping in loose cooked container");
+  }
+
+  std::optional<base::Sha256Digest> sha256;
+  if (compute_sha256_) {
+    sha256 = base::ComputeSha256(bytes);
+  }
+
+  const auto descriptor_path = cooked_root_ / descriptor_relpath;
+  const auto write_result = co_await file_writer_.Write(descriptor_path, bytes,
+    WriteOptions { .create_directories = true, .overwrite = true });
+  if (!write_result.has_value()) {
+    throw std::runtime_error("Failed to write '"
+      + std::string(descriptor_relpath)
+      + "': " + write_result.error().ToString());
+  }
+
+  RecordAsset(
+    key, asset_type, virtual_path, descriptor_relpath, bytes.size(), sha256);
 }
 
 auto AssetEmitter::Count() const noexcept -> size_t { return records_.size(); }

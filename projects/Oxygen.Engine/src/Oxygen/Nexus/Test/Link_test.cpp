@@ -6,9 +6,8 @@
 
 #include <iostream>
 
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 
@@ -27,8 +26,6 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   using oxygen::VersionedBindlessHandle;
   using oxygen::bindless::Capacity;
   using oxygen::bindless::HeapIndex;
-  using oxygen::graphics::DescriptorVisibility;
-  using oxygen::graphics::ResourceViewType;
   using oxygen::nexus::DomainKey;
 
   // Constants for test values to avoid magic numbers
@@ -43,20 +40,12 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   {
     std::cout << "Testing DomainKey construction and equality...\n";
 
-    const DomainKey domain1 {
-      .view_type = ResourceViewType::kTexture_SRV,
-      .visibility = DescriptorVisibility::kShaderVisible,
-    };
-
-    const DomainKey domain2 {
-      .view_type = ResourceViewType::kTexture_SRV,
-      .visibility = DescriptorVisibility::kShaderVisible,
-    };
-
-    const DomainKey domain3 {
-      .view_type = ResourceViewType::kTypedBuffer_SRV,
-      .visibility = DescriptorVisibility::kShaderVisible,
-    };
+    const DomainKey domain1 { .domain
+      = oxygen::bindless::generated::kTexturesDomain };
+    const DomainKey domain2 { .domain
+      = oxygen::bindless::generated::kTexturesDomain };
+    const DomainKey domain3 { .domain
+      = oxygen::bindless::generated::kGlobalSrvDomain };
 
     if (domain1 == domain2 && !(domain1 == domain3)) {
       std::cout << "✓ DomainKey equality works correctly\n";

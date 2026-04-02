@@ -354,7 +354,7 @@ auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
     cbv_view_desc.range = { offset, kPassConstantsStride };
 
     auto cbv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
@@ -460,8 +460,9 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
       "shader-visible index");
   }
 
-  auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error(
       "CompositingPass: Failed to allocate source SRV handle");

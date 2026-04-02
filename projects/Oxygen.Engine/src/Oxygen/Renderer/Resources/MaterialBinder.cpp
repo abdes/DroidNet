@@ -597,11 +597,13 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
 
   materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
     static_cast<std::uint32_t>(sizeof(engine::MaterialShadingConstants)),
-    "MaterialShadingConstantsAtlas");
+    "MaterialShadingConstantsAtlas",
+    oxygen::bindless::generated::kMaterialsDomain);
   CHECK_NOTNULL_F(materials_atlas_, "Failed to create material atlas buffer");
   procedural_grid_materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
     static_cast<std::uint32_t>(sizeof(engine::ProceduralGridMaterialConstants)),
-    "ProceduralGridMaterialConstantsAtlas");
+    "ProceduralGridMaterialConstantsAtlas",
+    oxygen::bindless::generated::kMaterialsDomain);
   CHECK_NOTNULL_F(procedural_grid_materials_atlas_,
     "Failed to create procedural-grid material atlas buffer");
 

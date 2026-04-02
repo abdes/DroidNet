@@ -1,31 +1,11 @@
-//===----------------------------------------------------------------------===//
-// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-// copy at https://opensource.org/licenses/BSD-3-Clause.
-// SPDX-License-Identifier: BSD-3-Clause
-//===----------------------------------------------------------------------===//
-// clang-format off
-
-// Generated file - do not edit.
-// Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.1.0
-// Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-01-04 14:03:03
-
-#pragma once
-
-namespace oxygen::engine::binding {
-
-// D3D12 Heap Strategy JSON embedded for convenient include-only usage.
-// Parse this at runtime with your preferred JSON library.
-static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
-    "source_version": "1.1.0",
+    "source_version": "2.0.0",
     "tool_version": "1.2.2",
-    "generated": "2026-01-04 14:03:03",
-    "format": "D3D12HeapStrategy/2",
-    "schema_version": "1.0.1"
+    "generated": "2026-04-02 17:18:15",
+    "format": "BindlessStrategy.D3D12/1",
+    "schema_version": "2.0.0"
   },
   "heaps": {
     "CBV_SRV_UAV:cpu": {
@@ -78,8 +58,3 @@ static constexpr const char kD3D12HeapStrategyJson[] = R"OXJ(
     }
   }
 }
-
-)OXJ";
-
-} // namespace oxygen::engine::binding
-// clang-format on

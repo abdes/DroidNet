@@ -9,7 +9,7 @@
 #include <stdexcept>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -228,8 +228,8 @@ auto IblComputePass::EnsurePassConstantsBuffer() -> void
   srv_view_desc.stride = kStrideBytes;
 
   auto srv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    = allocator.AllocateBindless(oxygen::bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_SRV);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error("IblComputePass: failed to allocate SRV");
   }
@@ -359,13 +359,16 @@ auto IblComputePass::DispatchIrradiance(graphics::CommandRecorder& recorder,
 
   recorder.SetPipelineState(*irradiance_pso_desc_);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), constants_index,
-    0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    constants_index, 0);
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     pass_constants_srv_index_.get(), 1);
 
   const uint32_t groups
@@ -409,12 +412,16 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
 
   recorder.SetPipelineState(*prefilter_pso_desc_);
   recorder.SetComputeRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants), 0U, 0);
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+    0U, 0);
   recorder.SetComputeRoot32BitConstant(
-    static_cast<uint32_t>(binding::RootParam::kRootConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
     pass_constants_srv_index_.get(), 1);
 
   const uint32_t mips = target->GetDescriptor().mip_levels;
@@ -456,7 +463,8 @@ auto IblComputePass::DispatchPrefilter(graphics::CommandRecorder& recorder,
     std::memcpy(constants_dst, &constants, sizeof(constants));
 
     recorder.SetComputeRoot32BitConstant(
-      static_cast<uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       constants_index, 0);
 
     const uint32_t groups

@@ -1,0 +1,70 @@
+{
+  "$meta": {
+    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
+    "source_version": "2.0.0",
+    "tool_version": "1.2.2",
+    "generated": "2026-04-02 17:18:15",
+    "format": "BindlessStrategy.Vulkan/1",
+    "schema_version": "2.0.0"
+  },
+  "descriptor_sets": [
+    {
+      "id": "bindless_main",
+      "set": 0
+    }
+  ],
+  "bindings": [
+    {
+      "id": "textures_binding",
+      "set": "bindless_main",
+      "binding": 0,
+      "descriptor_type": "SAMPLED_IMAGE",
+      "variable_count": true,
+      "update_after_bind": true
+    },
+    {
+      "id": "global_buffers_binding",
+      "set": "bindless_main",
+      "binding": 1,
+      "descriptor_type": "STORAGE_BUFFER",
+      "variable_count": true,
+      "update_after_bind": true
+    },
+    {
+      "id": "samplers_binding",
+      "set": "bindless_main",
+      "binding": 2,
+      "descriptor_type": "SAMPLER",
+      "descriptor_count": 256
+    },
+    {
+      "id": "view_constants_binding",
+      "set": "bindless_main",
+      "binding": 3,
+      "descriptor_type": "UNIFORM_BUFFER",
+      "descriptor_count": 1
+    }
+  ],
+  "domain_realizations": [
+    {
+      "domain": "textures",
+      "binding": "textures_binding",
+      "array_element_base": 5096
+    },
+    {
+      "domain": "srv_global",
+      "binding": "global_buffers_binding",
+      "array_element_base": 1
+    },
+    {
+      "domain": "materials",
+      "binding": "global_buffers_binding",
+      "array_element_base": 2049
+    },
+    {
+      "domain": "samplers",
+      "binding": "samplers_binding",
+      "array_element_base": 0
+    }
+  ]
+}

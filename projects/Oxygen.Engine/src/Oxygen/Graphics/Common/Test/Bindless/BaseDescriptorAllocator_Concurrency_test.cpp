@@ -19,7 +19,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -28,7 +28,7 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorSegment.h"
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 
@@ -135,7 +135,8 @@ NOLINT_TEST_F(
   std::atomic<size_t> successful_releases(0);
 
   // Vector to hold all generated handles across threads
-  std::vector<std::vector<DescriptorHandle>> thread_handles(kNumThreads);
+  std::vector<std::vector<DescriptorAllocationHandle>> thread_handles(
+    kNumThreads);
 
   // For collecting exception messages from threads
   std::vector<std::string> exception_messages;
@@ -157,7 +158,7 @@ NOLINT_TEST_F(
       // Perform allocations
       for (size_t i = 0; i < kOperationsPerThread; ++i) {
         try {
-          auto handle = allocator_->Allocate(ResourceViewType::kTexture_SRV,
+          auto handle = allocator_->AllocateRaw(ResourceViewType::kTexture_SRV,
             DescriptorVisibility::kShaderVisible);
           if (handle.IsValid()) {
             thread_handles[t].push_back(std::move(handle));
@@ -296,12 +297,12 @@ NOLINT_TEST_F(
             return;
           }
 
-          std::vector<DescriptorHandle> handles;
+          std::vector<DescriptorAllocationHandle> handles;
 
           // Perform some allocations
           for (int i = 0; i < 20; ++i) {
             try {
-              if (auto handle = allocator_->Allocate(type, vis);
+              if (auto handle = allocator_->AllocateRaw(type, vis);
                 handle.IsValid()) {
                 handles.push_back(std::move(handle));
 

@@ -109,7 +109,7 @@ struct TextureLayoutStrategy {
  }
 
  // Create a shader resource view for the full texture
- auto view = t.CreateShaderResourceView(DescriptorHandle{}, d.format,
+ auto view = t.CreateShaderResourceView(DescriptorAllocationHandle{}, d.format,
    TextureType::kTexture2D, TextureSubResourceSet::Full());
  ```
 
@@ -223,19 +223,21 @@ public:
 
 protected:
   OXGN_HDLS_NDAPI auto CreateShaderResourceView(
-    const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeView override;
+    const DescriptorAllocationHandle& view_handle, Format format,
+    TextureType dimension, TextureSubResourceSet sub_resources) const
+    -> NativeView override;
 
   OXGN_HDLS_NDAPI auto CreateUnorderedAccessView(
-    const DescriptorHandle& view_handle, Format format, TextureType dimension,
-    TextureSubResourceSet sub_resources) const -> NativeView override;
+    const DescriptorAllocationHandle& view_handle, Format format,
+    TextureType dimension, TextureSubResourceSet sub_resources) const
+    -> NativeView override;
 
   OXGN_HDLS_NDAPI auto CreateRenderTargetView(
-    const DescriptorHandle& view_handle, Format format,
+    const DescriptorAllocationHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources) const -> NativeView override;
 
   OXGN_HDLS_NDAPI auto CreateDepthStencilView(
-    const DescriptorHandle& view_handle, Format format,
+    const DescriptorAllocationHandle& view_handle, Format format,
     TextureSubResourceSet sub_resources, bool is_read_only) const
     -> NativeView override;
 };

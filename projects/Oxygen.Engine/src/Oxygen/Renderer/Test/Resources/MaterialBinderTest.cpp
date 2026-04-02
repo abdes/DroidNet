@@ -62,6 +62,17 @@ auto MaterialBinderTest::SetUp() -> void
     observer_ptr { asset_loader_.get() });
 }
 
+auto MaterialBinderTest::TearDown() -> void
+{
+  material_binder_.reset();
+  texture_binder_.reset();
+  texture_descriptor_allocator_.release();
+  asset_loader_.reset();
+  staging_provider_.reset();
+  uploader_.reset();
+  gfx_.reset();
+}
+
 auto MaterialBinderTest::GfxPtr() const -> observer_ptr<Graphics>
 {
   return observer_ptr<Graphics>(gfx_.get());

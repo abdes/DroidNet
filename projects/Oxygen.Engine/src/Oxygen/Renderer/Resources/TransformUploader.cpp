@@ -26,8 +26,7 @@ namespace oxygen::renderer::resources {
 namespace {
 
   constexpr oxygen::nexus::DomainKey kTransformDomain {
-    .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+    .domain = oxygen::bindless::generated::kGlobalSrvDomain,
   };
 
 } // namespace

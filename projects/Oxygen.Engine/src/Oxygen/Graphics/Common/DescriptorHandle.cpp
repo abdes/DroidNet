@@ -6,49 +6,60 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 
+using oxygen::graphics::DescriptorAllocationHandle;
+using oxygen::graphics::DescriptorAllocationKind;
 using oxygen::graphics::DescriptorAllocator;
-using oxygen::graphics::DescriptorHandle;
 
-DescriptorHandle::DescriptorHandle(DescriptorAllocator* allocator,
-  const bindless::HeapIndex index, const ResourceViewType view_type,
-  const DescriptorVisibility visibility) noexcept
+DescriptorAllocationHandle::DescriptorAllocationHandle(
+  DescriptorAllocator* allocator, const bindless::HeapIndex index,
+  const ResourceViewType view_type, const DescriptorVisibility visibility,
+  const DescriptorAllocationKind kind,
+  const bindless::DomainToken domain) noexcept
   : allocator_(allocator)
   , handle_(index)
   , view_type_(view_type)
   , visibility_(visibility)
+  , kind_(kind)
+  , domain_(domain)
 {
   DCHECK_F(allocator != nullptr, "Allocator must not be null");
   DCHECK_F(index != kInvalidBindlessHeapIndex, "Invalid index");
   DLOG_F(4, "constructed {}", *this);
 }
 
-DescriptorHandle::DescriptorHandle(const bindless::HeapIndex index,
-  const ResourceViewType view_type,
-  const DescriptorVisibility visibility) noexcept
+DescriptorAllocationHandle::DescriptorAllocationHandle(
+  const bindless::HeapIndex index, const ResourceViewType view_type,
+  const DescriptorVisibility visibility, const DescriptorAllocationKind kind,
+  const bindless::DomainToken domain) noexcept
   : handle_(index)
   , view_type_(view_type)
   , visibility_(visibility)
+  , kind_(kind)
+  , domain_(domain)
 {
   DLOG_F(4, "constructed(invalid) {}", *this);
 }
 
-DescriptorHandle::~DescriptorHandle() { Release(); }
+DescriptorAllocationHandle::~DescriptorAllocationHandle() { Release(); }
 
-DescriptorHandle::DescriptorHandle(DescriptorHandle&& other) noexcept
+DescriptorAllocationHandle::DescriptorAllocationHandle(
+  DescriptorAllocationHandle&& other) noexcept
   : allocator_(other.allocator_)
   , handle_(other.handle_)
   , view_type_(other.view_type_)
   , visibility_(other.visibility_)
+  , kind_(other.kind_)
+  , domain_(other.domain_)
 {
   other.InvalidateInternal(true);
   DLOG_F(5, "move-constructed {}", *this);
 }
 
-auto DescriptorHandle::operator=(DescriptorHandle&& other) noexcept
-  -> DescriptorHandle&
+auto DescriptorAllocationHandle::operator=(
+  DescriptorAllocationHandle&& other) noexcept -> DescriptorAllocationHandle&
 {
   if (this != &other) {
     Release();
@@ -56,12 +67,14 @@ auto DescriptorHandle::operator=(DescriptorHandle&& other) noexcept
     handle_ = other.handle_;
     view_type_ = other.view_type_;
     visibility_ = other.visibility_;
+    kind_ = other.kind_;
+    domain_ = other.domain_;
     other.InvalidateInternal(true);
   }
   return *this;
 }
 
-void DescriptorHandle::Invalidate() noexcept
+void DescriptorAllocationHandle::Invalidate() noexcept
 {
   if (!IsValid()) {
     return;
@@ -69,7 +82,7 @@ void DescriptorHandle::Invalidate() noexcept
   InvalidateInternal(false);
 }
 
-void DescriptorHandle::Release() noexcept
+void DescriptorAllocationHandle::Release() noexcept
 {
   if (IsValid()) {
     DLOG_F(4, "release {}", *this);
@@ -78,7 +91,8 @@ void DescriptorHandle::Release() noexcept
       !IsValid(), "Allocator should invalidate descriptor after release");
   }
 }
-void DescriptorHandle::InvalidateInternal(bool moved) noexcept
+
+void DescriptorAllocationHandle::InvalidateInternal(bool moved) noexcept
 {
   if (!moved) {
     DLOG_F(4, "invalidated: {}", *this);
@@ -88,4 +102,6 @@ void DescriptorHandle::InvalidateInternal(bool moved) noexcept
   handle_ = kInvalidBindlessHeapIndex;
   view_type_ = ResourceViewType::kNone;
   visibility_ = DescriptorVisibility::kNone;
+  kind_ = DescriptorAllocationKind::kInvalid;
+  domain_ = bindless::generated::kInvalidDomainToken;
 }

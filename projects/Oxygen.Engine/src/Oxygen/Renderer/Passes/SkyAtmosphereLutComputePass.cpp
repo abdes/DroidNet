@@ -18,7 +18,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Types/Geometry.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -382,7 +382,7 @@ struct SkyAtmosphereLutComputePass::Impl {
         = { static_cast<uint64_t>(i) * packing::kConstantBufferAlignment,
             packing::kConstantBufferAlignment };
 
-      auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
       if (!cbv_handle.IsValid()) {
         throw std::runtime_error(
@@ -639,7 +639,7 @@ auto SkyAtmosphereLutComputePass::DoExecute(CommandRecorder& recorder)
   constants.sun_cos_zenith = manager->GetSunState().cos_zenith;
   constants.alt_mapping_mode = alt_mapping_mode;
 
-  using b = binding::RootParam;
+  using b = oxygen::bindless::generated::d3d12::RootParam;
 
   auto dispatch_pass
     = [&](const graphics::ComputePipelineDesc& pso, uint32_t slot,

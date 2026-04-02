@@ -12,7 +12,7 @@
 //! 3. SkySphere solid color - if enabled and source is kSolidColor
 //! 4. Black fallback
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Common/Geometry.hlsli"
 #include "Renderer/GpuDebug.hlsli"
 #include "Atmosphere/SkyColor.hlsli"

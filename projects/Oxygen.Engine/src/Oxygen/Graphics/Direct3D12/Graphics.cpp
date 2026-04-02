@@ -11,9 +11,9 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Config/GraphicsConfig.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -39,6 +39,7 @@
 //===----------------------------------------------------------------------===//
 
 namespace {
+namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
 auto ParseFrameCaptureProvider(const std::string& value)
   -> oxygen::FrameCaptureProvider
@@ -207,9 +208,9 @@ protected:
     try {
       // Reserve will create initial segments when none exist according to
       // BaseDescriptorAllocator::Reserve.
-      auto _ = allocator_->Reserve(ResourceViewType::kStructuredBuffer_SRV,
+      auto _ = allocator_->ReserveRaw(ResourceViewType::kStructuredBuffer_SRV,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
-      _ = allocator_->Reserve(ResourceViewType::kSampler,
+      _ = allocator_->ReserveRaw(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
 
       // Ensure stable default samplers exist for bindless sampling.
@@ -217,8 +218,9 @@ protected:
       // - SamplerDescriptorHeap[0] = default linear wrap sampler
       // - SamplerDescriptorHeap[1] = shadow comparison sampler
       if (!default_sampler_.IsValid()) {
-        default_sampler_ = allocator_->Allocate(
-          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
+        default_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
         if (default_sampler_.IsValid()) {
           D3D12_SAMPLER_DESC sampler_desc {};
           sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -246,8 +248,9 @@ protected:
       }
 
       if (!shadow_comparison_sampler_.IsValid()) {
-        shadow_comparison_sampler_ = allocator_->Allocate(
-          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
+        shadow_comparison_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
         if (shadow_comparison_sampler_.IsValid()) {
           D3D12_SAMPLER_DESC sampler_desc {};
           sampler_desc.Filter
@@ -279,8 +282,8 @@ protected:
 
 private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
-  oxygen::graphics::DescriptorHandle default_sampler_ {};
-  oxygen::graphics::DescriptorHandle shadow_comparison_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
 };
 
 } // namespace
@@ -526,7 +529,7 @@ auto Graphics::GetDrawRootConstantCommandSignature(
   D3D12_INDIRECT_ARGUMENT_DESC args[2] {};
   args[0].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
   args[0].Constant.RootParameterIndex
-    = static_cast<UINT>(engine::binding::RootParam::kRootConstants);
+    = static_cast<UINT>(bindless_d3d12::RootParam::kRootConstants);
   args[0].Constant.DestOffsetIn32BitValues = 0U;
   args[0].Constant.Num32BitValuesToSet = 1U;
   args[1].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;

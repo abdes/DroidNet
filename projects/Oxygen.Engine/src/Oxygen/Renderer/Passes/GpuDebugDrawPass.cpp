@@ -63,7 +63,7 @@ namespace {
       rtv->IsValid()) {
       return rtv;
     }
-    auto rtv_desc_handle = allocator.Allocate(
+    auto rtv_desc_handle = allocator.AllocateRaw(
       ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
     if (!rtv_desc_handle.IsValid()) {
       throw std::runtime_error(
@@ -206,7 +206,7 @@ auto GpuDebugDrawPass::EnsurePassConstantsBuffer() -> void
     cbv_view_desc.range = { offset, kPassConstantsStride };
 
     auto cbv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error("failed to allocate CBV descriptor handle");
