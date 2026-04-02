@@ -151,7 +151,7 @@ depth is the numerically smallest. The channels are named by semantic meaning
 | `ShaderPass` | `DepthPrePassOutput` (DSV) | Depth-equal test when complete; `kGreaterOrEqual` fallback |
 | `TransparentPass` | `DepthPrePassOutput` (DSV) | Read-only depth test (`kGreaterOrEqual`); not depth-equal eligible |
 | `SkyPass` | `DepthPrePassOutput` (DSV + SRV) | Read-only depth test + shader depth reads for atmosphere |
-| `GroundGridPass` | `DepthPrePassOutput` (SRV) | Shader depth reads for grid intersection; no depth test |
+| `GroundGridPass` | `DepthPrePassOutput` (DSV) | Read-only depth test against per-pixel `SV_Depth` from the reconstructed grid plane |
 | `LightCullingPass` | Closest + furthest HZB | Tile depth bounds via HZB mip lookup plus clustered slice-range rejection |
 | `VsmPageRequestGeneratorPass` | `DepthPrePassOutput` (SRV) | Per-pixel depth analysis for VSM page requests; optional coarse-page flags remain a separate VSM policy |
 | `VsmInstanceCulling` | Previous-frame furthest HZB | Occlusion culling against projected AABB bounds |

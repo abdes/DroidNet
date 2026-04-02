@@ -44,10 +44,10 @@ struct GroundGridPassConstants {
     float horizon_boost;
     float pad_params2_0;
 
-    // Register 7 (grid offset + SRVs)
+    // Register 7 (grid offset + exposure)
     float grid_offset_x;
     float grid_offset_y;
-    uint depth_srv_index;
+    uint reserved0;
     uint exposure_srv_index;
 
     // Register 8 (minor color)
@@ -62,10 +62,20 @@ struct GroundGridPassConstants {
     float4 origin_color;
 };
 
-float4 PS(GroundGridPSInput input) : SV_TARGET
+struct GroundGridPSOutput
 {
+    float4 color : SV_TARGET;
+    float depth : SV_Depth;
+};
+
+GroundGridPSOutput PS(GroundGridPSInput input)
+{
+    GroundGridPSOutput output;
+
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
-        return float4(0.0, 0.0, 0.0, 0.0);
+        output.color = float4(0.0, 0.0, 0.0, 0.0);
+        output.depth = 0.0;
+        return output;
     }
 
     ConstantBuffer<GroundGridPassConstants> pass =
@@ -137,17 +147,6 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
         discard;
     }
 
-    if (pass.depth_srv_index != K_INVALID_BINDLESS_INDEX) {
-        Texture2D<float> depth_tex = ResourceDescriptorHeap[pass.depth_srv_index];
-        const int2 pixel = int2(input.position.xy);
-        const float scene_depth = depth_tex.Load(int3(pixel, 0)).r;
-        // Scene depth uses reversed-Z: larger values are closer to the camera.
-        // Discard the grid only when already-populated scene depth is nearer.
-        if (scene_depth > ndc_depth) {
-            discard;
-        }
-    }
-
     // --- Grid Logic (Using Relative Coordinates) ---
     // Grid coordinates stay camera-relative for precision. Origin shifting is
     // handled in the CPU-side snapped offset.
@@ -197,5 +196,7 @@ float4 PS(GroundGridPSInput input) : SV_TARGET
     color *= horizon_scale;
 
     color.a = saturate(color.a);
-    return color;
+    output.color = color;
+    output.depth = ndc_depth;
+    return output;
 }

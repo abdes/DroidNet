@@ -17,7 +17,6 @@
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
-class Graphics;
 namespace graphics {
   class Buffer;
   class CommandRecorder;
@@ -115,8 +114,6 @@ private:
   // Helper methods for UpdatePassConstants
   struct GroundGridPassConstants;
   auto ComputeInvViewProj() const -> glm::mat4;
-  auto UpdateDepthTexture(
-    Graphics& graphics, GroundGridPassConstants& constants) -> void;
   auto UpdateExposureIndex(GroundGridPassConstants& constants) const -> void;
   auto ComputeGridOffset(GroundGridPassConstants& constants) -> void;
   auto FillConstantBuffer(GroundGridPassConstants& constants) const -> void;
@@ -125,8 +122,6 @@ private:
   std::shared_ptr<graphics::Buffer> pass_constants_buffer_;
   std::byte* pass_constants_mapped_ptr_ { nullptr };
   ShaderVisibleIndex pass_constants_index_ { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex depth_srv_index_ { kInvalidShaderVisibleIndex };
-  const graphics::Texture* last_depth_texture_ { nullptr };
 
   // Smoothing state for "fluid" grid movement
   glm::dvec3 smooth_pos_ { 0.0 };
