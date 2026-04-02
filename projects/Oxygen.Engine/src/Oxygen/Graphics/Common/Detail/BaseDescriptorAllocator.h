@@ -17,14 +17,16 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -96,8 +98,8 @@ public:
    based on view type and visibility. Creates new segments if needed and
    allowed by the configuration.
   */
-  auto Allocate(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) -> DescriptorHandle override
+  auto AllocateRaw(const ResourceViewType view_type,
+    const DescriptorVisibility visibility) -> RawDescriptorHandle override
   {
     std::lock_guard lock(mutex_);
 
@@ -133,7 +135,7 @@ public:
       }
       if (const auto index = segment->Allocate();
         index != kInvalidBindlessHeapIndex) {
-        return CreateDescriptorHandle(index, view_type, visibility);
+        return CreateRawDescriptorHandle(index, view_type, visibility);
       }
     }
 
@@ -152,12 +154,48 @@ public:
         segments.push_back(std::move(segment));
         if (const auto index = segments.back()->Allocate();
           index != kInvalidBindlessHeapIndex) {
-          return CreateDescriptorHandle(index, view_type, visibility);
+          return CreateRawDescriptorHandle(index, view_type, visibility);
         }
       }
     }
 
     throw std::runtime_error("Failed to allocate descriptor: out of space");
+  }
+
+  auto AllocateBindless(const bindless::DomainToken domain,
+    const ResourceViewType view_type) -> BindlessHandle override
+  {
+    return AbortOnFailed(__func__, [&]() {
+      std::lock_guard lock(mutex_);
+      const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
+      if (desc == nullptr) {
+        throw std::runtime_error("Unknown bindless domain token");
+      }
+
+      auto& state = bindless_domains_[domain.get()];
+      if (!state.initialized) {
+        state.domain = domain;
+        state.capacity = bindless::Capacity { desc->capacity };
+        state.initialized = true;
+      }
+
+      uint32_t local_slot = 0U;
+      if (!state.free_list.empty()) {
+        local_slot = state.free_list.back();
+        state.free_list.pop_back();
+      } else {
+        if (state.next_slot >= state.capacity.get()) {
+          throw std::runtime_error(
+            "Failed to allocate bindless descriptor: domain is out of space");
+        }
+        local_slot = state.next_slot++;
+      }
+
+      state.active_view_types.emplace(local_slot, view_type);
+      return CreateBindlessHandle(
+        DescriptorAllocationHandle::PackBindlessSlot(domain, local_slot),
+        domain, view_type);
+    });
   }
 
   //! Releases a previously allocated descriptor.
@@ -167,7 +205,7 @@ public:
    Thread-safe implementation that returns the descriptor to its original
    segment for future reuse.
   */
-  auto Release(DescriptorHandle& handle) -> void override
+  auto Release(DescriptorAllocationHandle& handle) -> void override
   {
     if (!handle.IsValid()) {
       return;
@@ -175,6 +213,25 @@ public:
     if (handle.GetAllocator() != this) {
       throw std::runtime_error(
         "cannot release a handle that does not belong to this allocator");
+    }
+    if (handle.IsBindless()) {
+      return AbortOnFailed(__func__, [&]() {
+        std::lock_guard lock(mutex_);
+        auto it = bindless_domains_.find(handle.GetDomain().get());
+        if (it == bindless_domains_.end()) {
+          throw std::runtime_error(
+            "Failed to release bindless descriptor: unknown domain");
+        }
+        auto& state = it->second;
+        const auto local_slot = handle.GetLocalSlot();
+        if (local_slot >= state.next_slot) {
+          throw std::runtime_error(
+            "Failed to release bindless descriptor: invalid local slot");
+        }
+        state.active_view_types.erase(local_slot);
+        state.free_list.push_back(local_slot);
+        handle.Invalidate();
+      });
     }
 
     std::lock_guard lock(mutex_);
@@ -220,6 +277,11 @@ public:
           total += segment->GetAvailableCount().get();
         }
       }
+      if (visibility == DescriptorVisibility::kShaderVisible) {
+        for (const auto& [_, domain_state] : bindless_domains_) {
+          total += domain_state.GetRemainingCountFor(view_type).get();
+        }
+      }
       const auto& desc = heap_strategy_->GetHeapDescription(key);
       DCHECK_NOTNULL_F(
         &desc, "Heap description in the heaps_ table should never be null");
@@ -235,11 +297,20 @@ public:
    \param handle The descriptor handle to check.
    \return True if this allocator owns the handle, false otherwise.
   */
-  [[nodiscard]] auto Contains(const DescriptorHandle& handle) const
+  [[nodiscard]] auto Contains(const DescriptorAllocationHandle& handle) const
     -> bool override
   {
     if (!handle.IsValid()) {
       return false;
+    }
+
+    if (handle.IsBindless()) {
+      return AbortOnFailed(__func__, [&]() {
+        std::lock_guard lock(mutex_);
+        const auto it = bindless_domains_.find(handle.GetDomain().get());
+        return it != bindless_domains_.end()
+          && handle.GetLocalSlot() < it->second.next_slot;
+      });
     }
 
     return AbortOnFailed(__func__, [&]() {
@@ -274,28 +345,43 @@ public:
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       // If no segments were created yet for this heap key, return zero.
       if (const auto it = heaps_.find(key); it == heaps_.end()) {
-        return bindless::Count { 0 };
+        bindless::Count total { 0 };
+        if (visibility == DescriptorVisibility::kShaderVisible) {
+          for (const auto& [_, domain_state] : bindless_domains_) {
+            total += domain_state.GetAllocatedCountFor(view_type);
+          }
+        }
+        return total;
       } else {
         const auto& segments = it->second;
         bindless::Count total { 0 };
         for (const auto& segment : segments) {
           total += segment->GetAllocatedCount();
         }
+        if (visibility == DescriptorVisibility::kShaderVisible) {
+          for (const auto& [_, domain_state] : bindless_domains_) {
+            total += domain_state.GetAllocatedCountFor(view_type);
+          }
+        }
         return total;
       }
     });
   }
 
-  [[nodiscard]] auto GetDomainBaseIndex(const ResourceViewType view_type,
-    const DescriptorVisibility visibility) const -> bindless::HeapIndex override
+  [[nodiscard]] auto GetDomainBaseIndex(
+    const bindless::DomainToken domain) const
+    -> bindless::ShaderVisibleIndex override
   {
     return AbortOnFailed(__func__, [&]() {
-      std::lock_guard lock(mutex_);
-      return heap_strategy_->GetHeapBaseIndex(view_type, visibility);
+      const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
+      if (desc == nullptr) {
+        throw std::runtime_error("Unknown bindless domain token");
+      }
+      return bindless::ShaderVisibleIndex { desc->shader_index_base };
     });
   }
 
-  [[nodiscard]] auto Reserve(const ResourceViewType view_type,
+  [[nodiscard]] auto ReserveRaw(const ResourceViewType view_type,
     const DescriptorVisibility visibility, const bindless::Count count)
     -> std::optional<bindless::HeapIndex> override
   {
@@ -402,11 +488,30 @@ protected:
    This method does not validate if the handle was allocated by this allocator.
    The caller should use Contains() first to validate ownership.
   */
-  [[nodiscard]] auto GetSegmentForHandle(const DescriptorHandle& handle) const
+  [[nodiscard]] auto GetSegmentForHandle(
+    const DescriptorAllocationHandle& handle) const
     -> std::optional<const DescriptorSegment*>
   {
     std::lock_guard lock(mutex_);
     return GetSegmentForHandleNoLock(handle);
+  }
+
+  [[nodiscard]] auto GetRawShaderVisibleIndex(
+    const DescriptorAllocationHandle& handle) const noexcept
+    -> bindless::ShaderVisibleIndex
+  {
+    if (handle.GetVisibility() != DescriptorVisibility::kShaderVisible) {
+      return kInvalidShaderVisibleIndex;
+    }
+    const auto segment = GetSegmentForHandle(handle);
+    if (!segment.has_value()) {
+      return kInvalidShaderVisibleIndex;
+    }
+    const auto local_index
+      = handle.GetBindlessHandle().get() - (*segment)->GetBaseIndex().get();
+    return bindless::ShaderVisibleIndex {
+      GetRawShaderVisibleBase(handle.GetViewType()) + local_index,
+    };
   }
 
   struct HeapView {
@@ -433,10 +538,11 @@ protected:
 
 private:
   [[nodiscard]] auto GetSegmentForHandleNoLock(
-    const DescriptorHandle& handle) const
+    const DescriptorAllocationHandle& handle) const
     -> std::optional<const DescriptorSegment*>
   {
-    if (!handle.IsValid() || handle.GetAllocator() != this) {
+    if (!handle.IsValid() || handle.GetAllocator() != this
+      || handle.IsBindless()) {
       return std::nullopt;
     }
 
@@ -484,6 +590,26 @@ private:
     return bindless::Capacity {
       static_cast<bindless::Capacity::UnderlyingType>(rounded),
     };
+  }
+
+  [[nodiscard]] static constexpr auto GetRawShaderVisibleBase(
+    const ResourceViewType view_type) -> uint32_t
+  {
+    const auto index_space = view_type == ResourceViewType::kSampler
+      ? bindless::generated::kSamplerIndexSpace
+      : bindless::generated::kSrvUavCbvIndexSpace;
+
+    uint32_t max_end = 0U;
+    for (const auto& domain : bindless::generated::kDomainTable) {
+      if (domain.index_space != index_space) {
+        continue;
+      }
+      const auto end = domain.shader_index_base + domain.capacity;
+      if (end > max_end) {
+        max_end = end;
+      }
+    }
+    return max_end;
   }
 
   /**
@@ -571,6 +697,32 @@ private:
   std::array<std::string, kNumResourceViewTypes * kNumVisibilities> keys_;
   using Segments = std::vector<std::unique_ptr<DescriptorSegment>>;
   std::unordered_map<std::string, Segments> heaps_ {};
+
+  struct BindlessDomainState {
+    bindless::DomainToken domain { bindless::generated::kInvalidDomainToken };
+    bindless::Capacity capacity { 0U };
+    uint32_t next_slot { 0U };
+    std::vector<uint32_t> free_list {};
+    std::unordered_map<uint32_t, ResourceViewType> active_view_types {};
+    bool initialized { false };
+
+    [[nodiscard]] auto GetAllocatedCountFor(
+      const ResourceViewType view_type) const -> bindless::Count
+    {
+      return bindless::Count { static_cast<uint32_t>(
+        std::count_if(active_view_types.begin(), active_view_types.end(),
+          [&](const auto& entry) { return entry.second == view_type; })) };
+    }
+
+    [[nodiscard]] auto GetRemainingCountFor(
+      const ResourceViewType view_type) const -> bindless::Count
+    {
+      return bindless::Count {
+        capacity.get() - GetAllocatedCountFor(view_type).get(),
+      };
+    }
+  };
+  std::unordered_map<uint16_t, BindlessDomainState> bindless_domains_ {};
 
   //! Thread synchronization mutex.
   mutable std::mutex mutex_;

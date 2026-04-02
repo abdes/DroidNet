@@ -379,8 +379,9 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
   if (!histogram_uav_index_.IsValid()
     || last_histogram_buffer_ != config_->histogram_buffer) {
     RegisterResourceIfNeeded(graphics, config_->histogram_buffer);
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kRawBuffer_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kRawBuffer_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
       throw std::runtime_error(
         "AutoExposurePass: failed to allocate histogram UAV descriptor");
@@ -432,7 +433,7 @@ auto AutoExposurePass::DoPrepareResources(graphics::CommandRecorder& recorder)
 
     for (size_t slot = 0; slot < kPassConstantsSlots; ++slot) {
       auto handle
-        = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+        = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
           graphics::DescriptorVisibility::kShaderVisible);
       if (!handle.IsValid()) {
         throw std::runtime_error(
@@ -610,8 +611,9 @@ auto AutoExposurePass::UpdateHistogramConstants(
     if (!source_texture_srv_index_.IsValid()
       || last_source_texture_ != config_->source_texture
       || !registry_has_view) {
-      auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+      auto handle
+        = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+          graphics::DescriptorVisibility::kShaderVisible);
       if (!handle.IsValid()) {
         throw std::runtime_error(
           "AutoExposurePass: failed to allocate source texture SRV descriptor");
@@ -816,7 +818,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
 
   if (!state.uav_index.IsValid()) {
     auto uav_handle
-      = allocator.Allocate(graphics::ResourceViewType::kRawBuffer_UAV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kRawBuffer_UAV,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!uav_handle.IsValid()) {
       throw std::runtime_error(
@@ -840,7 +842,7 @@ auto AutoExposurePass::EnsureExposureStateForView(
 
   if (!state.srv_index.IsValid()) {
     auto srv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kRawBuffer_SRV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kRawBuffer_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
       throw std::runtime_error(

@@ -54,11 +54,13 @@ public:
   OXYGEN_DEFAULT_MOVABLE(DescriptorAllocator)
 
   //! Gets the D3D12 CPU descriptor handle for a given descriptor handle.
-  OXGN_D3D12_NDAPI auto GetCpuHandle(const DescriptorHandle& handle) const
+  OXGN_D3D12_NDAPI auto GetCpuHandle(
+    const DescriptorAllocationHandle& handle) const
     -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
   //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
-  OXGN_D3D12_NDAPI auto GetGpuHandle(const DescriptorHandle& handle) const
+  OXGN_D3D12_NDAPI auto GetGpuHandle(
+    const DescriptorAllocationHandle& handle) const
     -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
   //! Copies a descriptor from source to destination.
@@ -69,14 +71,14 @@ public:
    Copies the descriptor from source to destination using the appropriate
    D3D12 copying mechanism depending on the descriptor types.
   */
-  OXGN_D3D12_API auto CopyDescriptor(
-    const DescriptorHandle& dst, const DescriptorHandle& src) -> void override;
+  OXGN_D3D12_API auto CopyDescriptor(const DescriptorAllocationHandle& dst,
+    const DescriptorAllocationHandle& src) -> void override;
 
   OXGN_D3D12_API auto GetShaderVisibleHeaps()
     -> std::span<const detail::ShaderVisibleHeapInfo>;
 
   OXGN_D3D12_NDAPI auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept
+    const DescriptorAllocationHandle& handle) const noexcept
     -> bindless::ShaderVisibleIndex override;
 
 protected:
@@ -95,8 +97,11 @@ protected:
 
 private:
   //! Gets the D3D12DescriptorSegment from a handle.
-  [[nodiscard]] auto GetD3D12Segment(const DescriptorHandle& handle) const
-    -> const DescriptorSegment*;
+  [[nodiscard]] auto GetD3D12Segment(
+    const DescriptorAllocationHandle& handle) const -> const DescriptorSegment*;
+
+  [[nodiscard]] auto GetSharedShaderVisibleSegment(
+    D3D12_DESCRIPTOR_HEAP_TYPE type) const -> const DescriptorSegment*;
 
   //! Updates the set of shader visible heaps.
   /*!

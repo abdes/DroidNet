@@ -16,7 +16,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -27,8 +27,8 @@
 #include "./Mocks/TestDescriptorHandle.h"
 
 using oxygen::graphics::DefaultDescriptorAllocationStrategy;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorAllocationStrategy;
-using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::detail::DescriptorSegment;
@@ -76,7 +76,7 @@ NOLINT_TEST_F(
   };
 
   // Action: Allocate a descriptor
-  auto handle = allocator_->Allocate(
+  auto handle = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Verify: Handle should be valid
@@ -124,9 +124,9 @@ NOLINT_TEST_F(
   };
 
   // Action: Perform two allocations from the same heap
-  const auto h1 = allocator_->Allocate(
+  const auto h1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-  const auto h2 = allocator_->Allocate(
+  const auto h2 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Verify: Both allocations were made and handles are valid
@@ -156,7 +156,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleaseMakesDescriptorAvailable)
     return std::move(segment);
   };
 
-  auto handle = allocator_->Allocate(
+  auto handle = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(handle.IsValid());
   allocator_->Release(handle);
@@ -165,7 +165,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleaseMakesDescriptorAvailable)
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleasingInvalidHandleIsNoOp)
 {
-  DescriptorHandle invalid;
+  DescriptorAllocationHandle invalid;
   EXPECT_NO_THROW(allocator_->Release(invalid));
 }
 
@@ -192,7 +192,7 @@ NOLINT_TEST_F(
     return std::move(segment);
   };
 
-  auto handle = allocator_->Allocate(
+  auto handle = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   const auto remaining_count = allocator_->GetRemainingDescriptorsCount(
@@ -224,11 +224,11 @@ NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandleRecyclingReusesSameIndex)
     return std::move(segment);
   };
 
-  auto handle1 = allocator_->Allocate(
+  auto handle1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   const auto index1 = handle1.GetBindlessHandle();
   allocator_->Release(handle1);
-  auto handle2 = allocator_->Allocate(
+  auto handle2 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   const auto index2 = handle2.GetBindlessHandle();
 
@@ -261,11 +261,11 @@ NOLINT_TEST_F(
     return seg;
   };
 
-  auto h1 = allocator_->Allocate(
+  auto h1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-  auto h2 = allocator_->Allocate(
+  auto h2 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
-  auto h3 = allocator_->Allocate(
+  auto h3 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly);
 
   auto created = segmentCreated.find(
@@ -313,14 +313,14 @@ NOLINT_TEST_F(
     {
     }
 
-    auto CopyDescriptor(const DescriptorHandle&, const DescriptorHandle&)
-      -> void override
+    auto CopyDescriptor(const DescriptorAllocationHandle&,
+      const DescriptorAllocationHandle&) -> void override
     {
       throw std::logic_error("Not used in this test");
     }
 
     [[nodiscard]] auto GetShaderVisibleIndex(
-      const DescriptorHandle& /*handle*/) const noexcept
+      const DescriptorAllocationHandle& /*handle*/) const noexcept
       -> oxygen::bindless::ShaderVisibleIndex override
     {
       return oxygen::kInvalidShaderVisibleIndex;
@@ -361,7 +361,7 @@ NOLINT_TEST_F(
     = std::make_unique<LocalMockAllocator>(strategy, expected_base_index);
 
   // Allocate a descriptor and verify the base index was used
-  auto handle = allocator->Allocate(view_type, visibility);
+  auto handle = allocator->AllocateRaw(view_type, visibility);
   EXPECT_TRUE(handle.IsValid());
   EXPECT_EQ(handle.GetBindlessHandle(), expected_base_index);
   EXPECT_TRUE(allocator->Checked());

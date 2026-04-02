@@ -468,7 +468,7 @@ auto ConventionalShadowRasterPass::PrepareJobDepthStencilView(
   }
 
   auto dsv_desc_handle
-    = allocator.Allocate(graphics::ResourceViewType::kTexture_DSV,
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
       graphics::DescriptorVisibility::kCpuOnly);
   if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(

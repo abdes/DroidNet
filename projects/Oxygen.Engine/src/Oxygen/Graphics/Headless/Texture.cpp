@@ -152,9 +152,10 @@ auto Texture::GetLayoutStrategy() const -> const TextureLayoutStrategy&
  Unregister views before destroying the texture or transfer ownership to the
  registry if views must outlive the resource.
 */
-auto Texture::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, TextureType /*dimension*/,
-  TextureSubResourceSet sub_resources) const -> NativeView
+auto Texture::CreateShaderResourceView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  TextureType /*dimension*/, TextureSubResourceSet sub_resources) const
+  -> NativeView
 {
   // Resolve subresource set to concrete ranges and compute byte ranges.
   const auto resolved
@@ -186,9 +187,10 @@ auto Texture::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-auto Texture::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, TextureType /*dimension*/,
-  TextureSubResourceSet sub_resources) const -> NativeView
+auto Texture::CreateUnorderedAccessView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  TextureType /*dimension*/, TextureSubResourceSet sub_resources) const
+  -> NativeView
 {
   const auto resolved
     = sub_resources.Resolve(desc_, /*single_mip_level=*/false);
@@ -216,8 +218,9 @@ auto Texture::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-auto Texture::CreateRenderTargetView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, TextureSubResourceSet sub_resources) const -> NativeView
+auto Texture::CreateRenderTargetView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  TextureSubResourceSet sub_resources) const -> NativeView
 {
   // Resolve subresources for RTV (often entire texture or a single mip)
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
@@ -234,9 +237,9 @@ auto Texture::CreateRenderTargetView(const DescriptorHandle& /*view_handle*/,
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-auto Texture::CreateDepthStencilView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, TextureSubResourceSet sub_resources,
-  bool is_read_only) const -> NativeView
+auto Texture::CreateDepthStencilView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  TextureSubResourceSet sub_resources, bool is_read_only) const -> NativeView
 {
   const auto resolved = sub_resources.Resolve(desc_, /*single_mip_level=*/true);
   void* raw = operator new(sizeof(DSV));

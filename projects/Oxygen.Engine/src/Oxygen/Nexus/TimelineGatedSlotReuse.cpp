@@ -42,7 +42,8 @@ auto UpdatePeak(std::atomic<uint64_t>& peak_target, const uint64_t candidate)
  ```cpp
  auto reuse_manager = TimelineGatedSlotReuse(
    [](DomainKey domain) { return backend.allocate(domain); },
-   [](DomainKey domain, Handle h) { backend.free(domain, h); }
+   [](DomainKey
+ domain, Handle h) { backend.free(domain, h); }
  );
  ```
 
@@ -334,9 +335,9 @@ auto TimelineGatedSlotReuse::Release(DomainKey const& domain, VHandle const h,
 
  ```cpp
  // Batch release after frame submission
- std::vector<std::pair<DomainKey, VersionedBindlessHandle>> to_release;
- // ... populate to_release ...
- reuse_manager.ReleaseBatch(queue, fence, to_release);
+  std::vector<std::pair<DomainKey, VersionedBindlessHandle>> to_release;
+ // ...
+ populate to_release ... reuse_manager.ReleaseBatch(queue, fence, to_release);
  ```
 
  @note More efficient than multiple Release() calls for same fence

@@ -14,7 +14,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -57,7 +57,7 @@ public:
   using ViewDescriptionT = TestViewDesc;
 
   using GetNativeViewFn = std::function<NativeView(
-    const DescriptorHandle&, const ViewDescriptionT&)>;
+    const DescriptorAllocationHandle&, const ViewDescriptionT&)>;
 
   FakeResource() noexcept
     : instance_id_(s_next_instance_id_.fetch_add(1u, std::memory_order_relaxed))
@@ -114,8 +114,9 @@ public:
   }
 
   //! Required by resource registry
-  [[nodiscard]] auto GetNativeView(const DescriptorHandle& view_handle,
-    const ViewDescriptionT& desc) -> NativeView
+  [[nodiscard]] auto GetNativeView(
+    const DescriptorAllocationHandle& view_handle, const ViewDescriptionT& desc)
+    -> NativeView
   {
     ++call_count_;
     last_desc_ = desc;
@@ -149,7 +150,7 @@ private:
   // Helper factories to avoid duplicating lambda bodies
   auto MakeDefaultBehavior() -> GetNativeViewFn
   {
-    return [instance_copy = instance_id_](const DescriptorHandle&,
+    return [instance_copy = instance_id_](const DescriptorAllocationHandle&,
              const ViewDescriptionT& desc) -> NativeView {
       // Use HashCombine helper to combine the per-instance salt and the view
       // id. This preserves the full 64-bit value on 64-bit platforms while
@@ -162,16 +163,15 @@ private:
 
   static auto MakeInvalidViewBehavior() -> GetNativeViewFn
   {
-    return [](const DescriptorHandle&, const ViewDescriptionT&) -> NativeView {
-      return {};
-    };
+    return [](const DescriptorAllocationHandle&,
+             const ViewDescriptionT&) -> NativeView { return {}; };
   }
 
   auto MakeThrowOnIdBehavior() -> GetNativeViewFn
   {
     // Capture a copy of the configured id so the lambda does not reference
     // the containing object's storage (which may be moved/destroyed).
-    return [id_copy = throw_on_id_](const DescriptorHandle&,
+    return [id_copy = throw_on_id_](const DescriptorAllocationHandle&,
              const ViewDescriptionT& desc) -> NativeView {
       if (id_copy.has_value() && desc.id == *id_copy) {
         throw std::runtime_error("FakeResource: GetNativeView forced throw");

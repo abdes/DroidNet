@@ -153,7 +153,7 @@ auto PrepareRenderTargetView(const Texture& color_texture,
     rtv->IsValid()) {
     return rtv;
   }
-  auto rtv_desc_handle = allocator.Allocate(
+  auto rtv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
   if (!rtv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -193,7 +193,7 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
     dsv->IsValid()) {
     return dsv;
   }
-  auto dsv_desc_handle = allocator.Allocate(
+  auto dsv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
   if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(

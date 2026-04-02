@@ -1,5 +1,9 @@
 # 📘 Nexus Working Design Document (Updated)
 
+> **Migration note (2026-04-02):** semantic bindless allocations now flow
+> through `AllocateBindless(DomainToken, ResourceViewType)`, while transient or
+> explicit non-semantic descriptors use `AllocateRaw(...)`.
+
 ## 0. Purpose and scope
 
 This is a living design document for Nexus (the unified GPU resource manager)

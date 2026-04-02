@@ -1136,8 +1136,8 @@ auto EnvironmentStaticDataManager::EnsureResourcesCreated() -> void
 
   auto& allocator = gfx_->GetDescriptorAllocator();
   auto handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    = allocator.AllocateBindless(oxygen::bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_SRV);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "failed to allocate SRV descriptor for upload buffer");
     return;

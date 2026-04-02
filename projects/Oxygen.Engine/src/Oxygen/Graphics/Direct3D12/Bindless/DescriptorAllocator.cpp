@@ -30,16 +30,38 @@ DescriptorAllocator::DescriptorAllocator(
   , device_(device)
 {
   DCHECK_NOTNULL_F(device, "D3D12 device must not be null");
+  (void)ReserveRaw(ResourceViewType::kStructuredBuffer_SRV,
+    DescriptorVisibility::kShaderVisible, bindless::Count { 1U });
+  (void)ReserveRaw(ResourceViewType::kSampler,
+    DescriptorVisibility::kShaderVisible, bindless::Count { 1U });
 }
 
 DescriptorAllocator::~DescriptorAllocator() = default;
 
-auto DescriptorAllocator::GetCpuHandle(const DescriptorHandle& handle) const
-  -> D3D12_CPU_DESCRIPTOR_HANDLE
+auto DescriptorAllocator::GetCpuHandle(
+  const DescriptorAllocationHandle& handle) const -> D3D12_CPU_DESCRIPTOR_HANDLE
 {
   if (!handle.IsValid()) {
     throw std::runtime_error(
       "Invalid descriptor handle passed to GetCpuHandle");
+  }
+  if (handle.IsBindless()
+    || handle.GetVisibility() == DescriptorVisibility::kShaderVisible) {
+    const auto shader_index = GetShaderVisibleIndex(handle);
+    const auto heap_type
+      = handle.GetDomain() == bindless::generated::kSamplersDomain
+        || handle.GetViewType() == ResourceViewType::kSampler
+      ? D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+      : D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    const auto* segment = GetSharedShaderVisibleSegment(heap_type);
+    if (segment == nullptr) {
+      throw std::runtime_error(
+        "Failed to locate shared shader-visible heap for bindless handle");
+    }
+    auto cpu = segment->GetCpuDescriptorTableStart();
+    cpu.ptr += static_cast<SIZE_T>(shader_index.get())
+      * device_->GetDescriptorHandleIncrementSize(heap_type);
+    return cpu;
   }
   // Find the segment for the handle
   const auto* segment = GetD3D12Segment(handle);
@@ -49,13 +71,31 @@ auto DescriptorAllocator::GetCpuHandle(const DescriptorHandle& handle) const
   return segment->GetCpuHandle(handle);
 }
 
-auto DescriptorAllocator::GetGpuHandle(const DescriptorHandle& handle) const
-  -> D3D12_GPU_DESCRIPTOR_HANDLE
+auto DescriptorAllocator::GetGpuHandle(
+  const DescriptorAllocationHandle& handle) const -> D3D12_GPU_DESCRIPTOR_HANDLE
 {
   // TODO: check if handle is shader visible and throw if not
   if (!handle.IsValid()) {
     throw std::runtime_error(
       "Invalid descriptor handle passed to GetGpuHandle");
+  }
+  if (handle.IsBindless()
+    || handle.GetVisibility() == DescriptorVisibility::kShaderVisible) {
+    const auto shader_index = GetShaderVisibleIndex(handle);
+    const auto heap_type
+      = handle.GetDomain() == bindless::generated::kSamplersDomain
+        || handle.GetViewType() == ResourceViewType::kSampler
+      ? D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
+      : D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    const auto* segment = GetSharedShaderVisibleSegment(heap_type);
+    if (segment == nullptr) {
+      throw std::runtime_error(
+        "Failed to locate shared shader-visible heap for bindless handle");
+    }
+    auto gpu = segment->GetGpuDescriptorTableStart();
+    gpu.ptr += static_cast<UINT64>(shader_index.get())
+      * device_->GetDescriptorHandleIncrementSize(heap_type);
+    return gpu;
   }
   // Find the segment for the handle
   const auto* segment = GetD3D12Segment(handle);
@@ -65,8 +105,8 @@ auto DescriptorAllocator::GetGpuHandle(const DescriptorHandle& handle) const
   return segment->GetGpuHandle(handle);
 }
 
-auto DescriptorAllocator::CopyDescriptor(
-  const DescriptorHandle& dst, const DescriptorHandle& src) -> void
+auto DescriptorAllocator::CopyDescriptor(const DescriptorAllocationHandle& dst,
+  const DescriptorAllocationHandle& src) -> void
 {
   if (!dst.IsValid() || !src.IsValid()) {
     throw std::runtime_error("Cannot copy from/to invalid descriptor handles");
@@ -170,8 +210,8 @@ auto DescriptorAllocator::CreateHeapSegment(bindless::Capacity capacity,
   return segment;
 }
 
-auto DescriptorAllocator::GetD3D12Segment(const DescriptorHandle& handle) const
-  -> const DescriptorSegment*
+auto DescriptorAllocator::GetD3D12Segment(
+  const DescriptorAllocationHandle& handle) const -> const DescriptorSegment*
 {
   if (!Contains(handle)) {
     return nullptr;
@@ -190,20 +230,37 @@ auto DescriptorAllocator::GetD3D12Segment(const DescriptorHandle& handle) const
     *segment_opt); // NOLINT(*-static-cast-downcast)
 }
 
-auto DescriptorAllocator::GetShaderVisibleIndex(
-  const DescriptorHandle& handle) const noexcept -> ShaderVisibleIndex
+auto DescriptorAllocator::GetSharedShaderVisibleSegment(
+  const D3D12_DESCRIPTOR_HEAP_TYPE type) const -> const DescriptorSegment*
 {
-  // GetSegmentForHandle will do all the necessary validation of the handle.
-  const auto segment = GetSegmentForHandle(handle);
-  if (!segment.has_value()) {
-    return kInvalidShaderVisibleIndex;
+  for (const auto& heap_view : Heaps()) {
+    for (const auto& segment_ptr : heap_view.segments) {
+      auto* d3d12_segment
+        = static_cast<const DescriptorSegment*>(segment_ptr.get());
+      if (d3d12_segment->IsShaderVisible()
+        && d3d12_segment->GetHeapType() == type) {
+        return d3d12_segment;
+      }
+    }
   }
-  DCHECK_NOTNULL_F(segment.value());
+  return nullptr;
+}
 
-  // Because we map bindless tables 1:1 to heap segments, the shader-visible
-  // index is the local index into the segment.
-  return ShaderVisibleIndex { handle.GetBindlessHandle().get()
-    - (*segment)->GetBaseIndex().get() };
+auto DescriptorAllocator::GetShaderVisibleIndex(
+  const DescriptorAllocationHandle& handle) const noexcept -> ShaderVisibleIndex
+{
+  if (handle.IsBindless()) {
+    const auto* const domain_desc
+      = bindless::generated::TryGetDomainDesc(handle.GetDomain());
+    if (domain_desc == nullptr) {
+      return kInvalidShaderVisibleIndex;
+    }
+    return ShaderVisibleIndex {
+      domain_desc->shader_index_base + handle.GetLocalSlot(),
+    };
+  }
+
+  return GetRawShaderVisibleIndex(handle);
 }
 
 } // namespace oxygen::graphics::d3d12

@@ -78,7 +78,8 @@ public:
   OXGN_RNDR_API TransientStructuredBuffer(observer_ptr<Graphics> gfx,
     StagingProvider& staging, std::uint32_t stride,
     observer_ptr<InlineTransfersCoordinator> inline_transfers = nullptr,
-    std::string debug_label = {});
+    std::string debug_label = {},
+    bindless::DomainToken domain = bindless::generated::kGlobalSrvDomain);
 
   OXYGEN_MAKE_NON_COPYABLE(TransientStructuredBuffer)
   OXYGEN_DEFAULT_MOVABLE(TransientStructuredBuffer)
@@ -140,6 +141,7 @@ private:
   std::uint32_t stride_;
   observer_ptr<InlineTransfersCoordinator> inline_transfers_;
   std::string debug_label_;
+  bindless::DomainToken domain_ { bindless::generated::kGlobalSrvDomain };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   // Sequence number for the current frame; stored so returned allocations
   // include the frame sequence they were created in.

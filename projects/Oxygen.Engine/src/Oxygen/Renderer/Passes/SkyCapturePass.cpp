@@ -419,8 +419,9 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
       .num_array_slices = 6 });
   state.all_faces_fb = graphics.CreateFramebuffer(all_faces_fb_desc);
 
-  auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   graphics::TextureViewDescription srv_desc;
   srv_desc.view_type = graphics::ResourceViewType::kTexture_SRV;
   srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
@@ -438,7 +439,7 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
   state.face_rtvs.resize(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto rtv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_RTV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_RTV,
         graphics::DescriptorVisibility::kCpuOnly);
     graphics::TextureViewDescription rtv_desc;
     rtv_desc.view_type = graphics::ResourceViewType::kTexture_RTV;
@@ -469,7 +470,7 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
   state.face_constants_indices.reserve(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto cbv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     graphics::BufferViewDescription cbv_view_desc;
     cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;

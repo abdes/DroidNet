@@ -40,7 +40,7 @@ namespace {
 auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
   std::uint64_t size_bytes, const std::uint32_t stride,
-  std::string_view debug_label)
+  std::string_view debug_label, const bindless::DomainToken domain)
   -> std::expected<EnsureBufferResult, std::error_code>
 {
   if (buffer && buffer->GetSize() >= size_bytes) {
@@ -89,13 +89,12 @@ auto EnsureBufferAndSrv(Graphics& gfx,
   if (!had_old) {
     // First-time creation: allocate descriptor, register resource, register
     // view.
-    oxygen::graphics::DescriptorHandle view_handle {};
+    oxygen::graphics::DescriptorAllocationHandle view_handle {};
     ShaderVisibleIndex sv_index { kInvalidShaderVisibleIndex };
     try {
       auto& allocator = gfx.GetDescriptorAllocator();
-      view_handle
-        = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-          graphics::DescriptorVisibility::kShaderVisible);
+      view_handle = allocator.AllocateBindless(
+        domain, graphics::ResourceViewType::kStructuredBuffer_SRV);
       // Validate that we received a valid descriptor handle
       if (!view_handle.IsValid()) {
         LOG_F(ERROR, "-failed- to allocate valid SRV descriptor handle");

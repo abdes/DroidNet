@@ -34,12 +34,13 @@ namespace oxygen::engine::upload {
 TransientStructuredBuffer::TransientStructuredBuffer(observer_ptr<Graphics> gfx,
   StagingProvider& staging, std::uint32_t stride,
   observer_ptr<InlineTransfersCoordinator> inline_transfers,
-  std::string debug_label)
+  std::string debug_label, const bindless::DomainToken domain)
   : gfx_(gfx)
   , staging_(&staging)
   , stride_(stride)
   , inline_transfers_(inline_transfers)
   , debug_label_(std::move(debug_label))
+  , domain_(domain)
 {
   DCHECK_NOTNULL_F(gfx_);
   if (debug_label_.empty()) {
@@ -142,9 +143,8 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   }
 
   auto& allocator = gfx_->GetDescriptorAllocator();
-  auto handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+  auto handle = allocator.AllocateBindless(
+    domain_, graphics::ResourceViewType::kStructuredBuffer_SRV);
 
   if (!handle.IsValid()) {
     LOG_F(ERROR, "Descriptor allocation for transient upload buffer failed!");

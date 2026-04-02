@@ -24,7 +24,8 @@ namespace oxygen::engine::upload::internal {
 
 OXGN_RNDR_API auto EnsureBufferAndSrv(Graphics& gfx,
   std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  std::uint64_t size_bytes, std::uint32_t stride, std::string_view debug_label)
+  std::uint64_t size_bytes, std::uint32_t stride, std::string_view debug_label,
+  bindless::DomainToken domain = bindless::generated::kGlobalSrvDomain)
   -> std::expected<EnsureBufferResult, std::error_code>;
 
 } // namespace oxygen::engine::upload::internal

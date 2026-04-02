@@ -1,5 +1,10 @@
 # Bindless Conventions
 
+> **Migration note (2026-04-02):** bindless resources now allocate through
+> `AllocateBindless(DomainToken, ResourceViewType)`. Raw RTV/DSV or ad-hoc
+> descriptor allocations use `AllocateRaw(...)` and are not treated as semantic
+> bindless domains.
+
 This document captures the root binding layout and per-pass expectations in the
 current bindless renderer implementation.
 

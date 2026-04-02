@@ -26,8 +26,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(FixedDescriptorSegment)
   //! Allocates a descriptor index from this segment.
   /*!
-   \return The allocated index, or DescriptorHandle::kInvalidIndex if the
-           segment is full, or an error occurs. Errors are logged but not
+   \return The allocated index, or DescriptorAllocationHandle::kInvalidIndex if
+   the segment is full, or an error occurs. Errors are logged but not
            propagated.
   */
   OXGN_GFX_NDAPI auto Allocate() noexcept -> bindless::HeapIndex override;
@@ -54,8 +54,8 @@ public:
     -> bindless::Count override;
 
   // OXGN_GFX_NDAPI auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept -> bindless::HeapIndex
-  //   override;
+  //   const DescriptorAllocationHandle& handle) const noexcept ->
+  //   bindless::HeapIndex override;
 
   [[nodiscard]] auto GetCapacity() const noexcept -> bindless::Capacity override
   {

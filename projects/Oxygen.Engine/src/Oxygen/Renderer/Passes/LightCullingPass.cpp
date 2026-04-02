@@ -107,8 +107,7 @@ namespace {
     == 0);
 
   const DomainKey kTimelineRetireDomain {
-    .view_type = ResourceViewType::kStructuredBuffer_SRV,
-    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+    .domain = oxygen::bindless::generated::kGlobalSrvDomain,
   };
 
 } // namespace
@@ -332,7 +331,7 @@ struct LightCullingPass::Impl {
     cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     cbv_view_desc.range = { 0U, desc.size_bytes };
 
-    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error("Failed to allocate CBV descriptor handle");
@@ -381,7 +380,7 @@ struct LightCullingPass::Impl {
       registry.Register(cluster_grid_buffer);
 
       auto uav_handle
-        = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+        = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
           graphics::DescriptorVisibility::kShaderVisible);
       if (!uav_handle.IsValid()) {
         throw std::runtime_error("Failed to allocate cluster grid UAV handle");
@@ -396,9 +395,9 @@ struct LightCullingPass::Impl {
       registry.RegisterView(
         *cluster_grid_buffer, std::move(uav_handle), uav_desc);
 
-      auto srv_handle
-        = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-          graphics::DescriptorVisibility::kShaderVisible);
+      auto srv_handle = allocator.AllocateBindless(
+        oxygen::bindless::generated::kGlobalSrvDomain,
+        ResourceViewType::kStructuredBuffer_SRV);
       if (!srv_handle.IsValid()) {
         throw std::runtime_error("Failed to allocate cluster grid SRV handle");
       }
@@ -439,7 +438,7 @@ struct LightCullingPass::Impl {
       registry.Register(light_index_list_buffer);
 
       auto uav_handle
-        = allocator.Allocate(ResourceViewType::kStructuredBuffer_UAV,
+        = allocator.AllocateRaw(ResourceViewType::kStructuredBuffer_UAV,
           graphics::DescriptorVisibility::kShaderVisible);
       if (!uav_handle.IsValid()) {
         throw std::runtime_error(
@@ -455,9 +454,9 @@ struct LightCullingPass::Impl {
       registry.RegisterView(
         *light_index_list_buffer, std::move(uav_handle), uav_desc);
 
-      auto srv_handle
-        = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-          graphics::DescriptorVisibility::kShaderVisible);
+      auto srv_handle = allocator.AllocateBindless(
+        oxygen::bindless::generated::kGlobalSrvDomain,
+        ResourceViewType::kStructuredBuffer_SRV);
       if (!srv_handle.IsValid()) {
         throw std::runtime_error(
           "Failed to allocate light index list SRV handle");

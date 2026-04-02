@@ -8,7 +8,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 
@@ -195,7 +195,7 @@ auto oxygen::graphics::ResolveTextureBufferCopyRegion(const TextureDesc& desc,
 
 Texture::~Texture() { }
 
-auto Texture::GetNativeView(const DescriptorHandle& view_handle,
+auto Texture::GetNativeView(const DescriptorAllocationHandle& view_handle,
   const TextureViewDescription& view_desc) const -> NativeView
 {
   using graphics::ResourceViewType;

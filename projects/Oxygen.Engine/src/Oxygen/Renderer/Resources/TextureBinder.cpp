@@ -841,8 +841,9 @@ auto TextureBinder::Impl::GetOrAllocate(
 
   const auto view_desc = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
 
-  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto handle
+    = allocator.AllocateBindless(oxygen::bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate descriptor for resource key: {}",
       resource_key);
@@ -944,8 +945,8 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
     = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
 
   auto error_handle
-    = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    = allocator.AllocateBindless(oxygen::bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
   CHECK_F(
     error_handle.IsValid(), "Failed to allocate error texture descriptor");
 
@@ -964,8 +965,8 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
     placeholder_tex_svi_ = error_text_svi_;
   } else {
     auto placeholder_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+      = allocator.AllocateBindless(oxygen::bindless::generated::kTexturesDomain,
+        graphics::ResourceViewType::kTexture_SRV);
     CHECK_F(placeholder_handle.IsValid(),
       "Failed to allocate placeholder texture descriptor");
 

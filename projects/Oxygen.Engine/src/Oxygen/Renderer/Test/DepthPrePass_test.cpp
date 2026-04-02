@@ -125,7 +125,7 @@ protected:
     auto& allocator
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
     auto handle
-      = allocator.Allocate(oxygen::graphics::ResourceViewType::kTexture_DSV,
+      = allocator.AllocateRaw(oxygen::graphics::ResourceViewType::kTexture_DSV,
         oxygen::graphics::DescriptorVisibility::kCpuOnly);
     ASSERT_TRUE(handle.IsValid());
 

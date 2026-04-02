@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 
 namespace oxygen::graphics {
 class DescriptorAllocator;
@@ -14,7 +14,7 @@ class DescriptorAllocator;
 
 namespace oxygen::graphics::bindless::testing {
 
-class TestDescriptorHandle : public DescriptorHandle {
+class TestDescriptorHandle : public DescriptorAllocationHandle {
 public:
   TestDescriptorHandle() = default;
 
@@ -22,7 +22,8 @@ public:
   TestDescriptorHandle(DescriptorAllocator* allocator,
     const oxygen::bindless::HeapIndex index, const ResourceViewType view_type,
     const DescriptorVisibility visibility)
-    : DescriptorHandle(allocator, index, view_type, visibility)
+    : DescriptorAllocationHandle(
+        allocator, index, view_type, visibility, DescriptorAllocationKind::kRaw)
   {
   }
 };

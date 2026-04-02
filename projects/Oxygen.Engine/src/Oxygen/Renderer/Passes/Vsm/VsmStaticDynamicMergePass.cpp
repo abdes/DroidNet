@@ -333,7 +333,7 @@ struct VsmStaticDynamicMergePass::Impl {
     auto& allocator = gfx->GetDescriptorAllocator();
     auto& registry = gfx->GetResourceRegistry();
     for (std::uint32_t slot = 0U; slot < pass_constants_slot_count; ++slot) {
-      auto handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      auto handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
       CHECK_F(handle.IsValid(),
         "Failed to allocate VSM merge pass-constants CBV descriptor");
@@ -404,7 +404,7 @@ struct VsmStaticDynamicMergePass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM merge buffer view");
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view = registry.RegisterView(buffer, std::move(handle), desc);
@@ -422,7 +422,7 @@ struct VsmStaticDynamicMergePass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM merge texture view");
     const auto index = allocator.GetShaderVisibleIndex(handle);
     const auto view = registry.RegisterView(texture, std::move(handle), desc);

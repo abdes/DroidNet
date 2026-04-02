@@ -161,14 +161,20 @@ Results:
 
 ## Common contracts and utilities
 
+> **Migration note (2026-04-02):** Nexus domain ownership is no longer derived
+> from `(ResourceViewType, DescriptorVisibility)`. The active semantic selector
+> is generated `bindless::DomainToken`; `DomainKey` is only a thin wrapper over
+> that token while call sites finish migrating.
+
 The following Nexus types provide the bindless-reuse building blocks. Refer to
 the headers for full APIs, invariants, and usage examples.
 
-- **oxygen::nexus::DomainKey** — Strong key identifying a bindless descriptor
-  domain as a pair {ResourceViewType, DescriptorVisibility}. See
-  src/Oxygen/Nexus/Types/Domain.h
-- **oxygen::nexus::DomainRange** — Absolute range in the global bindless heap:
-  {start: bindless::HeapIndex, capacity: bindless::Capacity}. See
+- **oxygen::nexus::DomainKey** — Thin wrapper over generated
+  `bindless::DomainToken` for semantic bindless ownership. See
+  `src/Oxygen/Nexus/Types/Domain.h`
+- **oxygen::nexus::DomainRange** — Shader-visible range in the generated
+  bindless table: `{start: bindless::ShaderVisibleIndex, capacity:
+  bindless::Capacity}`. See
   src/Oxygen/Nexus/Types/Domain.h
 - **oxygen::nexus::GenerationTracker** — Thread-safe per-slot generation table
   used to stamp VersionedBindlessHandle and detect stale handles; supports lazy
@@ -182,8 +188,7 @@ the headers for full APIs, invariants, and usage examples.
 
 Practical domain mental model:
 
-- A Nexus `DomainKey` is a logical selector (`ResourceViewType` +
-  `DescriptorVisibility`).
+- A Nexus `DomainKey` now carries a generated semantic domain token.
 - The graphics layer owns numeric domain boundaries (`base`, `capacity`) through
   metadata-driven heap strategy and allocator APIs.
 - Nexus strategies must treat those boundaries as authoritative and never invent
@@ -450,12 +455,11 @@ Where to obtain a recorder and queue:
 
 Concrete domain trace (single example):
 
-- Example key: `DomainKey{ ResourceViewType::kTexture_SRV,
-  DescriptorVisibility::kShaderVisible }`.
+- Example key: `DomainKey{ bindless::generated::kTexturesDomain }`.
 - Domain layout source: bindless metadata generated artifacts in
   `src/Oxygen/Core/Bindless/Generated.*`.
-- Runtime authority: graphics allocator strategy and allocator methods
-  (`GetDomainBaseIndex`, `Reserve`, allocation path).
+- Runtime authority: graphics allocator methods
+  (`GetDomainBaseIndex`, `AllocateBindless`, `AllocateRaw`).
 - Nexus usage: pass the same `DomainKey` through Strategy A/B allocate/release
   callbacks; optional `DomainIndexMapper` can resolve handle-to-domain for
   diagnostics/validation.

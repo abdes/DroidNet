@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-02 17:13:35
+// Generated: 2026-04-02 21:10:18
 
 #ifndef OXYGEN_BINDLESS_ABI_HLSL
 #define OXYGEN_BINDLESS_ABI_HLSL
@@ -30,19 +30,19 @@ static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capaci
 #endif
 }
 
-// Unified global bindless table
+// Unified global bindless table sized for production large geometry-heavy scenes
 
 static const uint K_GLOBAL_SRV_SHADER_INDEX_BASE = 1;
-static const uint K_GLOBAL_SRV_CAPACITY = 2048;
+static const uint K_GLOBAL_SRV_CAPACITY = 32768;
 
 // Material and metadata buffer ranges
 
-static const uint K_MATERIALS_SHADER_INDEX_BASE = 2049;
+static const uint K_MATERIALS_SHADER_INDEX_BASE = 32769;
 static const uint K_MATERIALS_CAPACITY = 3047;
 
 // Unified texture bindless range
 
-static const uint K_TEXTURES_SHADER_INDEX_BASE = 5096;
+static const uint K_TEXTURES_SHADER_INDEX_BASE = 35816;
 static const uint K_TEXTURES_CAPACITY = 65536;
 
 // Global sampler table

@@ -3,7 +3,7 @@
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
     "source_version": "2.0.0",
     "tool_version": "1.2.2",
-    "generated": "2026-04-02 17:13:35",
+    "generated": "2026-04-02 21:10:18",
     "format": "BindlessStrategy.Vulkan/1",
     "schema_version": "2.0.0"
   },
@@ -49,7 +49,7 @@
     {
       "domain": "textures",
       "binding": "textures_binding",
-      "array_element_base": 5096
+      "array_element_base": 35816
     },
     {
       "domain": "srv_global",
@@ -59,7 +59,7 @@
     {
       "domain": "materials",
       "binding": "global_buffers_binding",
-      "array_element_base": 2049
+      "array_element_base": 32769
     },
     {
       "domain": "samplers",

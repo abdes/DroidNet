@@ -19,7 +19,7 @@
 #include <type_traits>
 #include <vector>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;

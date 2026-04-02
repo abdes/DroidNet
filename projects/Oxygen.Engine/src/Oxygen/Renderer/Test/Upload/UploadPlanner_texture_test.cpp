@@ -39,28 +39,28 @@ public:
 
 protected:
   [[nodiscard]] auto CreateShaderResourceView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateUnorderedAccessView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateRenderTargetView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet) const
     -> oxygen::graphics::NativeView override
   {
     return {};
   }
   [[nodiscard]] auto CreateDepthStencilView(
-    const oxygen::graphics::DescriptorHandle&, oxygen::Format,
+    const oxygen::graphics::DescriptorAllocationHandle&, oxygen::Format,
     oxygen::graphics::TextureSubResourceSet, bool) const
     -> oxygen::graphics::NativeView override
   {

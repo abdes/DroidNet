@@ -16,8 +16,8 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Nexus/Types/Domain.h>
 
 namespace oxygen::nexus::testing {
@@ -34,31 +34,42 @@ public:
   FakeAllocator()
   {
     // provide small default domain capacities via internal map
-    bases_[{
-      oxygen::graphics::ResourceViewType::kTexture_SRV,
-      oxygen::graphics::DescriptorVisibility::kShaderVisible,
-    }] = kDefaultBaseIndex;
+    bases_[oxygen::bindless::generated::kTexturesDomain.get()]
+      = b::ShaderVisibleIndex { kDefaultBaseIndex.get() };
   }
 
-  auto SetBase(oxygen::graphics::ResourceViewType vt,
-    oxygen::graphics::DescriptorVisibility vis, b::HeapIndex base) -> void
+  auto SetBase(oxygen::bindless::DomainToken domain, b::ShaderVisibleIndex base)
+    -> void
   {
-    bases_[{ vt, vis }] = base;
+    bases_[domain.get()] = base;
   }
 
-  auto Allocate(oxygen::graphics::ResourceViewType vt,
+  auto AllocateRaw(oxygen::graphics::ResourceViewType vt,
     oxygen::graphics::DescriptorVisibility vis)
-    -> oxygen::graphics::DescriptorHandle override
+    -> oxygen::graphics::DescriptorAllocationHandle override
   {
-    return CreateDescriptorHandle(b::HeapIndex { 0U }, vt, vis);
+    return CreateRawDescriptorHandle(b::HeapIndex { 0U }, vt, vis);
   }
 
-  auto Release(oxygen::graphics::DescriptorHandle& /*handle*/) -> void override
+  auto AllocateBindless(
+    oxygen::bindless::DomainToken domain, oxygen::graphics::ResourceViewType vt)
+    -> oxygen::graphics::DescriptorAllocationHandle override
+  {
+    return CreateBindlessHandle(
+      oxygen::graphics::DescriptorAllocationHandle::PackBindlessSlot(
+        domain, 0U),
+      domain, vt);
+  }
+
+  auto Release(oxygen::graphics::DescriptorAllocationHandle& /*handle*/)
+    -> void override
   {
   }
 
-  auto CopyDescriptor(const oxygen::graphics::DescriptorHandle& /*source*/,
-    const oxygen::graphics::DescriptorHandle& /*destination*/) -> void override
+  auto CopyDescriptor(
+    const oxygen::graphics::DescriptorAllocationHandle& /*source*/,
+    const oxygen::graphics::DescriptorAllocationHandle& /*destination*/)
+    -> void override
   {
   }
 
@@ -70,17 +81,18 @@ public:
   }
 
   [[nodiscard]] auto GetDomainBaseIndex(
-    oxygen::graphics::ResourceViewType view_type,
-    oxygen::graphics::DescriptorVisibility vis) const -> b::HeapIndex override
+    oxygen::bindless::DomainToken domain) const
+    -> b::ShaderVisibleIndex override
   {
-    auto it = bases_.find({ view_type, vis });
+    auto it = bases_.find(domain.get());
     if (it != bases_.end()) {
       return it->second;
     }
-    return b::HeapIndex { 0U };
+    return b::ShaderVisibleIndex { 0U };
   }
 
-  [[nodiscard]] auto Reserve(oxygen::graphics::ResourceViewType /*view_type*/,
+  [[nodiscard]] auto ReserveRaw(
+    oxygen::graphics::ResourceViewType /*view_type*/,
     oxygen::graphics::DescriptorVisibility /*vis*/, b::Count /*count*/)
     -> std::optional<b::HeapIndex> override
   {
@@ -88,7 +100,8 @@ public:
   }
 
   [[nodiscard]] auto Contains(
-    const oxygen::graphics::DescriptorHandle& /*handle*/) const -> bool override
+    const oxygen::graphics::DescriptorAllocationHandle& /*handle*/) const
+    -> bool override
   {
     return false;
   }
@@ -102,25 +115,14 @@ public:
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const oxygen::graphics::DescriptorHandle& /*handle*/) const noexcept
-    -> b::ShaderVisibleIndex override
+    const oxygen::graphics::DescriptorAllocationHandle& /*handle*/)
+    const noexcept -> b::ShaderVisibleIndex override
   {
     return oxygen::kInvalidShaderVisibleIndex;
   }
 
 private:
-  struct KeyHash {
-    auto operator()(const std::pair<oxygen::graphics::ResourceViewType,
-      oxygen::graphics::DescriptorVisibility>& k) const noexcept -> std::size_t
-    {
-      return (static_cast<std::size_t>(k.first) << kDomainHashShift)
-        ^ static_cast<std::size_t>(k.second);
-    }
-  };
-  std::unordered_map<std::pair<oxygen::graphics::ResourceViewType,
-                       oxygen::graphics::DescriptorVisibility>,
-    b::HeapIndex, KeyHash>
-    bases_;
+  std::unordered_map<uint16_t, b::ShaderVisibleIndex> bases_;
 };
 
 //! Backend allocator mock that tracks allocations and supports free list reuse.
