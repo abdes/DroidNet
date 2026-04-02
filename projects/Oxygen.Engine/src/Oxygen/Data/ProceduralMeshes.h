@@ -42,7 +42,7 @@ OXGN_DATA_NDAPI auto MakeIcoSphereMeshAsset(unsigned int subdivision_level = 2)
 OXGN_DATA_NDAPI auto MakeGeodesicSphereMeshAsset(unsigned int subdivision_level
   = 2) -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
 
-//! Creates a new Mesh representing a flat plane in the XZ plane.
+//! Creates a new Mesh representing a flat plane in the XY plane at `z = 0`.
 OXGN_DATA_NDAPI auto MakePlaneMeshAsset(
   unsigned int x_segments = 1, unsigned int z_segments = 1, float size = 1.0f)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;

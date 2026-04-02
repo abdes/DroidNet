@@ -11,14 +11,14 @@
 #include <vector>
 
 /*!
- Creates a new Mesh representing a flat plane in the XZ plane centered at
+ Creates a new Mesh representing a flat plane in the XY plane centered at
  the origin. The plane is subdivided into a grid of quads, with each quad made
  of two triangles. Vertices are generated with positions, normals, texcoords,
  tangents, bitangents, and color.
 
  @param x_segments Number of subdivisions along the X axis (minimum 1).
- @param z_segments Number of subdivisions along the Z axis (minimum 1).
- @param size Length of the plane along X and Z (plane is size x size).
+ @param z_segments Number of subdivisions along the Y axis (minimum 1).
+ @param size Length of the plane along X and Y (plane is size x size).
  @return Shared pointer to the immutable Mesh containing the plane
  geometry. Returns nullptr on invalid input. Never throws.
 

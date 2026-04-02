@@ -1063,6 +1063,86 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
+  ProceduralPlanePreservesDescriptorBoundsInCookedMetadata)
+{
+  const auto root = MakeTempCookedRoot("procedural_plane_bounds_xy_z0");
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  const auto descriptor_path = source_dir / "floor.procedural.geometry.json";
+
+  std::filesystem::create_directories(cooked_root / "Materials");
+  WriteTextFile(cooked_root / "Materials" / "default.omat", "placeholder");
+
+  const auto floor_bounds = json {
+    { "min", json::array({ -5.0F, -5.0F, 0.0F }) },
+    { "max", json::array({ 5.0F, 5.0F, 0.0F }) },
+  };
+  const auto descriptor_doc = json {
+    { "name", "FloorPlane" },
+    { "bounds", floor_bounds },
+    { "lods",
+      json::array({
+        json {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "bounds", floor_bounds },
+          { "procedural",
+            {
+              { "generator", "Plane" },
+              { "mesh_name", "Floor" },
+              { "params",
+                {
+                  { "x_segments", 10U },
+                  { "z_segments", 10U },
+                  { "size", 10.0F },
+                } },
+            } },
+          { "submeshes",
+            json::array({
+              json {
+                { "material_ref", "/.cooked/Materials/default.omat" },
+                { "views",
+                  json::array({ json { { "view_ref", "__all__" } } }) },
+              },
+            }) },
+        },
+      }) },
+  };
+  WriteTextFile(descriptor_path, descriptor_doc.dump(2));
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service]() { service.Stop(); });
+
+  const auto report = SubmitAndWait(
+    service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
+  EXPECT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+  EXPECT_EQ(report.geometry_written, 1U)
+    << DiagnosticSummary(report.diagnostics);
+
+  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
+  ASSERT_TRUE(geometry_relpath.has_value());
+
+  const auto descriptor_bytes
+    = ReadBinaryFile(cooked_root / std::filesystem::path(*geometry_relpath));
+  ASSERT_GE(
+    descriptor_bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
+
+  const auto geometry_desc
+    = ReadStructAt<data::pak::geometry::GeometryAssetDesc>(
+      descriptor_bytes, 0U);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[0], -5.0F);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[1], -5.0F);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_min[2], 0.0F);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_max[0], 5.0F);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_max[1], 5.0F);
+  EXPECT_FLOAT_EQ(geometry_desc.bounding_box_max[2], 0.0F);
+  EXPECT_TRUE(CanParseGeometryDescriptor(descriptor_bytes));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobTest,
   ProceduralGeodesicSphereImportsAndRemainsLoaderCompatible)
 {
   const auto root = MakeTempCookedRoot("procedural_geodesic_loader_compatible");
