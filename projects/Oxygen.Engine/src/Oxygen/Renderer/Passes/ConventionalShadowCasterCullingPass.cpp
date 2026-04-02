@@ -551,10 +551,21 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
     slot_index, view_state.partition_states.size());
 
   auto& state = view_state.partition_states[slot_index];
+  const auto total_command_count
+    = static_cast<std::uint64_t>(view_state.job_count)
+    * static_cast<std::uint64_t>(partition.record_count);
+  const auto command_bytes
+    = total_command_count * sizeof(ConventionalShadowIndirectDrawCommand);
+  const auto count_bytes
+    = static_cast<std::uint64_t>(view_state.job_count) * sizeof(std::uint32_t);
+
   if (state.command_buffer && state.count_buffer && state.count_clear_buffer
     && state.count_clear_mapped_ptr != nullptr
     && state.record_count == partition.record_count
-    && state.max_commands_per_job == partition.record_count) {
+    && state.max_commands_per_job == partition.record_count
+    && state.command_buffer->GetSize() >= command_bytes
+    && state.count_buffer->GetSize() >= count_bytes
+    && state.count_clear_buffer->GetSize() >= count_bytes) {
     state.pass_mask = partition.pass_mask;
     state.partition_index = partition.partition_index;
     state.record_begin = partition.record_begin;
@@ -568,14 +579,6 @@ auto ConventionalShadowCasterCullingPass::Impl::EnsurePartitionResources(
   state.record_begin = partition.record_begin;
   state.record_count = partition.record_count;
   state.max_commands_per_job = partition.record_count;
-
-  const auto total_command_count
-    = static_cast<std::uint64_t>(view_state.job_count)
-    * static_cast<std::uint64_t>(partition.record_count);
-  const auto command_bytes
-    = total_command_count * sizeof(ConventionalShadowIndirectDrawCommand);
-  const auto count_bytes
-    = static_cast<std::uint64_t>(view_state.job_count) * sizeof(std::uint32_t);
   const auto debug_base = config != nullptr && !config->debug_name.empty()
     ? config->debug_name
     : "ConventionalShadowCasterCullingPass";
