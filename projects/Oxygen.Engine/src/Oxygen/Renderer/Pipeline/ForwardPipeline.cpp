@@ -562,14 +562,6 @@ auto ForwardPipeline::Impl::RunScenePasses(
         }
       }
 
-      if (shadow_raster_pass && shadow_raster_pass_config
-        && shadow_raster_pass_config->depth_texture) {
-        co_await shadow_raster_pass->PrepareResources(rc, rec);
-        co_await shadow_raster_pass->Execute(rc, rec);
-        rc.RegisterPass<engine::ConventionalShadowRasterPass>(
-          shadow_raster_pass.get());
-      }
-
       co_await depth_pass->PrepareResources(rc, rec);
       co_await depth_pass->Execute(rc, rec);
       rc.RegisterPass<engine::DepthPrePass>(depth_pass.get());
@@ -618,6 +610,14 @@ auto ForwardPipeline::Impl::RunScenePasses(
             }
           }
         }
+      }
+
+      if (shadow_raster_pass && shadow_raster_pass_config
+        && shadow_raster_pass_config->depth_texture) {
+        co_await shadow_raster_pass->PrepareResources(rc, rec);
+        co_await shadow_raster_pass->Execute(rc, rec);
+        rc.RegisterPass<engine::ConventionalShadowRasterPass>(
+          shadow_raster_pass.get());
       }
     }
   }

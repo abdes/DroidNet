@@ -962,9 +962,9 @@ auto ConventionalShadowCasterCullingPass::DoExecute(CommandRecorder& recorder)
   for (std::size_t i = 0; i < impl_->active_partitions.size(); ++i) {
     auto& partition_state = view_state.partition_states[i];
     recorder.RequireResourceStateFinal(
-      *partition_state.command_buffer, ResourceStates::kCommon);
+      *partition_state.command_buffer, ResourceStates::kIndirectArgument);
     recorder.RequireResourceStateFinal(
-      *partition_state.count_buffer, ResourceStates::kCommon);
+      *partition_state.count_buffer, ResourceStates::kIndirectArgument);
   }
   recorder.RequireResourceStateFinal(
     *view_state.job_buffer, ResourceStates::kCommon);

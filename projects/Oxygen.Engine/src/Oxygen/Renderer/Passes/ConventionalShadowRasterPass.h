@@ -8,10 +8,15 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
 
@@ -40,12 +45,33 @@ class ConventionalShadowRasterPass : public DepthPrePass {
 public:
   using Config = DepthPrePassConfig;
 
+  struct IndirectPartitionInspection {
+    PassMask pass_mask {};
+    std::uint32_t partition_index { 0U };
+    std::uint32_t draw_record_count { 0U };
+    std::uint32_t max_commands_per_job { 0U };
+    const graphics::Buffer* command_buffer { nullptr };
+    const graphics::Buffer* count_buffer { nullptr };
+  };
+
+  struct Output {
+    std::uint32_t job_count { 0U };
+    std::uint32_t partition_count { 0U };
+    bool counted_indirect_used { false };
+    bool available { false };
+  };
+
   OXGN_RNDR_API explicit ConventionalShadowRasterPass(
     std::shared_ptr<Config> config);
   OXGN_RNDR_API ~ConventionalShadowRasterPass() override;
 
   OXYGEN_DEFAULT_COPYABLE(ConventionalShadowRasterPass)
   OXYGEN_DEFAULT_MOVABLE(ConventionalShadowRasterPass)
+
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetCurrentOutput(ViewId view_id) const
+    -> Output;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetIndirectPartitionsForInspection(
+    ViewId view_id) const -> std::span<const IndirectPartitionInspection>;
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -68,14 +94,23 @@ private:
     -> void;
   auto BindJobViewConstants(
     graphics::CommandRecorder& recorder, std::uint32_t job_index) const -> void;
+  auto ResetCurrentOutputState() -> void;
   auto PrepareJobDepthStencilView(graphics::Texture& depth_texture,
     const renderer::RasterShadowJob& job) const -> graphics::NativeView;
+
+  struct ViewState {
+    std::vector<IndirectPartitionInspection> inspection_partitions {};
+    std::uint32_t job_count { 0U };
+    bool counted_indirect_used { false };
+    bool has_current_output { false };
+  };
 
   std::shared_ptr<graphics::Buffer> shadow_view_constants_buffer_;
   void* shadow_view_constants_mapped_ptr_ { nullptr };
   std::uint32_t shadow_view_constants_capacity_ { 0U };
   observer_ptr<graphics::detail::DeferredReclaimer>
     shadow_view_constants_reclaimer_ { nullptr };
+  std::unordered_map<ViewId, ViewState> view_states_ {};
 };
 
 } // namespace oxygen::engine
