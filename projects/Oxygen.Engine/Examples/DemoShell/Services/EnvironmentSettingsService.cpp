@@ -66,8 +66,6 @@ namespace {
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
   constexpr float kMetersToKm = 0.001F;
   constexpr float kKmToMeters = 1000.0F;
-  constexpr float kSyntheticSunShadowBias = 0.0F;
-  constexpr float kSyntheticSunShadowNormalBias = 0.02F;
   constexpr std::string_view kPreferredSceneSunNodeName = "SUN";
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
@@ -375,6 +373,24 @@ namespace {
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
   constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
+  constexpr std::string_view kSunShadowBiasKey = "env.sun.shadow.bias";
+  constexpr std::string_view kSunShadowNormalBiasKey
+    = "env.sun.shadow.normal_bias";
+  constexpr std::string_view kSunShadowResolutionHintKey
+    = "env.sun.shadow.resolution_hint";
+  constexpr std::string_view kSunShadowCascadeCountKey
+    = "env.sun.csm.cascade_count";
+  constexpr std::string_view kSunShadowSplitModeKey = "env.sun.csm.split_mode";
+  constexpr std::string_view kSunShadowMaxDistanceKey
+    = "env.sun.csm.max_shadow_distance";
+  constexpr std::string_view kSunShadowDistributionExponentKey
+    = "env.sun.csm.distribution_exponent";
+  constexpr std::string_view kSunShadowTransitionFractionKey
+    = "env.sun.csm.transition_fraction";
+  constexpr std::string_view kSunShadowDistanceFadeoutFractionKey
+    = "env.sun.csm.distance_fadeout_fraction";
+  constexpr std::string_view kSunShadowCascadeDistancePrefixKey
+    = "env.sun.csm.cascade_distance";
   constexpr std::string_view kEnvironmentSettingsSchemaVersionKey
     = "env.settings.schema_version";
   constexpr std::string_view kEnvironmentCustomStatePresentKey
@@ -1651,6 +1667,162 @@ auto EnvironmentSettingsService::SetSunDiskRadiusDeg(float value) -> void
   MarkDirty(ToMask(DirtyDomain::kSun));
 }
 
+auto EnvironmentSettingsService::GetSunShadowBias() const -> float
+{
+  return sun_shadow_bias_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowBias(float value) -> void
+{
+  if (sun_shadow_bias_ == value) {
+    return;
+  }
+  sun_shadow_bias_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowNormalBias() const -> float
+{
+  return sun_shadow_normal_bias_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowNormalBias(float value) -> void
+{
+  if (sun_shadow_normal_bias_ == value) {
+    return;
+  }
+  sun_shadow_normal_bias_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowResolutionHint() const -> int
+{
+  return sun_shadow_resolution_hint_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowResolutionHint(int value) -> void
+{
+  if (sun_shadow_resolution_hint_ == value) {
+    return;
+  }
+  sun_shadow_resolution_hint_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowCascadeCount() const -> int
+{
+  return sun_shadow_cascade_count_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowCascadeCount(int value) -> void
+{
+  if (sun_shadow_cascade_count_ == value) {
+    return;
+  }
+  sun_shadow_cascade_count_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowSplitMode() const -> int
+{
+  return sun_shadow_split_mode_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowSplitMode(int value) -> void
+{
+  if (sun_shadow_split_mode_ == value) {
+    return;
+  }
+  sun_shadow_split_mode_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowMaxDistance() const -> float
+{
+  return sun_shadow_max_distance_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowMaxDistance(float value) -> void
+{
+  if (sun_shadow_max_distance_ == value) {
+    return;
+  }
+  sun_shadow_max_distance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowDistributionExponent() const
+  -> float
+{
+  return sun_shadow_distribution_exponent_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowDistributionExponent(float value)
+  -> void
+{
+  if (sun_shadow_distribution_exponent_ == value) {
+    return;
+  }
+  sun_shadow_distribution_exponent_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowTransitionFraction() const -> float
+{
+  return sun_shadow_transition_fraction_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowTransitionFraction(float value)
+  -> void
+{
+  if (sun_shadow_transition_fraction_ == value) {
+    return;
+  }
+  sun_shadow_transition_fraction_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowDistanceFadeoutFraction() const
+  -> float
+{
+  return sun_shadow_distance_fadeout_fraction_;
+}
+
+auto EnvironmentSettingsService::SetSunShadowDistanceFadeoutFraction(
+  float value) -> void
+{
+  if (sun_shadow_distance_fadeout_fraction_ == value) {
+    return;
+  }
+  sun_shadow_distance_fadeout_fraction_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
+auto EnvironmentSettingsService::GetSunShadowCascadeDistance(
+  const int index) const -> float
+{
+  if (index < 0
+    || index >= static_cast<int>(sun_shadow_cascade_distances_.size())) {
+    return 0.0F;
+  }
+  return sun_shadow_cascade_distances_[static_cast<std::size_t>(index)];
+}
+
+auto EnvironmentSettingsService::SetSunShadowCascadeDistance(
+  const int index, float value) -> void
+{
+  if (index < 0
+    || index >= static_cast<int>(sun_shadow_cascade_distances_.size())) {
+    return;
+  }
+  const auto idx = static_cast<std::size_t>(index);
+  if (sun_shadow_cascade_distances_[idx] == value) {
+    return;
+  }
+  sun_shadow_cascade_distances_[idx] = value;
+  MarkDirty(ToMask(DirtyDomain::kSun));
+}
+
 auto EnvironmentSettingsService::GetSunLightAvailable() const -> bool
 {
   return sun_light_available_;
@@ -1671,6 +1843,49 @@ auto EnvironmentSettingsService::UpdateSunLightCandidate() -> void
 
   sun_light_node_ = *candidate;
   sun_light_available_ = sun_light_node_.IsAlive();
+}
+
+auto EnvironmentSettingsService::CaptureSunShadowSettingsFromLight(
+  const scene::DirectionalLight& light) -> void
+{
+  const auto& shadow = light.Common().shadow;
+  sun_shadow_bias_ = shadow.bias;
+  sun_shadow_normal_bias_ = shadow.normal_bias;
+  sun_shadow_resolution_hint_ = static_cast<int>(shadow.resolution_hint);
+
+  const auto csm
+    = scene::CanonicalizeCascadedShadowSettings(light.CascadedShadows());
+  sun_shadow_cascade_count_ = static_cast<int>(csm.cascade_count);
+  sun_shadow_split_mode_ = static_cast<int>(csm.split_mode);
+  sun_shadow_max_distance_ = csm.max_shadow_distance;
+  sun_shadow_cascade_distances_ = csm.cascade_distances;
+  sun_shadow_distribution_exponent_ = csm.distribution_exponent;
+  sun_shadow_transition_fraction_ = csm.transition_fraction;
+  sun_shadow_distance_fadeout_fraction_ = csm.distance_fadeout_fraction;
+}
+
+auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
+  scene::DirectionalLight& light) const -> void
+{
+  auto& shadow = light.Common().shadow;
+  shadow.bias = sun_shadow_bias_;
+  shadow.normal_bias = sun_shadow_normal_bias_;
+  shadow.resolution_hint = static_cast<scene::ShadowResolutionHint>(
+    std::clamp(sun_shadow_resolution_hint_,
+      static_cast<int>(scene::ShadowResolutionHint::kLow),
+      static_cast<int>(scene::ShadowResolutionHint::kUltra)));
+
+  scene::CascadedShadowSettings csm {};
+  csm.cascade_count
+    = static_cast<std::uint32_t>(std::max(sun_shadow_cascade_count_, 1));
+  csm.split_mode
+    = static_cast<scene::DirectionalCsmSplitMode>(sun_shadow_split_mode_);
+  csm.max_shadow_distance = sun_shadow_max_distance_;
+  csm.cascade_distances = sun_shadow_cascade_distances_;
+  csm.distribution_exponent = sun_shadow_distribution_exponent_;
+  csm.transition_fraction = sun_shadow_transition_fraction_;
+  csm.distance_fadeout_fraction = sun_shadow_distance_fadeout_fraction_;
+  light.CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
 }
 
 auto EnvironmentSettingsService::EnableSyntheticSun() -> void
@@ -1797,6 +2012,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           light->get().SetIntensityLux(sun_illuminance_lx_);
           auto& common = light->get().Common();
+          ApplySunShadowSettingsToLight(light->get());
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
@@ -1852,10 +2068,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
             "to node '{}'",
             synthetic_sun_light_node_.GetName());
 
+          ApplySunShadowSettingsToLight(light->get());
           auto& common = light->get().Common();
-          common.shadow.bias = kSyntheticSunShadowBias;
-          common.shadow.normal_bias = kSyntheticSunShadowNormalBias;
-          common.shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
           light->get().SetIntensityLux(sun_illuminance_lx_);
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
@@ -2097,7 +2311,13 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
         if (auto light
           = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
           sun_enabled_ = light->get().Common().affects_world;
+          CaptureSunShadowSettingsFromLight(light->get());
         }
+      }
+    } else if (synthetic_sun_light_node_.IsAlive()) {
+      if (auto light
+        = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+        CaptureSunShadowSettingsFromLight(light->get());
       }
     }
 
@@ -2328,6 +2548,30 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(sun_illuminance_lx_, 0.0F, 250000.0F);
   clamp_float(sun_temperature_kelvin_, 1000.0F, 40000.0F);
   clamp_float(sun_component_disk_radius_deg_, 0.01F, 2.0F);
+  clamp_float(sun_shadow_bias_, 0.0F, 10.0F);
+  clamp_float(sun_shadow_normal_bias_, 0.0F, 10.0F);
+  clamp_int(sun_shadow_resolution_hint_,
+    static_cast<int>(scene::ShadowResolutionHint::kLow),
+    static_cast<int>(scene::ShadowResolutionHint::kUltra));
+
+  scene::CascadedShadowSettings csm {};
+  csm.cascade_count
+    = static_cast<std::uint32_t>(std::max(sun_shadow_cascade_count_, 1));
+  csm.split_mode
+    = static_cast<scene::DirectionalCsmSplitMode>(sun_shadow_split_mode_);
+  csm.max_shadow_distance = sun_shadow_max_distance_;
+  csm.cascade_distances = sun_shadow_cascade_distances_;
+  csm.distribution_exponent = sun_shadow_distribution_exponent_;
+  csm.transition_fraction = sun_shadow_transition_fraction_;
+  csm.distance_fadeout_fraction = sun_shadow_distance_fadeout_fraction_;
+  csm = scene::CanonicalizeCascadedShadowSettings(csm);
+  sun_shadow_cascade_count_ = static_cast<int>(csm.cascade_count);
+  sun_shadow_split_mode_ = static_cast<int>(csm.split_mode);
+  sun_shadow_max_distance_ = csm.max_shadow_distance;
+  sun_shadow_cascade_distances_ = csm.cascade_distances;
+  sun_shadow_distribution_exponent_ = csm.distribution_exponent;
+  sun_shadow_transition_fraction_ = csm.transition_fraction;
+  sun_shadow_distance_fadeout_fraction_ = csm.distance_fadeout_fraction;
 
   clamp_int(preset_index_, -2, 64);
 }
@@ -2504,6 +2748,27 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
     any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
     any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+    any_loaded |= load_float(kSunShadowBiasKey, sun_shadow_bias_);
+    any_loaded |= load_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
+    any_loaded
+      |= load_int(kSunShadowResolutionHintKey, sun_shadow_resolution_hint_);
+    any_loaded
+      |= load_int(kSunShadowCascadeCountKey, sun_shadow_cascade_count_);
+    any_loaded |= load_int(kSunShadowSplitModeKey, sun_shadow_split_mode_);
+    any_loaded
+      |= load_float(kSunShadowMaxDistanceKey, sun_shadow_max_distance_);
+    any_loaded |= load_float(
+      kSunShadowDistributionExponentKey, sun_shadow_distribution_exponent_);
+    any_loaded |= load_float(
+      kSunShadowTransitionFractionKey, sun_shadow_transition_fraction_);
+    any_loaded |= load_float(kSunShadowDistanceFadeoutFractionKey,
+      sun_shadow_distance_fadeout_fraction_);
+    for (std::size_t i = 0; i < sun_shadow_cascade_distances_.size(); ++i) {
+      std::string key(kSunShadowCascadeDistancePrefixKey);
+      key += '.';
+      key += std::to_string(i);
+      any_loaded |= load_float(key, sun_shadow_cascade_distances_[i]);
+    }
   }
 
   if (sun_source_loaded) {
@@ -2667,6 +2932,23 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_bool(kSunUseTemperatureKey, sun_use_temperature_);
   save_float(kSunTemperatureKey, sun_temperature_kelvin_);
   save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+  save_float(kSunShadowBiasKey, sun_shadow_bias_);
+  save_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
+  save_int(kSunShadowResolutionHintKey, sun_shadow_resolution_hint_);
+  save_int(kSunShadowCascadeCountKey, sun_shadow_cascade_count_);
+  save_int(kSunShadowSplitModeKey, sun_shadow_split_mode_);
+  save_float(kSunShadowMaxDistanceKey, sun_shadow_max_distance_);
+  save_float(
+    kSunShadowDistributionExponentKey, sun_shadow_distribution_exponent_);
+  save_float(kSunShadowTransitionFractionKey, sun_shadow_transition_fraction_);
+  save_float(kSunShadowDistanceFadeoutFractionKey,
+    sun_shadow_distance_fadeout_fraction_);
+  for (std::size_t i = 0; i < sun_shadow_cascade_distances_.size(); ++i) {
+    std::string key(kSunShadowCascadeDistancePrefixKey);
+    key += '.';
+    key += std::to_string(i);
+    save_float(key, sun_shadow_cascade_distances_[i]);
+  }
 }
 
 auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
@@ -2725,6 +3007,7 @@ auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void
 auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
 {
   const scene::environment::Sun defaults;
+  const scene::CascadedShadowSettings default_csm;
 
   sun_present_ = true;
   sun_enabled_ = defaults.IsEnabled();
@@ -2741,6 +3024,17 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
     = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
   sun_component_disk_radius_deg_
     = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
+  sun_shadow_bias_ = 0.0F;
+  sun_shadow_normal_bias_ = 0.02F;
+  sun_shadow_resolution_hint_
+    = static_cast<int>(scene::ShadowResolutionHint::kMedium);
+  sun_shadow_cascade_count_ = static_cast<int>(default_csm.cascade_count);
+  sun_shadow_split_mode_ = static_cast<int>(default_csm.split_mode);
+  sun_shadow_max_distance_ = default_csm.max_shadow_distance;
+  sun_shadow_cascade_distances_ = default_csm.cascade_distances;
+  sun_shadow_distribution_exponent_ = default_csm.distribution_exponent;
+  sun_shadow_transition_fraction_ = default_csm.transition_fraction;
+  sun_shadow_distance_fadeout_fraction_ = default_csm.distance_fadeout_fraction;
 
   SaveSunSettingsToProfile(0);
   SaveSunSettingsToProfile(1);
@@ -2776,6 +3070,10 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
     sun_present_ = true;
     sun_enabled_ = true;
     sun_source_ = 0;
+    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      CaptureSunShadowSettingsFromLight(light->get());
+      SaveSunSettingsToProfile(0);
+    }
     LOG_F(INFO,
       "EnvironmentSettingsService: activated scene '{}' selected scene "
       "directional '{}' as sun via {} selection (directional_count={})",
@@ -2791,6 +3089,7 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
   sun_light_available_ = false;
   sun_light_node_ = {};
 
+  LoadSunSettingsFromProfile(1);
   EnsureSyntheticSunLight();
   CHECK_F(synthetic_sun_light_node_.IsAlive(),
     "EnvironmentSettingsService: failed to create synthetic sun light during "
@@ -2807,9 +3106,7 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
   auto& common = light->get().Common();
   common.affects_world = true;
   common.casts_shadows = true;
-  common.shadow.bias = kSyntheticSunShadowBias;
-  common.shadow.normal_bias = kSyntheticSunShadowNormalBias;
-  common.shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
+  ApplySunShadowSettingsToLight(light->get());
   light->get().SetIntensityLux(sun_illuminance_lx_);
   common.color_rgb = sun_use_temperature_
     ? KelvinToLinearRgb(sun_temperature_kelvin_)
@@ -2947,6 +3244,17 @@ auto EnvironmentSettingsService::LoadSunSettingsFromProfile(const int source)
   sun_use_temperature_ = settings.use_temperature;
   sun_temperature_kelvin_ = settings.temperature_kelvin;
   sun_component_disk_radius_deg_ = settings.disk_radius_deg;
+  sun_shadow_bias_ = settings.shadow_bias;
+  sun_shadow_normal_bias_ = settings.shadow_normal_bias;
+  sun_shadow_resolution_hint_ = settings.shadow_resolution_hint;
+  sun_shadow_cascade_count_ = settings.shadow_cascade_count;
+  sun_shadow_split_mode_ = settings.shadow_split_mode;
+  sun_shadow_max_distance_ = settings.shadow_max_distance;
+  sun_shadow_cascade_distances_ = settings.shadow_cascade_distances;
+  sun_shadow_distribution_exponent_ = settings.shadow_distribution_exponent;
+  sun_shadow_transition_fraction_ = settings.shadow_transition_fraction;
+  sun_shadow_distance_fadeout_fraction_
+    = settings.shadow_distance_fadeout_fraction;
 }
 
 auto EnvironmentSettingsService::SaveSunSettingsToProfile(const int source)
@@ -2961,6 +3269,17 @@ auto EnvironmentSettingsService::SaveSunSettingsToProfile(const int source)
   settings.use_temperature = sun_use_temperature_;
   settings.temperature_kelvin = sun_temperature_kelvin_;
   settings.disk_radius_deg = sun_component_disk_radius_deg_;
+  settings.shadow_bias = sun_shadow_bias_;
+  settings.shadow_normal_bias = sun_shadow_normal_bias_;
+  settings.shadow_resolution_hint = sun_shadow_resolution_hint_;
+  settings.shadow_cascade_count = sun_shadow_cascade_count_;
+  settings.shadow_split_mode = sun_shadow_split_mode_;
+  settings.shadow_max_distance = sun_shadow_max_distance_;
+  settings.shadow_cascade_distances = sun_shadow_cascade_distances_;
+  settings.shadow_distribution_exponent = sun_shadow_distribution_exponent_;
+  settings.shadow_transition_fraction = sun_shadow_transition_fraction_;
+  settings.shadow_distance_fadeout_fraction
+    = sun_shadow_distance_fadeout_fraction_;
 }
 
 } // namespace oxygen::examples

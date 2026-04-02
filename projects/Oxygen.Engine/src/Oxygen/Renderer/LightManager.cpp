@@ -262,7 +262,11 @@ auto LightManager::CollectFromNode(const scene::NodeHandle& node_handle,
           .bias = common.shadow.bias,
           .normal_bias = common.shadow.normal_bias,
           .cascade_count = csm.cascade_count,
+          .split_mode = static_cast<std::uint32_t>(csm.split_mode),
+          .max_shadow_distance = csm.max_shadow_distance,
           .distribution_exponent = csm.distribution_exponent,
+          .transition_fraction = csm.transition_fraction,
+          .distance_fadeout_fraction = csm.distance_fadeout_fraction,
           .cascade_distances = csm.cascade_distances,
         });
     }

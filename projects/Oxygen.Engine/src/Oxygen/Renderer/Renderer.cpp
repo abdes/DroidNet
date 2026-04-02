@@ -129,6 +129,14 @@ constexpr std::string_view kCVarRendererGpuTimestampExportNextFrame
   = "rndr.gpu_timestamps.export_next_frame";
 constexpr std::string_view kCVarRendererGpuTimestampViewer
   = "rndr.gpu_timestamps.viewer";
+constexpr std::string_view kCVarRendererShadowCsmDistanceScale
+  = "rndr.shadow.csm.distance_scale";
+constexpr std::string_view kCVarRendererShadowCsmTransitionScale
+  = "rndr.shadow.csm.transition_scale";
+constexpr std::string_view kCVarRendererShadowCsmMaxCascades
+  = "rndr.shadow.csm.max_cascades";
+constexpr std::string_view kCVarRendererShadowCsmMaxResolution
+  = "rndr.shadow.csm.max_resolution";
 constexpr std::string_view kCommandRendererDumpTextureMemory
   = "rndr.dump_texture_memory";
 constexpr std::string_view kCommandRendererDumpStats = "rndr.dump_stats";
@@ -138,6 +146,10 @@ constexpr int64_t kMaxTextureDumpTopN = 500;
 constexpr int64_t kDefaultGpuTimestampMaxScopes = 4096;
 constexpr int64_t kMinGpuTimestampMaxScopes = 1;
 constexpr int64_t kMaxGpuTimestampMaxScopes = 65536;
+constexpr double kDefaultShadowCsmDistanceScale = 1.0;
+constexpr double kDefaultShadowCsmTransitionScale = 1.0;
+constexpr int64_t kDefaultShadowCsmMaxCascades = 4;
+constexpr int64_t kDefaultShadowCsmMaxResolution = 0;
 auto ParseTextureDumpTopN(std::string_view value) -> std::optional<int64_t>
 {
   int64_t parsed = 0;
@@ -1255,6 +1267,43 @@ auto Renderer::RegisterConsoleBindings(
     .max_value = std::nullopt,
   });
 
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererShadowCsmDistanceScale),
+    .help = "Runtime scale applied to authored classic CSM max distance",
+    .default_value = kDefaultShadowCsmDistanceScale,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 2.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererShadowCsmTransitionScale),
+    .help = "Runtime scale applied to authored classic CSM transition widths",
+    .default_value = kDefaultShadowCsmTransitionScale,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 2.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererShadowCsmMaxCascades),
+    .help = "Runtime cap for active classic CSM cascade count",
+    .default_value = kDefaultShadowCsmMaxCascades,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1.0,
+    .max_value = 4.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarRendererShadowCsmMaxResolution),
+    .help
+    = "Optional hard ceiling for classic CSM raster resolution (0 disables)",
+    .default_value = kDefaultShadowCsmMaxResolution,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 4096.0,
+  });
+
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = std::string(kCommandRendererDumpTextureMemory),
     .help = "Dump renderer texture memory usage [top_n]",
@@ -1372,6 +1421,38 @@ auto Renderer::ApplyConsoleCVars(
     && gpu_timeline_profiler_ && gpu_timeline_panel_) {
     gpu_timeline_panel_->SetVisible(gpu_timestamp_viewer_enabled);
     gpu_timeline_profiler_->SetRetainLatestFrame(gpu_timestamp_viewer_enabled);
+  }
+
+  renderer::DirectionalCsmRuntimeSettings csm_runtime_settings {};
+  double distance_scale = kDefaultShadowCsmDistanceScale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererShadowCsmDistanceScale, distance_scale)) {
+    csm_runtime_settings.distance_scale = static_cast<float>(distance_scale);
+  }
+
+  double transition_scale = kDefaultShadowCsmTransitionScale;
+  if (console->TryGetCVarValue<double>(
+        kCVarRendererShadowCsmTransitionScale, transition_scale)) {
+    csm_runtime_settings.transition_scale
+      = static_cast<float>(transition_scale);
+  }
+
+  int64_t max_cascades = kDefaultShadowCsmMaxCascades;
+  if (console->TryGetCVarValue<int64_t>(
+        kCVarRendererShadowCsmMaxCascades, max_cascades)) {
+    csm_runtime_settings.max_cascades
+      = static_cast<std::uint32_t>(std::max<int64_t>(1, max_cascades));
+  }
+
+  int64_t max_resolution = kDefaultShadowCsmMaxResolution;
+  if (console->TryGetCVarValue<int64_t>(
+        kCVarRendererShadowCsmMaxResolution, max_resolution)) {
+    csm_runtime_settings.max_resolution
+      = max_resolution <= 0 ? 0U : static_cast<std::uint32_t>(max_resolution);
+  }
+
+  if (shadow_manager_) {
+    shadow_manager_->SetDirectionalCsmRuntimeSettings(csm_runtime_settings);
   }
 }
 

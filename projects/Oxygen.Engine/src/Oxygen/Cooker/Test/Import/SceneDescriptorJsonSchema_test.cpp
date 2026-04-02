@@ -164,4 +164,37 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   EXPECT_FALSE(ValidateSchema(*schema, doc, errors));
 }
 
+NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
+{
+  const auto repo_root = FindRepoRoot();
+  ASSERT_FALSE(repo_root.empty());
+  const auto schema = LoadJsonFile(SchemaFile(repo_root));
+  ASSERT_TRUE(schema.has_value());
+
+  const auto doc = json::parse(R"({
+    "name": "TunedScene",
+    "nodes": [
+      { "name": "Root" }
+    ],
+    "lights": {
+      "directional": [
+        {
+          "node": 0,
+          "common": { "casts_shadows": true },
+          "cascade_count": 4,
+          "split_mode": 0,
+          "max_shadow_distance": 160.0,
+          "distribution_exponent": 3.0,
+          "transition_fraction": 0.1,
+          "distance_fadeout_fraction": 0.1,
+          "intensity_lux": 10000.0
+        }
+      ]
+    }
+  })");
+
+  auto errors = std::string {};
+  EXPECT_TRUE(ValidateSchema(*schema, doc, errors)) << errors;
+}
+
 } // namespace

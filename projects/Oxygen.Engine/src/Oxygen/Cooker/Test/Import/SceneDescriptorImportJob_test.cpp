@@ -5,13 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <latch>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
@@ -40,6 +43,26 @@ namespace {
     auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
     ASSERT_TRUE(out.is_open());
     out << text;
+  }
+
+  auto ReadBinaryFile(const std::filesystem::path& path)
+    -> std::vector<std::byte>
+  {
+    auto in = std::ifstream(path, std::ios::binary);
+    EXPECT_TRUE(in.is_open());
+    if (!in.is_open()) {
+      return {};
+    }
+
+    in.seekg(0, std::ios::end);
+    const auto size = static_cast<size_t>(in.tellg());
+    in.seekg(0, std::ios::beg);
+
+    auto bytes = std::vector<std::byte>(size);
+    in.read(reinterpret_cast<char*>(bytes.data()),
+      static_cast<std::streamsize>(bytes.size()));
+    EXPECT_TRUE(in.good() || in.eof());
+    return bytes;
   }
 
   auto HasDiagnosticCode(const std::vector<ImportDiagnostic>& diagnostics,
@@ -170,6 +193,63 @@ namespace {
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
       report.diagnostics, "scene.descriptor.reference_missing"));
+
+    service.Stop();
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    DirectionalLightManualCascadeDistancesDeriveMaxShadowDistance)
+  {
+    const auto cooked_root = MakeTempCookedRoot("directional_light_tuning");
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "name": "DirectionalTuning",
+      "nodes": [
+        { "name": "Root" },
+        { "name": "Sun", "parent": 0 }
+      ],
+      "lights": {
+        "directional": [
+          {
+            "node": 1,
+            "common": { "casts_shadows": true },
+            "cascade_count": 4,
+            "cascade_distances": [10.0, 30.0, 80.0, 200.0],
+            "distribution_exponent": 1.0,
+            "intensity_lux": 10000.0
+          }
+        ]
+      }
+    })"));
+
+    EXPECT_TRUE(report.success);
+    EXPECT_EQ(report.scenes_written, 1U);
+
+    auto layout = LooseCookedLayout {};
+    const auto scene_path = cooked_root
+      / std::filesystem::path(
+        layout.SceneDescriptorRelPath("DirectionalTuning"));
+    ASSERT_TRUE(std::filesystem::exists(scene_path));
+
+    const auto scene_bytes = ReadBinaryFile(scene_path);
+    ASSERT_FALSE(scene_bytes.empty());
+
+    const auto scene = oxygen::data::SceneAsset(
+      oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
+    const auto directional
+      = scene.GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
+    ASSERT_EQ(directional.size(), 1U);
+    EXPECT_EQ(directional[0].split_mode, 1U);
+    EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
+    EXPECT_FLOAT_EQ(directional[0].cascade_distances[0], 10.0F);
+    EXPECT_FLOAT_EQ(directional[0].cascade_distances[1], 30.0F);
+    EXPECT_FLOAT_EQ(directional[0].cascade_distances[2], 80.0F);
+    EXPECT_FLOAT_EQ(directional[0].cascade_distances[3], 200.0F);
+    EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
+    EXPECT_FLOAT_EQ(directional[0].distance_fadeout_fraction, 0.1F);
 
     service.Stop();
   }

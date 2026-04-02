@@ -620,6 +620,42 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  SameCookedRootScriptSidecarsInjectSerializationFence)
+{
+  const auto root = MakeScenarioDir("script_sidecar_same_root_fence");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+
+  WriteTextFile(manifest_path,
+    std::string { R"({
+      "version": 1,
+      "output": ")" }
+      + cooked_root.generic_string() + R"(",
+      "jobs": [
+        {
+          "id": "script.sidecar.a",
+          "depends_on": ["script.sidecar.b"],
+          "type": "script-sidecar",
+          "source": "Scenes/a.script-sidecar.json",
+          "target_scene_virtual_path": "/.cooked/Scenes/a.oscene"
+        },
+        {
+          "id": "script.sidecar.b",
+          "type": "script-sidecar",
+          "source": "Scenes/b.script-sidecar.json",
+          "target_scene_virtual_path": "/.cooked/Scenes/b.oscene"
+        }
+      ]
+    })");
+
+  const auto result = RunBatch(manifest_path);
+  EXPECT_FALSE(result.has_value());
+
+  const auto messages = Messages();
+  EXPECT_NE(messages.find("input.manifest.dep_cycle"), std::string::npos);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic)
 {
   const auto root = MakeScenarioDir("physics_duplicate_missing_dep");

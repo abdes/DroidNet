@@ -833,7 +833,282 @@ dynamic casters and apply explicit update budgeting.
 **Contingency:** This phase is mandatory only if CSM-5 misses the performance
 target. It may be skipped if CSM-5 already achieves the required GPU budget.
 
-### 5.7 CSM-7 — Authoring-Backed Shadow Specialization (Planned)
+### 5.7 CSM-TUNING — Cascade Distance / Distribution Policy (Planned)
+
+**Status:** planned
+
+**Purpose:** Make Oxygen's conventional cascade placement and transition policy
+behave like a tunable shipping renderer instead of a fixed hard-coded split
+table. This phase is about *quality distribution and shadow range*, not about
+receiver analysis, culling, or specialization.
+
+This phase exists because the current Oxygen defaults do not yet expose the
+full tuning contract needed by a shipping conventional shadow path:
+
+- Oxygen currently publishes explicit `cascade_distances = { 8, 24, 64, 160 }`
+  by default.
+- Because those distances are already valid, the current
+  `distribution_exponent` is effectively dormant for the default path.
+- Oxygen currently shares one raster resolution across cascades, which is
+  normal, but the visible near/far quality difference then depends almost
+  entirely on split placement and world coverage.
+- Oxygen currently computes the cascade blend band in shader with a fixed
+  heuristic instead of using authored transition fractions plus runtime tuning.
+
+So the tuning gap is not "different texture size per cascade". The real gap is
+"generated split distances and runtime shadow-range controls are not
+first-class in Oxygen yet."
+
+#### Oxygen tuning contract
+
+Recommended Oxygen-side tuning concepts:
+
+| Tuning concern | Oxygen contract |
+| - | - |
+| authored max near-CSM distance | `max_shadow_distance` in `CascadedShadowSettings` |
+| runtime scalar on the authored max distance | `rndr.shadow.csm.distance_scale` |
+| authored cascade count | existing `cascade_count`, clamped by `rndr.shadow.csm.max_cascades` |
+| geometric-series bias toward the camera | existing `distribution_exponent`, but active only in generated-split mode |
+| authored overlap fraction between neighboring cascades | `transition_fraction` |
+| runtime scalar on transition overlap | `rndr.shadow.csm.transition_scale` |
+| fade-out region at the end of CSM coverage | `distance_fadeout_fraction` |
+| global cap for classic CSM resolution | optional `rndr.shadow.csm.max_resolution`, a final hard ceiling applied after Oxygen clamps the authored resolution hint to the `ShadowQualityTier` budget |
+
+Current Oxygen classic CSM quality-tier budget, before any optional
+`rndr.shadow.csm.max_resolution` clamp:
+
+| Oxygen quality tier | Maximum classic CSM resolution |
+| - | - |
+| `Low` | `1024` |
+| `Medium` ("Normal") | `2048` |
+| `High` | `3072` for one dominant directional light, else `2048` |
+| `Ultra` | `4096` for one dominant directional light, else `3072` |
+
+Current authored shadow-resolution hints map to:
+
+| Authored hint | Requested classic CSM resolution |
+| - | - |
+| `Low` | `1024` |
+| `Medium` | `2048` |
+| `High` | `3072` |
+| `Ultra` | `4096` |
+
+The current backend resolves the final classic CSM resolution by taking the
+authored light `resolution_hint` and clamping it to the active
+`ShadowQualityTier` budget.
+
+Not recommended for Oxygen at this phase:
+
+- no special preview-only shadow CVars
+- no far-shadow-cascade feature import
+- no mobility-dependent split formulas
+
+Those features solve product-specific problems that Oxygen does not need to
+copy into the conventional path right now.
+
+#### Recommended Oxygen authored model
+
+`CascadedShadowSettings` should be extended so Oxygen can represent both
+generated and manual split policies explicitly.
+
+Recommended direction:
+
+```cpp
+enum class DirectionalCsmSplitMode : std::uint8_t {
+  kGenerated,
+  kManualDistances,
+};
+
+struct CascadedShadowSettings {
+  std::uint32_t cascade_count = 4;
+  DirectionalCsmSplitMode split_mode = DirectionalCsmSplitMode::kGenerated;
+  float max_shadow_distance = 160.0F;
+  std::array<float, 4> cascade_distances = { 8.0F, 24.0F, 64.0F, 160.0F };
+  float distribution_exponent = 3.0F;
+  float transition_fraction = 0.1F;
+  float distance_fadeout_fraction = 0.1F;
+};
+```
+
+Design rules:
+
+- `kGenerated` is the recommended default for newly authored directional
+  lights.
+- `kManualDistances` exists for legacy compatibility and explicit technical art
+  overrides.
+- Legacy imported content that only carries `cascade_distances` may continue to
+  map to `kManualDistances`.
+- Newly authored editor lights should prefer `kGenerated`.
+
+#### Recommended Oxygen runtime CVars
+
+Oxygen should expose the following runtime CVars through its existing console
+system:
+
+- `rndr.shadow.csm.distance_scale`
+  - default `1.0`
+  - clamp `[0.0, 2.0]`
+  - multiplies authored `max_shadow_distance`
+- `rndr.shadow.csm.transition_scale`
+  - default `1.0`
+  - clamp `[0.0, 2.0]`
+  - multiplies authored `transition_fraction`
+- `rndr.shadow.csm.max_cascades`
+  - default `4`
+  - clamp `[1, 4]`
+  - hard runtime cap for active conventional cascades
+  - `rndr.shadow.csm.max_resolution`
+  - optional
+  - default `0` = disabled, meaning "do not apply any extra clamp"
+  - final hard ceiling for classic CSM raster resolution after Oxygen resolves
+    the per-light authored `resolution_hint` against the active
+    `ShadowQualityTier` budget
+  - example:
+    if normal resolution selection resolves to `3072` and this CVar is `2048`,
+    the classic CSM path uses `2048`
+  - recommended non-zero values:
+    `1024`, `2048`, `3072`, or `4096`
+  - this CVar is a safety / scalability clamp, not a second independent
+    quality-selection system
+
+The first two are the important ones. They directly map to the UE-style
+controls that matter for visible near/far quality.
+
+#### Recommended split formula
+
+Generated mode should stop treating `distribution_exponent` as a fallback-only
+parameter and instead make it the primary split policy:
+
+```text
+effective_max_distance =
+  authored.max_shadow_distance * clamp(rndr.shadow.csm.distance_scale, 0, 2)
+
+effective_cascade_count =
+  min(authored.cascade_count, rndr.shadow.csm.max_cascades)
+
+split_end(i) =
+  near_plane + accumulated_geometric_fraction(
+    authored.distribution_exponent, i + 1, effective_cascade_count)
+  * (effective_max_distance - near_plane)
+```
+
+Where `accumulated_geometric_fraction` matches the intended geometric-series
+accumulator:
+
+- weights: `1, exponent, exponent^2, ...`
+- split `i` ends at the accumulated weight fraction through cascade `i`
+
+This gives Oxygen the intended tuning behavior:
+
+- larger exponent pushes more detail toward the camera
+- smaller exponent distributes more evenly
+- same per-cascade raster resolution still yields meaningfully higher effective
+  near-cascade texel density
+
+#### Transition policy
+
+The current shader-side fixed heuristic should be replaced with an authored +
+runtime-scaled transition policy:
+
+```text
+effective_transition_fraction =
+  authored.transition_fraction
+  * clamp(rndr.shadow.csm.transition_scale, 0, 2)
+```
+
+Recommended implementation rule:
+
+- compute cascade transition bands on the CPU when publishing directional
+  shadow metadata
+- publish the per-cascade transition widths explicitly to the shader
+- stop deriving the blend band from a hard-coded texel heuristic alone
+
+The existing heuristic can remain as a safety minimum, but it should no longer
+be the only source of transition width.
+
+#### Distance fade policy
+
+Oxygen should also expose an explicit end-of-range fade region:
+
+```text
+fade_begin =
+  effective_max_distance
+  - effective_max_distance * authored.distance_fadeout_fraction
+```
+
+This is separate from cascade-to-cascade overlap:
+
+- transition fraction blends *between cascades*
+- distance fadeout blends *from the last cascade to unshadowed*
+
+#### C++ ownership
+
+The future implementation should be centered in these Oxygen areas:
+
+- `src/Oxygen/Scene/Light/LightCommon.h`
+  - extend authored `CascadedShadowSettings`
+- `src/Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeLightBindings.cpp`
+  - expose new authored settings to scripting/editor tooling
+- scene import / serialization layers
+  - preserve legacy manual-distance content and support the new split mode
+- `src/Oxygen/Renderer/Types/DirectionalShadowCandidate.h`
+  - carry the new tuning fields into renderer space
+- `src/Oxygen/Renderer/LightManager.cpp`
+  - publish the new candidate data
+- `src/Oxygen/Renderer/Internal/ConventionalShadowBackend.cpp`
+  - compute generated splits from max distance + exponent + runtime CVars
+  - clamp active cascades from `rndr.shadow.csm.max_cascades`
+  - publish per-cascade transition data and end-of-range fade data
+- renderer console registration / settings plumbing
+  - define and read the new `rndr.shadow.csm.*` CVars
+
+#### HLSL ownership
+
+The tuning phase should touch only the conventional directional shadow
+selection / blending code, not the validated `CSM-2` through `CSM-5`
+infrastructure:
+
+- `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ShadowHelpers.hlsli`
+  - consume published transition widths instead of relying only on the current
+    fixed heuristic
+  - consume last-cascade fadeout parameters if present
+- directional shadow metadata HLSL layout
+  - carry any new per-cascade transition / fade parameters
+
+Not part of this phase:
+
+- no changes to receiver analysis
+- no changes to receiver mask construction
+- no changes to caster culling
+- no changes to counted-indirect raster architecture
+
+#### Validation package expected from the future implementation
+
+This phase is a tuning phase, but it still requires proof:
+
+- synthetic/unit tests proving generated split distances match the published
+  geometric-series policy
+- synthetic/unit tests proving effective world-units-per-texel increase across
+  cascades in generated mode
+- shader/path validation proving cascade selection still matches published
+  split ends
+- live visual validation in a large scene showing materially different near vs
+  far shadow quality after tuning
+- sequential RenderDoc analysis proving no structural regression in the
+  validated `CSM-2` through `CSM-5` path
+
+#### Relationship to later phases
+
+- `CSM-6` decides whether static and dynamic work should be updated at
+  different rates.
+- `CSM-TUNING` decides how the shared cascade budget is distributed across
+  distance.
+- `CSM-7` still decides how expensive each submitted shadow representation
+  should be.
+
+Those concerns must remain separate.
+
+### 5.8 CSM-7 — Authoring-Backed Shadow Specialization (Planned)
 
 **Status:** planned
 
@@ -1040,7 +1315,7 @@ Recommended success metrics:
 - no correctness regressions on authored alpha-tested casters
 - no second hot-path submission architecture introduced
 
-### 5.8 CSM-8 — Closure
+### 5.9 CSM-8 — Closure
 
 **Status:** pending
 

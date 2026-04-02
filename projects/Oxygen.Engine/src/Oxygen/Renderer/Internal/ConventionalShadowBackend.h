@@ -23,8 +23,10 @@
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/ConventionalShadowReceiverAnalysis.h>
 #include <Oxygen/Renderer/Types/DirectionalShadowCandidate.h>
+#include <Oxygen/Renderer/Types/DirectionalShadowMetadata.h>
 #include <Oxygen/Renderer/Types/RasterShadowRenderPlan.h>
 #include <Oxygen/Renderer/Types/ShadowFramePublication.h>
 #include <Oxygen/Renderer/Types/ViewConstants.h>
@@ -59,6 +61,8 @@ public:
   OXGN_RNDR_API auto ReserveFrameResources(
     std::span<const engine::DirectionalShadowCandidate> directional_candidates,
     std::uint32_t scene_view_count) -> void;
+  OXGN_RNDR_API auto SetDirectionalCsmRuntimeSettings(
+    const oxygen::renderer::DirectionalCsmRuntimeSettings& settings) -> void;
 
   OXGN_RNDR_API auto PublishView(ViewId view_id,
     const engine::ViewConstants& view_constants,
@@ -73,6 +77,8 @@ public:
     ViewId view_id) const noexcept -> const ShadowFramePublication*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetShadowInstanceMetadata(
     ViewId view_id) const noexcept -> const engine::ShadowInstanceMetadata*;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetDirectionalShadowMetadata(
+    ViewId view_id) const noexcept -> const engine::DirectionalShadowMetadata*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetRasterRenderPlan(
     ViewId view_id) const noexcept -> const RasterShadowRenderPlan*;
   [[nodiscard]] OXGN_RNDR_NDAPI auto TryGetReceiverAnalysisPlan(
@@ -118,6 +124,7 @@ private:
   oxygen::ShadowQualityTier shadow_quality_tier_ {
     oxygen::ShadowQualityTier::kHigh
   };
+  oxygen::renderer::DirectionalCsmRuntimeSettings directional_csm_runtime_ {};
 
   using BufferT = engine::upload::TransientStructuredBuffer;
   BufferT shadow_instance_buffer_;

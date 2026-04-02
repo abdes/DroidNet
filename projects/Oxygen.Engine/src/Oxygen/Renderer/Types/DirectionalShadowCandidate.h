@@ -36,7 +36,16 @@ struct DirectionalShadowCandidate {
   float bias { 0.0F };
   float normal_bias { 0.0F };
   std::uint32_t cascade_count { scene::kMaxShadowCascades };
-  float distribution_exponent { 1.0F };
+  std::uint32_t split_mode { static_cast<std::uint32_t>(
+    scene::DirectionalCsmSplitMode::kGenerated) };
+  float max_shadow_distance { scene::kDefaultDirectionalMaxShadowDistance };
+  float distribution_exponent {
+    scene::kDefaultDirectionalDistributionExponent
+  };
+  float transition_fraction { scene::kDefaultDirectionalTransitionFraction };
+  float distance_fadeout_fraction {
+    scene::kDefaultDirectionalDistanceFadeoutFraction
+  };
   std::array<float, scene::kMaxShadowCascades> cascade_distances {};
 };
 

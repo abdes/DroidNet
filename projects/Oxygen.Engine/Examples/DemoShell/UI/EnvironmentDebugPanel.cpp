@@ -28,6 +28,16 @@ namespace oxygen::examples::ui {
 namespace {
 
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
+  constexpr const char* kShadowResolutionLabels[] = {
+    "Low",
+    "Medium",
+    "High",
+    "Ultra",
+  };
+  constexpr const char* kShadowSplitModeLabels[] = {
+    "Generated",
+    "Manual Distances",
+  };
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -462,6 +472,94 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (ImGui::DragFloat("Disk radius (deg)", &sun_disk_radius_deg, 0.01F, 0.01F,
         5.0F, "%.3F")) {
     environment_vm_->SetSunDiskRadiusDeg(sun_disk_radius_deg);
+  }
+
+  ImGui::SeparatorText("Directional Shadows");
+
+  float sun_shadow_bias = environment_vm_->GetSunShadowBias();
+  if (ImGui::DragFloat(
+        "Shadow bias", &sun_shadow_bias, 0.0001F, 0.0F, 1.0F, "%.4f")) {
+    environment_vm_->SetSunShadowBias(sun_shadow_bias);
+  }
+
+  float sun_shadow_normal_bias = environment_vm_->GetSunShadowNormalBias();
+  if (ImGui::DragFloat("Shadow normal bias", &sun_shadow_normal_bias, 0.0001F,
+        0.0F, 1.0F, "%.4f")) {
+    environment_vm_->SetSunShadowNormalBias(sun_shadow_normal_bias);
+  }
+
+  int sun_shadow_resolution_hint
+    = environment_vm_->GetSunShadowResolutionHint();
+  ImGui::SetNextItemWidth(180.0F);
+  if (ImGui::Combo("Resolution hint", &sun_shadow_resolution_hint,
+        kShadowResolutionLabels, IM_ARRAYSIZE(kShadowResolutionLabels))) {
+    environment_vm_->SetSunShadowResolutionHint(sun_shadow_resolution_hint);
+  }
+
+  int sun_shadow_cascade_count = environment_vm_->GetSunShadowCascadeCount();
+  if (ImGui::SliderInt("Cascade count", &sun_shadow_cascade_count, 1, 4)) {
+    environment_vm_->SetSunShadowCascadeCount(sun_shadow_cascade_count);
+  }
+
+  int sun_shadow_split_mode = environment_vm_->GetSunShadowSplitMode();
+  ImGui::SetNextItemWidth(180.0F);
+  if (ImGui::Combo("Split mode", &sun_shadow_split_mode, kShadowSplitModeLabels,
+        IM_ARRAYSIZE(kShadowSplitModeLabels))) {
+    environment_vm_->SetSunShadowSplitMode(sun_shadow_split_mode);
+  }
+
+  const bool generated_splits = sun_shadow_split_mode == 0;
+
+  if (generated_splits) {
+    float sun_shadow_max_distance = environment_vm_->GetSunShadowMaxDistance();
+    if (ImGui::DragFloat("Max shadow distance", &sun_shadow_max_distance, 1.0F,
+          1.0F, 100000.0F, "%.1f")) {
+      environment_vm_->SetSunShadowMaxDistance(sun_shadow_max_distance);
+    }
+
+    float sun_shadow_distribution_exponent
+      = environment_vm_->GetSunShadowDistributionExponent();
+    if (ImGui::DragFloat("Distribution exponent",
+          &sun_shadow_distribution_exponent, 0.05F, 1.0F, 16.0F, "%.2f")) {
+      environment_vm_->SetSunShadowDistributionExponent(
+        sun_shadow_distribution_exponent);
+    }
+  } else {
+    ImGui::TextDisabled("Manual split distances drive cascade ends directly.");
+  }
+
+  float sun_shadow_transition_fraction
+    = environment_vm_->GetSunShadowTransitionFraction();
+  if (ImGui::SliderFloat("Transition fraction", &sun_shadow_transition_fraction,
+        0.0F, 1.0F, "%.3f")) {
+    environment_vm_->SetSunShadowTransitionFraction(
+      sun_shadow_transition_fraction);
+  }
+
+  float sun_shadow_distance_fadeout_fraction
+    = environment_vm_->GetSunShadowDistanceFadeoutFraction();
+  if (ImGui::SliderFloat("Distance fadeout fraction",
+        &sun_shadow_distance_fadeout_fraction, 0.0F, 1.0F, "%.3f")) {
+    environment_vm_->SetSunShadowDistanceFadeoutFraction(
+      sun_shadow_distance_fadeout_fraction);
+  }
+
+  if (!generated_splits) {
+    ImGui::SeparatorText("Manual Cascade Distances");
+    float minimum_distance = 0.0F;
+    for (int cascade_index = 0; cascade_index < sun_shadow_cascade_count;
+      ++cascade_index) {
+      float distance
+        = environment_vm_->GetSunShadowCascadeDistance(cascade_index);
+      const std::string label
+        = "Cascade " + std::to_string(cascade_index) + " End";
+      const float drag_min = minimum_distance + 0.1F;
+      if (ImGui::DragFloat(
+            label.c_str(), &distance, 0.5F, drag_min, 100000.0F, "%.1f")) {
+        environment_vm_->SetSunShadowCascadeDistance(cascade_index, distance);
+      }
+      minimum_distance = std::max(distance, drag_min);
+    }
   }
 
   ImGui::EndDisabled();
