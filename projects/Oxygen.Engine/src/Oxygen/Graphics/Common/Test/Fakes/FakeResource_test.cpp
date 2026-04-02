@@ -27,7 +27,7 @@ NOLINT_TEST(FakeResource_basic_test, DefaultReturnsValidView)
   };
 
   // Act
-  const oxygen::graphics::DescriptorHandle
+  const oxygen::graphics::DescriptorAllocationHandle
     dh; // invalid-but-typed handle for test
   const NativeView view = fake.GetNativeView(dh, desc);
 
@@ -44,7 +44,7 @@ NOLINT_TEST(FakeResource_basic_test, InvalidViewReturnsInvalid)
     .id = 2ULL };
 
   // Act
-  const oxygen::graphics::DescriptorHandle
+  const oxygen::graphics::DescriptorAllocationHandle
     dh; // invalid-but-typed handle for test
   const NativeView view = fake.GetNativeView(dh, desc);
 
@@ -60,7 +60,8 @@ NOLINT_TEST(FakeResource_basic_test, ThrowingViewThrowsForConfiguredId)
   TestViewDesc bad_desc { .id = 3ULL };
 
   // Act / Assert
-  oxygen::graphics::DescriptorHandle dh; // invalid-but-typed handle for test
+  oxygen::graphics::DescriptorAllocationHandle
+    dh; // invalid-but-typed handle for test
   EXPECT_NO_THROW((void)fake.GetNativeView(dh, good_desc));
   EXPECT_THROW((void)fake.GetNativeView(dh, bad_desc), std::runtime_error);
 }
@@ -70,7 +71,7 @@ NOLINT_TEST(FakeResource_basic_test, CustomBehaviorIsInvoked)
   // Arrange
   int calls = 0;
   auto fake = FakeResource {}.WithViewBehavior(
-    [&calls](const oxygen::graphics::DescriptorHandle&,
+    [&calls](const oxygen::graphics::DescriptorAllocationHandle&,
       const TestViewDesc& desc) -> NativeView {
       ++calls;
       // Return invalid view when id == 99 to check return path
@@ -85,7 +86,7 @@ NOLINT_TEST(FakeResource_basic_test, CustomBehaviorIsInvoked)
   constexpr TestViewDesc b { .id = 99ULL };
 
   // Act
-  const oxygen::graphics::DescriptorHandle
+  const oxygen::graphics::DescriptorAllocationHandle
     dh; // invalid-but-typed handle for test
   const NativeView va = fake.GetNativeView(dh, a);
   const NativeView vb = fake.GetNativeView(dh, b);

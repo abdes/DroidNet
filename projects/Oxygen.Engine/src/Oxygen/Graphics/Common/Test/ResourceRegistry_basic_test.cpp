@@ -12,14 +12,14 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::NativeView;
 using oxygen::graphics::ResourceRegistry;
@@ -85,8 +85,8 @@ protected:
     -> NativeView
   {
     // Allocate a descriptor
-    DescriptorHandle descriptor
-      = allocator_->Allocate(desc.view_type, desc.visibility);
+    DescriptorAllocationHandle descriptor
+      = allocator_->AllocateRaw(desc.view_type, desc.visibility);
     if (!descriptor.IsValid()) {
       ADD_FAILURE() << "failed to allocate descriptor";
       return {};
@@ -374,7 +374,7 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterView_InvalidHandle_Death)
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 101,
   };
-  DescriptorHandle invalid_handle; // default constructed, invalid
+  DescriptorAllocationHandle invalid_handle; // default constructed, invalid
   NOLINT_EXPECT_DEATH(
     registry_->RegisterView(*resource1_, std::move(invalid_handle), desc),
     ".*");
@@ -428,8 +428,8 @@ NOLINT_TEST_F(
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 202,
   };
-  DescriptorHandle descriptor
-    = allocator_->Allocate(desc.view_type, desc.visibility);
+  DescriptorAllocationHandle descriptor
+    = allocator_->AllocateRaw(desc.view_type, desc.visibility);
   const NativeView invalid_view; // default constructed, invalid
   // Should return false (not throw or abort)
   const bool result = registry_->RegisterView(
@@ -452,8 +452,8 @@ NOLINT_TEST_F(
 
   const auto before
     = allocator_->GetAllocatedDescriptorsCount(desc.view_type, desc.visibility);
-  DescriptorHandle descriptor
-    = allocator_->Allocate(desc.view_type, desc.visibility);
+  DescriptorAllocationHandle descriptor
+    = allocator_->AllocateRaw(desc.view_type, desc.visibility);
   ASSERT_TRUE(descriptor.IsValid());
 
   const NativeView invalid_view; // default constructed invalid
@@ -490,8 +490,8 @@ NOLINT_TEST_F(
 
   const auto before = other_allocator->GetAllocatedDescriptorsCount(
     desc.view_type, desc.visibility);
-  DescriptorHandle descriptor
-    = other_allocator->Allocate(desc.view_type, desc.visibility);
+  DescriptorAllocationHandle descriptor
+    = other_allocator->AllocateRaw(desc.view_type, desc.visibility);
   ASSERT_TRUE(descriptor.IsValid());
 
   // Register view using descriptor from other allocator
@@ -517,14 +517,15 @@ NOLINT_TEST_F(
 {
   const auto unregistered_resource = std::make_shared<FakeResource>();
   // Create a valid view object via the fake resource using a temporary
-  // DescriptorHandle from the allocator so we have a plausible view to pass.
+  // DescriptorAllocationHandle from the allocator so we have a plausible view
+  // to pass.
   constexpr TestViewDesc desc {
     .view_type = ResourceViewType::kConstantBuffer,
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 401,
   };
-  const DescriptorHandle descriptor
-    = allocator_->Allocate(desc.view_type, desc.visibility);
+  const DescriptorAllocationHandle descriptor
+    = allocator_->AllocateRaw(desc.view_type, desc.visibility);
   ASSERT_TRUE(descriptor.IsValid());
   const auto view = unregistered_resource->GetNativeView(descriptor, desc);
   EXPECT_THROW(registry_->UnRegisterView(*unregistered_resource, view),
@@ -692,8 +693,8 @@ NOLINT_TEST_F(
           .visibility = DescriptorVisibility::kShaderVisible,
           .id = static_cast<uint64_t>(i) };
         // Allocate descriptor using thread-local allocator to avoid contention
-        DescriptorHandle descriptor
-          = allocators[t]->Allocate(desc.view_type, desc.visibility);
+        DescriptorAllocationHandle descriptor
+          = allocators[t]->AllocateRaw(desc.view_type, desc.visibility);
         if (!descriptor.IsValid()) {
           ADD_FAILURE() << "failed to allocate descriptor in thread";
           continue;

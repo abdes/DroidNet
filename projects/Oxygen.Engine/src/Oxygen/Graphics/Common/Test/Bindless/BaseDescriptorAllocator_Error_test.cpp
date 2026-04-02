@@ -16,8 +16,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -27,7 +27,7 @@
 #include "./Mocks/MockDescriptorSegment.h"
 
 using oxygen::kInvalidBindlessHeapIndex;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 
@@ -82,10 +82,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorErrorTest, ThrowsIfOutOfSpaceAndNoGrowth)
   };
 
   // Action & Verify: First allocation succeeds, second throws
-  const auto h1 = allocator_->Allocate(
+  const auto h1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h1.IsValid());
-  EXPECT_THROW(allocator_->Allocate(ResourceViewType::kTexture_SRV,
+  EXPECT_THROW(allocator_->AllocateRaw(ResourceViewType::kTexture_SRV,
                  DescriptorVisibility::kShaderVisible),
     std::runtime_error);
 }
@@ -125,7 +125,7 @@ NOLINT_TEST_F(
   };
 
   // Allocate a handle from the first allocator
-  auto handle = allocator1->Allocate(
+  auto handle = allocator1->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Action & Verify: Attempting to release from allocator2 should throw

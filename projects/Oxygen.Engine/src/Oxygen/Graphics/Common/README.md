@@ -268,8 +268,12 @@ component wraps this with appropriate lifecycle management.
 
 - Descriptor allocator must be installed exactly once per `Graphics` instance
   (see `Graphics::SetDescriptorAllocator`).
-- `DescriptorHandle` and `bindless::HeapIndex` produced by `DescriptorAllocator`
-  are `Graphics` global, no matter how many heaps or segments are being used.
+- `DescriptorAllocationHandle` is the active backend slot carrier.
+  Use `AllocateBindless(DomainToken, ResourceViewType)` for semantic bindless
+  ownership and `AllocateRaw(ResourceViewType, DescriptorVisibility)` for
+  explicit raw descriptors.
+- Stable backend slots carried by `DescriptorAllocationHandle` are `Graphics`
+  global, no matter how many heaps or segments are being used.
   `bindless::ShaderVisibleIndex` are NOT; they are relative to a specific
   bindless descriptor table.
 - For a particular `bindless:Handle`, `GetShaderVisibleIndex` will always return

@@ -30,9 +30,9 @@ NOLINT_TEST(HeadlessAllocator, AllocateRelease)
   EXPECT_EQ(alloc->GetAllocatedDescriptorsCount(type, vis).get(), 0);
 
   // Act: allocate handles
-  std::vector<DescriptorHandle> handles;
+  std::vector<DescriptorAllocationHandle> handles;
   for (int i = 0; i < 10; ++i) {
-    auto h = alloc->Allocate(type, vis);
+    auto h = alloc->AllocateRaw(type, vis);
     EXPECT_TRUE(h.IsValid());
     handles.push_back(std::move(h));
   }

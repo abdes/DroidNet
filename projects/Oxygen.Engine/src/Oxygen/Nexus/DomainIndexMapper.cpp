@@ -4,9 +4,8 @@
 
 #include <unordered_map>
 
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
 
 using oxygen::nexus::DomainIndexMapper;
@@ -40,8 +39,10 @@ using oxygen::nexus::detail::DomainIndexMapperImpl;
 
  ```cpp
  DomainIndexMapper mapper(allocator, {
-   {ResourceViewType::Texture2D, DescriptorVisibility::Pixel},
-   {ResourceViewType::Buffer, DescriptorVisibility::All}
+   {
+oxygen::bindless::generated::kTexturesDomain },
+   {
+oxygen::bindless::generated::kMaterialsDomain }
  });
  ```
 
@@ -55,14 +56,13 @@ DomainIndexMapper::DomainIndexMapper(
   : pimpl_(std::make_unique<DomainIndexMapperImpl>())
 {
   for (auto const& d : domains) {
-    const auto base = allocator.GetDomainBaseIndex(d.view_type, d.visibility);
-    const auto allocated
-      = allocator.GetAllocatedDescriptorsCount(d.view_type, d.visibility);
-    const auto remaining
-      = allocator.GetRemainingDescriptorsCount(d.view_type, d.visibility);
-    const auto u_allocated = allocated.get();
-    const auto u_remaining = remaining.get();
-    const auto cap = oxygen::bindless::Capacity { u_allocated + u_remaining };
+    const auto* const domain_desc
+      = oxygen::bindless::generated::TryGetDomainDesc(d.domain);
+    if (domain_desc == nullptr) {
+      continue;
+    }
+    const auto base = allocator.GetDomainBaseIndex(d.domain);
+    const auto cap = oxygen::bindless::Capacity { domain_desc->capacity };
     pimpl_->map.emplace(d, DomainRange { .start = base, .capacity = cap });
   }
 }
@@ -86,11 +86,10 @@ DomainIndexMapper::~DomainIndexMapper() = default;
  ### Usage Examples
 
  ```cpp
- auto key = DomainKey{ResourceViewType::Texture2D,
-                      DescriptorVisibility::Pixel};
- if (auto range = mapper.GetDomainRange(key)) {
-   auto start_idx = range->start.get();
-   auto slot_count = range->capacity.get();
+ auto key = DomainKey{ oxygen::bindless::generated::kTexturesDomain };
+ if (auto
+ range = mapper.GetDomainRange(key)) { auto start_idx = range->start.get(); auto
+ slot_count = range->capacity.get();
  }
  ```
 
@@ -124,7 +123,7 @@ auto DomainIndexMapper::GetDomainRange(DomainKey const& k) const noexcept
  ### Usage Examples
 
  ```cpp
- auto handle = oxygen::bindless::HeapIndex{42};
+ auto handle = oxygen::bindless::ShaderVisibleIndex{42};
  if (auto domain = mapper.ResolveDomain(handle)) {
    auto view_type = domain->view_type;
    auto visibility = domain->visibility;
@@ -136,7 +135,8 @@ auto DomainIndexMapper::GetDomainRange(DomainKey const& k) const noexcept
  @see GetDomainRange, DomainKey
 */
 auto DomainIndexMapper::ResolveDomain(
-  oxygen::bindless::HeapIndex index) const noexcept -> std::optional<DomainKey>
+  oxygen::bindless::ShaderVisibleIndex index) const noexcept
+  -> std::optional<DomainKey>
 {
   const uint64_t u_index = index.get();
   for (auto const& entry : pimpl_->map) {

@@ -6,7 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
 
 using namespace oxygen::graphics::headless;
@@ -138,20 +138,23 @@ NOLINT_TEST(HeadlessBufferTest, CreateViewsAndNativeObject)
   // Act / Assert: CBV
   oxygen::graphics::BufferViewDescription cbv_desc;
   cbv_desc.view_type = oxygen::graphics::ResourceViewType::kConstantBuffer;
-  auto cbv = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, cbv_desc);
+  auto cbv = buf.GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, cbv_desc);
   EXPECT_TRUE(cbv->IsValid());
   EXPECT_TRUE(cbv->IsPointerHandle());
 
   // Act / Assert: SRV
   oxygen::graphics::BufferViewDescription srv_desc;
   srv_desc.view_type = oxygen::graphics::ResourceViewType::kRawBuffer_SRV;
-  auto srv = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, srv_desc);
+  auto srv = buf.GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, srv_desc);
   EXPECT_TRUE(srv->IsValid());
 
   // Act / Assert: UAV
   oxygen::graphics::BufferViewDescription uav_desc;
   uav_desc.view_type = oxygen::graphics::ResourceViewType::kRawBuffer_UAV;
-  auto uav = buf.GetNativeView(oxygen::graphics::DescriptorHandle {}, uav_desc);
+  auto uav = buf.GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, uav_desc);
   EXPECT_TRUE(uav->IsValid());
 }
 

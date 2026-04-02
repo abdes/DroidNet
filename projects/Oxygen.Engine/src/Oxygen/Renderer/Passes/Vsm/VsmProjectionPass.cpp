@@ -399,9 +399,9 @@ struct VsmProjectionPass::Impl {
       "Failed to map VSM projection upload buffer");
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto srv_handle
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM projection SRV");
     projection_buffer_srv_index = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -450,7 +450,7 @@ struct VsmProjectionPass::Impl {
     auto& registry = gfx->GetResourceRegistry();
     pass_constants_indices.reserve(required_slot_count);
     for (std::uint32_t i = 0U; i < required_slot_count; ++i) {
-      auto handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      auto handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
       CHECK_F(handle.IsValid(),
         "Failed to allocate VSM projection pass-constants CBV");
@@ -533,7 +533,7 @@ struct VsmProjectionPass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM projection buffer view");
     const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
     auto view = registry.RegisterView(buffer, std::move(handle), desc);
@@ -554,7 +554,7 @@ struct VsmProjectionPass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM projection texture view");
     const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
     auto view = registry.RegisterView(texture, std::move(handle), desc);

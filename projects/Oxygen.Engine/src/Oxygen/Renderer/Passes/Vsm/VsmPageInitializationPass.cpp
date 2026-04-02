@@ -23,7 +23,7 @@
 #include <Oxygen/Renderer/VirtualShadowMaps/VsmPhysicalPageAddressing.h>
 
 using oxygen::graphics::CommandRecorder;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::ResourceStates;
 using oxygen::renderer::vsm::TryConvertToCoord;
 using oxygen::renderer::vsm::VsmPageInitializationAction;
@@ -58,7 +58,7 @@ struct VsmPageInitializationPass::Impl {
   std::optional<std::uint32_t> dynamic_slice_index {};
   std::optional<std::uint32_t> static_slice_index {};
 
-  DescriptorHandle dynamic_slice_dsv_handle {};
+  DescriptorAllocationHandle dynamic_slice_dsv_handle {};
   const graphics::Texture* dynamic_slice_owner { nullptr };
   graphics::NativeView dynamic_slice_dsv {};
   std::shared_ptr<graphics::Texture> copy_scratch_texture {};
@@ -84,7 +84,7 @@ auto VsmPageInitializationPass::Impl::EnsureDynamicSliceDsv(
   auto& allocator = gfx->GetDescriptorAllocator();
   if (!dynamic_slice_dsv_handle.IsValid()) {
     dynamic_slice_dsv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_DSV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
         graphics::DescriptorVisibility::kCpuOnly);
     CHECK_F(dynamic_slice_dsv_handle.IsValid(),
       "Failed to allocate VSM page-initialization DSV");

@@ -99,7 +99,7 @@ auto PrepareRenderTargetView(Texture& color_texture, ResourceRegistry& registry,
     rtv->IsValid()) {
     return rtv;
   }
-  auto rtv_desc_handle = allocator.Allocate(
+  auto rtv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
   if (!rtv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -137,7 +137,7 @@ auto PrepareDepthStencilView(Texture& depth_texture, ResourceRegistry& registry,
     dsv->IsValid()) {
     return dsv;
   }
-  auto dsv_desc_handle = allocator.Allocate(
+  auto dsv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
   if (!dsv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -189,7 +189,7 @@ auto PrepareDepthShaderResourceView(Texture& depth_texture,
     // safer to re-allocate if srv index is not known.
     return { srv, oxygen::kInvalidShaderVisibleIndex.get() };
   }
-  auto srv_desc_handle = allocator.Allocate(
+  auto srv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   if (!srv_desc_handle.IsValid()) {
     throw std::runtime_error(
@@ -353,7 +353,7 @@ auto SkyPass::EnsurePassConstantsBuffer() -> void
   cbv_view_desc.range = { 0U, desc.size_bytes };
 
   auto cbv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+    = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
   if (!cbv_handle.IsValid()) {
     throw std::runtime_error("SkyPass: Failed to allocate CBV handle");

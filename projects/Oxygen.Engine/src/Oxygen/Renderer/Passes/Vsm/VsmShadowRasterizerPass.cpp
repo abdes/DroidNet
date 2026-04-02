@@ -742,7 +742,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareJobDepthStencilView(
   }
 
   auto dsv_desc_handle
-    = allocator.Allocate(graphics::ResourceViewType::kTexture_DSV,
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
       graphics::DescriptorVisibility::kCpuOnly);
   CHECK_F(dsv_desc_handle.IsValid(),
     "VsmShadowRasterizerPass: failed to allocate page DSV descriptor");
@@ -764,7 +764,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureShaderVisibleIndex(Buffer& buffer,
     return *existing;
   }
 
-  auto handle = gfx->GetDescriptorAllocator().Allocate(
+  auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
     view_desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "VsmShadowRasterizerPass: failed to allocate {} descriptor",
@@ -1183,7 +1183,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
 
   instance_culling_constants_indices_.reserve(slot_count);
   for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
-    auto handle = gfx->GetDescriptorAllocator().Allocate(
+    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
       graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(),
@@ -1247,7 +1247,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishConstantsBuffer(
 
   raster_result_publish_constants_indices_.reserve(slot_count);
   for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
-    auto handle = gfx->GetDescriptorAllocator().Allocate(
+    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
       graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(),

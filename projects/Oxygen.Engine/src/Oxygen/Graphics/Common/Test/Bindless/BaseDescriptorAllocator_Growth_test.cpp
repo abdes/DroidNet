@@ -19,7 +19,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -30,8 +30,8 @@
 
 using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::CommandRecorder;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorAllocationStrategy;
-using oxygen::graphics::DescriptorHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::bindless::testing::BaseDescriptorAllocatorTest;
@@ -98,9 +98,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
   };
 
   // Action: Allocate twice, second allocation should cause growth
-  auto h1 = allocator_->Allocate(
+  auto h1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
-  auto h2 = allocator_->Allocate(
+  auto h2 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Verify: Both handles are valid, second segment was created
@@ -175,7 +175,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
   // sizes
   for (auto i = 0U; i < max_growth_iterations; ++i) {
     try {
-      allocator_->Allocate(
+      allocator_->AllocateRaw(
         ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     } catch (const std::runtime_error&) {
       // Expected to throw when we run out of growth iterations
@@ -231,7 +231,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, SegmentCreatedOnlyWhenNeeded)
   EXPECT_EQ(create_count, 0);
 
   // Action: Allocate a descriptor (should create segment)
-  auto handle = allocator_->Allocate(
+  auto handle = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_EQ(create_count, 1);
 }
@@ -277,9 +277,9 @@ NOLINT_TEST_F(
   const auto max_growth_iterations
     = heap_strategy_->GetHeapDescription(key).max_growth_iterations;
 
-  std::vector<DescriptorHandle> handles;
+  std::vector<DescriptorAllocationHandle> handles;
   for (auto i = 0U; i < max_growth_iterations + 1; ++i) {
-    auto h = allocator_->Allocate(
+    auto h = allocator_->AllocateRaw(
       ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     EXPECT_TRUE(h.IsValid());
     handles.push_back(std::move(h));
@@ -288,7 +288,7 @@ NOLINT_TEST_F(
   }
 
   // Next allocation should throw
-  EXPECT_THROW(allocator_->Allocate(ResourceViewType::kTexture_SRV,
+  EXPECT_THROW(allocator_->AllocateRaw(ResourceViewType::kTexture_SRV,
                  DescriptorVisibility::kShaderVisible),
     std::runtime_error);
 
@@ -338,14 +338,14 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
   };
 
   // Action 1: First allocation - should use segment 1 with index 100
-  auto h1 = allocator_->Allocate(
+  auto h1 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h1.IsValid());
   EXPECT_EQ(h1.GetBindlessHandle().get(), 0U);
 
   // Action 2: Second allocation - segment 1 is full, should use segment 2 with
   // index 200
-  const auto h2 = allocator_->Allocate(
+  const auto h2 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h2.IsValid());
   EXPECT_EQ(h2.GetBindlessHandle().get(), 1U);
@@ -354,7 +354,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
   allocator_->Release(h1);
 
   // Action 4: Third allocation - should reuse segment 1 (index 100)
-  const auto h3 = allocator_->Allocate(
+  const auto h3 = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(h3.IsValid());
   EXPECT_EQ(
@@ -402,13 +402,13 @@ NOLINT_TEST_F(
       };
 
   // First allocation should succeed
-  const auto handle = allocator_->Allocate(
+  const auto handle = allocator_->AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_TRUE(handle.IsValid());
   EXPECT_EQ(handle.GetBindlessHandle().get(), 0U);
 
   // Second allocation should throw due to segment creation failure
-  EXPECT_THROW(allocator_->Allocate(ResourceViewType::kTexture_SRV,
+  EXPECT_THROW(allocator_->AllocateRaw(ResourceViewType::kTexture_SRV,
                  DescriptorVisibility::kShaderVisible),
     std::runtime_error);
 
@@ -433,7 +433,7 @@ public:
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const DescriptorHandle& /*handle*/) const noexcept
+    const DescriptorAllocationHandle& /*handle*/) const noexcept
     -> oxygen::bindless::ShaderVisibleIndex override
   {
     return oxygen::kInvalidShaderVisibleIndex;
@@ -499,8 +499,8 @@ protected:
   using Base::GetInitialCapacity;
 
 public:
-  auto CopyDescriptor(const DescriptorHandle& /*source*/,
-    const DescriptorHandle& /*destination*/) -> void override
+  auto CopyDescriptor(const DescriptorAllocationHandle& /*source*/,
+    const DescriptorAllocationHandle& /*destination*/) -> void override
   {
   }
 };
@@ -548,13 +548,13 @@ NOLINT_TEST_F(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Allocate once to create the initial segment
-  allocator.Allocate(
+  allocator.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Now, simulate a segment with a capacity that will overflow on growth
   // (the allocator will use the growth factor on the last segment's capacity)
   // We need to trigger growth, so we force allocation again
-  allocator.Allocate(
+  allocator.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // The last_requested_capacity should be clamped to the max possible capacity

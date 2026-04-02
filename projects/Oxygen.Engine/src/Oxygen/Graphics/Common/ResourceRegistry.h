@@ -20,7 +20,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -121,8 +121,8 @@ namespace detail {
    registered resource instance will abort the program. Use Replace() instead.
  - **Duplicate View Registration**: Registering identical views (same resource
    + description) will abort the program. Use UpdateView() instead.
- - **Invalid Descriptor Handles**: Passing invalid DescriptorHandle objects will
-   abort the program in all view operations.
+ - **Invalid Descriptor Handles**: Passing invalid DescriptorAllocationHandle
+ objects will abort the program in all view operations.
  - **Null Resource Registration**: Attempting to register null resources will
    abort the program.
 
@@ -131,7 +131,7 @@ namespace detail {
 
  @warning All template parameters must satisfy their respective concepts
           (SupportedResource, ResourceWithViews) for correct operation.
- @see DescriptorHandle, NativeResource, NativeView
+ @see DescriptorAllocationHandle, NativeResource, NativeView
 */
 class ResourceRegistry {
 public:
@@ -243,8 +243,9 @@ public:
 
    ### Critical Contracts
 
-   - **Valid Descriptor Handle Required**: Passing an invalid DescriptorHandle
-     will abort the program. Handle must be properly allocated.
+   - **Valid Descriptor Handle Required**: Passing an invalid
+   DescriptorAllocationHandle will abort the program. Handle must be properly
+   allocated.
    - **No Duplicate Views**: Registering a view with identical description for
      the same resource will abort the program. Use UpdateView() to modify
      existing views.
@@ -285,11 +286,11 @@ public:
    @throw std::runtime_error if the resource is not registered, or if a view
           with the same description already exists for this resource.
 
-   @see RegisterView(Resource&, NativeView, DescriptorHandle, ViewDescriptionT),
-        UpdateView, UnRegisterView
+   @see RegisterView(Resource&, NativeView, DescriptorAllocationHandle,
+   ViewDescriptionT), UpdateView, UnRegisterView
   */
   template <ResourceWithViews Resource>
-  auto RegisterView(Resource& resource, DescriptorHandle view_handle,
+  auto RegisterView(Resource& resource, DescriptorAllocationHandle view_handle,
     const typename Resource::ViewDescriptionT& desc) -> NativeView
   {
     auto view = resource.GetNativeView(view_handle, desc);
@@ -343,8 +344,9 @@ public:
 
    ### Critical Contracts
 
-   - **Valid Descriptor Handle Required**: Passing an invalid DescriptorHandle
-     will abort the program. Handle must be properly allocated.
+   - **Valid Descriptor Handle Required**: Passing an invalid
+   DescriptorAllocationHandle will abort the program. Handle must be properly
+   allocated.
    - **No Duplicate Views**: Registering a view with identical description for
      the same resource will abort the program. Use UpdateView() to modify
      existing views.
@@ -382,12 +384,12 @@ public:
    @warning Ensure the provided view object matches the description exactly, as
             the registry cannot validate this correspondence.
 
-   @see RegisterView(Resource&, DescriptorHandle, ViewDescriptionT), UpdateView,
-        UnRegisterView
+   @see RegisterView(Resource&, DescriptorAllocationHandle, ViewDescriptionT),
+   UpdateView, UnRegisterView
   */
   template <ResourceWithViews Resource>
   auto RegisterView(Resource& resource, NativeView view,
-    DescriptorHandle view_handle,
+    DescriptorAllocationHandle view_handle,
     const typename Resource::ViewDescriptionT& desc) -> bool
   {
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
@@ -496,7 +498,7 @@ public:
     }
 
     // Find existing owner and take ownership of the descriptor handle entry
-    DescriptorHandle owned_descriptor;
+    DescriptorAllocationHandle owned_descriptor;
     NativeView old_view_obj; // for cache purge
     NativeResource old_res_obj; // original owner
     // Track prior cache key (by hash) if available to perform precise purge
@@ -797,7 +799,8 @@ public:
           continue;
         }
 
-        DescriptorHandle owned_descriptor = std::move(ve_it->second.descriptor);
+        DescriptorAllocationHandle owned_descriptor
+          = std::move(ve_it->second.descriptor);
         const NativeView view_obj = ve_it->second.view_object;
 
         DLOG_F(2, "replacing view: {}. {}", view_obj, owned_descriptor);
@@ -1174,7 +1177,7 @@ private:
     -> void;
 
   OXGN_GFX_API auto RegisterView(NativeResource resource, NativeView view,
-    DescriptorHandle view_handle, std::any view_description_for_cache,
+    DescriptorAllocationHandle view_handle, std::any view_description_for_cache,
     size_t key, ResourceViewType view_type, DescriptorVisibility visibility)
     -> NativeView;
 
@@ -1197,7 +1200,7 @@ private:
   //! Attach a descriptor and associate a native view and cache entry. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
-    bindless::HeapIndex index, DescriptorHandle descriptor_handle,
+    bindless::HeapIndex index, DescriptorAllocationHandle descriptor_handle,
     const NativeView& view, std::any description, std::size_t key_hash) -> void;
   //! Collect all descriptor indices owned by a resource. Assumes
   //! registry_mutex_ held.
@@ -1227,7 +1230,7 @@ private:
     // Descriptors associated with this resource
     struct ViewEntry {
       NativeView view_object; // Native view object
-      DescriptorHandle descriptor; // Handle to descriptor heap entry
+      DescriptorAllocationHandle descriptor; // Handle to descriptor heap entry
     };
 
     // Map from descriptor index to view entry

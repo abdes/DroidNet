@@ -12,7 +12,7 @@
 #include <string>
 #include <unordered_map>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -259,8 +259,19 @@ public:
    CPU-only).
    \return A handle to the allocated descriptor.
   */
-  virtual auto Allocate(ResourceViewType view_type,
-    DescriptorVisibility visibility) -> DescriptorHandle
+  virtual auto AllocateRaw(ResourceViewType view_type,
+    DescriptorVisibility visibility) -> RawDescriptorHandle
+    = 0;
+
+  //! Allocates a bindless descriptor from the specified generated domain.
+  /*!
+   \param domain The semantic bindless domain that owns the descriptor slot.
+   \param view_type The resource view type to materialize in the domain.
+   \return A bindless handle carrying both semantic domain ownership and a
+           stable backend slot identity.
+  */
+  virtual auto AllocateBindless(
+    bindless::DomainToken domain, ResourceViewType view_type) -> BindlessHandle
     = 0;
 
   //! Releases a previously allocated descriptor.
@@ -268,7 +279,7 @@ public:
    \param handle The handle to release. After this call, the handle will be
    invalidated.
   */
-  virtual auto Release(DescriptorHandle& handle) -> void = 0;
+  virtual auto Release(DescriptorAllocationHandle& handle) -> void = 0;
 
   //! Copies a descriptor from one visibility to another.
   /*!
@@ -279,8 +290,8 @@ public:
    different visibility spaces. Typically used to copy from CPU-only to
    shader-visible.
   */
-  virtual auto CopyDescriptor(
-    const DescriptorHandle& source, const DescriptorHandle& destination) -> void
+  virtual auto CopyDescriptor(const DescriptorAllocationHandle& source,
+    const DescriptorAllocationHandle& destination) -> void
     = 0;
 
   //! Returns the number of descriptors remaining of a specific view type in a
@@ -295,33 +306,42 @@ public:
     -> bindless::Count
     = 0;
 
-  //! Returns the global base index for a (view_type, visibility) domain.
+  //! Returns the generated shader-visible base index for a semantic bindless
+  //! domain.
   /*!
-   This value is stable and derived from the allocation strategy. Shaders
-   compute the final bindless index as: base + local_slot. Use this to
-   validate ranges and to pre-compute indices before any allocation occurs.
+   This value is stable and derived from generated bindless metadata.
+   * Shaders
+   compute the final bindless index as `base + local_slot`.
 
-   \param view_type The resource view type.
-   \param visibility The memory visibility.
-   \return The domain's global base index.
+
+   * \param domain The generated semantic bindless domain token.
+   \return The
+   * domain's global base index.
   */
-  [[nodiscard]] virtual auto GetDomainBaseIndex(ResourceViewType view_type,
-    DescriptorVisibility visibility) const -> bindless::HeapIndex
+  [[nodiscard]] virtual auto GetDomainBaseIndex(
+    bindless::DomainToken domain) const -> bindless::ShaderVisibleIndex
     = 0;
 
-  //! Attempts to reserve capacity in a domain and returns its base index.
+  //! Attempts to reserve capacity in an explicit raw descriptor class and
+  //! returns its base index.
   /*!
-   Reservation validates that the requested count fits the configured domain
-   capacity. Implementations may pre-create backing segments but are not
+   Reservation validates that the requested count fits the configured
+   * domain
+   capacity. Implementations may pre-create backing segments but are
+   * not
    required to. On success, returns the domain base index; on failure,
-   returns std::nullopt.
 
-   \param view_type The resource view type.
-   \param visibility The memory visibility.
-   \param count Number of descriptors to budget for this domain.
-   \return Domain base index on success, std::nullopt otherwise.
+   * returns std::nullopt.
+
+   \param view_type The raw descriptor view type.
+
+   * \param visibility The raw descriptor heap visibility.
+   \param count
+   * Number of descriptors to budget for this raw descriptor class.
+   \return
+   * Raw descriptor base index on success, std::nullopt otherwise.
   */
-  [[nodiscard]] virtual auto Reserve(ResourceViewType view_type,
+  [[nodiscard]] virtual auto ReserveRaw(ResourceViewType view_type,
     DescriptorVisibility visibility, bindless::Count count)
     -> std::optional<bindless::HeapIndex>
     = 0;
@@ -331,8 +351,8 @@ public:
    \param handle The descriptor handle to check.
    \return True if this allocator owns the handle, false otherwise.
   */
-  [[nodiscard]] virtual auto Contains(const DescriptorHandle& handle) const
-    -> bool
+  [[nodiscard]] virtual auto Contains(
+    const DescriptorAllocationHandle& handle) const -> bool
     = 0;
 
   //! Returns the number of allocated descriptors of a specific view type in a
@@ -354,7 +374,7 @@ public:
    descriptor table from which the descriptor for the original handle was
    allocated.
 
-   The mapping from a global `DescriptorHandle` to a shader-visible index is
+   The mapping from a descriptor allocation handle to a shader-visible index is
    allocator- and backend-specific. Callers must use this method instead of
    attempting to derive the index themselves.
 
@@ -364,18 +384,28 @@ public:
    is invalid or not owned by this allocator.
   */
   [[nodiscard]] virtual auto GetShaderVisibleIndex(
-    const DescriptorHandle& handle) const noexcept
+    const DescriptorAllocationHandle& handle) const noexcept
     -> bindless::ShaderVisibleIndex
     = 0;
 
 protected:
   //! Protected method to create a descriptor handle instance. Provided for
   //! classes implementing this interface, which is the only one declared as
-  //! a friend in DescriptorHandle.
-  auto CreateDescriptorHandle(const bindless::HeapIndex index,
+  //! a friend in DescriptorAllocationHandle.
+  auto CreateRawDescriptorHandle(const bindless::HeapIndex index,
     const ResourceViewType view_type, const DescriptorVisibility visibility)
   {
-    return DescriptorHandle { this, index, view_type, visibility };
+    return RawDescriptorHandle { this, index, view_type, visibility,
+      DescriptorAllocationKind::kRaw };
+  }
+
+  auto CreateBindlessHandle(const bindless::HeapIndex slot,
+    const bindless::DomainToken domain, const ResourceViewType view_type,
+    const DescriptorVisibility visibility
+    = DescriptorVisibility::kShaderVisible)
+  {
+    return BindlessHandle { this, slot, view_type, visibility,
+      DescriptorAllocationKind::kBindless, domain };
   }
 };
 

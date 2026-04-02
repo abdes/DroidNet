@@ -13,7 +13,7 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -208,9 +208,9 @@ protected:
     try {
       // Reserve will create initial segments when none exist according to
       // BaseDescriptorAllocator::Reserve.
-      auto _ = allocator_->Reserve(ResourceViewType::kStructuredBuffer_SRV,
+      auto _ = allocator_->ReserveRaw(ResourceViewType::kStructuredBuffer_SRV,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
-      _ = allocator_->Reserve(ResourceViewType::kSampler,
+      _ = allocator_->ReserveRaw(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
 
       // Ensure stable default samplers exist for bindless sampling.
@@ -218,8 +218,9 @@ protected:
       // - SamplerDescriptorHeap[0] = default linear wrap sampler
       // - SamplerDescriptorHeap[1] = shadow comparison sampler
       if (!default_sampler_.IsValid()) {
-        default_sampler_ = allocator_->Allocate(
-          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
+        default_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
         if (default_sampler_.IsValid()) {
           D3D12_SAMPLER_DESC sampler_desc {};
           sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -247,8 +248,9 @@ protected:
       }
 
       if (!shadow_comparison_sampler_.IsValid()) {
-        shadow_comparison_sampler_ = allocator_->Allocate(
-          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
+        shadow_comparison_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
         if (shadow_comparison_sampler_.IsValid()) {
           D3D12_SAMPLER_DESC sampler_desc {};
           sampler_desc.Filter
@@ -280,8 +282,8 @@ protected:
 
 private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
-  oxygen::graphics::DescriptorHandle default_sampler_ {};
-  oxygen::graphics::DescriptorHandle shadow_comparison_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
 };
 
 } // namespace

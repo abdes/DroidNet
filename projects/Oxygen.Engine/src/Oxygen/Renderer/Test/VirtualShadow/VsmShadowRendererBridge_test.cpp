@@ -660,8 +660,9 @@ protected:
 
     auto& allocator
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-      oxygen::graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(handle.IsValid(), "Failed to allocate structured SRV for `{}`",
       debug_name);
 
@@ -701,7 +702,7 @@ protected:
 
     auto& allocator
       = static_cast<oxygen::Graphics&>(Backend()).GetDescriptorAllocator();
-    auto handle = allocator.Allocate(ResourceViewType::kRawBuffer_SRV,
+    auto handle = allocator.AllocateRaw(ResourceViewType::kRawBuffer_SRV,
       oxygen::graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(
       handle.IsValid(), "Failed to allocate raw SRV for `{}`", debug_name);

@@ -382,7 +382,7 @@ struct SkyAtmosphereLutComputePass::Impl {
         = { static_cast<uint64_t>(i) * packing::kConstantBufferAlignment,
             packing::kConstantBufferAlignment };
 
-      auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
       if (!cbv_handle.IsValid()) {
         throw std::runtime_error(

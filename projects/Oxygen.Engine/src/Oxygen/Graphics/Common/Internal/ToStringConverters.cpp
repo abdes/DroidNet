@@ -11,7 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -77,10 +77,11 @@ auto oxygen::graphics::to_string(const NativeResource& value) -> std::string
   return "NativeResource{__Invalid__}";
 }
 
-auto oxygen::graphics::to_string(const DescriptorHandle& handle) -> std::string
+auto oxygen::graphics::to_string(const DescriptorAllocationHandle& handle)
+  -> std::string
 {
   return fmt::format(
-    "DescriptorHandle{}{{index: {}, view_type: {}, visibility: {}}}",
+    "DescriptorAllocationHandle{}{{index: {}, view_type: {}, visibility: {}}}",
     handle.IsValid() ? "" : " (__Invalid__)", handle.GetBindlessHandle().get(),
     nostd::to_string(handle.GetViewType()),
     nostd::to_string(handle.GetVisibility()));

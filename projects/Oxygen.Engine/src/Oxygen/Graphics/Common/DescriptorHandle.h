@@ -19,65 +19,50 @@ namespace oxygen::graphics {
 
 class DescriptorAllocator;
 
-//! An allocated descriptor slot with stable index for use by shaders.
+enum class DescriptorAllocationKind : uint8_t {
+  kInvalid = 0,
+  kRaw,
+  kBindless,
+};
+
+//! Unified descriptor allocation handle used by both raw and bindless paths.
 /*!
- Represents a descriptor in a descriptor heap/pool, containing backend-specific
- information needed to identify and use the descriptor. In D3D12, this would
- represent a descriptor in a descriptor heap; in Vulkan, a descriptor in a
- descriptor pool.
+ Carries the allocator back-reference plus the stable slot identity for a
+ descriptor allocation. Raw allocations model explicit descriptor heap entries
+ (RTV/DSV or ad-hoc shader-visible descriptors). Bindless allocations model
+ domain-owned slots keyed by a generated `DomainToken`.
 
- Each descriptor is associated with a specific type (CBV/SRV/UAV, Sampler, etc.)
- and exists in a specific memory visibility (shader-visible or CPU-only). The
- type determines which heap it's allocated from in D3D12 and the binding type in
- Vulkan. The visibility determines which heap it's allocated from in D3D12 and
- the memory location in Vulkan.
-
- Has limited ownership semantics: can release its descriptor back to the
- allocator but doesn't own the underlying resource. Contains a back-reference to
- its allocator for lifetime management.
-
- This class follows RAII principles and will automatically release its
- descriptor back to the allocator when destroyed, unless it has been moved from
- or explicitly released.
-
- The handle is non-copyable to enforce proper ownership semantics, but is
- movable to allow transferring ownership of the descriptor slot. This supports
- efficient management of descriptor resources in modern graphics applications.
-
- Usage:
- - Obtain from a DescriptorAllocator via the Allocate method
- - Store in resource registries or pass to rendering commands
- - Access the stable index via GetBindlessHandle() for shader bindings
- - Release explicitly when no longer needed, or let RAII handle cleanup
+ The handle is move-only and follows RAII semantics: destroying a valid handle
+ returns it to the originating allocator.
 */
-class DescriptorHandle {
+class DescriptorAllocationHandle {
   friend class DescriptorAllocator;
 
 public:
-  //! Default constructor creates an invalid handle.
-  DescriptorHandle() noexcept = default;
+  static constexpr uint32_t kBindlessDomainShift = 20U;
+  static constexpr uint32_t kBindlessLocalSlotMask
+    = (1U << kBindlessDomainShift) - 1U;
 
-  //! Destructor that automatically releases the descriptor if still valid.
-  OXGN_GFX_API ~DescriptorHandle();
+  DescriptorAllocationHandle() noexcept = default;
+  OXGN_GFX_API ~DescriptorAllocationHandle();
 
-  OXYGEN_MAKE_NON_COPYABLE(DescriptorHandle)
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocationHandle)
 
-  //! Move constructor transfers ownership of the descriptor.
-  OXGN_GFX_API DescriptorHandle(DescriptorHandle&& other) noexcept;
-
-  //! Move assignment transfers ownership of the descriptor.
-  OXGN_GFX_API auto operator=(DescriptorHandle&& other) noexcept
-    -> DescriptorHandle&;
+  OXGN_GFX_API DescriptorAllocationHandle(
+    DescriptorAllocationHandle&& other) noexcept;
+  OXGN_GFX_API auto operator=(DescriptorAllocationHandle&& other) noexcept
+    -> DescriptorAllocationHandle&;
 
   [[nodiscard]] constexpr auto operator==(
-    const DescriptorHandle& other) const noexcept
+    const DescriptorAllocationHandle& other) const noexcept
   {
     return allocator_ == other.allocator_ && handle_ == other.handle_
-      && view_type_ == other.view_type_ && visibility_ == other.visibility_;
+      && view_type_ == other.view_type_ && visibility_ == other.visibility_
+      && kind_ == other.kind_ && domain_ == other.domain_;
   }
 
   [[nodiscard]] constexpr auto operator!=(
-    const DescriptorHandle& other) const noexcept
+    const DescriptorAllocationHandle& other) const noexcept
   {
     return !(*this == other);
   }
@@ -86,81 +71,98 @@ public:
   {
     const auto properly_allocated
       = allocator_ != nullptr && handle_ != kInvalidBindlessHeapIndex;
-    // When properly allocated, the view type and visibility should also be
-    // valid.
     assert(!properly_allocated || oxygen::graphics::IsValid(view_type_));
     assert(!properly_allocated || oxygen::graphics::IsValid(visibility_));
     return properly_allocated;
   }
+
+  [[nodiscard]] constexpr auto IsBindless() const noexcept
+  {
+    return kind_ == DescriptorAllocationKind::kBindless;
+  }
+
+  [[nodiscard]] constexpr auto IsRaw() const noexcept
+  {
+    return kind_ == DescriptorAllocationKind::kRaw;
+  }
+
+  [[nodiscard]] constexpr auto GetKind() const noexcept { return kind_; }
 
   [[nodiscard]] constexpr auto GetBindlessHandle() const noexcept
   {
     return handle_;
   }
 
-  //! Gets the resource view type (SRV, UAV, CBV, Sampler, etc.) of this
-  //! descriptor.
   [[nodiscard]] constexpr auto GetViewType() const noexcept
   {
     return view_type_;
   }
 
-  //! Gets the visibility of this descriptor (CPU-only, Shaders, etc.).
   [[nodiscard]] constexpr auto GetVisibility() const noexcept
   {
     return visibility_;
   }
 
-  //! Gets the allocator that created this descriptor.
   [[nodiscard]] constexpr auto GetAllocator() const noexcept
   {
     return allocator_;
   }
 
-  //! Explicitly releases the descriptor back to its allocator, and
-  //! invalidates the handle.
-  OXGN_GFX_API auto Release() noexcept -> void;
+  [[nodiscard]] constexpr auto GetDomain() const noexcept
+    -> bindless::DomainToken
+  {
+    return domain_;
+  }
 
-  //! Invalidates this handle without releasing the descriptor.
+  [[nodiscard]] constexpr auto GetLocalSlot() const noexcept -> uint32_t
+  {
+    if (!IsBindless()) {
+      return handle_.get();
+    }
+    return handle_.get() & kBindlessLocalSlotMask;
+  }
+
+  [[nodiscard]] static constexpr auto PackBindlessSlot(
+    bindless::DomainToken domain, const uint32_t local_slot) noexcept
+    -> bindless::HeapIndex
+  {
+    return bindless::HeapIndex {
+      (static_cast<uint32_t>(domain.get()) << kBindlessDomainShift)
+        | (local_slot & kBindlessLocalSlotMask),
+    };
+  }
+
+  OXGN_GFX_API auto Release() noexcept -> void;
   OXGN_GFX_API auto Invalidate() noexcept -> void;
 
 protected:
-  //! No allocator constructor creates an invalid handle. Primarily useful for
-  //! unit tests.
-  OXGN_GFX_API DescriptorHandle(bindless::HeapIndex index,
-    ResourceViewType view_type, DescriptorVisibility visibility) noexcept;
+  OXGN_GFX_API DescriptorAllocationHandle(bindless::HeapIndex index,
+    ResourceViewType view_type, DescriptorVisibility visibility,
+    DescriptorAllocationKind kind,
+    bindless::DomainToken domain
+    = bindless::generated::kInvalidDomainToken) noexcept;
 
-  //! Constructor that takes an allocator and index.
-  /*!
-   Creating a valid handle can only be done by the entity that allocated
-   descriptors. In the current design, this is the DescriptorAllocator
-   class.
-
-   This constructor is protected to prevent misuse outside the allocator
-   context, while still allowing unit tests to create handles for testing
-   purposes via derivation.
-  */
-  OXGN_GFX_API DescriptorHandle(DescriptorAllocator* allocator,
+  OXGN_GFX_API DescriptorAllocationHandle(DescriptorAllocator* allocator,
     bindless::HeapIndex index, ResourceViewType view_type,
-    DescriptorVisibility visibility) noexcept;
+    DescriptorVisibility visibility, DescriptorAllocationKind kind,
+    bindless::DomainToken domain
+    = bindless::generated::kInvalidDomainToken) noexcept;
 
 private:
   OXGN_GFX_API auto InvalidateInternal(bool moved) noexcept -> void;
 
-  //! Back-reference to allocator for lifetime management.
   DescriptorAllocator* allocator_ { nullptr };
-
-  //! Stable index for shader reference.
   bindless::HeapIndex handle_ { kInvalidBindlessHeapIndex };
-
-  //! Resource view type (SRV, UAV, CBV, Sampler, etc.).
   ResourceViewType view_type_ { ResourceViewType::kNone };
-
-  //! Visibility of the memory space where this descriptor resides.
   DescriptorVisibility visibility_ { DescriptorVisibility::kNone };
+  DescriptorAllocationKind kind_ { DescriptorAllocationKind::kInvalid };
+  bindless::DomainToken domain_ { bindless::generated::kInvalidDomainToken };
 };
 
-//! Converts a `DescriptorHandle` to a string representation.
-OXGN_GFX_API auto to_string(const DescriptorHandle& handle) -> std::string;
+using RawDescriptorHandle = DescriptorAllocationHandle;
+using BindlessHandle = DescriptorAllocationHandle;
+
+OXGN_GFX_API auto to_string(const DescriptorAllocationHandle& handle)
+  -> std::string;
 
 } // namespace oxygen::graphics

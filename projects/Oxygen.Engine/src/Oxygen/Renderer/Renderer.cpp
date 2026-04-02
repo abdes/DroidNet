@@ -832,10 +832,11 @@ auto Renderer::EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx)
     "provider");
 
   if (!shadow_manager_) {
-    shadow_manager_ = std::make_unique<renderer::ShadowManager>(
-      observer_ptr { gfx.get() }, observer_ptr { inline_staging_provider_.get() },
-      observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
-      config_.directional_shadow_policy);
+    shadow_manager_
+      = std::make_unique<renderer::ShadowManager>(observer_ptr { gfx.get() },
+        observer_ptr { inline_staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() }, config_.shadow_quality_tier,
+        config_.directional_shadow_policy);
   }
 
   if (!shadow_frame_bindings_publisher_) {
@@ -2982,7 +2983,7 @@ auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
 
   auto register_new_srv = [&]() -> ShaderVisibleIndex {
     auto srv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
       return kInvalidShaderVisibleIndex;

@@ -10,7 +10,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-02 17:13:35
+// Generated: 2026-04-02 21:10:18
 
 #pragma once
 
@@ -98,9 +98,9 @@ inline constexpr std::array<BindingDesc, 4> kBindingTable = {{
 
 inline constexpr std::array<DomainBindingDesc, 4>
   kDomainBindingTable = {{
-  DomainBindingDesc{ "textures", Binding::kTexturesBinding, 5096U, 65536U },
-  DomainBindingDesc{ "srv_global", Binding::kGlobalBuffersBinding, 1U, 2048U },
-  DomainBindingDesc{ "materials", Binding::kGlobalBuffersBinding, 2049U, 3047U },
+  DomainBindingDesc{ "textures", Binding::kTexturesBinding, 35816U, 65536U },
+  DomainBindingDesc{ "srv_global", Binding::kGlobalBuffersBinding, 1U, 32768U },
+  DomainBindingDesc{ "materials", Binding::kGlobalBuffersBinding, 32769U, 3047U },
   DomainBindingDesc{ "samplers", Binding::kSamplersBinding, 0U, 256U },
 }};
 

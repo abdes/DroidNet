@@ -30,21 +30,22 @@ public:
       oxygen::bindless::HeapIndex /*base_index*/, ResourceViewType,
       DescriptorVisibility)>;
 
-  // Explicit constructor to set up default action for the mocked Allocate
+  // Explicit constructor to set up default action for the mocked AllocateRaw
   // method
   explicit MockDescriptorAllocator(
     std::shared_ptr<const DescriptorAllocationStrategy> heap_strategy = nullptr)
     : BaseDescriptorAllocator(std::move(heap_strategy))
   {
-    ON_CALL(*this, Allocate(::testing::_, ::testing::_))
-      .WillByDefault(
-        ::testing::Invoke(this, &MockDescriptorAllocator::RealAllocateForMock));
+    ON_CALL(*this, AllocateRaw(::testing::_, ::testing::_))
+      .WillByDefault(::testing::Invoke(
+        this, &MockDescriptorAllocator::RealAllocateRawForMock));
   }
 
   ExtendedSegmentFactory ext_segment_factory_;
   SegmentFactory segment_factory_;
 
   // Expose other public methods from BaseDescriptorAllocator for testing
+  using BaseDescriptorAllocator::AllocateBindless;
   using BaseDescriptorAllocator::Contains;
   using BaseDescriptorAllocator::GetAllocatedDescriptorsCount;
   using BaseDescriptorAllocator::GetRemainingDescriptorsCount;
@@ -52,16 +53,16 @@ public:
 
   // clang-format off
   // NOLINTBEGIN
-  MOCK_METHOD(DescriptorHandle, Allocate, (oxygen::graphics::ResourceViewType view_type, oxygen::graphics::DescriptorVisibility visibility), (override));
-  MOCK_METHOD(void, CopyDescriptor, (const DescriptorHandle&, const DescriptorHandle&), (override));
-  MOCK_METHOD(oxygen::bindless::ShaderVisibleIndex, GetShaderVisibleIndex, (const DescriptorHandle& handle), (const, noexcept, override));
+  MOCK_METHOD(DescriptorAllocationHandle, AllocateRaw, (oxygen::graphics::ResourceViewType view_type, oxygen::graphics::DescriptorVisibility visibility), (override));
+  MOCK_METHOD(void, CopyDescriptor, (const DescriptorAllocationHandle&, const DescriptorAllocationHandle&), (override));
+  MOCK_METHOD(oxygen::bindless::ShaderVisibleIndex, GetShaderVisibleIndex, (const DescriptorAllocationHandle& handle), (const, noexcept, override));
   // NOLINTEND
   // clang-format off
 
-  DescriptorHandle RealAllocateForMock(
+  DescriptorAllocationHandle RealAllocateRawForMock(
     const ResourceViewType view_type, const DescriptorVisibility visibility)
   {
-    return BaseDescriptorAllocator::Allocate(view_type, visibility);
+    return BaseDescriptorAllocator::AllocateRaw(view_type, visibility);
   }
 
   // Expose GetInitialCapacity for testing

@@ -228,8 +228,8 @@ auto IblComputePass::EnsurePassConstantsBuffer() -> void
   srv_view_desc.stride = kStrideBytes;
 
   auto srv_handle
-    = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    = allocator.AllocateBindless(oxygen::bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_SRV);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error("IblComputePass: failed to allocate SRV");
   }

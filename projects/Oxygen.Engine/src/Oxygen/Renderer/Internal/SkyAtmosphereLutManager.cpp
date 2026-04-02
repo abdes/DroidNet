@@ -61,7 +61,8 @@ auto SkyAtmosphereLutManager::UpdateParameters(
       if (!almost_equal(a.layers[i].width_m, b.layers[i].width_m)
         || !almost_equal(a.layers[i].exp_term, b.layers[i].exp_term)
         || !almost_equal(a.layers[i].linear_term, b.layers[i].linear_term)
-        || !almost_equal(a.layers[i].constant_term, b.layers[i].constant_term)) {
+        || !almost_equal(
+          a.layers[i].constant_term, b.layers[i].constant_term)) {
         return false;
       }
     }
@@ -103,7 +104,8 @@ auto SkyAtmosphereLutManager::UpdateParameters(
 
   cached_params_ = new_params;
   if (dirty_) {
-    // A regen is already pending; coalesce this change into the pending request.
+    // A regen is already pending; coalesce this change into the pending
+    // request.
     return;
   }
   dirty_ = true;
@@ -122,7 +124,8 @@ auto SkyAtmosphereLutManager::UpdateSunState(
   // Sun-driven LUT invalidation must react to the full resolved sun state
   // (direction, color, intensity, enabled), not just selected fields.
   constexpr float kSunStateEpsilon = 1e-5F;
-  const bool sun_state_changed = !sun_state_.ApproxEquals(sun, kSunStateEpsilon);
+  const bool sun_state_changed
+    = !sun_state_.ApproxEquals(sun, kSunStateEpsilon);
   if (sun_state_changed) {
     if (!dirty_) {
       ++generation_;
@@ -666,8 +669,9 @@ auto SkyAtmosphereLutManager::CreateLutViews(
   const auto view_dimension = tex_desc.texture_type;
 
   // Create SRV for shader sampling
-  auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   if (!srv_handle.IsValid()) {
     LOG_F(ERROR, "SkyAtmosphereLutManager: failed to allocate SRV descriptor");
     return false;
@@ -693,7 +697,7 @@ auto SkyAtmosphereLutManager::CreateLutViews(
   // Create UAV for compute shader writes only if supported [P20]
   if (tex_desc.is_uav) {
     auto uav_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_UAV,
         graphics::DescriptorVisibility::kShaderVisible);
     if (!uav_handle.IsValid()) {
       LOG_F(

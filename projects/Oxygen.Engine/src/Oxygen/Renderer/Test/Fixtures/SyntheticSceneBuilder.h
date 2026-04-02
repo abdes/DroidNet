@@ -321,9 +321,9 @@ private:
     UploadBufferBytes(buffer, elements.data(), elements.size_bytes(), label);
 
     auto& allocator = graphics_.GetDescriptorAllocator();
-    auto handle
-      = allocator.Allocate(graphics::ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(handle.IsValid(), "Failed to allocate SRV for `{}`", label);
 
     const auto slot = allocator.GetShaderVisibleIndex(handle);
@@ -358,8 +358,9 @@ private:
     UploadBufferBytes(buffer, indices.data(), indices.size_bytes(), label);
 
     auto& allocator = graphics_.GetDescriptorAllocator();
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kRawBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kRawBuffer_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(), "Failed to allocate SRV for `{}`", label);
 
     const auto slot = allocator.GetShaderVisibleIndex(handle);

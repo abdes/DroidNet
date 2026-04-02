@@ -5,12 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferViewDescription;
 
-auto Buffer::GetNativeView(const DescriptorHandle& view_handle,
+auto Buffer::GetNativeView(const DescriptorAllocationHandle& view_handle,
   const BufferViewDescription& view_desc) const -> NativeView
 {
   using graphics::ResourceViewType;

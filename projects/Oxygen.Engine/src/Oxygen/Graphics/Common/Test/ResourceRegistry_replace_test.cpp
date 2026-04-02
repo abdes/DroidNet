@@ -12,14 +12,14 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::NativeView;
 using oxygen::graphics::ResourceRegistry;
@@ -83,15 +83,16 @@ protected:
 
   struct RegisteredViewInfo {
     NativeView view;
-    decltype(std::declval<DescriptorHandle>().GetBindlessHandle()) index;
+    decltype(std::declval<DescriptorAllocationHandle>()
+        .GetBindlessHandle()) index;
   };
 
   auto RegisterView(FakeResource& resource, const TestViewDesc desc) const
     -> NativeView
   {
     // Allocate a descriptor
-    DescriptorHandle descriptor
-      = allocator_->Allocate(desc.view_type, desc.visibility);
+    DescriptorAllocationHandle descriptor
+      = allocator_->AllocateRaw(desc.view_type, desc.visibility);
     if (!descriptor.IsValid()) {
       ADD_FAILURE() << "failed to allocate descriptor";
       return {};
@@ -104,8 +105,8 @@ protected:
     FakeResource& resource, const TestViewDesc desc) const -> RegisteredViewInfo
   {
     // Allocate a descriptor
-    DescriptorHandle descriptor
-      = allocator_->Allocate(desc.view_type, desc.visibility);
+    DescriptorAllocationHandle descriptor
+      = allocator_->AllocateRaw(desc.view_type, desc.visibility);
     if (!descriptor.IsValid()) {
       ADD_FAILURE() << "failed to allocate descriptor";
       return {};
@@ -637,8 +638,8 @@ NOLINT_TEST_F(
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 601,
   };
-  const auto same_view_lambda
-    = [](const DescriptorHandle&, const TestViewDesc& d) -> NativeView {
+  const auto same_view_lambda = [](const DescriptorAllocationHandle&,
+                                  const TestViewDesc& d) -> NativeView {
     // Use id as the handle; both resources will produce identical views
     return { d.id, FakeResource::ClassTypeId() };
   };
@@ -678,8 +679,8 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_PreservesAllocatorOwnership)
     .visibility = DescriptorVisibility::kShaderVisible,
     .id = 701,
   };
-  DescriptorHandle h
-    = other_allocator->Allocate(desc.view_type, desc.visibility);
+  DescriptorAllocationHandle h
+    = other_allocator->AllocateRaw(desc.view_type, desc.visibility);
   ASSERT_TRUE(h.IsValid());
   const auto idx = h.GetBindlessHandle();
   [[maybe_unused]] auto v

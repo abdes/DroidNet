@@ -33,15 +33,15 @@ abi:
       name: "GlobalSRV"
       index_space: srv_uav_cbv
       shader_index_base: 1
-      capacity: 2048
+      capacity: 32768
       shader_access_class: buffer_srv
       view_types: [StructuredBuffer_SRV]
-      comment: "Unified global bindless table"
+      comment: "Unified global bindless table sized for production large geometry-heavy scenes"
 
     - id: materials
       name: "Materials"
       index_space: srv_uav_cbv
-      shader_index_base: 2049
+      shader_index_base: 32769
       capacity: 3047
       shader_access_class: buffer_srv
       view_types: [StructuredBuffer_SRV, RawBuffer_SRV]
@@ -50,7 +50,7 @@ abi:
     - id: textures
       name: "Textures"
       index_space: srv_uav_cbv
-      shader_index_base: 5096
+      shader_index_base: 35816
       capacity: 65536
       shader_access_class: texture_srv
       view_types: [Texture_SRV]
@@ -133,11 +133,11 @@ backends:
 
         - domain: materials
           table: BindlessSRVTable
-          heap_local_base: 2049
+          heap_local_base: 32769
 
         - domain: textures
           table: BindlessSRVTable
-          heap_local_base: 5096
+          heap_local_base: 35816
 
         - domain: samplers
           table: SamplerTable
@@ -207,7 +207,7 @@ backends:
       domain_realizations:
         - domain: textures
           binding: textures_binding
-          array_element_base: 5096
+          array_element_base: 35816
 
         - domain: srv_global
           binding: global_buffers_binding
@@ -215,7 +215,7 @@ backends:
 
         - domain: materials
           binding: global_buffers_binding
-          array_element_base: 2049
+          array_element_base: 32769
 
         - domain: samplers
           binding: samplers_binding

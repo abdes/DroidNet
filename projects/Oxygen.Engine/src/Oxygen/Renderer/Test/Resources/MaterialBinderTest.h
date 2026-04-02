@@ -19,8 +19,8 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
@@ -30,6 +30,7 @@ namespace oxygen::renderer::testing {
 class MaterialBinderTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override;
+  auto TearDown() -> void override;
 
   [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>;
 
@@ -472,12 +473,11 @@ private:
       // binder returns placeholder indices without consuming descriptors so
       // MaterialBinder can be exercised without triggering SRV allocations.
       if ((allocator_ != nullptr) && allocate_on_request_) {
-        const auto handle
-          = allocator_->Allocate(graphics::ResourceViewType::kTexture_SRV,
-            graphics::DescriptorVisibility::kShaderVisible);
-        const auto idx
-          = static_cast<uint32_t>(handle.GetBindlessHandle().get());
-        const auto sv = ShaderVisibleIndex { idx };
+        auto handle = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kTexturesDomain,
+          graphics::ResourceViewType::kTexture_SRV);
+        const auto sv = allocator_->GetShaderVisibleIndex(handle);
+        handles_.emplace(key, std::move(handle));
         map_.emplace(key, sv);
         return sv;
       }
@@ -497,6 +497,7 @@ private:
 
   private:
     std::unordered_map<content::ResourceKey, ShaderVisibleIndex> map_;
+    std::unordered_map<content::ResourceKey, graphics::BindlessHandle> handles_;
     std::unordered_map<content::ResourceKey, uint32_t>
       get_or_allocate_calls_by_key_;
     uint32_t get_or_allocate_total_calls_ { 0U };

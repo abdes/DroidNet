@@ -425,7 +425,7 @@ auto BrdfLutManager::CreateSrv(
   -> std::optional<SrvAllocation>
 {
   auto& allocator = gfx_->GetDescriptorAllocator();
-  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+  auto handle = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
     graphics::DescriptorVisibility::kShaderVisible);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "BRDF LUT descriptor allocation failed");

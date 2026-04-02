@@ -8,7 +8,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -17,7 +17,7 @@
 #include "./Mocks/TestDescriptorHandle.h"
 
 using oxygen::kInvalidBindlessHeapIndex;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::bindless::testing::MockDescriptorAllocator;
@@ -75,7 +75,7 @@ protected:
 // Test Group: Construction and Validity
 NOLINT_TEST_F(UnitTests, DefaultConstructedHandleIsInvalid)
 {
-  const DescriptorHandle handle;
+  const DescriptorAllocationHandle handle;
   EXPECT_FALSE(handle.IsValid());
   EXPECT_EQ(handle.GetBindlessHandle(), kInvalidBindlessHeapIndex);
 }
@@ -90,7 +90,7 @@ NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
   SetSegmentFactory(
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
 
-  auto handle = allocator_.Allocate(
+  auto handle = allocator_.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   handle.Invalidate();
@@ -109,7 +109,7 @@ NOLINT_TEST_F(UnitTests, ReleasingInvalidHandleIsNoop)
     return std::unique_ptr<DescriptorSegment> {};
   });
 
-  DescriptorHandle handle;
+  DescriptorAllocationHandle handle;
   handle.Release();
 
   EXPECT_FALSE(handle.IsValid());
@@ -125,7 +125,7 @@ NOLINT_TEST_F(UnitTests, ExplicitReleaseInvalidatesHandle)
   SetSegmentFactory(
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
 
-  auto handle = allocator_.Allocate(
+  auto handle = allocator_.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   EXPECT_TRUE(handle.IsValid());
@@ -147,7 +147,7 @@ NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
 
   {
-    const auto handle = allocator_.Allocate(
+    const auto handle = allocator_.AllocateRaw(
       ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
     EXPECT_TRUE(handle.IsValid());
     EXPECT_EQ(handle.GetBindlessHandle(), b::HeapIndex { 42U });
@@ -159,7 +159,7 @@ NOLINT_TEST_F(UnitTests, MoveConstructorDestinationEquivalentToSource)
   TestDescriptorHandle src(&allocator_, b::HeapIndex { 77 },
     ResourceViewType::kSampler, DescriptorVisibility::kCpuOnly);
 
-  DescriptorHandle dst(std::move(src));
+  DescriptorAllocationHandle dst(std::move(src));
 
   // Destination should have the same properties as the original source
   EXPECT_TRUE(dst.IsValid());
@@ -223,7 +223,7 @@ NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
     [&mock_segment](auto, auto) { return std::move(mock_segment); });
 
   // Allocate a handle so that it owns index 55
-  auto dst = allocator_.Allocate(
+  auto dst = allocator_.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
 
   // Hand made source so we do not need to manage its release

@@ -131,7 +131,8 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
  Unregister views before destroying the buffer or transfer ownership to the
  registry if views must outlive the resource.
 */
-auto Buffer::CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
+auto Buffer::CreateConstantBufferView(
+  const DescriptorAllocationHandle& /*view_handle*/,
   const BufferRange& /*range*/) const -> NativeView
 {
   // Allocate raw memory for payload and construct in-place. Use a
@@ -150,9 +151,9 @@ auto Buffer::CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-auto Buffer::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
-  -> NativeView
+auto Buffer::CreateShaderResourceView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  BufferRange /*range*/, uint32_t /*stride*/) const -> NativeView
 {
   void* raw = operator new(sizeof(SRV));
   auto typed = new (raw) SRV { this, BufferRange {}, Format::kUnknown, 0 };
@@ -166,9 +167,9 @@ auto Buffer::CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
-auto Buffer::CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
-  Format /*format*/, BufferRange /*range*/, uint32_t /*stride*/) const
-  -> NativeView
+auto Buffer::CreateUnorderedAccessView(
+  const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+  BufferRange /*range*/, uint32_t /*stride*/) const -> NativeView
 {
   void* raw = operator new(sizeof(UAV));
   auto typed = new (raw) UAV { this, BufferRange {}, Format::kUnknown, 0 };
