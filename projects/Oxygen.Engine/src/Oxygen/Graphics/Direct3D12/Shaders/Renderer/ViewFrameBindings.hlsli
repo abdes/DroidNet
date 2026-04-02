@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_VIEWFRAMEBINDINGS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_VIEWFRAMEBINDINGS_HLSLI
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 struct ViewFrameBindings
 {

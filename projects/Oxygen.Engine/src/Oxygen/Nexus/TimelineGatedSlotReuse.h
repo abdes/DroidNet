@@ -28,7 +28,7 @@
 namespace oxygen::nexus {
 
 // This header uses canonical project types from the included headers.
-// DomainKey and VersionedBindlessHandle are defined in the engine.
+// bindless::DomainToken and VersionedBindlessHandle are defined in the engine.
 
 //! Timeline-gated slot reuse strategy for bindless resource management
 /*!

@@ -11,7 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
@@ -21,7 +21,7 @@
 #include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::d3d12::DescriptorAllocator;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::detail::GetDxgiFormatMapping;
@@ -30,7 +30,7 @@ using oxygen::windows::ThrowOnFailed;
 
 namespace {
 
-auto GetDescriptorAllocator(const DescriptorHandle& view_handle)
+auto GetDescriptorAllocator(const DescriptorAllocationHandle& view_handle)
 {
   using oxygen::graphics::d3d12::DescriptorAllocator;
 
@@ -251,8 +251,9 @@ auto Buffer::SetName(const std::string_view name) noexcept -> void
   GetComponent<GraphicResource>().SetName(name);
 }
 
-auto Buffer::CreateConstantBufferView(const DescriptorHandle& view_handle,
-  const BufferRange& range) const -> NativeView
+auto Buffer::CreateConstantBufferView(
+  const DescriptorAllocationHandle& view_handle, const BufferRange& range) const
+  -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -286,8 +287,9 @@ auto Buffer::CreateConstantBufferView(const DescriptorHandle& view_handle,
   return { gpu_ptr, ClassTypeId() };
 }
 
-auto Buffer::CreateShaderResourceView(const DescriptorHandle& view_handle,
-  Format format, BufferRange range, uint32_t stride) const -> NativeView
+auto Buffer::CreateShaderResourceView(
+  const DescriptorAllocationHandle& view_handle, Format format,
+  BufferRange range, uint32_t stride) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");
@@ -361,8 +363,9 @@ auto Buffer::CreateShaderResourceView(const DescriptorHandle& view_handle,
   }
 }
 
-auto Buffer::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
-  Format format, BufferRange range, uint32_t stride) const -> NativeView
+auto Buffer::CreateUnorderedAccessView(
+  const DescriptorAllocationHandle& view_handle, Format format,
+  BufferRange range, uint32_t stride) const -> NativeView
 {
   if (!view_handle.IsValid()) {
     throw std::runtime_error("Invalid view handle");

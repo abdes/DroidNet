@@ -660,8 +660,9 @@ auto ConventionalShadowBackend::EnsureDirectionalResources(
   };
 
   graphics::NativeView new_srv_view {};
-  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto handle
+    = allocator.AllocateBindless(oxygen::bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kTexture_SRV);
   if (!handle.IsValid()) {
     registry.UnRegisterResource(*new_texture);
     throw std::runtime_error(

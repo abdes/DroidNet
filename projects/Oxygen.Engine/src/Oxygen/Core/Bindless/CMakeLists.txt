@@ -26,7 +26,8 @@ set(_bindless_schema_file "${_bindless_meta_dir}/Bindless.schema.json")
 
 # Temp-generated meta file paths (in the build tree)
 set(_gen_all_json "${_gen_temp_dir}/${_gen_prefix}All.json")
-set(_gen_heaps_json "${_gen_temp_dir}/${_gen_prefix}Heaps.D3D12.json")
+set(_gen_d3d12_strategy_json "${_gen_temp_dir}/${_gen_prefix}Strategy.D3D12.json")
+set(_gen_vulkan_strategy_json "${_gen_temp_dir}/${_gen_prefix}Strategy.Vulkan.json")
 
 # Make generation sensitive to tool script changes
 set(_gentool_dir "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Tools/BindlessCodeGen")
@@ -86,17 +87,30 @@ add_custom_command(
     ${_copy_helper} "${_gen_all_json}"
     "${_bindless_meta_dir}/Generated.All.json"
   COMMAND
-    ${_copy_helper} "${_gen_heaps_json}"
-    "${_bindless_meta_dir}/Generated.Heaps.D3D12.json"
+    ${_copy_helper} "${_gen_d3d12_strategy_json}"
+    "${_bindless_meta_dir}/Generated.Strategy.D3D12.json"
+  COMMAND
+    ${_copy_helper} "${_gen_vulkan_strategy_json}"
+    "${_bindless_meta_dir}/Generated.Strategy.Vulkan.json"
   # Remove the meta JSON files from the temporary output so they are not
   # included when we copy the remaining generated files into the source tree.
   COMMAND
-    ${CMAKE_COMMAND} -E remove "${_gen_temp_dir}Generated.All.json"
-    "${_gen_temp_dir}Generated.Heaps.D3D12.json"
+    ${CMAKE_COMMAND} -E remove -f
+    "${_gen_temp_dir}Generated.All.json"
+    "${_gen_temp_dir}Generated.Strategy.D3D12.json"
+    "${_gen_temp_dir}Generated.Strategy.Vulkan.json"
+  # Delete obsolete generated artifact names from the source tree so the checked-in
+  # contract stays aligned with the current generator output set.
+  COMMAND
+    ${CMAKE_COMMAND} -E remove -f
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated.Constants.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated.BindlessLayout.hlsl"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated.Heaps.D3D12.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated.RootSignature.h"
+    "${_bindless_meta_dir}/Generated.Heaps.D3D12.json"
   # Now copy the rest of the generated files into the source tree root using
   # the same helper so we avoid spurious commits caused by timestamp-only
   # differences. We iterate files in the temp dir and copy them individually.
-  COMMAND
   COMMAND
     ${_copy_helper} "${_gen_temp_dir}" "${CMAKE_CURRENT_SOURCE_DIR}"
   # Remove the temporary generation directory

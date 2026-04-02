@@ -19,7 +19,7 @@ class Allocator;
 } // namespace D3D12MA
 
 namespace oxygen::graphics {
-class DescriptorHandle;
+class DescriptorAllocationHandle;
 
 namespace d3d12 {
   class Graphics;
@@ -59,15 +59,15 @@ namespace d3d12 {
 
     // --- New view creation methods ---
     [[nodiscard]] auto CreateConstantBufferView(
-      const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-      -> NativeView override;
+      const DescriptorAllocationHandle& view_handle,
+      const BufferRange& range = {}) const -> NativeView override;
 
     [[nodiscard]] auto CreateShaderResourceView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
 
     [[nodiscard]] auto CreateUnorderedAccessView(
-      const DescriptorHandle& view_handle, Format format,
+      const DescriptorAllocationHandle& view_handle, Format format,
       BufferRange range = {}, uint32_t stride = 0) const -> NativeView override;
 
   private:

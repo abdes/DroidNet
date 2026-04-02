@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -148,7 +148,7 @@ auto WireframePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     cbv_view_desc.visibility = DescriptorVisibility::kShaderVisible;
     cbv_view_desc.range = { 0u, desc.size_bytes };
 
-    auto cbv_handle = allocator.Allocate(
+    auto cbv_handle = allocator.AllocateRaw(
       ResourceViewType::kConstantBuffer, DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
@@ -212,7 +212,7 @@ auto WireframePass::SetupRenderTargets(CommandRecorder& recorder) const -> void
 
   auto rtv = registry.Find(color_texture, rtv_view_desc);
   if (!rtv->IsValid()) {
-    auto rtv_desc_handle = allocator.Allocate(
+    auto rtv_desc_handle = allocator.AllocateRaw(
       ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
     if (!rtv_desc_handle.IsValid()) {
       throw std::runtime_error(
@@ -252,7 +252,7 @@ auto WireframePass::SetupRenderTargets(CommandRecorder& recorder) const -> void
       found->IsValid()) {
       dsv = found;
     } else {
-      auto dsv_desc_handle = allocator.Allocate(
+      auto dsv_desc_handle = allocator.AllocateRaw(
         ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
       if (!dsv_desc_handle.IsValid()) {
         throw std::runtime_error(

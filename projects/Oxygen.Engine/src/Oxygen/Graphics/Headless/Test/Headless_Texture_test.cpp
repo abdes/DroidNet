@@ -7,7 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
 using namespace oxygen::graphics::headless;
@@ -80,8 +80,8 @@ NOLINT_TEST(HeadlessTextureTest, Texture_SRVContainsCorrectOffsets)
   view_desc.sub_resources = subresources;
 
   // Act: use public GetNativeView to obtain headless payloads (SRV)
-  auto srv_native
-    = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
+  auto srv_native = texture->GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, view_desc);
 
   // Assert (SRV only)
   const auto* srv_payload = srv_native->AsPointer<const Texture::SRV>();
@@ -125,8 +125,8 @@ NOLINT_TEST(HeadlessTextureTest, Texture_UAVContainsCorrectOffsets)
   view_desc.sub_resources = subresources;
 
   // Act
-  auto uav_native
-    = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
+  auto uav_native = texture->GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, view_desc);
 
   // Assert (UAV only)
   const auto* uav_payload = uav_native->AsPointer<const Texture::UAV>();
@@ -233,8 +233,8 @@ NOLINT_TEST(HeadlessTextureTest, Texture_ViewPayloadBoundsWithinBacking)
   view_desc.sub_resources = sr;
 
   // Act
-  auto native
-    = texture->GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
+  auto native = texture->GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, view_desc);
   const auto* srv = native->AsPointer<const Texture::SRV>();
   ASSERT_NE(srv, nullptr);
 
@@ -308,8 +308,8 @@ NOLINT_TEST(HeadlessTextureTest, Texture_BC1_BlockSizeAndOffsets)
   sr.num_mip_levels = desc.mip_levels;
   view_desc.sub_resources = sr;
 
-  const auto native
-    = tex.GetNativeView(oxygen::graphics::DescriptorHandle {}, view_desc);
+  const auto native = tex.GetNativeView(
+    oxygen::graphics::DescriptorAllocationHandle {}, view_desc);
   const auto* srv = native->AsPointer<const Texture::SRV>();
   ASSERT_NE(srv, nullptr);
 

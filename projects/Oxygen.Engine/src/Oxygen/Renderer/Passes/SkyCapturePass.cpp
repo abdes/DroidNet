@@ -13,7 +13,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -172,7 +172,8 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     co_return;
   }
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     Context().view_constants->GetGPUVirtualAddress());
 
   SetupViewPortAndScissors(recorder);
@@ -248,7 +249,8 @@ auto SkyCapturePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     // Bind the specific face constants index via root constants.
     // GPU will see the correct descriptor pointing to the correct buffer slice.
     recorder.SetGraphicsRoot32BitConstant(
-      static_cast<uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       state.face_constants_indices[i].get(), 1);
 
     recorder.Draw(3, 1, 0, 0);
@@ -417,8 +419,9 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
       .num_array_slices = 6 });
   state.all_faces_fb = graphics.CreateFramebuffer(all_faces_fb_desc);
 
-  auto srv_handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+      graphics::DescriptorVisibility::kShaderVisible);
   graphics::TextureViewDescription srv_desc;
   srv_desc.view_type = graphics::ResourceViewType::kTexture_SRV;
   srv_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
@@ -436,7 +439,7 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
   state.face_rtvs.resize(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto rtv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kTexture_RTV,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_RTV,
         graphics::DescriptorVisibility::kCpuOnly);
     graphics::TextureViewDescription rtv_desc;
     rtv_desc.view_type = graphics::ResourceViewType::kTexture_RTV;
@@ -467,7 +470,7 @@ auto SkyCapturePass::EnsureResourcesCreated(const ViewId view_id)
   state.face_constants_indices.reserve(6);
   for (uint32_t i = 0; i < 6; ++i) {
     auto cbv_handle
-      = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
     graphics::BufferViewDescription cbv_view_desc;
     cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;

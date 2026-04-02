@@ -12,6 +12,18 @@
 
 namespace oxygen::content::import {
 
+namespace {
+
+  constexpr auto kScriptsTableLockSuffix = std::string_view { "|scripts" };
+  constexpr auto kScriptBindingsTableLockSuffix
+    = std::string_view { "|script-bindings" };
+
+} // namespace
+
+struct ResourceTableRegistry::SharedTableLockState final {
+  co::Semaphore semaphore { 1 };
+};
+
 ResourceTableRegistry::ResourceTableRegistry(IAsyncFileWriter& file_writer)
   : file_writer_(file_writer)
 {
@@ -71,6 +83,22 @@ auto ResourceTableRegistry::PhysicsAggregator(
   return *it->second;
 }
 
+auto ResourceTableRegistry::LockScriptsTable(
+  const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>
+{
+  auto key = NormalizeKey(cooked_root);
+  key.append(kScriptsTableLockSuffix);
+  co_return co_await AcquireSharedTableLock(std::move(key));
+}
+
+auto ResourceTableRegistry::LockScriptBindingsTable(
+  const std::filesystem::path& cooked_root) -> co::Co<SharedTableLockGuard>
+{
+  auto key = NormalizeKey(cooked_root);
+  key.append(kScriptBindingsTableLockSuffix);
+  co_return co_await AcquireSharedTableLock(std::move(key));
+}
+
 auto ResourceTableRegistry::BeginSession(
   const std::filesystem::path& cooked_root) -> void
 {
@@ -79,6 +107,23 @@ auto ResourceTableRegistry::BeginSession(
   auto& count = active_sessions_[key];
   ++count;
   DLOG_F(INFO, "Session started for '{}' (count={})", key, count);
+}
+
+auto ResourceTableRegistry::AcquireSharedTableLock(std::string key)
+  -> co::Co<SharedTableLockGuard>
+{
+  auto state = std::shared_ptr<SharedTableLockState> {};
+  {
+    std::scoped_lock lock(mutex_);
+    auto& entry = shared_table_locks_[key];
+    if (!entry) {
+      entry = std::make_shared<SharedTableLockState>();
+    }
+    state = entry;
+  }
+
+  auto lock = co_await state->semaphore.Lock();
+  co_return SharedTableLockGuard(std::move(state), std::move(lock));
 }
 
 auto ResourceTableRegistry::EndSession(const std::filesystem::path& cooked_root)

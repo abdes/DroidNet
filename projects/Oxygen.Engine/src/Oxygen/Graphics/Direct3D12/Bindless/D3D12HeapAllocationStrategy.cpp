@@ -10,7 +10,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Core/Bindless/Generated.Heaps.D3D12.h>
+#include <Oxygen/Core/Bindless/Generated.Strategy.D3D12.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 
 namespace oxygen::graphics::d3d12 {
@@ -213,7 +213,7 @@ D3D12HeapAllocationStrategy::D3D12HeapAllocationStrategy(dx::IDevice* device)
   // Device is unused when loading from generated JSON. Keep parameter for API
   // stability.
   (void)device;
-  InitFromJson(oxygen::engine::binding::kD3D12HeapStrategyJson);
+  InitFromJson(oxygen::bindless::generated::d3d12::kStrategyJson);
 }
 
 D3D12HeapAllocationStrategy::D3D12HeapAllocationStrategy(
@@ -331,7 +331,7 @@ auto D3D12HeapAllocationStrategy::EmbeddedConfigProvider::Instance() noexcept
 auto D3D12HeapAllocationStrategy::EmbeddedConfigProvider::GetJson()
   const noexcept -> std::string_view
 {
-  return oxygen::engine::binding::kD3D12HeapStrategyJson;
+  return oxygen::bindless::generated::d3d12::kStrategyJson;
 }
 
 void D3D12HeapAllocationStrategy::InitFromJson(std::string_view json_text)

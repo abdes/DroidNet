@@ -27,8 +27,8 @@ namespace detail {
 
 //! Maps bindless domain keys to absolute descriptor heap ranges.
 /*!
- Provides bidirectional mapping between domain keys (resource type + visibility)
- and their corresponding absolute ranges in the global bindless descriptor heap.
+ Provides bidirectional mapping between generated semantic domain tokens
+ and their corresponding shader-visible ranges in the bindless tables.
  Captures allocator state for specified domains at construction time.
 
  ### Key Features
@@ -51,14 +51,14 @@ namespace detail {
  });
 
  // Get range for a domain
- auto key = DomainKey{ResourceViewType::Texture2D,
-                      DescriptorVisibility::Pixel};
- if (auto range = mapper.GetDomainRange(key)) {
+ auto key = DomainKey{ oxygen::bindless::generated::kTexturesDomain };
+ if (auto
+ range = mapper.GetDomainRange(key)) {
    // Use range.start and range.capacity
  }
 
  // Reverse lookup from absolute index
- auto handle = oxygen::bindless::HeapIndex{42};
+ auto handle = oxygen::bindless::ShaderVisibleIndex{42};
  if (auto domain = mapper.ResolveDomain(handle)) {
    // Found the domain containing this handle
  }
@@ -95,7 +95,7 @@ public:
 
   //! Resolve domain key from absolute bindless handle.
   OXGN_NXS_NDAPI auto ResolveDomain(
-    oxygen::bindless::HeapIndex index) const noexcept
+    oxygen::bindless::ShaderVisibleIndex index) const noexcept
     -> std::optional<DomainKey>;
 
 private:

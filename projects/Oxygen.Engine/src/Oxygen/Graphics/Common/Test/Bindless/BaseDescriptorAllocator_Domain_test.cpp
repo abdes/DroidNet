@@ -8,7 +8,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
@@ -16,7 +16,7 @@
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorSegment.h"
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::detail::DescriptorSegment;
@@ -37,7 +37,7 @@ class BaseDescriptorAllocatorDomainTest : public BaseDescriptorAllocatorTest {
 
 namespace {
 
-//! Domain base index must match the allocation strategy's base for the domain.
+//! Reserved raw heap base index must match the allocation strategy's base.
 NOLINT_TEST_F(
   BaseDescriptorAllocatorDomainTest, GetDomainBaseIndexMatchesStrategy)
 {
@@ -55,9 +55,11 @@ NOLINT_TEST_F(
 
   // Act + Assert
   for (const auto& [type, vis] : domains) {
-    const auto base_from_allocator = allocator_->GetDomainBaseIndex(type, vis);
+    const auto base_from_allocator
+      = allocator_->ReserveRaw(type, vis, b::Count { 1 });
     const auto base_from_strategy = heap_strategy_->GetHeapBaseIndex(type, vis);
-    EXPECT_EQ(base_from_allocator, base_from_strategy);
+    ASSERT_TRUE(base_from_allocator.has_value());
+    EXPECT_EQ(base_from_allocator.value(), base_from_strategy);
   }
 }
 
@@ -67,7 +69,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   BaseDescriptorAllocatorDomainTest, ReserveWithinCapacity_NoSegment)
 {
-  // Arrange: One item capacity per domain; do not create segments in Reserve()
+  // Arrange: One item capacity per domain; do not create segments in
+  // ReserveRaw()
   heap_strategy_ = std::make_shared<OneCapacityDescriptorAllocationStrategy>();
   allocator_ = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>(
     heap_strategy_);
@@ -77,7 +80,7 @@ NOLINT_TEST_F(
   const auto expected_base = heap_strategy_->GetHeapBaseIndex(kType, kVis);
 
   // Act
-  const auto reserved = allocator_->Reserve(kType, kVis, b::Count { 1 });
+  const auto reserved = allocator_->ReserveRaw(kType, kVis, b::Count { 1 });
 
   // Assert
   ASSERT_TRUE(reserved.has_value());
@@ -97,7 +100,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
   constexpr auto kType = ResourceViewType::kTexture_SRV;
   constexpr auto kVis = DescriptorVisibility::kShaderVisible;
 
-  // Create segment during Reserve() and verify base index and capacity are
+  // Create segment during ReserveRaw() and verify base index and capacity are
   // honored.
   allocator_->ext_segment_factory_ = [](const b::Capacity capacity,
                                        const b::HeapIndex base_index,
@@ -119,9 +122,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
   };
 
   // Act: Reserve then Allocate one descriptor
-  const auto reserved = allocator_->Reserve(kType, kVis, b::Count { 1 });
+  const auto reserved = allocator_->ReserveRaw(kType, kVis, b::Count { 1 });
   ASSERT_TRUE(reserved.has_value());
-  auto handle = allocator_->Allocate(kType, kVis);
+  auto handle = allocator_->AllocateRaw(kType, kVis);
 
   // Assert
   EXPECT_TRUE(handle.IsValid());
@@ -140,10 +143,12 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest, ReserveExceedingCapacityFails)
     heap_strategy_);
 
   // Act
-  const auto reserved_gpu = allocator_->Reserve(ResourceViewType::kTexture_SRV,
-    DescriptorVisibility::kShaderVisible, b::Count { 2 });
-  const auto reserved_cpu = allocator_->Reserve(ResourceViewType::kTexture_SRV,
-    DescriptorVisibility::kCpuOnly, b::Count { 2 });
+  const auto reserved_gpu
+    = allocator_->ReserveRaw(ResourceViewType::kTexture_SRV,
+      DescriptorVisibility::kShaderVisible, b::Count { 2 });
+  const auto reserved_cpu
+    = allocator_->ReserveRaw(ResourceViewType::kTexture_SRV,
+      DescriptorVisibility::kCpuOnly, b::Count { 2 });
 
   // Assert
   EXPECT_FALSE(reserved_gpu.has_value());

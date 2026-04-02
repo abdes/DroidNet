@@ -4,292 +4,174 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-"""Root signature specific validations and helpers."""
+"""D3D12 root-signature specific validations and helpers."""
 
 from __future__ import annotations
 
 from typing import Any, Dict, List
-from textwrap import indent
 
 from . import domains as domains_mod
 
 
-def _digits(s: str) -> int | None:
+def _digits(token: Any) -> int | None:
     try:
-        return int("".join([c for c in s if c.isdigit()]))
+        return int("".join([c for c in str(token) if c.isdigit()]))
     except Exception:
         return None
 
 
-def validate_params_vs_domains(
-    root_sig: List[Dict[str, Any]], domains_by_id: Dict[str, Dict[str, Any]]
-):
-    """Validate root parameters and ranges consistency with domains.
+def validate_root_signature(
+    root_sig: List[Dict[str, Any]], tables_by_id: Dict[str, Dict[str, Any]]
+) -> None:
+    ids_seen: set[str] = set()
+    indices_seen: set[int] = set()
 
-    - range_type vs domain.kind
-    - base_shader_register/register_space match domain register/space (first domain when multi-domain)
-    - UAV + counters cannot be referenced by unbounded ranges
-    - CBV array sizes vs domain capacity (when mapped)
-    """
     for idx, param in enumerate(root_sig):
-        if param.get("type") == "descriptor_table":
-            param_domains = param.get("domains") or []
-            ranges = param.get("ranges", []) or []
-            for r_i, r in enumerate(ranges):
-                doms = list(param_domains)
-                if r.get("domain"):
-                    doms = list(r.get("domain")) + doms
-                if not doms:
-                    raise ValueError(
-                        f"root_signature parameter {idx} range {r_i} must specify 'domain'"
-                    )
-                rt = r.get("range_type")
-                if rt is None:
-                    raise ValueError(
-                        f"root_signature parameter {idx} range {r_i} missing required 'range_type'"
-                    )
-                if r.get("num_descriptors") is None:
-                    raise ValueError(
-                        f"root_signature parameter {idx} range {r_i} missing required 'num_descriptors'"
-                    )
-                first = doms[0]
-                for dom_id in doms:
-                    d = domains_by_id.get(dom_id)
-                    if d is None:
-                        raise ValueError(
-                            f"root_signature parameter {idx} range {r_i} references unknown domain '{dom_id}'"
-                        )
-                    kind = d.get("kind")
-                    if kind is not None and rt is not None and kind != rt:
-                        raise ValueError(
-                            f"root_signature parameter {idx} range {r_i} range_type '{rt}' does not match domain '{dom_id}' kind '{kind}'"
-                        )
-                    # register match only enforced for first domain when multi-domain
-                    dom_reg = d.get("register")
-                    if dom_reg is not None and dom_id == first:
-                        base = r.get("base_shader_register")
-                        if base is not None:
-                            reg_num = _digits(str(dom_reg))
-                            base_num = (
-                                _digits(str(base))
-                                if isinstance(base, str)
-                                else int(base)
-                            )
-                            if (
-                                reg_num is not None
-                                and base_num is not None
-                                and reg_num != int(base_num)
-                            ):
-                                raise ValueError(
-                                    f"root_signature parameter {idx} range {r_i} base_shader_register {base} does not match domain '{dom_id}' register {dom_reg}"
-                                )
-                    dom_space = d.get("space")
-                    if dom_space is not None:
-                        space = r.get("register_space")
-                        if space is not None:
-                            dom_space_num = (
-                                _digits(str(dom_space))
-                                if isinstance(dom_space, str)
-                                else int(dom_space)
-                            )
-                            space_num = (
-                                _digits(str(space))
-                                if isinstance(space, str)
-                                else int(space)
-                            )
-                            if (
-                                dom_space_num is not None
-                                and space_num is not None
-                                and int(space_num) != int(dom_space_num)
-                            ):
-                                raise ValueError(
-                                    f"root_signature parameter {idx} range {r_i} register_space {space} does not match domain '{dom_id}' space {dom_space}"
-                                )
+        param_id = str(param.get("id"))
+        param_index = int(param.get("index", -1))
+        if param_id in ids_seen:
+            raise ValueError(
+                f"D3D12 root_signature has duplicate id '{param_id}'"
+            )
+        if param_index in indices_seen:
+            raise ValueError(
+                f"D3D12 root_signature has duplicate index {param_index}"
+            )
+        ids_seen.add(param_id)
+        indices_seen.add(param_index)
 
-    # UAV + counters cannot be referenced by unbounded ranges
-    for d in domains_by_id.values():
-        if d.get("kind") == "UAV" and d.get("uav_counter_register") is not None:
-            for idx, param in enumerate(root_sig):
-                if param.get("type") != "descriptor_table":
-                    continue
-                param_domains = param.get("domains") or []
-                for r_i, r in enumerate(param.get("ranges", []) or []):
-                    doms = list(param_domains)
-                    if r.get("domain"):
-                        doms = list(r.get("domain")) + doms
-                    if d.get("id") in doms:
-                        nd = r.get("num_descriptors")
-                        if isinstance(nd, str) and nd == "unbounded":
-                            raise ValueError(
-                                f"Descriptor_table parameter {idx} range {r_i} references UAV domain '{d.get('id')}' which cannot be 'unbounded' when a UAV counter is present"
-                            )
-
-    # CBV array sizes vs domain capacity (when mapped)
-    for idx, param in enumerate(root_sig):
-        if param.get("type") == "cbv":
-            arr_size = param.get("cbv_array_size")
-            if arr_size is not None:
-                name = param.get("name")
-                mapped = [
-                    d
-                    for d in domains_by_id.values()
-                    if d.get("root_table") == name
-                ]
-                for d in mapped:
-                    cap = d.get("capacity")
-                    if cap is not None and int(arr_size) > int(cap):
-                        raise ValueError(
-                            f"CBV parameter '{name}' cbv_array_size {arr_size} exceeds domain '{d.get('id')}' capacity {cap}"
-                        )
+        param_type = str(param.get("type"))
+        if param_type == "descriptor_table":
+            table_id = str(param.get("table"))
+            if table_id not in tables_by_id:
+                raise ValueError(
+                    f"D3D12 root_signature parameter '{param_id}' references "
+                    f"unknown table '{table_id}'"
+                )
+        elif param_type == "cbv":
+            shader_register = str(param.get("shader_register"))
+            if not shader_register.startswith("b"):
+                raise ValueError(
+                    f"D3D12 root_signature parameter '{param_id}' must use a "
+                    "CBV register token"
+                )
+        elif param_type == "root_constants":
+            shader_register = str(param.get("shader_register"))
+            if not shader_register.startswith("b"):
+                raise ValueError(
+                    f"D3D12 root_signature parameter '{param_id}' must use a "
+                    "CBV register token for root constants"
+                )
+            if int(param.get("num_32bit_values", 0)) <= 0:
+                raise ValueError(
+                    f"D3D12 root_signature parameter '{param_id}' must declare "
+                    "num_32bit_values > 0"
+                )
+        else:
+            raise ValueError(
+                f"D3D12 root_signature parameter {idx} uses unsupported type "
+                f"'{param_type}'"
+            )
 
 
-def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
-    """Render richer C++ metadata for the root signature.
-
-    Returns a dict with keys:
-      - root_param_enums: enum entries
-      - root_constants_counts: counts lines
-      - register_space_consts: register/space consts
-      - root_param_structs: struct definitions and per-param ranges arrays
-      - root_param_table: constexpr RootParamDesc table
-    """
+def render_cpp_root_signature(
+    root_sig: List[Dict[str, Any]], tables_by_id: Dict[str, Dict[str, Any]]
+) -> Dict[str, str]:
+    """Render richer C++ metadata for the D3D12 root signature."""
     enum_lines: List[str] = []
     counts_lines: List[str] = []
     regs_lines: List[str] = []
     structs_lines: List[str] = []
     table_entries: List[str] = []
 
-    def _emit_comment_block(lines: List[str], comment: Any) -> None:
-        if comment is None:
-            return
-        text = str(comment).strip("\n")
-        if not text:
-            return
-        for raw in text.splitlines():
-            line = raw.rstrip()
-            if not line:
-                lines.append("//")
-            else:
-                lines.append(f"// {line}")
-
     def _norm(name: str) -> str:
         return domains_mod._normalize_acronyms(name)
 
-    # Helper to parse register/space tokens like 't0','b1','space0'
-    def _num(s):
-        if s is None:
-            return 0
-        if isinstance(s, int):
-            return int(s)
-        d = _digits(str(s))
-        return int(d) if d is not None else 0
-
-    # Range type mapping (emit as enum class RangeType)
-    RANGE_MAP = {
+    range_map = {
         "SRV": "RangeType::SRV",
-        "SAMPLER": "RangeType::Sampler",
         "UAV": "RangeType::UAV",
+        "CBV": "RangeType::CBV",
+        "SAMPLER": "RangeType::Sampler",
     }
 
-    for idx, p in enumerate(root_sig or []):
-        name = p.get("name") or f"Param{idx}"
-        cname = _norm(str(name))
+    for idx, param in enumerate(root_sig or []):
+        param_id = str(param.get("id") or f"Param{idx}")
+        cname = _norm(param_id)
         enum_lines.append(f"  k{cname} = {idx},")
 
-        # counts for root_constants
-        if p.get("type") == "root_constants":
-            n = int(p.get("num_32bit_values", 0))
-
-            _emit_comment_block(counts_lines, p.get("comment"))
+        if param.get("type") == "root_constants":
+            count = int(param.get("num_32bit_values", 0))
             counts_lines.append(
-                f"static constexpr uint32_t k{cname}ConstantsCount = {n}U;"
+                f"static constexpr uint32_t k{cname}ConstantsCount = {count}U;"
             )
 
-        # register/space shortcuts
-        reg = p.get("shader_register") or p.get("base_shader_register")
-        space = p.get("register_space")
+        reg = param.get("shader_register")
+        space = param.get("register_space")
+        if param.get("type") == "descriptor_table":
+            table = tables_by_id[str(param.get("table"))]
+            reg = table.get("shader_register")
+            space = table.get("register_space")
+
         if reg is not None:
-            sreg = str(reg)
-            digits = "".join([c for c in sreg if c.isdigit()]) or "0"
             regs_lines.append(
-                f"static constexpr uint32_t k{cname}Register = {int(digits)}u; // '{sreg}'"
+                f"static constexpr uint32_t k{cname}Register = "
+                f"{int(_digits(reg) or 0)}u; // '{reg}'"
             )
         if space is not None:
-            sspace = str(space)
-            digits = "".join([c for c in sspace if c.isdigit()]) or "0"
             regs_lines.append(
-                f"static constexpr uint32_t k{cname}Space = {int(digits)}u; // '{sspace}'"
+                f"static constexpr uint32_t k{cname}Space = "
+                f"{int(_digits(space) or 0)}u; // '{space}'"
             )
 
-        # Build per-parameter ranges arrays for descriptor_table
-        if p.get("type") == "descriptor_table":
-            ranges = p.get("ranges", []) or []
+        if param.get("type") == "descriptor_table":
+            table = tables_by_id[str(param.get("table"))]
+            descriptor_kind = str(table.get("descriptor_kind"))
             ranges_name = f"kRootParam{idx}Ranges"
-            range_lines: List[str] = []
-            for r in ranges:
-                rt = r.get("range_type")
-                rt_v = (
-                    RANGE_MAP.get(str(rt).upper(), "RangeType::SRV")
-                    if rt is not None
-                    else "RangeType::SRV"
-                )
-                base = _num(r.get("base_shader_register"))
-                space_n = _num(r.get("register_space"))
-                nd = r.get("num_descriptors")
-                if isinstance(nd, str) and nd == "unbounded":
-                    nd_v = "(std::numeric_limits<uint32_t>::max)()"
-                else:
-                    try:
-                        nd_v = f"{int(nd)}U"
-                    except Exception:
-                        nd_v = "(std::numeric_limits<uint32_t>::max)()"
-                range_lines.append(
-                    f"    RootParamRange{{ {rt_v}, {base}U, {space_n}U, {nd_v} }},"
-                )
-            if not range_lines:
-                # Emit a sentinel empty range
-                range_lines.append(
-                    "    RootParamRange{ RangeType::SRV, 0U, 0U, 0U },"
-                )
-            # Emit std::array with double-brace init for aggregate
-            arr = (
-                "static constexpr std::array<RootParamRange, %d> %s = { {\n"
-                % (len(range_lines), ranges_name)
+            if bool(table.get("unbounded")):
+                num_descriptors = "(std::numeric_limits<uint32_t>::max)()"
+            else:
+                num_descriptors = f"{int(table.get('descriptor_count', 0))}U"
+            range_line = (
+                "    RootParamRange{ "
+                f"{range_map[descriptor_kind]}, "
+                f"{int(_digits(table.get('shader_register')) or 0)}U, "
+                f"{int(_digits(table.get('register_space')) or 0)}U, "
+                f"{num_descriptors} "
+                "},"
             )
-            arr += "\n".join(range_lines)
-            arr += "\n} };"
-            structs_lines.append(arr)
-            # Use std::span constructed from data() and size()
-            table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{{ {ranges_name}.data(), {ranges_name}.size() }}, static_cast<uint32_t>({ranges_name}.size()), 0U }},"
+            structs_lines.append(
+                "static constexpr std::array<RootParamRange, 1> "
+                f"{ranges_name} = {{ {{\n{range_line}\n}} }};"
             )
-        elif p.get("type") == "cbv":
-            reg_n = _num(p.get("shader_register"))
-            space_n = _num(p.get("register_space"))
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::CBV, {reg_n}U, {space_n}U, std::span<const RootParamRange>{{}}, 0U, 0U }},"
+                "  RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, "
+                f"std::span<const RootParamRange>{{ {ranges_name}.data(), "
+                f"{ranges_name}.size() }}, "
+                f"static_cast<uint32_t>({ranges_name}.size()), 0U }},"
             )
-        elif p.get("type") == "root_constants":
-            reg_n = _num(p.get("shader_register"))
-            space_n = _num(p.get("register_space"))
-            n32 = int(p.get("num_32bit_values", 0))
+        elif param.get("type") == "cbv":
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::RootConstants, {reg_n}U, {space_n}U, std::span<const RootParamRange>{{}}, 0U, {n32}U }},"
+                "  RootParamDesc{ RootParamKind::CBV, "
+                f"{int(_digits(param.get('shader_register')) or 0)}U, "
+                f"{int(_digits(param.get('register_space')) or 0)}U, "
+                "std::span<const RootParamRange>{}, 0U, 0U },"
             )
-        else:
-            # Unknown type: emit placeholder as empty span
+        elif param.get("type") == "root_constants":
             table_entries.append(
-                f"  RootParamDesc{{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{{}}, 0U, 0U }},"
+                "  RootParamDesc{ RootParamKind::RootConstants, "
+                f"{int(_digits(param.get('shader_register')) or 0)}U, "
+                f"{int(_digits(param.get('register_space')) or 0)}U, "
+                "std::span<const RootParamRange>{}, 0U, "
+                f"{int(param.get('num_32bit_values', 0))}U }},"
             )
 
     enum_lines.append(f"  kCount = {len(root_sig or [])},")
 
-    # Compose structs header
     structs_header = """
 // Root parameter runtime descriptors (C++20 idiomatic)
 enum class RootParamKind : uint8_t { DescriptorTable = 0, CBV = 1, RootConstants = 2 };
 
-enum class RangeType : uint8_t { SRV = 0, Sampler = 1, UAV = 2 };
+enum class RangeType : uint8_t { SRV = 0, Sampler = 1, UAV = 2, CBV = 3 };
 
 struct RootParamRange {
   RangeType range_type;
@@ -308,14 +190,12 @@ struct RootParamDesc {
 };
 """
 
-    # Compose ranges and table
     structs_all = [structs_header]
     if structs_lines:
         structs_all.extend(structs_lines)
     structs_all.append(
         "static constexpr std::array<RootParamDesc, "
-        + str(len(table_entries))
-        + "> kRootParamTable = { {\n"
+        f"{len(table_entries)}> kRootParamTable = {{ {{\n"
         + "\n".join(table_entries)
         + "\n} };"
     )

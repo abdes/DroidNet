@@ -15,7 +15,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -296,7 +296,7 @@ auto DepthPrePass::DoPrepareResources(CommandRecorder& recorder) -> co::Co<>
     cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
     cbv_view_desc.range = { 0u, desc.size_bytes };
 
-    auto cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+    auto cbv_handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!cbv_handle.IsValid()) {
       throw std::runtime_error(
@@ -516,7 +516,7 @@ auto DepthPrePass::EnsureCanonicalDepthSrv() -> ShaderVisibleIndex
   }
 
   auto register_new_view = [&]() -> ShaderVisibleIndex {
-    auto srv_handle = allocator.Allocate(ResourceViewType::kTexture_SRV,
+    auto srv_handle = allocator.AllocateRaw(ResourceViewType::kTexture_SRV,
       graphics::DescriptorVisibility::kShaderVisible);
     if (!srv_handle.IsValid()) {
       canonical_depth_srv_index_ = kInvalidShaderVisibleIndex;
@@ -649,7 +649,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 auto DepthPrePass::PrepareDepthStencilView(Texture& depth_texture_ref)
   -> graphics::NativeView
 {
-  using graphics::DescriptorHandle;
+  using graphics::DescriptorAllocationHandle;
   using graphics::DescriptorVisibility;
   using graphics::TextureViewDescription;
 
@@ -681,7 +681,7 @@ auto DepthPrePass::PrepareDepthStencilView(Texture& depth_texture_ref)
     return dsv;
   }
   // View not found (cache miss), create and register it
-  DescriptorHandle dsv_desc_handle = allocator.Allocate(
+  DescriptorAllocationHandle dsv_desc_handle = allocator.AllocateRaw(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
 
   if (!dsv_desc_handle.IsValid()) {

@@ -706,7 +706,8 @@ auto VsmShadowRasterizerPass::Impl::BindJobViewConstants(
     + local_job_index;
   const auto byte_offset = slot_offset * sizeof(ViewConstants::GpuData);
   recorder.SetGraphicsRootConstantBufferView(
-    static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+    static_cast<std::uint32_t>(
+      oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
     shadow_view_constants_buffer_->GetGPUVirtualAddress() + byte_offset);
 }
 
@@ -741,7 +742,7 @@ auto VsmShadowRasterizerPass::Impl::PrepareJobDepthStencilView(
   }
 
   auto dsv_desc_handle
-    = allocator.Allocate(graphics::ResourceViewType::kTexture_DSV,
+    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
       graphics::DescriptorVisibility::kCpuOnly);
   CHECK_F(dsv_desc_handle.IsValid(),
     "VsmShadowRasterizerPass: failed to allocate page DSV descriptor");
@@ -763,7 +764,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureShaderVisibleIndex(Buffer& buffer,
     return *existing;
   }
 
-  auto handle = gfx->GetDescriptorAllocator().Allocate(
+  auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
     view_desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "VsmShadowRasterizerPass: failed to allocate {} descriptor",
@@ -1182,7 +1183,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureInstanceCullingConstantsBuffer(
 
   instance_culling_constants_indices_.reserve(slot_count);
   for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
-    auto handle = gfx->GetDescriptorAllocator().Allocate(
+    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
       graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(),
@@ -1246,7 +1247,7 @@ auto VsmShadowRasterizerPass::Impl::EnsureRasterResultPublishConstantsBuffer(
 
   raster_result_publish_constants_indices_.reserve(slot_count);
   for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
-    auto handle = gfx->GetDescriptorAllocator().Allocate(
+    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
       graphics::ResourceViewType::kConstantBuffer,
       graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(handle.IsValid(),
@@ -1824,12 +1825,16 @@ auto VsmShadowRasterizerPass::Impl::PublishRasterResults(
 
     recorder.SetPipelineState(*raster_result_publish_pso_);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       raster_result_publish_constants_indices_[partition_index].get(), 1U);
     recorder.Dispatch((static_cast<std::uint32_t>(active_page_jobs.size())
                         + (kInstanceCullingThreadGroupSize - 1U))
@@ -2245,12 +2250,16 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 
     recorder.SetPipelineState(*impl_->instance_culling_pso_);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       Context().view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       impl_->instance_culling_constants_indices_[partition_index].get(), 1U);
     recorder.Dispatch((partition.count + (kInstanceCullingThreadGroupSize - 1U))
         / kInstanceCullingThreadGroupSize,

@@ -24,10 +24,11 @@ struct ElementRefTag { };
  @warning `gfx` must outlive the AtlasBuffer.
 */
 AtlasBuffer::AtlasBuffer(observer_ptr<Graphics> gfx, const std::uint32_t stride,
-  std::string debug_label)
+  std::string debug_label, const bindless::DomainToken domain)
   : gfx_(std::move(gfx))
   , debug_label_(std::move(debug_label))
   , stride_(stride)
+  , domain_(domain)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
 }
@@ -92,8 +93,8 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
     return EnsureBufferResult::kUnchanged;
   }
 
-  auto result = internal::EnsureBufferAndSrv(
-    *gfx_, primary_buffer_, primary_srv_, target_bytes, stride_, debug_label_);
+  auto result = internal::EnsureBufferAndSrv(*gfx_, primary_buffer_,
+    primary_srv_, target_bytes, stride_, debug_label_, domain_);
   if (!result) {
     return std::unexpected(result.error());
   }

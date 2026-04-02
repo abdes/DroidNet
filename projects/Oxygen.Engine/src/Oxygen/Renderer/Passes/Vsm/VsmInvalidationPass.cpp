@@ -12,7 +12,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -33,7 +33,7 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::ComputePipelineDesc;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
 using oxygen::renderer::vsm::VsmCacheInvalidationScope;
@@ -142,11 +142,11 @@ struct VsmInvalidationPass::Impl {
   std::shared_ptr<Buffer> constants_buffer {};
   void* constants_ptr { nullptr };
 
-  DescriptorHandle projection_records_srv_handle {};
-  DescriptorHandle page_table_srv_handle {};
-  DescriptorHandle physical_meta_uav_handle {};
-  DescriptorHandle work_item_srv_handle {};
-  DescriptorHandle constants_cbv_handle {};
+  DescriptorAllocationHandle projection_records_srv_handle {};
+  DescriptorAllocationHandle page_table_srv_handle {};
+  DescriptorAllocationHandle physical_meta_uav_handle {};
+  DescriptorAllocationHandle work_item_srv_handle {};
+  DescriptorAllocationHandle constants_cbv_handle {};
 
   ShaderVisibleIndex projection_records_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex page_table_srv { kInvalidShaderVisibleIndex };
@@ -267,8 +267,9 @@ struct VsmInvalidationPass::Impl {
   }
 
   auto EnsureBufferView(Buffer& buffer,
-    const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-    ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex
+    const graphics::BufferViewDescription& desc,
+    DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+    const Buffer*& owner) -> ShaderVisibleIndex
   {
     auto& registry = gfx->GetResourceRegistry();
     auto& allocator = gfx->GetDescriptorAllocator();
@@ -284,7 +285,7 @@ struct VsmInvalidationPass::Impl {
       return index;
     }
 
-    handle = allocator.Allocate(
+    handle = allocator.AllocateRaw(
       desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(
       handle.IsValid(), "Failed to allocate VSM invalidation buffer view");

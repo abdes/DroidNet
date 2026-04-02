@@ -15,7 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -35,7 +35,7 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::ComputePipelineDesc;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
 using oxygen::renderer::vsm::VsmPageAllocationFrame;
@@ -91,13 +91,16 @@ namespace {
     recorder.SetPipelineState(pso_desc);
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       dispatch_index, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -158,10 +161,10 @@ struct VsmPageFlagPropagationPass::Impl {
   std::shared_ptr<Buffer> constants_buffer {};
   void* constants_ptr { nullptr };
 
-  DescriptorHandle dispatch_srv_handle {};
-  DescriptorHandle constants_cbv_handle {};
-  DescriptorHandle page_flags_uav_handle {};
-  DescriptorHandle page_table_srv_handle {};
+  DescriptorAllocationHandle dispatch_srv_handle {};
+  DescriptorAllocationHandle constants_cbv_handle {};
+  DescriptorAllocationHandle page_flags_uav_handle {};
+  DescriptorAllocationHandle page_table_srv_handle {};
 
   ShaderVisibleIndex dispatch_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex constants_index { kInvalidShaderVisibleIndex };
@@ -189,8 +192,9 @@ struct VsmPageFlagPropagationPass::Impl {
   auto EnsureMappedUploadBuffer(std::uint32_t required_count) -> void;
   auto EnsureConstantsBuffer() -> void;
   auto EnsureBufferView(Buffer& buffer,
-    const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-    ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex;
+    const graphics::BufferViewDescription& desc,
+    DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+    const Buffer*& owner) -> ShaderVisibleIndex;
   auto BuildDispatches() -> void;
 };
 
@@ -263,8 +267,9 @@ auto VsmPageFlagPropagationPass::Impl::EnsureConstantsBuffer() -> void
 
   if (!constants_cbv_handle.IsValid()) {
     auto& allocator = gfx->GetDescriptorAllocator();
-    constants_cbv_handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
-      graphics::DescriptorVisibility::kShaderVisible);
+    constants_cbv_handle
+      = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
+        graphics::DescriptorVisibility::kShaderVisible);
     CHECK_F(constants_cbv_handle.IsValid(),
       "Failed to allocate propagation constants CBV");
     constants_index = allocator.GetShaderVisibleIndex(constants_cbv_handle);
@@ -278,15 +283,16 @@ auto VsmPageFlagPropagationPass::Impl::EnsureConstantsBuffer() -> void
 }
 
 auto VsmPageFlagPropagationPass::Impl::EnsureBufferView(Buffer& buffer,
-  const graphics::BufferViewDescription& desc, DescriptorHandle& handle,
-  ShaderVisibleIndex& index, const Buffer*& owner) -> ShaderVisibleIndex
+  const graphics::BufferViewDescription& desc,
+  DescriptorAllocationHandle& handle, ShaderVisibleIndex& index,
+  const Buffer*& owner) -> ShaderVisibleIndex
 {
   if (handle.IsValid() && owner == &buffer) {
     return index;
   }
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  handle = allocator.Allocate(desc.view_type, desc.visibility);
+  handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
   if (!handle.IsValid()) {
     LOG_F(ERROR, "Failed to allocate VSM propagation buffer view");
     return kInvalidShaderVisibleIndex;

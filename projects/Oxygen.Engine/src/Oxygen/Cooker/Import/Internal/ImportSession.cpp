@@ -301,6 +301,12 @@ auto ImportSession::ThreadPool() const noexcept -> observer_ptr<co::ThreadPool>
   return thread_pool_;
 }
 
+auto ImportSession::TableRegistry() const noexcept
+  -> observer_ptr<ResourceTableRegistry>
+{
+  return table_registry_;
+}
+
 /*!
  Get (and lazily create) the texture emitter for this session.
 

@@ -11,7 +11,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 
 // Google Test matchers for logging tests

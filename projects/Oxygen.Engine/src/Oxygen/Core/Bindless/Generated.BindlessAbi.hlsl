@@ -6,17 +6,16 @@
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
-// Source-Version: 1.1.0
-// Schema-Version: 1.0.1
+// Source-Version: 2.0.0
+// Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-03-08 17:33:12
+// Generated: 2026-04-02 21:10:18
 
-#ifndef OXYGEN_BINDLESS_LAYOUT_HLSL
-#define OXYGEN_BINDLESS_LAYOUT_HLSL
+#ifndef OXYGEN_BINDLESS_ABI_HLSL
+#define OXYGEN_BINDLESS_ABI_HLSL
 
 static const uint K_INVALID_BINDLESS_INDEX = 0XFFFFFFFF;
 
-// Debug-friendly domain guards helpers (generated)
 static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 {
 	return (idx >= base) && (idx < (base + capacity));
@@ -31,58 +30,52 @@ static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capaci
 #endif
 }
 
-// View constants CBV
+// Unified global bindless table sized for production large geometry-heavy scenes
 
-static const uint K_VIEW_DOMAIN_BASE = 0;
-static const uint K_VIEW_CAPACITY = 1;
+static const uint K_GLOBAL_SRV_SHADER_INDEX_BASE = 1;
+static const uint K_GLOBAL_SRV_CAPACITY = 32768;
 
-// Unified global bindless table
+// Material and metadata buffer ranges
 
-static const uint K_GLOBAL_SRV_DOMAIN_BASE = 1;
-static const uint K_GLOBAL_SRV_CAPACITY = 2048;
-
-// Unified bindless table domains
-
-static const uint K_MATERIALS_DOMAIN_BASE = 2049;
+static const uint K_MATERIALS_SHADER_INDEX_BASE = 32769;
 static const uint K_MATERIALS_CAPACITY = 3047;
 
-static const uint K_TEXTURES_DOMAIN_BASE = 5096;
+// Unified texture bindless range
+
+static const uint K_TEXTURES_SHADER_INDEX_BASE = 35816;
 static const uint K_TEXTURES_CAPACITY = 65536;
 
-static const uint K_SAMPLERS_DOMAIN_BASE = 0;
+// Global sampler table
+
+static const uint K_SAMPLERS_SHADER_INDEX_BASE = 0;
 static const uint K_SAMPLERS_CAPACITY = 256;
 
 // Domain guard macros (generated)
 
-#define BX_DOMAIN_BASE(TAG)   K_##TAG##_DOMAIN_BASE
+#define BX_DOMAIN_BASE(TAG)   K_##TAG##_SHADER_INDEX_BASE
 #define BX_DOMAIN_CAP(TAG)    K_##TAG##_CAPACITY
 #define BX_IN(TAG, IDX)       BX_IsInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))
 #define BX_TRY(TAG, IDX)      BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_BASE(TAG), BX_DOMAIN_CAP(TAG))
 
-#define BX_DOMAIN_VIEW_BASE K_VIEW_DOMAIN_BASE
-#define BX_DOMAIN_VIEW_CAPACITY K_VIEW_CAPACITY
-#define BX_IN_VIEW(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_VIEW_BASE, BX_DOMAIN_VIEW_CAPACITY)
-#define BX_TRY_VIEW(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_VIEW_BASE, BX_DOMAIN_VIEW_CAPACITY)
-
-#define BX_DOMAIN_GLOBAL_SRV_BASE K_GLOBAL_SRV_DOMAIN_BASE
+#define BX_DOMAIN_GLOBAL_SRV_BASE K_GLOBAL_SRV_SHADER_INDEX_BASE
 #define BX_DOMAIN_GLOBAL_SRV_CAPACITY K_GLOBAL_SRV_CAPACITY
 #define BX_IN_GLOBAL_SRV(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_GLOBAL_SRV_BASE, BX_DOMAIN_GLOBAL_SRV_CAPACITY)
 #define BX_TRY_GLOBAL_SRV(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_GLOBAL_SRV_BASE, BX_DOMAIN_GLOBAL_SRV_CAPACITY)
 
-#define BX_DOMAIN_MATERIALS_BASE K_MATERIALS_DOMAIN_BASE
+#define BX_DOMAIN_MATERIALS_BASE K_MATERIALS_SHADER_INDEX_BASE
 #define BX_DOMAIN_MATERIALS_CAPACITY K_MATERIALS_CAPACITY
 #define BX_IN_MATERIALS(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_MATERIALS_BASE, BX_DOMAIN_MATERIALS_CAPACITY)
 #define BX_TRY_MATERIALS(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_MATERIALS_BASE, BX_DOMAIN_MATERIALS_CAPACITY)
 
-#define BX_DOMAIN_TEXTURES_BASE K_TEXTURES_DOMAIN_BASE
+#define BX_DOMAIN_TEXTURES_BASE K_TEXTURES_SHADER_INDEX_BASE
 #define BX_DOMAIN_TEXTURES_CAPACITY K_TEXTURES_CAPACITY
 #define BX_IN_TEXTURES(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_TEXTURES_BASE, BX_DOMAIN_TEXTURES_CAPACITY)
 #define BX_TRY_TEXTURES(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_TEXTURES_BASE, BX_DOMAIN_TEXTURES_CAPACITY)
 
-#define BX_DOMAIN_SAMPLERS_BASE K_SAMPLERS_DOMAIN_BASE
+#define BX_DOMAIN_SAMPLERS_BASE K_SAMPLERS_SHADER_INDEX_BASE
 #define BX_DOMAIN_SAMPLERS_CAPACITY K_SAMPLERS_CAPACITY
 #define BX_IN_SAMPLERS(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_SAMPLERS_BASE, BX_DOMAIN_SAMPLERS_CAPACITY)
 #define BX_TRY_SAMPLERS(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_SAMPLERS_BASE, BX_DOMAIN_SAMPLERS_CAPACITY)
 
 
-#endif // OXYGEN_BINDLESS_LAYOUT_HLSL
+#endif // OXYGEN_BINDLESS_ABI_HLSL

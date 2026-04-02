@@ -23,6 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -152,11 +153,21 @@ namespace {
         "Script embedded emission requires file reader/writer/index registry");
       co_return false;
     }
+    auto* const table_registry = session.TableRegistry().get();
+    if (table_registry == nullptr) {
+      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.asset.table_registry_unavailable",
+        "Script embedded emission requires ResourceTableRegistry");
+      co_return false;
+    }
 
     const auto table_relpath = script_import::BuildScriptsTableRelPath(request);
     const auto data_relpath = script_import::BuildScriptsDataRelPath(request);
     const auto table_path = session.CookedRoot() / table_relpath;
     const auto data_path = session.CookedRoot() / data_relpath;
+
+    auto scripts_table_lock
+      = co_await table_registry->LockScriptsTable(session.CookedRoot());
 
     const auto table_exists_result = co_await reader->Exists(table_path);
     if (!table_exists_result.has_value()) {

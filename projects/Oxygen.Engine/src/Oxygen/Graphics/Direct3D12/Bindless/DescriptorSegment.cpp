@@ -68,8 +68,8 @@ DescriptorSegment::DescriptorSegment(dx::IDevice* device,
 
 DescriptorSegment::~DescriptorSegment() { ObjectRelease(heap_); }
 
-auto DescriptorSegment::GetCpuHandle(const DescriptorHandle& handle) const
-  -> D3D12_CPU_DESCRIPTOR_HANDLE
+auto DescriptorSegment::GetCpuHandle(
+  const DescriptorAllocationHandle& handle) const -> D3D12_CPU_DESCRIPTOR_HANDLE
 {
   const auto local_index = GlobalToLocalIndex(handle.GetBindlessHandle());
   D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle = cpu_start_;
@@ -78,8 +78,8 @@ auto DescriptorSegment::GetCpuHandle(const DescriptorHandle& handle) const
   return cpu_handle;
 }
 
-auto DescriptorSegment::GetGpuHandle(const DescriptorHandle& handle) const
-  -> D3D12_GPU_DESCRIPTOR_HANDLE
+auto DescriptorSegment::GetGpuHandle(
+  const DescriptorAllocationHandle& handle) const -> D3D12_GPU_DESCRIPTOR_HANDLE
 {
   if (!IsShaderVisible()) {
     throw std::runtime_error(

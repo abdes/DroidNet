@@ -42,7 +42,7 @@ public:
   [[nodiscard]] auto GetAllocatedCount() const noexcept
     -> oxygen::bindless::Count override;
   // [[nodiscard]] auto GetShaderVisibleIndex(
-  //   const DescriptorHandle& handle) const noexcept
+  //   const DescriptorAllocationHandle& handle) const noexcept
   //   -> oxygen::bindless::HeapIndex override;
 
 private:

@@ -14,7 +14,7 @@
 
 namespace oxygen::graphics {
 
-class DescriptorHandle;
+class DescriptorAllocationHandle;
 
 namespace d3d12 {
 
@@ -65,7 +65,8 @@ namespace d3d12 {
      the device, such as creating views on resources or copying descriptor
      handles.
     */
-    OXGN_D3D12_NDAPI auto GetCpuHandle(const DescriptorHandle& handle) const
+    OXGN_D3D12_NDAPI auto GetCpuHandle(
+      const DescriptorAllocationHandle& handle) const
       -> D3D12_CPU_DESCRIPTOR_HANDLE;
 
     //! Gets the D3D12 GPU descriptor handle for a given descriptor handle.
@@ -74,7 +75,8 @@ namespace d3d12 {
      GPU handles are used to access descriptors via methods on the command
      lists, and are only valid for shader-visible heaps.
     */
-    OXGN_D3D12_NDAPI auto GetGpuHandle(const DescriptorHandle& handle) const
+    OXGN_D3D12_NDAPI auto GetGpuHandle(
+      const DescriptorAllocationHandle& handle) const
       -> D3D12_GPU_DESCRIPTOR_HANDLE;
 
     //! Gets the GPU descriptor handle that represents the start of the heap.

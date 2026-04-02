@@ -19,7 +19,7 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::TextureDesc;
 using oxygen::graphics::d3d12::GraphicResource;
 using oxygen::graphics::d3d12::Graphics;
@@ -82,7 +82,7 @@ auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
   return { resource, d3dma_allocation };
 }
 
-auto GetDescriptorAllocator(const DescriptorHandle& view_handle)
+auto GetDescriptorAllocator(const DescriptorAllocationHandle& view_handle)
 {
   using oxygen::graphics::d3d12::DescriptorAllocator;
 
@@ -231,9 +231,10 @@ auto Texture::CurrentDevice() const -> dx::IDevice*
   return gfx_->GetCurrentDevice();
 }
 
-auto Texture::CreateShaderResourceView(const DescriptorHandle& view_handle,
-  const Format format, const TextureType dimension,
-  const TextureSubResourceSet sub_resources) const -> NativeView
+auto Texture::CreateShaderResourceView(
+  const DescriptorAllocationHandle& view_handle, const Format format,
+  const TextureType dimension, const TextureSubResourceSet sub_resources) const
+  -> NativeView
 {
   if (is_readback_surface_) {
     throw std::runtime_error(
@@ -250,9 +251,10 @@ auto Texture::CreateShaderResourceView(const DescriptorHandle& view_handle,
   return { gpu_handle.ptr, ClassTypeId() };
 }
 
-auto Texture::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
-  const Format format, const TextureType dimension,
-  const TextureSubResourceSet sub_resources) const -> NativeView
+auto Texture::CreateUnorderedAccessView(
+  const DescriptorAllocationHandle& view_handle, const Format format,
+  const TextureType dimension, const TextureSubResourceSet sub_resources) const
+  -> NativeView
 {
   if (is_readback_surface_) {
     throw std::runtime_error(
@@ -269,9 +271,9 @@ auto Texture::CreateUnorderedAccessView(const DescriptorHandle& view_handle,
   return { gpu_handle.ptr, ClassTypeId() };
 }
 
-auto Texture::CreateRenderTargetView(const DescriptorHandle& view_handle,
-  const Format format, const TextureSubResourceSet sub_resources) const
-  -> NativeView
+auto Texture::CreateRenderTargetView(
+  const DescriptorAllocationHandle& view_handle, const Format format,
+  const TextureSubResourceSet sub_resources) const -> NativeView
 {
   if (is_readback_surface_) {
     throw std::runtime_error(
@@ -287,9 +289,10 @@ auto Texture::CreateRenderTargetView(const DescriptorHandle& view_handle,
   return { cpu_handle.ptr, ClassTypeId() };
 }
 
-auto Texture::CreateDepthStencilView(const DescriptorHandle& view_handle,
-  const Format format, const TextureSubResourceSet sub_resources,
-  const bool is_read_only) const -> NativeView
+auto Texture::CreateDepthStencilView(
+  const DescriptorAllocationHandle& view_handle, const Format format,
+  const TextureSubResourceSet sub_resources, const bool is_read_only) const
+  -> NativeView
 {
   if (is_readback_surface_) {
     throw std::runtime_error(

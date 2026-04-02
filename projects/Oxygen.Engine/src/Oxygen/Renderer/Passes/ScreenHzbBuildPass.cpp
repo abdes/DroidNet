@@ -19,7 +19,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -160,12 +160,16 @@ namespace {
   {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -314,7 +318,7 @@ struct ScreenHzbBuildPass::Impl {
     pass_constants_indices.reserve(slot_count);
     for (std::uint32_t slot = 0U; slot < slot_count; ++slot) {
       auto handle
-        = allocator.Allocate(graphics::ResourceViewType::kConstantBuffer,
+        = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
           graphics::DescriptorVisibility::kShaderVisible);
       CHECK_F(handle.IsValid(), "Failed to allocate Screen HZB constants CBV");
 
@@ -362,8 +366,9 @@ struct ScreenHzbBuildPass::Impl {
       return cached_index;
     }
 
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
       LOG_F(ERROR, "Screen HZB: failed to allocate {} SRV", debug_label);
       cached_index = kInvalidShaderVisibleIndex;
@@ -395,8 +400,9 @@ struct ScreenHzbBuildPass::Impl {
       return cached_index;
     }
 
-    auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_UAV,
+        graphics::DescriptorVisibility::kShaderVisible);
     if (!handle.IsValid()) {
       LOG_F(ERROR, "Screen HZB: failed to allocate {} UAV", debug_label);
       cached_index = kInvalidShaderVisibleIndex;

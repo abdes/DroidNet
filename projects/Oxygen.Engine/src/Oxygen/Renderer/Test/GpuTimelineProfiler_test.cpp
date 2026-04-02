@@ -56,21 +56,32 @@ using oxygen::graphics::TimestampQueryProvider;
 
 class NullDescriptorAllocator final : public DescriptorAllocator {
 public:
-  auto Allocate(oxygen::graphics::ResourceViewType view_type,
+  auto AllocateRaw(oxygen::graphics::ResourceViewType view_type,
     oxygen::graphics::DescriptorVisibility visibility)
-    -> oxygen::graphics::DescriptorHandle override
+    -> oxygen::graphics::DescriptorAllocationHandle override
   {
-    return CreateDescriptorHandle(
+    return CreateRawDescriptorHandle(
       oxygen::bindless::HeapIndex { 0U }, view_type, visibility);
   }
 
-  auto Release(oxygen::graphics::DescriptorHandle& handle) -> void override
+  auto AllocateBindless(oxygen::bindless::DomainToken domain,
+    oxygen::graphics::ResourceViewType view_type)
+    -> oxygen::graphics::DescriptorAllocationHandle override
+  {
+    return CreateBindlessHandle(
+      oxygen::graphics::DescriptorAllocationHandle::PackBindlessSlot(
+        domain, 0U),
+      domain, view_type);
+  }
+
+  auto Release(oxygen::graphics::DescriptorAllocationHandle& handle)
+    -> void override
   {
     handle.Invalidate();
   }
 
-  auto CopyDescriptor(const oxygen::graphics::DescriptorHandle&,
-    const oxygen::graphics::DescriptorHandle&) -> void override
+  auto CopyDescriptor(const oxygen::graphics::DescriptorAllocationHandle&,
+    const oxygen::graphics::DescriptorAllocationHandle&) -> void override
   {
   }
 
@@ -82,14 +93,13 @@ public:
     return oxygen::bindless::Count { 1024U };
   }
 
-  [[nodiscard]] auto GetDomainBaseIndex(oxygen::graphics::ResourceViewType,
-    oxygen::graphics::DescriptorVisibility) const
-    -> oxygen::bindless::HeapIndex override
+  [[nodiscard]] auto GetDomainBaseIndex(oxygen::bindless::DomainToken) const
+    -> oxygen::bindless::ShaderVisibleIndex override
   {
-    return oxygen::bindless::HeapIndex { 0U };
+    return oxygen::bindless::ShaderVisibleIndex { 0U };
   }
 
-  [[nodiscard]] auto Reserve(oxygen::graphics::ResourceViewType,
+  [[nodiscard]] auto ReserveRaw(oxygen::graphics::ResourceViewType,
     oxygen::graphics::DescriptorVisibility, oxygen::bindless::Count count)
     -> std::optional<oxygen::bindless::HeapIndex> override
   {
@@ -100,7 +110,8 @@ public:
   }
 
   [[nodiscard]] auto Contains(
-    const oxygen::graphics::DescriptorHandle& handle) const -> bool override
+    const oxygen::graphics::DescriptorAllocationHandle& handle) const
+    -> bool override
   {
     return handle.IsValid();
   }
@@ -114,7 +125,7 @@ public:
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const oxygen::graphics::DescriptorHandle&) const noexcept
+    const oxygen::graphics::DescriptorAllocationHandle&) const noexcept
     -> oxygen::bindless::ShaderVisibleIndex override
   {
     return oxygen::kInvalidShaderVisibleIndex;

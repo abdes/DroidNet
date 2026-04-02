@@ -124,6 +124,10 @@ public:
   OXGN_COOK_NDAPI auto ThreadPool() const noexcept
     -> observer_ptr<co::ThreadPool>;
 
+  //! Get the shared resource-table registry (non-owning).
+  OXGN_COOK_NDAPI auto TableRegistry() const noexcept
+    -> observer_ptr<ResourceTableRegistry>;
+
   //=== Emitters
   //===-----------------------------------------------------------//
 

@@ -54,7 +54,7 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    auto rtv_handle = gfx->GetDescriptorAllocator().Allocate(
+    auto rtv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
       ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
     if (!rtv_handle.IsValid()) {
       throw std::runtime_error(fmt::format(
@@ -93,8 +93,9 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    DescriptorHandle dsv_handle = gfx->GetDescriptorAllocator().Allocate(
-      ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+    DescriptorAllocationHandle dsv_handle
+      = gfx->GetDescriptorAllocator().AllocateRaw(
+        ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
     if (!dsv_handle.IsValid()) {
       throw std::runtime_error(fmt::format(
         "Failed to allocate DSV handle for color attachment in texture `{}`",

@@ -22,7 +22,7 @@
 
 namespace oxygen::graphics {
 
-class DescriptorHandle;
+class DescriptorAllocationHandle;
 
 //! Specifies the intended usage(s) of a buffer resource.
 enum class BufferUsage : uint32_t { // NOLINT(performance-enum-size)
@@ -169,7 +169,8 @@ public:
   //! Returns the native backend resource handle.
   OXGN_GFX_NDAPI virtual auto GetNativeResource() const -> NativeResource = 0;
 
-  OXGN_GFX_NDAPI virtual auto GetNativeView(const DescriptorHandle& view_handle,
+  OXGN_GFX_NDAPI virtual auto GetNativeView(
+    const DescriptorAllocationHandle& view_handle,
     const BufferViewDescription& view_desc) const -> NativeView;
 
   //! Maps the buffer memory for CPU access.
@@ -230,20 +231,20 @@ protected:
    * @return NativeView The constant buffer view as a native object
    */
   [[nodiscard]] virtual auto CreateConstantBufferView(
-    const DescriptorHandle& view_handle, const BufferRange& range = {}) const
-    -> NativeView
+    const DescriptorAllocationHandle& view_handle,
+    const BufferRange& range = {}) const -> NativeView
     = 0;
 
   //! Returns a shader resource view (SRV) for this buffer.
   [[nodiscard]] virtual auto CreateShaderResourceView(
-    const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeView
+    const DescriptorAllocationHandle& view_handle, Format format,
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView
     = 0;
 
   //! Returns an unordered access view (UAV) for this buffer.
   [[nodiscard]] virtual auto CreateUnorderedAccessView(
-    const DescriptorHandle& view_handle, Format format, BufferRange range = {},
-    uint32_t stride = 0) const -> NativeView
+    const DescriptorAllocationHandle& view_handle, Format format,
+    BufferRange range = {}, uint32_t stride = 0) const -> NativeView
     = 0;
 };
 

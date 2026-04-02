@@ -28,22 +28,25 @@ auto DescriptorAllocator::CreateHeapSegment(oxygen::bindless::Capacity capacity,
 }
 
 auto DescriptorAllocator::GetShaderVisibleIndex(
-  const DescriptorHandle& handle) const noexcept -> ShaderVisibleIndex
+  const DescriptorAllocationHandle& handle) const noexcept -> ShaderVisibleIndex
 {
-  const auto segment = GetSegmentForHandle(handle);
-  if (!segment.has_value()) {
-    return kInvalidShaderVisibleIndex;
+  if (handle.IsBindless()) {
+    const auto* const domain_desc
+      = oxygen::bindless::generated::TryGetDomainDesc(handle.GetDomain());
+    if (domain_desc == nullptr) {
+      return kInvalidShaderVisibleIndex;
+    }
+    return ShaderVisibleIndex {
+      domain_desc->shader_index_base + handle.GetLocalSlot(),
+    };
   }
-  DCHECK_NOTNULL_F(segment.value());
 
-  // Because we map bindless tables 1:1 to heap segments, the shader-visible
-  // index is the local index into the segment.
-  return ShaderVisibleIndex { handle.GetBindlessHandle().get()
-    - (*segment)->GetBaseIndex().get() };
+  return GetRawShaderVisibleIndex(handle);
 }
 
 auto DescriptorAllocator::CopyDescriptor(
-  const DescriptorHandle& source, const DescriptorHandle& destination) -> void
+  const DescriptorAllocationHandle& source,
+  const DescriptorAllocationHandle& destination) -> void
 {
   // Validation: ensure handles are valid and of the same view type.
   if (!source.IsValid() || !destination.IsValid()) {

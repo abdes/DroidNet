@@ -17,8 +17,8 @@
 #include <wrl/client.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -79,7 +79,7 @@ public:
 private:
   struct RegisteredTexture {
     std::shared_ptr<graphics::Texture> texture;
-    graphics::DescriptorHandle source_srv_handle {};
+    graphics::DescriptorAllocationHandle source_srv_handle {};
     graphics::NativeView source_srv_view {};
     D3D12_CPU_DESCRIPTOR_HANDLE imgui_cpu_handle {};
     D3D12_GPU_DESCRIPTOR_HANDLE imgui_gpu_handle {};
@@ -118,10 +118,9 @@ private:
   };
   std::unordered_map<std::string, RegisteredTexture> registered_textures_ {};
 
-  [[nodiscard]] auto AllocatePersistentDescriptorSlot()
-    -> std::optional<UINT>;
-  [[nodiscard]] auto MakeSrvDescription(
-    const graphics::Texture& texture) const -> graphics::TextureViewDescription;
+  [[nodiscard]] auto AllocatePersistentDescriptorSlot() -> std::optional<UINT>;
+  [[nodiscard]] auto MakeSrvDescription(const graphics::Texture& texture) const
+    -> graphics::TextureViewDescription;
 };
 
 } // namespace oxygen::graphics::d3d12

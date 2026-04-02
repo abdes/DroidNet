@@ -9,7 +9,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -63,7 +63,7 @@ NOLINT_TEST_F(
   };
 
   // Action & Verify: Allocation should throw
-  EXPECT_THROW(z_allocator->Allocate(ResourceViewType::kTexture_SRV,
+  EXPECT_THROW(z_allocator->AllocateRaw(ResourceViewType::kTexture_SRV,
                  DescriptorVisibility::kShaderVisible),
     std::runtime_error);
 }

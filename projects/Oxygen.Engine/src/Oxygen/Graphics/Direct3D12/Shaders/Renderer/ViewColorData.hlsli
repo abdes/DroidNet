@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_VIEWCOLORDATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_VIEWCOLORDATA_HLSLI
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 struct ViewColorData
 {

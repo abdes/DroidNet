@@ -59,7 +59,7 @@ GpuDebugManager::GpuDebugManager(observer_ptr<Graphics> gfx)
       .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
       .stride = sizeof(GpuDebugLine),
     };
-    auto handle = allocator.Allocate(
+    auto handle = allocator.AllocateRaw(
       srv_desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
     line_buffer_srv_ = allocator.GetShaderVisibleIndex(handle);
     registry.RegisterView(*line_buffer_, std::move(handle), srv_desc);
@@ -71,7 +71,7 @@ GpuDebugManager::GpuDebugManager(observer_ptr<Graphics> gfx)
       .view_type = graphics::ResourceViewType::kStructuredBuffer_UAV,
       .stride = sizeof(GpuDebugLine),
     };
-    auto handle = allocator.Allocate(
+    auto handle = allocator.AllocateRaw(
       uav_desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
     line_buffer_uav_ = allocator.GetShaderVisibleIndex(handle);
     registry.RegisterView(*line_buffer_, std::move(handle), uav_desc);
@@ -82,7 +82,7 @@ GpuDebugManager::GpuDebugManager(observer_ptr<Graphics> gfx)
     graphics::BufferViewDescription uav_desc {
       .view_type = graphics::ResourceViewType::kRawBuffer_UAV,
     };
-    auto handle = allocator.Allocate(
+    auto handle = allocator.AllocateRaw(
       uav_desc.view_type, graphics::DescriptorVisibility::kShaderVisible);
     counter_buffer_uav_ = allocator.GetShaderVisibleIndex(handle);
     registry.RegisterView(*counter_buffer_, std::move(handle), uav_desc);

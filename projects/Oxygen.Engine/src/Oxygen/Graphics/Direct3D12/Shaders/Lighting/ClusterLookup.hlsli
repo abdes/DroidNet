@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI
 #define OXYGEN_D3D12_SHADERS_PASSES_LIGHTING_CLUSTERLOOKUP_HLSLI
 
-#include "Core/Bindless/Generated.BindlessLayout.hlsl"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 // Clustered light-grid lookup utilities shared by shading and debug consumers.
 //

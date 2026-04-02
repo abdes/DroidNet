@@ -8,8 +8,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>
@@ -17,7 +17,7 @@
 #include "./Mocks/MockDescriptorHeap.h"
 #include "./Mocks/MockDevice.h"
 
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::d3d12::DescriptorSegment;
@@ -32,12 +32,13 @@ using testing::SetArgPointee;
 namespace b = oxygen::bindless;
 
 // Helper: FakeDescriptorHandle for testing
-class FakeDescriptorHandle : public DescriptorHandle {
+class FakeDescriptorHandle : public DescriptorAllocationHandle {
 public:
   explicit FakeDescriptorHandle(const b::HeapIndex index,
     const ResourceViewType view_type = ResourceViewType::kNone,
     const DescriptorVisibility visibility = DescriptorVisibility::kNone)
-    : DescriptorHandle(index, view_type, visibility)
+    : DescriptorAllocationHandle(index, view_type, visibility,
+        oxygen::graphics::DescriptorAllocationKind::kRaw)
   {
   }
 };

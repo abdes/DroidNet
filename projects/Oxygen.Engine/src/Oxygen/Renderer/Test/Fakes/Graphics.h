@@ -185,8 +185,7 @@ public:
   auto EndEvent() -> void override { }
   auto SetMarker(std::string_view /*name*/) -> void override { }
 
-  auto SetPipelineState(graphics::GraphicsPipelineDesc desc)
-    -> void override
+  auto SetPipelineState(graphics::GraphicsPipelineDesc desc) -> void override
   {
     if (pipeline_log_ != nullptr) {
       pipeline_log_->binds.push_back(
@@ -352,24 +351,48 @@ public:
   MiniDescriptorAllocator() = default;
   ~MiniDescriptorAllocator() override = default;
 
-  auto Allocate(const graphics::ResourceViewType view_type,
+  auto AllocateRaw(const graphics::ResourceViewType view_type,
     const graphics::DescriptorVisibility visibility)
-    -> graphics::DescriptorHandle override
+    -> graphics::DescriptorAllocationHandle override
   {
     const auto key = Key(view_type, visibility);
     auto& state = domains_[key];
     const auto index = state.next_index++;
-    return CreateDescriptorHandle(
+    return CreateRawDescriptorHandle(
       bindless::HeapIndex { index }, view_type, visibility);
   }
 
-  auto Release(graphics::DescriptorHandle& handle) -> void override
+  auto AllocateBindless(const bindless::DomainToken domain,
+    const graphics::ResourceViewType view_type)
+    -> graphics::DescriptorAllocationHandle override
   {
+    auto& state = bindless_domains_[domain.get()];
+    const auto local_slot = state.next_index++;
+    state.active_counts[view_type] += 1U;
+    return CreateBindlessHandle(
+      graphics::DescriptorAllocationHandle::PackBindlessSlot(
+        domain, local_slot),
+      domain, view_type);
+  }
+
+  auto Release(graphics::DescriptorAllocationHandle& handle) -> void override
+  {
+    if (handle.IsBindless()) {
+      auto it = bindless_domains_.find(handle.GetDomain().get());
+      if (it != bindless_domains_.end()) {
+        auto count_it = it->second.active_counts.find(handle.GetViewType());
+        if (count_it != it->second.active_counts.end()
+          && count_it->second > 0U) {
+          count_it->second -= 1U;
+        }
+      }
+    }
     handle.Invalidate();
   }
 
-  auto CopyDescriptor(const graphics::DescriptorHandle& /*source*/,
-    const graphics::DescriptorHandle& /*destination*/) -> void override
+  auto CopyDescriptor(const graphics::DescriptorAllocationHandle& /*source*/,
+    const graphics::DescriptorAllocationHandle& /*destination*/)
+    -> void override
   {
   }
 
@@ -381,15 +404,16 @@ public:
     return bindless::Count { 1'000'000 }; // ample room
   }
 
-  [[nodiscard]] auto GetDomainBaseIndex(
-    graphics::ResourceViewType /*view_type*/,
-    graphics::DescriptorVisibility /*visibility*/) const
-    -> bindless::HeapIndex override
+  [[nodiscard]] auto GetDomainBaseIndex(bindless::DomainToken domain) const
+    -> bindless::ShaderVisibleIndex override
   {
-    return bindless::HeapIndex { 0 };
+    const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
+    return desc != nullptr
+      ? bindless::ShaderVisibleIndex { desc->shader_index_base }
+      : bindless::ShaderVisibleIndex { 0U };
   }
 
-  [[nodiscard]] auto Reserve(const graphics::ResourceViewType view_type,
+  [[nodiscard]] auto ReserveRaw(const graphics::ResourceViewType view_type,
     const graphics::DescriptorVisibility visibility, bindless::Count count)
     -> std::optional<bindless::HeapIndex> override
   {
@@ -403,8 +427,8 @@ public:
     return bindless::HeapIndex { base };
   }
 
-  [[nodiscard]] auto Contains(const graphics::DescriptorHandle& handle) const
-    -> bool override
+  [[nodiscard]] auto Contains(
+    const graphics::DescriptorAllocationHandle& handle) const -> bool override
   {
     return handle.IsValid();
   }
@@ -414,24 +438,48 @@ public:
     const graphics::DescriptorVisibility visibility) const
     -> bindless::Count override
   {
+    uint32_t total = 0U;
     const auto key = Key(view_type, visibility);
     auto it = domains_.find(key);
-    if (it == domains_.end()) {
-      return bindless::Count { 0 };
+    if (it != domains_.end()) {
+      total += it->second.next_index;
     }
-    return bindless::Count { static_cast<uint32_t>(it->second.next_index) };
+    if (visibility == graphics::DescriptorVisibility::kShaderVisible) {
+      for (const auto& [_, state] : bindless_domains_) {
+        auto active_it = state.active_counts.find(view_type);
+        if (active_it != state.active_counts.end()) {
+          total += active_it->second;
+        }
+      }
+    }
+    return bindless::Count { total };
   }
 
   [[nodiscard]] auto GetShaderVisibleIndex(
-    const graphics::DescriptorHandle& handle) const noexcept
+    const graphics::DescriptorAllocationHandle& handle) const noexcept
     -> bindless::ShaderVisibleIndex override
   {
-    return bindless::ShaderVisibleIndex { handle.GetBindlessHandle().get() };
+    if (handle.IsBindless()) {
+      const auto* const desc
+        = bindless::generated::TryGetDomainDesc(handle.GetDomain());
+      return desc != nullptr
+        ? bindless::ShaderVisibleIndex { desc->shader_index_base
+            + handle.GetLocalSlot() }
+        : oxygen::kInvalidShaderVisibleIndex;
+    }
+    const auto raw_base
+      = handle.GetViewType() == graphics::ResourceViewType::kSampler
+      ? bindless::generated::kSamplersCapacity
+      : (bindless::generated::kTexturesShaderIndexBase
+          + bindless::generated::kTexturesCapacity);
+    return bindless::ShaderVisibleIndex { raw_base
+      + handle.GetBindlessHandle().get() };
   }
 
 private:
   struct DomainState {
     uint32_t next_index { 0 };
+    std::unordered_map<graphics::ResourceViewType, uint32_t> active_counts {};
   };
   using DomainKey = uint64_t;
   static constexpr auto Key(graphics::ResourceViewType vt,
@@ -441,6 +489,7 @@ private:
       | static_cast<DomainKey>(static_cast<uint32_t>(vis));
   }
   std::unordered_map<DomainKey, DomainState> domains_;
+  std::unordered_map<uint16_t, DomainState> bindless_domains_;
 };
 
 //! Fake Graphics implementation providing staging buffers, queues and recorders
@@ -451,17 +500,24 @@ public:
     : Graphics("FakeGraphics")
   {
   }
+  ~FakeGraphics() override
+  {
+    // ResourceRegistry lives in the Graphics base and may still release view
+    // handles during base destruction. Leak the tiny test allocator so those
+    // handles never observe a dangling allocator pointer.
+    (void)descriptor_allocator_.release();
+  }
   // Test-only failure injection hooks
   void SetFailMap(const bool v) { fail_map_ = v; }
   void SetThrowOnCreateBuffer(const bool v) { throw_on_create_buffer_ = v; }
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
   {
-    return descriptor_allocator_;
+    return *descriptor_allocator_;
   }
   auto GetDescriptorAllocator() -> graphics::DescriptorAllocator&
   {
-    return descriptor_allocator_;
+    return *descriptor_allocator_;
   }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window> /*window_weak*/,
@@ -509,14 +565,19 @@ public:
 
     protected:
       [[nodiscard]] auto CreateShaderResourceView(
-        const graphics::DescriptorHandle& view_handle, Format /*format*/,
-        TextureType /*dimension*/,
+        const graphics::DescriptorAllocationHandle& view_handle,
+        Format /*format*/, TextureType /*dimension*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
         if (srv_view_log_ != nullptr) {
+          const auto index = view_handle.GetAllocator() != nullptr
+            ? view_handle.GetAllocator()
+                ->GetShaderVisibleIndex(view_handle)
+                .get()
+            : view_handle.GetBindlessHandle().get();
           srv_view_log_->events.push_back(SrvViewCreationLog::Event {
-            .index = view_handle.GetBindlessHandle().get(),
+            .index = index,
             .texture = this,
           });
         }
@@ -524,23 +585,24 @@ public:
         return { this, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
-        const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
-        TextureType /*dimension*/,
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        Format /*format*/, TextureType /*dimension*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
         return { this, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateRenderTargetView(
-        const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        Format /*format*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
         return { this, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateDepthStencilView(
-        const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
-        graphics::TextureSubResourceSet /*sub_resources*/,
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        Format /*format*/, graphics::TextureSubResourceSet /*sub_resources*/,
         bool /*is_read_only*/) const -> graphics::NativeView override
       {
         return { this, Texture::ClassTypeId() };
@@ -613,8 +675,7 @@ public:
       }
       [[nodiscard]] auto GetGPUVirtualAddress() const -> uint64_t override
       {
-        return static_cast<uint64_t>(
-          reinterpret_cast<std::uintptr_t>(this));
+        return static_cast<uint64_t>(reinterpret_cast<std::uintptr_t>(this));
       }
 
     protected:
@@ -637,23 +698,23 @@ public:
       }
 
       [[nodiscard]] auto CreateConstantBufferView(
-        const graphics::DescriptorHandle& /*view_handle*/,
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
         const graphics::BufferRange& /*range*/) const
         -> graphics::NativeView override
       {
         return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateShaderResourceView(
-        const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
-        graphics::BufferRange /*range*/, uint32_t /*stride*/) const
-        -> graphics::NativeView override
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        Format /*format*/, graphics::BufferRange /*range*/,
+        uint32_t /*stride*/) const -> graphics::NativeView override
       {
         return { this, Buffer::ClassTypeId() };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
-        const graphics::DescriptorHandle& /*view_handle*/, Format /*format*/,
-        graphics::BufferRange /*range*/, uint32_t /*stride*/) const
-        -> graphics::NativeView override
+        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        Format /*format*/, graphics::BufferRange /*range*/,
+        uint32_t /*stride*/) const -> graphics::NativeView override
       {
         return { this, Buffer::ClassTypeId() };
       }
@@ -734,7 +795,9 @@ public:
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_ {};
-  mutable MiniDescriptorAllocator descriptor_allocator_;
+  mutable std::unique_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
+    std::make_unique<MiniDescriptorAllocator>()
+  };
   // Test injection flags (mutable to allow const CreateBuffer)
   mutable bool fail_map_ { false };
   mutable bool throw_on_create_buffer_ { false };

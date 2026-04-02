@@ -1,5 +1,9 @@
 # 📘 Nexus Working Design Document (Updated)
 
+> **Migration note (2026-04-02):** semantic bindless allocations now flow
+> through `AllocateBindless(DomainToken, ResourceViewType)`, while transient or
+> explicit non-semantic descriptors use `AllocateRaw(...)`.
+
 ## 0. Purpose and scope
 
 This is a living design document for Nexus (the unified GPU resource manager)
@@ -112,9 +116,9 @@ but is not yet wired into all bindless allocation/reuse paths.
 
 Bindless mapping is generated from Bindless.yaml into:
 
-- Generated.Constants.h (sentinels, constants)
-- Generated.RootSignature.h (root parameter order)
-- Generated.Heaps.D3D12.h (heap strategy JSON)
+- Generated.BindlessAbi.h (sentinels, constants)
+- Generated.RootSignature.D3D12.h (root parameter order)
+- Generated.Strategy.D3D12.h (heap strategy JSON)
 - BindingSlots headers for C++ and HLSL
 
 ## 4. Bindless indices management

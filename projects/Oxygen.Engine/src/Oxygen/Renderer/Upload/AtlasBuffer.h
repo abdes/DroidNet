@@ -124,8 +124,9 @@ public:
   };
 
   //! Construct an AtlasBuffer.
-  OXGN_RNDR_API AtlasBuffer(
-    observer_ptr<Graphics> gfx, std::uint32_t stride, std::string debug_label);
+  OXGN_RNDR_API AtlasBuffer(observer_ptr<Graphics> gfx, std::uint32_t stride,
+    std::string debug_label,
+    bindless::DomainToken domain = bindless::generated::kGlobalSrvDomain);
 
   OXYGEN_MAKE_NON_COPYABLE(AtlasBuffer)
   OXYGEN_MAKE_NON_MOVABLE(AtlasBuffer)
@@ -207,6 +208,7 @@ private:
   observer_ptr<Graphics> gfx_;
   std::string debug_label_;
   std::uint32_t stride_ { 0 };
+  bindless::DomainToken domain_ { bindless::generated::kGlobalSrvDomain };
 
   // Primary chunk (Phase 1)
   std::shared_ptr<graphics::Buffer> primary_buffer_;

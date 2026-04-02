@@ -20,7 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -225,12 +225,16 @@ namespace {
     DCHECK_NOTNULL_F(context.view_constants);
     recorder.SetPipelineState(pso_desc);
     recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(binding::RootParam::kViewConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
       context.view_constants->GetGPUVirtualAddress());
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants), 0U, 0U);
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
+      0U, 0U);
     recorder.SetComputeRoot32BitConstant(
-      static_cast<std::uint32_t>(binding::RootParam::kRootConstants),
+      static_cast<std::uint32_t>(
+        oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
       pass_constants_index.get(), 1U);
   }
 
@@ -395,9 +399,9 @@ struct VsmProjectionPass::Impl {
       "Failed to map VSM projection upload buffer");
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto srv_handle
-      = allocator.Allocate(ResourceViewType::kStructuredBuffer_SRV,
-        graphics::DescriptorVisibility::kShaderVisible);
+    auto srv_handle = allocator.AllocateBindless(
+      oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
     CHECK_F(srv_handle.IsValid(), "Failed to allocate VSM projection SRV");
     projection_buffer_srv_index = allocator.GetShaderVisibleIndex(srv_handle);
 
@@ -446,7 +450,7 @@ struct VsmProjectionPass::Impl {
     auto& registry = gfx->GetResourceRegistry();
     pass_constants_indices.reserve(required_slot_count);
     for (std::uint32_t i = 0U; i < required_slot_count; ++i) {
-      auto handle = allocator.Allocate(ResourceViewType::kConstantBuffer,
+      auto handle = allocator.AllocateRaw(ResourceViewType::kConstantBuffer,
         graphics::DescriptorVisibility::kShaderVisible);
       CHECK_F(handle.IsValid(),
         "Failed to allocate VSM projection pass-constants CBV");
@@ -529,7 +533,7 @@ struct VsmProjectionPass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM projection buffer view");
     const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
     auto view = registry.RegisterView(buffer, std::move(handle), desc);
@@ -550,7 +554,7 @@ struct VsmProjectionPass::Impl {
     }
 
     auto& allocator = gfx->GetDescriptorAllocator();
-    auto handle = allocator.Allocate(desc.view_type, desc.visibility);
+    auto handle = allocator.AllocateRaw(desc.view_type, desc.visibility);
     CHECK_F(handle.IsValid(), "Failed to allocate VSM projection texture view");
     const auto shader_visible_index = allocator.GetShaderVisibleIndex(handle);
     auto view = registry.RegisterView(texture, std::move(handle), desc);

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 
@@ -18,7 +18,7 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferRange;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::BufferViewDescription;
-using oxygen::graphics::DescriptorHandle;
+using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::NativeResource;
 using oxygen::graphics::NativeView;
 using oxygen::graphics::ResourceStates;
@@ -53,7 +53,7 @@ public:
   auto GetDescriptor() const noexcept -> BufferDesc override { return {}; }
   auto SetName(std::string_view /*name*/) noexcept -> void override { }
 
-  auto GetNativeView(const DescriptorHandle& /*view_handle*/,
+  auto GetNativeView(const DescriptorAllocationHandle& /*view_handle*/,
     const BufferViewDescription& /*view_desc*/) const -> NativeView override
   {
     return {};
@@ -67,20 +67,23 @@ protected:
   }
   auto DoUnMap() noexcept -> void override { }
 
-  auto CreateConstantBufferView(const DescriptorHandle& /*view_handle*/,
+  auto CreateConstantBufferView(
+    const DescriptorAllocationHandle& /*view_handle*/,
     const BufferRange& /*range*/ = {}) const -> NativeView override
   {
     return {};
   }
-  auto CreateShaderResourceView(const DescriptorHandle& /*view_handle*/,
-    Format /*format*/, BufferRange /*range*/ = {},
-    uint32_t /*stride*/ = 0) const -> NativeView override
+  auto CreateShaderResourceView(
+    const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+    BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const
+    -> NativeView override
   {
     return {};
   }
-  auto CreateUnorderedAccessView(const DescriptorHandle& /*view_handle*/,
-    Format /*format*/, BufferRange /*range*/ = {},
-    uint32_t /*stride*/ = 0) const -> NativeView override
+  auto CreateUnorderedAccessView(
+    const DescriptorAllocationHandle& /*view_handle*/, Format /*format*/,
+    BufferRange /*range*/ = {}, uint32_t /*stride*/ = 0) const
+    -> NativeView override
   {
     return {};
   }
