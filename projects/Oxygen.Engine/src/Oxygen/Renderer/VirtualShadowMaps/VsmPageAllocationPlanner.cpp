@@ -205,6 +205,20 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
   auto result = Result { .snapshot = BuildBaseSnapshot(seam) };
   auto& plan = result.plan;
   auto& snapshot = result.snapshot;
+  auto effective_previous_frame = previous_frame;
+
+  if (effective_previous_frame != nullptr
+    && effective_previous_frame->physical_pages.size()
+      != snapshot.physical_pages.size()) {
+    LOG_F(WARNING,
+      "VsmPageAllocationPlanner: ignoring previous extracted frame due to "
+      "physical-page capacity mismatch (previous={}, current={}, "
+      "cache_state={})",
+      effective_previous_frame->physical_pages.size(),
+      snapshot.physical_pages.size(),
+      static_cast<std::uint32_t>(cache_data_state));
+    effective_previous_frame = nullptr;
+  }
 
   auto pending_requests = std::vector<PendingRequest> {};
   pending_requests.resize(requests.size());
@@ -268,7 +282,7 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
   }
 
   if (cache_data_state == VsmCacheDataState::kAvailable
-    && previous_frame != nullptr) {
+    && effective_previous_frame != nullptr) {
     for (const auto& remap_entry : seam.previous_to_current_remap.entries) {
       remap_by_previous_id.try_emplace(remap_entry.previous_id, remap_entry);
       if (remap_entry.rejection_reason != VsmReuseRejectionReason::kNone
@@ -278,7 +292,7 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
     }
   }
 
-  if (previous_frame != nullptr) {
+  if (effective_previous_frame != nullptr) {
     for (std::uint32_t page_index = 0;
       page_index < snapshot.physical_pages.size(); ++page_index) {
       const auto physical_page = VsmPhysicalPageIndex { .value = page_index };
@@ -288,7 +302,8 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
         "VsmPageAllocationPlanner: physical page {} must resolve to a valid "
         "slice for the active pool layout",
         physical_page.value);
-      const auto& previous_meta = previous_frame->physical_pages[page_index];
+      const auto& previous_meta
+        = effective_previous_frame->physical_pages[page_index];
       if (!previous_meta.is_allocated) {
         available_physical_pages_by_slice[*physical_page_slice].push_back(
           physical_page);
