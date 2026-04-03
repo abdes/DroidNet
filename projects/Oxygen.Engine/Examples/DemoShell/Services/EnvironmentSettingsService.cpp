@@ -3027,8 +3027,8 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
     = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
   sun_component_disk_radius_deg_
     = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
-  sun_shadow_bias_ = 0.0F;
-  sun_shadow_normal_bias_ = 0.02F;
+  sun_shadow_bias_ = scene::kDefaultShadowBias;
+  sun_shadow_normal_bias_ = scene::kDefaultShadowNormalBias;
   sun_shadow_resolution_hint_
     = static_cast<int>(scene::ShadowResolutionHint::kMedium);
   sun_shadow_cascade_count_ = static_cast<int>(default_csm.cascade_count);

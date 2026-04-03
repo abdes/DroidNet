@@ -114,6 +114,7 @@ namespace {
     }
 
     if (layout.page_grid_origin.size() != layout.clip_level_count
+      || layout.clip_min_corner_ls.size() != layout.clip_level_count
       || layout.page_world_size.size() != layout.clip_level_count
       || layout.near_depth.size() != layout.clip_level_count
       || layout.far_depth.size() != layout.clip_level_count) {

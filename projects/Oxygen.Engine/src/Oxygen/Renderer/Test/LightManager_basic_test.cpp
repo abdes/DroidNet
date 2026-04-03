@@ -287,6 +287,32 @@ NOLINT_TEST_F(LightManagerTest,
   EXPECT_EQ(manager.GetPositionalShadowCandidates().front().light_index, 0U);
 }
 
+NOLINT_TEST_F(LightManagerTest,
+  CollectFromNode_DirectionalShadowCandidateUsesNonZeroDefaultShadowBias)
+{
+  auto& manager = Manager();
+  manager.OnFrameStart(
+    RendererTagFactory::Get(), SequenceNumber { 1 }, Slot { 0 });
+
+  auto node = CreateNode("dir", /*visible=*/true, /*casts_shadows=*/true);
+  auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  impl->get().AddComponent<oxygen::scene::DirectionalLight>();
+  auto& light = impl->get().GetComponent<oxygen::scene::DirectionalLight>();
+  light.Common().casts_shadows = true;
+  UpdateTransforms(node);
+
+  manager.CollectFromNode(node.GetHandle(), impl->get());
+
+  ASSERT_EQ(manager.GetDirectionalShadowCandidates().size(), 1U);
+  const auto& candidate = manager.GetDirectionalShadowCandidates().front();
+  const auto defaults = oxygen::scene::ShadowSettings {};
+  EXPECT_FLOAT_EQ(candidate.bias, defaults.bias);
+  EXPECT_FLOAT_EQ(candidate.normal_bias, defaults.normal_bias);
+  EXPECT_GT(candidate.bias, 0.0F);
+  EXPECT_GT(candidate.normal_bias, 0.0F);
+}
+
 NOLINT_TEST(LightCommonDefaultsTest,
   CascadedShadowSettings_DefaultsUseCanonicalCascadeDistances)
 {
@@ -302,6 +328,13 @@ NOLINT_TEST(LightCommonDefaultsTest,
   EXPECT_FLOAT_EQ(defaults.distribution_exponent, 3.0F);
   EXPECT_FLOAT_EQ(defaults.transition_fraction, 0.1F);
   EXPECT_FLOAT_EQ(defaults.distance_fadeout_fraction, 0.1F);
+}
+
+NOLINT_TEST(LightCommonDefaultsTest, ShadowSettings_DefaultsUseNonZeroBiases)
+{
+  const oxygen::scene::ShadowSettings defaults {};
+  EXPECT_GT(defaults.bias, 0.0F);
+  EXPECT_GT(defaults.normal_bias, 0.0F);
 }
 
 NOLINT_TEST_F(LightManagerTest,
