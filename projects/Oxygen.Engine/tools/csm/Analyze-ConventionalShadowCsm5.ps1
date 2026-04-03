@@ -21,77 +21,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-function Resolve-RepoPath {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$RepoRoot,
-
-    [Parameter(Mandatory = $true)]
-    [string]$Path
-  )
-
-  if ([System.IO.Path]::IsPathRooted($Path)) {
-    return [System.IO.Path]::GetFullPath($Path)
-  }
-
-  return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $Path))
-}
-
-function Invoke-StableTimingAnalysis {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$InvokeScript,
-
-    [Parameter(Mandatory = $true)]
-    [string]$CapturePath,
-
-    [Parameter(Mandatory = $true)]
-    [string]$UiScriptPath,
-
-    [Parameter(Mandatory = $true)]
-    [string]$PassName,
-
-    [Parameter(Mandatory = $true)]
-    [string]$ReportPath
-  )
-
-  & $InvokeScript `
-    -CapturePath $CapturePath `
-    -UiScriptPath $UiScriptPath `
-    -PassName $PassName `
-    -ReportPath $ReportPath
-
-  $durationLine = @(Select-String `
-    -Path $ReportPath `
-    -Pattern '^authoritative_scope_gpu_duration_ms=(.+)$')
-  if ($durationLine.Count -ne 1) {
-    throw "Timing report did not contain exactly one authoritative_scope_gpu_duration_ms entry: $ReportPath"
-  }
-
-  [void][double]::Parse(
-    $durationLine[0].Matches[0].Groups[1].Value,
-    [System.Globalization.CultureInfo]::InvariantCulture
-  )
-}
-
-function Invoke-PythonCommand {
-  param(
-    [Parameter(Mandatory = $true)]
-    [string]$ScriptPath,
-
-    [Parameter(Mandatory = $true)]
-    [string[]]$Arguments
-  )
-
-  & python $ScriptPath @Arguments
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
-    throw "python exited with code $exitCode while running $ScriptPath"
-  }
-
-  $global:LASTEXITCODE = 0
-}
+. (Join-Path $PSScriptRoot '..\shadows\PowerShellCommon.ps1')
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $captureFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $CapturePath
@@ -109,7 +39,7 @@ if ([string]::IsNullOrWhiteSpace($OutputStem)) {
 $outputStemFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $OutputStem
 $baselineStemFullPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $BaselineStem
 $compareReportPath = "$outputStemFullPath.baseline_compare.txt"
-$invokeScript = Join-Path $PSScriptRoot 'Invoke-RenderDocUiAnalysis.ps1'
+$invokeScript = Join-Path $PSScriptRoot '..\shadows\Invoke-RenderDocUiAnalysis.ps1'
 
 foreach ($requiredReport in @(
     "$baselineStemFullPath.shadow_timing.txt",
