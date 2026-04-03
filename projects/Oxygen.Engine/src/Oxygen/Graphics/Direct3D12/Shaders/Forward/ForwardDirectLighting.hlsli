@@ -114,6 +114,7 @@ static inline float ComputePerceptualLuma(float3 rgb)
 static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnosticTerms(
     DirectionalLightBasic dl,
     float3 world_pos,
+    float2 screen_position_xy,
     GpuSkyAtmosphereParams atmo,
     float3 shadow_normal_ws,
     float3 N,
@@ -152,7 +153,7 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     terms.transmittance_luma = ComputePerceptualLuma(transmittance);
 
     terms.shadow_visibility = saturate(ComputeShadowVisibility(
-        dl.shadow_index, world_pos, shadow_normal_ws, L));
+        dl.shadow_index, world_pos, screen_position_xy, shadow_normal_ws, L));
 
     const float3 H_unorm = V + L;
     const float H_len_sq = dot(H_unorm, H_unorm);
@@ -184,6 +185,7 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
 static inline float3 EvaluateDirectionalLightContribution(
     DirectionalLightBasic dl,
     float3 world_pos,
+    float2 screen_position_xy,
     GpuSkyAtmosphereParams atmo,
     float3 shadow_normal_ws,
     float3 N,
@@ -195,7 +197,7 @@ static inline float3 EvaluateDirectionalLightContribution(
     float  roughness)
 {
     return EvaluateDirectionalLightDiagnosticTerms(
-        dl, world_pos, atmo, shadow_normal_ws, N, V, NdotV, F0, base_rgb,
+        dl, world_pos, screen_position_xy, atmo, shadow_normal_ws, N, V, NdotV, F0, base_rgb,
         metalness, roughness).full_direct;
 }
 
@@ -250,6 +252,7 @@ float3 AccumulateDirectionalLightsRawLambert(
 
 float3 AccumulateDirectionalLightGatesDebug(
     float3 world_pos,
+    float2 screen_position_xy,
     GpuSkyAtmosphereParams atmo,
     float3 shadow_normal_ws,
     float3 N,
@@ -280,7 +283,7 @@ float3 AccumulateDirectionalLightGatesDebug(
     for (uint i = 0; i < dir_limit; ++i) {
         const DirectionalLightDiagnosticTerms terms =
             EvaluateDirectionalLightDiagnosticTerms(
-                dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+                dir_lights[i], world_pos, screen_position_xy, atmo, shadow_normal_ws, N, V, NdotV,
                 F0, base_rgb, metalness, roughness);
         shadow_sum += terms.shadow_visibility * terms.weight;
         trans_sum += terms.transmittance_luma * terms.weight;
@@ -296,6 +299,7 @@ float3 AccumulateDirectionalLightGatesDebug(
 
 float3 AccumulateDirectionalLightsBrdfCore(
     float3 world_pos,
+    float2 screen_position_xy,
     GpuSkyAtmosphereParams atmo,
     float3 shadow_normal_ws,
     float3 N,
@@ -323,7 +327,7 @@ float3 AccumulateDirectionalLightsBrdfCore(
     for (uint i = 0; i < dir_limit; ++i) {
         const DirectionalLightDiagnosticTerms terms =
             EvaluateDirectionalLightDiagnosticTerms(
-                dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+                dir_lights[i], world_pos, screen_position_xy, atmo, shadow_normal_ws, N, V, NdotV,
                 F0, base_rgb, metalness, roughness);
         brdf_core += terms.brdf_core * dir_lights[i].color_rgb;
     }
@@ -333,6 +337,7 @@ float3 AccumulateDirectionalLightsBrdfCore(
 
 float3 AccumulateDirectionalLights(
     float3 world_pos,
+    float2 screen_position_xy,
     GpuSkyAtmosphereParams atmo,
     float3 shadow_normal_ws,
     float3 N,
@@ -361,7 +366,7 @@ float3 AccumulateDirectionalLights(
     const uint dir_limit = min(dir_count, MAX_DIRECTIONAL_LIGHTS);
     for (uint i = 0; i < dir_limit; ++i) {
         direct += EvaluateDirectionalLightContribution(
-            dir_lights[i], world_pos, atmo, shadow_normal_ws, N, V, NdotV,
+            dir_lights[i], world_pos, screen_position_xy, atmo, shadow_normal_ws, N, V, NdotV,
             F0, base_rgb, metalness, roughness);
     }
 

@@ -159,6 +159,11 @@ Cross-reference:
     `Oxygen.Renderer.VsmShadowProjection.Tests` program through
     `VsmShadowProjectionLiveSceneTest.*`, which validates real Stage 1-14 directional and
     paged-local projection/composite behavior plus live-shell directional shadow-band probes
+  - the renderer-owned lighting-consumer seam now has explicit regression coverage in
+    `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`: the localized directional live-shell test
+    runs `ShaderPass` in `DirectLightGates` mode and asserts the forward-lighting shadow-visibility
+    channel matches the Stage 15 directional mask at the sampled floor pixels instead of relying on
+    a second world-position reprojection path
   - the Stage 14 dedicated suite now lives in `VsmShadowHzb_test.cpp` under
     `Oxygen.Renderer.VsmShadowHzb.Tests` and validates the exact HZB mip chain from real Stage 13
     directional and local-light inputs instead of mixing stage ownership with synthetic seeded HZB
@@ -326,14 +331,24 @@ Cross-reference:
 
 ## Known Forward Gaps
 
-- Phase J is implemented as a standalone invalidation slice, but it is not yet wired into a renderer-owned VSM shadow orchestrator. Phase K-a owns that renderer integration path.
-- The page-request generator now has focused off-screen GPU execution coverage, but it is still not wired into the main renderer orchestration path. Phase K-a owns that integration.
-- The standalone Stage 15 projection pass now exists, but its shadow-mask output is not yet fully consumed by the normal renderer path. Phase K-b and Phase K-c own that forward-lighting integration.
+- Phase J invalidation and the Stage 5 page-request generator are now wired into the renderer-owned
+  VSM shell. Current directional smoke evidence in
+  `out/build-ninja/analysis/directional_vsm_40frame_smoke.log` shows the live shell producing
+  nonzero page requests (`request_count=236`) once the real `physics_domains` scene settles
+  (frame generation 9 onward).
+- The standalone Stage 15 projection pass now publishes both directional and composite shadow-mask
+  slots into `VsmFrameBindings`. The **directional** mask is consumed by the normal forward
+  directional-light path, and the broader composite/screen shadow mask remains primarily a
+  debug/local-light follow-on surface rather than a fully generalized normal-path product. This
+  publication/consumer seam is only one localized Stage 15 contract and must not be overclaimed as
+  full directional renderer-path closure.
 - Distant-local-light refresh budgeting and point-light per-face update scheduling remain Phase K-d work.
 - Translucent-receiver transmission sampling for VSM-projected shadows is not integrated yet. That stays deferred until the renderer path actually consumes the Stage 15 mask.
-- Dedicated Phase F coverage already proves previous-frame screen-space HZB consumption during
-  instance culling. The remaining Phase F gap is broader live-scene visual validation across the
-  Stage 12→15 path, where user-provided evidence still shows incorrect final floor-shadow output.
+- Dedicated Phase F coverage proves previous-frame screen-space HZB consumption during
+  instance culling, and localized Stage 15 directional consumer-seam regressions now have explicit
+  Debug coverage. However the broader directional renderer path remains `in_progress`: lower-stage
+  correctness still has to be revalidated in serialized stage order, and current user reports show
+  page-management / camera-rotation failures that are blocking closeout.
 
 ## Helper Policy
 

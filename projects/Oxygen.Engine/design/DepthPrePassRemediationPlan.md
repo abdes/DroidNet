@@ -111,7 +111,7 @@ UE5 closeness check:
 Completion evidence:
 
 - implementation:
-  - `Examples/RenderScene/renderdoc_ui_analysis.py` now recognizes
+  - `tools/shadows/renderdoc_ui_analysis.py` now recognizes
     both `DepthPrePass` and `ConventionalShadowRasterPass` as routable pass
     names for the shared timing and pass-focus scripts
   - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.cpp` now assigns distinct

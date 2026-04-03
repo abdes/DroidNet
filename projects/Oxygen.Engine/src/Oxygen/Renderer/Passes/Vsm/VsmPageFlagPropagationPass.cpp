@@ -71,6 +71,16 @@ namespace {
     return count == 0U ? 0U : (count + group_size - 1U) / group_size;
   }
 
+  auto ReduceLevelDim(const std::uint32_t base_dim,
+    const std::uint32_t level) noexcept -> std::uint32_t
+  {
+    auto dim = base_dim;
+    for (std::uint32_t i = 0U; i < level && dim > 1U; ++i) {
+      dim = (dim + 1U) >> 1U;
+    }
+    return std::max(dim, 1U);
+  }
+
   auto BuildBufferViewDesc(const ResourceViewType view_type,
     const std::uint64_t size_bytes, const std::uint32_t stride)
     -> graphics::BufferViewDescription
@@ -128,17 +138,24 @@ namespace {
     const auto pages_per_level = pages_x * pages_y;
     for (std::uint32_t target_level = 1U; target_level < level_count;
       ++target_level) {
+      const auto source_level = target_level - 1U;
+      const auto source_pages_x = ReduceLevelDim(pages_x, source_level);
+      const auto source_pages_y = ReduceLevelDim(pages_y, source_level);
       dispatches.push_back(DispatchRecord {
         .gpu = VsmShaderPageHierarchyDispatch {
           .first_page_table_entry = first_page_table_entry,
-          .pages_x = pages_x,
-          .pages_y = pages_y,
+          .level0_pages_x = pages_x,
+          .level0_pages_y = pages_y,
           .pages_per_level = pages_per_level,
-          .source_level = target_level - 1U,
+          .source_level = source_level,
           .target_level = target_level,
+          .source_pages_x = source_pages_x,
+          .source_pages_y = source_pages_y,
         },
-        .group_count_x = MakeDispatchGroups(pages_x, kPropagationGroupSizeX),
-        .group_count_y = MakeDispatchGroups(pages_y, kPropagationGroupSizeY),
+        .group_count_x
+        = MakeDispatchGroups(source_pages_x, kPropagationGroupSizeX),
+        .group_count_y
+        = MakeDispatchGroups(source_pages_y, kPropagationGroupSizeY),
       });
     }
   }

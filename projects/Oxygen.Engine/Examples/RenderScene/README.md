@@ -68,7 +68,7 @@ standalone Python replay. Use:
 
 The baseline K-a analyzer is:
 
-- `Examples/RenderScene/AnalyzeRenderDocCapture.py`
+- `tools/vsm/AnalyzeRenderDocCapture.py`
 
 It stays bounded and answers whether a replay-safe capture is valid automated
 Phase K-a evidence. The baseline report records:
@@ -91,9 +91,9 @@ $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine
 
 Deep-dive scripts stay separate from the baseline:
 
-- `Examples/RenderScene/AnalyzeRenderDocPassFocus.py`
+- `tools/shadows/AnalyzeRenderDocPassFocus.py`
   - inspect one pass with `OXYGEN_RENDERDOC_PASS_NAME`
-- `Examples/RenderScene/AnalyzeRenderDocPassTiming.py`
+- `tools/shadows/AnalyzeRenderDocPassTiming.py`
   - measure GPU time and work events for one pass with
     `OXYGEN_RENDERDOC_PASS_NAME`
 - `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
@@ -101,7 +101,7 @@ Deep-dive scripts stay separate from the baseline:
 - `Examples/RenderScene/AnalyzeRenderDocShaderPassDepthEqual.py`
   - verify `ShaderPass` depth-equal state, matched depth target/resource
     states, and sample `PixelHistory` evidence for accepted/rejected fragments
-- `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
+- `tools/vsm/AnalyzeRenderDocStage15Masks.py`
   - inspect Stage 15 mask presence, writer events, and any observed shader-side
     consumers
 - `Examples/RenderScene/AnalyzeRenderDocLightCulling.py`
@@ -171,11 +171,11 @@ Working rules:
 - inspect the same pass with `AnalyzeRenderDocPassFocus.py` when the timing
   alone does not explain the cost
 - keep each script focused on one question and route shared UI/capture/report
-  behavior through `renderdoc_ui_analysis.py`
+  behavior through `tools/shadows/renderdoc_ui_analysis.py`
 
 The Stage 13 optimization followed exactly that workflow:
 
-1. capture late frames with `Run-RenderSceneCapture.ps1`
+1. capture late frames with the direct `RenderScene` CLI capture command
 2. time `VsmStaticDynamicMergePass`
 3. inspect the merge pass scope and event mix
 4. redesign the workload shape

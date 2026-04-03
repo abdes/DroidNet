@@ -604,6 +604,15 @@ namespace {
       = std::move(merged_feedback);
   }
 
+  auto ClearTransientInvalidationFlags(VsmPageAllocationSnapshot& snapshot)
+    -> void
+  {
+    for (auto& physical_page : snapshot.physical_pages) {
+      physical_page.static_invalidated = false;
+      physical_page.dynamic_invalidated = false;
+    }
+  }
+
 } // namespace
 
 VsmCacheManager::VsmCacheManager(
@@ -1070,6 +1079,7 @@ auto VsmCacheManager::QueueFrameExtraction(graphics::CommandRecorder& recorder)
     CarryForwardContinuityPublications(*runtime_state_.captured_seam,
       *runtime_state_.previous_frame, extracted_snapshot);
   }
+  ClearTransientInvalidationFlags(extracted_snapshot);
   auto queued_readback = std::optional<PendingFrameExtraction> {};
 
   const auto readback_manager = gfx_ != nullptr
@@ -1158,6 +1168,7 @@ auto VsmCacheManager::ExtractFrameData() -> void
   }
   static_cast<void>(TrySynchronizeSnapshotFromGpu(
     *runtime_state_.current_frame, extracted_snapshot));
+  ClearTransientInvalidationFlags(extracted_snapshot);
 
   runtime_state_.previous_frame = std::move(extracted_snapshot);
   runtime_state_.cache_data_state = VsmCacheDataState::kAvailable;
@@ -1560,6 +1571,7 @@ auto VsmCacheManager::FinalizePendingFrameExtraction() -> void
   snapshot.physical_pages = DeserializeBufferReadback<VsmPhysicalPageMeta>(
     physical_bytes, pending.physical_page_count,
     "VsmCacheManager.ExtractFrameData.PhysicalMeta");
+  ClearTransientInvalidationFlags(snapshot);
 
   const auto page_table_bytes = AwaitBufferReadback(*readback_manager,
     pending.page_table_readback, pending.page_table_ticket,
