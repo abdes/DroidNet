@@ -1,8 +1,24 @@
 # CSM Tooling
 
-This directory is the canonical home for conventional-shadow validation tools.
+This directory is the canonical home for **conventional-shadow-specific**
+validation tools.
 
-Use it for three things:
+Ownership split:
+
+- `tools/shadows/`
+  - shared/common RenderDoc helpers used by both conventional shadows and VSM
+  - current shared pass analyzers:
+    - `AnalyzeRenderDocPassTiming.py`
+    - `AnalyzeRenderDocPassFocus.py`
+    - `renderdoc_ui_analysis.py`
+- `tools/csm/`
+  - conventional-shadow-specific analyzers, comparison scripts, and PowerShell
+    workflows
+  - imports shared RenderDoc helpers directly from `tools/shadows/`
+- `tools/vsm/`
+  - VSM-specific RenderDoc entrypoints and wrappers
+
+Use `tools/csm/` for three things:
 
 - building and running the unified conventional-shadow test target
 - capturing a conventional-shadow baseline from `RenderScene`
@@ -86,6 +102,20 @@ Each phase script:
 - runs the required RenderDoc UI analyses
 - writes phase reports next to the capture stem
 - runs the matching Python comparison/report step when that phase requires it
+
+## Shared RenderDoc helpers
+
+Shared pass analyzers and helper modules live in `tools/shadows/`.
+The CSM PowerShell workflows call those shared scripts directly.
+
+## RenderDoc Python constraint
+
+RenderDoc's embedded Python may execute entry scripts **without defining
+`__file__`**.
+
+Do not "simplify" the path-resolution logic back to unconditional
+`Path(__file__)` access unless you have verified that the exact qrenderdoc
+execution mode still provides it.
 
 ## Notes
 

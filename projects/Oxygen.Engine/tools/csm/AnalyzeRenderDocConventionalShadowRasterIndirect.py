@@ -56,19 +56,12 @@ def resolve_script_dir():
             continue
         seen.add(normalized)
 
-        if (candidate_root / "renderdoc_ui_analysis.py").exists():
-            return candidate_root
-
-        candidate = candidate_root / "tools" / "csm"
-        if (candidate / "renderdoc_ui_analysis.py").exists():
-            return candidate
-
-        candidate = candidate_root / "Examples" / "RenderScene"
+        candidate = candidate_root / "tools" / "shadows"
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
     raise RuntimeError(
-        "Unable to locate tools/csm from the RenderDoc script path. "
+        "Unable to locate tools/shadows from the RenderDoc script path. "
         "Launch qrenderdoc with the repository script path."
     )
 

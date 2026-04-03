@@ -39,7 +39,7 @@ $invokeScript = Join-Path $PSScriptRoot '..\shadows\Invoke-RenderDocUiAnalysis.p
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowRasterPass' `
   -ReportPath "$outputStemFullPath.shadow_timing.txt" `
   -Label 'Conventional shadow timing report'
@@ -47,14 +47,14 @@ Invoke-StableTimingAnalysis `
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ShaderPass' `
   -ReportPath "$outputStemFullPath.shader_timing.txt" `
   -Label 'Conventional shader timing report'
 
 & $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassFocus.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassFocus.py') `
   -PassName 'ConventionalShadowRasterPass' `
   -ReportPath "$outputStemFullPath.shadow_parent_focus.txt"
 

@@ -60,42 +60,42 @@ if (-not (Test-Path -LiteralPath "$outputStemFullPath.benchmark.log")) {
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowRasterPass' `
   -ReportPath "$outputStemFullPath.shadow_timing.txt"
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ShaderPass' `
   -ReportPath "$outputStemFullPath.shader_timing.txt"
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ScreenHzbBuildPass' `
   -ReportPath "$outputStemFullPath.screen_hzb_timing.txt"
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowReceiverAnalysisPass' `
   -ReportPath "$outputStemFullPath.receiver_analysis_timing.txt"
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowReceiverMaskPass' `
   -ReportPath "$outputStemFullPath.receiver_mask_timing.txt"
 
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowCasterCullingPass' `
   -ReportPath "$outputStemFullPath.caster_culling_timing.txt"
 
