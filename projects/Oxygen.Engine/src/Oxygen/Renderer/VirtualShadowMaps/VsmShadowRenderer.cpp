@@ -423,6 +423,7 @@ namespace {
     glm::mat4 light_projection { 1.0F };
     glm::vec4 view_origin_ws_pad { 0.0F };
     glm::ivec2 page_grid_origin { 0, 0 };
+    glm::vec2 clip_min_corner_ls { 0.0F, 0.0F };
     float page_world_size { 1.0F };
     float near_depth { 0.01F };
     float far_depth { 1.0F };
@@ -584,6 +585,10 @@ namespace {
         "world size x={} y={}; using max for clipmap metadata",
         clip_index, page_world_size_x, page_world_size_y);
     }
+    // Keep the exact snapped light-space corner, not just the rounded page
+    // origin. Reuse validation needs this exact value to detect sub-page
+    // camera motion that would otherwise leave cached pages spatially
+    // misregistered against the new projection window.
     const auto clip_min_corner_ls = glm::vec2(snapped_center_ls)
       - glm::vec2(padded_half_extent_x, padded_half_extent_y);
     const auto page_grid_origin = glm::ivec2 {
@@ -622,6 +627,7 @@ namespace {
       .light_projection = light_projection,
       .view_origin_ws_pad = glm::vec4(light_eye, 0.0F),
       .page_grid_origin = page_grid_origin,
+      .clip_min_corner_ls = clip_min_corner_ls,
       .page_world_size = std::max(page_world_size_x, page_world_size_y),
       .near_depth = std::max(prev_depth, 0.01F),
       .far_depth = end_depth,
@@ -662,6 +668,7 @@ namespace {
         : "vsm-directional-invalid",
     };
     desc.page_grid_origin.reserve(clip_level_count);
+    desc.clip_min_corner_ls.reserve(clip_level_count);
     desc.page_world_size.reserve(clip_level_count);
     desc.near_depth.reserve(clip_level_count);
     desc.far_depth.reserve(clip_level_count);
@@ -679,6 +686,7 @@ namespace {
           candidate.cascade_distances[clip_index], previous_far + 1.0F);
         const auto clip_extent_world = glm::max(current_far * 2.0F, 1.0F);
         desc.page_grid_origin.push_back(glm::ivec2 { 0, 0 });
+        desc.clip_min_corner_ls.push_back(glm::vec2 { 0.0F, 0.0F });
         desc.page_world_size.push_back(
           clip_extent_world / static_cast<float>(desc.pages_per_axis));
         desc.near_depth.push_back(glm::max(previous_far, 0.01F));
@@ -699,6 +707,7 @@ namespace {
         *frustum_context, light_context, candidate, clip_index,
         desc.pages_per_axis, virtual_resolution, prev_depth);
       desc.page_grid_origin.push_back(clip_state.page_grid_origin);
+      desc.clip_min_corner_ls.push_back(clip_state.clip_min_corner_ls);
       desc.page_world_size.push_back(clip_state.page_world_size);
       desc.near_depth.push_back(clip_state.near_depth);
       desc.far_depth.push_back(clip_state.far_depth);
@@ -1319,8 +1328,9 @@ auto VsmShadowRenderer::BuildCurrentVirtualFrame(
     prepared_view.frame_sequence.get());
 
   for (const auto& candidate : prepared_view.directional_shadow_candidates) {
-    virtual_address_space_.AllocateDirectionalClipmap(
-      BuildDirectionalClipmapDesc(prepared_view, candidate, quality_tier_));
+    const auto desc
+      = BuildDirectionalClipmapDesc(prepared_view, candidate, quality_tier_);
+    virtual_address_space_.AllocateDirectionalClipmap(desc);
   }
 
   for (const auto& candidate : prepared_view.positional_shadow_candidates) {

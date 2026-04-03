@@ -435,9 +435,9 @@ namespace {
       }
 
       const auto translated_x = static_cast<std::int64_t>(previous_page.page_x)
-        - remap_entry->page_offset.x;
+        + remap_entry->page_offset.x;
       const auto translated_y = static_cast<std::int64_t>(previous_page.page_y)
-        - remap_entry->page_offset.y;
+        + remap_entry->page_offset.y;
       if (translated_x < 0 || translated_y < 0) {
         return std::nullopt;
       }

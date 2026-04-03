@@ -33,6 +33,8 @@ auto to_string(const VsmReuseRejectionReason value) noexcept -> const char*
     return "MissingRemapKey";
   case VsmReuseRejectionReason::kDuplicateRemapKey:
     return "DuplicateRemapKey";
+  case VsmReuseRejectionReason::kSubPageOffsetMismatch:
+    return "SubPageOffsetMismatch";
   }
 
   return "__NotSupported__";

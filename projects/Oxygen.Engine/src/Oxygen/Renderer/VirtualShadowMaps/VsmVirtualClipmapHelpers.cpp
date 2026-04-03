@@ -33,6 +33,10 @@ auto ComputeClipmapReuse(const VsmClipmapLayout& previous_layout,
   if (previous_layout.page_grid_origin.size()
       != previous_layout.clip_level_count
     || current_layout.page_grid_origin.size() != current_layout.clip_level_count
+    || previous_layout.clip_min_corner_ls.size()
+      != previous_layout.clip_level_count
+    || current_layout.clip_min_corner_ls.size()
+      != current_layout.clip_level_count
     || previous_layout.page_world_size.size()
       != previous_layout.clip_level_count
     || current_layout.page_world_size.size() != current_layout.clip_level_count
@@ -55,6 +59,7 @@ auto ComputeClipmapReuse(const VsmClipmapLayout& previous_layout,
 
   for (std::uint32_t clip_index = 0;
     clip_index < current_layout.clip_level_count; ++clip_index) {
+    const auto page_world_size = current_layout.page_world_size[clip_index];
     if (std::fabs(current_layout.page_world_size[clip_index]
           - previous_layout.page_world_size[clip_index])
       > config.page_world_size_epsilon) {
@@ -76,8 +81,35 @@ auto ComputeClipmapReuse(const VsmClipmapLayout& previous_layout,
       };
     }
 
-    const auto offset = current_layout.page_grid_origin[clip_index]
-      - previous_layout.page_grid_origin[clip_index];
+    // Reuse must be page-aligned in light space.
+    //
+    // A previous bug only compared the integer page_grid_origin, which let
+    // sub-page camera motion slip through as "reusable". That kept old page
+    // contents alive even though the projection window had shifted inside the
+    // same page, producing detached/stuck shadows and lots of unjustified page
+    // reuse in motion. We therefore compare the exact clip-space corner and
+    // reject reuse unless the delta is an integer number of pages.
+    const auto clip_min_corner_delta
+      = current_layout.clip_min_corner_ls[clip_index]
+      - previous_layout.clip_min_corner_ls[clip_index];
+    const auto raw_offset_x = clip_min_corner_delta.x / page_world_size;
+    const auto raw_offset_y = clip_min_corner_delta.y / page_world_size;
+    const auto rounded_offset_x = std::round(raw_offset_x);
+    const auto rounded_offset_y = std::round(raw_offset_y);
+    constexpr auto kSubPageOffsetEpsilon = 1.0e-3F;
+    if (std::fabs(raw_offset_x - rounded_offset_x) > kSubPageOffsetEpsilon
+      || std::fabs(raw_offset_y - rounded_offset_y) > kSubPageOffsetEpsilon) {
+      return {
+        .reusable = false,
+        .page_offsets = std::move(page_offsets),
+        .rejection_reason = VsmReuseRejectionReason::kSubPageOffsetMismatch,
+      };
+    }
+
+    const auto offset = glm::ivec2 {
+      static_cast<std::int32_t>(rounded_offset_x),
+      static_cast<std::int32_t>(rounded_offset_y),
+    };
     page_offsets[clip_index] = offset;
 
     if (std::abs(offset.x) > config.max_page_offset_x

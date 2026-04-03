@@ -154,10 +154,10 @@ namespace {
 
     const auto translated_x
       = static_cast<std::int64_t>(previous_meta.owner_page.page_x)
-      - remap.page_offset.x;
+      + remap.page_offset.x;
     const auto translated_y
       = static_cast<std::int64_t>(previous_meta.owner_page.page_y)
-      - remap.page_offset.y;
+      + remap.page_offset.y;
     if (translated_x < 0 || translated_y < 0) {
       return std::nullopt;
     }
@@ -227,8 +227,6 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
     = std::unordered_map<RequestKey, std::size_t, RequestKeyHasher> {};
   auto remap_by_previous_id
     = std::unordered_map<VsmVirtualShadowMapId, VsmVirtualRemapEntry> {};
-  auto remap_rejected_current_ids
-    = std::unordered_set<VsmVirtualShadowMapId> {};
   auto eviction_decisions = std::vector<VsmPageAllocationDecision> {};
   auto available_physical_pages_by_slice
     = std::vector<std::vector<VsmPhysicalPageIndex>>(
@@ -285,10 +283,6 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
     && effective_previous_frame != nullptr) {
     for (const auto& remap_entry : seam.previous_to_current_remap.entries) {
       remap_by_previous_id.try_emplace(remap_entry.previous_id, remap_entry);
-      if (remap_entry.rejection_reason != VsmReuseRejectionReason::kNone
-        && remap_entry.current_id != 0) {
-        remap_rejected_current_ids.insert(remap_entry.current_id);
-      }
     }
   }
 
@@ -421,14 +415,6 @@ auto VsmPageAllocationPlanner::Build(const VsmCacheManagerSeam& seam,
       || (pending.decision.action == VsmAllocationAction::kReject
         && pending.decision.failure_reason
           != VsmAllocationFailureReason::kNone)) {
-      continue;
-    }
-
-    if (remap_rejected_current_ids.contains(pending.decision.request.map_id)) {
-      pending.decision.action = VsmAllocationAction::kReject;
-      pending.decision.failure_reason
-        = VsmAllocationFailureReason::kRemapRejected;
-      ++plan.rejected_page_count;
       continue;
     }
 

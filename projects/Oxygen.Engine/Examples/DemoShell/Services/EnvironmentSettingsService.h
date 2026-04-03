@@ -402,8 +402,8 @@ private:
     float disk_radius_deg {
       scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
     };
-    float shadow_bias { 0.0F };
-    float shadow_normal_bias { 0.02F };
+    float shadow_bias { scene::kDefaultShadowBias };
+    float shadow_normal_bias { scene::kDefaultShadowNormalBias };
     int shadow_resolution_hint { static_cast<int>(
       scene::ShadowResolutionHint::kMedium) };
     int shadow_cascade_count { static_cast<int>(scene::kMaxShadowCascades) };
@@ -560,8 +560,8 @@ private:
   float sun_component_disk_radius_deg_ {
     scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
   };
-  float sun_shadow_bias_ { 0.0F };
-  float sun_shadow_normal_bias_ { 0.02F };
+  float sun_shadow_bias_ { scene::kDefaultShadowBias };
+  float sun_shadow_normal_bias_ { scene::kDefaultShadowNormalBias };
   int sun_shadow_resolution_hint_ { static_cast<int>(
     scene::ShadowResolutionHint::kMedium) };
   int sun_shadow_cascade_count_ { static_cast<int>(scene::kMaxShadowCascades) };

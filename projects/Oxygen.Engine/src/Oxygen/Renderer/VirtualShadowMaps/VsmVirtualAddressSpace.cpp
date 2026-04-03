@@ -49,7 +49,15 @@ auto ValidateDirectionalClipmapDesc(
     || desc.far_depth.size() != desc.clip_level_count) {
     throw std::invalid_argument(
       "VsmVirtualAddressSpace: directional clipmap descriptors must provide "
-      "one origin, world size, and depth range per clip level");
+      "one origin, clip-min corner, world size, and depth range per clip "
+      "level");
+  }
+
+  if (!desc.clip_min_corner_ls.empty()
+    && desc.clip_min_corner_ls.size() != desc.clip_level_count) {
+    throw std::invalid_argument(
+      "VsmVirtualAddressSpace: directional clipmap descriptors with explicit "
+      "clip-min corners must provide one clip-min corner per clip level");
   }
 }
 
@@ -140,6 +148,19 @@ auto VsmVirtualAddressSpace::AllocateDirectionalClipmap(
 {
   ValidateDirectionalClipmapDesc(desc);
 
+  auto clip_min_corner_ls = desc.clip_min_corner_ls;
+  if (clip_min_corner_ls.empty()) {
+    // Older/test call sites only provide integer page_grid_origin. Preserve
+    // those call sites by reconstructing the exact corner from origin *
+    // page_world_size. Production directional clipmaps should populate the
+    // explicit corner directly so reuse validation can detect sub-page motion.
+    clip_min_corner_ls.reserve(desc.clip_level_count);
+    for (std::size_t i = 0; i < desc.page_grid_origin.size(); ++i) {
+      clip_min_corner_ls.push_back(
+        glm::vec2(desc.page_grid_origin[i]) * desc.page_world_size[i]);
+    }
+  }
+
   const auto layout = VsmClipmapLayout {
     .first_id = build_state_.next_virtual_id,
     .remap_key = desc.remap_key,
@@ -147,6 +168,7 @@ auto VsmVirtualAddressSpace::AllocateDirectionalClipmap(
     .pages_per_axis = desc.pages_per_axis,
     .first_page_table_entry = build_state_.next_page_table_entry,
     .page_grid_origin = desc.page_grid_origin,
+    .clip_min_corner_ls = std::move(clip_min_corner_ls),
     .page_world_size = desc.page_world_size,
     .near_depth = desc.near_depth,
     .far_depth = desc.far_depth,

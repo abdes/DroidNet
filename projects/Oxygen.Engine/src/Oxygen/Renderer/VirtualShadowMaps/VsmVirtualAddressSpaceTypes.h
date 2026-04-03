@@ -31,6 +31,7 @@ enum class VsmReuseRejectionReason : std::uint8_t {
   kNoMatchingCurrentLayout = 8,
   kMissingRemapKey = 9,
   kDuplicateRemapKey = 10,
+  kSubPageOffsetMismatch = 11,
 };
 
 OXGN_RNDR_NDAPI auto to_string(VsmReuseRejectionReason value) noexcept -> const
@@ -69,6 +70,14 @@ struct VsmClipmapLayout {
   std::uint32_t pages_per_axis { 0 };
   std::uint32_t first_page_table_entry { 0 };
   std::vector<glm::ivec2> page_grid_origin {};
+  // Exact light-space minimum corner for each clip level.
+  //
+  // Do not derive reuse eligibility from page_grid_origin alone: camera motion
+  // can shift the clip region within the same integer page while keeping the
+  // rounded page origin unchanged. Reusing cached pages in that situation makes
+  // shadows appear detached from their casters because the old page contents
+  // are sampled against a different projection window.
+  std::vector<glm::vec2> clip_min_corner_ls {};
   std::vector<float> page_world_size {};
   std::vector<float> near_depth {};
   std::vector<float> far_depth {};
@@ -122,6 +131,10 @@ struct VsmDirectionalClipmapDesc {
   std::uint32_t clip_level_count { 0 };
   std::uint32_t pages_per_axis { 0 };
   std::vector<glm::ivec2> page_grid_origin {};
+  // Exact per-level light-space minimum corner matching the runtime clipmap
+  // projection window. This exists specifically to detect sub-page camera
+  // motion that must invalidate reuse even when page_grid_origin is stable.
+  std::vector<glm::vec2> clip_min_corner_ls {};
   std::vector<float> page_world_size {};
   std::vector<float> near_depth {};
   std::vector<float> far_depth {};
