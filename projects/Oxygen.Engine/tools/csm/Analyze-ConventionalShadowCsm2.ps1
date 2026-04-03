@@ -42,7 +42,7 @@ $invokeScript = Join-Path $PSScriptRoot '..\shadows\Invoke-RenderDocUiAnalysis.p
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowRasterPass' `
   -ReportPath "$outputStemFullPath.shadow_timing.txt" `
   -Label 'CSM-2 shadow timing report'
@@ -50,7 +50,7 @@ Invoke-StableTimingAnalysis `
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ShaderPass' `
   -ReportPath "$outputStemFullPath.shader_timing.txt" `
   -Label 'CSM-2 shader timing report'
@@ -58,7 +58,7 @@ Invoke-StableTimingAnalysis `
 Invoke-StableTimingAnalysis `
   -InvokeScript $invokeScript `
   -CapturePath $captureFullPath `
-  -UiScriptPath (Join-Path $PSScriptRoot 'AnalyzeRenderDocPassTiming.py') `
+  -UiScriptPath (Join-Path $PSScriptRoot '..\shadows\AnalyzeRenderDocPassTiming.py') `
   -PassName 'ConventionalShadowReceiverAnalysisPass' `
   -ReportPath "$outputStemFullPath.receiver_analysis_timing.txt" `
   -Label 'CSM-2 receiver-analysis timing report'
