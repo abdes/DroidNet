@@ -182,15 +182,15 @@ Key design rules:
 
 Relevant scripts:
 
-- `AnalyzeRenderDocCapture.py`
+- `tools/vsm/AnalyzeRenderDocCapture.py`
   - broad K-a validation
-- `AnalyzeRenderDocPassFocus.py`
+- `tools/shadows/AnalyzeRenderDocPassFocus.py`
   - pass-local action/resource inspection
 - `AnalyzeRenderDocEventFocus.py`
   - one-event drill-down
-- `AnalyzeRenderDocStage15Masks.py`
+- `tools/vsm/AnalyzeRenderDocStage15Masks.py`
   - Stage 15 resource presence and writer/consumer evidence
-- `AnalyzeRenderDocPassTiming.py`
+- `tools/shadows/AnalyzeRenderDocPassTiming.py`
   - exact GPU timing for one pass via `OXYGEN_RENDERDOC_PASS_NAME`
 
 Example timing run:
@@ -199,7 +199,7 @@ Example timing run:
 $env:OXYGEN_RENDERDOC_PASS_NAME = 'VsmStaticDynamicMergePass'
 $env:OXYGEN_RENDERDOC_REPORT_PATH = 'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\merge_timing_post_selective\late_frame35.timing.txt'
 & 'C:\Program Files\RenderDoc\qrenderdoc.exe' --ui-python `
-  'H:\projects\DroidNet\projects\Oxygen.Engine\Examples\RenderScene\AnalyzeRenderDocPassTiming.py' `
+  'H:\projects\DroidNet\projects\Oxygen.Engine\tools\shadows\AnalyzeRenderDocPassTiming.py' `
   'H:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\merge_timing_post_selective\late_frame35.rdc'
 ```
 

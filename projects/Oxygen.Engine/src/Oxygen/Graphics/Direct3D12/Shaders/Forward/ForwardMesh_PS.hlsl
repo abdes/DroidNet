@@ -178,18 +178,21 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
   const float3 F0 = lerp(float3(0.04, 0.04, 0.04), base_rgb, surf.metalness);
 
   terms.directional_direct
-    = AccumulateDirectionalLights(input.world_pos, env_state.atmosphere,
+    = AccumulateDirectionalLights(input.world_pos, input.position.xy,
+      env_state.atmosphere,
       shadow_normal, N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
   terms.positional_direct
     = AccumulatePositionalLightsClustered(input.world_pos, input.position.xy,
       max(-mul(view_matrix, float4(input.world_pos, 1.0)).z, 0.0), N, V, NdotV,
       F0, base_rgb, surf.metalness, surf.roughness);
   terms.direct_gates = AccumulateDirectionalLightGatesDebug(input.world_pos,
-    env_state.atmosphere, shadow_normal, N, V, NdotV, F0, base_rgb,
+    input.position.xy, env_state.atmosphere, shadow_normal, N, V, NdotV, F0,
+    base_rgb,
     surf.metalness, surf.roughness);
   terms.direct_brdf_core
-    = AccumulateDirectionalLightsBrdfCore(input.world_pos, env_state.atmosphere,
-      shadow_normal, N, V, NdotV, F0, base_rgb, surf.metalness, surf.roughness);
+    = AccumulateDirectionalLightsBrdfCore(input.world_pos, input.position.xy,
+      env_state.atmosphere, shadow_normal, N, V, NdotV, F0, base_rgb,
+      surf.metalness, surf.roughness);
 
   terms.ibl = ComputeForwardIblTerm(
     env_state, surf, base_rgb, NdotV, F0, linear_sampler);

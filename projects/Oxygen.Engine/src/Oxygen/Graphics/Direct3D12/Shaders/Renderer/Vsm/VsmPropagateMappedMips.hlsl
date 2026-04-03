@@ -60,21 +60,25 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass_constants.page_table_srv_index];
 
     const VsmShaderPageHierarchyDispatch dispatch_item = dispatches[g_DrawIndex];
-    if (dispatch_thread_id.x >= dispatch_item.pages_x
-        || dispatch_thread_id.y >= dispatch_item.pages_y) {
+    if (dispatch_thread_id.x >= dispatch_item.source_pages_x
+        || dispatch_thread_id.y >= dispatch_item.source_pages_y) {
         return;
     }
 
-    const uint linear_index
-        = dispatch_thread_id.y * dispatch_item.pages_x + dispatch_thread_id.x;
+    const uint child_x = dispatch_thread_id.x;
+    const uint child_y = dispatch_thread_id.y;
+    const uint parent_x = child_x >> 1u;
+    const uint parent_y = child_y >> 1u;
     const uint child_index = dispatch_item.first_page_table_entry
-        + dispatch_item.source_level * dispatch_item.pages_per_level + linear_index;
+        + dispatch_item.source_level * dispatch_item.pages_per_level
+        + child_y * dispatch_item.level0_pages_x + child_x;
     const uint parent_index = dispatch_item.first_page_table_entry
-        + dispatch_item.target_level * dispatch_item.pages_per_level + linear_index;
+        + dispatch_item.target_level * dispatch_item.pages_per_level
+        + parent_y * dispatch_item.level0_pages_x + parent_x;
 
     const bool child_mapped = VsmIsPageTableEntryMapped(page_table[child_index])
         || VsmHasAnyPageFlag(page_flags[child_index], VSM_PAGE_FLAG_MAPPED_DESCENDANT);
     if (child_mapped) {
-        page_flags[parent_index].bits |= VSM_PAGE_FLAG_MAPPED_DESCENDANT;
+        InterlockedOr(page_flags[parent_index].bits, VSM_PAGE_FLAG_MAPPED_DESCENDANT);
     }
 }

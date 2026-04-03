@@ -346,8 +346,20 @@ Evidence summary:
 
 Blocking note:
 
-- The renderer-owned live shell still has a known directional correctness issue,
-  so Phase F cannot be closed even though the core Stage 12 pass is implemented.
+- The renderer-owned live shell no longer appears blocked by the old Stage 12
+  contract failures: the dedicated Stage 12 suite is green again, and the
+  directional live-shell analytic floor probes in
+  `Oxygen.Renderer.VsmShadowProjection.Tests` are green in Debug. Phase F
+  remains open because the broader directional renderer path is still not
+  closed: localized Stage 15 consumer-seam fixes do not discharge earlier-stage
+  page-management / camera-motion correctness, and user-reported camera-rotation
+  failures keep this phase `in_progress`.
+- Architecture/UE5 code review on `2026-04-03` found and corrected a Stage 15
+  lighting-consumer seam drift: the forward-lighting path had been reprojecting
+  shaded world positions back into the VSM mask instead of consuming the
+  screen-space mask by the current raster pixel identity. Regression coverage
+  now lives in `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests` via the
+  localized `DirectLightGates` consumer-seam assertion.
 
 ---
 
@@ -558,10 +570,10 @@ Evidence summary:
 - Directional policy routing coverage exists in
   `Oxygen.Renderer.ShadowManagerPolicy.Tests`.
 - Repo-owned RenderDoc UI analysis now exists in:
-  - `Examples/RenderScene/AnalyzeRenderDocCapture.py`
-  - `Examples/RenderScene/AnalyzeRenderDocPassFocus.py`
+  - `tools/vsm/AnalyzeRenderDocCapture.py`
+  - `tools/shadows/AnalyzeRenderDocPassFocus.py`
   - `Examples/RenderScene/AnalyzeRenderDocEventFocus.py`
-  - `Examples/RenderScene/AnalyzeRenderDocStage15Masks.py`
+  - `tools/vsm/AnalyzeRenderDocStage15Masks.py`
 - The replay-safe capture
   `out/build-ninja/analysis/k_a_baseline/k_a_vsm_40frames_frame10.rdc`
   was validated with that workflow on `2026-03-30`, producing:
@@ -626,8 +638,21 @@ Evidence summary:
 
 Blocking note:
 
-- End-to-end directional closure is still blocked by the live shell Stage 5 ->
-  Stage 15 regression and missing manual sign-off.
+- End-to-end directional closure is no longer blocked by missing Stage 5 wiring:
+  the renderer-owned shell now drives nonzero page requests on the settled
+  `physics_domains` scene in
+  `out/build-ninja/analysis/directional_vsm_40frame_smoke.log`, and a replayable
+  late-frame capture exists at
+  `out/build-ninja/analysis/directional_vsm_capture/frame30_frame30.rdc`.
+- The Stage 15 consumer seam is now covered by a dedicated regression: the
+  forward-lighting `DirectLightGates` debug channel must match the published
+  directional mask at the sampled live-shell floor pixels in
+  `Oxygen.Renderer.VirtualShadowGpuLifecycle.Tests`.
+- These signals are supporting evidence only. Directional closeout remains
+  blocked until the plan’s serialized stage-by-stage review/validation flow is
+  completed and the current page-management / camera-rotation failure is rooted
+  in the correct lower stage instead of being treated as a final visual-only
+  issue.
 
 #### Phase K-c - Local-Light VSM Forward-Lighting Integration
 

@@ -162,18 +162,19 @@ static_assert(offsetof(VsmShaderPageAllocationDecision, physical_meta) == 16U);
 
 // Compact per-level propagation work item for stages 9 and 10.
 //
-// VSM level propagation in Oxygen follows the published virtual-map layout:
-// each coarser level reuses the same page-grid footprint as the next finer
-// level, so propagation operates on matching (x, y) coordinates across levels.
+// Oxygen stores each level in a fixed-size per-level page-table slice, but the
+// propagation logic follows UE-style hierarchical reduction semantics: threads
+// iterate the effective source level footprint, and parent addresses are
+// derived by collapsing child coordinates through >> 1.
 struct VsmShaderPageHierarchyDispatch {
   std::uint32_t first_page_table_entry { 0U };
-  std::uint32_t pages_x { 0U };
-  std::uint32_t pages_y { 0U };
+  std::uint32_t level0_pages_x { 0U };
+  std::uint32_t level0_pages_y { 0U };
   std::uint32_t pages_per_level { 0U };
   std::uint32_t source_level { 0U };
   std::uint32_t target_level { 0U };
-  std::uint32_t _pad0 { 0U };
-  std::uint32_t _pad1 { 0U };
+  std::uint32_t source_pages_x { 0U };
+  std::uint32_t source_pages_y { 0U };
 
   auto operator==(const VsmShaderPageHierarchyDispatch&) const -> bool
     = default;
@@ -182,11 +183,13 @@ static_assert(std::is_standard_layout_v<VsmShaderPageHierarchyDispatch>);
 static_assert(sizeof(VsmShaderPageHierarchyDispatch) == 32U);
 static_assert(
   offsetof(VsmShaderPageHierarchyDispatch, first_page_table_entry) == 0U);
-static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_x) == 4U);
-static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_y) == 8U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, level0_pages_x) == 4U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, level0_pages_y) == 8U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, pages_per_level) == 12U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_level) == 16U);
 static_assert(offsetof(VsmShaderPageHierarchyDispatch, target_level) == 20U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_pages_x) == 24U);
+static_assert(offsetof(VsmShaderPageHierarchyDispatch, source_pages_y) == 28U);
 
 // Shader-facing invalidation work item for the Phase J dedicated GPU pass.
 //

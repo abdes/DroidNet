@@ -416,25 +416,12 @@ static inline float ComputeConventionalDirectionalShadowVisibility(
     return visibility;
 }
 
-static inline float ComputeVirtualDirectionalShadowVisibility(float3 world_pos)
+static inline float ComputeVirtualDirectionalShadowVisibility(
+    float2 pixel_position_xy)
 {
     const VsmFrameBindings vsm_bindings = LoadResolvedVsmFrameBindings();
     if (vsm_bindings.directional_shadow_mask_slot == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(vsm_bindings.directional_shadow_mask_slot)) {
-        return 1.0;
-    }
-
-    const float4 clip_position =
-        mul(projection_matrix, mul(view_matrix, float4(world_pos, 1.0)));
-    if (abs(clip_position.w) <= 1.0e-6) {
-        return 1.0;
-    }
-
-    const float2 ndc_xy = clip_position.xy / clip_position.w;
-    const float2 uv = float2(
-        ndc_xy.x * 0.5 + 0.5,
-        ndc_xy.y * -0.5 + 0.5);
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
         return 1.0;
     }
 
@@ -448,7 +435,7 @@ static inline float ComputeVirtualDirectionalShadowVisibility(float3 world_pos)
     }
 
     const uint2 pixel = min(
-        uint2(uv * float2(width, height)),
+        uint2(pixel_position_xy),
         uint2(width - 1u, height - 1u));
     return saturate(directional_shadow_mask.Load(int3(pixel, 0)));
 }
@@ -456,6 +443,7 @@ static inline float ComputeVirtualDirectionalShadowVisibility(float3 world_pos)
 static inline float ComputeShadowVisibility(
     uint shadow_index,
     float3 world_pos,
+    float2 pixel_position_xy,
     float3 normal_ws,
     float3 light_dir_ws)
 {
@@ -491,7 +479,7 @@ static inline float ComputeShadowVisibility(
 
     if (shadow_instance.domain == SHADOW_DOMAIN_DIRECTIONAL
         && shadow_instance.implementation_kind == SHADOW_IMPLEMENTATION_VIRTUAL) {
-        return ComputeVirtualDirectionalShadowVisibility(world_pos);
+        return ComputeVirtualDirectionalShadowVisibility(pixel_position_xy);
     }
 
     return 1.0;

@@ -285,6 +285,16 @@ void CS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         return;
     }
 
+    if (pass_constants.previous_frame_hzb_available != 0u
+        && BX_IsValidSlot(pass_constants.previous_frame_hzb_index)) {
+        Texture2D<float> previous_frame_hzb
+            = ResourceDescriptorHeap[pass_constants.previous_frame_hzb_index];
+        if (VsmIsOccludedByPreviousHzb(
+                previous_frame_hzb, page_clip_sphere, pass_constants)) {
+            return;
+        }
+    }
+
     uint command_slot = 0u;
     InterlockedAdd(command_counts[dispatch_thread_id.y], 1u, command_slot);
     if (command_slot >= pass_constants.max_commands_per_page) {
