@@ -161,7 +161,7 @@ auto GpuDebugDrawPass::DoExecute(graphics::CommandRecorder& recorder)
 
   // Issue the indirect draw call. The counter buffer contains the
   // D3D12_DRAW_ARGUMENTS at offset 0.
-  recorder.ExecuteIndirect(*debug_manager->GetCounterBuffer(), 0);
+  recorder.ExecuteIndirect(*debug_manager->GetCounterBuffer());
 
   co_return;
 }

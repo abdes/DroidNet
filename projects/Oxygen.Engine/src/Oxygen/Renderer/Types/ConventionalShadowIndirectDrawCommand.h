@@ -14,8 +14,9 @@ namespace oxygen::renderer {
 
 //! Packed indirect draw command for counted conventional shadow raster.
 /*!
- Matches `ExecuteIndirect(kDrawWithRootConstant)`: DWORD0 carries the global
- `draw_index`, followed by the native draw-arguments payload.
+ Matches an indirect draw command with one inline push-constant DWORD written
+ into the engine RootConstants binding before each draw. DWORD0 carries the
+ global `draw_index`, followed by the native draw-arguments payload.
 */
 struct ConventionalShadowIndirectDrawCommand {
   std::uint32_t draw_index { 0U };

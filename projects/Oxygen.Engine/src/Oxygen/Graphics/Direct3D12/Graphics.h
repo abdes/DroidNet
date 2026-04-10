@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <wrl/client.h>
@@ -14,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
@@ -37,6 +40,55 @@ class Allocator;
 } // namespace D3D12MA
 
 namespace oxygen::graphics::d3d12 {
+
+class CommandRecorder;
+
+namespace detail {
+  struct InlineRootConstantsDesc {
+    std::uint32_t root_parameter_index { 0U };
+    std::uint32_t dest_offset_in_32bit_values { 0U };
+    std::uint32_t value_count { 0U };
+
+    auto operator==(const InlineRootConstantsDesc&) const -> bool = default;
+  };
+
+  struct IndirectCommandSignatureKey {
+    graphics::CommandRecorder::IndirectCommandKind kind {
+      graphics::CommandRecorder::IndirectCommandKind::kDraw
+    };
+    std::optional<InlineRootConstantsDesc> inline_root_constants {};
+    ID3D12RootSignature* root_signature { nullptr };
+
+    auto operator==(const IndirectCommandSignatureKey&) const -> bool = default;
+  };
+
+  struct IndirectCommandSignatureKeyHash {
+    auto operator()(const IndirectCommandSignatureKey& key) const noexcept
+      -> std::size_t
+    {
+      auto combine = [](std::size_t& seed, const std::size_t value) {
+        seed ^= value + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
+      };
+
+      std::size_t seed = std::hash<int> {}(static_cast<int>(key.kind));
+      combine(seed,
+        std::hash<std::uintptr_t> {}(
+          reinterpret_cast<std::uintptr_t>(key.root_signature)));
+      combine(seed, std::hash<bool> {}(key.inline_root_constants.has_value()));
+
+      if (key.inline_root_constants.has_value()) {
+        const auto& constants = *key.inline_root_constants;
+        combine(
+          seed, std::hash<std::uint32_t> {}(constants.root_parameter_index));
+        combine(seed,
+          std::hash<std::uint32_t> {}(constants.dest_offset_in_32bit_values));
+        combine(seed, std::hash<std::uint32_t> {}(constants.value_count));
+      }
+
+      return seed;
+    }
+  };
+} // namespace detail
 
 class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
@@ -108,13 +160,6 @@ public:
   OXGN_D3D12_NDAPI auto GetFormatPlaneCount(DXGI_FORMAT format) const
     -> uint8_t;
 
-  OXGN_D3D12_NDAPI auto GetDrawCommandSignature() const
-    -> ID3D12CommandSignature*;
-  OXGN_D3D12_NDAPI auto GetDrawRootConstantCommandSignature(
-    ID3D12RootSignature* root_signature) const -> ID3D12CommandSignature*;
-  OXGN_D3D12_NDAPI auto GetDispatchCommandSignature() const
-    -> ID3D12CommandSignature*;
-
   //=== Pipeline State Management ===--------------------------------------//
 
   OXGN_D3D12_NDAPI auto GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,
@@ -144,16 +189,20 @@ protected:
     -> std::unique_ptr<graphics::CommandList> override;
 
 private:
+  friend class CommandRecorder;
+
+  OXGN_D3D12_NDAPI auto GetOrCreateIndirectCommandSignature(
+    const graphics::CommandRecorder::IndirectCommandDesc& command_desc,
+    ID3D12RootSignature* current_root_signature, size_t pipeline_hash) const
+    -> ID3D12CommandSignature*;
+
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_ {};
   bool enable_vsync_ { true };
-  mutable Microsoft::WRL::ComPtr<ID3D12CommandSignature>
-    draw_command_signature_;
-  mutable Microsoft::WRL::ComPtr<ID3D12CommandSignature>
-    dispatch_command_signature_;
-  mutable std::unordered_map<ID3D12RootSignature*,
-    Microsoft::WRL::ComPtr<ID3D12CommandSignature>>
-    draw_root_constant_command_signatures_ {};
+  mutable std::unordered_map<detail::IndirectCommandSignatureKey,
+    Microsoft::WRL::ComPtr<ID3D12CommandSignature>,
+    detail::IndirectCommandSignatureKeyHash>
+    indirect_command_signatures_ {};
   std::unique_ptr<graphics::FrameCaptureController>
     frame_capture_controller_ {};
   std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_ {};

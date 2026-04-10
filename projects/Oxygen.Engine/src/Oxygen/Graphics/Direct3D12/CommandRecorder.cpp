@@ -241,6 +241,15 @@ CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
   DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
 }
 
+auto CommandRecorder::Begin() -> void
+{
+  Base::Begin();
+  current_graphics_root_signature_ = nullptr;
+  current_compute_root_signature_ = nullptr;
+  graphics_pipeline_hash_ = 0U;
+  compute_pipeline_hash_ = 0U;
+}
+
 namespace {
 namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
@@ -412,8 +421,8 @@ auto CommandRecorder::Dispatch(uint32_t thread_group_count_x,
 }
 
 auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
-  const uint64_t argument_buffer_offset, const uint32_t command_count,
-  const IndirectCommandLayout layout) -> void
+  const IndirectCommandDesc& command_desc,
+  const IndirectExecutionDesc& execution_desc) -> void
 {
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
@@ -427,66 +436,42 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   auto* resource = buf.GetResource();
   DCHECK_NOTNULL_F(resource);
 
-  ID3D12CommandSignature* signature = nullptr;
-  switch (layout) {
-  case IndirectCommandLayout::kDraw:
-    signature = graphics->GetDrawCommandSignature();
+  const auto resolved_argument_range
+    = execution_desc.argument_buffer_range.Resolve(buf.GetDescriptor());
+
+  ID3D12RootSignature* current_root_signature = nullptr;
+  size_t pipeline_hash = 0U;
+  switch (command_desc.kind) {
+  case IndirectCommandKind::kDraw:
+    current_root_signature = current_graphics_root_signature_;
+    pipeline_hash = graphics_pipeline_hash_;
     break;
-  case IndirectCommandLayout::kDrawWithRootConstant:
-    signature = graphics->GetDrawRootConstantCommandSignature(
-      current_graphics_root_signature_);
-    break;
-  case IndirectCommandLayout::kDispatch:
-    signature = graphics->GetDispatchCommandSignature();
+  case IndirectCommandKind::kDispatch:
+    current_root_signature = current_compute_root_signature_;
+    pipeline_hash = compute_pipeline_hash_;
     break;
   }
+
+  auto* signature = graphics->GetOrCreateIndirectCommandSignature(
+    command_desc, current_root_signature, pipeline_hash);
   DCHECK_NOTNULL_F(signature);
 
-  d3d12_command_list->ExecuteIndirect(
-    signature, command_count, resource, argument_buffer_offset, nullptr, 0);
-}
-
-auto CommandRecorder::ExecuteIndirectCounted(
-  const graphics::Buffer& argument_buffer,
-  const uint64_t argument_buffer_offset, const uint32_t max_command_count,
-  const IndirectCommandLayout layout, const graphics::Buffer& count_buffer,
-  const uint64_t count_buffer_offset) -> void
-{
-  auto graphics = graphics_weak_.lock();
-  DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
-
-  const auto& command_list = GetConcreteCommandList();
-  auto* d3d12_command_list = command_list.GetCommandList();
-  DCHECK_NOTNULL_F(d3d12_command_list);
-
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto& argument_buf = static_cast<const Buffer&>(argument_buffer);
-  auto* argument_resource = argument_buf.GetResource();
-  DCHECK_NOTNULL_F(argument_resource);
-
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  const auto& count_buf = static_cast<const Buffer&>(count_buffer);
-  auto* count_resource = count_buf.GetResource();
-  DCHECK_NOTNULL_F(count_resource);
-
-  ID3D12CommandSignature* signature = nullptr;
-  switch (layout) {
-  case IndirectCommandLayout::kDraw:
-    signature = graphics->GetDrawCommandSignature();
-    break;
-  case IndirectCommandLayout::kDrawWithRootConstant:
-    signature = graphics->GetDrawRootConstantCommandSignature(
-      current_graphics_root_signature_);
-    break;
-  case IndirectCommandLayout::kDispatch:
-    throw std::runtime_error(
-      "ExecuteIndirectCounted does not support dispatch arguments");
+  ID3D12Resource* count_resource = nullptr;
+  UINT64 count_buffer_offset = 0U;
+  if (execution_desc.count_buffer != nullptr) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+    const auto& count_buf
+      = static_cast<const Buffer&>(*execution_desc.count_buffer);
+    count_resource = count_buf.GetResource();
+    DCHECK_NOTNULL_F(count_resource);
+    const auto resolved_count_range
+      = execution_desc.count_buffer_range.Resolve(count_buf.GetDescriptor());
+    count_buffer_offset = resolved_count_range.offset_bytes;
   }
-  DCHECK_NOTNULL_F(signature);
 
-  d3d12_command_list->ExecuteIndirect(signature, max_command_count,
-    argument_resource, argument_buffer_offset, count_resource,
-    count_buffer_offset);
+  d3d12_command_list->ExecuteIndirect(signature,
+    execution_desc.command_count.get(), resource,
+    resolved_argument_range.offset_bytes, count_resource, count_buffer_offset);
 }
 
 auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
@@ -550,7 +535,7 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
   d3d12_command_list->SetComputeRootSignature(root_signature);
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps(), /*is_compute=*/true);
-  current_graphics_root_signature_ = nullptr;
+  current_compute_root_signature_ = root_signature;
 
   d3d12_command_list->SetPipelineState(pipeline_state);
 }

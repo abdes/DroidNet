@@ -96,13 +96,8 @@ struct DrawCommandLog {
 struct IndirectCommandLog {
   struct Event {
     const Buffer* argument_buffer { nullptr };
-    uint64_t argument_buffer_offset { 0U };
-    uint32_t max_command_count { 0U };
-    CommandRecorder::IndirectCommandLayout layout {
-      CommandRecorder::IndirectCommandLayout::kDraw
-    };
-    const Buffer* count_buffer { nullptr };
-    uint64_t count_buffer_offset { 0U };
+    CommandRecorder::IndirectCommandDesc command_desc {};
+    CommandRecorder::IndirectExecutionDesc execution_desc {};
   };
   std::vector<Event> counted_draws;
 };
@@ -271,24 +266,15 @@ public:
     -> void override
   {
   }
-  auto ExecuteIndirect(const Buffer& /*argument_buffer*/,
-    uint64_t /*argument_buffer_offset*/, uint32_t /*command_count*/,
-    IndirectCommandLayout /*layout*/) -> void override
+  auto ExecuteIndirect(const Buffer& argument_buffer,
+    const IndirectCommandDesc& command_desc,
+    const IndirectExecutionDesc& execution_desc) -> void override
   {
-  }
-  auto ExecuteIndirectCounted(const Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t max_command_count,
-    IndirectCommandLayout layout, const Buffer& count_buffer,
-    uint64_t count_buffer_offset) -> void override
-  {
-    if (indirect_log_ != nullptr) {
+    if (indirect_log_ != nullptr && execution_desc.count_buffer != nullptr) {
       indirect_log_->counted_draws.push_back(IndirectCommandLog::Event {
         .argument_buffer = &argument_buffer,
-        .argument_buffer_offset = argument_buffer_offset,
-        .max_command_count = max_command_count,
-        .layout = layout,
-        .count_buffer = &count_buffer,
-        .count_buffer_offset = count_buffer_offset,
+        .command_desc = command_desc,
+        .execution_desc = execution_desc,
       });
     }
   }

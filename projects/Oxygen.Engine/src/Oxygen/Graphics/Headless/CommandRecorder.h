@@ -60,14 +60,8 @@ public:
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
 
   auto ExecuteIndirect(const graphics::Buffer& /*argument_buffer*/,
-    uint64_t /*argument_buffer_offset*/, uint32_t /*command_count*/,
-    IndirectCommandLayout /*layout*/) -> void override
-  {
-  }
-  auto ExecuteIndirectCounted(const graphics::Buffer& /*argument_buffer*/,
-    uint64_t /*argument_buffer_offset*/, uint32_t /*max_command_count*/,
-    IndirectCommandLayout /*layout*/, const graphics::Buffer& /*count_buffer*/,
-    uint64_t /*count_buffer_offset*/) -> void override
+    const IndirectCommandDesc& /*command_desc*/,
+    const IndirectExecutionDesc& /*execution_desc*/) -> void override
   {
   }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<graphics::Buffer>*,

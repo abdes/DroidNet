@@ -90,6 +90,10 @@ protected:
   OXGN_RNDR_NDAPI static auto BuildRootBindings()
     -> std::vector<graphics::RootBindingItem>;
 
+  //! Return the binding slot used by the canonical engine RootConstants range.
+  OXGN_RNDR_NDAPI static auto RootConstantsBindingSlot()
+    -> graphics::BindingSlotDesc;
+
   //! Store the pass-level constants index for use during execution.
   /*!
    Binds `g_PassConstantsIndex` (DWORD1 at `b2, space0`) once per pass.

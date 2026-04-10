@@ -110,6 +110,18 @@ auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
   return out;
 }
 
+auto RenderPass::RootConstantsBindingSlot() -> graphics::BindingSlotDesc
+{
+  namespace b = oxygen::bindless::generated::d3d12;
+
+  const auto& root_constants_desc = b::kRootParamTable[static_cast<std::size_t>(
+    b::RootParam::kRootConstants)];
+  return graphics::BindingSlotDesc {
+    .register_index = root_constants_desc.shader_register,
+    .register_space = root_constants_desc.register_space,
+  };
+}
+
 /*!
  Registers an `ObjectMetadata` component to store the pass name.
 
