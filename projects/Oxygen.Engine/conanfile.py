@@ -48,6 +48,7 @@ class OxygenConan(ConanFile):
         "awaitable_state_checker": [True, False],
         "with_asan": [True, False],
         "with_coverage": [True, False],
+        "with_tracy": [True, False],
         # Optional components:
         "base": [True, False],
         "oxco": [True, False],
@@ -64,6 +65,7 @@ class OxygenConan(ConanFile):
         "awaitable_state_checker": True,
         "with_asan": False,
         "with_coverage": False,
+        "with_tracy": False,
         # Optional components:
         "base": True,
         "oxco": True,
@@ -116,6 +118,7 @@ class OxygenConan(ConanFile):
         self.requires("luau/0.708")
         self.requires("joltphysics/5.5.0")
         self.requires("xxhash/0.8.3")
+        self.requires("tracy/0.13.1")
 
         # Record test-only dependencies so we can skip them during deploy.
         # The test_requires call accepts a reference like 'gtest/master'.
@@ -173,6 +176,11 @@ class OxygenConan(ConanFile):
         except Exception:
             # If pdcurses isn't present in this configuration, ignore silently
             pass
+
+        # Configure Tracy based on the with_tracy option
+        if "tracy" in self.options:
+            self.options["tracy"].enable = self.options.get_safe("with_tracy", False)
+            self.options["tracy"].shared = self.options.get_safe("shared", False)
 
     def validate(self):
         if self._with_asan and self.settings.build_type != "Debug":
@@ -239,6 +247,11 @@ class OxygenConan(ConanFile):
         if self.options.with_coverage:
             tc.cache_variables["OXYGEN_WITH_COVERAGE"] = "ON"
 
+        # Propagate Tracy option to CMake
+        enable_tracy = self.options.get_safe("with_tracy", False)
+        tc.variables["OXYGEN_WITH_TRACY"] = "ON" if enable_tracy else "OFF"
+
+
         tc.generate()
 
         deps = CMakeDeps(self)
@@ -277,6 +290,8 @@ class OxygenConan(ConanFile):
         suffix = "ninja" if self._is_ninja else "vs"
         if self._with_asan:
             suffix = f"asan-{suffix}"
+        if self.options.get_safe("with_tracy"):
+            suffix = f"tracy-{suffix}"
         expected = Path(self.recipe_folder) / f"out/build-{suffix}"
         candidates.append(expected)
 
@@ -353,6 +368,8 @@ class OxygenConan(ConanFile):
         suffix = "ninja" if self._is_ninja else "vs"
         if self._with_asan:
             suffix = f"asan-{suffix}"
+        if self.options.get_safe("with_tracy"):
+            suffix = f"tracy-{suffix}"
 
         build_folder = f"out/build-{suffix}"
         cmake_layout(self, build_folder=build_folder)

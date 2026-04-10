@@ -1,0 +1,78 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+# ------------------------------------------------------------------------------
+# Meta information about the this module
+# ------------------------------------------------------------------------------
+
+asap_module_declare(
+  MODULE_NAME "Oxygen.Tracy"
+  DESCRIPTION "Tracy profiler integration module"
+  WITHOUT_VERSION_H
+)
+asap_push_module("${META_MODULE_NAME}")
+
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(Tracy CONFIG REQUIRED)
+
+# ==============================================================================
+# Build instructions
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Main module target
+# ------------------------------------------------------------------------------
+
+# We create an INTERFACE library to expose Tracy correctly across the engine.
+# This ensures that Oxygen Engine targets can unconditionally link Oxygen::Tracy.
+add_library(${META_MODULE_TARGET} INTERFACE)
+add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+set_target_properties(
+  ${META_MODULE_TARGET}
+  PROPERTIES
+    VERSION
+      ${META_VERSION}
+    SOVERSION
+      ${META_VERSION_MAJOR}
+    PROJECT_LABEL
+      ${META_MODULE_NAME}
+)
+
+# Link the Conan provided tracy library which carries TRACY_ENABLE, TRACY_IMPORTS, etc.
+target_link_libraries(${META_MODULE_TARGET} INTERFACE Tracy::TracyClient)
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
+
+target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_23)
+
+# ------------------------------------------------------------------------------
+# API Documentation
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
+  asap_with_doxygen(
+    MODULE_NAME ${META_MODULE_TARGET}
+    VERSION ${META_VERSION}
+    TITLE "\"Tracy\""
+    BRIEF "\"Tracy Profiler integration\""
+    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+endif()
+
+# ==============================================================================
+# Deployment instructions
+# ==============================================================================
+
+oxygen_module_install(
+  EXPORT ${META_MODULE_NAMESPACE}
+  TARGETS
+    ${META_MODULE_TARGET}
+)
+
+asap_pop_module("${META_MODULE_NAME}")
