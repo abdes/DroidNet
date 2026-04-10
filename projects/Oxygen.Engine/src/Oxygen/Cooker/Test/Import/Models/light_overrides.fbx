@@ -1,0 +1,104 @@
+; FBX 7.7.0 project file
+; ----------------------------------------------------
+
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7700
+	CreationTimeStamp:  {
+		Version: 1000
+		Year: 2026
+		Month: 1
+		Day: 18
+		Hour: 0
+		Minute: 0
+		Second: 0
+		Millisecond: 0
+	}
+	Creator: "Oxygen.Engine Test Fixture"
+}
+GlobalSettings:  {
+	Version: 1000
+	Properties70:  {
+		P: "UpAxis", "int", "Integer", "",1
+		P: "UpAxisSign", "int", "Integer", "",1
+		P: "FrontAxis", "int", "Integer", "",2
+		P: "FrontAxisSign", "int", "Integer", "",1
+		P: "CoordAxis", "int", "Integer", "",0
+		P: "CoordAxisSign", "int", "Integer", "",1
+		P: "OriginalUpAxis", "int", "Integer", "",1
+		P: "OriginalUpAxisSign", "int", "Integer", "",1
+		P: "UnitScaleFactor", "double", "Number", "",1
+		P: "OriginalUnitScaleFactor", "double", "Number", "",1
+		P: "AmbientColor", "ColorRGB", "Color", "",0,0,0
+		P: "DefaultCamera", "KString", "", "", "Producer Perspective"
+		P: "TimeMode", "enum", "", "",0
+		P: "TimeProtocol", "enum", "", "",2
+		P: "SnapOnFrameMode", "enum", "", "",0
+		P: "TimeSpanStart", "KTime", "Time", "",0
+		P: "TimeSpanStop", "KTime", "Time", "",0
+		P: "CustomFrameRate", "double", "Number", "",-1
+	}
+}
+
+Documents:  {
+	Count: 1
+	Document: 1000001, "", "Scene" {
+		Properties70:  {
+			P: "SourceObject", "object", "", ""
+			P: "ActiveAnimStackName", "KString", "", "", "Take 001"
+		}
+		RootNode: 0
+	}
+}
+
+References:  {
+}
+
+Definitions:  {
+	Version: 100
+	Count: 3
+	ObjectType: "GlobalSettings" {
+		Count: 1
+	}
+	ObjectType: "Model" {
+		Count: 1
+	}
+	ObjectType: "NodeAttribute" {
+		Count: 1
+	}
+}
+
+Objects:  {
+	Model: 2000001, "Model::ShadowOverrideLight", "Light" {
+		Version: 232
+		Properties70:  {
+			P: "DefaultAttributeIndex", "int", "Integer", "",0
+			P: "Lcl Translation", "Lcl Translation", "", "A",0,0,0
+			P: "Lcl Rotation", "Lcl Rotation", "", "A",0,0,0
+			P: "Lcl Scaling", "Lcl Scaling", "", "A",1,1,1
+			P: "Visibility", "Visibility", "", "A",1
+			P: "Oxygen.AffectsWorld", "Bool", "", "A+U",0
+			P: "Oxygen.CastsShadows", "Bool", "", "A+U",0
+		}
+		Shading: T
+		Culling: "CullingOff"
+	}
+	NodeAttribute: 2000002, "NodeAttribute::ShadowOverrideLight", "Light" {
+		Properties70:  {
+			P: "Color", "ColorRGB", "Color", "",1,1,1
+			P: "Intensity", "double", "Number", "",100
+			P: "LightType", "enum", "", "",0
+			P: "DecayType", "enum", "", "",2
+			P: "CastLight", "bool", "", "",1
+			P: "CastShadows", "bool", "", "",1
+			P: "Oxygen.AffectsWorld", "Bool", "", "A+U",1
+			P: "Oxygen.CastsShadows", "Bool", "", "A+U",1
+		}
+		TypeFlags: "Light"
+	}
+}
+
+Connections:  {
+	C: "OO",2000001,0
+	C: "OO",2000002,2000001
+}
