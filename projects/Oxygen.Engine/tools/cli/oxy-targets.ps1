@@ -48,7 +48,7 @@
 
 # Constants
 # Default build root base (regular builds use 'out/build-ninja').
-# Sanitized builds append '-asan' (e.g. 'out/build-ninja-asan').
+# Sanitized builds append '-asan' (for example 'out/build-asan-ninja').
 $script:BUILD_DIR = "out/build-ninja"
 $script:CONAN_DEPLOY_DIR = "out/full_deploy"
 $script:CONAN_PROFILES_DIR = "profiles"
@@ -342,13 +342,29 @@ function Get-FuzzyPattern($targetName) {
 .DESCRIPTION
     Returns the standardized build directory path "out/build" from the project root.
 
+.PARAMETER BuildTree
+  Optional build tree name or path. When provided, overrides the default
+  build-root selection. Examples: 'build-tracy-ninja', 'out/build-vs'.
+
 .OUTPUTS
-    String. The absolute path to the standard build directory.
+  String. The absolute path to the selected build directory.
 
 .EXAMPLE
     $buildRoot = Get-StandardBuildRoot
 #>
-function Get-StandardBuildRoot([switch]$Sanitized) {
+function Get-StandardBuildRoot([switch]$Sanitized, [string]$BuildTree) {
+  if (-not [string]::IsNullOrWhiteSpace($BuildTree)) {
+    if ([System.IO.Path]::IsPathRooted($BuildTree)) {
+      return $BuildTree
+    }
+
+    if ($BuildTree.StartsWith("out/") -or $BuildTree.StartsWith("out\")) {
+      return Join-Path (Get-Location) $BuildTree
+    }
+
+    return Join-Path (Join-Path (Get-Location) "out") $BuildTree
+  }
+
   # Default base like "out/build-ninja". For sanitized builds we want
   # "out/build-asan-ninja" (insert "-asan" before the "-ninja" suffix).
   $base = $script:BUILD_DIR
@@ -361,6 +377,55 @@ function Get-StandardBuildRoot([switch]$Sanitized) {
     }
   }
   return Join-Path (Get-Location) $base
+}
+
+function Get-DirectConfigureCommand($buildRoot) {
+  $projectRoot = (Get-Location).Path
+  $cacheFile = Join-Path $buildRoot "CMakeCache.txt"
+  if (Test-Path $cacheFile) {
+    return "cmake -S `"$projectRoot`" -B `"$buildRoot`""
+  }
+
+  $conanPresetsFile = Join-Path $buildRoot "generators/CMakePresets.json"
+  if (-not (Test-Path $conanPresetsFile)) {
+    return $null
+  }
+
+  $presets = Read-Presets $conanPresetsFile
+  $configurePreset = $presets.configurePresets | Select-Object -First 1
+  if (-not $configurePreset) {
+    return $null
+  }
+
+  $parts = @(
+    "cmake",
+    "-S `"$projectRoot`"",
+    "-B `"$buildRoot`""
+  )
+
+  if ($configurePreset.generator) {
+    $parts += "-G `"$($configurePreset.generator)`""
+  }
+
+  if ($configurePreset.toolchainFile) {
+    $parts += "-DCMAKE_TOOLCHAIN_FILE=`"$($configurePreset.toolchainFile)`""
+  }
+
+  if ($configurePreset.architecture -and $configurePreset.architecture.value) {
+    $parts += "-A `"$($configurePreset.architecture.value)`""
+  }
+
+  if ($configurePreset.toolset -and $configurePreset.toolset.value) {
+    $parts += "-T `"$($configurePreset.toolset.value)`""
+  }
+
+  if ($configurePreset.cacheVariables) {
+    foreach ($property in $configurePreset.cacheVariables.PSObject.Properties) {
+      $parts += "-D$($property.Name)=`"$($property.Value)`""
+    }
+  }
+
+  return ($parts -join ' ')
 }
 
 <#
@@ -445,7 +510,7 @@ function Get-ConanProfile($Config) {
     Requires that Conan has already been run to set up the build environment.
     Uses platform-specific configure presets.
 #>
-function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized) {
+function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized, [string]$BuildTree) {
   $platformName = Get-PlatformName
   $configurePreset = $platformName
 
@@ -455,7 +520,7 @@ function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized) {
   }
 
   # Ensure CMake File API query exists for target discovery
-  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
+  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
   $apiQueryDir = Join-Path $buildRoot ".cmake/api/v1/query"
   if (-not (Test-Path $apiQueryDir)) {
     if (-not $DryRun) {
@@ -467,7 +532,19 @@ function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized) {
     }
   }
 
-  $cmakeCmd = "cmake --preset $configurePreset"
+  if (-not [string]::IsNullOrWhiteSpace($BuildTree)) {
+    $cmakeCmd = Get-DirectConfigureCommand $buildRoot
+    if (-not $cmakeCmd) {
+      $msg = @"
+Unable to configure custom build tree: $(Format-CompactPath $buildRoot).
+Expected either an existing CMakeCache.txt or Conan generator presets under
+$(Format-CompactPath (Join-Path $buildRoot "generators/CMakePresets.json")).
+"@
+      Write-LogErrorAndExit $msg 3
+    }
+  } else {
+    $cmakeCmd = "cmake --preset $configurePreset"
+  }
 
   if ($DryRun) {
     Write-Host ""
@@ -1049,8 +1126,8 @@ function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
     Always uses the standard out/build directory. Custom build directories are not supported.
     Target resolution happens automatically when CMake configure runs during this function.
 #>
-function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun, [switch]$Sanitized) {
-  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
+function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun, [switch]$Sanitized, [string]$BuildTree) {
+  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
 
   # Step 1: Ensure build root exists. Do NOT run Conan automatically.
   if (-not (Test-Path $buildRoot)) {
@@ -1074,7 +1151,7 @@ Please initialize the build environments using `tools\generate-builds.bat <profi
   $configureRan = $false
   if ($conanRan -or -not $hasCodemodel) {
     Write-LogInfo "CMake not configured. Running CMake configuration..."
-    Invoke-CMakeConfigure $Config -DryRun:$DryRun -Sanitized:$Sanitized
+    Invoke-CMakeConfigure $Config -DryRun:$DryRun -Sanitized:$Sanitized -BuildTree $BuildTree
     $configureRan = $true
   }
 
@@ -1086,7 +1163,10 @@ Please initialize the build environments using `tools\generate-builds.bat <profi
 
   # Step 4: Build the target
   Write-LogInfo "Building target: $resolvedTarget"
-  $preset = Find-BuildPreset $buildRoot $Config -Sanitized:$Sanitized
+  $preset = $null
+  if ([string]::IsNullOrWhiteSpace($BuildTree)) {
+    $preset = Find-BuildPreset $buildRoot $Config -Sanitized:$Sanitized
+  }
   if ($preset) {
     $buildCmd = "cmake --build --preset $preset --target $resolvedTarget"
     Write-LogVerbose "Using build preset: $preset"

@@ -12,8 +12,7 @@ The script follows the standardized build workflow:
 2. Check if CMake is configured -> if not, run CMake configure preset
 3. Build the target using appropriate CMake preset or direct cmake command
 
-Uses the fixed out/build directory for all builds to ensure consistency and proper
-integration with Conan dependency management and CMake presets.
+Uses the default out/build tree unless -BuildTree is specified.
 
 .PARAMETER Target
 The name of the target to build. This must match a CMake target name defined
@@ -31,6 +30,10 @@ If multiple targets match, an interactive selection menu will be displayed.
 .PARAMETER Config
 The build configuration (Debug, Release, etc.). Defaults to "Debug". The script will
 use platform-specific Conan profiles and CMake presets based on this configuration.
+
+.PARAMETER BuildTree
+Optional build tree name or path to use instead of the default tree.
+Examples: "build-tracy-ninja", "build-vs", "out/build-tracy-ninja".
 
 Debug builds use ASAN-enabled profiles for better debugging; **sanitized builds
 are always Debug and you must not pass `-Config` together with `-Sanitized`.**
@@ -70,6 +73,10 @@ Show what build commands would be executed without actually building.
 oxybuild.ps1 my-target -Config Release
 Build using Release configuration with optimized Conan profile.
 
+.EXAMPLE
+oxybuild.ps1 oxygen-renderer -BuildTree build-tracy-ninja
+Build the oxygen-renderer target using out/build-tracy-ninja.
+
 .NOTES
 Build System Integration:
 - Uses standardized out/build directory for all builds
@@ -101,6 +108,7 @@ Designed for CI/CD:
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Target,
     [string]$Config = "Debug",
+    [string]$BuildTree,
     [switch]$DryRun,
     [switch]$Sanitized
 )
@@ -119,7 +127,7 @@ Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
     Write-LogErrorAndExit $errMsg 1
 }
 
-$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
+$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
 
 # Resolve target name using fuzzy matching
 $resolvedTarget = Resolve-TargetName $Target $buildRoot
@@ -146,7 +154,7 @@ if ($found -and $found.Count -gt 1) {
     }
 }
 
-Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized
+Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized -BuildTree $BuildTree
 
 if ($DryRun) {
     Write-Host ""
