@@ -43,7 +43,7 @@
       "parent": 0,
       "flags": {
         "visible": true,
-        "static": true,
+        "static": false,
         "casts_shadows": true,
         "receives_shadows": true
       },
@@ -58,7 +58,7 @@
       "parent": 0,
       "flags": {
         "visible": true,
-        "static": true,
+        "static": false,
         "casts_shadows": true,
         "receives_shadows": true,
         "ray_cast_selectable": true
