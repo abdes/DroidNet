@@ -34,6 +34,10 @@ The build configuration (Debug, Release, etc.). Defaults to "Debug". The script 
 look for a CMake build preset named "<platform>-<config>" (e.g., "windows-debug") and
 use it if available.
 
+.PARAMETER BuildTree
+Optional build tree name or path to use instead of the default tree.
+Examples: "build-tracy-ninja", "build-vs", "out/build-tracy-ninja".
+
 .PARAMETER NoBuild
 Skip the build step and just run the target executable. Useful when the target is
 already built.
@@ -70,6 +74,10 @@ Run the target and pass "-f 1 --verbose" as arguments to the executable.
 oxyrun.ps1 oxygen-asyncengine-simulator -Config Release -NoBuild -- --help
 Skip building, use Release configuration, and run the target with --help argument.
 
+.EXAMPLE
+oxyrun.ps1 oxygen-examples-renderscene -BuildTree build-tracy-ninja -- --help
+Build and run using out/build-tracy-ninja.
+
 .NOTES
 Build System Integration:
 - Automatically detects CMake presets in CMakePresets.json
@@ -97,6 +105,7 @@ Error Handling:
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$Target,
     [string]$Config = "Debug",
+    [string]$BuildTree,
     [switch]$NoBuild,
     [switch]$DryRun,
     [switch]$Sanitized,
@@ -117,7 +126,7 @@ Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
     Write-LogErrorAndExit $errMsg 1
 }
 
-$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized
+$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
 
 function Set-ConfigRuntimePath([string]$BuildConfig, [switch]$SanitizedBuild) {
     $deployConfig = if ($SanitizedBuild) { "Asan" } else { $BuildConfig }
@@ -157,7 +166,7 @@ if (-not $found -or $found.Count -eq 0) {
 
 # Build step - must come before artifact discovery
 if (-not $NoBuild) {
-    Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized
+    Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized -BuildTree $BuildTree
 
     # After build, attempt to re-resolve the user's fuzzy target into the canonical name
     try {
