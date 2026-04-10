@@ -1,0 +1,30 @@
+{
+  "name": "cube",
+  "bounds": {
+    "min": [-0.5, -0.5, -0.5],
+    "max": [0.5, 0.5, 0.5]
+  },
+  "lods": [
+    {
+      "name": "cube_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "Cube"
+      },
+      "submeshes": [
+        {
+          "name": "cube_surface",
+          "material_ref": "/.cooked/Materials/cube_red.omat",
+          "views": [
+            { "view_ref": "__all__" }
+          ]
+        }
+      ]
+    }
+  ]
+}

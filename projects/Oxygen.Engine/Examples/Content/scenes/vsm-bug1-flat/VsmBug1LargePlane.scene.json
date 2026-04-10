@@ -1,0 +1,92 @@
+{
+  "name": "VsmBug1LargePlane",
+  "nodes": [
+    {
+      "name": "world",
+      "flags": {
+        "visible": true,
+        "static": true
+      }
+    },
+    {
+      "name": "plane_node",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": true,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [12.0, 12.0, 1.0]
+      }
+    },
+    {
+      "name": "sun_light_node",
+      "parent": 0,
+      "flags": {
+        "visible": true
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 50.0],
+        "rotation": [0.2706, -0.2706, 0.0, 0.9239],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "camera_node",
+      "parent": 0,
+      "flags": {
+        "visible": true
+      },
+      "transform": {
+        "translation": [10.0, -16.0, 9.5],
+        "rotation": [0.3007, 0.0, 0.0, 0.9537],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/.cooked/Geometry/floor.ogeo"
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 3,
+        "fov_y": 0.7854,
+        "aspect_ratio": 1.7778,
+        "near_plane": 0.1,
+        "far_plane": 2000.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 2,
+        "common": {
+          "color_rgb": [1.0, 0.98, 0.95],
+          "casts_shadows": true,
+          "mobility": 0,
+          "exposure_compensation_ev": 0.0,
+          "shadow": {
+            "bias": 0.0006,
+            "normal_bias": 0.02,
+            "resolution_hint": 1
+          }
+        },
+        "intensity_lux": 100000.0,
+        "angular_size_radians": 0.00931,
+        "is_sun_light": true,
+        "environment_contribution": true,
+        "cascade_count": 4,
+        "cascade_distances": [5.0, 15.0, 40.0, 100.0]
+      }
+    ]
+  }
+}
