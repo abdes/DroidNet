@@ -295,11 +295,26 @@ auto ConventionalShadowRasterPass::DoExecute(
         * sizeof(renderer::ConventionalShadowIndirectDrawCommand);
       const auto count_offset
         = static_cast<std::uint64_t>(job_index) * sizeof(std::uint32_t);
-      recorder.SetMarker("ConventionalShadowRasterPass.ExecuteIndirectCounted");
-      recorder.ExecuteIndirectCounted(*partition.command_buffer, command_offset,
-        partition.max_commands_per_job,
-        graphics::CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant,
-        *partition.count_buffer, count_offset);
+      recorder.SetMarker("ConventionalShadowRasterPass.ExecuteIndirect");
+      recorder.ExecuteIndirect(*partition.command_buffer,
+        graphics::CommandRecorder::IndirectCommandDesc {
+          .kind = graphics::CommandRecorder::IndirectCommandKind::kDraw,
+          .push_constants = graphics::CommandRecorder::IndirectPushConstantsDesc {
+            .binding_slot_desc = RootConstantsBindingSlot(),
+            .dest_offset_in_32bit_values = 0U,
+            .value_count = 1U,
+          },
+        },
+        graphics::CommandRecorder::IndirectExecutionDesc {
+          .argument_buffer_range = { command_offset, 0U },
+          .command_count = graphics::CommandRecorder::IndirectCommandCount {
+            partition.max_commands_per_job
+          },
+          .count_buffer = observer_ptr<const graphics::Buffer> {
+            partition.count_buffer
+          },
+          .count_buffer_range = { count_offset, sizeof(std::uint32_t) },
+        });
     }
   }
 

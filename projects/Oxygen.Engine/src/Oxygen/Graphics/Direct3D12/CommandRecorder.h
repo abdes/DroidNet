@@ -53,6 +53,8 @@ public:
   //! Use sparingly; prefer the CommandRecorder abstraction where possible.
   auto GetD3D12CommandList() const -> ID3D12GraphicsCommandList*;
 
+  auto Begin() -> void override;
+
   auto BeginEvent(std::string_view name) -> void override;
   auto EndEvent() -> void override;
   auto SetMarker(std::string_view name) -> void override;
@@ -88,13 +90,8 @@ public:
     uint32_t thread_group_count_z) -> void override;
 
   auto ExecuteIndirect(const graphics::Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t command_count,
-    IndirectCommandLayout layout) -> void override;
-
-  auto ExecuteIndirectCounted(const graphics::Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t max_command_count,
-    IndirectCommandLayout layout, const graphics::Buffer& count_buffer,
-    uint64_t count_buffer_offset) -> void override;
+    const IndirectCommandDesc& command_desc,
+    const IndirectExecutionDesc& execution_desc) -> void override;
 
   // ReSharper disable once CppRedundantQualifier
   auto BindIndexBuffer(const graphics::Buffer& buffer, Format format)
@@ -179,6 +176,7 @@ private:
 
   std::weak_ptr<Graphics> graphics_weak_;
   ID3D12RootSignature* current_graphics_root_signature_ { nullptr };
+  ID3D12RootSignature* current_compute_root_signature_ { nullptr };
 
   size_t graphics_pipeline_hash_ = 0;
   size_t compute_pipeline_hash_ = 0;

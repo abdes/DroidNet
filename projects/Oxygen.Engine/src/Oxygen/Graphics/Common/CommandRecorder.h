@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 // ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
@@ -48,10 +49,41 @@ class NativeView;
 
 class CommandRecorder {
 public:
-  enum class IndirectCommandLayout : uint8_t {
+  enum class IndirectCommandKind : uint8_t {
     kDraw,
-    kDrawWithRootConstant,
     kDispatch,
+  };
+
+  using IndirectCommandCount
+    = NamedType<uint32_t, struct IndirectCommandCountTag,
+      // clang-format off
+    DefaultInitialized,
+    Comparable,
+    Printable,
+    Hashable>; // clang-format on
+
+  struct IndirectPushConstantsDesc {
+    BindingSlotDesc binding_slot_desc {};
+    uint32_t dest_offset_in_32bit_values { 0U };
+    uint32_t value_count { 0U };
+
+    auto operator==(const IndirectPushConstantsDesc&) const -> bool = default;
+  };
+
+  struct IndirectCommandDesc {
+    IndirectCommandKind kind { IndirectCommandKind::kDraw };
+    std::optional<IndirectPushConstantsDesc> push_constants {};
+
+    auto operator==(const IndirectCommandDesc&) const -> bool = default;
+  };
+
+  struct IndirectExecutionDesc {
+    BufferRange argument_buffer_range {};
+    IndirectCommandCount command_count { 1U };
+    observer_ptr<const Buffer> count_buffer { nullptr };
+    BufferRange count_buffer_range {};
+
+    auto operator==(const IndirectExecutionDesc&) const -> bool = default;
   };
 
   //=== Lifecycle ===-------------------------------------------------------//
@@ -184,67 +216,45 @@ public:
     uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void
     = 0;
 
-  //! Issues one indirect draw or dispatch command.
+  //! Issues one indirect draw command using the default draw layout.
   /*!
-   In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
-   This implementation currently assumes a DrawInstanced command signature.
-
-   \param argument_buffer The buffer containing the draw or dispatch arguments.
-   \param argument_buffer_offset Offset in bytes into the argument buffer.
+   \param argument_buffer The buffer containing the indirect draw arguments.
+   \param argument_buffer_range Byte range within the argument buffer.
   */
-  auto ExecuteIndirect(
-    const Buffer& argument_buffer, uint64_t argument_buffer_offset) -> void
+  auto ExecuteIndirect(const Buffer& argument_buffer,
+    BufferRange argument_buffer_range = {}) -> void
   {
-    ExecuteIndirect(argument_buffer, argument_buffer_offset, 1U,
-      IndirectCommandLayout::kDraw);
+    ExecuteIndirect(argument_buffer, IndirectCommandDesc {},
+      IndirectExecutionDesc { .argument_buffer_range = argument_buffer_range });
   }
 
   auto ExecuteIndirect(const Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t command_count) -> void
+    const IndirectCommandDesc& command_desc,
+    BufferRange argument_buffer_range = {}) -> void
   {
-    ExecuteIndirect(argument_buffer, argument_buffer_offset, command_count,
-      IndirectCommandLayout::kDraw);
+    ExecuteIndirect(argument_buffer, command_desc,
+      IndirectExecutionDesc { .argument_buffer_range = argument_buffer_range });
   }
 
   //! Issues one or more indirect draw or dispatch commands.
   /*!
    In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
-   This implementation currently assumes a DrawInstanced command signature.
+   \p command_desc describes the terminal indirect operation and any inline
+   push-constant payload that should be written before executing each command.
+
+   When \p execution_desc.count_buffer is null, \p command_count is the fixed
+   number of commands to execute. When a count buffer is provided,
+   \p command_count is the maximum number of commands to execute and the GPU-
+   written counter value in that buffer is used as the actual count.
 
    \param argument_buffer The buffer containing the draw or dispatch arguments.
-   \param argument_buffer_offset Offset in bytes into the argument buffer.
-   \param command_count Number of commands to execute from the buffer.
+   \param command_desc Backend-agnostic description of the indirect command.
+   \param execution_desc Execution options, argument range, and optional GPU-
+          written count source.
   */
   virtual auto ExecuteIndirect(const Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t command_count,
-    IndirectCommandLayout layout) -> void
-    = 0;
-
-  //! Issues one or more indirect draw commands using a GPU-written count.
-  /*!
-   This maps to the D3D12 ExecuteIndirect overload that consumes both an
-
-   * argument buffer and a count buffer. The count buffer value is clamped by
-
-   * \p max_command_count.
-
-   \param argument_buffer The buffer containing
-   * indirect draw arguments.
-   \param argument_buffer_offset Offset in bytes
-   * into the argument buffer.
-   \param max_command_count Maximum number of
-   * commands to execute.
-   \param layout Command signature layout for the
-   * argument buffer.
-   \param count_buffer Buffer containing the GPU-written
-   * command count.
-   \param count_buffer_offset Offset in bytes into the count
-   * buffer.
-  */
-  virtual auto ExecuteIndirectCounted(const Buffer& argument_buffer,
-    uint64_t argument_buffer_offset, uint32_t max_command_count,
-    IndirectCommandLayout layout, const Buffer& count_buffer,
-    uint64_t count_buffer_offset) -> void
+    const IndirectCommandDesc& command_desc,
+    const IndirectExecutionDesc& execution_desc) -> void
     = 0;
 
   virtual auto SetVertexBuffers(uint32_t num,

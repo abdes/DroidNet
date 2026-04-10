@@ -620,16 +620,20 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
       const auto& partition = raster_partitions[partition_index];
       const auto& event = gfx_->indirect_log_.counted_draws[event_index];
       EXPECT_EQ(event.argument_buffer, partition.command_buffer);
-      EXPECT_EQ(event.count_buffer, partition.count_buffer);
-      EXPECT_EQ(event.max_command_count, partition.max_commands_per_job);
-      EXPECT_EQ(event.layout,
-        CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant);
-      EXPECT_EQ(event.argument_buffer_offset,
+      EXPECT_EQ(
+        event.execution_desc.count_buffer.get(), partition.count_buffer);
+      EXPECT_EQ(event.execution_desc.command_count.get(),
+        partition.max_commands_per_job);
+      EXPECT_EQ(
+        event.command_desc.kind, CommandRecorder::IndirectCommandKind::kDraw);
+      ASSERT_TRUE(event.command_desc.push_constants.has_value());
+      EXPECT_EQ(event.command_desc.push_constants->value_count, 1U);
+      EXPECT_EQ(event.execution_desc.argument_buffer_range.offset_bytes,
         static_cast<std::uint64_t>(job_index)
           * static_cast<std::uint64_t>(partition.max_commands_per_job)
           * sizeof(oxygen::renderer::ConventionalShadowIndirectDrawCommand));
-      EXPECT_EQ(
-        event.count_buffer_offset, static_cast<std::uint64_t>(job_index) * 4U);
+      EXPECT_EQ(event.execution_desc.count_buffer_range.offset_bytes,
+        static_cast<std::uint64_t>(job_index) * 4U);
     }
   }
 

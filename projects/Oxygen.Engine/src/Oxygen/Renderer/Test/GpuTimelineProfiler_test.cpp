@@ -284,12 +284,8 @@ public:
   auto SetScissors(const oxygen::Scissors&) -> void override { }
   auto Draw(uint32_t, uint32_t, uint32_t, uint32_t) -> void override { }
   auto Dispatch(uint32_t, uint32_t, uint32_t) -> void override { }
-  auto ExecuteIndirect(const Buffer&, uint64_t, uint32_t, IndirectCommandLayout)
-    -> void override
-  {
-  }
-  auto ExecuteIndirectCounted(const Buffer&, uint64_t, uint32_t,
-    IndirectCommandLayout, const Buffer&, uint64_t) -> void override
+  auto ExecuteIndirect(const Buffer&, const IndirectCommandDesc&,
+    const IndirectExecutionDesc&) -> void override
   {
   }
   auto SetVertexBuffers(uint32_t, const std::shared_ptr<Buffer>*,
