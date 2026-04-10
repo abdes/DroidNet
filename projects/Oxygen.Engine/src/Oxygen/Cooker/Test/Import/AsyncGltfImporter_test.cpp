@@ -4,10 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <filesystem>
 #include <optional>
-#include <string>
 #include <string_view>
 
 #include <Oxygen/Testing/GTest.h>
@@ -48,9 +46,12 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   const auto temp_dir = MakeTempDir("async_gltf_tabuleiro");
   ImportRequest request {
     .source_path = source_path,
+    .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
+    .job_name = std::nullopt,
+    .orchestration = std::nullopt,
     .options = {},
   };
   request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
@@ -64,10 +65,11 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   EXPECT_TRUE(run_result.report.success);
 
   const ExpectedSceneOutputs expected {
-    .materials = 3u,
-    .geometry = 5u,
-    .scenes = 1u,
-    .texture_files = 0u,
+    .materials = 3U,
+    .geometry = 5U,
+    .scenes = 1U,
+    .nodes_min = std::nullopt,
+    .texture_files = 0U,
   };
   ValidateSceneOutputs(run_result.report, expected);
 
@@ -81,6 +83,45 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
   }
 
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();
+}
+
+NOLINT_TEST_F(
+  AsyncGltfImporterFullTest, AsyncBackendImportsLightExtrasAsSceneSemantics)
+{
+  const auto models_dir = TestModelsDirFromFile();
+  const auto source_path = models_dir / "light_overrides.gltf";
+  if (!std::filesystem::exists(source_path)) {
+    GTEST_SKIP() << "Missing test asset: " << source_path.string();
+  }
+
+  const auto temp_dir = MakeTempDir("async_gltf_light_overrides");
+  ImportRequest request {
+    .source_path = source_path,
+    .additional_sources = {},
+    .cooked_root = temp_dir,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .job_name = std::nullopt,
+    .orchestration = std::nullopt,
+    .options = {},
+  };
+  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
+  request.options.import_content = ImportContentFlags::kAll;
+
+  const auto run_result = RunImport(std::move(request));
+
+  EXPECT_EQ(run_result.finished_id, run_result.job_id);
+  EXPECT_TRUE(run_result.report.success);
+
+  const auto scene = LoadSceneReadback(run_result.report);
+  EXPECT_TRUE(scene.renderables.empty());
+  EXPECT_TRUE(scene.directional_lights.empty());
+  ASSERT_EQ(scene.point_lights.size(), 1U);
+  EXPECT_TRUE(scene.spot_lights.empty());
+
+  const auto& light = scene.point_lights.front();
+  EXPECT_EQ(light.common.affects_world, 0U);
+  EXPECT_EQ(light.common.casts_shadows, 0U);
 }
 
 //! Async import succeeds for glTF Sponza when asset is available.
@@ -100,9 +141,12 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, DISABLEDAsyncBackendImportsSponza)
   const auto temp_dir = MakeTempDir("async_gltf_sponza");
   ImportRequest request {
     .source_path = source_path,
+    .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
+    .job_name = std::nullopt,
+    .orchestration = std::nullopt,
     .options = {},
   };
   request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();

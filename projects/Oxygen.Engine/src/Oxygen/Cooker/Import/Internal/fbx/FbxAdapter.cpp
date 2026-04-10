@@ -22,6 +22,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
@@ -242,6 +243,26 @@ namespace {
   using data::pak::world::PointLightRecord;
   using data::pak::world::RenderableRecord;
   using data::pak::world::SpotLightRecord;
+
+  [[nodiscard]] auto TryReadFbxBoolOverride(
+    const ufbx_props* props, const std::string_view name) -> std::optional<bool>
+  {
+    if (props == nullptr || ufbx_find_prop(props, name.data()) == nullptr) {
+      return std::nullopt;
+    }
+    return ufbx_find_bool(props, name.data(), false);
+  }
+
+  [[nodiscard]] auto ReadImportedLightSemantics(const ufbx_props* props)
+    -> detail::ImportedLightSemantics
+  {
+    return detail::ImportedLightSemantics {
+      .affects_world = TryReadFbxBoolOverride(
+        props, detail::kImportedLightAffectsWorldFbxProp),
+      .casts_shadows = TryReadFbxBoolOverride(
+        props, detail::kImportedLightCastsShadowsFbxProp),
+    };
+  }
 
   struct UfbxCancelContext final {
     std::stop_token stop_token;
@@ -2670,17 +2691,23 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     if (ufbx_node != nullptr && ufbx_node->light != nullptr) {
+      const auto node_light_semantics = ReadImportedLightSemantics(
+        ufbx_node != nullptr ? &ufbx_node->props : nullptr);
       const auto& light = *ufbx_node->light;
+      const auto light_semantics = ReadImportedLightSemantics(&light.props);
+      const auto imported_common = detail::ResolveImportedLightCommon(
+        node_light_semantics, light_semantics,
+        /*default_affects_world=*/light.cast_light,
+        /*default_casts_shadows=*/light.cast_shadows);
       switch (light.type) {
       case UFBX_LIGHT_DIRECTIONAL: {
         DirectionalLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = light.cast_light ? 1U : 0U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
         rec_light.intensity_lux = (std::max)(0.0F, light.intensity);
-        rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         build.directional_lights.push_back(rec_light);
         break;
       }
@@ -2689,12 +2716,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_VOLUME: {
         PointLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = light.cast_light ? 1U : 0U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
         rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
-        rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         build.point_lights.push_back(rec_light);
         if (light.type != UFBX_LIGHT_POINT) {
           diagnostics.push_back(
@@ -2707,12 +2733,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_SPOT: {
         SpotLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = light.cast_light ? 1U : 0U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color.x);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color.y);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color.z);
         rec_light.luminous_flux_lm = FbxIntensityToLumens(light.intensity);
-        rec_light.common.casts_shadows = light.cast_shadows ? 1U : 0U;
         const float inner = light.inner_angle;
         const float outer = light.outer_angle;
         rec_light.inner_cone_angle_radians = (std::max)(0.0F, inner);

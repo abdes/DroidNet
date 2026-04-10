@@ -1,0 +1,48 @@
+{
+  "asset": {
+    "version": "2.0"
+  },
+  "extensionsUsed": [
+    "KHR_lights_punctual"
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        {
+          "name": "SharedPointLight",
+          "type": "point",
+          "color": [1.0, 0.8, 0.6],
+          "intensity": 125.0,
+          "extras": {
+            "oxygen": {
+              "affects_world": true,
+              "casts_shadows": true
+            }
+          }
+        }
+      ]
+    }
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    {
+      "name": "InstanceOverrideLight",
+      "extensions": {
+        "KHR_lights_punctual": {
+          "light": 0
+        }
+      },
+      "extras": {
+        "oxygen": {
+          "affects_world": false,
+          "casts_shadows": false
+        }
+      }
+    }
+  ]
+}

@@ -181,6 +181,7 @@ set(
   "Import/Internal/ImportPipeline.h"
   "Import/Internal/ImportPlanner.h"
   "Import/Internal/ImportSession.h"
+  "Import/Internal/ImportedLightSemantics.h"
   "Import/Internal/JobEntry.h"
   "Import/Internal/Jobs/AudioImportJob.h"
   "Import/Internal/Jobs/BufferContainerImportJob.h"

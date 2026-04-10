@@ -54,6 +54,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackendImportsFullDinoScene)
   const auto temp_dir = MakeTempDir("async_fbx_dino");
   ImportRequest request {
     .source_path = source_path,
+    .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,
@@ -94,6 +95,43 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, AsyncBackendImportsFullDinoScene)
   GTEST_LOG_(INFO) << "Cooked root: " << run_result.report.cooked_root.string();
 }
 
+NOLINT_TEST_F(AsyncFbxImporterFullTest,
+  AsyncBackendImportsLightCustomPropertiesAsSceneSemantics)
+{
+  const auto models_dir = TestModelsDirFromFile();
+  const auto source_path = models_dir / "light_overrides.fbx";
+  if (!std::filesystem::exists(source_path)) {
+    GTEST_SKIP() << "Missing test asset: " << source_path.string();
+  }
+
+  const auto temp_dir = MakeTempDir("async_fbx_light_overrides");
+  ImportRequest request {
+    .source_path = source_path,
+    .additional_sources = {},
+    .cooked_root = temp_dir,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .options = {},
+  };
+  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
+  request.options.import_content = ImportContentFlags::kAll;
+
+  const auto run_result = RunImport(std::move(request));
+
+  EXPECT_EQ(run_result.finished_id, run_result.job_id);
+  EXPECT_TRUE(run_result.report.success);
+
+  const auto scene = LoadSceneReadback(run_result.report);
+  EXPECT_TRUE(scene.renderables.empty());
+  EXPECT_TRUE(scene.directional_lights.empty());
+  ASSERT_EQ(scene.point_lights.size(), 1U);
+  EXPECT_TRUE(scene.spot_lights.empty());
+
+  const auto& light = scene.point_lights.front();
+  EXPECT_EQ(light.common.affects_world, 0U);
+  EXPECT_EQ(light.common.casts_shadows, 0U);
+}
+
 //! Async import succeeds for Sponza when asset is available.
 /*!
  Validates the async FBX importer can handle the external-texture Sponza
@@ -111,6 +149,7 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, DISABLEDAsyncBackendImportsSponza)
   const auto temp_dir = MakeTempDir("async_fbx_sponza");
   ImportRequest request {
     .source_path = source_path,
+    .additional_sources = {},
     .cooked_root = temp_dir,
     .loose_cooked_layout = LooseCookedLayout {},
     .source_key = std::nullopt,

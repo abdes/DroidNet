@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -25,6 +26,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
@@ -143,6 +145,48 @@ namespace {
       .message = std::string(ResultToMessage(result)),
       .source_path = std::string(source_id),
       .object_path = {},
+    };
+  }
+
+  [[nodiscard]] auto TryReadJsonBool(const nlohmann::json& doc,
+    const std::string_view key) -> std::optional<bool>
+  {
+    const auto it = doc.find(std::string(key));
+    if (it == doc.end() || !it->is_boolean()) {
+      return std::nullopt;
+    }
+    return it->get<bool>();
+  }
+
+  [[nodiscard]] auto ReadImportedLightSemantics(const cgltf_extras& extras)
+    -> detail::ImportedLightSemantics
+  {
+    if (extras.data == nullptr) {
+      return {};
+    }
+
+    const auto extras_text = std::string_view(extras.data);
+    if (extras_text.empty()) {
+      return {};
+    }
+
+    const auto doc = nlohmann::json::parse(extras_text, nullptr, false);
+    if (doc.is_discarded() || !doc.is_object()) {
+      return {};
+    }
+
+    const auto oxygen_it
+      = doc.find(std::string(detail::kImportedLightExtrasNamespace));
+    if (oxygen_it == doc.end() || !oxygen_it->is_object()) {
+      return {};
+    }
+
+    const auto& oxygen_doc = *oxygen_it;
+    return detail::ImportedLightSemantics {
+      .affects_world
+      = TryReadJsonBool(oxygen_doc, detail::kImportedLightAffectsWorldKey),
+      .casts_shadows
+      = TryReadJsonBool(oxygen_doc, detail::kImportedLightCastsShadowsKey),
     };
   }
 
@@ -2507,42 +2551,46 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     if (gltf_node != nullptr && gltf_node->light != nullptr) {
+      const auto node_light_semantics
+        = ReadImportedLightSemantics(gltf_node->extras);
       const auto& light = *gltf_node->light;
+      const auto light_semantics = ReadImportedLightSemantics(light.extras);
+      const auto imported_common = detail::ResolveImportedLightCommon(
+        node_light_semantics, light_semantics,
+        /*default_affects_world=*/true,
+        /*default_casts_shadows=*/true);
       switch (light.type) {
       case cgltf_light_type_directional: {
         DirectionalLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = 1U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
         rec_light.intensity_lux = (std::max)(0.0F, light.intensity);
-        rec_light.common.casts_shadows = 1U;
         build.directional_lights.push_back(rec_light);
         break;
       }
       case cgltf_light_type_point: {
         PointLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = 1U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
         const float intensity_cd = (std::max)(0.0F, light.intensity);
         rec_light.luminous_flux_lm = CandelaToLumens(intensity_cd);
-        rec_light.common.casts_shadows = 1U;
         build.point_lights.push_back(rec_light);
         break;
       }
       case cgltf_light_type_spot: {
         SpotLightRecord rec_light {};
         rec_light.node_index = i;
-        rec_light.common.affects_world = 1U;
+        rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
         rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
         rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
         const float intensity_cd = (std::max)(0.0F, light.intensity);
-        rec_light.common.casts_shadows = 1U;
         rec_light.inner_cone_angle_radians
           = (std::max)(0.0F, light.spot_inner_cone_angle);
         rec_light.outer_cone_angle_radians

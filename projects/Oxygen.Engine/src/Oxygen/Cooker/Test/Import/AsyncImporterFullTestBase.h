@@ -34,10 +34,13 @@ using data::AssetType;
 using data::ComponentType;
 using data::loose_cooked::FileKind;
 using data::pak::core::TextureResourceDesc;
+using data::pak::world::DirectionalLightRecord;
 using data::pak::world::NodeRecord;
+using data::pak::world::PointLightRecord;
 using data::pak::world::RenderableRecord;
 using data::pak::world::SceneAssetDesc;
 using data::pak::world::SceneComponentTableDesc;
+using data::pak::world::SpotLightRecord;
 using import::AsyncImportService;
 using import::ImportJobId;
 using import::ImportReport;
@@ -69,6 +72,9 @@ protected:
     std::vector<NodeRecord> nodes;
     std::vector<SceneComponentTableDesc> component_entries;
     std::vector<RenderableRecord> renderables;
+    std::vector<DirectionalLightRecord> directional_lights;
+    std::vector<PointLightRecord> point_lights;
+    std::vector<SpotLightRecord> spot_lights;
   };
 
   [[nodiscard]] auto TestModelsDirFromFile() -> std::filesystem::path

@@ -6,6 +6,8 @@
 
 #include "AsyncImporterFullTestBase.h"
 
+#include <type_traits>
+
 namespace oxygen::content::import::test {
 
 auto AsyncImporterFullTestBase::LoadInspection(
@@ -66,6 +68,28 @@ auto AsyncImporterFullTestBase::LoadSceneReadback(const ImportReport& report)
   }
   const auto base_pos = *base_pos_res;
 
+  auto read_component_table
+    = [&](const SceneComponentTableDesc& entry, auto& out) -> bool {
+    using Record = typename std::remove_reference_t<decltype(out)>::value_type;
+    if (entry.table.count == 0U) {
+      out.clear();
+      return true;
+    }
+
+    out.resize(entry.table.count);
+    const auto seek_table
+      = scene_reader.Seek(base_pos + static_cast<size_t>(entry.table.offset));
+    EXPECT_TRUE(seek_table);
+    if (!seek_table) {
+      return false;
+    }
+
+    auto read_result = scene_reader.ReadBlobInto(
+      std::as_writable_bytes(std::span<Record>(out.data(), out.size())));
+    EXPECT_TRUE(read_result);
+    return static_cast<bool>(read_result);
+  };
+
   SceneReadback readback {};
   auto scene_desc_result = scene_reader.ReadBlobInto(
     std::as_writable_bytes(std::span<SceneAssetDesc, 1>(&readback.desc, 1)));
@@ -108,28 +132,24 @@ auto AsyncImporterFullTestBase::LoadSceneReadback(const ImportReport& report)
       return {};
     }
 
-    const auto renderables_it = std::find_if(readback.component_entries.begin(),
-      readback.component_entries.end(),
-      [](const SceneComponentTableDesc& entry) {
-        return static_cast<ComponentType>(entry.component_type)
-          == ComponentType::kRenderable;
-      });
-    if (renderables_it != readback.component_entries.end()
-      && renderables_it->table.count > 0U) {
-      readback.renderables.resize(renderables_it->table.count);
-      const auto seek_renderables = scene_reader.Seek(
-        base_pos + static_cast<size_t>(renderables_it->table.offset));
-      EXPECT_TRUE(seek_renderables);
-      if (!seek_renderables) {
-        return {};
-      }
-
-      auto renderables_result = scene_reader.ReadBlobInto(
-        std::as_writable_bytes(std::span<RenderableRecord>(
-          readback.renderables.data(), readback.renderables.size())));
-      EXPECT_TRUE(renderables_result);
-      if (!renderables_result) {
-        return {};
+    for (const auto& entry : readback.component_entries) {
+      const auto type = static_cast<ComponentType>(entry.component_type);
+      if (type == ComponentType::kRenderable) {
+        if (!read_component_table(entry, readback.renderables)) {
+          return {};
+        }
+      } else if (type == ComponentType::kDirectionalLight) {
+        if (!read_component_table(entry, readback.directional_lights)) {
+          return {};
+        }
+      } else if (type == ComponentType::kPointLight) {
+        if (!read_component_table(entry, readback.point_lights)) {
+          return {};
+        }
+      } else if (type == ComponentType::kSpotLight) {
+        if (!read_component_table(entry, readback.spot_lights)) {
+          return {};
+        }
       }
     }
   }
@@ -181,8 +201,8 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
       static_cast<uint32_t>(expected.nodes_min.value()));
   }
 
-  ASSERT_GT(scene_desc.component_table_count, 0u);
-  ASSERT_NE(scene_desc.component_table_directory_offset, 0u);
+  ASSERT_GT(scene_desc.component_table_count, 0U);
+  ASSERT_NE(scene_desc.component_table_directory_offset, 0U);
 
   auto seek_dir = scene_reader.Seek(base_pos
     + static_cast<size_t>(scene_desc.component_table_directory_offset));
@@ -223,7 +243,7 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
     EXPECT_EQ(renderables_entry->table.count,
       static_cast<uint32_t>(expected.geometry.value()));
   } else {
-    EXPECT_GT(renderables_entry->table.count, 0u);
+    EXPECT_GT(renderables_entry->table.count, 0U);
   }
 
   EXPECT_FALSE(has_perspective);
@@ -240,17 +260,17 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
   const auto table_exists = std::filesystem::exists(textures_table_path);
   const auto data_exists = std::filesystem::exists(textures_data_path);
 
-  size_t texture_count = 0u;
+  size_t texture_count = 0U;
   if (table_exists) {
     const auto table_size = std::filesystem::file_size(textures_table_path);
-    ASSERT_EQ(table_size % sizeof(TextureResourceDesc), 0u);
+    ASSERT_EQ(table_size % sizeof(TextureResourceDesc), 0U);
     texture_count
       = static_cast<size_t>(table_size / sizeof(TextureResourceDesc));
   }
 
   if (expected.texture_files.has_value()) {
     EXPECT_EQ(texture_count, expected.texture_files.value());
-    if (expected.texture_files.value() > 0u) {
+    if (expected.texture_files.value() > 0U) {
       EXPECT_TRUE(table_exists);
       EXPECT_TRUE(data_exists);
     } else {
@@ -258,7 +278,7 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
       EXPECT_FALSE(data_exists);
     }
   } else {
-    EXPECT_GT(texture_count, 0u);
+    EXPECT_GT(texture_count, 0U);
     EXPECT_TRUE(table_exists);
     EXPECT_TRUE(data_exists);
   }
@@ -274,7 +294,7 @@ auto AsyncImporterFullTestBase::ValidateSceneOutputs(
     });
 
   if (expected.texture_files.has_value()) {
-    if (expected.texture_files.value() > 0u) {
+    if (expected.texture_files.value() > 0U) {
       EXPECT_TRUE(has_textures_table);
       EXPECT_TRUE(has_textures_data);
     } else {
