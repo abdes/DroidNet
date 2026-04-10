@@ -205,12 +205,14 @@ without requiring per-dependency options.
 # Non-ASan
 .\tools\generate-builds.ps1 profiles/windows-msvc.ini
 
+# Generate Tracy-enabled builds
+.\tools\generate-builds.ps1 profiles/windows-msvc.ini -WithTracy
+
 # Show usage
 .\tools\generate-builds.ps1 -Help
 ```
 
-CLI tools (oxybuild / oxyrun)
------------------------------
+**CLI tools (oxybuild / oxyrun):**
 
 - Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
 - Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).

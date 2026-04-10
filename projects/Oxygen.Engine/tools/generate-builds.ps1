@@ -24,6 +24,9 @@ Deployer package name (default: "Oxygen/0.1.0").
 .PARAMETER NoClean
 Do not clean existing build directories.
 
+.PARAMETER WithTracy
+Generate Tracy (profiler enabled) build trees instead of standard builds.
+
 .PARAMETER Help
 Show this help message and exit.
 
@@ -42,7 +45,8 @@ param(
     [string]$Build = "missing",
     [string]$DeployerFolder = "out/install",
     [string]$DeployerPackage = "Oxygen/0.1.0",
-    [switch]$NoClean
+    [switch]$NoClean,
+    [switch]$WithTracy
 )
 
 function Show-Usage {
@@ -55,6 +59,7 @@ function Show-Usage {
     Write-Host "  -DeployerFolder     Deployer output folder (default: out/install)"
     Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
     Write-Host "  -NoClean            Do not clean existing build directories"
+    Write-Host "  -WithTracy          Generate additional Tracy build trees"
     Write-Host "  -Help, -h, -?       Show this help message and exit"
     Write-Host ""
     Write-Host "Note: Relative paths for profiles and output (e.g. 'out') are resolved relative to the repository root." -ForegroundColor Gray
@@ -130,12 +135,18 @@ $configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release", "RelW
 $sanitizer = if ($isAsan) { 'asan' } else { 'none' }
 
 # Clean up specific directories
+$tracyModes = if ($WithTracy) { @( $true ) } else { @( $false ) }
+
 if (-not $NoClean) {
     Write-Host "Cleaning build environment..." -ForegroundColor Gray
-    $targetsToClean = @(
-        (Join-Path $repoRoot $vsBuildDir),
-        (Join-Path $repoRoot $ninjaBuildDir)
-    )
+    $targetsToClean = @()
+    foreach ($tracy in $tracyModes) {
+        $prefix = if ($tracy) { "tracy-" } else { "" }
+        $vsBuildDir = "out/build-${prefix}${suffix}vs"
+        $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
+        $targetsToClean += (Join-Path $repoRoot $vsBuildDir)
+        $targetsToClean += (Join-Path $repoRoot $ninjaBuildDir)
+    }
 
     foreach ($config in $configurations) {
         $sub = if ($isAsan) { "Asan" } else { $config }
@@ -172,39 +183,52 @@ $conanBaseArgs = @(
     "-c", "user.oxygen:sanitizer=$sanitizer"
 )
 
-Write-Host "`n=== Phase 1: Ninja Multi-Config ===" -ForegroundColor Cyan
-$ninjaConanArgs = $conanBaseArgs + @(
-    "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config"
-)
+foreach ($tracy in $tracyModes) {
+    $tracyName = if ($tracy) { " (Tracy)" } else { "" }
+    $tracyArg = if ($tracy) { @("-o", "with_tracy=True") } else { @("-o", "with_tracy=False") }
+    $prefix = if ($tracy) { "tracy-" } else { "" }
+    $vsBuildDir = "out/build-${prefix}${suffix}vs"
+    $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
 
-Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
-foreach ($config in $configurations) {
-    conan @ninjaConanArgs -s build_type=$config
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "`n=== Phase 1: Ninja Multi-Config$tracyName ===" -ForegroundColor Cyan
+    $ninjaConanArgs = $conanBaseArgs + $tracyArg + @(
+        "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config"
+    )
+
+    Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
+    foreach ($config in $configurations) {
+        conan @ninjaConanArgs -s build_type=$config
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+
+    Write-Host "Configuring Ninja build tree..." -ForegroundColor Gray
+    cmake --preset $ninjaPreset
+    if ($LASTEXITCODE -ne 0) { Write-Host "Ninja configuration failed" -ForegroundColor Yellow }
+
+    Write-Host "`n=== Phase 2: Visual Studio 18$tracyName ===" -ForegroundColor Cyan
+    $vsConanArgs = $conanBaseArgs + $tracyArg + @(
+        "-c", "tools.cmake.cmaketoolchain:generator=Visual Studio 18 2026"
+    )
+
+    Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
+    foreach ($config in $configurations) {
+        conan @vsConanArgs -s build_type=$config
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+
+    Write-Host "Generating Visual Studio solution (Plain old CMake)..." -ForegroundColor Gray
+    $vsToolchain = "$vsBuildDir/generators/conan_toolchain.cmake"
+    cmake -G "Visual Studio 18 2026" -A x64 -S . -B $vsBuildDir -D "CMAKE_TOOLCHAIN_FILE=$vsToolchain"
+    if ($LASTEXITCODE -ne 0) { Write-Host "VS configuration failed" -ForegroundColor Yellow }
 }
-
-Write-Host "Configuring Ninja build tree..." -ForegroundColor Gray
-cmake --preset $ninjaPreset
-if ($LASTEXITCODE -ne 0) { Write-Host "Ninja configuration failed" -ForegroundColor Yellow }
-
-Write-Host "`n=== Phase 2: Visual Studio 18 ===" -ForegroundColor Cyan
-$vsConanArgs = $conanBaseArgs + @(
-    "-c", "tools.cmake.cmaketoolchain:generator=Visual Studio 18 2026"
-)
-
-Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
-foreach ($config in $configurations) {
-    conan @vsConanArgs -s build_type=$config
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
-
-Write-Host "Generating Visual Studio solution (Plain old CMake)..." -ForegroundColor Gray
-$vsToolchain = "$vsBuildDir/generators/conan_toolchain.cmake"
-cmake -G "Visual Studio 18 2026" -A x64 -S . -B $vsBuildDir -D "CMAKE_TOOLCHAIN_FILE=$vsToolchain"
-if ($LASTEXITCODE -ne 0) { Write-Host "VS configuration failed" -ForegroundColor Yellow }
 
 Write-Host "`n=== Success ===" -ForegroundColor Green
-Write-Host "Ninja Folder:  $ninjaBuildDir/"
-Write-Host "VS Folder:     $vsBuildDir/"
+foreach ($tracy in $tracyModes) {
+    $prefix = if ($tracy) { "tracy-" } else { "" }
+    $vsBuildDir = "out/build-${prefix}${suffix}vs"
+    $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
+    Write-Host "Ninja Folder:  $ninjaBuildDir/"
+    Write-Host "VS Folder:     $vsBuildDir/"
+}
 
 Write-Host "`nRuntime dependency PATH is resolved per build configuration by CMake custom commands and tools/cli/oxyrun.ps1." -ForegroundColor Gray

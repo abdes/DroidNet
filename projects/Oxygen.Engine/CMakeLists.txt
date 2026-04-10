@@ -162,6 +162,7 @@ set(OPTIONS_LIST
   OXYGEN_BUILD_DOCS        "Setup target to build the documentation." ON
   OXYGEN_WITH_ASAN         "Instrument code with address sanitizer" OFF
   OXYGEN_WITH_COVERAGE     "Instrument code to measure coverage" OFF
+  OXYGEN_WITH_TRACY        "Enable Tracy profiler integration" OFF
   # OXYGEN_WITH_UBSAN        "Instrument code with undefined behavior sanitizer" OFF
   # OXYGEN_WITH_TSAN         "Instrument code with thread sanitizer" OFF
   # OXYGEN_WITH_VALGRIND     "Instrument code with valgrind profilers" OFF
@@ -536,6 +537,7 @@ message(STATUS "     Build examples: ${OXYGEN_BUILD_EXAMPLES}")
 message(STATUS "     Build documentation: ${OXYGEN_BUILD_DOCS}")
 message(STATUS "     Address sanitizer: ${OXYGEN_WITH_ASAN}")
 message(STATUS "     Code coverage: ${OXYGEN_WITH_COVERAGE}")
+message(STATUS "     Tracy profiler: ${OXYGEN_WITH_TRACY}")
 message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
 # message(STATUS "     Undefined behavior sanitizer: ${OXYGEN_WITH_UBSAN}")
 # message(STATUS "     Thread sanitizer: ${OXYGEN_WITH_TSAN}")
