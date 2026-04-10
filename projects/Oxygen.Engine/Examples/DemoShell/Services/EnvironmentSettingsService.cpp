@@ -2012,7 +2012,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
           light->get().SetIntensityLux(sun_illuminance_lx_);
           auto& common = light->get().Common();
-          ApplySunShadowSettingsToLight(light->get());
           common.color_rgb = sun_use_temperature_
             ? KelvinToLinearRgb(sun_temperature_kelvin_)
             : sun_color_rgb_;
@@ -2328,7 +2327,11 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   }
 
   if (apply_saved_sun_on_next_sync_) {
-    ApplySavedSunSourcePreference();
+    if (!(sun_light_available_ && sun_source_ == 0)) {
+      ApplySavedSunSourcePreference();
+    } else {
+      saved_sun_source_ = 0;
+    }
     apply_saved_sun_on_next_sync_ = false;
   }
 
@@ -3070,6 +3073,7 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
     sun_present_ = true;
     sun_enabled_ = true;
     sun_source_ = 0;
+    saved_sun_source_ = 0;
     if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
       CaptureSunShadowSettingsFromLight(light->get());
       SaveSunSettingsToProfile(0);

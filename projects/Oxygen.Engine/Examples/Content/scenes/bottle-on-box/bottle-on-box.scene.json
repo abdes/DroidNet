@@ -14,6 +14,7 @@
       "flags": {
         "visible": true,
         "static": true,
+        "casts_shadows": false,
         "receives_shadows": true
       },
       "transform": {
@@ -130,12 +131,18 @@
           "color_rgb": [1.0, 0.98, 0.95],
           "casts_shadows": true,
           "mobility": 0,
-          "exposure_compensation_ev": 0.0
+          "exposure_compensation_ev": 0.0,
+          "shadow": {
+            "bias": 0.0006,
+            "normal_bias": 0.02,
+            "resolution_hint": 1
+          }
         },
         "intensity_lux": 100000.0,
         "angular_size_radians": 0.00931,
         "is_sun_light": true,
-        "cascade_count": 3,
+        "environment_contribution": true,
+        "cascade_count": 4,
         "cascade_distances": [5.0, 15.0, 40.0, 100.0]
       }
     ]
