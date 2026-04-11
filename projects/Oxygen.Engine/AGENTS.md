@@ -46,3 +46,16 @@ If the agent violates rules 1-3:
 2. Reuse existing engine pipelines/helpers before adding new mechanisms.
 3. Keep domain ownership boundaries clean (no cross-domain option payload leakage).
 4. Use schema-first validation; manual validation only for non-schema-enforceable constraints.
+
+## 6. Proof-Carrying Progress
+
+This repository prefers **proof-carrying progress** over either bluffing or defensive stagnation.
+
+1. Do the substantive work first; do not substitute process talk for progress.
+2. Do not make strong claims (`done`, `fully preserved`, `fully reviewed`, `complete`, equivalent) unless the corresponding verification has already been performed.
+3. Bundle every strong claim with its proof artifact:
+   changed files, tests/results, coverage check, source-to-target mapping, or exact residual gap.
+4. If self-review finds gaps, fix them before reporting unless blocked.
+5. Avoid vague confidence language like `appears`, `looks`, or `should be fine` when a binary verified/not-verified answer is possible.
+6. Keep verification discipline mostly internal; surface the result and the evidence, not a wall of defensive meta-commentary.
+7. When splitting, migrating, or rewriting documents, preserve architecture decisions, implementation-significant details, simulation findings, deferred items, and explicit open questions; run a source-to-target coverage check before claiming preservation.
