@@ -35,6 +35,7 @@
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -45,6 +46,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
@@ -106,6 +108,8 @@ using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::DescriptorVisibility;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::GraphicsPipelineDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
@@ -295,9 +299,9 @@ auto UploadStructuredSrvBuffer(oxygen::renderer::testing::FakeGraphics& gfx,
   }
 
   auto& allocator = gfx.GetDescriptorAllocator();
-  auto handle = allocator.AllocateBindless(
-    oxygen::bindless::generated::kGlobalSrvDomain,
-    ResourceViewType::kStructuredBuffer_SRV);
+  auto handle
+    = allocator.AllocateBindless(oxygen::bindless::generated::kGlobalSrvDomain,
+      ResourceViewType::kStructuredBuffer_SRV);
   EXPECT_TRUE(handle.IsValid());
   if (!handle.IsValid()) {
     return { .buffer = std::move(buffer) };
@@ -336,6 +340,29 @@ protected:
   {
     return gfx_->AcquireCommandRecorder(
       gfx_->QueueKeyFor(QueueRole::kGraphics), name, false);
+  }
+
+  [[nodiscard]] auto MakeHarnessFramebuffer(std::string_view debug_name,
+    const std::uint32_t width = 1U, const std::uint32_t height = 1U)
+    -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = oxygen::graphics::TextureDesc {};
+    color_desc.width = width;
+    color_desc.height = height;
+    color_desc.format = oxygen::Format::kRGBA8UNorm;
+    color_desc.texture_type = oxygen::TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = std::string(debug_name) + ".Color";
+
+    auto color = gfx_->CreateTexture(color_desc);
+    EXPECT_NE(color, nullptr);
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.AddColorAttachment({ .texture = color });
+    auto framebuffer = gfx_->CreateFramebuffer(framebuffer_desc);
+    EXPECT_NE(framebuffer, nullptr);
+    return framebuffer;
   }
 
   std::shared_ptr<oxygen::renderer::testing::FakeGraphics> gfx_ {};
@@ -399,44 +426,6 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
     "shadow-pass.contract.draw-metadata");
   prepared_frame.bindless_draw_metadata_slot = uploaded_draw_metadata.slot;
 
-  auto offscreen = renderer_->BeginOffscreenFrame({ .frame_slot = kFrameSlot,
-    .frame_sequence = kFrameSequence,
-    .scene = observer_ptr<Scene> { scene.get() } });
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
-  auto& render_context = offscreen.GetRenderContext();
-  ASSERT_NE(render_context.view_constants, nullptr);
-
-  const auto light_manager = renderer_->GetLightManager();
-  ASSERT_NE(light_manager.get(), nullptr);
-  light_manager->CollectFromNode(
-    directional_node.GetHandle(), directional_impl->get());
-
-  const auto shadow_manager = renderer_->GetShadowManager();
-  ASSERT_NE(shadow_manager.get(), nullptr);
-  shadow_manager->ReserveFrameResources(1U, *light_manager);
-
-  const auto shadow_caster_bounds
-    = std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } };
-  const auto visible_receiver_bounds
-    = std::array { glm::vec4 { 0.0F, 0.0F, -2.0F, 4.0F } };
-  const auto publication = shadow_manager->PublishForView(kTestViewId,
-    view_constants, *light_manager, observer_ptr<Scene> { scene.get() },
-    static_cast<float>(kWidth), {}, shadow_caster_bounds,
-    visible_receiver_bounds);
-  EXPECT_TRUE(publication.directional_shadow_texture_srv.IsValid());
-
-  const auto authoritative_depth_texture
-    = shadow_manager->GetConventionalShadowDepthTexture();
-  ASSERT_NE(authoritative_depth_texture, nullptr);
-
-  const auto* raster_plan = shadow_manager->TryGetRasterRenderPlan(kTestViewId);
-  ASSERT_NE(raster_plan, nullptr);
-  ASSERT_NE(raster_plan->depth_texture, nullptr);
-  ASSERT_FALSE(raster_plan->jobs.empty());
-  EXPECT_EQ(
-    raster_plan->depth_texture.get(), authoritative_depth_texture.get());
-
   auto conventional_draw_records
     = std::vector<oxygen::renderer::ConventionalShadowDrawRecord> {};
   BuildConventionalShadowDrawRecords(prepared_frame, conventional_draw_records);
@@ -449,8 +438,62 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
     = std::span(conventional_draw_records);
   prepared_frame.bindless_conventional_shadow_draw_records_slot
     = uploaded_draw_records.slot;
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
+
+  auto framebuffer
+    = MakeHarnessFramebuffer("shadow-pass.contract", kWidth, kHeight);
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = kFrameSlot,
+        .frame_sequence = kFrameSequence,
+        .scene = observer_ptr<Scene> { scene.get() },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = resolved_view,
+      },
+      Renderer::PreparedFrameInput { .value = prepared_frame },
+      Renderer::CoreShaderInputsInput {
+        .view_id = kTestViewId,
+        .value = view_constants,
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
+  ASSERT_NE(render_context.view_constants, nullptr);
+
+  const auto shadow_caster_bounds
+    = std::array { glm::vec4 { 0.0F, 0.0F, 0.0F, 4.0F } };
+  const auto visible_receiver_bounds
+    = std::array { glm::vec4 { 0.0F, 0.0F, -2.0F, 4.0F } };
+  auto authoritative_depth_texture = std::shared_ptr<Texture> {};
+  const oxygen::renderer::RasterShadowRenderPlan* raster_plan = nullptr;
+  const auto light_manager = renderer_->GetLightManager();
+  ASSERT_NE(light_manager.get(), nullptr);
+  light_manager->CollectFromNode(
+    directional_node.GetHandle(), directional_impl->get());
+
+  const auto shadow_manager = renderer_->GetShadowManager();
+  ASSERT_NE(shadow_manager.get(), nullptr);
+  shadow_manager->ReserveFrameResources(1U, *light_manager);
+
+  const auto publication = shadow_manager->PublishForView(kTestViewId,
+    view_constants, *light_manager, observer_ptr<Scene> { scene.get() },
+    static_cast<float>(kWidth), {}, shadow_caster_bounds,
+    visible_receiver_bounds);
+  EXPECT_TRUE(publication.directional_shadow_texture_srv.IsValid());
+
+  authoritative_depth_texture
+    = shadow_manager->GetConventionalShadowDepthTexture();
+  ASSERT_NE(authoritative_depth_texture, nullptr);
+
+  raster_plan = shadow_manager->TryGetRasterRenderPlan(kTestViewId);
+  ASSERT_NE(raster_plan, nullptr);
+  ASSERT_NE(raster_plan->depth_texture, nullptr);
+  ASSERT_FALSE(raster_plan->jobs.empty());
+  EXPECT_EQ(
+    raster_plan->depth_texture.get(), authoritative_depth_texture.get());
 
   auto depth_pass
     = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
@@ -501,6 +544,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
     NOLINT_EXPECT_NO_THROW(RunPass(screen_hzb_pass, render_context, *recorder));
     render_context.RegisterPass<ScreenHzbBuildPass>(&screen_hzb_pass);
   }
+  ASSERT_TRUE(screen_hzb_pass.GetCurrentOutput(kTestViewId).available);
   {
     auto recorder
       = AcquireRecorder("shadow-pass.contract.receiver-analysis.run");
@@ -510,6 +554,7 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
     render_context.RegisterPass<ConventionalShadowReceiverAnalysisPass>(
       &receiver_analysis_pass);
   }
+  ASSERT_TRUE(receiver_analysis_pass.GetCurrentOutput(kTestViewId).available);
   {
     auto recorder = AcquireRecorder("shadow-pass.contract.receiver-mask.run");
     ASSERT_NE(recorder, nullptr);
@@ -659,13 +704,27 @@ NOLINT_TEST_F(ConventionalShadowRasterPassContractTest,
 
   auto scene = std::make_shared<Scene>("renderer.offscreen.attach.guard", 8U);
   auto prepared_frame = PreparedSceneFrame {};
-  {
-    auto offscreen = renderer_->BeginOffscreenFrame({ .frame_slot = Slot { 0U },
-      .frame_sequence = SequenceNumber { 1U },
-      .scene = observer_ptr<Scene> { scene.get() } });
-    offscreen.SetCurrentView(
-      kTestViewId, MakeResolvedView(4U, 4U), prepared_frame);
-  }
+  auto framebuffer = MakeHarnessFramebuffer("renderer.attach.guard", 4U, 4U);
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 1U },
+        .scene = observer_ptr<Scene> { scene.get() },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeResolvedView(4U, 4U),
+      },
+      Renderer::PreparedFrameInput { .value = prepared_frame },
+      Renderer::CoreShaderInputsInput {
+        .view_id = kTestViewId,
+        .value = MakeShadowViewConstants(
+          MakeResolvedView(4U, 4U), Slot { 0U }, SequenceNumber { 1U }),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
 
   auto engine = FakeAsyncEngine {};
   NOLINT_EXPECT_DEATH(

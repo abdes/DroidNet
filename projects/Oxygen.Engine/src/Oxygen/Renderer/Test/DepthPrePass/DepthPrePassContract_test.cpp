@@ -31,9 +31,7 @@ using oxygen::NdcDepthRange;
 using oxygen::engine::DepthPrePass;
 using oxygen::engine::PassMask;
 using oxygen::engine::PassMaskBit;
-using oxygen::engine::PreparedSceneFrame;
 using oxygen::engine::testing::DepthPrePassGpuTestFixture;
-using oxygen::engine::testing::RunPass;
 using oxygen::engine::testing::SyntheticSceneBuilder;
 using oxygen::engine::testing::TestVertex;
 using oxygen::frame::SequenceNumber;
@@ -101,23 +99,8 @@ NOLINT_TEST_F(DepthPrePassContractTest,
       .debug_name = "contract.products",
     }));
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 7U } });
-  offscreen.SetCurrentView(kTestViewId,
-    MakeResolvedView(depth_texture->GetDescriptor().width,
-      depth_texture->GetDescriptor().height, true, NdcDepthRange::ZeroToOne),
-    prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
-
-  {
-    auto recorder = AcquireRecorder("contract.products.execute");
-    ASSERT_NE(recorder, nullptr);
-    EnsureTracked(
-      *recorder, depth_texture, oxygen::graphics::ResourceStates::kCommon);
-    RunPass(pass, render_context, *recorder);
-  }
-  WaitForQueueIdle();
+  ExecuteDepthPass(pass, *renderer, depth_texture, SequenceNumber { 7U },
+    "contract.products.execute");
 
   const auto output = pass.GetOutput();
   ASSERT_NE(output.depth_texture, nullptr);
@@ -188,9 +171,9 @@ NOLINT_TEST_F(DepthPrePassContractTest, GeometryExecutionProducesCompleteOutput)
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "contract.complete.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "contract.complete.execute");
 
   const auto output = pass.GetOutput();
   EXPECT_TRUE(output.is_complete);
@@ -235,9 +218,9 @@ NOLINT_TEST_F(DepthPrePassContractTest,
   scene.partitions.clear();
   scene.prepared_frame.partitions = {};
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "contract.no-partitions.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "contract.no-partitions.execute");
 
   const auto output = pass.GetOutput();
   EXPECT_TRUE(output.is_complete);

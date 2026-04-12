@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 
@@ -145,9 +146,15 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 
   frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
 
-  [[maybe_unused]] auto offscreen
-    = renderer_->BeginOffscreenFrame({ .frame_slot = oxygen::frame::Slot { 0U },
-      .frame_sequence = oxygen::frame::SequenceNumber { 1U } });
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForFullscreenGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
 
   graphics_->draw_log_.draws.clear();
 
@@ -177,9 +184,15 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto target_a = MakeFramebuffer(surface_a_texture);
   auto target_b = MakeFramebuffer(surface_b_texture);
 
-  [[maybe_unused]] auto offscreen
-    = renderer_->BeginOffscreenFrame({ .frame_slot = oxygen::frame::Slot { 0U },
-      .frame_sequence = oxygen::frame::SequenceNumber { 1U } });
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForFullscreenGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { target_a.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.SourceA", target_a), surface_a);
@@ -198,9 +211,15 @@ NOLINT_TEST_F(
 
   frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
 
-  [[maybe_unused]] auto offscreen
-    = renderer_->BeginOffscreenFrame({ .frame_slot = oxygen::frame::Slot { 0U },
-      .frame_sequence = oxygen::frame::SequenceNumber { 1U } });
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForFullscreenGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
 
   renderer_->RegisterComposition(
     MakeSubmission("Queue.Drain", target), surface);

@@ -12,10 +12,12 @@
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/RenderPass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
@@ -28,6 +30,7 @@ using oxygen::Format;
 using oxygen::TextureType;
 using oxygen::engine::DepthPrePass;
 using oxygen::engine::PreparedSceneFrame;
+using oxygen::engine::Renderer;
 using oxygen::engine::RenderPass;
 using oxygen::engine::ShaderDebugMode;
 using oxygen::engine::ShaderPass;
@@ -38,6 +41,8 @@ using oxygen::frame::Slot;
 using oxygen::graphics::Color;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::CompareOp;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
 using oxygen::renderer::DepthPrePassCompleteness;
@@ -67,7 +72,20 @@ protected:
     desc.clear_value = Color { 0.1F, 0.1F, 0.1F, 1.0F };
     desc.initial_state = ResourceStates::kCommon;
     desc.debug_name = std::string(debug_name);
-    return CreateRegisteredTexture(desc);
+    return Backend().CreateTexture(desc);
+  }
+
+  auto CreateColorFramebuffer(const std::shared_ptr<Texture>& color_texture,
+    std::string_view debug_name) -> std::shared_ptr<Framebuffer>
+  {
+    CHECK_NOTNULL_F(color_texture.get(),
+      "ShaderPass depth-state tests require a color target");
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.AddColorAttachment({ .texture = color_texture });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(
+      framebuffer.get(), "Failed to create shader-pass framebuffer");
+    return framebuffer;
   }
 };
 
@@ -85,12 +103,22 @@ NOLINT_TEST_F(ShaderPassDepthStateTest,
   ASSERT_NE(color_texture, nullptr);
   ASSERT_NE(depth_texture, nullptr);
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 1U } });
-  offscreen.SetCurrentView(
-    kTestViewId, MakeResolvedView(kWidth, kHeight), prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer
+    = CreateColorFramebuffer(color_texture, "shader-pass.depth-state");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeResolvedView(kWidth, kHeight),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto depth_pass
     = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
@@ -141,12 +169,22 @@ NOLINT_TEST_F(ShaderPassDepthStateTest,
   ASSERT_NE(color_texture, nullptr);
   ASSERT_NE(depth_texture, nullptr);
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 2U } });
-  offscreen.SetCurrentView(
-    kTestViewId, MakeResolvedView(kWidth, kHeight), prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer
+    = CreateColorFramebuffer(color_texture, "shader-pass.rebuild");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 2U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeResolvedView(kWidth, kHeight),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto depth_pass
     = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
@@ -216,12 +254,22 @@ NOLINT_TEST_F(ShaderPassDepthStateTest,
   ASSERT_NE(color_texture, nullptr);
   ASSERT_NE(depth_texture, nullptr);
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 3U } });
-  offscreen.SetCurrentView(
-    kTestViewId, MakeResolvedView(kWidth, kHeight), prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer
+    = CreateColorFramebuffer(color_texture, "shader-pass.scene-depth-mismatch");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 3U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeResolvedView(kWidth, kHeight),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto depth_pass
     = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {

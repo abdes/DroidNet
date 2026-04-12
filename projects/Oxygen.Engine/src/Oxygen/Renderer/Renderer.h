@@ -135,6 +135,7 @@ class TextureBinder;
 namespace oxygen::engine {
 namespace internal {
   class IblManager;
+  class RenderContextMaterializer;
 } // namesapce internal
 
 struct MaterialShadingConstants;
@@ -181,40 +182,16 @@ public:
     ViewConstants value {};
   };
 
-  //! Minimal frame bootstrap for explicit off-screen pass execution.
-  struct OffscreenFrameConfig {
-    frame::Slot frame_slot { frame::Slot { 0U } };
-    frame::SequenceNumber frame_sequence { 1U };
-    float delta_time_seconds { 1.0F / 60.0F };
-    observer_ptr<scene::Scene> scene { nullptr };
-  };
-
-  //! Scoped renderer-owned off-screen frame session.
-  /*!
-   Binds a valid RenderContext to this Renderer and starts the minimal
-
-   - per-frame services needed by renderer passes. Intended for explicit
-   - off-screen pass execution in tests and tools without exposing renderer
-   - internals through friend access.
-  */
-  class OffscreenFrameSession {
+  class ValidatedSinglePassHarnessContext {
   public:
-    OXGN_RNDR_API OffscreenFrameSession(
-      Renderer& renderer, OffscreenFrameConfig config);
-    OXGN_RNDR_API ~OffscreenFrameSession();
+    OXGN_RNDR_API ~ValidatedSinglePassHarnessContext();
 
-    OXYGEN_MAKE_NON_COPYABLE(OffscreenFrameSession)
-    OXGN_RNDR_API OffscreenFrameSession(OffscreenFrameSession&& other) noexcept;
-    OXGN_RNDR_API auto operator=(OffscreenFrameSession&& other) noexcept
-      -> OffscreenFrameSession&;
-
-    OXGN_RNDR_API auto SetCurrentView(ViewId view_id,
-      const ResolvedView& resolved_view,
-      const PreparedSceneFrame& prepared_frame) -> void;
-    OXGN_RNDR_API auto SetCurrentView(ViewId view_id,
-      const ResolvedView& resolved_view,
-      const PreparedSceneFrame& prepared_frame,
-      const ViewConstants& view_constants) -> void;
+    OXYGEN_MAKE_NON_COPYABLE(ValidatedSinglePassHarnessContext)
+    OXGN_RNDR_API ValidatedSinglePassHarnessContext(
+      ValidatedSinglePassHarnessContext&& other) noexcept;
+    OXGN_RNDR_API auto operator=(
+      ValidatedSinglePassHarnessContext&& other) noexcept
+      -> ValidatedSinglePassHarnessContext&;
 
     [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
     {
@@ -227,39 +204,23 @@ public:
     }
 
   private:
-    auto RebindCurrentViewPointers() noexcept -> void;
+    friend class internal::RenderContextMaterializer;
 
+    OXGN_RNDR_API ValidatedSinglePassHarnessContext(Renderer& renderer,
+      FrameSessionInput session, ViewId view_id,
+      observer_ptr<const graphics::Framebuffer> pass_target,
+      const ResolvedView& resolved_view,
+      const PreparedSceneFrame& prepared_frame,
+      std::optional<ViewConstants> core_shader_inputs);
+
+    auto RebindCurrentViewPointers() noexcept -> void;
     auto Release() noexcept -> void;
 
-    Renderer* renderer_ { nullptr };
+    observer_ptr<Renderer> renderer_ { nullptr };
     RenderContext render_context_ {};
     std::optional<ResolvedView> current_resolved_view_ {};
     std::optional<PreparedSceneFrame> current_prepared_frame_ {};
     bool active_ { false };
-  };
-
-  class ValidatedSinglePassHarnessContext {
-  public:
-    explicit ValidatedSinglePassHarnessContext(OffscreenFrameSession session)
-      : session_(std::move(session))
-    {
-    }
-
-    OXYGEN_MAKE_NON_COPYABLE(ValidatedSinglePassHarnessContext)
-    OXYGEN_DEFAULT_MOVABLE(ValidatedSinglePassHarnessContext)
-
-    [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
-    {
-      return session_.GetRenderContext();
-    }
-
-    [[nodiscard]] auto GetRenderContext() const noexcept -> const RenderContext&
-    {
-      return session_.GetRenderContext();
-    }
-
-  private:
-    OffscreenFrameSession session_;
   };
 
   class SinglePassHarnessFacade {
@@ -631,10 +592,6 @@ public:
   */
   OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
-
-  //! Begins a renderer-owned off-screen frame and returns the scoped session.
-  OXGN_RNDR_NDAPI auto BeginOffscreenFrame(OffscreenFrameConfig config = {})
-    -> OffscreenFrameSession;
   OXGN_RNDR_API auto ForSinglePassHarness() -> SinglePassHarnessFacade;
   OXGN_RNDR_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
   OXGN_RNDR_API auto ForOffscreenScene() -> OffscreenSceneFacade;
@@ -860,6 +817,12 @@ private:
   auto EnsureShadowServicesInitialized(observer_ptr<Graphics> gfx) -> void;
   auto EnsureConventionalShadowDrawRecordBufferInitialized(
     observer_ptr<Graphics> gfx) -> void;
+  auto BeginStandaloneFrameExecution(const FrameSessionInput& session) -> void;
+  auto InitializeStandaloneCurrentView(RenderContext& render_context,
+    std::optional<ResolvedView>& current_resolved_view,
+    std::optional<PreparedSceneFrame>& current_prepared_frame, ViewId view_id,
+    const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
+    const std::optional<ViewConstants>& view_constants_override) -> void;
   auto BeginFrameServices(
     frame::Slot frame_slot, frame::SequenceNumber frame_sequence) -> void;
   auto EndOffscreenFrame() noexcept -> void;

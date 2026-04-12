@@ -28,10 +28,12 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ScreenHzbBuildPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -112,7 +114,7 @@ protected:
       = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
-    return CreateRegisteredTexture(texture_desc);
+    return Backend().CreateTexture(texture_desc);
   }
 
   auto SeedDepthQuadrants(const std::shared_ptr<Texture>& depth_texture,
@@ -148,6 +150,7 @@ protected:
     });
     ASSERT_NE(upload, nullptr);
     upload->Update(upload_bytes.data(), upload_bytes.size(), 0U);
+    RegisterResource(depth_texture);
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + ".SeedDepth");
@@ -178,6 +181,7 @@ protected:
         *depth_texture, ResourceStates::kCommon);
     }
     WaitForQueueIdle();
+    Backend().GetResourceRegistry().UnRegisterResource(*depth_texture);
   }
 
   auto ReadMipTexel(const std::shared_ptr<const Texture>& texture,
@@ -194,11 +198,16 @@ protected:
     });
     CHECK_NOTNULL_F(
       readback.get(), "Failed to create Screen HZB readback buffer");
+    auto writable_texture = std::const_pointer_cast<Texture>(texture);
+    auto& registry = Backend().GetResourceRegistry();
+    const auto registered_here = !registry.Contains(*writable_texture);
+    if (registered_here) {
+      registry.Register(writable_texture);
+    }
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + ".ProbeCopy");
       CHECK_NOTNULL_F(recorder.get(), "Failed to acquire Screen HZB recorder");
-      RegisterResource(std::const_pointer_cast<Texture>(texture));
       recorder->BeginTrackingResourceState(
         *texture, ResourceStates::kShaderResource, true);
       EnsureTracked(*recorder, readback, ResourceStates::kCopyDest);
@@ -222,6 +231,9 @@ protected:
         });
     }
     WaitForQueueIdle();
+    if (registered_here) {
+      registry.UnRegisterResource(*writable_texture);
+    }
 
     float value = 0.0F;
     const auto* mapped
@@ -240,29 +252,59 @@ protected:
     depth_config->depth_texture = depth_texture;
     depth_config->debug_name = std::string(debug_name) + ".DepthPrePass";
     auto depth_pass = DepthPrePass(depth_config);
-
-    auto prepared_frame = PreparedSceneFrame {};
-    auto offscreen = renderer.BeginOffscreenFrame(
-      { .frame_slot = Slot { 0U }, .frame_sequence = frame_sequence });
-    offscreen.SetCurrentView(kTestViewId,
-      MakeResolvedView(depth_texture->GetDescriptor().width,
-        depth_texture->GetDescriptor().height),
-      prepared_frame);
-    auto& render_context = offscreen.GetRenderContext();
-    render_context.RegisterPass(&depth_pass);
+    auto framebuffer = MakeDepthFramebuffer(depth_texture, debug_name);
+    auto harness
+      = oxygen::renderer::harness::render_graph::presets::ForSingleViewGraph(
+        renderer,
+        Renderer::FrameSessionInput {
+          .frame_slot = Slot { 0U },
+          .frame_sequence = frame_sequence,
+        },
+        oxygen::observer_ptr<const oxygen::graphics::Framebuffer> {
+          framebuffer.get(),
+        },
+        Renderer::ResolvedViewInput {
+          .view_id = kTestViewId,
+          .value = MakeResolvedView(depth_texture->GetDescriptor().width,
+            depth_texture->GetDescriptor().height),
+        },
+        [&](const ViewId view_id, const oxygen::engine::RenderContext& context,
+          oxygen::graphics::CommandRecorder& recorder) -> oxygen::co::Co<void> {
+          EXPECT_EQ(view_id, kTestViewId);
+          EnsureTracked(recorder, depth_texture, ResourceStates::kCommon);
+          context.RegisterPass(&depth_pass);
+          co_await depth_pass.PrepareResources(context, recorder);
+          co_await pass.PrepareResources(context, recorder);
+          co_await pass.Execute(context, recorder);
+        });
+    auto finalized_result = harness.Finalize();
+    ASSERT_TRUE(finalized_result.has_value());
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name));
       ASSERT_NE(recorder, nullptr);
-      EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
       oxygen::co::testing::TestEventLoop loop;
       oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
-        co_await depth_pass.PrepareResources(render_context, *recorder);
+        co_await finalized_result->Execute(*recorder);
         co_return;
       });
-      RunPass(pass, render_context, *recorder);
     }
     WaitForQueueIdle();
+  }
+
+  [[nodiscard]] auto MakeDepthFramebuffer(
+    const std::shared_ptr<Texture>& depth_texture, std::string_view debug_name)
+    -> std::shared_ptr<oxygen::graphics::Framebuffer>
+  {
+    CHECK_NOTNULL_F(depth_texture.get(),
+      "Failed to create depth-backed harness framebuffer for '{}'", debug_name);
+
+    auto framebuffer_desc = oxygen::graphics::FramebufferDesc {};
+    framebuffer_desc.SetDepthAttachment({ .texture = depth_texture });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(framebuffer.get(),
+      "Failed to create render-graph framebuffer for '{}'", debug_name);
+    return framebuffer;
   }
 };
 

@@ -19,13 +19,19 @@
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
 
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/LightCullingPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
@@ -58,7 +64,11 @@ using oxygen::engine::testing::RunPass;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::graphics::BufferRange;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::GpuBufferReadback;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::TextureDesc;
 using oxygen::renderer::LightManager;
 using oxygen::scene::PointLight;
 using oxygen::scene::Scene;
@@ -107,6 +117,30 @@ protected:
       .near_plane = 0.1F,
       .far_plane = 100.0F,
     });
+  }
+
+  auto MakeFramebuffer(std::string_view debug_name)
+    -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = TextureDesc {};
+    color_desc.width = kViewportWidth;
+    color_desc.height = kViewportHeight;
+    color_desc.format = oxygen::Format::kRGBA8UNorm;
+    color_desc.texture_type = oxygen::TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = std::string(debug_name) + ".Color";
+
+    auto color = Backend().CreateTexture(color_desc);
+    CHECK_NOTNULL_F(
+      color.get(), "Failed to create light-culling membership framebuffer");
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.AddColorAttachment({ .texture = color });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(framebuffer.get(),
+      "Failed to create light-culling membership framebuffer");
+    return framebuffer;
   }
 
   [[nodiscard]] static auto CreatePointLightNode(Scene& scene,
@@ -288,11 +322,21 @@ NOLINT_TEST_F(LightCullingPassMembershipTest,
         LightCullingPassConfig { .debug_name = "light-culling.membership" }));
 
   auto resolved_view = MakeResolvedView();
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 1U } });
-  offscreen.SetCurrentView(kTestViewId, resolved_view, prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer = MakeFramebuffer("light-culling.membership");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = resolved_view,
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto light_manager = renderer->GetLightManager();
   ASSERT_NE(light_manager, nullptr);

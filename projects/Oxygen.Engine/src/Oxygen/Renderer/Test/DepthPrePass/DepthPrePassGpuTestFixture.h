@@ -25,10 +25,12 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -78,6 +80,18 @@ protected:
     });
   }
 
+  auto MakeDepthOnlyFramebuffer(
+    const std::shared_ptr<graphics::Texture>& depth_texture,
+    std::string_view debug_name) -> std::shared_ptr<graphics::Framebuffer>
+  {
+    auto fb_desc = graphics::FramebufferDesc {};
+    fb_desc.SetDepthAttachment({ .texture = depth_texture });
+    auto framebuffer = Backend().CreateFramebuffer(fb_desc);
+    CHECK_NOTNULL_F(framebuffer.get(),
+      "Failed to create depth-only framebuffer for '{}'", debug_name);
+    return framebuffer;
+  }
+
   auto CreateDepthTexture(const std::uint32_t width, const std::uint32_t height,
     std::string_view debug_name) -> std::shared_ptr<graphics::Texture>
   {
@@ -93,7 +107,7 @@ protected:
     texture_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = graphics::ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
-    return CreateRegisteredTexture(texture_desc);
+    return Backend().CreateTexture(texture_desc);
   }
 
   auto ClearDepthTexture(const std::shared_ptr<graphics::Texture>& texture,
@@ -103,6 +117,8 @@ protected:
 
     auto& allocator
       = static_cast<Graphics&>(Backend()).GetDescriptorAllocator();
+    auto& registry = Backend().GetResourceRegistry();
+    registry.Register(texture);
     auto handle
       = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
         graphics::DescriptorVisibility::kCpuOnly);
@@ -121,8 +137,7 @@ protected:
       },
       .is_read_only_dsv = false,
     };
-    auto dsv = Backend().GetResourceRegistry().RegisterView(
-      *texture, std::move(handle), dsv_desc);
+    auto dsv = registry.RegisterView(*texture, std::move(handle), dsv_desc);
     ASSERT_TRUE(dsv->IsValid());
 
     {
@@ -138,6 +153,7 @@ protected:
         *texture, graphics::ResourceStates::kCommon);
     }
     WaitForQueueIdle();
+    registry.UnRegisterResource(*texture);
   }
 
   auto ReadDepthTexel(const std::shared_ptr<const graphics::Texture>& texture,
@@ -154,6 +170,8 @@ protected:
       .debug_name = std::string(debug_name) + ".Readback",
     });
     CHECK_NOTNULL_F(readback.get(), "Failed to create readback buffer");
+    auto& registry = Backend().GetResourceRegistry();
+    registry.Register(writable_texture);
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name) + ".Probe");
@@ -190,6 +208,7 @@ protected:
     CHECK_NOTNULL_F(mapped, "Failed to map depth readback buffer");
     std::memcpy(&value, mapped, sizeof(value));
     readback->UnMap();
+    registry.UnRegisterResource(*writable_texture);
     return value;
   }
 
@@ -198,14 +217,22 @@ protected:
     const frame::SequenceNumber frame_sequence, std::string_view debug_name)
     -> void
   {
-    auto prepared_frame = PreparedSceneFrame {};
-    auto offscreen = renderer.BeginOffscreenFrame(
-      { .frame_slot = frame::Slot { 0U }, .frame_sequence = frame_sequence });
-    offscreen.SetCurrentView(kTestViewId,
-      MakeResolvedView(depth_texture->GetDescriptor().width,
-        depth_texture->GetDescriptor().height),
-      prepared_frame);
-    auto& render_context = offscreen.GetRenderContext();
+    auto depth_only_framebuffer
+      = MakeDepthOnlyFramebuffer(depth_texture, debug_name);
+    auto harness
+      = renderer::harness::single_pass::presets::ForFullscreenGraphicsPass(
+        renderer,
+        Renderer::FrameSessionInput {
+          .frame_slot = frame::Slot { 0U },
+          .frame_sequence = frame_sequence,
+        },
+        observer_ptr<const graphics::Framebuffer> {
+          depth_only_framebuffer.get(),
+        },
+        kTestViewId);
+    auto harness_result = harness.Finalize();
+    ASSERT_TRUE(harness_result.has_value());
+    auto& render_context = harness_result->GetRenderContext();
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name));
@@ -220,18 +247,37 @@ protected:
     WaitForQueueIdle();
   }
 
-  auto ExecuteDepthPassWithScene(DepthPrePass& pass, Renderer& renderer,
+  auto ExecuteDepthPassWithPreparedFrame(DepthPrePass& pass, Renderer& renderer,
     const std::shared_ptr<graphics::Texture>& depth_texture,
     const ResolvedView& resolved_view, PreparedSceneFrame& prepared_frame,
     const ViewConstants& view_constants, const frame::Slot frame_slot,
     const frame::SequenceNumber frame_sequence, std::string_view debug_name)
     -> void
   {
-    auto offscreen = renderer.BeginOffscreenFrame(
-      { .frame_slot = frame_slot, .frame_sequence = frame_sequence });
-    offscreen.SetCurrentView(
-      kTestViewId, resolved_view, prepared_frame, view_constants);
-    auto& render_context = offscreen.GetRenderContext();
+    auto depth_only_framebuffer
+      = MakeDepthOnlyFramebuffer(depth_texture, debug_name);
+    auto harness
+      = renderer::harness::single_pass::presets::ForPreparedSceneGraphicsPass(
+        renderer,
+        Renderer::FrameSessionInput {
+          .frame_slot = frame_slot,
+          .frame_sequence = frame_sequence,
+        },
+        observer_ptr<const graphics::Framebuffer> {
+          depth_only_framebuffer.get(),
+        },
+        Renderer::ResolvedViewInput {
+          .view_id = kTestViewId,
+          .value = resolved_view,
+        },
+        Renderer::PreparedFrameInput { .value = prepared_frame });
+    harness.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
+      .view_id = kTestViewId,
+      .value = view_constants,
+    });
+    auto harness_result = harness.Finalize();
+    ASSERT_TRUE(harness_result.has_value());
+    auto& render_context = harness_result->GetRenderContext();
 
     {
       auto recorder = AcquireRecorder(std::string(debug_name));

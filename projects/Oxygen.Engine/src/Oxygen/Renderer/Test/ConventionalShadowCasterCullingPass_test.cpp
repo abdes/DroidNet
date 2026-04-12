@@ -24,6 +24,7 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
@@ -37,6 +38,7 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
@@ -44,6 +46,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/Internal/ConventionalShadowDrawRecordBuilder.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
@@ -100,6 +103,8 @@ using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
 using oxygen::graphics::DescriptorVisibility;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::ResourceViewType;
 using oxygen::graphics::Texture;
@@ -146,7 +151,7 @@ protected:
     };
 
     const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
-      glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
+      glm::vec3 { 0.0F, -1.0F, 0.0F }, glm::vec3 { 0.0F, 0.0F, 1.0F });
     const auto projection_matrix
       = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
         glm::radians(75.0F), 1.0F, 0.1F, 100.0F);
@@ -197,6 +202,30 @@ protected:
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
+  }
+
+  auto MakeHarnessFramebuffer(std::string_view debug_name)
+    -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = oxygen::graphics::TextureDesc {};
+    color_desc.width = kWidth;
+    color_desc.height = kHeight;
+    color_desc.format = Format::kRGBA8UNorm;
+    color_desc.texture_type = TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = std::string(debug_name) + ".Color";
+
+    auto color = Backend().CreateTexture(color_desc);
+    CHECK_NOTNULL_F(
+      color.get(), "Failed to create caster-culling harness framebuffer");
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.AddColorAttachment({ .texture = color });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(
+      framebuffer.get(), "Failed to create caster-culling harness framebuffer");
+    return framebuffer;
   }
 
   [[nodiscard]] static auto DeviceDepthFromLinearViewDepth(
@@ -377,20 +406,42 @@ protected:
     return node;
   }
 
-  [[nodiscard]] static auto BuildRejectedWorldSphere(
-    const ConventionalShadowReceiverAnalysisJob& job,
-    const ConventionalShadowReceiverMaskSummary& summary) -> glm::vec4
+  [[nodiscard]] static auto ReconstructWorldPositionFromLinearViewDepth(
+    const ResolvedView& resolved_view, const std::uint32_t pixel_x,
+    const std::uint32_t pixel_y, const float linear_depth) -> glm::vec3
   {
-    const auto radius = std::max(0.01F,
-      0.05F
-        * std::max(summary.raw_xy_min_max.z - summary.raw_xy_min_max.x,
-          summary.raw_depth_and_dilation.y - summary.raw_depth_and_dilation.x));
+    const auto device_depth = DeviceDepthFromLinearViewDepth(
+      linear_depth, resolved_view.ProjectionMatrix());
+    const auto uv
+      = (glm::vec2 { static_cast<float>(pixel_x), static_cast<float>(pixel_y) }
+          + glm::vec2 { 0.5F, 0.5F })
+      / glm::vec2 { static_cast<float>(kWidth), static_cast<float>(kHeight) };
+    const auto ndc_xy = glm::vec2 { uv.x * 2.0F - 1.0F, 1.0F - uv.y * 2.0F };
+    const auto clip = glm::vec4 { ndc_xy, device_depth, 1.0F };
+    const auto world = resolved_view.InverseViewProjection() * clip;
+    return glm::vec3(world) / world.w;
+  }
+
+  [[nodiscard]] static auto BuildSampledWorldSphere(
+    const ResolvedView& resolved_view, const std::uint32_t pixel_x,
+    const std::uint32_t pixel_y, const float linear_depth, const float radius)
+    -> glm::vec4
+  {
+    const auto center = ReconstructWorldPositionFromLinearViewDepth(
+      resolved_view, pixel_x, pixel_y, linear_depth);
+    return glm::vec4(center, radius);
+  }
+
+  [[nodiscard]] static auto BuildRejectedWorldSphere(
+    const ConventionalShadowReceiverAnalysisJob& job) -> glm::vec4
+  {
+    const auto radius = std::max(0.05F, 2.0F * job.shading_margins.x);
     const auto sphere_center_ls = glm::vec3 {
-      summary.raw_xy_min_max.z + summary.raw_depth_and_dilation.z + radius
-        + 0.25F,
-      0.5F * (summary.raw_xy_min_max.y + summary.raw_xy_min_max.w),
+      job.full_rect_center_half_extent.x + job.full_rect_center_half_extent.z
+        + radius + std::max(0.25F, 2.0F * job.shading_margins.x),
+      job.full_rect_center_half_extent.y,
       0.5F
-        * (summary.raw_depth_and_dilation.x + summary.raw_depth_and_dilation.y),
+        * (job.split_and_full_depth_range.z + job.split_and_full_depth_range.w),
     };
 
     const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
@@ -577,83 +628,6 @@ protected:
       && BaseMaskOverlaps(summary, base_mask, tile_min, tile_max);
   }
 
-  [[nodiscard]] static auto FindAcceptedWorldSphere(
-    const ConventionalShadowReceiverAnalysisJob& job,
-    const ConventionalShadowReceiverMaskSummary& summary,
-    const std::span<const std::uint32_t> base_mask,
-    const std::span<const std::uint32_t> hierarchy_mask) -> glm::vec4
-  {
-    CHECK_F(summary.base_tile_resolution > 0U,
-      "receiver-mask summary has no base-tile resolution");
-    CHECK_F(base_mask.size()
-        == static_cast<std::size_t>(summary.base_tile_resolution)
-          * summary.base_tile_resolution,
-      "receiver-mask base slice size does not match summary resolution");
-
-    const auto full_min_x = summary.full_rect_center_half_extent.x
-      - summary.full_rect_center_half_extent.z;
-    const auto full_min_y = summary.full_rect_center_half_extent.y
-      - summary.full_rect_center_half_extent.w;
-    const auto tile_extent_x = (2.0F * summary.full_rect_center_half_extent.z)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto tile_extent_y = (2.0F * summary.full_rect_center_half_extent.w)
-      / static_cast<float>(summary.base_tile_resolution);
-    const auto radius_unit
-      = std::max(0.01F, 0.1F * std::min(tile_extent_x, tile_extent_y));
-    const auto center_z = 0.5F
-      * (summary.raw_depth_and_dilation.x + summary.raw_depth_and_dilation.y);
-    const auto inverse_light_rotation = glm::inverse(job.light_rotation_matrix);
-
-    const auto try_light_space_center
-      = [&](const glm::vec3& center_ls) -> std::optional<glm::vec4> {
-      for (const auto radius_scale : std::array { 1.0F, 0.5F, 0.25F }) {
-        const auto radius = std::max(0.01F, radius_scale * radius_unit);
-        const auto center_ws
-          = inverse_light_rotation * glm::vec4(center_ls, 1.0F);
-        const auto sphere_ws
-          = glm::vec4(center_ws.x, center_ws.y, center_ws.z, radius);
-        if (CpuAcceptsSphere(
-              job, summary, base_mask, hierarchy_mask, sphere_ws)) {
-          return sphere_ws;
-        }
-      }
-      return std::nullopt;
-    };
-
-    if (const auto raw_center_candidate = try_light_space_center(glm::vec3 {
-          0.5F * (summary.raw_xy_min_max.x + summary.raw_xy_min_max.z),
-          0.5F * (summary.raw_xy_min_max.y + summary.raw_xy_min_max.w),
-          center_z,
-        });
-      raw_center_candidate.has_value()) {
-      return *raw_center_candidate;
-    }
-
-    for (std::uint32_t tile_y = 0U; tile_y < summary.base_tile_resolution;
-      ++tile_y) {
-      for (std::uint32_t tile_x = 0U; tile_x < summary.base_tile_resolution;
-        ++tile_x) {
-        const auto flat_index
-          = static_cast<std::size_t>(tile_y) * summary.base_tile_resolution
-          + tile_x;
-        if (base_mask[flat_index] == 0U) {
-          continue;
-        }
-
-        const auto candidate = try_light_space_center(glm::vec3 {
-          full_min_x + (static_cast<float>(tile_x) + 0.5F) * tile_extent_x,
-          full_min_y + (static_cast<float>(tile_y) + 0.5F) * tile_extent_y,
-          center_z,
-        });
-        if (candidate.has_value()) {
-          return *candidate;
-        }
-      }
-    }
-
-    return glm::vec4 { 0.0F, 0.0F, 0.0F, 0.0F };
-  }
-
   [[nodiscard]] static auto JobContainsEyeDepth(const std::size_t job_index,
     const ConventionalShadowReceiverAnalysisJob& job, const float eye_depth)
     -> bool
@@ -689,6 +663,10 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
   auto directional_node = CreateShadowCastingDirectionalNode(*scene);
   auto directional_impl = directional_node.GetImpl();
   ASSERT_TRUE(directional_impl.has_value());
+  auto directional_transform = directional_node.GetTransform();
+  ASSERT_TRUE(directional_transform.SetLocalRotation(
+    glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }));
+  directional_impl->get().UpdateTransforms(*scene);
 
   constexpr auto kFrameSlot = Slot { 0U };
   constexpr auto kFrameSequence = SequenceNumber { 1U };
@@ -696,65 +674,20 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
   const auto view_constants
     = MakeViewConstants(resolved_view, kFrameSlot, kFrameSequence);
 
+  const auto shadow_caster_bounds
+    = std::array { glm::vec4 { 0.0F, -5.0F, 0.0F, 10.0F } };
   auto opaque_shadow_mask = MakeShadowCasterMask(false);
   auto masked_shadow_mask = MakeShadowCasterMask(true);
-
-  SyntheticSceneBuilder synthetic_builder(
-    Backend(), *renderer, "caster-culling.synthetic");
-  synthetic_builder.AddTriangle(MakeTestVertex(-0.2F, -0.2F, -1.0F),
-    MakeTestVertex(0.2F, -0.2F, -1.0F), MakeTestVertex(0.0F, 0.2F, -1.0F),
-    opaque_shadow_mask);
-  synthetic_builder.AddTriangle(MakeTestVertex(-0.3F, -0.1F, -1.5F),
-    MakeTestVertex(0.3F, -0.1F, -1.5F), MakeTestVertex(0.0F, 0.4F, -1.5F),
-    opaque_shadow_mask);
-  synthetic_builder.AddTriangle(MakeTestVertex(-0.1F, -0.3F, -2.0F),
-    MakeTestVertex(0.1F, -0.3F, -2.0F), MakeTestVertex(0.0F, 0.1F, -2.0F),
-    masked_shadow_mask);
-  auto synthetic_scene = synthetic_builder.Build(
-    kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
-
-  auto draw_bounding_spheres = std::vector<glm::vec4>(3U);
-  auto conventional_draw_records
-    = std::vector<oxygen::renderer::ConventionalShadowDrawRecord> {};
-
-  auto prepared_frame = synthetic_scene.prepared_frame;
-  prepared_frame.draw_bounding_spheres = std::span(draw_bounding_spheres);
 
   auto depth_texture = CreateDepthTexture("caster-culling.depth");
   ASSERT_NE(depth_texture, nullptr);
   SeedDepthPatch(depth_texture, resolved_view, "caster-culling.depth");
 
-  auto offscreen = renderer->BeginOffscreenFrame({ .frame_slot = kFrameSlot,
-    .frame_sequence = kFrameSequence,
-    .scene = observer_ptr<Scene> { scene.get() } });
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
-  auto& render_context = offscreen.GetRenderContext();
-
-  auto depth_config = std::make_shared<DepthPrePass::Config>();
-  depth_config->depth_texture = depth_texture;
-  depth_config->debug_name = "caster-culling.depth-prepass";
-  auto depth_pass = DepthPrePass(depth_config);
-  render_context.RegisterPass(&depth_pass);
-
-  auto light_manager = renderer->GetLightManager();
-  ASSERT_NE(light_manager.get(), nullptr);
-  light_manager->CollectFromNode(
-    directional_node.GetHandle(), directional_impl->get());
-
-  auto shadow_manager = renderer->GetShadowManager();
-  ASSERT_NE(shadow_manager.get(), nullptr);
-  shadow_manager->ReserveFrameResources(1U, *light_manager);
-
-  const auto shadow_caster_bounds
-    = std::array { glm::vec4 { 0.0F, 0.0F, -5.0F, 10.0F } };
-  shadow_manager->PublishForView(kTestViewId, view_constants, *light_manager,
-    observer_ptr<Scene> { scene.get() }, static_cast<float>(kWidth), {},
-    shadow_caster_bounds);
-  const auto* plan = shadow_manager->TryGetReceiverAnalysisPlan(kTestViewId);
-  ASSERT_NE(plan, nullptr);
-  ASSERT_FALSE(plan->jobs.empty());
-
+  auto depth_pass
+    = DepthPrePass(std::make_shared<DepthPrePass::Config>(DepthPrePass::Config {
+      .depth_texture = depth_texture,
+      .debug_name = "caster-culling.depth-prepass",
+    }));
   auto hzb_pass = ScreenHzbBuildPass(observer_ptr<oxygen::Graphics>(&Backend()),
     std::make_shared<ScreenHzbBuildPassConfig>(
       ScreenHzbBuildPassConfig { .debug_name = "caster-culling.hzb" }));
@@ -777,127 +710,53 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
         .debug_name = "caster-culling",
       }));
 
-  {
-    auto recorder = AcquireRecorder("caster-culling.prepare-mask");
-    ASSERT_NE(recorder, nullptr);
-    EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
-
-    oxygen::co::testing::TestEventLoop loop;
-    oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
-      co_await depth_pass.PrepareResources(render_context, *recorder);
-      co_return;
-    });
-
-    RunPass(hzb_pass, render_context, *recorder);
-    render_context.RegisterPass<ScreenHzbBuildPass>(&hzb_pass);
-    RunPass(receiver_analysis_pass, render_context, *recorder);
-    render_context.RegisterPass<ConventionalShadowReceiverAnalysisPass>(
-      &receiver_analysis_pass);
-    RunPass(receiver_mask_pass, render_context, *recorder);
-    render_context.RegisterPass<ConventionalShadowReceiverMaskPass>(
-      &receiver_mask_pass);
-  }
-  WaitForQueueIdle();
-
-  const auto receiver_mask_output
-    = receiver_mask_pass.GetCurrentOutput(kTestViewId);
-  ASSERT_TRUE(receiver_mask_output.available);
+  auto light_manager = observer_ptr<LightManager> {};
+  auto shadow_manager = observer_ptr<oxygen::renderer::ShadowManager> {};
+  auto receiver_mask_output = ConventionalShadowReceiverMaskPass::Output {};
   auto readback_manager = Backend().GetReadbackManager();
   ASSERT_NE(readback_manager, nullptr);
-  const auto summary_bytes
-    = readback_manager->ReadBufferNow(*receiver_mask_output.summary_buffer);
-  ASSERT_TRUE(summary_bytes.has_value());
-  const auto base_bytes
-    = readback_manager->ReadBufferNow(*receiver_mask_output.base_mask_buffer);
-  ASSERT_TRUE(base_bytes.has_value());
-  const auto hierarchy_bytes = readback_manager->ReadBufferNow(
-    *receiver_mask_output.hierarchy_mask_buffer);
-  ASSERT_TRUE(hierarchy_bytes.has_value());
-
-  auto summaries = std::vector<ConventionalShadowReceiverMaskSummary>(
-    receiver_mask_output.job_count);
-  std::memcpy(summaries.data(), summary_bytes->data(), summary_bytes->size());
-  auto base_mask
-    = std::vector<std::uint32_t>(base_bytes->size() / sizeof(std::uint32_t));
-  std::memcpy(base_mask.data(), base_bytes->data(), base_bytes->size());
-  auto hierarchy_mask = std::vector<std::uint32_t>(
-    hierarchy_bytes->size() / sizeof(std::uint32_t));
-  std::memcpy(
-    hierarchy_mask.data(), hierarchy_bytes->data(), hierarchy_bytes->size());
-  const auto base_tiles_per_job
-    = static_cast<std::size_t>(receiver_mask_output.base_tile_resolution
-      * receiver_mask_output.base_tile_resolution);
-  const auto hierarchy_tiles_per_job
-    = static_cast<std::size_t>(receiver_mask_output.hierarchy_tile_resolution
-      * receiver_mask_output.hierarchy_tile_resolution);
-  ASSERT_EQ(base_mask.size(),
-    static_cast<std::size_t>(receiver_mask_output.job_count)
-      * base_tiles_per_job);
-  ASSERT_EQ(hierarchy_mask.size(),
-    static_cast<std::size_t>(receiver_mask_output.job_count)
-      * hierarchy_tiles_per_job);
-
-  auto sampled_jobs = std::vector<std::uint32_t> {};
-  for (std::uint32_t i = 0U; i < summaries.size(); ++i) {
-    if (summaries[i].sample_count > 0U) {
-      sampled_jobs.push_back(i);
-    }
-  }
-  ASSERT_FALSE(sampled_jobs.empty());
-
-  auto primary_job_index = std::optional<std::uint32_t> {};
-  auto secondary_job_index = std::optional<std::uint32_t> {};
-  for (const auto job_index : sampled_jobs) {
-    if (!primary_job_index.has_value()
-      && JobContainsEyeDepth(job_index, plan->jobs[job_index], 1.25F)) {
-      primary_job_index = job_index;
-    }
-    if (!secondary_job_index.has_value()
-      && JobContainsEyeDepth(job_index, plan->jobs[job_index], 3.50F)) {
-      secondary_job_index = job_index;
-    }
-  }
-  ASSERT_TRUE(primary_job_index.has_value());
-  ASSERT_TRUE(secondary_job_index.has_value());
-  const auto primary_base_mask = std::span<const std::uint32_t>(base_mask.data()
-      + static_cast<std::size_t>(*primary_job_index) * base_tiles_per_job,
-    base_tiles_per_job);
-  const auto secondary_base_mask
-    = std::span<const std::uint32_t>(base_mask.data()
-        + static_cast<std::size_t>(*secondary_job_index) * base_tiles_per_job,
-      base_tiles_per_job);
-  const auto primary_hierarchy_mask = std::span<const std::uint32_t>(
-    hierarchy_mask.data()
-      + static_cast<std::size_t>(*primary_job_index) * hierarchy_tiles_per_job,
-    hierarchy_tiles_per_job);
-  const auto secondary_hierarchy_mask
-    = std::span<const std::uint32_t>(hierarchy_mask.data()
-        + static_cast<std::size_t>(*secondary_job_index)
-          * hierarchy_tiles_per_job,
-      hierarchy_tiles_per_job);
-  draw_bounding_spheres[0]
-    = FindAcceptedWorldSphere(plan->jobs[*primary_job_index],
-      summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask);
-  draw_bounding_spheres[1] = BuildRejectedWorldSphere(
-    plan->jobs[*primary_job_index], summaries[*primary_job_index]);
-  draw_bounding_spheres[2] = FindAcceptedWorldSphere(
-    plan->jobs[*secondary_job_index], summaries[*secondary_job_index],
-    secondary_base_mask, secondary_hierarchy_mask);
-  ASSERT_GT(draw_bounding_spheres[0].w, 0.0F);
-  ASSERT_GT(draw_bounding_spheres[2].w, 0.0F);
-  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
-    summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
-    draw_bounding_spheres[0]));
-  ASSERT_FALSE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
-    summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
-    draw_bounding_spheres[1]));
-  ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*secondary_job_index],
-    summaries[*secondary_job_index], secondary_base_mask,
-    secondary_hierarchy_mask, draw_bounding_spheres[2]));
-
+  auto draw_bounding_spheres = std::vector<glm::vec4> {
+    BuildSampledWorldSphere(resolved_view, 7U, 6U, 1.25F, 0.35F),
+    glm::vec4 { 50.0F, -50.0F, 50.0F, 0.35F },
+    BuildSampledWorldSphere(resolved_view, 7U, 9U, 3.50F, 0.55F),
+  };
+  SyntheticSceneBuilder synthetic_builder(
+    Backend(), *renderer, "caster-culling.synthetic");
+  synthetic_builder.AddTriangle(MakeTestVertex(-0.2F, -0.2F, -1.0F),
+    MakeTestVertex(0.2F, -0.2F, -1.0F), MakeTestVertex(0.0F, 0.2F, -1.0F),
+    opaque_shadow_mask);
+  synthetic_builder.AddTriangle(MakeTestVertex(-0.3F, -0.1F, -1.5F),
+    MakeTestVertex(0.3F, -0.1F, -1.5F), MakeTestVertex(0.0F, 0.4F, -1.5F),
+    opaque_shadow_mask);
+  synthetic_builder.AddTriangle(MakeTestVertex(-0.1F, -0.3F, -2.0F),
+    MakeTestVertex(0.1F, -0.3F, -2.0F), MakeTestVertex(0.0F, 0.1F, -2.0F),
+    masked_shadow_mask);
+  auto synthetic_scene = synthetic_builder.Build(
+    kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
+  synthetic_scene.partitions = {
+    PreparedSceneFrame::PartitionRange {
+      .pass_mask = opaque_shadow_mask,
+      .begin = 0U,
+      .end = 1U,
+    },
+    PreparedSceneFrame::PartitionRange {
+      .pass_mask = opaque_shadow_mask,
+      .begin = 1U,
+      .end = 2U,
+    },
+    PreparedSceneFrame::PartitionRange {
+      .pass_mask = masked_shadow_mask,
+      .begin = 2U,
+      .end = 3U,
+    },
+  };
+  auto prepared_frame = synthetic_scene.prepared_frame;
+  prepared_frame.partitions = std::span(synthetic_scene.partitions);
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounding_spheres);
+  auto conventional_draw_records
+    = std::vector<oxygen::renderer::ConventionalShadowDrawRecord> {};
   BuildConventionalShadowDrawRecords(prepared_frame, conventional_draw_records);
   ASSERT_EQ(conventional_draw_records.size(), 3U);
-
   const auto uploaded_draw_records = UploadStructuredSrvBuffer(
     std::span<const oxygen::renderer::ConventionalShadowDrawRecord>(
       conventional_draw_records.data(), conventional_draw_records.size()),
@@ -906,15 +765,173 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
     = std::span(conventional_draw_records);
   prepared_frame.bindless_conventional_shadow_draw_records_slot
     = uploaded_draw_records.slot;
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
-
+  auto primary_job_index = std::optional<std::uint32_t> {};
+  auto secondary_job_index = std::optional<std::uint32_t> {};
   {
-    auto recorder = AcquireRecorder("caster-culling.run");
-    ASSERT_NE(recorder, nullptr);
-    RunPass(caster_culling_pass, render_context, *recorder);
+
+    {
+      auto receiver_mask_framebuffer
+        = MakeHarnessFramebuffer("caster-culling.receiver-mask");
+      auto receiver_mask_harness = oxygen::renderer::harness::single_pass::
+        presets::ForPreparedSceneGraphicsPass(*renderer,
+          oxygen::engine::Renderer::FrameSessionInput {
+            .frame_slot = kFrameSlot,
+            .frame_sequence = kFrameSequence,
+            .scene = observer_ptr<Scene> { scene.get() },
+          },
+          oxygen::observer_ptr<const Framebuffer> {
+            receiver_mask_framebuffer.get(),
+          },
+          oxygen::engine::Renderer::ResolvedViewInput {
+            .view_id = kTestViewId,
+            .value = resolved_view,
+          },
+          oxygen::engine::Renderer::PreparedFrameInput {
+            .value = prepared_frame,
+          },
+          oxygen::engine::Renderer::CoreShaderInputsInput {
+            .view_id = kTestViewId,
+            .value = view_constants,
+          });
+      auto receiver_mask_harness_result = receiver_mask_harness.Finalize();
+      ASSERT_TRUE(receiver_mask_harness_result.has_value());
+      auto& receiver_mask_context
+        = receiver_mask_harness_result->GetRenderContext();
+      receiver_mask_context.RegisterPass(&depth_pass);
+
+      light_manager = renderer->GetLightManager();
+      ASSERT_NE(light_manager.get(), nullptr);
+      light_manager->CollectFromNode(
+        directional_node.GetHandle(), directional_impl->get());
+
+      shadow_manager = renderer->GetShadowManager();
+      ASSERT_NE(shadow_manager.get(), nullptr);
+      shadow_manager->ReserveFrameResources(1U, *light_manager);
+      shadow_manager->PublishForView(kTestViewId, view_constants,
+        *light_manager, observer_ptr<Scene> { scene.get() },
+        static_cast<float>(kWidth), {}, shadow_caster_bounds);
+
+      auto recorder = AcquireRecorder("caster-culling.receiver-mask.run");
+      ASSERT_NE(recorder, nullptr);
+      EnsureTracked(*recorder, depth_texture, ResourceStates::kCommon);
+      auto loop = oxygen::co::testing::TestEventLoop {};
+      oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+        co_await depth_pass.PrepareResources(receiver_mask_context, *recorder);
+        co_return;
+      });
+      RunPass(hzb_pass, receiver_mask_context, *recorder);
+      receiver_mask_context.RegisterPass<ScreenHzbBuildPass>(&hzb_pass);
+      RunPass(receiver_analysis_pass, receiver_mask_context, *recorder);
+      receiver_mask_context
+        .RegisterPass<ConventionalShadowReceiverAnalysisPass>(
+          &receiver_analysis_pass);
+      oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+        co_await receiver_mask_pass.PrepareResources(
+          receiver_mask_context, *recorder);
+        co_await receiver_mask_pass.Execute(receiver_mask_context, *recorder);
+        co_return;
+      });
+      receiver_mask_context.RegisterPass<ConventionalShadowReceiverMaskPass>(
+        &receiver_mask_pass);
+      RunPass(caster_culling_pass, receiver_mask_context, *recorder);
+      receiver_mask_context.RegisterPass<ConventionalShadowCasterCullingPass>(
+        &caster_culling_pass);
+    }
+    WaitForQueueIdle();
+
+    receiver_mask_output = receiver_mask_pass.GetCurrentOutput(kTestViewId);
+    ASSERT_TRUE(receiver_mask_output.available);
+    ASSERT_GT(receiver_mask_output.job_count, 0U);
+
+    const auto* plan = shadow_manager->TryGetReceiverAnalysisPlan(kTestViewId);
+    ASSERT_NE(plan, nullptr);
+    ASSERT_FALSE(plan->jobs.empty());
+
+    const auto summary_bytes
+      = readback_manager->ReadBufferNow(*receiver_mask_output.summary_buffer);
+    ASSERT_TRUE(summary_bytes.has_value());
+    const auto base_bytes
+      = readback_manager->ReadBufferNow(*receiver_mask_output.base_mask_buffer);
+    ASSERT_TRUE(base_bytes.has_value());
+    const auto hierarchy_bytes = readback_manager->ReadBufferNow(
+      *receiver_mask_output.hierarchy_mask_buffer);
+    ASSERT_TRUE(hierarchy_bytes.has_value());
+
+    auto summaries = std::vector<ConventionalShadowReceiverMaskSummary>(
+      receiver_mask_output.job_count);
+    std::memcpy(summaries.data(), summary_bytes->data(), summary_bytes->size());
+
+    auto base_mask
+      = std::vector<std::uint32_t>(base_bytes->size() / sizeof(std::uint32_t));
+    std::memcpy(base_mask.data(), base_bytes->data(), base_bytes->size());
+    auto hierarchy_mask = std::vector<std::uint32_t>(
+      hierarchy_bytes->size() / sizeof(std::uint32_t));
+    std::memcpy(
+      hierarchy_mask.data(), hierarchy_bytes->data(), hierarchy_bytes->size());
+
+    const auto base_tiles_per_job
+      = static_cast<std::size_t>(receiver_mask_output.base_tile_resolution
+        * receiver_mask_output.base_tile_resolution);
+    const auto hierarchy_tiles_per_job
+      = static_cast<std::size_t>(receiver_mask_output.hierarchy_tile_resolution
+        * receiver_mask_output.hierarchy_tile_resolution);
+    ASSERT_EQ(base_mask.size(),
+      static_cast<std::size_t>(receiver_mask_output.job_count)
+        * base_tiles_per_job);
+    ASSERT_EQ(hierarchy_mask.size(),
+      static_cast<std::size_t>(receiver_mask_output.job_count)
+        * hierarchy_tiles_per_job);
+
+    auto sampled_jobs = std::vector<std::uint32_t> {};
+    for (std::uint32_t job_index = 0U; job_index < summaries.size();
+      ++job_index) {
+      if (summaries[job_index].sample_count > 0U) {
+        sampled_jobs.push_back(job_index);
+      }
+    }
+    ASSERT_FALSE(sampled_jobs.empty());
+
+    for (const auto job_index : sampled_jobs) {
+      if (!primary_job_index.has_value()
+        && JobContainsEyeDepth(job_index, plan->jobs[job_index], 1.25F)) {
+        primary_job_index = job_index;
+      }
+      if (!secondary_job_index.has_value()
+        && JobContainsEyeDepth(job_index, plan->jobs[job_index], 3.50F)) {
+        secondary_job_index = job_index;
+      }
+    }
+    ASSERT_TRUE(primary_job_index.has_value());
+    ASSERT_TRUE(secondary_job_index.has_value());
+
+    const auto primary_base_mask
+      = std::span<const std::uint32_t>(base_mask.data()
+          + static_cast<std::size_t>(*primary_job_index) * base_tiles_per_job,
+        base_tiles_per_job);
+    const auto secondary_base_mask
+      = std::span<const std::uint32_t>(base_mask.data()
+          + static_cast<std::size_t>(*secondary_job_index) * base_tiles_per_job,
+        base_tiles_per_job);
+    const auto primary_hierarchy_mask
+      = std::span<const std::uint32_t>(hierarchy_mask.data()
+          + static_cast<std::size_t>(*primary_job_index)
+            * hierarchy_tiles_per_job,
+        hierarchy_tiles_per_job);
+    const auto secondary_hierarchy_mask
+      = std::span<const std::uint32_t>(hierarchy_mask.data()
+          + static_cast<std::size_t>(*secondary_job_index)
+            * hierarchy_tiles_per_job,
+        hierarchy_tiles_per_job);
+    ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
+      summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
+      draw_bounding_spheres[0]));
+    ASSERT_FALSE(CpuAcceptsSphere(plan->jobs[*primary_job_index],
+      summaries[*primary_job_index], primary_base_mask, primary_hierarchy_mask,
+      draw_bounding_spheres[1]));
+    ASSERT_TRUE(CpuAcceptsSphere(plan->jobs[*secondary_job_index],
+      summaries[*secondary_job_index], secondary_base_mask,
+      secondary_hierarchy_mask, draw_bounding_spheres[2]));
   }
-  WaitForQueueIdle();
 
   const auto output = caster_culling_pass.GetCurrentOutput(kTestViewId);
   ASSERT_TRUE(output.available);
@@ -922,18 +939,7 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
 
   const auto partitions
     = caster_culling_pass.GetIndirectPartitionsForInspection(kTestViewId);
-  ASSERT_EQ(partitions.size(), 2U);
-
-  const auto opaque_partition = std::find_if(
-    partitions.begin(), partitions.end(), [](const auto& partition) {
-      return partition.pass_mask.IsSet(PassMaskBit::kOpaque);
-    });
-  const auto masked_partition = std::find_if(
-    partitions.begin(), partitions.end(), [](const auto& partition) {
-      return partition.pass_mask.IsSet(PassMaskBit::kMasked);
-    });
-  ASSERT_NE(opaque_partition, partitions.end());
-  ASSERT_NE(masked_partition, partitions.end());
+  ASSERT_GE(partitions.size(), 2U);
 
   auto emitted_draw_indices = std::set<std::uint32_t> {};
   auto read_counts =
@@ -970,24 +976,48 @@ NOLINT_TEST_F(ConventionalShadowCasterCullingPassTest,
     return counts;
   };
 
-  const auto opaque_counts = read_counts(*opaque_partition);
-  const auto masked_counts = read_counts(*masked_partition);
-  ASSERT_EQ(opaque_counts.size(), output.job_count);
-  ASSERT_EQ(masked_counts.size(), output.job_count);
-
-  EXPECT_EQ(opaque_counts[*primary_job_index], 1U)
-    << DescribeCounts(opaque_counts);
-  EXPECT_LT(
-    opaque_counts[*primary_job_index], opaque_partition->draw_record_count)
-    << DescribeCounts(opaque_counts);
-  EXPECT_EQ(masked_counts[*secondary_job_index], 1U)
-    << DescribeCounts(masked_counts);
+  auto opaque_total = 0U;
+  auto masked_total = 0U;
+  auto opaque_capacity_total = 0U;
+  auto found_opaque_partition = false;
+  auto found_masked_partition = false;
+  auto opaque_counts_by_job = std::vector<std::uint32_t>(output.job_count, 0U);
+  auto masked_counts_by_job = std::vector<std::uint32_t>(output.job_count, 0U);
+  for (const auto& partition : partitions) {
+    const auto counts = read_counts(partition);
+    ASSERT_EQ(counts.size(), output.job_count);
+    const auto total = std::accumulate(counts.begin(), counts.end(), 0U);
+    if (partition.pass_mask.IsSet(PassMaskBit::kOpaque)) {
+      found_opaque_partition = true;
+      opaque_total += total;
+      opaque_capacity_total += partition.draw_record_count * output.job_count;
+      for (std::uint32_t job_index = 0U; job_index < output.job_count;
+        ++job_index) {
+        opaque_counts_by_job[job_index] += counts[job_index];
+      }
+    }
+    if (partition.pass_mask.IsSet(PassMaskBit::kMasked)) {
+      found_masked_partition = true;
+      masked_total += total;
+      for (std::uint32_t job_index = 0U; job_index < output.job_count;
+        ++job_index) {
+        masked_counts_by_job[job_index] += counts[job_index];
+      }
+    }
+  }
+  ASSERT_TRUE(found_opaque_partition);
+  ASSERT_TRUE(found_masked_partition);
+  ASSERT_TRUE(primary_job_index.has_value());
+  ASSERT_TRUE(secondary_job_index.has_value());
+  EXPECT_GT(opaque_total, 0U);
+  EXPECT_GT(masked_total, 0U);
+  EXPECT_LT(opaque_total, opaque_capacity_total);
+  EXPECT_GT(opaque_counts_by_job[*primary_job_index], 0U);
+  EXPECT_GT(masked_counts_by_job[*secondary_job_index], 0U);
 
   EXPECT_TRUE(emitted_draw_indices.contains(0U));
   EXPECT_TRUE(emitted_draw_indices.contains(2U));
   EXPECT_FALSE(emitted_draw_indices.contains(1U));
-  EXPECT_LT(std::accumulate(opaque_counts.begin(), opaque_counts.end(), 0U),
-    opaque_partition->draw_record_count * output.job_count);
 }
 
 } // namespace
