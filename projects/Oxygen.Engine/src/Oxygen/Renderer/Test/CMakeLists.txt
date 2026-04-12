@@ -88,20 +88,6 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  RendererCompositionQueue
-  SOURCES
-    "Fakes/Graphics.h"
-    "RendererCompositionQueue_test.cpp"
-)
-
-m_gtest_program(
-  RendererFacadePresets
-  SOURCES
-    "Fakes/Graphics.h"
-    "FacadePresets_test.cpp"
-)
-
-m_gtest_program(
   "ConventionalShadows"
   SOURCES
     "Fakes/Graphics.h"

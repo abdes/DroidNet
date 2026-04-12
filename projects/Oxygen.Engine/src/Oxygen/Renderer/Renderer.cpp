@@ -671,6 +671,12 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   render_context_pool_ = std::make_unique<RenderContextPool>();
 }
 
+Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
+  : Renderer(std::move(graphics), std::move(config),
+      renderer::kPhase1DefaultRuntimeCapabilityFamilies)
+{
+}
+
 Renderer::~Renderer()
 {
   const auto stats = GetStats();
@@ -3386,233 +3392,15 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
       ? runtime_state.published_view_bindings
       : ViewFrameBindings {};
 
-    if (const auto* pass_target = render_context.pass_target.get();
-      pass_target != nullptr
-      && pass_target->GetDescriptor().depth_attachment.texture != nullptr) {
-      view_bindings.scene_depth_slot = EnsureSceneDepthTextureSrv(
-        runtime_state, *pass_target->GetDescriptor().depth_attachment.texture);
-    } else {
-      runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
-      runtime_state.scene_depth_texture_owner = nullptr;
-      runtime_state.owns_scene_depth_srv = false;
-      view_bindings.scene_depth_slot = kInvalidShaderVisibleIndex;
+    if (!PublishBaselineViewBindings(view_id, render_context, prepared,
+          runtime_state, can_reuse_cached_view_bindings, view_bindings,
+          view_constants)) {
+      return false;
     }
 
-    if (!can_reuse_cached_view_bindings && draw_frame_bindings_publisher_) {
-      DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
-      DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
-      DLOG_F(
-        3, "material shading: {}", prepared.bindless_material_shading_slot);
-      DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
-      DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
-
-      const DrawFrameBindings draw_bindings {
-        .draw_metadata_slot
-        = BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
-        .transforms_slot = BindlessWorldsSlot(prepared.bindless_worlds_slot),
-        .normal_matrices_slot
-        = BindlessNormalsSlot(prepared.bindless_normals_slot),
-        .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot(
-          prepared.bindless_material_shading_slot),
-        .procedural_grid_material_constants_slot
-        = BindlessProceduralGridMaterialConstantsSlot(
-          scene_prep_state_->GetMaterialBinder()
-            ? scene_prep_state_->GetMaterialBinder()
-                ->GetProceduralGridMaterialsSrvIndex()
-            : kInvalidShaderVisibleIndex),
-        .instance_data_slot
-        = BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
-      };
-      view_bindings.draw_frame_slot
-        = draw_frame_bindings_publisher_->Publish(view_id, draw_bindings);
-    }
-
-    if (!can_reuse_cached_view_bindings && view_color_data_publisher_) {
-      const ViewColorData view_color_data {
-        .exposure = prepared.exposure,
-      };
-      view_bindings.view_color_frame_slot
-        = view_color_data_publisher_->Publish(view_id, view_color_data);
-    }
-
-    if (!can_reuse_cached_view_bindings && gpu_debug_manager_
-      && debug_frame_bindings_publisher_) {
-      const DebugFrameBindings debug_bindings {
-        .line_buffer_srv_slot
-        = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex()),
-        .line_buffer_uav_slot
-        = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferUavIndex()),
-        .counter_buffer_uav_slot
-        = ShaderVisibleIndex(gpu_debug_manager_->GetCounterBufferUavIndex()),
-      };
-      view_bindings.debug_frame_slot
-        = debug_frame_bindings_publisher_->Publish(view_id, debug_bindings);
-    }
-
-    if (lighting_frame_bindings_publisher_) {
-      auto directional_lights_slot = kInvalidShaderVisibleIndex;
-      auto positional_lights_slot = kInvalidShaderVisibleIndex;
-      if (const auto light_manager = scene_prep_state_->GetLightManager()) {
-        directional_lights_slot = light_manager->GetDirectionalLightsSrvIndex();
-        positional_lights_slot = light_manager->GetPositionalLightsSrvIndex();
-      }
-
-      const LightingFrameBindings lighting_bindings {
-        .directional_lights_slot = directional_lights_slot,
-        .positional_lights_slot = positional_lights_slot,
-        .light_culling = runtime_state.light_culling,
-        .sun = runtime_state.sun,
-      };
-      view_bindings.lighting_frame_slot
-        = lighting_frame_bindings_publisher_->Publish(
-          view_id, lighting_bindings);
-      LOG_F(INFO,
-        "Renderer: frame={} view={} lighting publication dir_slot={} "
-        "pos_slot={} "
-        "lighting_frame_slot={} sun_enabled={} sun_illuminance={:.3f} "
-        "sun_dir=({:.6f}, {:.6f}, {:.6f})",
-        render_context.frame_sequence.get(), nostd::to_string(view_id),
-        directional_lights_slot, positional_lights_slot,
-        view_bindings.lighting_frame_slot, lighting_bindings.sun.enabled,
-        lighting_bindings.sun.direction_ws_illuminance.w,
-        lighting_bindings.sun.direction_ws_illuminance.x,
-        lighting_bindings.sun.direction_ws_illuminance.y,
-        lighting_bindings.sun.direction_ws_illuminance.z);
-    }
-
-    if (vsm_frame_bindings_publisher_) {
-      view_bindings.virtual_shadow_frame_slot
-        = vsm_frame_bindings_publisher_->Publish(
-          view_id, runtime_state.virtual_shadow);
-    }
-
-    if (!can_reuse_cached_view_bindings) {
-      const auto provisional_view_bindings_slot
-        = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
-      if (provisional_view_bindings_slot == kInvalidShaderVisibleIndex) {
-        LOG_F(ERROR,
-          "Renderer: failed to publish provisional view bindings for view {}",
-          view_id.get());
-        return false;
-      }
-      view_constants.SetBindlessViewFrameBindingsSlot(
-        BindlessViewFrameBindingsSlot(provisional_view_bindings_slot),
-        ViewConstants::kRenderer);
-    }
-
-    if (!can_reuse_cached_view_bindings && shadow_frame_bindings_publisher_
-      && shadow_manager_) {
-      auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
-      auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
-      auto sun_shadow_index = 0xFFFFFFFFU;
-      if (const auto light_manager = scene_prep_state_->GetLightManager()) {
-        const auto prepared_it = prepared_frames_.find(view_id);
-        const auto rendered_items = prepared_it != prepared_frames_.end()
-          ? prepared_it->second.render_items
-          : std::span<const sceneprep::RenderItemData> {};
-        const auto shadow_caster_bounds = prepared_it != prepared_frames_.end()
-          ? prepared_it->second.shadow_caster_bounding_spheres
-          : std::span<const glm::vec4> {};
-        const auto visible_receiver_bounds
-          = prepared_it != prepared_frames_.end()
-          ? prepared_it->second.visible_receiver_bounding_spheres
-          : std::span<const glm::vec4> {};
-        auto shadow_caster_content_hash
-          = HashPreparedShadowCasterContent(prepared);
-        const auto alpha_test_material_state = HashShadowCasterMaterialState(
-          rendered_items, texture_binder_.get());
-        if (alpha_test_material_state.hash != 0U) {
-          shadow_caster_content_hash = HashBytes(
-            &alpha_test_material_state.hash,
-            sizeof(alpha_test_material_state.hash), shadow_caster_content_hash);
-        }
-        LOG_F(INFO,
-          "Renderer: view={} shadow content hash={} "
-          "alpha_test_shadow_materials={} "
-          "pending_alpha_test_shadow_materials={} "
-          "alpha_test_domain_mismatches={}",
-          view_id.get(), shadow_caster_content_hash,
-          alpha_test_material_state.alpha_test_material_count,
-          alpha_test_material_state.pending_alpha_test_material_count,
-          alpha_test_material_state.alpha_test_domain_mismatch_count);
-        const auto shadow_view = shadow_manager_->PublishForView(view_id,
-          view_constants, *light_manager, render_context.GetSceneMutable(),
-          std::max(1.0F, resolved.Viewport().width), rendered_items,
-          shadow_caster_bounds, visible_receiver_bounds,
-          frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
-        shadow_instance_metadata_slot
-          = shadow_view.shadow_instance_metadata_srv;
-        directional_shadow_metadata_slot
-          = shadow_view.directional_shadow_metadata_srv;
-        const auto directional_shadow_texture_slot
-          = shadow_view.directional_shadow_texture_srv;
-        sun_shadow_index = shadow_view.sun_shadow_index;
-
-        const auto* shadow_instance = shadow_manager_ != nullptr
-          ? shadow_manager_->TryGetShadowInstanceMetadata(view_id)
-          : nullptr;
-
-        const ShadowFrameBindings shadow_bindings {
-          .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
-          .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
-          .directional_shadow_texture_slot = directional_shadow_texture_slot,
-          .sun_shadow_index = sun_shadow_index,
-        };
-        LOG_F(INFO,
-          "Renderer: frame={} view={} shadow publication shadow_meta={} "
-          "dir_meta={} dir_tex={} sun_shadow_index={}",
-          render_context.frame_sequence.get(), view_id.get(),
-          shadow_instance_metadata_slot.get(),
-          directional_shadow_metadata_slot.get(),
-          directional_shadow_texture_slot.get(), sun_shadow_index);
-        if (shadow_manager_ != nullptr) {
-          if (shadow_instance != nullptr) {
-            LOG_F(INFO,
-              "Renderer: frame={} view={} shadow instance detail "
-              "shadow_meta_srv={} sun_shadow_index={} light_index={} "
-              "payload_index={} domain={} implementation={} flags=0x{:08x}",
-              render_context.frame_sequence.get(), view_id.get(),
-              shadow_instance_metadata_slot.get(), sun_shadow_index,
-              shadow_instance->light_index, shadow_instance->payload_index,
-              shadow_instance->domain, shadow_instance->implementation_kind,
-              shadow_instance->flags);
-          } else {
-            LOG_F(INFO,
-              "Renderer: frame={} view={} shadow instance detail unavailable "
-              "shadow_meta_srv={} sun_shadow_index={}",
-              render_context.frame_sequence.get(), view_id.get(),
-              shadow_instance_metadata_slot.get(), sun_shadow_index);
-          }
-        }
-        view_bindings.shadow_frame_slot
-          = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
-      } else {
-        const ShadowFrameBindings shadow_bindings {};
-        view_bindings.shadow_frame_slot
-          = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
-        LOG_F(WARNING,
-          "Renderer: view {} published empty shadow bindings because "
-          "LightManager is unavailable",
-          view_id.get());
-      }
-    }
-
-    if (!can_reuse_cached_view_bindings
-      && environment_frame_bindings_publisher_) {
-      auto environment_view_slot = kInvalidShaderVisibleIndex;
-      if (environment_view_data_publisher_) {
-        environment_view_slot = environment_view_data_publisher_->Publish(
-          view_id, runtime_state.environment_view);
-      }
-
-      const EnvironmentFrameBindings environment_bindings {
-        .environment_static_slot = environment_static_slot,
-        .environment_view_slot = environment_view_slot,
-      };
-      view_bindings.environment_frame_slot
-        = environment_frame_bindings_publisher_->Publish(
-          view_id, environment_bindings);
-    }
+    PublishOptionalFamilyViewBindings(view_id, render_context, resolved,
+      prepared, environment_static_slot, runtime_state,
+      can_reuse_cached_view_bindings, view_bindings, view_constants);
 
     const auto view_bindings_slot
       = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
@@ -3659,6 +3447,245 @@ auto Renderer::RepublishCurrentViewBindings(const RenderContext& render_context,
   // scene-constants buffer remains a renderer-owned operation.
   WireContext(const_cast<RenderContext&>(render_context), buffer_info.buffer);
   return true;
+}
+
+auto Renderer::PublishBaselineViewBindings(const ViewId view_id,
+  const RenderContext& render_context, const PreparedSceneFrame& prepared,
+  PerViewRuntimeState& runtime_state, const bool can_reuse_cached_view_bindings,
+  ViewFrameBindings& view_bindings, ViewConstants& view_constants) -> bool
+{
+  if (const auto* pass_target = render_context.pass_target.get();
+    pass_target != nullptr
+    && pass_target->GetDescriptor().depth_attachment.texture != nullptr) {
+    view_bindings.scene_depth_slot = EnsureSceneDepthTextureSrv(
+      runtime_state, *pass_target->GetDescriptor().depth_attachment.texture);
+  } else {
+    runtime_state.scene_depth_srv = kInvalidShaderVisibleIndex;
+    runtime_state.scene_depth_texture_owner = nullptr;
+    runtime_state.owns_scene_depth_srv = false;
+    view_bindings.scene_depth_slot = kInvalidShaderVisibleIndex;
+  }
+
+  if (!can_reuse_cached_view_bindings && draw_frame_bindings_publisher_) {
+    DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
+    DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
+    DLOG_F(3, "material shading: {}", prepared.bindless_material_shading_slot);
+    DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
+    DLOG_F(3, " instance: {}", prepared.bindless_instance_data_slot);
+
+    const DrawFrameBindings draw_bindings {
+      .draw_metadata_slot
+      = BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
+      .transforms_slot = BindlessWorldsSlot(prepared.bindless_worlds_slot),
+      .normal_matrices_slot
+      = BindlessNormalsSlot(prepared.bindless_normals_slot),
+      .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot(
+        prepared.bindless_material_shading_slot),
+      .procedural_grid_material_constants_slot
+      = BindlessProceduralGridMaterialConstantsSlot(
+        scene_prep_state_->GetMaterialBinder()
+          ? scene_prep_state_->GetMaterialBinder()
+              ->GetProceduralGridMaterialsSrvIndex()
+          : kInvalidShaderVisibleIndex),
+      .instance_data_slot
+      = BindlessInstanceDataSlot(prepared.bindless_instance_data_slot),
+    };
+    view_bindings.draw_frame_slot
+      = draw_frame_bindings_publisher_->Publish(view_id, draw_bindings);
+  }
+
+  if (!can_reuse_cached_view_bindings && view_color_data_publisher_) {
+    const ViewColorData view_color_data {
+      .exposure = prepared.exposure,
+    };
+    view_bindings.view_color_frame_slot
+      = view_color_data_publisher_->Publish(view_id, view_color_data);
+  }
+
+  if (!can_reuse_cached_view_bindings) {
+    const auto provisional_view_bindings_slot
+      = view_frame_bindings_publisher_->Publish(view_id, view_bindings);
+    if (provisional_view_bindings_slot == kInvalidShaderVisibleIndex) {
+      LOG_F(ERROR,
+        "Renderer: failed to publish provisional view bindings for view {}",
+        view_id.get());
+      return false;
+    }
+    view_constants.SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot(provisional_view_bindings_slot),
+      ViewConstants::kRenderer);
+  }
+
+  return true;
+}
+
+auto Renderer::PublishOptionalFamilyViewBindings(const ViewId view_id,
+  const RenderContext& render_context, const ResolvedView& resolved,
+  const PreparedSceneFrame& prepared,
+  const ShaderVisibleIndex environment_static_slot,
+  PerViewRuntimeState& runtime_state, const bool can_reuse_cached_view_bindings,
+  ViewFrameBindings& view_bindings, ViewConstants& view_constants) -> void
+{
+  if (!can_reuse_cached_view_bindings && gpu_debug_manager_
+    && debug_frame_bindings_publisher_) {
+    const DebugFrameBindings debug_bindings {
+      .line_buffer_srv_slot
+      = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferSrvIndex()),
+      .line_buffer_uav_slot
+      = ShaderVisibleIndex(gpu_debug_manager_->GetLineBufferUavIndex()),
+      .counter_buffer_uav_slot
+      = ShaderVisibleIndex(gpu_debug_manager_->GetCounterBufferUavIndex()),
+    };
+    view_bindings.debug_frame_slot
+      = debug_frame_bindings_publisher_->Publish(view_id, debug_bindings);
+  }
+
+  if (lighting_frame_bindings_publisher_) {
+    auto directional_lights_slot = kInvalidShaderVisibleIndex;
+    auto positional_lights_slot = kInvalidShaderVisibleIndex;
+    if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+      directional_lights_slot = light_manager->GetDirectionalLightsSrvIndex();
+      positional_lights_slot = light_manager->GetPositionalLightsSrvIndex();
+    }
+
+    const LightingFrameBindings lighting_bindings {
+      .directional_lights_slot = directional_lights_slot,
+      .positional_lights_slot = positional_lights_slot,
+      .light_culling = runtime_state.light_culling,
+      .sun = runtime_state.sun,
+    };
+    view_bindings.lighting_frame_slot
+      = lighting_frame_bindings_publisher_->Publish(view_id, lighting_bindings);
+    LOG_F(INFO,
+      "Renderer: frame={} view={} lighting publication dir_slot={} "
+      "pos_slot={} "
+      "lighting_frame_slot={} sun_enabled={} sun_illuminance={:.3f} "
+      "sun_dir=({:.6f}, {:.6f}, {:.6f})",
+      render_context.frame_sequence.get(), nostd::to_string(view_id),
+      directional_lights_slot, positional_lights_slot,
+      view_bindings.lighting_frame_slot, lighting_bindings.sun.enabled,
+      lighting_bindings.sun.direction_ws_illuminance.w,
+      lighting_bindings.sun.direction_ws_illuminance.x,
+      lighting_bindings.sun.direction_ws_illuminance.y,
+      lighting_bindings.sun.direction_ws_illuminance.z);
+  }
+
+  if (vsm_frame_bindings_publisher_) {
+    view_bindings.virtual_shadow_frame_slot
+      = vsm_frame_bindings_publisher_->Publish(
+        view_id, runtime_state.virtual_shadow);
+  }
+
+  if (!can_reuse_cached_view_bindings && shadow_frame_bindings_publisher_
+    && shadow_manager_) {
+    auto shadow_instance_metadata_slot = kInvalidShaderVisibleIndex;
+    auto directional_shadow_metadata_slot = kInvalidShaderVisibleIndex;
+    auto sun_shadow_index = 0xFFFFFFFFU;
+    if (const auto light_manager = scene_prep_state_->GetLightManager()) {
+      const auto prepared_it = prepared_frames_.find(view_id);
+      const auto rendered_items = prepared_it != prepared_frames_.end()
+        ? prepared_it->second.render_items
+        : std::span<const sceneprep::RenderItemData> {};
+      const auto shadow_caster_bounds = prepared_it != prepared_frames_.end()
+        ? prepared_it->second.shadow_caster_bounding_spheres
+        : std::span<const glm::vec4> {};
+      const auto visible_receiver_bounds = prepared_it != prepared_frames_.end()
+        ? prepared_it->second.visible_receiver_bounding_spheres
+        : std::span<const glm::vec4> {};
+      auto shadow_caster_content_hash
+        = HashPreparedShadowCasterContent(prepared);
+      const auto alpha_test_material_state
+        = HashShadowCasterMaterialState(rendered_items, texture_binder_.get());
+      if (alpha_test_material_state.hash != 0U) {
+        shadow_caster_content_hash = HashBytes(&alpha_test_material_state.hash,
+          sizeof(alpha_test_material_state.hash), shadow_caster_content_hash);
+      }
+      LOG_F(INFO,
+        "Renderer: view={} shadow content hash={} "
+        "alpha_test_shadow_materials={} "
+        "pending_alpha_test_shadow_materials={} "
+        "alpha_test_domain_mismatches={}",
+        view_id.get(), shadow_caster_content_hash,
+        alpha_test_material_state.alpha_test_material_count,
+        alpha_test_material_state.pending_alpha_test_material_count,
+        alpha_test_material_state.alpha_test_domain_mismatch_count);
+      const auto shadow_view = shadow_manager_->PublishForView(view_id,
+        view_constants, *light_manager, render_context.GetSceneMutable(),
+        std::max(1.0F, resolved.Viewport().width), rendered_items,
+        shadow_caster_bounds, visible_receiver_bounds,
+        frame_budget_stats_.gpu_budget, shadow_caster_content_hash);
+      shadow_instance_metadata_slot = shadow_view.shadow_instance_metadata_srv;
+      directional_shadow_metadata_slot
+        = shadow_view.directional_shadow_metadata_srv;
+      const auto directional_shadow_texture_slot
+        = shadow_view.directional_shadow_texture_srv;
+      sun_shadow_index = shadow_view.sun_shadow_index;
+
+      const auto* shadow_instance = shadow_manager_ != nullptr
+        ? shadow_manager_->TryGetShadowInstanceMetadata(view_id)
+        : nullptr;
+
+      const ShadowFrameBindings shadow_bindings {
+        .shadow_instance_metadata_slot = shadow_instance_metadata_slot,
+        .directional_shadow_metadata_slot = directional_shadow_metadata_slot,
+        .directional_shadow_texture_slot = directional_shadow_texture_slot,
+        .sun_shadow_index = sun_shadow_index,
+      };
+      LOG_F(INFO,
+        "Renderer: frame={} view={} shadow publication shadow_meta={} "
+        "dir_meta={} dir_tex={} sun_shadow_index={}",
+        render_context.frame_sequence.get(), view_id.get(),
+        shadow_instance_metadata_slot.get(),
+        directional_shadow_metadata_slot.get(),
+        directional_shadow_texture_slot.get(), sun_shadow_index);
+      if (shadow_manager_ != nullptr) {
+        if (shadow_instance != nullptr) {
+          LOG_F(INFO,
+            "Renderer: frame={} view={} shadow instance detail "
+            "shadow_meta_srv={} sun_shadow_index={} light_index={} "
+            "payload_index={} domain={} implementation={} flags=0x{:08x}",
+            render_context.frame_sequence.get(), view_id.get(),
+            shadow_instance_metadata_slot.get(), sun_shadow_index,
+            shadow_instance->light_index, shadow_instance->payload_index,
+            shadow_instance->domain, shadow_instance->implementation_kind,
+            shadow_instance->flags);
+        } else {
+          LOG_F(INFO,
+            "Renderer: frame={} view={} shadow instance detail unavailable "
+            "shadow_meta_srv={} sun_shadow_index={}",
+            render_context.frame_sequence.get(), view_id.get(),
+            shadow_instance_metadata_slot.get(), sun_shadow_index);
+        }
+      }
+      view_bindings.shadow_frame_slot
+        = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
+    } else {
+      const ShadowFrameBindings shadow_bindings {};
+      view_bindings.shadow_frame_slot
+        = shadow_frame_bindings_publisher_->Publish(view_id, shadow_bindings);
+      LOG_F(WARNING,
+        "Renderer: view {} published empty shadow bindings because "
+        "LightManager is unavailable",
+        view_id.get());
+    }
+  }
+
+  if (!can_reuse_cached_view_bindings
+    && environment_frame_bindings_publisher_) {
+    auto environment_view_slot = kInvalidShaderVisibleIndex;
+    if (environment_view_data_publisher_) {
+      environment_view_slot = environment_view_data_publisher_->Publish(
+        view_id, runtime_state.environment_view);
+    }
+
+    const EnvironmentFrameBindings environment_bindings {
+      .environment_static_slot = environment_static_slot,
+      .environment_view_slot = environment_view_slot,
+    };
+    view_bindings.environment_frame_slot
+      = environment_frame_bindings_publisher_->Publish(
+        view_id, environment_bindings);
+  }
 }
 
 auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
