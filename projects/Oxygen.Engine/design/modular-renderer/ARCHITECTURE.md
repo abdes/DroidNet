@@ -1,11 +1,11 @@
 # Modular Renderer Architecture
 
-Status: `phase-1 architecture baseline`
+Status: `phase-2 architecture baseline`
 
 This document captures the stable conceptual model for the modular renderer.
 It defines architectural boundaries, ownership, capability families, and
-phase-1 architectural commitments. It avoids implementation sequencing and
-task-level planning.
+architectural commitments across phases. It avoids implementation sequencing
+and task-level planning.
 
 Related:
 
@@ -140,9 +140,16 @@ back onto the existing codebase.
 | Baseline shader publication | `view_const_cpu_`, `view_const_manager_`, `view_frame_bindings_publisher_`, `draw_frame_bindings_publisher_`, `view_color_data_publisher_` | This is why `Renderer Core` includes baseline shader-execution substrate rather than exposing it as a peer optional family. |
 | Optional family publication | `debug_frame_bindings_publisher_`, `lighting_frame_bindings_publisher_`, `shadow_frame_bindings_publisher_`, `vsm_frame_bindings_publisher_`, `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `conventional_shadow_draw_record_buffer_` | This is the source of the publication refactor pressure and why there is no top-level `Feature Shader Inputs` family in phase 1. |
 | Lighting/shadow services | `shadow_manager_`, with `LightManager` still indirectly owned through `ScenePrepState` | This is the ownership drift that motivates the split into `Lighting Data` and `Shadowing`. |
-| Environment services | `brdf_lut_manager_`, `per_view_atmo_luts_`, `ibl_manager_`, `sky_capture_pass_`, `sky_capture_pass_config_`, `sky_atmo_lut_compute_pass_`, `sky_atmo_lut_compute_pass_config_`, `ibl_compute_pass_`, `env_static_manager_`, `last_atmo_generation_`, `last_seen_view_frame_seq_`, `sky_capture_requested_`, atmosphere state | This becomes `Environment Lighting` as a coherent family with internal subfacets. |
+| Environment services | `environment_view_data_publisher_`, `environment_frame_bindings_publisher_`, `brdf_lut_manager_`, `per_view_atmo_luts_`, `ibl_manager_`, `sky_capture_pass_`, `sky_capture_pass_config_`, `sky_atmo_lut_compute_pass_`, `sky_atmo_lut_compute_pass_config_`, `ibl_compute_pass_`, `env_static_manager_`, `last_atmo_generation_`, `last_seen_view_frame_seq_`, `sky_capture_requested_`, atmosphere state | This becomes `Environment Lighting` as a coherent family with internal subfacets. |
 | Composition state | `composition_mutex_`, `composition_submission_`, `composition_surface_`, `compositing_pass_`, `compositing_pass_config_` | This is the current scalar bottleneck replaced by queued multi-submission composition. |
 | Diagnostics state | `gpu_debug_manager_`, `gpu_timeline_profiler_`, `gpu_timeline_panel_`, `imgui_module_subscription_`, `gpu_timeline_panel_drawer_token_`, `console_`, timing/stat accumulators | This remains an optional `Diagnostics and Profiling` family. |
+
+Important exclusion:
+
+- `last_scene_identity_` is not part of the environment family in the current
+  implementation. It is used to reset shadow cache state on scene changes and
+  therefore stays with the shadow/runtime side unless a later phase proves
+  otherwise.
 
 Useful source anchors for this inventory:
 
@@ -179,9 +186,10 @@ The following are intentionally **not** frozen as stable phase-1 architecture:
 These are production policy or implementation-shape decisions that may still
 change without invalidating the architecture defined here.
 
-## 5. Phase-1 Structural Model
+## 5. Phase-1 Structural Model (delivered)
 
-Phase-1 should distinguish three different kinds of architectural parts:
+Phase-1 distinguished three different kinds of architectural parts.
+All of the following are delivered and stable.
 
 ### 5.1 Baseline Substrate
 
@@ -218,6 +226,128 @@ Important architectural rules:
 - `Lighting Data` and `Shadowing` are separate families
 - `Final Output Composition` is an explicit family, not an implicit side effect
 
+## 5.4 Phase-2 Structural Evolution: Capability-Family Services
+
+Phase 1 established the capability-family vocabulary. The `Renderer` class
+knows which families are present and gates pipeline binding on them. However,
+the `Renderer` class still physically owns all member variables, initialization,
+publication, per-view management, and shutdown for every family. This means the
+monolith is ~4,800 lines and ~65 member variables.
+
+Phase 2 starts extracting families into **capability-family services**:
+standalone classes that own a family's full lifecycle.
+
+### 5.4.1 What Is a Capability-Family Service?
+
+A capability-family service is a class that encapsulates everything a single
+capability family needs to operate:
+
+- all member variables (managers, passes, configs, per-view state, tracking)
+- initialization (called once when the renderer attaches to the graphics
+  device)
+- per-frame setup (called at frame start, including publisher lifecycle)
+- per-view state contribution during scene prep / current-view binding
+- per-view publication (called when the renderer publishes bindings for a view)
+- per-view cached-product eviction (called when a view is removed)
+- shutdown (called when the renderer detaches)
+- debug/runtime toggle ownership for the family
+
+The renderer holds a `unique_ptr` to the service, gated by `HasCapability`.
+When the capability is absent, the pointer is null and the renderer skips all
+calls to it.
+
+### 5.4.2 Ownership Rules for Extracted Services
+
+1. The service is **renderer-owned**. The renderer creates it, holds it, and
+   destroys it.
+2. The service **does not** hold a back-pointer to the full `Renderer`. It
+   receives only the specific dependencies it needs (e.g., `Graphics&`,
+   publication substrate references, view identity) through its constructor
+   or through per-call parameters.
+3. The service **owns** its optional-family publishers and advances their
+   per-frame lifecycle. The renderer still owns the generic publication
+   substrate concept, but the service owns the concrete publisher instances,
+   the environment-specific source data contribution, and the `Publish()` calls.
+4. The service **owns** any passes that are logically part of the family (e.g.,
+   sky capture, atmosphere LUT computation, IBL computation for the
+   `Environment Lighting` family). These passes are service-managed, not
+   pipeline-managed and not renderer-managed.
+5. The service **owns** per-view state maps for its family. Per-view creation,
+   lookup, and eviction are service responsibilities.
+6. Pipeline access to service functionality goes through **bridged renderer
+   APIs** — the same pattern established in phase 1 for shadow and environment
+   access.
+
+### 5.4.3 Phase-2 Extraction Target: Environment Lighting
+
+The first family to extract is `Environment Lighting`. It is the best candidate
+because:
+
+- it has the most member variables of any optional family (~15 variables, ~6
+  public methods)
+- it has no cyclical dependency on other optional families (Shadowing depends
+  on the depth pre-pass chain; Environment does not)
+- it already owns three renderer-held passes that should be service-owned
+- it has per-view state (`per_view_atmo_luts_`) that demonstrates the per-view
+  management pattern
+- the publication seam (`PublishOptionalFamilyViewBindings`) already separates
+  environment from shadow publication internally
+
+The concrete member variables that move into `EnvironmentLightingService`:
+
+| Current `Renderer` member | Role |
+| --- | --- |
+| `environment_view_data_publisher_` | Environment view publication |
+| `environment_frame_bindings_publisher_` | Environment frame publication |
+| `brdf_lut_manager_` | Global BRDF LUT management |
+| `per_view_atmo_luts_` | Per-view atmosphere LUT cache |
+| `ibl_manager_` | Image-based lighting computation |
+| `sky_capture_pass_` | Sky capture render pass |
+| `sky_capture_pass_config_` | Sky capture pass configuration |
+| `sky_atmo_lut_compute_pass_` | Atmosphere LUT compute pass |
+| `sky_atmo_lut_compute_pass_config_` | Atmosphere LUT pass configuration |
+| `ibl_compute_pass_` | IBL compute pass |
+| `env_static_manager_` | Static environment data (bindless SRV) |
+| `last_atmo_generation_` | Atmosphere generation tracking |
+| `last_seen_view_frame_seq_` | Per-view frame sequence tracking |
+| `sky_capture_requested_` | Pending sky capture request flag |
+| `atmosphere_blue_noise_enabled_` | Atmosphere debug flag |
+| `atmosphere_debug_flags_` | Atmosphere debug overrides |
+
+The public `Renderer` methods that move to the service or become thin
+delegations:
+
+| Current `Renderer` method | After extraction |
+| --- | --- |
+| `GetEnvironmentStaticDataManager()` | Service method |
+| `GetIblManager()` | Service method |
+| `GetIblComputePass()` | Service method |
+| `GetSkyAtmosphereLutManagerForView()` | Service method |
+| `RequestSkyCapture()` | Service method |
+| `RequestIblRegeneration()` | Service method |
+| `SetAtmosphereBlueNoiseEnabled()` | Service method |
+| `GetOrCreateSkyAtmosphereLutManagerForView()` | Internal service method |
+
+Phase-2 bridge rule:
+
+- Existing pass/pipeline entry points on `Renderer` may remain as thin
+  one-line forwards in phase 2 when that avoids broad pass churn. The goal of
+  the extraction is to remove environment implementation ownership from
+  `Renderer`, not to force every environment-related public symbol to disappear
+  in the same phase.
+
+### 5.4.4 Future Extraction Candidates
+
+After Environment Lighting, the following families are candidates for
+extraction in priority order:
+
+1. **Diagnostics and Profiling** — self-contained, no cross-family coupling,
+   ~5 member variables.
+2. **Shadowing** — higher complexity due to depth-chain coupling and
+   draw-record buffers, but already has `ShadowManager` as partial precedent.
+3. **Lighting Data** — once shadowing is clean, lighting is a natural
+   follow-on.
+
 ## 6. Ownership Split
 
 ## 6.1 Renderer-Owned
@@ -228,7 +358,8 @@ Renderer owns:
 - `RenderContext` allocation, reset, and materialization
 - upload/staging services
 - asset/resource binding services
-- reusable capability-family services
+- capability-family service instances (held as `unique_ptr`, gated by
+  capability availability)
 - publication substrate
 - non-runtime facade infrastructure
 - canonical runtime state
