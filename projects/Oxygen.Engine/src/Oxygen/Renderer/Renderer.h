@@ -523,9 +523,7 @@ public:
   OXGN_RNDR_API explicit Renderer(
     std::weak_ptr<Graphics> graphics, RendererConfig config);
   OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics,
-    RendererConfig config,
-    renderer::CapabilitySet capability_families
-    = renderer::kPhase1DefaultRuntimeCapabilityFamilies);
+    RendererConfig config, renderer::CapabilitySet capability_families);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
@@ -609,6 +607,16 @@ public:
   OXGN_RNDR_API auto UnregisterViewRenderGraph(ViewId view_id) -> void;
 
   //! Submit compositing tasks for the current frame.
+  /*!
+    Phase 1 accepts multiple submissions per frame, but they must all
+   * target
+    the same composite framebuffer/surface pair. `target_surface` is
+   * renderer
+    bookkeeping for presentability integration;
+   * `submission.composite_target`
+    remains the execution framebuffer
+   * handoff.
+  */
   OXGN_RNDR_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
 
@@ -989,9 +997,15 @@ private:
   // each view renders with its own draw list (not the last view's data)
   std::unordered_map<ViewId, PreparedSceneFrame> prepared_frames_;
 
+  struct PendingComposition {
+    CompositionSubmission submission {};
+    std::shared_ptr<graphics::Surface> target_surface {};
+    std::uint64_t sequence_in_frame { 0 };
+  };
+
   std::mutex composition_mutex_;
-  std::optional<CompositionSubmission> composition_submission_;
-  std::shared_ptr<graphics::Surface> composition_surface_;
+  std::vector<PendingComposition> pending_compositions_;
+  std::uint64_t next_composition_sequence_in_frame_ { 0 };
   renderer::CapabilitySet capability_families_ {
     renderer::kPhase1DefaultRuntimeCapabilityFamilies
   };

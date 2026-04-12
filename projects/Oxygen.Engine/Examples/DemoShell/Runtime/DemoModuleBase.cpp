@@ -125,6 +125,7 @@ DemoModuleBase::~DemoModuleBase()
 {
   ClearViewIds();
   GetLightCullingConsoleCommandState()->pipeline = nullptr;
+  renderer_subscription_.Cancel();
   pipeline_.reset();
 }
 
@@ -162,12 +163,16 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   }
 
   if (pipeline_) {
-    const auto renderer_module = engine->GetModule<engine::Renderer>();
-    if (!renderer_module.has_value()) {
-      LOG_F(ERROR, "-failed- renderer module missing during pipeline bind");
-      return false;
-    }
-    pipeline_->BindToRenderer(renderer_module->get());
+    renderer_subscription_ = engine->SubscribeModuleAttached(
+      [this](const engine::ModuleEvent& event) {
+        if (event.type_id != engine::Renderer::ClassTypeId()) {
+          return;
+        }
+        auto* renderer = static_cast<engine::Renderer*>(event.module.get());
+        DCHECK_NOTNULL_F(renderer);
+        BindPipelineToRenderer(*renderer);
+      },
+      true);
   }
 
   RegisterLightCullingConsoleCommand(*engine);
@@ -180,6 +185,8 @@ auto DemoModuleBase::OnShutdown() noexcept -> void
 {
   shell_.reset();
   GetLightCullingConsoleCommandState()->pipeline = nullptr;
+  renderer_subscription_.Cancel();
+  pipeline_bound_ = false;
   pipeline_.reset();
   view_registry_.clear();
 }
@@ -190,13 +197,22 @@ auto DemoModuleBase::GetShell() -> DemoShell&
   return *shell_;
 }
 
+auto DemoModuleBase::BindPipelineToRenderer(engine::Renderer& renderer) -> void
+{
+  if (pipeline_ == nullptr || pipeline_bound_) {
+    return;
+  }
+  pipeline_->BindToRenderer(renderer);
+  pipeline_bound_ = true;
+}
+
 auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
   DCHECK_NOTNULL_F(context);
   try {
     OnFrameStartCommon(*context);
-    if (pipeline_) {
+    if (pipeline_ && pipeline_bound_) {
       if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
         pipeline_->OnFrameStart(context, *renderer);
       }
@@ -227,7 +243,7 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  if (!pipeline_) {
+  if (!pipeline_ || !pipeline_bound_) {
     co_return;
   }
   auto* renderer = GetRendererFromEngine(app_.engine.get());
@@ -252,7 +268,7 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
 auto DemoModuleBase::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  if (pipeline_) {
+  if (pipeline_ && pipeline_bound_) {
     if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
       co_await pipeline_->OnPreRender(context, *renderer, active_views_);
     }
@@ -270,7 +286,7 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  if (pipeline_) {
+  if (pipeline_ && pipeline_bound_) {
     if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
       // Get the current framebuffer from our window for final composite
       std::shared_ptr<graphics::Framebuffer> target_fb;
@@ -288,9 +304,6 @@ auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
           surface = app_window_->GetSurface().lock();
         }
         renderer->RegisterComposition(std::move(submission), surface);
-        if (surface) {
-          MarkSurfacePresentable(*context);
-        }
       }
     }
   }
@@ -351,33 +364,6 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
     last_surface_ = observer_ptr { surface.get() };
   } else {
     last_surface_ = nullptr;
-  }
-}
-
-auto DemoModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
-  -> void
-{
-  auto surface = app_window_->GetSurface().lock();
-  if (!surface) {
-    DLOG_F(1, "Skip marking presentable: surface=null");
-    return;
-  }
-  const auto surfaces = context.GetSurfaces();
-  bool found = false;
-  for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i].get() == surface.get()) {
-      context.SetSurfacePresentable(i, true);
-      DLOG_F(1, "Mark surface presentable: index={}, surface='{}'", i,
-        surface->GetName());
-      found = true;
-      break;
-    }
-  }
-  if (surfaces.empty()) {
-    DLOG_F(1, "Skip marking presentable: no surfaces in FrameContext");
-  } else if (!found) {
-    DLOG_F(1, "Skip marking presentable: surface not found: '{}'",
-      surface->GetName());
   }
 }
 
