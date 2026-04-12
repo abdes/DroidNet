@@ -417,7 +417,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         } else if (action == PendingSourceAction::kMountPak) {
           const auto normalized = runtime::NormalizePath(path);
           try {
-            const auto already_mounted = IsMountedPak(*asset_loader, normalized);
+            const auto already_mounted
+              = IsMountedPak(*asset_loader, normalized);
             const auto write_time = TryGetLastWriteTime(normalized);
 
             if (already_mounted) {
@@ -968,18 +969,25 @@ auto MainModule::ClearBackbufferReferences() -> void
   }
 }
 
-auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
+auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> /*context*/)
   -> co::Co<>
 {
-  auto& shell = GetShell();
   if (!logged_gameplay_tick_) {
     logged_gameplay_tick_ = true;
     LOG_F(INFO, "RenderScene: OnGameplay is running");
   }
 
+  co_return;
+}
+
+auto MainModule::OnInput(observer_ptr<engine::FrameContext> context) -> co::Co<>
+{
+  auto& shell = GetShell();
+
   // Input edges are finalized during kInput earlier in the frame (mirrors the
   // InputSystem example). Apply camera controls here so WASD/Shift/Space and
-  // mouse deltas are visible in the same frame.
+  // mouse deltas are visible in the same frame without stomping camera
+  // transforms written later by gameplay scripts.
   shell.Update(context->GetGameDeltaTime());
 
   co_return;
