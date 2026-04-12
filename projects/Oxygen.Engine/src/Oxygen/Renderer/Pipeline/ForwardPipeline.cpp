@@ -83,6 +83,35 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(Impl)
 
   void ApplySettings();
+  void ValidateCapabilityBinding(engine::Renderer& renderer,
+    const PipelineCapabilityRequirements& requirements);
+  [[nodiscard]] auto IsBoundTo(const engine::Renderer& renderer) const noexcept
+    -> bool
+  {
+    return validated_renderer.get() == &renderer;
+  }
+  [[nodiscard]] auto HasLightingCapability(
+    const engine::Renderer& renderer) const noexcept -> bool
+  {
+    return renderer.HasCapability(RendererCapabilityFamily::kLightingData);
+  }
+  [[nodiscard]] auto HasShadowingCapability(
+    const engine::Renderer& renderer) const noexcept -> bool
+  {
+    return renderer.HasCapability(RendererCapabilityFamily::kShadowing);
+  }
+  [[nodiscard]] auto HasEnvironmentCapability(
+    const engine::Renderer& renderer) const noexcept -> bool
+  {
+    return renderer.HasCapability(
+      RendererCapabilityFamily::kEnvironmentLighting);
+  }
+  [[nodiscard]] auto HasDiagnosticsCapability(
+    const engine::Renderer& renderer) const noexcept -> bool
+  {
+    return renderer.HasCapability(
+      RendererCapabilityFamily::kDiagnosticsAndProfiling);
+  }
   [[nodiscard]] auto IsAtmosphereBlueNoiseEnabled() const noexcept -> bool
   {
     return frame_settings.atmosphere_blue_noise_enabled;
@@ -230,6 +259,7 @@ private:
   std::shared_ptr<engine::GpuDebugDrawPass> gpu_debug_draw_pass;
 
   // Runtime settings state
+  observer_ptr<engine::Renderer> validated_renderer;
   std::optional<float> pending_auto_exposure_reset;
   PipelineSettings frame_settings {};
   PipelineSettingsDraft settings_draft {};
@@ -540,6 +570,9 @@ auto ForwardPipeline::Impl::RunScenePasses(
   -> co::Co<>
 {
   auto& renderer = rc.GetRenderer();
+  const bool has_lighting = HasLightingCapability(renderer);
+  const bool has_shadowing = HasShadowingCapability(renderer);
+  const bool has_environment = HasEnvironmentCapability(renderer);
   rc.current_view.depth_prepass_completeness = ctx.plan.WantsDepthPrePass()
     ? DepthPrePassCompleteness::kIncomplete
     : DepthPrePassCompleteness::kDisabled;
@@ -555,7 +588,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
         ctx.view->GetPublishedViewId().get(),
         to_string(ctx.plan.GetDepthPrePassMode()));
     } else {
-      if (shadow_raster_pass && shadow_raster_pass_config) {
+      if (has_shadowing && shadow_raster_pass && shadow_raster_pass_config) {
         if (const auto shadow_manager = renderer.GetShadowManager()) {
           shadow_raster_pass_config->depth_texture
             = shadow_manager->GetConventionalShadowDepthTexture();
@@ -586,7 +619,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
         co_await screen_hzb_pass->Execute(rc, rec);
         rc.RegisterPass<engine::ScreenHzbBuildPass>(screen_hzb_pass.get());
 
-        if (conventional_shadow_receiver_analysis_pass) {
+        if (has_shadowing && conventional_shadow_receiver_analysis_pass) {
           co_await conventional_shadow_receiver_analysis_pass->PrepareResources(
             rc, rec);
           co_await conventional_shadow_receiver_analysis_pass->Execute(rc, rec);
@@ -612,7 +645,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
         }
       }
 
-      if (shadow_raster_pass && shadow_raster_pass_config
+      if (has_shadowing && shadow_raster_pass && shadow_raster_pass_config
         && shadow_raster_pass_config->depth_texture) {
         co_await shadow_raster_pass->PrepareResources(rc, rec);
         co_await shadow_raster_pass->Execute(rc, rec);
@@ -623,16 +656,17 @@ auto ForwardPipeline::Impl::RunScenePasses(
   }
 
   const bool defer_sky_until_after_opaque
-    = ctx.plan.RunSkyPass() && !early_depth_complete;
+    = has_environment && ctx.plan.RunSkyPass() && !early_depth_complete;
 
   // Sky can run before opaque shading only when early depth is complete. When
   // it is not, defer sky until after opaque depth has been written.
-  if (ctx.plan.RunSkyPass() && sky_pass && !defer_sky_until_after_opaque) {
+  if (has_environment && ctx.plan.RunSkyPass() && sky_pass
+    && !defer_sky_until_after_opaque) {
     co_await sky_pass->PrepareResources(rc, rec);
     co_await sky_pass->Execute(rc, rec);
   }
 
-  if (light_culling_pass) {
+  if (has_lighting && light_culling_pass) {
     co_await light_culling_pass->PrepareResources(rc, rec);
     co_await light_culling_pass->Execute(rc, rec);
     rc.RegisterPass<engine::LightCullingPass>(light_culling_pass.get());
@@ -643,26 +677,34 @@ auto ForwardPipeline::Impl::RunScenePasses(
       rc, engine::LightCullingConfig {});
   }
 
-  if (const auto shadow_manager = renderer.GetShadowManager()) {
-    if (const auto vsm_shadow_renderer
-      = shadow_manager->GetVirtualShadowRenderer()) {
-      if (early_depth_complete) {
-        DLOG_F(2,
-          "ForwardPipeline: view={} executing VSM shell after screen-hzb and "
-          "light-culling",
-          ctx.view->GetPublishedViewId());
-        co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
-          observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
-      } else {
-        renderer.UpdateCurrentViewVirtualShadowFrameBindings(
-          rc, engine::VsmFrameBindings {});
-        DLOG_F(2,
-          "ForwardPipeline: view={} skipping VSM shell because early depth is "
-          "{}",
-          ctx.view->GetPublishedViewId(),
-          to_string(rc.current_view.depth_prepass_completeness));
+  if (has_shadowing) {
+    if (const auto shadow_manager = renderer.GetShadowManager()) {
+      if (const auto vsm_shadow_renderer
+        = shadow_manager->GetVirtualShadowRenderer()) {
+        if (early_depth_complete) {
+          DLOG_F(2,
+            "ForwardPipeline: view={} executing VSM shell after screen-hzb "
+            "and light-culling",
+            ctx.view->GetPublishedViewId());
+          co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
+            observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
+        } else {
+          renderer.UpdateCurrentViewVirtualShadowFrameBindings(
+            rc, engine::VsmFrameBindings {});
+          DLOG_F(2,
+            "ForwardPipeline: view={} skipping VSM shell because early depth "
+            "is {}",
+            ctx.view->GetPublishedViewId(),
+            to_string(rc.current_view.depth_prepass_completeness));
+        }
       }
+    } else {
+      renderer.UpdateCurrentViewVirtualShadowFrameBindings(
+        rc, engine::VsmFrameBindings {});
     }
+  } else {
+    renderer.UpdateCurrentViewVirtualShadowFrameBindings(
+      rc, engine::VsmFrameBindings {});
   }
 
   if (shader_pass) {
@@ -693,6 +735,9 @@ auto ForwardPipeline::Impl::RenderGpuDebugOverlay(
   const engine::RenderContext& rc, graphics::CommandRecorder& rec) const
   -> co::Co<>
 {
+  if (!HasDiagnosticsCapability(rc.GetRenderer())) {
+    co_return;
+  }
   if (!frame_plan_builder->GpuDebugPassEnabled() || !gpu_debug_draw_pass) {
     co_return;
   }
@@ -852,7 +897,10 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
     if (!run_scene_passes) {
       co_await RenderWireframeScene(ctx, rc, rec);
     } else {
-      if (frame_plan_builder->GpuDebugPassEnabled() && gpu_debug_clear_pass) {
+      const bool run_gpu_debug_clear
+        = HasDiagnosticsCapability(rc.GetRenderer())
+        && frame_plan_builder->GpuDebugPassEnabled() && gpu_debug_clear_pass;
+      if (run_gpu_debug_clear) {
         co_await gpu_debug_clear_pass->PrepareResources(rc, rec);
         co_await gpu_debug_clear_pass->Execute(rc, rec);
         rc.RegisterPass<engine::GpuDebugClearPass>(gpu_debug_clear_pass.get());
@@ -1055,6 +1103,31 @@ ForwardPipeline::Impl::Impl(observer_ptr<IAsyncEngine> engine_ptr)
 
   settings_draft.ground_grid_config.enabled = false;
   frame_settings.ground_grid_config.enabled = false;
+}
+
+void ForwardPipeline::Impl::ValidateCapabilityBinding(
+  engine::Renderer& renderer,
+  const PipelineCapabilityRequirements& requirements)
+{
+  if (validated_renderer.get() == &renderer) {
+    return;
+  }
+
+  const auto validation = renderer.ValidateCapabilityRequirements(requirements);
+  CHECK_F(validation.Ok(),
+    "ForwardPipeline requires capability families [{}] but renderer provides "
+    "[{}]; missing required [{}]",
+    to_string(requirements.required), to_string(validation.available),
+    to_string(validation.missing_required));
+
+  if (validation.missing_optional != RendererCapabilityFamily::kNone) {
+    LOG_F(INFO,
+      "ForwardPipeline: renderer missing optional capability families [{}]; "
+      "degraded paths must remain coherent",
+      to_string(validation.missing_optional));
+  }
+
+  validated_renderer.reset(&renderer);
 }
 
 auto ForwardPipeline::Impl::AcquireGraphics() const -> std::shared_ptr<Graphics>
@@ -1389,12 +1462,36 @@ auto ForwardPipeline::GetSupportedFeatures() const -> PipelineFeature
     | PipelineFeature::kLightCulling;
 }
 
+auto ForwardPipeline::GetCapabilityRequirements() const
+  -> PipelineCapabilityRequirements
+{
+  return PipelineCapabilityRequirements {
+    .required = RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kGpuUploadAndAssetBinding
+      | RendererCapabilityFamily::kFinalOutputComposition,
+    .optional = RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kShadowing
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kDiagnosticsAndProfiling,
+  };
+}
+
+auto ForwardPipeline::BindToRenderer(engine::Renderer& renderer) -> void
+{
+  impl_->ValidateCapabilityBinding(renderer, GetCapabilityRequirements());
+}
+
 auto ForwardPipeline::OnFrameStart(
   observer_ptr<engine::FrameContext> /*context*/, engine::Renderer& renderer)
   -> void
 {
+  CHECK_F(impl_->IsBoundTo(renderer),
+    "ForwardPipeline must be bound to the renderer before frame execution");
   impl_->ApplySettings();
-  renderer.SetAtmosphereBlueNoiseEnabled(impl_->IsAtmosphereBlueNoiseEnabled());
+  if (impl_->HasEnvironmentCapability(renderer)) {
+    renderer.SetAtmosphereBlueNoiseEnabled(
+      impl_->IsAtmosphereBlueNoiseEnabled());
+  }
 }
 
 auto ForwardPipeline::OnPublishViews(

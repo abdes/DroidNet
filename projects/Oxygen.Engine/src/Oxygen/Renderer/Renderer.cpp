@@ -37,6 +37,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -68,6 +69,7 @@
 #include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Renderer/Internal/RenderContextMaterializer.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Internal/SunResolver.h>
 #include <Oxygen/Renderer/Internal/ViewConstantsManager.h>
@@ -76,6 +78,7 @@
 #include <Oxygen/Renderer/Passes/IblComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyAtmosphereLutComputePass.h>
 #include <Oxygen/Renderer/Passes/SkyCapturePass.h>
+#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/RenderContextPool.h>
@@ -87,6 +90,7 @@
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
+#include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
@@ -585,13 +589,45 @@ using oxygen::graphics::BufferUsage;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::SingleQueueStrategy;
 
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
+
+namespace {
+
+class OffscreenForwardPipeline final
+  : public oxygen::renderer::ForwardPipeline {
+public:
+  using oxygen::renderer::ForwardPipeline::ForwardPipeline;
+
+  [[nodiscard]] auto GetCapabilityRequirements() const
+    -> oxygen::renderer::PipelineCapabilityRequirements override
+  {
+    return oxygen::renderer::PipelineCapabilityRequirements {
+      .required = oxygen::renderer::RendererCapabilityFamily::kScenePreparation
+        | oxygen::renderer::RendererCapabilityFamily::kGpuUploadAndAssetBinding,
+      .optional = oxygen::renderer::RendererCapabilityFamily::kLightingData
+        | oxygen::renderer::RendererCapabilityFamily::kShadowing
+        | oxygen::renderer::RendererCapabilityFamily::kEnvironmentLighting
+        | oxygen::renderer::RendererCapabilityFamily::kFinalOutputComposition
+        | oxygen::renderer::RendererCapabilityFamily::kDiagnosticsAndProfiling,
+    };
+  }
+};
+
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Renderer Implementation
 //===----------------------------------------------------------------------===//
 
-Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
+Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
+  const renderer::CapabilitySet capability_families)
   : gfx_weak_(std::move(graphics))
   , config_(config)
+  , capability_families_(capability_families)
   , scene_prep_(std::make_unique<sceneprep::ScenePrepPipelineImpl<
         decltype(sceneprep::CreateBasicCollectionConfig()),
         decltype(sceneprep::CreateStandardFinalizationConfig())>>(
@@ -776,6 +812,585 @@ auto Renderer::OffscreenFrameSession::Release() noexcept -> void
   current_prepared_frame_.reset();
   renderer_ = nullptr;
   active_ = false;
+}
+
+Renderer::SinglePassHarnessFacade::SinglePassHarnessFacade(
+  Renderer& renderer) noexcept
+  : renderer_(observer_ptr { &renderer })
+{
+}
+
+auto Renderer::SinglePassHarnessFacade::SetFrameSession(
+  FrameSessionInput session) -> SinglePassHarnessFacade&
+{
+  frame_session_ = std::move(session);
+  return *this;
+}
+
+auto Renderer::SinglePassHarnessFacade::SetOutputTarget(
+  OutputTargetInput target) -> SinglePassHarnessFacade&
+{
+  output_target_ = std::move(target);
+  return *this;
+}
+
+auto Renderer::SinglePassHarnessFacade::SetResolvedView(ResolvedViewInput view)
+  -> SinglePassHarnessFacade&
+{
+  resolved_view_ = std::move(view);
+  return *this;
+}
+
+auto Renderer::SinglePassHarnessFacade::SetPreparedFrame(
+  PreparedFrameInput frame) -> SinglePassHarnessFacade&
+{
+  prepared_frame_ = std::move(frame);
+  return *this;
+}
+
+auto Renderer::SinglePassHarnessFacade::SetCoreShaderInputs(
+  CoreShaderInputsInput inputs) -> SinglePassHarnessFacade&
+{
+  core_shader_inputs_ = std::move(inputs);
+  return *this;
+}
+
+auto Renderer::SinglePassHarnessFacade::CanFinalize() const -> bool
+{
+  return frame_session_.has_value() && output_target_.has_value()
+    && (resolved_view_.has_value() || core_shader_inputs_.has_value());
+}
+
+auto Renderer::SinglePassHarnessFacade::Validate() const -> ValidationReport
+{
+  auto materializer = internal::RenderContextMaterializer(*renderer_);
+  return materializer.ValidateSinglePass(internal::SinglePassHarnessStaging {
+    .frame_session = frame_session_,
+    .output_target = output_target_,
+    .resolved_view = resolved_view_,
+    .prepared_frame = prepared_frame_,
+    .core_shader_inputs = core_shader_inputs_,
+  });
+}
+
+auto Renderer::SinglePassHarnessFacade::Finalize()
+  -> std::expected<ValidatedSinglePassHarnessContext, ValidationReport>
+{
+  auto materializer = internal::RenderContextMaterializer(*renderer_);
+  return materializer.MaterializeSinglePass(internal::SinglePassHarnessStaging {
+    .frame_session = frame_session_,
+    .output_target = output_target_,
+    .resolved_view = resolved_view_,
+    .prepared_frame = prepared_frame_,
+    .core_shader_inputs = core_shader_inputs_,
+  });
+}
+
+auto Renderer::ForSinglePassHarness() -> SinglePassHarnessFacade
+{
+  return SinglePassHarnessFacade(*this);
+}
+
+Renderer::RenderGraphHarnessFacade::RenderGraphHarnessFacade(
+  Renderer& renderer) noexcept
+  : renderer_(observer_ptr { &renderer })
+{
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetFrameSession(
+  FrameSessionInput session) -> RenderGraphHarnessFacade&
+{
+  frame_session_ = std::move(session);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetOutputTarget(
+  OutputTargetInput target) -> RenderGraphHarnessFacade&
+{
+  output_target_ = std::move(target);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetResolvedView(ResolvedViewInput view)
+  -> RenderGraphHarnessFacade&
+{
+  resolved_view_ = std::move(view);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetPreparedFrame(
+  PreparedFrameInput frame) -> RenderGraphHarnessFacade&
+{
+  prepared_frame_ = std::move(frame);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetCoreShaderInputs(
+  CoreShaderInputsInput inputs) -> RenderGraphHarnessFacade&
+{
+  core_shader_inputs_ = std::move(inputs);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::SetRenderGraph(
+  RenderGraphHarnessInput graph) -> RenderGraphHarnessFacade&
+{
+  render_graph_ = std::move(graph);
+  return *this;
+}
+
+auto Renderer::RenderGraphHarnessFacade::CanFinalize() const -> bool
+{
+  return frame_session_.has_value() && output_target_.has_value()
+    && (resolved_view_.has_value() || core_shader_inputs_.has_value())
+    && render_graph_.has_value();
+}
+
+auto Renderer::RenderGraphHarnessFacade::Validate() const -> ValidationReport
+{
+  auto materializer = internal::RenderContextMaterializer(*renderer_);
+  auto report
+    = materializer.ValidateSinglePass(internal::SinglePassHarnessStaging {
+      .frame_session = frame_session_,
+      .output_target = output_target_,
+      .resolved_view = resolved_view_,
+      .prepared_frame = prepared_frame_,
+      .core_shader_inputs = core_shader_inputs_,
+    });
+
+  if (!render_graph_.has_value()) {
+    report.issues.push_back(ValidationIssue {
+      .code = "render_graph.missing",
+      .message = "Render-graph harness requires a caller-authored render graph",
+    });
+  }
+
+  return report;
+}
+
+auto Renderer::RenderGraphHarnessFacade::Finalize()
+  -> std::expected<ValidatedRenderGraphHarness, ValidationReport>
+{
+  auto report = Validate();
+  if (!report.Ok()) {
+    return std::unexpected(std::move(report));
+  }
+
+  auto materializer = internal::RenderContextMaterializer(*renderer_);
+  auto materialized
+    = materializer.MaterializeSinglePass(internal::SinglePassHarnessStaging {
+      .frame_session = frame_session_,
+      .output_target = output_target_,
+      .resolved_view = resolved_view_,
+      .prepared_frame = prepared_frame_,
+      .core_shader_inputs = core_shader_inputs_,
+    });
+  if (!materialized.has_value()) {
+    return std::unexpected(std::move(materialized.error()));
+  }
+
+  const auto view_id = resolved_view_.has_value()
+    ? resolved_view_->view_id
+    : core_shader_inputs_->view_id;
+  return ValidatedRenderGraphHarness(
+    std::move(materialized.value()), *render_graph_, view_id);
+}
+
+auto Renderer::ForRenderGraphHarness() -> RenderGraphHarnessFacade
+{
+  return RenderGraphHarnessFacade(*this);
+}
+
+Renderer::OffscreenSceneViewInput::OffscreenSceneViewInput()
+{
+  composition_view_ = renderer::CompositionView::ForScene(
+    kInvalidViewId, View {}, scene::SceneNode {});
+  SyncName();
+}
+
+auto Renderer::OffscreenSceneViewInput::FromCamera(std::string name,
+  const ViewId view_id, const View& view, const scene::SceneNode& camera)
+  -> OffscreenSceneViewInput
+{
+  auto input = OffscreenSceneViewInput {};
+  input.name_storage_ = std::move(name);
+  input.composition_view_
+    = renderer::CompositionView::ForScene(view_id, view, camera);
+  input.SyncName();
+  return input;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetWithAtmosphere(const bool enabled)
+  -> OffscreenSceneViewInput&
+{
+  composition_view_.with_atmosphere = enabled;
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetClearColor(
+  const graphics::Color& clear_color) -> OffscreenSceneViewInput&
+{
+  composition_view_.clear_color = clear_color;
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetForceWireframe(const bool enabled)
+  -> OffscreenSceneViewInput&
+{
+  composition_view_.force_wireframe = enabled;
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetExposureSourceViewId(
+  const ViewId view_id) -> OffscreenSceneViewInput&
+{
+  composition_view_.exposure_source_view_id = view_id;
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::SyncName() noexcept -> void
+{
+  composition_view_.name = name_storage_;
+}
+
+Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
+  Renderer& renderer, FrameSessionInput frame_session,
+  SceneSourceInput scene_source, OffscreenSceneViewInput view_intent,
+  OutputTargetInput output_target, OffscreenPipelineInput pipeline)
+  : renderer_(observer_ptr { &renderer })
+  , frame_session_(std::move(frame_session))
+  , scene_source_(std::move(scene_source))
+  , view_intent_(std::move(view_intent))
+  , output_target_(std::move(output_target))
+  , pipeline_(pipeline.borrowed_pipeline)
+  , owned_pipeline_(std::move(pipeline.owned_pipeline))
+{
+  if (owned_pipeline_) {
+    pipeline_.reset(owned_pipeline_.get());
+  }
+  if (view_intent_.ViewIntent().id == kInvalidViewId) {
+    auto normalized = renderer::CompositionView::ForScene(ViewId { 1U },
+      view_intent_.ViewIntent().view, *view_intent_.ViewIntent().camera);
+    normalized.with_atmosphere = view_intent_.ViewIntent().with_atmosphere;
+    normalized.clear_color = view_intent_.ViewIntent().clear_color;
+    normalized.force_wireframe = view_intent_.ViewIntent().force_wireframe;
+    normalized.exposure_source_view_id
+      = view_intent_.ViewIntent().exposure_source_view_id;
+    view_intent_ = OffscreenSceneViewInput::FromCamera(
+      std::string(view_intent_.ViewIntent().name), ViewId { 1U },
+      normalized.view, *normalized.camera);
+    view_intent_.SetWithAtmosphere(normalized.with_atmosphere)
+      .SetClearColor(normalized.clear_color)
+      .SetForceWireframe(normalized.force_wireframe)
+      .SetExposureSourceViewId(normalized.exposure_source_view_id);
+  }
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::MakeCompositionView() const
+  -> renderer::CompositionView
+{
+  return view_intent_.ViewIntent();
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
+{
+  CHECK_NOTNULL_F(
+    renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
+  CHECK_NOTNULL_F(scene_source_.scene.get(),
+    "ValidatedOffscreenSceneSession requires a live scene");
+  CHECK_NOTNULL_F(output_target_.framebuffer.get(),
+    "ValidatedOffscreenSceneSession requires an output target");
+  CHECK_NOTNULL_F(
+    pipeline_.get(), "ValidatedOffscreenSceneSession requires a pipeline");
+
+  auto graphics = renderer_->GetGraphics();
+  const auto make_tag
+    = []() { return engine::internal::EngineTagFactory::Get(); };
+
+  auto frame_context = FrameContext {};
+  frame_context.SetGraphicsBackend(
+    std::weak_ptr<Graphics>(graphics), make_tag());
+  frame_context.SetFrameSequenceNumber(
+    frame_session_.frame_sequence, make_tag());
+  frame_context.SetFrameSlot(frame_session_.frame_slot, make_tag());
+  frame_context.SetFrameStartTime(std::chrono::steady_clock::now(), make_tag());
+  frame_context.SetScene(scene_source_.scene);
+
+  auto timing = ModuleTimingData {};
+  timing.game_delta_time = time::CanonicalDuration {
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::duration<float>(frame_session_.delta_time_seconds)),
+  };
+  timing.fixed_delta_time = timing.game_delta_time;
+  timing.current_fps = frame_session_.delta_time_seconds > 0.0F
+    ? 1.0F / frame_session_.delta_time_seconds
+    : 0.0F;
+  frame_context.SetModuleTimingData(timing, make_tag());
+  frame_context.SetBudgetStats(
+    FrameContext::BudgetStats { .cpu_budget = std::chrono::milliseconds(16),
+      .gpu_budget = std::chrono::milliseconds(16) },
+    make_tag());
+
+  const auto target_fb = std::shared_ptr<graphics::Framebuffer>(
+    const_cast<graphics::Framebuffer*>(output_target_.framebuffer.get()),
+    [](graphics::Framebuffer*) { });
+  const auto active_view = MakeCompositionView();
+  const std::array views { active_view };
+
+  auto finish_frame = [&]() -> void {
+    frame_context.SetCurrentPhase(core::PhaseId::kFrameEnd, make_tag());
+    renderer_->OnFrameEnd(observer_ptr<FrameContext> { &frame_context });
+    graphics->EndFrame(
+      frame_session_.frame_sequence, frame_session_.frame_slot);
+  };
+
+  graphics->BeginFrame(
+    frame_session_.frame_sequence, frame_session_.frame_slot);
+  try {
+    frame_context.SetCurrentPhase(core::PhaseId::kFrameStart, make_tag());
+    renderer_->OnFrameStart(observer_ptr<FrameContext> { &frame_context });
+    pipeline_->OnFrameStart(
+      observer_ptr<FrameContext> { &frame_context }, *renderer_);
+
+    frame_context.SetCurrentPhase(
+      core::PhaseId::kTransformPropagation, make_tag());
+    co_await renderer_->OnTransformPropagation(
+      observer_ptr<FrameContext> { &frame_context });
+
+    frame_context.SetCurrentPhase(core::PhaseId::kPublishViews, make_tag());
+    co_await pipeline_->OnPublishViews(
+      observer_ptr<FrameContext> { &frame_context }, *renderer_,
+      *scene_source_.scene,
+      std::span<const renderer::CompositionView>(views.data(), views.size()),
+      target_fb.get());
+
+    frame_context.SetCurrentPhase(core::PhaseId::kPreRender, make_tag());
+    co_await pipeline_->OnPreRender(
+      observer_ptr<FrameContext> { &frame_context }, *renderer_,
+      std::span<const renderer::CompositionView>(views.data(), views.size()));
+    co_await renderer_->OnPreRender(
+      observer_ptr<FrameContext> { &frame_context });
+
+    frame_context.SetCurrentPhase(core::PhaseId::kRender, make_tag());
+    co_await renderer_->OnRender(observer_ptr<FrameContext> { &frame_context });
+
+    frame_context.SetCurrentPhase(core::PhaseId::kCompositing, make_tag());
+    auto submission = co_await pipeline_->OnCompositing(
+      observer_ptr<FrameContext> { &frame_context }, target_fb);
+    if (!submission.tasks.empty() && submission.composite_target) {
+      renderer_->RegisterComposition(std::move(submission), nullptr);
+    }
+    co_await renderer_->OnCompositing(
+      observer_ptr<FrameContext> { &frame_context });
+
+    finish_frame();
+    co_return;
+  } catch (...) {
+    finish_frame();
+    throw;
+  }
+}
+
+Renderer::OffscreenSceneFacade::OffscreenSceneFacade(
+  Renderer& renderer) noexcept
+  : renderer_(observer_ptr { &renderer })
+{
+}
+
+auto Renderer::OffscreenSceneFacade::SetFrameSession(FrameSessionInput session)
+  -> OffscreenSceneFacade&
+{
+  frame_session_ = std::move(session);
+  return *this;
+}
+
+auto Renderer::OffscreenSceneFacade::SetSceneSource(SceneSourceInput scene)
+  -> OffscreenSceneFacade&
+{
+  scene_source_ = std::move(scene);
+  return *this;
+}
+
+auto Renderer::OffscreenSceneFacade::SetViewIntent(OffscreenSceneViewInput view)
+  -> OffscreenSceneFacade&
+{
+  view_intent_ = std::move(view);
+  return *this;
+}
+
+auto Renderer::OffscreenSceneFacade::SetOutputTarget(OutputTargetInput target)
+  -> OffscreenSceneFacade&
+{
+  output_target_ = std::move(target);
+  return *this;
+}
+
+auto Renderer::OffscreenSceneFacade::SetPipeline(
+  OffscreenPipelineInput pipeline) -> OffscreenSceneFacade&
+{
+  pipeline_ = std::move(pipeline);
+  return *this;
+}
+
+auto Renderer::OffscreenSceneFacade::CanFinalize() const -> bool
+{
+  return frame_session_.has_value() && scene_source_.has_value()
+    && view_intent_.has_value() && output_target_.has_value();
+}
+
+auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
+{
+  auto report = ValidationReport {};
+
+  if (!frame_session_.has_value()) {
+    report.issues.push_back(ValidationIssue { .code = "frame_session.missing",
+      .message = "Offscreen scene requires a frame session" });
+  } else if (frame_session_->frame_slot == frame::kInvalidSlot) {
+    report.issues.push_back(
+      ValidationIssue { .code = "frame_session.invalid_slot",
+        .message = "Offscreen scene requires a valid frame slot" });
+  } else if (frame_session_->scene != nullptr) {
+    report.issues.push_back(
+      ValidationIssue { .code = "frame_session.scene_not_allowed",
+        .message = "Offscreen scene uses SetSceneSource as the sole scene "
+                   "authority; FrameSessionInput.scene must remain null" });
+  } else if (!(frame_session_->frame_slot < frame::kMaxSlot)) {
+    report.issues.push_back(
+      ValidationIssue { .code = "frame_session.out_of_bounds_slot",
+        .message = "Offscreen scene requires a frame slot inside the "
+                   "frames-in-flight range" });
+  } else if (!std::isfinite(frame_session_->delta_time_seconds)
+    || frame_session_->delta_time_seconds <= 0.0F) {
+    report.issues.push_back(
+      ValidationIssue { .code = "frame_session.invalid_delta_time",
+        .message = "Offscreen scene requires a finite positive delta time" });
+  }
+
+  if (!scene_source_.has_value() || scene_source_->scene == nullptr) {
+    report.issues.push_back(ValidationIssue { .code = "scene_source.missing",
+      .message = "Offscreen scene requires a live scene source" });
+  }
+
+  if (!view_intent_.has_value()) {
+    report.issues.push_back(ValidationIssue { .code = "view_intent.missing",
+      .message = "Offscreen scene requires a view intent" });
+  } else {
+    const auto& view_intent = view_intent_->ViewIntent();
+    auto camera = view_intent.camera.value_or(scene::SceneNode {});
+    if (!camera.IsAlive() || !camera.HasCamera()) {
+      report.issues.push_back(
+        ValidationIssue { .code = "view_intent.invalid_camera",
+          .message = "Offscreen scene requires a live camera node" });
+    } else if (scene_source_.has_value() && scene_source_->scene != nullptr
+      && !scene_source_->scene->Contains(camera)) {
+      report.issues.push_back(
+        ValidationIssue { .code = "view_intent.camera_not_in_scene",
+          .message
+          = "Offscreen scene camera must belong to the staged scene source" });
+    }
+  }
+
+  if (!output_target_.has_value() || output_target_->framebuffer == nullptr) {
+    report.issues.push_back(ValidationIssue { .code = "output_target.missing",
+      .message = "Offscreen scene requires an output target framebuffer" });
+  }
+
+  if (renderer_->engine_ == nullptr || renderer_->scene_prep_state_ == nullptr
+    || renderer_->texture_binder_ == nullptr) {
+    report.issues.push_back(ValidationIssue { .code = "renderer.not_attached",
+      .message = "Offscreen scene requires a renderer attached to an "
+                 "engine-initialized runtime substrate" });
+  }
+
+  if ((!pipeline_.has_value()
+        || (pipeline_->borrowed_pipeline == nullptr
+          && pipeline_->owned_pipeline == nullptr))
+    && renderer_->engine_ == nullptr) {
+    report.issues.push_back(
+      ValidationIssue { .code = "pipeline.default_unavailable",
+        .message = "Default offscreen pipeline requires the renderer to be "
+                   "attached to an engine" });
+  }
+
+  auto pipeline = observer_ptr<renderer::RenderingPipeline> {};
+  if (pipeline_.has_value()) {
+    pipeline = pipeline_->borrowed_pipeline;
+    if (pipeline == nullptr && pipeline_->owned_pipeline != nullptr) {
+      pipeline.reset(pipeline_->owned_pipeline.get());
+    }
+    if (pipeline_->borrowed_pipeline != nullptr
+      && pipeline_->owned_pipeline != nullptr) {
+      report.issues.push_back(
+        ValidationIssue { .code = "pipeline.ambiguous_ownership",
+          .message = "Offscreen pipeline input must be either borrowed or "
+                     "owned, but not both" });
+    }
+  }
+  if (pipeline == nullptr && renderer_->engine_ != nullptr) {
+    auto preview = OffscreenForwardPipeline(renderer_->engine_);
+    const auto validation = renderer_->ValidateCapabilityRequirements(
+      preview.GetCapabilityRequirements());
+    if (!validation.Ok()) {
+      report.issues.push_back(
+        ValidationIssue { .code = "pipeline.missing_required_capabilities",
+          .message = "Default offscreen pipeline requires unavailable renderer "
+                     "capability families" });
+    }
+  } else if (pipeline != nullptr) {
+    const auto validation = renderer_->ValidateCapabilityRequirements(
+      pipeline->GetCapabilityRequirements());
+    if (!validation.Ok()) {
+      report.issues.push_back(
+        ValidationIssue { .code = "pipeline.missing_required_capabilities",
+          .message = "Selected offscreen pipeline requires unavailable "
+                     "renderer capability families" });
+    }
+  }
+
+  return report;
+}
+
+auto Renderer::OffscreenSceneFacade::Finalize()
+  -> std::expected<ValidatedOffscreenSceneSession, ValidationReport>
+{
+  auto report = Validate();
+  if (!report.Ok()) {
+    return std::unexpected(std::move(report));
+  }
+
+  auto pipeline_input
+    = pipeline_.has_value() ? std::move(*pipeline_) : OffscreenPipelineInput {};
+  auto pipeline = pipeline_input.borrowed_pipeline;
+  if (pipeline == nullptr && pipeline_input.owned_pipeline != nullptr) {
+    pipeline.reset(pipeline_input.owned_pipeline.get());
+  }
+  if (pipeline == nullptr) {
+    pipeline_input.owned_pipeline
+      = std::make_unique<OffscreenForwardPipeline>(renderer_->engine_);
+    pipeline.reset(pipeline_input.owned_pipeline.get());
+  }
+  pipeline->BindToRenderer(*renderer_);
+
+  auto view_intent = *view_intent_;
+  if (view_intent.ViewIntent().id == kInvalidViewId) {
+    view_intent = OffscreenSceneViewInput::FromCamera(
+      std::string(view_intent.ViewIntent().name), ViewId { 1U },
+      view_intent.ViewIntent().view, *view_intent.ViewIntent().camera);
+    view_intent.SetWithAtmosphere(view_intent_->ViewIntent().with_atmosphere)
+      .SetClearColor(view_intent_->ViewIntent().clear_color)
+      .SetForceWireframe(view_intent_->ViewIntent().force_wireframe)
+      .SetExposureSourceViewId(
+        view_intent_->ViewIntent().exposure_source_view_id);
+  }
+
+  return ValidatedOffscreenSceneSession(*renderer_, *frame_session_,
+    *scene_source_, std::move(view_intent), *output_target_,
+    std::move(pipeline_input));
+}
+
+auto Renderer::ForOffscreenScene() -> OffscreenSceneFacade
+{
+  return OffscreenSceneFacade(*this);
 }
 
 auto Renderer::EnsureOffscreenFrameServicesInitialized() -> void

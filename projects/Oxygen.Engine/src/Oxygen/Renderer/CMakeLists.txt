@@ -51,6 +51,7 @@ set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
   "Errors.h"
+  "FacadePresets.h"
   "LightManager.h"
   "ShadowManager.h"
   "ImGui/ImGuiModule.h"
@@ -101,6 +102,7 @@ set(
   "Pipeline/Internal/ViewLifecycleService.h"
   "Pipeline/Internal/ViewRenderPlan.h"
   "Pipeline/PipelineFeature.h"
+  "Pipeline/RendererCapability.h"
   "Pipeline/RenderingPipeline.h"
   "Pipeline/RenderMode.h"
   "PreparedSceneFrame.h"
@@ -188,6 +190,7 @@ set(
   "Internal/GpuTimelineProfiler.h"
   "Internal/IblManager.cpp"
   "Internal/IblManager.h"
+  "Internal/RenderContextMaterializer.h"
   "Internal/IBrdfLutProvider.h"
   "Internal/IIblProvider.h"
   "Internal/ISkyAtmosphereLutProvider.h"

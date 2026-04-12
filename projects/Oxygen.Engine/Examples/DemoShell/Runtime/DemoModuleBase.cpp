@@ -161,6 +161,15 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     return false;
   }
 
+  if (pipeline_) {
+    const auto renderer_module = engine->GetModule<engine::Renderer>();
+    if (!renderer_module.has_value()) {
+      LOG_F(ERROR, "-failed- renderer module missing during pipeline bind");
+      return false;
+    }
+    pipeline_->BindToRenderer(renderer_module->get());
+  }
+
   RegisterLightCullingConsoleCommand(*engine);
   GetLightCullingConsoleCommandState()->pipeline
     = observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };

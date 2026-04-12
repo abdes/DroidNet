@@ -8,11 +8,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -34,6 +36,9 @@
 #include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Renderer/Pipeline/RendererCapability.h>
+#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
@@ -118,6 +123,7 @@ namespace sceneprep {
 namespace oxygen::renderer {
 class LightManager;
 class ShadowManager;
+class RenderingPipeline;
 } // namespace oxygen::renderer
 
 namespace oxygen::renderer::resources {
@@ -139,6 +145,42 @@ class Renderer : public EngineModule {
   OXYGEN_TYPED(Renderer)
 
 public:
+  struct ValidationIssue {
+    std::string code;
+    std::string message;
+  };
+
+  struct ValidationReport {
+    std::vector<ValidationIssue> issues;
+
+    [[nodiscard]] auto Ok() const noexcept -> bool { return issues.empty(); }
+  };
+
+  struct FrameSessionInput {
+    frame::Slot frame_slot { frame::kInvalidSlot };
+    frame::SequenceNumber frame_sequence { 1U };
+    float delta_time_seconds { 1.0F / 60.0F };
+    observer_ptr<scene::Scene> scene { nullptr };
+  };
+
+  struct OutputTargetInput {
+    observer_ptr<const graphics::Framebuffer> framebuffer { nullptr };
+  };
+
+  struct ResolvedViewInput {
+    ViewId view_id {};
+    ResolvedView value;
+  };
+
+  struct PreparedFrameInput {
+    PreparedSceneFrame value {};
+  };
+
+  struct CoreShaderInputsInput {
+    ViewId view_id {};
+    ViewConstants value {};
+  };
+
   //! Minimal frame bootstrap for explicit off-screen pass execution.
   struct OffscreenFrameConfig {
     frame::Slot frame_slot { frame::Slot { 0U } };
@@ -196,6 +238,259 @@ public:
     bool active_ { false };
   };
 
+  class ValidatedSinglePassHarnessContext {
+  public:
+    explicit ValidatedSinglePassHarnessContext(OffscreenFrameSession session)
+      : session_(std::move(session))
+    {
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(ValidatedSinglePassHarnessContext)
+    OXYGEN_DEFAULT_MOVABLE(ValidatedSinglePassHarnessContext)
+
+    [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
+    {
+      return session_.GetRenderContext();
+    }
+
+    [[nodiscard]] auto GetRenderContext() const noexcept -> const RenderContext&
+    {
+      return session_.GetRenderContext();
+    }
+
+  private:
+    OffscreenFrameSession session_;
+  };
+
+  class SinglePassHarnessFacade {
+  public:
+    OXGN_RNDR_API explicit SinglePassHarnessFacade(Renderer& renderer) noexcept;
+
+    OXYGEN_MAKE_NON_COPYABLE(SinglePassHarnessFacade)
+    OXYGEN_DEFAULT_MOVABLE(SinglePassHarnessFacade)
+
+    OXGN_RNDR_API auto SetFrameSession(FrameSessionInput session)
+      -> SinglePassHarnessFacade&;
+    OXGN_RNDR_API auto SetOutputTarget(OutputTargetInput target)
+      -> SinglePassHarnessFacade&;
+    OXGN_RNDR_API auto SetResolvedView(ResolvedViewInput view)
+      -> SinglePassHarnessFacade&;
+    OXGN_RNDR_API auto SetPreparedFrame(PreparedFrameInput frame)
+      -> SinglePassHarnessFacade&;
+    OXGN_RNDR_API auto SetCoreShaderInputs(CoreShaderInputsInput inputs)
+      -> SinglePassHarnessFacade&;
+
+    [[nodiscard]] OXGN_RNDR_API auto CanFinalize() const -> bool;
+    OXGN_RNDR_API auto Validate() const -> ValidationReport;
+    OXGN_RNDR_API auto Finalize()
+      -> std::expected<ValidatedSinglePassHarnessContext, ValidationReport>;
+
+  private:
+    observer_ptr<Renderer> renderer_ { nullptr };
+    std::optional<FrameSessionInput> frame_session_ {};
+    std::optional<OutputTargetInput> output_target_ {};
+    std::optional<ResolvedViewInput> resolved_view_ {};
+    std::optional<PreparedFrameInput> prepared_frame_ {};
+    std::optional<CoreShaderInputsInput> core_shader_inputs_ {};
+  };
+
+  using RenderGraphHarnessInput = std::function<co::Co<void>(
+    ViewId view_id, const RenderContext&, graphics::CommandRecorder&)>;
+
+  class ValidatedRenderGraphHarness {
+  public:
+    ValidatedRenderGraphHarness(ValidatedSinglePassHarnessContext context,
+      RenderGraphHarnessInput graph, ViewId view_id)
+      : context_(std::move(context))
+      , graph_(std::move(graph))
+      , view_id_(view_id)
+    {
+    }
+
+    OXYGEN_MAKE_NON_COPYABLE(ValidatedRenderGraphHarness)
+    OXYGEN_DEFAULT_MOVABLE(ValidatedRenderGraphHarness)
+
+    [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
+    {
+      return context_.GetRenderContext();
+    }
+
+    [[nodiscard]] auto GetRenderContext() const noexcept -> const RenderContext&
+    {
+      return context_.GetRenderContext();
+    }
+
+    [[nodiscard]] auto GetViewId() const noexcept -> ViewId { return view_id_; }
+
+    auto Execute(graphics::CommandRecorder& recorder) const -> co::Co<void>
+    {
+      auto& render_context = context_.GetRenderContext();
+      render_context.ClearRegisteredPasses();
+      co_await graph_(view_id_, render_context, recorder);
+    }
+
+  private:
+    ValidatedSinglePassHarnessContext context_;
+    RenderGraphHarnessInput graph_;
+    ViewId view_id_ {};
+  };
+
+  class RenderGraphHarnessFacade {
+  public:
+    OXGN_RNDR_API explicit RenderGraphHarnessFacade(
+      Renderer& renderer) noexcept;
+
+    OXYGEN_MAKE_NON_COPYABLE(RenderGraphHarnessFacade)
+    OXYGEN_DEFAULT_MOVABLE(RenderGraphHarnessFacade)
+
+    OXGN_RNDR_API auto SetFrameSession(FrameSessionInput session)
+      -> RenderGraphHarnessFacade&;
+    OXGN_RNDR_API auto SetOutputTarget(OutputTargetInput target)
+      -> RenderGraphHarnessFacade&;
+    OXGN_RNDR_API auto SetResolvedView(ResolvedViewInput view)
+      -> RenderGraphHarnessFacade&;
+    OXGN_RNDR_API auto SetPreparedFrame(PreparedFrameInput frame)
+      -> RenderGraphHarnessFacade&;
+    OXGN_RNDR_API auto SetCoreShaderInputs(CoreShaderInputsInput inputs)
+      -> RenderGraphHarnessFacade&;
+    OXGN_RNDR_API auto SetRenderGraph(RenderGraphHarnessInput graph)
+      -> RenderGraphHarnessFacade&;
+
+    [[nodiscard]] OXGN_RNDR_API auto CanFinalize() const -> bool;
+    OXGN_RNDR_API auto Validate() const -> ValidationReport;
+    OXGN_RNDR_API auto Finalize()
+      -> std::expected<ValidatedRenderGraphHarness, ValidationReport>;
+
+  private:
+    observer_ptr<Renderer> renderer_ { nullptr };
+    std::optional<FrameSessionInput> frame_session_ {};
+    std::optional<OutputTargetInput> output_target_ {};
+    std::optional<ResolvedViewInput> resolved_view_ {};
+    std::optional<PreparedFrameInput> prepared_frame_ {};
+    std::optional<CoreShaderInputsInput> core_shader_inputs_ {};
+    std::optional<RenderGraphHarnessInput> render_graph_ {};
+  };
+
+  struct SceneSourceInput {
+    observer_ptr<scene::Scene> scene { nullptr };
+  };
+
+  class OffscreenSceneViewInput {
+  public:
+    OXGN_RNDR_API OffscreenSceneViewInput();
+
+    [[nodiscard]] OXGN_RNDR_API static auto FromCamera(std::string name,
+      ViewId view_id, const View& view, const scene::SceneNode& camera)
+      -> OffscreenSceneViewInput;
+
+    OXGN_RNDR_API auto SetWithAtmosphere(bool enabled)
+      -> OffscreenSceneViewInput&;
+    OXGN_RNDR_API auto SetClearColor(const graphics::Color& clear_color)
+      -> OffscreenSceneViewInput&;
+    OXGN_RNDR_API auto SetForceWireframe(bool enabled)
+      -> OffscreenSceneViewInput&;
+    OXGN_RNDR_API auto SetExposureSourceViewId(ViewId view_id)
+      -> OffscreenSceneViewInput&;
+
+    [[nodiscard]] auto ViewIntent() const noexcept
+      -> const renderer::CompositionView&
+    {
+      return composition_view_;
+    }
+
+  private:
+    auto SyncName() noexcept -> void;
+
+    std::string name_storage_ { "OffscreenScene" };
+    renderer::CompositionView composition_view_ {};
+  };
+
+  struct OffscreenPipelineInput {
+    [[nodiscard]] static auto Borrowed(
+      observer_ptr<renderer::RenderingPipeline> pipeline)
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .borrowed_pipeline = pipeline };
+    }
+
+    [[nodiscard]] static auto Owned(
+      std::unique_ptr<renderer::RenderingPipeline> pipeline)
+      -> OffscreenPipelineInput
+    {
+      return OffscreenPipelineInput { .owned_pipeline = std::move(pipeline) };
+    }
+
+    observer_ptr<renderer::RenderingPipeline> borrowed_pipeline { nullptr };
+    std::unique_ptr<renderer::RenderingPipeline> owned_pipeline {};
+  };
+
+  class ValidatedOffscreenSceneSession {
+  public:
+    ValidatedOffscreenSceneSession(Renderer& renderer,
+      FrameSessionInput frame_session, SceneSourceInput scene_source,
+      OffscreenSceneViewInput view_intent, OutputTargetInput output_target,
+      OffscreenPipelineInput pipeline);
+
+    OXYGEN_MAKE_NON_COPYABLE(ValidatedOffscreenSceneSession)
+    OXYGEN_DEFAULT_MOVABLE(ValidatedOffscreenSceneSession)
+
+    [[nodiscard]] auto GetViewId() const noexcept -> ViewId
+    {
+      return view_intent_.ViewIntent().id;
+    }
+
+    [[nodiscard]] auto GetPipeline() const noexcept
+      -> observer_ptr<renderer::RenderingPipeline>
+    {
+      return pipeline_;
+    }
+
+    OXGN_RNDR_API auto Execute() -> co::Co<void>;
+
+  private:
+    [[nodiscard]] auto MakeCompositionView() const -> renderer::CompositionView;
+
+    observer_ptr<Renderer> renderer_ { nullptr };
+    FrameSessionInput frame_session_ {};
+    SceneSourceInput scene_source_ {};
+    OffscreenSceneViewInput view_intent_ {};
+    OutputTargetInput output_target_ {};
+    observer_ptr<renderer::RenderingPipeline> pipeline_ { nullptr };
+    std::unique_ptr<renderer::RenderingPipeline> owned_pipeline_ {};
+  };
+
+  class OffscreenSceneFacade {
+  public:
+    OXGN_RNDR_API explicit OffscreenSceneFacade(Renderer& renderer) noexcept;
+
+    OXYGEN_MAKE_NON_COPYABLE(OffscreenSceneFacade)
+    OXYGEN_DEFAULT_MOVABLE(OffscreenSceneFacade)
+
+    OXGN_RNDR_API auto SetFrameSession(FrameSessionInput session)
+      -> OffscreenSceneFacade&;
+    OXGN_RNDR_API auto SetSceneSource(SceneSourceInput scene)
+      -> OffscreenSceneFacade&;
+    OXGN_RNDR_API auto SetViewIntent(OffscreenSceneViewInput view)
+      -> OffscreenSceneFacade&;
+    OXGN_RNDR_API auto SetOutputTarget(OutputTargetInput target)
+      -> OffscreenSceneFacade&;
+    OXGN_RNDR_API auto SetPipeline(OffscreenPipelineInput pipeline)
+      -> OffscreenSceneFacade&;
+
+    [[nodiscard]] OXGN_RNDR_API auto CanFinalize() const -> bool;
+    OXGN_RNDR_API auto Validate() const -> ValidationReport;
+    OXGN_RNDR_API auto Finalize()
+      -> std::expected<ValidatedOffscreenSceneSession, ValidationReport>;
+
+  private:
+    observer_ptr<Renderer> renderer_ { nullptr };
+    std::optional<FrameSessionInput> frame_session_ {};
+    std::optional<SceneSourceInput> scene_source_ {};
+    std::optional<OffscreenSceneViewInput> view_intent_ {};
+    std::optional<OutputTargetInput> output_target_ {};
+    std::optional<OffscreenPipelineInput> pipeline_ {};
+  };
+
   struct LastFrameStats {
     double sceneprep_ms { 0.0 };
     double view_render_ms { 0.0 };
@@ -225,8 +520,10 @@ public:
     ViewId view_id, const RenderContext&, graphics::CommandRecorder&)>;
   // Renderer must be constructed with a valid RendererConfig containing a
   // non-empty upload_queue_key key.
-  OXGN_RNDR_API explicit Renderer(
-    std::weak_ptr<Graphics> graphics, RendererConfig config);
+  OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics,
+    RendererConfig config,
+    renderer::CapabilitySet capability_families
+    = renderer::kPhase1DefaultRuntimeCapabilityFamilies);
 
   OXYGEN_MAKE_NON_COPYABLE(Renderer)
   OXYGEN_DEFAULT_MOVABLE(Renderer)
@@ -316,11 +613,34 @@ public:
   //! Begins a renderer-owned off-screen frame and returns the scoped session.
   OXGN_RNDR_NDAPI auto BeginOffscreenFrame(OffscreenFrameConfig config = {})
     -> OffscreenFrameSession;
+  OXGN_RNDR_API auto ForSinglePassHarness() -> SinglePassHarnessFacade;
+  OXGN_RNDR_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
+  OXGN_RNDR_API auto ForOffscreenScene() -> OffscreenSceneFacade;
 
   //! Returns a point-in-time renderer stats snapshot.
   OXGN_RNDR_NDAPI auto GetStats() const noexcept -> Stats;
   //! Resets renderer stats accumulators.
   OXGN_RNDR_API auto ResetStats() noexcept -> void;
+
+  [[nodiscard]] auto GetCapabilityFamilies() const noexcept
+    -> renderer::CapabilitySet
+  {
+    return capability_families_;
+  }
+
+  [[nodiscard]] auto HasCapability(
+    const renderer::RendererCapabilityFamily family) const noexcept -> bool
+  {
+    return renderer::HasAllCapabilities(capability_families_, family);
+  }
+
+  [[nodiscard]] auto ValidateCapabilityRequirements(
+    const renderer::PipelineCapabilityRequirements requirements) const noexcept
+    -> renderer::PipelineCapabilityValidation
+  {
+    return renderer::ValidateCapabilityRequirements(
+      capability_families_, requirements);
+  }
 
   //! Query if a view completed rendering successfully this frame.
   /*!
@@ -660,6 +980,9 @@ private:
   std::mutex composition_mutex_;
   std::optional<CompositionSubmission> composition_submission_;
   std::shared_ptr<graphics::Surface> composition_surface_;
+  renderer::CapabilitySet capability_families_ {
+    renderer::kPhase1DefaultRuntimeCapabilityFamilies
+  };
 
   // Pending cleanup set guarded by a mutex so arbitrary threads may
   // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.
