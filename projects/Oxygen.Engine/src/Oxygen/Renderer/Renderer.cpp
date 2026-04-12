@@ -2108,8 +2108,8 @@ auto Renderer::OnShutdown() noexcept -> void
 
   {
     std::lock_guard lock(composition_mutex_);
-    composition_submission_.reset();
-    composition_surface_.reset();
+    pending_compositions_.clear();
+    next_composition_sequence_in_frame_ = 0;
   }
 
   {
@@ -2382,8 +2382,20 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
   std::shared_ptr<graphics::Surface> target_surface) -> void
 {
   std::lock_guard lock(composition_mutex_);
-  composition_submission_ = std::move(submission);
-  composition_surface_ = std::move(target_surface);
+  if (!pending_compositions_.empty()) {
+    const auto& anchor = pending_compositions_.front();
+    const bool same_composite_target = anchor.submission.composite_target.get()
+      == submission.composite_target.get();
+    const bool same_target_surface
+      = anchor.target_surface.get() == target_surface.get();
+    CHECK_F(same_composite_target && same_target_surface,
+      "Phase-1 composition queue requires a single target per frame");
+  }
+  pending_compositions_.push_back(PendingComposition {
+    .submission = std::move(submission),
+    .target_surface = std::move(target_surface),
+    .sequence_in_frame = next_composition_sequence_in_frame_++,
+  });
 }
 
 auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
@@ -2406,8 +2418,8 @@ auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
   per_view_runtime_state_.clear();
   {
     std::lock_guard lock(composition_mutex_);
-    composition_submission_.reset();
-    composition_surface_.reset();
+    pending_compositions_.clear();
+    next_composition_sequence_in_frame_ = 0;
   }
 
   last_frame_dt_seconds_ = config.delta_time_seconds;
@@ -2923,39 +2935,56 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
       gpu_timeline_profiler_->OnFrameRecordTailResolve();
     }
   };
-  std::optional<CompositionSubmission> submission;
-  std::shared_ptr<graphics::Surface> target_surface;
+  std::vector<PendingComposition> submissions;
   {
     std::lock_guard lock(composition_mutex_);
-    if (!composition_submission_) {
+    if (pending_compositions_.empty()) {
       compositing_last_frame_ns_ = 0;
       finalize_gpu_timestamps();
       co_return;
     }
-    submission = std::move(composition_submission_);
-    composition_submission_.reset();
-    target_surface = std::move(composition_surface_);
-    composition_surface_.reset();
+    submissions = std::move(pending_compositions_);
+    pending_compositions_.clear();
   }
 
-  CHECK_F(submission.has_value(), "Compositing submission required");
-  auto& payload = *submission;
-  if (payload.tasks.empty()) {
-    compositing_last_frame_ns_ = 0;
-    finalize_gpu_timestamps();
-    co_return;
+  const auto& anchor = submissions.front();
+  for (const auto& pending : submissions) {
+    const bool same_composite_target = anchor.submission.composite_target.get()
+      == pending.submission.composite_target.get();
+    const bool same_target_surface
+      = anchor.target_surface.get() == pending.target_surface.get();
+    CHECK_F(same_composite_target && same_target_surface,
+      "Phase-1 composition queue requires a single target per frame");
   }
 
-  CHECK_F(static_cast<bool>(payload.composite_target),
-    "Compositing requires a target framebuffer");
-
+  std::ranges::stable_sort(submissions,
+    [](const PendingComposition& lhs, const PendingComposition& rhs) {
+      return lhs.sequence_in_frame < rhs.sequence_in_frame;
+    });
   auto gfx = GetGraphics();
   CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
 
+  if (!compositing_pass_) {
+    compositing_pass_config_ = std::make_shared<CompositingPassConfig>();
+    compositing_pass_config_->debug_name = "CompositingPass";
+    compositing_pass_
+      = std::make_shared<CompositingPass>(compositing_pass_config_);
+  }
+
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  {
-    auto recorder_ptr
-      = gfx->AcquireCommandRecorder(queue_key, "Renderer Compositing");
+  bool had_tasks = false;
+  for (const auto& pending : submissions) {
+    auto payload = pending.submission;
+    if (payload.tasks.empty()) {
+      continue;
+    }
+    had_tasks = true;
+
+    CHECK_F(static_cast<bool>(payload.composite_target),
+      "Compositing requires a target framebuffer");
+
+    auto recorder_ptr = gfx->AcquireCommandRecorder(queue_key,
+      fmt::format("Renderer Compositing {}", pending.sequence_in_frame));
     CHECK_F(static_cast<bool>(recorder_ptr),
       "Compositing recorder acquisition failed");
     if (gpu_timeline_profiler_) {
@@ -2974,24 +3003,18 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
       "Compositing target missing color texture");
     auto& backbuffer = *fb_desc.color_attachments[0].texture;
     DLOG_F(1,
-      "Log compositing target ptr={} size={}x{} fmt={} samples={} name={}",
+      "Log compositing target ptr={} size={}x{} fmt={} samples={} name={} "
+      "queue_sequence={}",
       fmt::ptr(&backbuffer), backbuffer.GetDescriptor().width,
       backbuffer.GetDescriptor().height, backbuffer.GetDescriptor().format,
       backbuffer.GetDescriptor().sample_count,
-      backbuffer.GetDescriptor().debug_name);
+      backbuffer.GetDescriptor().debug_name, pending.sequence_in_frame);
 
     RenderContext comp_context {};
     comp_context.SetRenderer(this, gfx.get());
     comp_context.pass_target = observer_ptr { payload.composite_target.get() };
     comp_context.frame_slot = frame_slot_;
     comp_context.frame_sequence = frame_seq_num;
-
-    if (!compositing_pass_) {
-      compositing_pass_config_ = std::make_shared<CompositingPassConfig>();
-      compositing_pass_config_->debug_name = "CompositingPass";
-      compositing_pass_
-        = std::make_shared<CompositingPass>(compositing_pass_config_);
-    }
 
     for (const auto& task : payload.tasks) {
       const auto scope_options = MakeGpuEventScopeOptions();
@@ -3114,16 +3137,22 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     recorder.RequireResourceStateFinal(
       backbuffer, graphics::ResourceStates::kPresent);
     recorder.FlushBarriers();
-  }
 
-  if (target_surface) {
-    const auto surfaces = context->GetSurfaces();
-    for (size_t i = 0; i < surfaces.size(); ++i) {
-      if (surfaces[i].get() == target_surface.get()) {
-        context->SetSurfacePresentable(i, true);
-        break;
+    if (pending.target_surface) {
+      const auto surfaces = context->GetSurfaces();
+      for (size_t i = 0; i < surfaces.size(); ++i) {
+        if (surfaces[i].get() == pending.target_surface.get()) {
+          context->SetSurfacePresentable(i, true);
+          break;
+        }
       }
     }
+  }
+
+  if (!had_tasks) {
+    compositing_last_frame_ns_ = 0;
+    finalize_gpu_timestamps();
+    co_return;
   }
 
   const auto compositing_end = std::chrono::steady_clock::now();
@@ -4539,8 +4568,8 @@ auto Renderer::OnFrameStart(observer_ptr<FrameContext> context) -> void
 
   {
     std::lock_guard lock(composition_mutex_);
-    composition_submission_.reset();
-    composition_surface_.reset();
+    pending_compositions_.clear();
+    next_composition_sequence_in_frame_ = 0;
   }
 
   if (!scene_prep_state_ || !texture_binder_) {

@@ -14,6 +14,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
@@ -22,9 +23,9 @@
 #include "DemoShell/Runtime/AppWindow.h"
 
 namespace oxygen {
-class IAsyncEngine;
 namespace engine {
   class FrameContext;
+  class Renderer;
 }
 namespace renderer {
   class RenderingPipeline;
@@ -108,9 +109,11 @@ private:
   std::unique_ptr<DemoShell> shell_;
 
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
-  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
+  auto BindPipelineToRenderer(engine::Renderer& renderer) -> void;
 
   observer_ptr<graphics::Surface> last_surface_ { nullptr };
+  IAsyncEngine::ModuleSubscription renderer_subscription_ {};
+  bool pipeline_bound_ { false };
 };
 
 } // namespace oxygen::examples
