@@ -88,6 +88,7 @@ class TransientStructuredBuffer;
 
 namespace oxygen::engine {
 class RenderContextPool;
+class EnvironmentLightingService;
 namespace imgui {
   class GpuTimelinePanel;
   class ImGuiModule;
@@ -861,8 +862,6 @@ private:
   auto ExecuteRenderGraphForView(ViewId view_id,
     const RenderGraphFactory& factory, RenderContext& render_context,
     graphics::CommandRecorder& recorder) -> co::Co<bool>;
-  auto GetOrCreateSkyAtmosphereLutManagerForView(ViewId view_id)
-    -> observer_ptr<internal::SkyAtmosphereLutManager>;
   auto EvictPerViewCachedProducts(ViewId view_id) -> void;
   auto EvictInactivePerViewState(frame::SequenceNumber current_seq,
     const std::unordered_set<ViewId>& active_views) -> void;
@@ -894,34 +893,8 @@ private:
     shadow_frame_bindings_publisher_;
   std::unique_ptr<internal::PerViewStructuredPublisher<VsmFrameBindings>>
     vsm_frame_bindings_publisher_;
-  std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
-    environment_view_data_publisher_;
-  std::unique_ptr<
-    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
-    environment_frame_bindings_publisher_;
+  std::unique_ptr<EnvironmentLightingService> env_lighting_service_;
   std::unordered_map<ViewId, PerViewRuntimeState> per_view_runtime_state_;
-
-  // Manages pre-integrated BRDF lookup tables for IBL.
-  std::unique_ptr<internal::BrdfLutManager> brdf_lut_manager_;
-
-  // Manages sky atmosphere LUT textures (transmittance, sky-view) per view.
-  std::unordered_map<ViewId, std::unique_ptr<internal::SkyAtmosphereLutManager>>
-    per_view_atmo_luts_;
-
-  // Manages Image Based Lighting (Irradiance/Prefilter)
-  std::unique_ptr<internal::IblManager> ibl_manager_;
-
-  std::unique_ptr<SkyCapturePass> sky_capture_pass_;
-  std::shared_ptr<SkyCapturePassConfig> sky_capture_pass_config_;
-
-  std::unique_ptr<SkyAtmosphereLutComputePass> sky_atmo_lut_compute_pass_;
-  std::shared_ptr<SkyAtmosphereLutComputePassConfig>
-    sky_atmo_lut_compute_pass_config_;
-
-  std::unique_ptr<IblComputePass> ibl_compute_pass_;
-
-  // Environment static data single-owner manager (bindless SRV).
-  std::unique_ptr<internal::EnvironmentStaticDataManager> env_static_manager_;
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each RunScenePrep while retaining
@@ -1033,13 +1006,6 @@ private:
 
   std::unordered_map<ViewId, PerViewStorage> per_view_storage_;
 
-  // Debug override state for atmosphere.
-  uint32_t atmosphere_debug_flags_ { 0 };
-  bool atmosphere_blue_noise_enabled_ { true };
-
-  std::unordered_map<ViewId, std::uint64_t> last_atmo_generation_;
-  std::unordered_map<ViewId, frame::SequenceNumber> last_seen_view_frame_seq_;
-  bool sky_capture_requested_ { false };
   const scene::Scene* last_scene_identity_ { nullptr };
   // ScenePrep instrumentation.
   std::uint64_t sceneprep_profile_frames_ { 0 };
