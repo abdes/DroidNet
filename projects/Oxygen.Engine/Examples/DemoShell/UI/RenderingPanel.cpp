@@ -24,6 +24,11 @@ RenderingPanel::RenderingPanel(observer_ptr<RenderingVm> vm)
 
 auto RenderingPanel::DrawContents() -> void
 {
+  if (ImGui::CollapsingHeader(
+        "Directional Shadows", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawShadowSettings();
+  }
+
   if (ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawViewModeControls();
     DrawWireframeColor();
@@ -61,6 +66,26 @@ auto RenderingPanel::OnUnloaded() -> void
 auto RenderingPanel::GetRenderMode() const -> renderer::RenderMode
 {
   return vm_->GetRenderMode();
+}
+
+void RenderingPanel::DrawShadowSettings()
+{
+  static constexpr const char* kShadowQualityLabels[] = {
+    "Low",
+    "Medium",
+    "High",
+    "Ultra",
+  };
+
+  auto quality = static_cast<int>(vm_->GetShadowQualityTier());
+  ImGui::SetNextItemWidth(180.0F);
+  if (ImGui::Combo("Quality", &quality, kShadowQualityLabels,
+        IM_ARRAYSIZE(kShadowQualityLabels))) {
+    vm_->SetShadowQualityTier(static_cast<ShadowQualityTier>(quality));
+  }
+
+  ImGui::TextDisabled(
+    "Renderer shadow quality is applied at startup; restart to apply changes.");
 }
 
 void RenderingPanel::DrawViewModeControls()
