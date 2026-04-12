@@ -520,6 +520,8 @@ public:
     ViewId view_id, const RenderContext&, graphics::CommandRecorder&)>;
   // Renderer must be constructed with a valid RendererConfig containing a
   // non-empty upload_queue_key key.
+  OXGN_RNDR_API explicit Renderer(
+    std::weak_ptr<Graphics> graphics, RendererConfig config);
   OXGN_RNDR_API explicit Renderer(std::weak_ptr<Graphics> graphics,
     RendererConfig config,
     renderer::CapabilitySet capability_families
@@ -846,6 +848,16 @@ private:
     const FrameContext& frame_context, RenderContext& render_context) -> bool;
   auto RepublishCurrentViewBindings(const RenderContext& render_context,
     ViewBindingRepublishMode mode = ViewBindingRepublishMode::kFull) -> bool;
+  auto PublishBaselineViewBindings(ViewId view_id,
+    const RenderContext& render_context, const PreparedSceneFrame& prepared,
+    PerViewRuntimeState& runtime_state, bool can_reuse_cached_view_bindings,
+    ViewFrameBindings& view_bindings, ViewConstants& view_constants) -> bool;
+  auto PublishOptionalFamilyViewBindings(ViewId view_id,
+    const RenderContext& render_context, const ResolvedView& resolved,
+    const PreparedSceneFrame& prepared,
+    ShaderVisibleIndex environment_static_slot,
+    PerViewRuntimeState& runtime_state, bool can_reuse_cached_view_bindings,
+    ViewFrameBindings& view_bindings, ViewConstants& view_constants) -> void;
   auto EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
     const graphics::Texture& depth_texture) -> ShaderVisibleIndex;
 
