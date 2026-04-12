@@ -202,6 +202,77 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
   EXPECT_EQ(request->cooked_root->generic_string(), "C:/tmp/top-level");
 }
 
+NOLINT_TEST(
+  ImportManifestInputTest, ResolvesRelativeTopLevelOutputAgainstManifest)
+{
+  const auto manifest_path = MakeManifestPath("relative_top_level_output");
+  const auto expected_cooked_root
+    = (manifest_path.parent_path() / ".cooked" / "top-level")
+        .lexically_normal();
+
+  WriteManifestFile(manifest_path,
+    R"({
+      "version": 1,
+      "output": ".cooked/top-level",
+      "jobs": [
+        {
+          "id": "core.actions",
+          "type": "input",
+          "source": "Content/Input/Core.input.json"
+        }
+      ]
+    })");
+
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_TRUE(manifest.has_value()) << errors.str();
+
+  std::ostringstream req_errors;
+  const auto request = manifest->jobs[0].BuildRequest(req_errors);
+  ASSERT_TRUE(request.has_value()) << req_errors.str();
+  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
+}
+
+NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
+{
+  const auto manifest_path = MakeManifestPath("relative_job_output");
+  const auto expected_cooked_root
+    = (manifest_path.parent_path() / ".cooked" / "job-level")
+        .lexically_normal();
+
+  WriteManifestFile(manifest_path,
+    R"({
+      "version": 1,
+      "output": ".cooked/top-level",
+      "defaults": {
+        "input": {
+          "output": ".cooked/default-level"
+        }
+      },
+      "jobs": [
+        {
+          "id": "core.actions",
+          "type": "input",
+          "source": "Content/Input/Core.input.json",
+          "output": ".cooked/job-level"
+        }
+      ]
+    })");
+
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_TRUE(manifest.has_value()) << errors.str();
+
+  std::ostringstream req_errors;
+  const auto request = manifest->jobs[0].BuildRequest(req_errors);
+  ASSERT_TRUE(request.has_value()) << req_errors.str();
+  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
+}
+
 NOLINT_TEST(ImportManifestInputTest, InputUsesSharedLayoutDefaultsByDefault)
 {
   const auto manifest_path = MakeManifestPath("input_shared_layout_defaults");

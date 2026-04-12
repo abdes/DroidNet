@@ -139,6 +139,67 @@ namespace {
     return (root / source_path).lexically_normal().string();
   }
 
+  template <typename T>
+  auto ResolveCookedRootRelativeToManifest(
+    const std::filesystem::path& manifest_dir, T& settings) -> void
+  {
+    if (settings.cooked_root.empty()) {
+      return;
+    }
+
+    auto cooked_root = std::filesystem::path(settings.cooked_root);
+    if (!cooked_root.is_absolute()) {
+      cooked_root = manifest_dir / cooked_root;
+    }
+    settings.cooked_root = cooked_root.lexically_normal().string();
+  }
+
+  auto ResolveCookedRootsRelativeToManifest(
+    const std::filesystem::path& manifest_dir, ImportManifestDefaults& defaults)
+    -> void
+  {
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.texture);
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.fbx);
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.gltf);
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.script);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.scripting_sidecar);
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.physics_sidecar);
+    ResolveCookedRootRelativeToManifest(manifest_dir, defaults.input);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.buffer_container);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.material_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.physics_material_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.collision_shape_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.geometry_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, defaults.scene_descriptor);
+  }
+
+  auto ResolveCookedRootsRelativeToManifest(
+    const std::filesystem::path& manifest_dir, ImportManifestJob& job) -> void
+  {
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.texture);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.fbx);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.gltf);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.script);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.scripting_sidecar);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.physics_sidecar);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.input);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.buffer_container);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.material_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, job.physics_material_descriptor);
+    ResolveCookedRootRelativeToManifest(
+      manifest_dir, job.collision_shape_descriptor);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.geometry_descriptor);
+    ResolveCookedRootRelativeToManifest(manifest_dir, job.scene_descriptor);
+  }
+
   auto ReadStringField(const json& obj, const char* name, std::string& target,
     std::ostream& errors) -> bool
   {
@@ -986,6 +1047,9 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
   }
 
+  const auto manifest_dir
+    = std::filesystem::absolute(manifest_path).parent_path();
+
   const auto root
     = root_override.has_value() ? *root_override : manifest_path.parent_path();
 
@@ -1250,6 +1314,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
   }
 
+  ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
+
   if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
     error_stream << "ERROR: manifest.jobs must be an array\n";
     return std::nullopt;
@@ -1329,6 +1395,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
             manifest_job.depends_on, error_stream)) {
         return std::nullopt;
       }
+
+      ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
 
       manifest.jobs.push_back(std::move(manifest_job));
       continue;
@@ -1556,6 +1624,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
           job, manifest_job.physics_sidecar, error_stream)) {
       return std::nullopt;
     }
+
+    ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
 
     manifest.jobs.push_back(std::move(manifest_job));
   }
