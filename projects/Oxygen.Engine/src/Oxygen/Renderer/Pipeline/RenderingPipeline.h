@@ -23,6 +23,7 @@
 #include <Oxygen/Renderer/Pipeline/DepthPrePassPolicy.h>
 #include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
+#include <Oxygen/Renderer/Pipeline/RendererCapability.h>
 
 namespace oxygen {
 namespace engine {
@@ -53,6 +54,12 @@ public:
   // Discovery
   [[nodiscard]] virtual auto GetSupportedFeatures() const -> PipelineFeature
     = 0;
+  [[nodiscard]] virtual auto GetCapabilityRequirements() const
+    -> PipelineCapabilityRequirements
+    = 0;
+
+  //! Bind the pipeline to a renderer assembly before frame execution.
+  virtual auto BindToRenderer(engine::Renderer& /*renderer*/) -> void { }
 
   // === Granular Configuration (User-Facing) ===-----------------------------
 

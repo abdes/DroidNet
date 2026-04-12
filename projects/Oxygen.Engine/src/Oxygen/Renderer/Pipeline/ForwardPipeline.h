@@ -75,6 +75,9 @@ public:
 
   // Configuration
   [[nodiscard]] auto GetSupportedFeatures() const -> PipelineFeature override;
+  [[nodiscard]] auto GetCapabilityRequirements() const
+    -> PipelineCapabilityRequirements override;
+  auto BindToRenderer(engine::Renderer& renderer) -> void override;
 
   //! Stage a shader debug mode update.
   auto SetShaderDebugMode(engine::ShaderDebugMode mode) -> void override;

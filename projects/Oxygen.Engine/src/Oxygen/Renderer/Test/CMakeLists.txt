@@ -48,6 +48,59 @@ m_gtest_program(ShaderDebugMode SOURCES "ShaderDebugMode_test.cpp")
 
 m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
 
+m_gtest_program(RendererCapability SOURCES "RendererCapability_test.cpp")
+
+m_gtest_program(
+  RenderContextMaterializer
+  SOURCES
+    "Fakes/Graphics.h"
+    "RenderContextMaterializer_test.cpp"
+)
+
+m_gtest_program(
+  SinglePassHarnessFacade
+  SOURCES
+    "Fakes/Graphics.h"
+    "SinglePassHarnessFacade_test.cpp"
+)
+
+m_gtest_program(
+  RenderGraphHarnessFacade
+  SOURCES
+    "Fakes/Graphics.h"
+    "RenderGraphHarnessFacade_test.cpp"
+)
+
+m_gtest_program(
+  OffscreenSceneFacade
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/GeometryUploaderTest.h"
+    "OffscreenSceneFacade_test.cpp"
+)
+
+m_gtest_program(
+  RendererPublicationSplit
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/GeometryUploaderTest.h"
+    "RendererPublicationSplit_test.cpp"
+)
+
+m_gtest_program(
+  RendererCompositionQueue
+  SOURCES
+    "Fakes/Graphics.h"
+    "RendererCompositionQueue_test.cpp"
+)
+
+m_gtest_program(
+  RendererFacadePresets
+  SOURCES
+    "Fakes/Graphics.h"
+    "FacadePresets_test.cpp"
+)
+
 m_gtest_program(
   "ConventionalShadows"
   SOURCES
