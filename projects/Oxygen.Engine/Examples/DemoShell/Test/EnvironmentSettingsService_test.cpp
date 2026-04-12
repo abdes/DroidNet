@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,6 +20,7 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/SettingsService.h"
 
 namespace oxygen::examples::testing {
 
@@ -122,6 +124,15 @@ namespace {
       }
 
       return std::nullopt;
+    }
+
+    static auto ResetDemoSettings() -> void
+    {
+      const auto settings = SettingsService::ForDemoApp();
+      ASSERT_NE(settings, nullptr);
+      std::error_code ec;
+      std::filesystem::remove(settings->GetStoragePath(), ec);
+      settings->Load();
     }
 
     EnvironmentSettingsService service_ {};
@@ -425,6 +436,42 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(csm.distribution_exponent, 5.0F);
   EXPECT_FLOAT_EQ(csm.transition_fraction, 0.22F);
   EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.31F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  LoadSettings_ReadsLegacyCsmKeysAfterNamespaceMigration)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.sun.csm.cascade_count", 3.0F);
+  settings->SetFloat("env.sun.csm.split_mode", 1.0F);
+  settings->SetFloat("env.sun.csm.max_shadow_distance", 275.0F);
+  settings->SetFloat("env.sun.csm.distribution_exponent", 4.0F);
+  settings->SetFloat("env.sun.csm.transition_fraction", 0.2F);
+  settings->SetFloat("env.sun.csm.distance_fadeout_fraction", 0.3F);
+  settings->SetFloat("env.sun.csm.cascade_distance.0", 12.0F);
+  settings->SetFloat("env.sun.csm.cascade_distance.1", 36.0F);
+  settings->SetFloat("env.sun.csm.cascade_distance.2", 92.0F);
+
+  auto scene = MakeScene("DemoShell.LegacyCsmSettings");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  EXPECT_EQ(service_.GetSunShadowCascadeCount(), 3);
+  EXPECT_EQ(service_.GetSunShadowSplitMode(),
+    static_cast<int>(scene::DirectionalCsmSplitMode::kManualDistances));
+  EXPECT_FLOAT_EQ(service_.GetSunShadowMaxDistance(), 275.0F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowDistributionExponent(), 4.0F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowTransitionFraction(), 0.2F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowDistanceFadeoutFraction(), 0.3F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(0), 12.0F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(1), 36.0F);
+  EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(2), 92.0F);
 }
 
 } // namespace oxygen::examples::testing

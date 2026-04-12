@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
@@ -46,6 +47,8 @@ public:
   [[nodiscard]] auto GetGpuDebugPassEnabled() -> bool;
   //! Returns whether atmosphere blue-noise jitter is currently enabled.
   [[nodiscard]] auto GetAtmosphereBlueNoiseEnabled() -> bool;
+  //! Returns the persisted directional shadow quality tier.
+  [[nodiscard]] auto GetShadowQualityTier() -> ShadowQualityTier;
 
   //! Sets view mode and forwards changes to the service.
   auto SetRenderMode(renderer::RenderMode mode) -> void;
@@ -57,6 +60,8 @@ public:
   auto SetGpuDebugPassEnabled(bool enabled) -> void;
   //! Toggles atmosphere blue-noise jitter and persists the change.
   auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
+  //! Persists the shadow quality tier for the next renderer initialization.
+  auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
 
   [[nodiscard]] auto GetWireframeColor() -> graphics::Color;
   auto SetWireframeColor(const graphics::Color& color) -> void;
@@ -73,6 +78,7 @@ private:
   graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   bool gpu_debug_pass_enabled_ { true };
   bool atmosphere_blue_noise_enabled_ { true };
+  ShadowQualityTier shadow_quality_tier_ { ShadowQualityTier::kUltra };
 };
 
 } // namespace oxygen::examples::ui

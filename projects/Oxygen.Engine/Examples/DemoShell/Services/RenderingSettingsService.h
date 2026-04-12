@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Pipeline/RenderMode.h>
 #include <Oxygen/Renderer/Types/ShaderDebugMode.h>
@@ -80,6 +81,12 @@ public:
   //! Sets whether atmosphere blue-noise jitter is enabled.
   virtual auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
 
+  //! Returns the persisted directional shadow quality tier.
+  [[nodiscard]] virtual auto GetShadowQualityTier() const -> ShadowQualityTier;
+
+  //! Persists the directional shadow quality tier for the next renderer init.
+  virtual auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
+
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -97,6 +104,8 @@ private:
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
+  static constexpr auto kShadowQualityTierKey
+    = "rendering.shadow_quality_tier";
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
   mutable std::atomic_uint64_t epoch_ { 0 };

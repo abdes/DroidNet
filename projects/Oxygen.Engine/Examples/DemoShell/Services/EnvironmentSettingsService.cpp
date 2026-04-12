@@ -379,17 +379,32 @@ namespace {
   constexpr std::string_view kSunShadowResolutionHintKey
     = "env.sun.shadow.resolution_hint";
   constexpr std::string_view kSunShadowCascadeCountKey
+    = "env.sun.shadow.csm.cascade_count";
+  constexpr std::string_view kLegacySunShadowCascadeCountKey
     = "env.sun.csm.cascade_count";
-  constexpr std::string_view kSunShadowSplitModeKey = "env.sun.csm.split_mode";
+  constexpr std::string_view kSunShadowSplitModeKey
+    = "env.sun.shadow.csm.split_mode";
+  constexpr std::string_view kLegacySunShadowSplitModeKey
+    = "env.sun.csm.split_mode";
   constexpr std::string_view kSunShadowMaxDistanceKey
+    = "env.sun.shadow.csm.max_shadow_distance";
+  constexpr std::string_view kLegacySunShadowMaxDistanceKey
     = "env.sun.csm.max_shadow_distance";
   constexpr std::string_view kSunShadowDistributionExponentKey
+    = "env.sun.shadow.csm.distribution_exponent";
+  constexpr std::string_view kLegacySunShadowDistributionExponentKey
     = "env.sun.csm.distribution_exponent";
   constexpr std::string_view kSunShadowTransitionFractionKey
+    = "env.sun.shadow.csm.transition_fraction";
+  constexpr std::string_view kLegacySunShadowTransitionFractionKey
     = "env.sun.csm.transition_fraction";
   constexpr std::string_view kSunShadowDistanceFadeoutFractionKey
+    = "env.sun.shadow.csm.distance_fadeout_fraction";
+  constexpr std::string_view kLegacySunShadowDistanceFadeoutFractionKey
     = "env.sun.csm.distance_fadeout_fraction";
   constexpr std::string_view kSunShadowCascadeDistancePrefixKey
+    = "env.sun.shadow.csm.cascade_distance";
+  constexpr std::string_view kLegacySunShadowCascadeDistancePrefixKey
     = "env.sun.csm.cascade_distance";
   constexpr std::string_view kEnvironmentSettingsSchemaVersionKey
     = "env.settings.schema_version";
@@ -2010,6 +2025,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
             "directional node '{}'",
             sun_light_node_.GetName());
 
+          ApplySunShadowSettingsToLight(light->get());
           light->get().SetIntensityLux(sun_illuminance_lx_);
           auto& common = light->get().Common();
           common.color_rgb = sun_use_temperature_
@@ -2643,6 +2659,14 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     }
     return false;
   };
+  auto load_int_with_legacy
+    = [&](std::string_view primary_key, std::string_view legacy_key, int& out) {
+        return load_int(primary_key, out) || load_int(legacy_key, out);
+      };
+  auto load_float_with_legacy = [&](std::string_view primary_key,
+                                  std::string_view legacy_key, float& out) {
+    return load_float(primary_key, out) || load_float(legacy_key, out);
+  };
 
   bool any_loaded = false;
   any_loaded |= load_int(kEnvironmentPresetKey, preset_index_);
@@ -2755,22 +2779,29 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
     any_loaded
       |= load_int(kSunShadowResolutionHintKey, sun_shadow_resolution_hint_);
-    any_loaded
-      |= load_int(kSunShadowCascadeCountKey, sun_shadow_cascade_count_);
-    any_loaded |= load_int(kSunShadowSplitModeKey, sun_shadow_split_mode_);
-    any_loaded
-      |= load_float(kSunShadowMaxDistanceKey, sun_shadow_max_distance_);
-    any_loaded |= load_float(
-      kSunShadowDistributionExponentKey, sun_shadow_distribution_exponent_);
-    any_loaded |= load_float(
-      kSunShadowTransitionFractionKey, sun_shadow_transition_fraction_);
-    any_loaded |= load_float(kSunShadowDistanceFadeoutFractionKey,
+    any_loaded |= load_int_with_legacy(kSunShadowCascadeCountKey,
+      kLegacySunShadowCascadeCountKey, sun_shadow_cascade_count_);
+    any_loaded |= load_int_with_legacy(kSunShadowSplitModeKey,
+      kLegacySunShadowSplitModeKey, sun_shadow_split_mode_);
+    any_loaded |= load_float_with_legacy(kSunShadowMaxDistanceKey,
+      kLegacySunShadowMaxDistanceKey, sun_shadow_max_distance_);
+    any_loaded |= load_float_with_legacy(kSunShadowDistributionExponentKey,
+      kLegacySunShadowDistributionExponentKey,
+      sun_shadow_distribution_exponent_);
+    any_loaded |= load_float_with_legacy(kSunShadowTransitionFractionKey,
+      kLegacySunShadowTransitionFractionKey, sun_shadow_transition_fraction_);
+    any_loaded |= load_float_with_legacy(kSunShadowDistanceFadeoutFractionKey,
+      kLegacySunShadowDistanceFadeoutFractionKey,
       sun_shadow_distance_fadeout_fraction_);
     for (std::size_t i = 0; i < sun_shadow_cascade_distances_.size(); ++i) {
       std::string key(kSunShadowCascadeDistancePrefixKey);
       key += '.';
       key += std::to_string(i);
-      any_loaded |= load_float(key, sun_shadow_cascade_distances_[i]);
+      std::string legacy_key(kLegacySunShadowCascadeDistancePrefixKey);
+      legacy_key += '.';
+      legacy_key += std::to_string(i);
+      any_loaded |= load_float(key, sun_shadow_cascade_distances_[i])
+        || load_float(legacy_key, sun_shadow_cascade_distances_[i]);
     }
   }
 

@@ -44,6 +44,7 @@ public:
   [[nodiscard]] auto GetRenderMode() const -> renderer::RenderMode;
 
 private:
+  void DrawShadowSettings();
   void DrawViewModeControls();
   void DrawWireframeColor();
   void DrawDebugModes();
