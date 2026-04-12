@@ -86,9 +86,10 @@ struct ImportManifest {
    populated ImportManifest object if successful.
 
    @param manifest_path Path to the JSON manifest file.
-   @param root_override Optional override for the root directory used to resolve
-          relative source paths. If unset, paths are resolved relative to the
-          manifest file's parent directory.
+     @param root_override Optional override for the root directory used to
+   resolve relative source paths. If unset, source paths are resolved relative
+       to the manifest file's parent directory. Relative output paths are
+       always resolved relative to the manifest file's parent directory.
    @param error_stream Stream for reporting parsing and validation errors.
    @return A populated ImportManifest on success, or std::nullopt on failure.
   */
