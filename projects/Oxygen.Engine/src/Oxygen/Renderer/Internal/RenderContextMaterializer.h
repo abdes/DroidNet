@@ -126,14 +126,6 @@ public:
     }
 
     const auto& session = *staging.frame_session;
-    auto offscreen
-      = renderer_->BeginOffscreenFrame(Renderer::OffscreenFrameConfig {
-        .frame_slot = session.frame_slot,
-        .frame_sequence = session.frame_sequence,
-        .delta_time_seconds = session.delta_time_seconds,
-        .scene = session.scene,
-      });
-
     const auto view_id = staging.resolved_view.has_value()
       ? staging.resolved_view->view_id
       : staging.core_shader_inputs->view_id;
@@ -143,19 +135,12 @@ public:
     const auto prepared_frame = staging.prepared_frame.has_value()
       ? staging.prepared_frame->value
       : PreparedSceneFrame {};
-
-    if (staging.core_shader_inputs.has_value()) {
-      offscreen.SetCurrentView(view_id, resolved_view, prepared_frame,
-        staging.core_shader_inputs->value);
-    } else {
-      offscreen.SetCurrentView(view_id, resolved_view, prepared_frame);
-    }
-
-    auto materialized
-      = Renderer::ValidatedSinglePassHarnessContext(std::move(offscreen));
-    materialized.GetRenderContext().pass_target
-      = staging.output_target->framebuffer;
-    return materialized;
+    return Renderer::ValidatedSinglePassHarnessContext(*renderer_, session,
+      view_id, staging.output_target->framebuffer, resolved_view,
+      prepared_frame,
+      staging.core_shader_inputs.has_value()
+        ? std::optional<ViewConstants> { staging.core_shader_inputs->value }
+        : std::nullopt);
   }
 
 private:

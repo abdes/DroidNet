@@ -33,11 +33,13 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowReceiverAnalysisPass.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowReceiverMaskPass.h>
@@ -80,6 +82,8 @@ using oxygen::frame::Slot;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
 using oxygen::renderer::ConventionalShadowReceiverAnalysisJob;
@@ -170,6 +174,30 @@ protected:
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
     return CreateRegisteredTexture(texture_desc);
+  }
+
+  auto MakeHarnessFramebuffer(std::string_view debug_name)
+    -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = oxygen::graphics::TextureDesc {};
+    color_desc.width = kWidth;
+    color_desc.height = kHeight;
+    color_desc.format = Format::kRGBA8UNorm;
+    color_desc.texture_type = TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = std::string(debug_name) + ".Color";
+
+    auto color = Backend().CreateTexture(color_desc);
+    CHECK_NOTNULL_F(
+      color.get(), "Failed to create receiver-mask harness framebuffer");
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.AddColorAttachment({ .texture = color });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(
+      framebuffer.get(), "Failed to create receiver-mask harness framebuffer");
+    return framebuffer;
   }
 
   [[nodiscard]] static auto DeviceDepthFromLinearViewDepth(
@@ -335,12 +363,27 @@ NOLINT_TEST_F(ConventionalShadowReceiverMaskPassTest,
   SeedDepthPatch(depth_texture, resolved_view, "receiver-mask.depth");
 
   auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame({ .frame_slot = kFrameSlot,
-    .frame_sequence = kFrameSequence,
-    .scene = observer_ptr<Scene> { scene.get() } });
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer = MakeHarnessFramebuffer("receiver-mask");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer,
+      oxygen::engine::Renderer::FrameSessionInput {
+        .frame_slot = kFrameSlot,
+        .frame_sequence = kFrameSequence,
+        .scene = observer_ptr<Scene> { scene.get() },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      oxygen::engine::Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = resolved_view,
+      },
+      oxygen::engine::Renderer::PreparedFrameInput { .value = prepared_frame },
+      oxygen::engine::Renderer::CoreShaderInputsInput {
+        .view_id = kTestViewId,
+        .value = view_constants,
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto depth_config = std::make_shared<DepthPrePass::Config>();
   depth_config->depth_texture = depth_texture;

@@ -202,9 +202,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest, OpaqueTriangleWritesExpectedDepth)
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.opaque.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.opaque.execute");
 
   // With identity projection and reverse-Z (GreaterOrEqual), the clear is 0.0
   // and triangles at z=0.5 write 0.5 (which is > 0.0, so passes).
@@ -239,9 +239,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest, TransparentPartitionIsExcluded)
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.transparent.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.transparent.execute");
 
   // Depth should remain at the clear value (0.0 reverse-Z) everywhere.
   const float center_depth = ReadDepthTexel(
@@ -273,9 +273,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest, NonMainViewVisiblePartitionIsExcluded)
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.non-main.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.non-main.execute");
 
   const float center_depth = ReadDepthTexel(
     depth_texture, kWidth / 2, kHeight / 2, "geom.non-main.center");
@@ -317,9 +317,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest, ZeroVertexDrawDoesNotCrash)
   scene.draw_metadata[1].index_count = 0U;
   scene.draw_metadata[1].vertex_count = 0U;
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.zero-vertex.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.zero-vertex.execute");
 
   // The first triangle should still produce depth; no crash from the zero draw.
   const float center_depth = ReadDepthTexel(
@@ -355,9 +355,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest, MaskedPartitionSelectsAlphaTestPso)
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.masked.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.masked.execute");
 
   const float center_depth = ReadDepthTexel(
     depth_texture, kWidth / 2, kHeight / 2, "geom.masked.center");
@@ -392,9 +392,9 @@ NOLINT_TEST_F(DepthPrePassGeometryTest,
   auto scene
     = builder.Build(kTestViewId, kFrameSlot, kFrameSequence, resolved_view);
 
-  ExecuteDepthPassWithScene(pass, *renderer, depth_texture, resolved_view,
-    scene.prepared_frame, scene.view_constants, kFrameSlot, kFrameSequence,
-    "geom.double-sided.execute");
+  ExecuteDepthPassWithPreparedFrame(pass, *renderer, depth_texture,
+    resolved_view, scene.prepared_frame, scene.view_constants, kFrameSlot,
+    kFrameSequence, "geom.double-sided.execute");
 
   const float center_depth = ReadDepthTexel(
     depth_texture, kWidth / 2, kHeight / 2, "geom.double-sided.center");

@@ -20,11 +20,13 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Renderer/FacadePresets.h>
 #include <Oxygen/Renderer/LightManager.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/ShadowManager.h>
@@ -37,17 +39,20 @@
 namespace {
 
 using oxygen::Format;
+using oxygen::observer_ptr;
 using oxygen::TextureType;
 using oxygen::engine::ConventionalShadowRasterPass;
 using oxygen::engine::PreparedSceneFrame;
+using oxygen::engine::Renderer;
 using oxygen::engine::ViewConstants;
 using oxygen::engine::testing::DepthPrePassGpuTestFixture;
 using oxygen::frame::SequenceNumber;
 using oxygen::frame::Slot;
 using oxygen::graphics::CommandRecorder;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Texture;
-using oxygen::observer_ptr;
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneFlag;
@@ -90,8 +95,9 @@ auto MakeShadowViewConstants(const oxygen::ResolvedView& resolved_view,
     : static_cast<float>(width) / static_cast<float>(height);
   const auto view_matrix = glm::lookAtRH(glm::vec3 { 0.0F, 0.0F, 0.0F },
     glm::vec3 { 0.0F, 0.0F, -1.0F }, glm::vec3 { 0.0F, 1.0F, 0.0F });
-  const auto projection_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
-    glm::radians(90.0F), aspect_ratio, 0.1F, 100.0F);
+  const auto projection_matrix
+    = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
+      glm::radians(90.0F), aspect_ratio, 0.1F, 100.0F);
 
   auto view_config = oxygen::View {};
   view_config.viewport = oxygen::ViewPort {
@@ -163,7 +169,22 @@ protected:
       = oxygen::graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
     texture_desc.initial_state = ResourceStates::kCommon;
     texture_desc.debug_name = std::string(debug_name);
-    return CreateRegisteredTexture(texture_desc);
+    return Backend().CreateTexture(texture_desc);
+  }
+
+  auto MakeDepthFramebuffer(const std::shared_ptr<Texture>& depth_texture,
+    std::string_view debug_name) -> std::shared_ptr<Framebuffer>
+  {
+    CHECK_NOTNULL_F(depth_texture.get(),
+      "Conventional shadow config tests require a depth target for '{}'",
+      debug_name);
+    auto framebuffer_desc = FramebufferDesc {};
+    framebuffer_desc.SetDepthAttachment({ .texture = depth_texture });
+    auto framebuffer = Backend().CreateFramebuffer(framebuffer_desc);
+    CHECK_NOTNULL_F(framebuffer.get(),
+      "Failed to create conventional shadow config framebuffer for '{}'",
+      debug_name);
+    return framebuffer;
   }
 };
 
@@ -183,12 +204,21 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
         .debug_name = "shadow-pass.invalid-depth",
       }));
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 1U } });
-  offscreen.SetCurrentView(
-    kTestViewId, MakeShadowResolvedView(8U, 8U), prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer = MakeDepthFramebuffer(depth_texture, "shadow-pass.invalid");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      oxygen::engine::Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      oxygen::engine::Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeShadowResolvedView(8U, 8U),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto recorder = AcquireRecorder("shadow-pass.invalid-depth.prepare");
   ASSERT_NE(recorder, nullptr);
@@ -215,12 +245,21 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
         .debug_name = "shadow-pass.array-depth",
       }));
 
-  auto prepared_frame = PreparedSceneFrame {};
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = Slot { 0U }, .frame_sequence = SequenceNumber { 2U } });
-  offscreen.SetCurrentView(
-    kTestViewId, MakeShadowResolvedView(8U, 8U), prepared_frame);
-  auto& render_context = offscreen.GetRenderContext();
+  auto framebuffer = MakeDepthFramebuffer(depth_texture, "shadow-pass.array");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForResolvedViewGraphicsPass(*renderer,
+      oxygen::engine::Renderer::FrameSessionInput {
+        .frame_slot = Slot { 0U },
+        .frame_sequence = SequenceNumber { 2U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      oxygen::engine::Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = MakeShadowResolvedView(8U, 8U),
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   auto recorder = AcquireRecorder("shadow-pass.array-depth.prepare");
   ASSERT_NE(recorder, nullptr);
@@ -249,14 +288,31 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   const auto view_constants
     = MakeShadowViewConstants(resolved_view, kFrameSlot, kFrameSequence);
   auto prepared_frame = PreparedSceneFrame {};
-
-  auto offscreen = renderer->BeginOffscreenFrame(
-    { .frame_slot = kFrameSlot,
-      .frame_sequence = kFrameSequence,
-      .scene = observer_ptr<Scene> { scene.get() } });
-  offscreen.SetCurrentView(
-    kTestViewId, resolved_view, prepared_frame, view_constants);
-  auto& render_context = offscreen.GetRenderContext();
+  auto bootstrap_depth
+    = CreateDepthTextureArray(kWidth, kHeight, 1U, "shadow-pass.bootstrap");
+  ASSERT_NE(bootstrap_depth, nullptr);
+  auto framebuffer
+    = MakeDepthFramebuffer(bootstrap_depth, "shadow-pass.sync-bootstrap");
+  auto harness = oxygen::renderer::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer,
+      oxygen::engine::Renderer::FrameSessionInput {
+        .frame_slot = kFrameSlot,
+        .frame_sequence = kFrameSequence,
+        .scene = observer_ptr<Scene> { scene.get() },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer.get() },
+      oxygen::engine::Renderer::ResolvedViewInput {
+        .view_id = kTestViewId,
+        .value = resolved_view,
+      },
+      oxygen::engine::Renderer::PreparedFrameInput { .value = prepared_frame },
+      oxygen::engine::Renderer::CoreShaderInputsInput {
+        .view_id = kTestViewId,
+        .value = view_constants,
+      });
+  auto harness_result = harness.Finalize();
+  ASSERT_TRUE(harness_result.has_value());
+  auto& render_context = harness_result->GetRenderContext();
 
   const auto light_manager = renderer->GetLightManager();
   ASSERT_NE(light_manager.get(), nullptr);
@@ -272,8 +328,8 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   const auto publication = shadow_manager->PublishForView(kTestViewId,
     view_constants, *light_manager, observer_ptr<Scene> { scene.get() },
     static_cast<float>(kWidth), {}, shadow_caster_bounds);
-  EXPECT_NE(
-    publication.directional_shadow_texture_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(publication.directional_shadow_texture_srv,
+    oxygen::kInvalidShaderVisibleIndex);
 
   const auto authoritative_depth_texture
     = shadow_manager->GetConventionalShadowDepthTexture();
@@ -283,7 +339,8 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
   ASSERT_NE(raster_plan, nullptr);
   ASSERT_NE(raster_plan->depth_texture, nullptr);
   ASSERT_FALSE(raster_plan->jobs.empty());
-  EXPECT_EQ(raster_plan->depth_texture.get(), authoritative_depth_texture.get());
+  EXPECT_EQ(
+    raster_plan->depth_texture.get(), authoritative_depth_texture.get());
 
   auto stale_depth_texture
     = CreateDepthTextureArray(kWidth, kHeight, 1U, "shadow-pass.stale-depth");
@@ -298,7 +355,8 @@ NOLINT_TEST_F(ConventionalShadowRasterPassConfigTest,
 
   auto recorder = AcquireRecorder("shadow-pass.sync-to-shadow-manager.prepare");
   ASSERT_NE(recorder, nullptr);
-  EnsureTracked(*recorder, authoritative_depth_texture, ResourceStates::kCommon);
+  EnsureTracked(
+    *recorder, authoritative_depth_texture, ResourceStates::kCommon);
 
   EXPECT_NO_THROW(PreparePassResources(pass, render_context, *recorder));
 }

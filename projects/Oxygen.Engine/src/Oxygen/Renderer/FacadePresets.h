@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Renderer/Renderer.h>
 
 namespace oxygen::renderer::detail {
@@ -18,8 +19,8 @@ namespace oxygen::renderer::detail {
 [[nodiscard]] inline auto MakeFramebufferSizedView(
   const observer_ptr<const graphics::Framebuffer> framebuffer) -> View
 {
-  CHECK_NOTNULL_F(framebuffer.get(),
-    "Facade preset requires a valid output framebuffer");
+  CHECK_NOTNULL_F(
+    framebuffer.get(), "Facade preset requires a valid output framebuffer");
   CHECK_F(!framebuffer->GetDescriptor().color_attachments.empty()
       && framebuffer->GetDescriptor().color_attachments[0].texture != nullptr,
     "Facade preset requires an output framebuffer with a color attachment");
@@ -41,6 +42,20 @@ namespace oxygen::renderer::detail {
 } // namespace oxygen::renderer::detail
 
 namespace oxygen::renderer::harness::single_pass::presets {
+
+[[nodiscard]] inline auto ForResolvedViewGraphicsPass(
+  engine::Renderer& renderer, engine::Renderer::FrameSessionInput frame_session,
+  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  engine::Renderer::ResolvedViewInput resolved_view)
+  -> engine::Renderer::SinglePassHarnessFacade
+{
+  auto facade = renderer.ForSinglePassHarness();
+  facade.SetFrameSession(std::move(frame_session));
+  facade.SetOutputTarget(
+    engine::Renderer::OutputTargetInput { .framebuffer = framebuffer });
+  facade.SetResolvedView(std::move(resolved_view));
+  return facade;
+}
 
 [[nodiscard]] inline auto ForFullscreenGraphicsPass(engine::Renderer& renderer,
   engine::Renderer::FrameSessionInput frame_session,
@@ -75,6 +90,20 @@ namespace oxygen::renderer::harness::single_pass::presets {
   return facade;
 }
 
+[[nodiscard]] inline auto ForPreparedSceneGraphicsPass(
+  engine::Renderer& renderer, engine::Renderer::FrameSessionInput frame_session,
+  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  engine::Renderer::ResolvedViewInput resolved_view,
+  engine::Renderer::PreparedFrameInput prepared_frame,
+  engine::Renderer::CoreShaderInputsInput core_shader_inputs)
+  -> engine::Renderer::SinglePassHarnessFacade
+{
+  auto facade = ForPreparedSceneGraphicsPass(renderer, std::move(frame_session),
+    framebuffer, std::move(resolved_view), std::move(prepared_frame));
+  facade.SetCoreShaderInputs(std::move(core_shader_inputs));
+  return facade;
+}
+
 } // namespace oxygen::renderer::harness::single_pass::presets
 
 namespace oxygen::renderer::harness::render_graph::presets {
@@ -95,6 +124,36 @@ namespace oxygen::renderer::harness::render_graph::presets {
   return facade;
 }
 
+[[nodiscard]] inline auto ForSingleViewGraph(engine::Renderer& renderer,
+  engine::Renderer::FrameSessionInput frame_session,
+  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  engine::Renderer::ResolvedViewInput resolved_view,
+  engine::Renderer::PreparedFrameInput prepared_frame,
+  engine::Renderer::RenderGraphHarnessInput graph)
+  -> engine::Renderer::RenderGraphHarnessFacade
+{
+  auto facade = ForSingleViewGraph(renderer, std::move(frame_session),
+    framebuffer, std::move(resolved_view), std::move(graph));
+  facade.SetPreparedFrame(std::move(prepared_frame));
+  return facade;
+}
+
+[[nodiscard]] inline auto ForSingleViewGraph(engine::Renderer& renderer,
+  engine::Renderer::FrameSessionInput frame_session,
+  const observer_ptr<const graphics::Framebuffer> framebuffer,
+  engine::Renderer::ResolvedViewInput resolved_view,
+  engine::Renderer::PreparedFrameInput prepared_frame,
+  engine::Renderer::CoreShaderInputsInput core_shader_inputs,
+  engine::Renderer::RenderGraphHarnessInput graph)
+  -> engine::Renderer::RenderGraphHarnessFacade
+{
+  auto facade
+    = ForSingleViewGraph(renderer, std::move(frame_session), framebuffer,
+      std::move(resolved_view), std::move(prepared_frame), std::move(graph));
+  facade.SetCoreShaderInputs(std::move(core_shader_inputs));
+  return facade;
+}
+
 } // namespace oxygen::renderer::harness::render_graph::presets
 
 namespace oxygen::renderer::offscreen::scene::presets {
@@ -111,10 +170,10 @@ namespace oxygen::renderer::offscreen::scene::presets {
   facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(
     engine::Renderer::SceneSourceInput { .scene = scene_source });
-  facade.SetViewIntent(engine::Renderer::OffscreenSceneViewInput::FromCamera(
-    "Preview", kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer),
-    camera)
-                         .SetWithAtmosphere(true));
+  facade.SetViewIntent(
+    engine::Renderer::OffscreenSceneViewInput::FromCamera("Preview",
+      kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
+      .SetWithAtmosphere(true));
   facade.SetOutputTarget(
     engine::Renderer::OutputTargetInput { .framebuffer = framebuffer });
   if (pipeline.has_value()) {
@@ -135,10 +194,10 @@ namespace oxygen::renderer::offscreen::scene::presets {
   facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(
     engine::Renderer::SceneSourceInput { .scene = scene_source });
-  facade.SetViewIntent(engine::Renderer::OffscreenSceneViewInput::FromCamera(
-    "Capture", kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer),
-    camera)
-                         .SetWithAtmosphere(false));
+  facade.SetViewIntent(
+    engine::Renderer::OffscreenSceneViewInput::FromCamera("Capture",
+      kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
+      .SetWithAtmosphere(false));
   facade.SetOutputTarget(
     engine::Renderer::OutputTargetInput { .framebuffer = framebuffer });
   if (pipeline.has_value()) {

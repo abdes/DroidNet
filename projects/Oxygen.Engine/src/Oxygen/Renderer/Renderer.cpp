@@ -687,19 +687,42 @@ Renderer::~Renderer()
   scene_prep_.reset();
 }
 
-Renderer::OffscreenFrameSession::OffscreenFrameSession(
-  Renderer& renderer, const OffscreenFrameConfig config)
-  : renderer_(&renderer)
-  , active_(true)
+Renderer::SinglePassHarnessFacade::SinglePassHarnessFacade(
+  Renderer& renderer) noexcept
+  : renderer_(observer_ptr { &renderer })
 {
-  renderer_->WireContext(render_context_, {});
-  render_context_.scene = config.scene;
 }
 
-Renderer::OffscreenFrameSession::~OffscreenFrameSession() { Release(); }
+Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
+  Renderer& renderer, FrameSessionInput session, const ViewId view_id,
+  const observer_ptr<const graphics::Framebuffer> pass_target,
+  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
+  std::optional<ViewConstants> core_shader_inputs)
+  : renderer_(observer_ptr { &renderer })
+{
+  renderer.BeginStandaloneFrameExecution(session);
+  active_ = true;
+  try {
+    renderer.WireContext(render_context_, {});
+    render_context_.scene = session.scene;
+    render_context_.pass_target = pass_target;
+    renderer.InitializeStandaloneCurrentView(render_context_,
+      current_resolved_view_, current_prepared_frame_, view_id, resolved_view,
+      prepared_frame, core_shader_inputs);
+  } catch (...) {
+    Release();
+    throw;
+  }
+}
 
-Renderer::OffscreenFrameSession::OffscreenFrameSession(
-  OffscreenFrameSession&& other) noexcept
+Renderer::ValidatedSinglePassHarnessContext::
+  ~ValidatedSinglePassHarnessContext()
+{
+  Release();
+}
+
+Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
+  ValidatedSinglePassHarnessContext&& other) noexcept
   : renderer_(std::exchange(other.renderer_, nullptr))
   , render_context_(std::move(other.render_context_))
   , current_resolved_view_(std::move(other.current_resolved_view_))
@@ -709,8 +732,9 @@ Renderer::OffscreenFrameSession::OffscreenFrameSession(
   RebindCurrentViewPointers();
 }
 
-auto Renderer::OffscreenFrameSession::operator=(
-  OffscreenFrameSession&& other) noexcept -> OffscreenFrameSession&
+auto Renderer::ValidatedSinglePassHarnessContext::operator=(
+  ValidatedSinglePassHarnessContext&& other) noexcept
+  -> ValidatedSinglePassHarnessContext&
 {
   if (this == &other) {
     return *this;
@@ -726,71 +750,8 @@ auto Renderer::OffscreenFrameSession::operator=(
   return *this;
 }
 
-auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
-  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame)
-  -> void
-{
-  CHECK_F(active_ && renderer_ != nullptr,
-    "OffscreenFrameSession::SetCurrentView called on an inactive session");
-  CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
-    "Renderer offscreen frame requires ViewConstantsManager");
-
-  current_resolved_view_ = resolved_view;
-  current_prepared_frame_ = prepared_frame;
-
-  render_context_.current_view = {};
-  render_context_.current_view.view_id = view_id;
-  render_context_.current_view.exposure_view_id = view_id;
-  render_context_.current_view.resolved_view.reset(&*current_resolved_view_);
-  render_context_.current_view.prepared_frame.reset(&*current_prepared_frame_);
-
-  renderer_->UpdateViewConstantsFromView(resolved_view);
-  renderer_->view_const_cpu_
-    .SetTimeSeconds(renderer_->last_frame_dt_seconds_, ViewConstants::kRenderer)
-    .SetFrameSlot(renderer_->frame_slot_, ViewConstants::kRenderer)
-    .SetFrameSequenceNumber(renderer_->frame_seq_num, ViewConstants::kRenderer)
-    .SetBindlessViewFrameBindingsSlot(
-      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
-
-  const auto& snapshot = renderer_->view_const_cpu_.GetSnapshot();
-  auto buffer_info = renderer_->view_const_manager_->WriteViewConstants(
-    view_id, &snapshot, sizeof(snapshot));
-  CHECK_F(buffer_info.buffer != nullptr,
-    "Renderer offscreen frame failed to write ViewConstants for view {}",
-    view_id.get());
-
-  renderer_->WireContext(render_context_, buffer_info.buffer);
-}
-
-auto Renderer::OffscreenFrameSession::SetCurrentView(const ViewId view_id,
-  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
-  const ViewConstants& view_constants) -> void
-{
-  SetCurrentView(view_id, resolved_view, prepared_frame);
-
-  CHECK_F(active_ && renderer_ != nullptr,
-    "OffscreenFrameSession::SetCurrentView called on an inactive session");
-  CHECK_NOTNULL_F(renderer_->view_const_manager_.get(),
-    "Renderer offscreen frame requires ViewConstantsManager");
-
-  auto override_constants = view_constants;
-  override_constants
-    .SetTimeSeconds(renderer_->last_frame_dt_seconds_, ViewConstants::kRenderer)
-    .SetFrameSlot(renderer_->frame_slot_, ViewConstants::kRenderer)
-    .SetFrameSequenceNumber(renderer_->frame_seq_num, ViewConstants::kRenderer);
-
-  const auto& snapshot = override_constants.GetSnapshot();
-  auto buffer_info = renderer_->view_const_manager_->WriteViewConstants(
-    view_id, &snapshot, sizeof(snapshot));
-  CHECK_F(buffer_info.buffer != nullptr,
-    "Renderer offscreen frame failed to override ViewConstants for view {}",
-    view_id.get());
-
-  renderer_->WireContext(render_context_, buffer_info.buffer);
-}
-
-auto Renderer::OffscreenFrameSession::RebindCurrentViewPointers() noexcept
-  -> void
+auto Renderer::ValidatedSinglePassHarnessContext::
+  RebindCurrentViewPointers() noexcept -> void
 {
   if (!current_resolved_view_.has_value()) {
     render_context_.current_view.resolved_view.reset();
@@ -806,7 +767,7 @@ auto Renderer::OffscreenFrameSession::RebindCurrentViewPointers() noexcept
   }
 }
 
-auto Renderer::OffscreenFrameSession::Release() noexcept -> void
+auto Renderer::ValidatedSinglePassHarnessContext::Release() noexcept -> void
 {
   if (!active_) {
     return;
@@ -817,14 +778,8 @@ auto Renderer::OffscreenFrameSession::Release() noexcept -> void
   render_context_.current_view = {};
   current_resolved_view_.reset();
   current_prepared_frame_.reset();
-  renderer_ = nullptr;
+  renderer_.reset();
   active_ = false;
-}
-
-Renderer::SinglePassHarnessFacade::SinglePassHarnessFacade(
-  Renderer& renderer) noexcept
-  : renderer_(observer_ptr { &renderer })
-{
 }
 
 auto Renderer::SinglePassHarnessFacade::SetFrameSession(
@@ -1508,6 +1463,98 @@ auto Renderer::EnsureConventionalShadowDrawRecordBufferInitialized(
         observer_ptr { inline_transfers_.get() },
         "ConventionalShadowDrawRecords");
   }
+}
+
+auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
+  -> void
+{
+  CHECK_F(!offscreen_frame_active_,
+    "Standalone renderer harnesses do not support nested offscreen frames");
+  CHECK_F(render_context_ == nullptr,
+    "Standalone renderer harnesses cannot run while the main renderer frame "
+    "context is active");
+  CHECK_F(session.frame_slot != frame::kInvalidSlot,
+    "Standalone renderer harnesses require a valid frame slot");
+  CHECK_F(std::isfinite(session.delta_time_seconds)
+      && session.delta_time_seconds > 0.0F,
+    "Standalone renderer harnesses require a finite positive delta time");
+
+  EnsureOffscreenFrameServicesInitialized();
+
+  resolved_views_.clear();
+  per_view_runtime_state_.clear();
+  {
+    std::lock_guard lock(composition_mutex_);
+    pending_compositions_.clear();
+    next_composition_sequence_in_frame_ = 0;
+  }
+
+  last_frame_dt_seconds_ = session.delta_time_seconds;
+  frame_budget_stats_.cpu_budget = std::chrono::milliseconds(16);
+  frame_budget_stats_.gpu_budget = std::chrono::milliseconds(16);
+
+  const auto current_scene = session.scene.get();
+  if (current_scene != last_scene_identity_) {
+    LOG_F(INFO,
+      "Renderer: standalone scene identity changed (old={} new={}); resetting "
+      "shadow cache state",
+      fmt::ptr(last_scene_identity_), fmt::ptr(current_scene));
+    last_scene_identity_ = current_scene;
+    if (shadow_manager_) {
+      shadow_manager_->ResetCachedState();
+    }
+  }
+
+  auto gfx = gfx_weak_.lock();
+  CHECK_F(gfx != nullptr,
+    "Standalone renderer harnesses require a live Graphics backend");
+
+  gfx->BeginFrame(session.frame_sequence, session.frame_slot);
+  BeginFrameServices(session.frame_slot, session.frame_sequence);
+  offscreen_frame_used_ = true;
+  offscreen_frame_active_ = true;
+}
+
+auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
+  std::optional<ResolvedView>& current_resolved_view,
+  std::optional<PreparedSceneFrame>& current_prepared_frame,
+  const ViewId view_id, const ResolvedView& resolved_view,
+  const PreparedSceneFrame& prepared_frame,
+  const std::optional<ViewConstants>& view_constants_override) -> void
+{
+  CHECK_NOTNULL_F(view_const_manager_.get(),
+    "Standalone renderer harness requires ViewConstantsManager");
+
+  current_resolved_view = resolved_view;
+  current_prepared_frame = prepared_frame;
+
+  render_context.current_view = {};
+  render_context.current_view.view_id = view_id;
+  render_context.current_view.exposure_view_id = view_id;
+  render_context.current_view.resolved_view.reset(&*current_resolved_view);
+  render_context.current_view.prepared_frame.reset(&*current_prepared_frame);
+
+  auto effective_view_constants = view_constants_override;
+  if (!effective_view_constants.has_value()) {
+    UpdateViewConstantsFromView(resolved_view);
+    effective_view_constants = view_const_cpu_;
+    effective_view_constants->SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
+  }
+
+  effective_view_constants
+    ->SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
+    .SetFrameSlot(frame_slot_, ViewConstants::kRenderer)
+    .SetFrameSequenceNumber(frame_seq_num, ViewConstants::kRenderer);
+
+  const auto& snapshot = effective_view_constants->GetSnapshot();
+  auto buffer_info = view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(snapshot));
+  CHECK_F(buffer_info.buffer != nullptr,
+    "Standalone renderer harness failed to write ViewConstants for view {}",
+    view_id.get());
+
+  WireContext(render_context, buffer_info.buffer);
 }
 
 auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
@@ -2535,60 +2582,6 @@ auto Renderer::RegisterComposition(CompositionSubmission submission,
     .target_surface = std::move(target_surface),
     .sequence_in_frame = next_composition_sequence_in_frame_++,
   });
-}
-
-auto Renderer::BeginOffscreenFrame(OffscreenFrameConfig config)
-  -> OffscreenFrameSession
-{
-  CHECK_F(!offscreen_frame_active_,
-    "Renderer::BeginOffscreenFrame does not support nested offscreen frames");
-  CHECK_F(render_context_ == nullptr,
-    "Renderer::BeginOffscreenFrame cannot run while the main renderer frame "
-    "context is active");
-  CHECK_F(config.frame_slot != frame::kInvalidSlot,
-    "Renderer::BeginOffscreenFrame requires a valid frame slot");
-  CHECK_F(std::isfinite(config.delta_time_seconds)
-      && config.delta_time_seconds > 0.0F,
-    "Renderer::BeginOffscreenFrame requires a finite positive delta time");
-
-  EnsureOffscreenFrameServicesInitialized();
-
-  resolved_views_.clear();
-  per_view_runtime_state_.clear();
-  {
-    std::lock_guard lock(composition_mutex_);
-    pending_compositions_.clear();
-    next_composition_sequence_in_frame_ = 0;
-  }
-
-  last_frame_dt_seconds_ = config.delta_time_seconds;
-  frame_budget_stats_.cpu_budget = std::chrono::milliseconds(16);
-  frame_budget_stats_.gpu_budget = std::chrono::milliseconds(16);
-
-  const auto current_scene = config.scene.get();
-  if (current_scene != last_scene_identity_) {
-    LOG_F(INFO,
-      "Renderer: offscreen scene identity changed (old={} new={}); resetting "
-      "shadow cache state",
-      fmt::ptr(last_scene_identity_), fmt::ptr(current_scene));
-    last_scene_identity_ = current_scene;
-    if (shadow_manager_) {
-      shadow_manager_->ResetCachedState();
-    }
-  }
-
-  auto gfx = gfx_weak_.lock();
-  CHECK_F(gfx != nullptr,
-    "Renderer::BeginOffscreenFrame requires a live Graphics backend");
-
-  // Offscreen frames must advance the graphics frame lifecycle too. Without
-  // this, readback retirement and deferred reclamation never move forward for
-  // explicit test/tool frames, which can turn timing into hangs.
-  gfx->BeginFrame(config.frame_sequence, config.frame_slot);
-  BeginFrameServices(config.frame_slot, config.frame_sequence);
-  offscreen_frame_used_ = true;
-  offscreen_frame_active_ = true;
-  return OffscreenFrameSession(*this, config);
 }
 
 auto Renderer::IsViewReady(ViewId view_id) const -> bool

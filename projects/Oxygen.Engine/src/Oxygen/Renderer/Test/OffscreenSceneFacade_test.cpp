@@ -555,4 +555,62 @@ NOLINT_TEST_F(
   EXPECT_EQ(pipeline.last_executed_view_id, pipeline.published_view_id_);
 }
 
+NOLINT_TEST_F(
+  OffscreenSceneFacadeTest, ExecuteRunsSceneThroughDefaultForwardPipeline)
+{
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 5U },
+  });
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = observer_ptr<oxygen::scene::Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(MakeViewIntent());
+  facade.SetOutputTarget(MakeOutputTarget());
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  NOLINT_EXPECT_NO_THROW(oxygen::co::Run(
+    loop, [&]() -> oxygen::co::Co<void> { co_await result->Execute(); }));
+
+  const auto stats = renderer_->GetStats();
+  EXPECT_EQ(stats.last_frame.views, 1U);
+  EXPECT_EQ(stats.last_frame.scene_views, 1U);
+  EXPECT_GT(stats.last_frame.render_graph_ms, 0.0);
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest,
+  ExecuteDefaultForwardPipelineDegradesCoherentlyWithoutOptionalFamilies)
+{
+  auto renderer
+    = MakeAttachedRenderer(RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kGpuUploadAndAssetBinding);
+
+  auto facade = renderer->ForOffscreenScene();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 6U },
+  });
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = observer_ptr<oxygen::scene::Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(MakeViewIntent());
+  facade.SetOutputTarget(MakeOutputTarget());
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  NOLINT_EXPECT_NO_THROW(oxygen::co::Run(
+    loop, [&]() -> oxygen::co::Co<void> { co_await result->Execute(); }));
+
+  const auto stats = renderer->GetStats();
+  EXPECT_EQ(stats.last_frame.views, 1U);
+  EXPECT_EQ(stats.last_frame.scene_views, 1U);
+  EXPECT_GT(stats.last_frame.render_graph_ms, 0.0);
+}
+
 } // namespace
