@@ -20,6 +20,8 @@
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
@@ -44,6 +46,8 @@ using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
+using oxygen::renderer::CapabilitySet;
+using oxygen::renderer::RendererCapabilityFamily;
 using oxygen::renderer::testing::FakeAssetLoader;
 using oxygen::renderer::testing::FakeGraphics;
 
@@ -201,17 +205,23 @@ protected:
     asset_loader_ = std::make_unique<FakeAssetLoader>();
     engine_ = std::make_unique<RendererPublicationTestEngine>(graphics_,
       observer_ptr<oxygen::content::IAssetLoader> { asset_loader_.get() });
+    renderer_ = MakeAttachedRenderer(
+      oxygen::renderer::kPhase1DefaultRuntimeCapabilityFamilies);
+    framebuffer_ = MakeFramebuffer();
+  }
 
+  [[nodiscard]] auto MakeAttachedRenderer(const CapabilitySet capabilities)
+    -> std::unique_ptr<Renderer>
+  {
     auto config = RendererConfig {};
     config.upload_queue_key
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    renderer_ = std::make_unique<Renderer>(std::weak_ptr<Graphics>(graphics_),
-      std::move(config),
-      oxygen::renderer::kPhase1DefaultRuntimeCapabilityFamilies);
-    engine_->AddModule(*renderer_);
-    ASSERT_TRUE(
-      renderer_->OnAttached(observer_ptr<IAsyncEngine> { engine_.get() }));
-    framebuffer_ = MakeFramebuffer();
+    auto renderer = std::make_unique<Renderer>(
+      std::weak_ptr<Graphics>(graphics_), std::move(config), capabilities);
+    engine_->AddModule(*renderer);
+    EXPECT_TRUE(
+      renderer->OnAttached(observer_ptr<IAsyncEngine> { engine_.get() }));
+    return renderer;
   }
 
   [[nodiscard]] auto MakeFramebuffer() const -> std::shared_ptr<Framebuffer>
@@ -287,12 +297,57 @@ NOLINT_TEST_F(RendererPublicationSplitTest,
   render_context.pass_target
     = observer_ptr<const Framebuffer> { framebuffer_.get() };
 
-  NOLINT_EXPECT_NO_THROW(renderer_->UpdateCurrentViewLightCullingConfig(
-    render_context, LightCullingConfig {}));
-  NOLINT_EXPECT_NO_THROW(renderer_->UpdateCurrentViewVirtualShadowFrameBindings(
-    render_context, VsmFrameBindings {}));
-  NOLINT_EXPECT_NO_THROW(renderer_->UpdateCurrentViewLightCullingConfig(
-    render_context, LightCullingConfig {}));
+  NOLINT_EXPECT_NO_THROW(
+    renderer_->UpdateCurrentViewDynamicBindings(render_context,
+      Renderer::CurrentViewDynamicBindingsUpdate {
+        .light_culling = LightCullingConfig {},
+      }));
+  NOLINT_EXPECT_NO_THROW(
+    renderer_->UpdateCurrentViewDynamicBindings(render_context,
+      Renderer::CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = VsmFrameBindings {},
+      }));
+  NOLINT_EXPECT_NO_THROW(
+    renderer_->UpdateCurrentViewDynamicBindings(render_context,
+      Renderer::CurrentViewDynamicBindingsUpdate {
+        .light_culling = LightCullingConfig {},
+        .virtual_shadow = VsmFrameBindings {},
+      }));
+}
+
+NOLINT_TEST_F(RendererPublicationSplitTest,
+  VirtualShadowShellBridgeClearsBindingsWhenShadowingCapabilityIsAbsent)
+{
+  auto renderer = MakeAttachedRenderer(
+    oxygen::renderer::kPhase1DefaultRuntimeCapabilityFamilies
+    & ~RendererCapabilityFamily::kShadowing);
+
+  auto facade = renderer->ForSinglePassHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+  });
+  facade.SetOutputTarget(Renderer::OutputTargetInput {
+    .framebuffer = observer_ptr<const Framebuffer> { framebuffer_.get() },
+  });
+  facade.SetResolvedView(MakeResolvedView());
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto& render_context = result->GetRenderContext();
+  render_context.pass_target
+    = observer_ptr<const Framebuffer> { framebuffer_.get() };
+
+  auto recorder = graphics_->AcquireCommandRecorder(
+    graphics_->QueueKeyFor(QueueRole::kGraphics),
+    "RendererPublicationSplitTest.VirtualShadowShellBridge", false);
+  ASSERT_TRUE(static_cast<bool>(recorder));
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  NOLINT_EXPECT_NO_THROW(oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer->ExecuteCurrentViewVirtualShadowShell(render_context,
+      *recorder, observer_ptr<const oxygen::graphics::Texture> {});
+  }));
 }
 
 } // namespace

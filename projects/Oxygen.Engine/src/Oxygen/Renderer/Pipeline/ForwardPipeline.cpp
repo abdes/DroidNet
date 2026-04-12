@@ -52,10 +52,8 @@
 #include <Oxygen/Renderer/Pipeline/Internal/PipelineSettings.h>
 #include <Oxygen/Renderer/Pipeline/Internal/ViewLifecycleService.h>
 #include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/ShadowManager.h>
 #include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Renderer/Types/VsmFrameBindings.h>
-#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -214,6 +212,7 @@ private:
   observer_ptr<IAsyncEngine> engine;
 
   std::unique_ptr<ViewLifecycleService> view_lifecycle_service;
+  observer_ptr<engine::Renderer> lifecycle_renderer_ { nullptr };
   std::unique_ptr<FramePlanBuilder> frame_plan_builder;
   CompositionPlanner composition_planner;
 
@@ -585,14 +584,12 @@ auto ForwardPipeline::Impl::RunScenePasses(
       LOG_F(WARNING,
         "ForwardPipeline: view={} requested DepthPrePass mode {} but no "
         "scene depth target is available",
-        ctx.view->GetPublishedViewId().get(),
+        rc.current_view.view_id.get(),
         to_string(ctx.plan.GetDepthPrePassMode()));
     } else {
       if (has_shadowing && shadow_raster_pass && shadow_raster_pass_config) {
-        if (const auto shadow_manager = renderer.GetShadowManager()) {
-          shadow_raster_pass_config->depth_texture
-            = shadow_manager->GetConventionalShadowDepthTexture();
-        }
+        shadow_raster_pass_config->depth_texture
+          = renderer.GetConventionalShadowDepthTexture();
       }
 
       co_await depth_pass->PrepareResources(rc, rec);
@@ -611,7 +608,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
         LOG_F(WARNING,
           "ForwardPipeline: view={} DepthPrePass ran but did not publish a "
           "complete canonical depth product",
-          ctx.view->GetPublishedViewId().get());
+          rc.current_view.view_id.get());
       }
 
       if (screen_hzb_pass && early_depth_complete) {
@@ -673,38 +670,36 @@ auto ForwardPipeline::Impl::RunScenePasses(
   } else {
     // When clustered culling does not execute for this view, explicitly clear
     // the published bindings so ShaderPass cannot reuse stale data.
-    renderer.UpdateCurrentViewLightCullingConfig(
-      rc, engine::LightCullingConfig {});
+    renderer.UpdateCurrentViewDynamicBindings(rc,
+      engine::Renderer::CurrentViewDynamicBindingsUpdate {
+        .light_culling = engine::LightCullingConfig {},
+      });
   }
 
   if (has_shadowing) {
-    if (const auto shadow_manager = renderer.GetShadowManager()) {
-      if (const auto vsm_shadow_renderer
-        = shadow_manager->GetVirtualShadowRenderer()) {
-        if (early_depth_complete) {
-          DLOG_F(2,
-            "ForwardPipeline: view={} executing VSM shell after screen-hzb "
-            "and light-culling",
-            ctx.view->GetPublishedViewId());
-          co_await vsm_shadow_renderer->ExecutePreparedViewShell(rc, rec,
-            observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
-        } else {
-          renderer.UpdateCurrentViewVirtualShadowFrameBindings(
-            rc, engine::VsmFrameBindings {});
-          DLOG_F(2,
-            "ForwardPipeline: view={} skipping VSM shell because early depth "
-            "is {}",
-            ctx.view->GetPublishedViewId(),
-            to_string(rc.current_view.depth_prepass_completeness));
-        }
-      }
+    if (early_depth_complete) {
+      DLOG_F(2,
+        "ForwardPipeline: view={} executing VSM shell after screen-hzb "
+        "and light-culling",
+        rc.current_view.view_id);
+      co_await renderer.ExecuteCurrentViewVirtualShadowShell(rc, rec,
+        observer_ptr<const graphics::Texture> { ctx.depth_texture.get() });
     } else {
-      renderer.UpdateCurrentViewVirtualShadowFrameBindings(
-        rc, engine::VsmFrameBindings {});
+      renderer.UpdateCurrentViewDynamicBindings(rc,
+        engine::Renderer::CurrentViewDynamicBindingsUpdate {
+          .virtual_shadow = engine::VsmFrameBindings {},
+        });
+      DLOG_F(2,
+        "ForwardPipeline: view={} skipping VSM shell because early depth "
+        "is {}",
+        rc.current_view.view_id,
+        to_string(rc.current_view.depth_prepass_completeness));
     }
   } else {
-    renderer.UpdateCurrentViewVirtualShadowFrameBindings(
-      rc, engine::VsmFrameBindings {});
+    renderer.UpdateCurrentViewDynamicBindings(rc,
+      engine::Renderer::CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = engine::VsmFrameBindings {},
+      });
   }
 
   if (shader_pass) {
@@ -717,7 +712,7 @@ auto ForwardPipeline::Impl::RunScenePasses(
     DLOG_F(2,
       "ForwardPipeline: view={} deferring SkyPass until after opaque shading "
       "because early depth is {}",
-      ctx.view->GetPublishedViewId(),
+      rc.current_view.view_id,
       to_string(rc.current_view.depth_prepass_completeness));
     co_await sky_pass->PrepareResources(rc, rec);
     co_await sky_pass->Execute(rc, rec);
@@ -907,7 +902,7 @@ auto ForwardPipeline::Impl::ExecuteRegisteredView(ViewId id,
       }
       co_await RunScenePasses(ctx, rc, rec);
 
-      const auto published_view_id = ctx.view->GetPublishedViewId();
+      const auto published_view_id = frame_packet->PublishedViewId();
       const auto exposure_view_id
         = rc.current_view.exposure_view_id != kInvalidViewId
         ? rc.current_view.exposure_view_id
@@ -995,6 +990,10 @@ void ForwardPipeline::Impl::BuildFramePlan(observer_ptr<scene::Scene> scene)
     .pending_auto_exposure_reset = pending_auto_exposure_reset,
     .tone_map_pass_config = observer_ptr { tone_map_pass_config.get() },
     .shader_pass_config = observer_ptr { shader_pass_config.get() },
+    .resolve_published_view_id
+    = [&renderer = *lifecycle_renderer_](ViewId intent_view_id) -> ViewId {
+      return renderer.ResolvePublishedRuntimeViewId(intent_view_id);
+    },
   };
   frame_plan_builder->BuildFrameViewPackets(scene,
     view_lifecycle_service
@@ -1027,10 +1026,28 @@ auto ForwardPipeline::Impl::BuildCompositionSubmission(
 void ForwardPipeline::Impl::EnsureViewLifecycleService(
   engine::Renderer& renderer)
 {
-  if (view_lifecycle_service) {
+  if (view_lifecycle_service && lifecycle_renderer_.get() == &renderer) {
     return;
   }
-  view_lifecycle_service = std::make_unique<ViewLifecycleService>(renderer,
+  lifecycle_renderer_ = observer_ptr { &renderer };
+  view_lifecycle_service = std::make_unique<ViewLifecycleService>(
+    [&renderer](engine::FrameContext& frame_context, ViewId intent_view_id,
+      engine::ViewContext view_ctx) -> ViewId {
+      return renderer.UpsertPublishedRuntimeView(
+        frame_context, intent_view_id, std::move(view_ctx));
+    },
+    [&renderer](ViewId intent_view_id) -> ViewId {
+      return renderer.ResolvePublishedRuntimeViewId(intent_view_id);
+    },
+    [&renderer](engine::FrameContext& frame_context) -> std::vector<ViewId> {
+      return renderer.PruneStalePublishedRuntimeViews(frame_context);
+    },
+    [&renderer](ViewId id,
+      const ViewLifecycleService::RenderViewCoroutine& render_view_coroutine,
+      ResolvedView resolved_view) {
+      renderer.RegisterViewRenderGraph(
+        id, render_view_coroutine, std::move(resolved_view));
+    },
     [this](ViewId id, const engine::RenderContext& rc,
       graphics::CommandRecorder& rec) -> co::Co<> {
       co_await ExecuteRegisteredView(id, rc, rec);

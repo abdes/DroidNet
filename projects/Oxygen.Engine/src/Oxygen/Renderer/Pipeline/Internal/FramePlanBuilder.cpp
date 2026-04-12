@@ -61,13 +61,16 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
   const auto sky_state = EvaluateSkyState(scene);
   frame_view_packets_.reserve(ordered_active_views.size());
   for (auto* view : ordered_active_views) {
-    if (view->GetPublishedViewId() == kInvalidViewId) {
+    CHECK_NOTNULL_F(inputs.resolve_published_view_id);
+    const auto published_view_id
+      = inputs.resolve_published_view_id(view->GetDescriptor().id);
+    if (published_view_id == kInvalidViewId) {
       continue;
     }
     frame_view_packet_index_.emplace(
-      view->GetPublishedViewId(), frame_view_packets_.size());
-    frame_view_packets_.emplace_back(
-      observer_ptr { view }, EvaluateViewRenderPlan(*view, sky_state, inputs));
+      published_view_id, frame_view_packets_.size());
+    frame_view_packets_.emplace_back(observer_ptr { view }, published_view_id,
+      EvaluateViewRenderPlan(*view, sky_state, inputs));
   }
 }
 

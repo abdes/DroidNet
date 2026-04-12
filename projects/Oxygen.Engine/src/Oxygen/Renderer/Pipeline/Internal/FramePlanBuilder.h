@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <span>
@@ -31,6 +32,7 @@ public:
     std::optional<float> pending_auto_exposure_reset;
     observer_ptr<const engine::ToneMapPassConfig> tone_map_pass_config;
     observer_ptr<const engine::ShaderPassConfig> shader_pass_config;
+    std::function<ViewId(ViewId)> resolve_published_view_id;
   };
 
   FramePlanBuilder() = default;

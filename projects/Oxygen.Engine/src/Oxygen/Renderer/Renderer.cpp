@@ -115,6 +115,7 @@
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
+#include <Oxygen/Renderer/VirtualShadowMaps/VsmShadowRenderer.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -2104,6 +2105,7 @@ auto Renderer::OnShutdown() noexcept -> void
   {
     std::unique_lock state_lock(view_state_mutex_);
     view_ready_states_.clear();
+    published_runtime_views_by_intent_.clear();
   }
 
   {
@@ -2234,6 +2236,41 @@ auto Renderer::GetShadowManager() const noexcept
   return observer_ptr { shadow_manager_.get() };
 }
 
+auto Renderer::GetConventionalShadowDepthTexture() const noexcept
+  -> std::shared_ptr<graphics::Texture>
+{
+  if (!shadow_manager_) {
+    return {};
+  }
+  return shadow_manager_->GetConventionalShadowDepthTexture();
+}
+
+auto Renderer::ExecuteCurrentViewVirtualShadowShell(
+  const RenderContext& render_context, graphics::CommandRecorder& recorder,
+  const observer_ptr<const graphics::Texture> scene_depth_texture) -> co::Co<>
+{
+  const auto clear_virtual_shadow_bindings = [&]() {
+    UpdateCurrentViewDynamicBindings(render_context,
+      CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = VsmFrameBindings {},
+      });
+  };
+
+  if (!shadow_manager_) {
+    clear_virtual_shadow_bindings();
+    co_return;
+  }
+
+  const auto vsm_shadow_renderer = shadow_manager_->GetVirtualShadowRenderer();
+  if (!vsm_shadow_renderer) {
+    clear_virtual_shadow_bindings();
+    co_return;
+  }
+
+  co_await vsm_shadow_renderer->ExecutePreparedViewShell(
+    render_context, recorder, scene_depth_texture);
+}
+
 auto Renderer::GetSkyAtmosphereLutManagerForView(
   const ViewId view_id) const noexcept
   -> observer_ptr<internal::SkyAtmosphereLutManager>
@@ -2350,6 +2387,100 @@ auto Renderer::RegisterViewRenderGraph(
     view_id.get(), render_graphs_.size());
 }
 
+auto Renderer::UpsertPublishedRuntimeView(FrameContext& frame_context,
+  const ViewId intent_view_id, ViewContext view) -> ViewId
+{
+  CHECK_F(intent_view_id != kInvalidViewId,
+    "Renderer::UpsertPublishedRuntimeView requires a valid intent view id");
+
+  std::unique_lock state_lock(view_state_mutex_);
+  if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+    it != published_runtime_views_by_intent_.end()) {
+    frame_context.UpdateView(it->second.published_view_id, std::move(view));
+    it->second.last_seen_frame = frame_context.GetFrameSequenceNumber();
+    return it->second.published_view_id;
+  }
+
+  const auto published_view_id = frame_context.RegisterView(std::move(view));
+  published_runtime_views_by_intent_.insert_or_assign(intent_view_id,
+    PublishedRuntimeViewState {
+      .published_view_id = published_view_id,
+      .last_seen_frame = frame_context.GetFrameSequenceNumber(),
+    });
+  return published_view_id;
+}
+
+auto Renderer::ResolvePublishedRuntimeViewId(
+  const ViewId intent_view_id) const noexcept -> ViewId
+{
+  if (intent_view_id == kInvalidViewId) {
+    return kInvalidViewId;
+  }
+
+  std::shared_lock state_lock(view_state_mutex_);
+  if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+    it != published_runtime_views_by_intent_.end()) {
+    return it->second.published_view_id;
+  }
+  return kInvalidViewId;
+}
+
+auto Renderer::RemovePublishedRuntimeView(
+  FrameContext& frame_context, const ViewId intent_view_id) -> void
+{
+  if (intent_view_id == kInvalidViewId) {
+    return;
+  }
+
+  ViewId published_view_id { kInvalidViewId };
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+      it != published_runtime_views_by_intent_.end()) {
+      published_view_id = it->second.published_view_id;
+      published_runtime_views_by_intent_.erase(it);
+    }
+  }
+
+  if (published_view_id == kInvalidViewId) {
+    return;
+  }
+
+  frame_context.RemoveView(published_view_id);
+  UnregisterViewRenderGraph(published_view_id);
+}
+
+auto Renderer::PruneStalePublishedRuntimeViews(FrameContext& frame_context)
+  -> std::vector<ViewId>
+{
+  const auto current_frame = frame_context.GetFrameSequenceNumber();
+  auto stale_intent_ids = std::vector<ViewId> {};
+  auto stale_published_view_ids = std::vector<ViewId> {};
+
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    for (auto it = published_runtime_views_by_intent_.begin();
+      it != published_runtime_views_by_intent_.end();) {
+      if (current_frame - it->second.last_seen_frame
+        > kPublishedRuntimeViewMaxIdleFrames) {
+        stale_intent_ids.push_back(it->first);
+        stale_published_view_ids.push_back(it->second.published_view_id);
+        it = published_runtime_views_by_intent_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  for (const auto published_view_id : stale_published_view_ids) {
+    frame_context.RemoveView(published_view_id);
+    UnregisterViewRenderGraph(published_view_id);
+    EvictPerViewCachedProducts(published_view_id);
+  }
+
+  return stale_intent_ids;
+}
+
 auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
 {
   std::size_t removed_graph = 0;
@@ -2375,6 +2506,14 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
   {
     std::unique_lock state_lock(view_state_mutex_);
     view_ready_states_.erase(view_id);
+    for (auto it = published_runtime_views_by_intent_.begin();
+      it != published_runtime_views_by_intent_.end();) {
+      if (it->second.published_view_id == view_id) {
+        it = published_runtime_views_by_intent_.erase(it);
+      } else {
+        ++it;
+      }
+    }
   }
 }
 
@@ -3801,42 +3940,36 @@ auto Renderer::EnsureSceneDepthTextureSrv(PerViewRuntimeState& runtime_state,
   return register_new_srv();
 }
 
-auto Renderer::UpdateCurrentViewLightCullingConfig(
-  const RenderContext& render_context, const LightCullingConfig& config) -> void
+auto Renderer::UpdateCurrentViewDynamicBindings(
+  const RenderContext& render_context,
+  const CurrentViewDynamicBindingsUpdate& update) -> void
 {
   const auto view_id = render_context.current_view.view_id;
   if (view_id == ViewId {}) {
-    LOG_F(ERROR,
-      "Renderer: cannot update clustered-lighting state for invalid view id");
+    LOG_F(
+      ERROR, "Renderer: cannot update dynamic bindings for invalid view id");
     return;
   }
 
-  per_view_runtime_state_[view_id].light_culling = config;
-  if (!RepublishCurrentViewBindings(
-        render_context, ViewBindingRepublishMode::kDynamicSystemBindings)) {
-    LOG_F(ERROR,
-      "Renderer: failed to republish current-view bindings after light "
-      "culling update for view {}",
-      view_id.get());
+  auto& runtime_state = per_view_runtime_state_[view_id];
+  bool changed = false;
+  if (update.light_culling.has_value()) {
+    runtime_state.light_culling = *update.light_culling;
+    changed = true;
   }
-}
-
-auto Renderer::UpdateCurrentViewVirtualShadowFrameBindings(
-  const RenderContext& render_context, const VsmFrameBindings& bindings) -> void
-{
-  const auto view_id = render_context.current_view.view_id;
-  if (view_id == ViewId {}) {
-    LOG_F(ERROR,
-      "Renderer: cannot update virtual-shadow bindings for invalid view id");
+  if (update.virtual_shadow.has_value()) {
+    runtime_state.virtual_shadow = *update.virtual_shadow;
+    changed = true;
+  }
+  if (!changed) {
     return;
   }
 
-  per_view_runtime_state_[view_id].virtual_shadow = bindings;
   if (!RepublishCurrentViewBindings(
         render_context, ViewBindingRepublishMode::kDynamicSystemBindings)) {
     LOG_F(ERROR,
-      "Renderer: failed to republish current-view bindings after virtual "
-      "shadow update for view {}",
+      "Renderer: failed to republish current-view bindings after dynamic "
+      "binding update for view {}",
       view_id.get());
   }
 }
@@ -3964,6 +4097,22 @@ auto Renderer::GetOrCreateSkyAtmosphereLutManagerForView(const ViewId view_id)
   return observer_ptr { lut_ptr };
 }
 
+auto Renderer::EvictPerViewCachedProducts(const ViewId view_id) -> void
+{
+  per_view_atmo_luts_.erase(view_id);
+  last_atmo_generation_.erase(view_id);
+  last_seen_view_frame_seq_.erase(view_id);
+  if (env_static_manager_) {
+    env_static_manager_->EraseViewState(view_id);
+  }
+  if (sky_capture_pass_) {
+    sky_capture_pass_->EraseViewState(view_id);
+  }
+  if (ibl_manager_) {
+    ibl_manager_->EraseViewState(view_id);
+  }
+}
+
 auto Renderer::EvictInactivePerViewState(
   const frame::SequenceNumber current_seq,
   const std::unordered_set<ViewId>& active_views) -> void
@@ -3981,18 +4130,7 @@ auto Renderer::EvictInactivePerViewState(
   }
 
   for (const auto view_id : to_evict) {
-    per_view_atmo_luts_.erase(view_id);
-    last_atmo_generation_.erase(view_id);
-    last_seen_view_frame_seq_.erase(view_id);
-    if (env_static_manager_) {
-      env_static_manager_->EraseViewState(view_id);
-    }
-    if (sky_capture_pass_) {
-      sky_capture_pass_->EraseViewState(view_id);
-    }
-    if (ibl_manager_) {
-      ibl_manager_->EraseViewState(view_id);
-    }
+    EvictPerViewCachedProducts(view_id);
   }
 }
 

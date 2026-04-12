@@ -28,12 +28,15 @@ class CompositionViewImpl;
 // ViewLifecycleService.
 class FrameViewPacket {
 public:
-  FrameViewPacket(
-    observer_ptr<const CompositionViewImpl> view, ViewRenderPlan plan)
+  FrameViewPacket(observer_ptr<const CompositionViewImpl> view,
+    ViewId published_view_id, ViewRenderPlan plan)
     : view_(view)
+    , published_view_id_(published_view_id)
     , plan_(plan)
   {
     CHECK_NOTNULL_F(view_.get(), "FrameViewPacket requires non-null view");
+    CHECK_F(published_view_id_ != kInvalidViewId,
+      "FrameViewPacket requires a published runtime view id");
   }
   ~FrameViewPacket() = default;
   OXYGEN_DEFAULT_COPYABLE(FrameViewPacket)
@@ -48,6 +51,10 @@ public:
   {
     return plan_;
   }
+  [[nodiscard]] auto PublishedViewId() const noexcept -> ViewId
+  {
+    return published_view_id_;
+  }
 
   [[nodiscard]] auto HasCompositeTexture() const noexcept -> bool;
   [[nodiscard]] auto GetCompositeTexture() const
@@ -57,6 +64,7 @@ public:
 
 private:
   observer_ptr<const CompositionViewImpl> view_;
+  ViewId published_view_id_ { kInvalidViewId };
   ViewRenderPlan plan_;
 };
 
