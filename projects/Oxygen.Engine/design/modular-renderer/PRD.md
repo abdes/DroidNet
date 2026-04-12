@@ -1,6 +1,6 @@
 # Modular Renderer PRD
 
-Status: `phase-1 working PRD`
+Status: `phase-2 implementation-ready PRD`
 
 This document captures the product requirements for the modular renderer effort.
 It describes what the renderer package must achieve and how success will be
@@ -43,6 +43,9 @@ This makes it harder than it should be to assemble a renderer intentionally for:
 8. Reuse Oxygen Composition where it fits naturally.
 9. Support legal non-runtime setup without polluting the production path.
 10. Replace the architectural single-submission bottleneck in composition.
+11. Begin physically extracting capability-family services out of the
+    monolithic `Renderer` class so that each family owns its own state,
+    initialization, per-view management, publication, and shutdown.
 
 ## 3. Non-Goals
 
@@ -146,9 +149,9 @@ as:
 - scene-prep-only
 - shadow-only
 
-## 6. Phase-1 Required Outcomes
+## 6. Phase-1 Required Outcomes (delivered)
 
-Phase 1 must deliver these architectural outcomes:
+Phase 1 delivered these architectural outcomes:
 
 1. `Renderer` remains the structural composition root and execution substrate.
 2. `Pipeline` remains the interchangeable policy/configuration layer.
@@ -169,6 +172,51 @@ Phase 1 must deliver these architectural outcomes:
 11. Editor multi-view / multi-surface remains an explicit target scenario in the
     package.
 
+See [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) for proof artifacts.
+
+## 6.1 Phase-2 Required Outcomes
+
+Phase 2 must deliver these outcomes:
+
+1. **Environment Lighting extraction.** All environment-lighting state,
+   initialization, per-view management, publication, and shutdown move from
+   `Renderer` into a dedicated `EnvironmentLightingService` class.
+2. **Renderer delegates, not orchestrates.** After extraction, `Renderer` holds
+   a capability-gated `unique_ptr<EnvironmentLightingService>` and delegates
+   environment work to it. `Renderer` no longer contains any
+   environment-specific member variables, helper methods, or publication logic.
+3. **Capability gating preserved.** The service is instantiated only when
+   `kEnvironmentLighting` is present in the renderer assembly. Pipelines that
+   do not require environment lighting continue to work unchanged.
+4. **Publication ownership transfer.** The two optional-family publishers
+   (`EnvironmentViewData`, `EnvironmentFrameBindings`) and their frame-start
+   lifecycle move into the service. The renderer continues to own the generic
+   publication model, but the service owns the concrete publisher instances and
+   the environment publish calls.
+5. **Per-view state ownership transfer.** The per-view atmosphere LUT map
+   (`per_view_atmo_luts_`), atmosphere generation tracking, inactive-view
+   eviction tracking, and environment-specific current-view wiring move into
+   the service. The shared renderer runtime-state container may remain
+   renderer-owned, but the environment contribution to it becomes
+   service-owned logic.
+6. **Renderer-owned pass inversion resolved.** The three renderer-owned
+   environment passes (`sky_capture_pass_`, `sky_atmo_lut_compute_pass_`,
+   `ibl_compute_pass_`) move into the service as service-owned passes.
+7. **Debug/runtime toggles move with the service.** Environment runtime toggles
+   such as blue-noise enablement move into the service. There are currently no
+   environment-specific console bindings in `Renderer::RegisterConsoleBindings`,
+   so phase 2 does not invent new console scope just to satisfy the extraction.
+8. **Production runtime and all existing tests remain green.** The extraction
+   is a structural refactor with no behavioral change.
+9. **Extraction pattern documented.** The service extraction establishes a
+   reusable pattern for subsequent family extractions (Diagnostics, Shadowing,
+   etc.).
+10. **`Renderer` stops owning environment implementation.**
+    Environment-specific public bridge methods may remain on `Renderer` in
+    phase 2, but only as thin delegations into the service. `Renderer` no
+    longer owns environment members, helper logic, or
+    publication/orchestration blocks.
+
 ## 7. Constraints and Assumptions
 
 1. Passes are engine-authored and engine-delivered.
@@ -182,7 +230,7 @@ Phase 1 must deliver these architectural outcomes:
 
 ## 8. Success Criteria
 
-Phase 1 is successful when all of the following are true:
+### Phase-1 success criteria (met)
 
 1. The three non-runtime facades exist with semantically distinct authority.
 2. `RenderContext` remains the authoritative execution context.
@@ -199,7 +247,26 @@ Phase 1 is successful when all of the following are true:
    explicit target scenario, even when phase-1 implementation uses a narrower
    composition subset.
 
-## 9. Deferred Beyond Phase 1
+### Phase-2 success criteria
+
+1. `EnvironmentLightingService` exists as a standalone class that owns all
+   environment-lighting state.
+2. `Renderer` holds a single `unique_ptr<EnvironmentLightingService>` for the
+   entire environment-lighting surface. No environment member variables,
+   orchestration blocks, or per-view helper logic remain directly in
+   `Renderer`. Any retained public bridge methods are pure forwards.
+3. The service is instantiated only when `kEnvironmentLighting` is present.
+   Absent-capability scenarios still work.
+4. All existing tests pass. The `DemoShell` / `RenderScene` / `MultiView`
+   examples run without regression.
+5. A short "Capability-Family Service Extraction Guide" section exists in
+   [DESIGN.md](./DESIGN.md) that a developer can follow to extract the next
+   family.
+6. Focused verification exists for both capability-present and
+   capability-absent environment paths, using the active renderer proof
+   surface.
+
+## 9. Deferred Beyond Phase 2
 
 The following are intentionally deferred:
 
@@ -208,12 +275,18 @@ The following are intentionally deferred:
 - richer inter-view dependency mechanisms
 - generalized public graph-based view dependency authoring
 - broad plugin-style capability ecosystems
+- extraction of remaining capability families (Diagnostics, Shadowing, Lighting
+  Data) beyond the phase-2 Environment Lighting proof
 
 ## 10. Open Product Questions
 
-Product-level questions still worth revisiting later:
+Product-level questions still worth revisiting after phase 2:
 
-1. What should become the first architectural target beyond phase 1?
-2. Which future scenario should most strongly drive phase-2 investment:
-   multi-surface composition, richer inter-view dependency, or broader runtime
+1. Which capability family should be extracted next after Environment Lighting?
+   (Diagnostics is the most self-contained candidate; Shadowing has the highest
+   complexity due to depth-chain coupling.)
+2. Should per-view state management become a shared framework across extracted
+   services, or should each service manage its own per-view map independently?
+3. Which future scenario should most strongly drive phase-3 investment:
+   multi-surface composition, additional family extraction, or broader runtime
    profile variation?

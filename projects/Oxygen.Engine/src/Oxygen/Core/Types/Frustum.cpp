@@ -30,74 +30,58 @@ namespace {
       p.d *= inv;
     }
   }
+
+  [[nodiscard]] auto MakePlane(const glm::vec3& a, const glm::vec3& b,
+    const glm::vec3& c, const glm::vec3& inside_point) noexcept
+    -> Frustum::Plane
+  {
+    auto plane = Frustum::Plane {};
+    plane.normal = glm::normalize(glm::cross(b - a, c - a));
+    plane.d = -glm::dot(plane.normal, a);
+
+    // Orient every plane so the frustum center stays on the positive side.
+    if ((glm::dot(plane.normal, inside_point) + plane.d) < 0.0F) {
+      plane.normal = -plane.normal;
+      plane.d = -plane.d;
+    }
+
+    return plane;
+  }
 } // namespace
 
 auto Frustum::FromViewProj(const glm::mat4& vp, bool reverse_z) -> Frustum
 {
   Frustum f {};
-  // Gribb & Hartmann plane extraction. GLM stores matrices column-major and
-  // uses indexing m[col][row]. Build explicit row vectors first, then form
-  // planes as r3 +/- r{0,1,2}.
-  const glm::vec4 r0 { vp[0][0], vp[1][0], vp[2][0], vp[3][0] };
-  const glm::vec4 r1 { vp[0][1], vp[1][1], vp[2][1], vp[3][1] };
-  const glm::vec4 r2 { vp[0][2], vp[1][2], vp[2][2], vp[3][2] };
-  const glm::vec4 r3 { vp[0][3], vp[1][3], vp[2][3], vp[3][3] };
+  const auto inv_vp = glm::inverse(vp);
+  const float clip_near = reverse_z ? 1.0F : 0.0F;
+  const float clip_far = reverse_z ? 0.0F : 1.0F;
 
-  // Left:  r3 + r0
-  {
-    const glm::vec4 p = r3 + r0;
-    f.planes[kLeft].normal = glm::vec3(p);
-    f.planes[kLeft].d = p.w;
-  }
-  // Right: r3 - r0
-  {
-    const glm::vec4 p = r3 - r0;
-    f.planes[kRight].normal = glm::vec3(p);
-    f.planes[kRight].d = p.w;
-  }
-  // Bottom: r3 + r1
-  {
-    const glm::vec4 p = r3 + r1;
-    f.planes[kBottom].normal = glm::vec3(p);
-    f.planes[kBottom].d = p.w;
-  }
-  // Top: r3 - r1
-  {
-    const glm::vec4 p = r3 - r1;
-    f.planes[kTop].normal = glm::vec3(p);
-    f.planes[kTop].d = p.w;
-  }
-  // Near/Far: handle reverse-Z swap
-  if (!reverse_z) {
-    // Near: r3 + r2
-    {
-      const glm::vec4 p = r3 + r2;
-      f.planes[kNear].normal = glm::vec3(p);
-      f.planes[kNear].d = p.w;
-    }
-    // Far: r3 - r2
-    {
-      const glm::vec4 p = r3 - r2;
-      f.planes[kFar].normal = glm::vec3(p);
-      f.planes[kFar].d = p.w;
-    }
-  } else {
-    // Reverse-Z: swap meaning
-    {
-      const glm::vec4 p = r3 - r2; // near
-      f.planes[kNear].normal = glm::vec3(p);
-      f.planes[kNear].d = p.w;
-    }
-    {
-      const glm::vec4 p = r3 + r2; // far
-      f.planes[kFar].normal = glm::vec3(p);
-      f.planes[kFar].d = p.w;
-    }
-  }
+  const auto Unproject = [&inv_vp](const float x, const float y,
+                           const float z) noexcept {
+    const auto clip = glm::vec4(x, y, z, 1.0F);
+    const auto world = inv_vp * clip;
+    return glm::vec3(world) / world.w;
+  };
 
-  for (auto& p : f.planes) {
-    NormalizePlane(p);
-  }
+  const auto ntl = Unproject(-1.0F, 1.0F, clip_near);
+  const auto ntr = Unproject(1.0F, 1.0F, clip_near);
+  const auto nbl = Unproject(-1.0F, -1.0F, clip_near);
+  const auto nbr = Unproject(1.0F, -1.0F, clip_near);
+  const auto ftl = Unproject(-1.0F, 1.0F, clip_far);
+  const auto ftr = Unproject(1.0F, 1.0F, clip_far);
+  const auto fbl = Unproject(-1.0F, -1.0F, clip_far);
+  const auto fbr = Unproject(1.0F, -1.0F, clip_far);
+
+  const auto inside_point
+    = (ntl + ntr + nbl + nbr + ftl + ftr + fbl + fbr) / 8.0F;
+
+  f.planes[kLeft] = MakePlane(nbl, ntl, ftl, inside_point);
+  f.planes[kRight] = MakePlane(ntr, nbr, fbr, inside_point);
+  f.planes[kBottom] = MakePlane(nbr, nbl, fbl, inside_point);
+  f.planes[kTop] = MakePlane(ntl, ntr, ftr, inside_point);
+  f.planes[kNear] = MakePlane(nbl, nbr, ntr, inside_point);
+  f.planes[kFar] = MakePlane(fbr, fbl, ftl, inside_point);
+
   return f;
 }
 

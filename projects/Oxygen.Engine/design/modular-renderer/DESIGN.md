@@ -1,10 +1,11 @@
 # Modular Renderer Design
 
-Status: `phase-1 design baseline`
+Status: `phase-2 implementation-ready design`
 
-This document captures the concrete chosen solution shapes for phase 1:
+This document captures the concrete chosen solution shapes:
 facades, contracts, validation rules, capability declarations, composition
-behavior, and migration-oriented design decisions. It assumes the stable
+behavior, migration-oriented design decisions, and the phase-2
+capability-family service extraction design. It assumes the stable
 conceptual model defined in [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 Related:
@@ -650,9 +651,9 @@ Phase 1 explicitly avoids:
 - public dependency DAG authoring
 - general dependency-edge authoring in `CompositionView`
 
-## 10. Phase-1 Acceptance Matrix
+## 10. Phase-1 Acceptance Matrix (met)
 
-The architecture should support:
+The architecture supports:
 
 - `ForSinglePassHarness()`
 - `ForRenderGraphHarness()`
@@ -667,3 +668,280 @@ And should avoid:
 - generic typed-slot injection facade
 - public inter-view dependency DAG
 - full task-targeted global compositor
+
+---
+
+## 11. Phase-2 Design: Environment Lighting Service Extraction
+
+Phase 2 extracts the `Environment Lighting` capability family from the
+monolithic `Renderer` class into a standalone `EnvironmentLightingService`.
+This is a structural refactor: no rendering behavior changes.
+
+### 11.1 Service Responsibilities
+
+`EnvironmentLightingService` owns the full lifecycle of environment lighting:
+
+1. **Initialization.** Create BRDF LUT manager, IBL manager, static
+   environment data manager, environment publishers, sky capture pass,
+   atmosphere LUT compute pass, IBL compute pass, and their configs.
+2. **Per-frame update.** Advance environment publishers, advance the static
+   environment manager, apply blue-noise/debug toggle state, and maintain any
+   dirty-tracking needed for sky capture or IBL regeneration.
+3. **Per-view state contribution.** Own the environment-specific work currently
+   embedded in renderer view preparation:
+   - update `PerViewRuntimeState::environment_view`
+   - create/update the per-view atmosphere LUT manager
+   - synchronize `RenderContext::current_view.atmo_lut_manager`
+   - keep `EnvironmentStaticDataManager` synchronized with the active view
+4. **Per-view environment pass execution.** Run the atmosphere LUT compute,
+   sky capture, and IBL compute passes for a given view. This absorbs the
+   ~130-line orchestration block currently inline in `Renderer::OnRender`
+   STEP 2 (lines ~2877-2990 in the current source). The service owns the
+   pass objects **and** the sequencing logic that drives them.
+5. **Per-view publication.** Publish `EnvironmentViewData` and
+   `EnvironmentFrameBindings` for a given view. Manage per-view atmosphere
+   LUT instances (create on first access, evict on view removal).
+6. **Shutdown.** Tear down all owned objects in reverse order.
+
+### 11.2 Service Interface Shape
+
+The service exposes a small public surface. The exact signatures will follow
+current engine conventions, but the semantic contract is:
+
+- `Initialize(Graphics&, RendererConfig&, ...)` — called once during
+  `Renderer::OnAttached` when `kEnvironmentLighting` is present.
+- `OnFrameStart(...)` — called per frame to advance publisher/static-manager
+  frame lifecycle and apply environment runtime toggles.
+- `UpdatePreparedViewState(...)` — called from the renderer's scene-prep path
+  to populate `PerViewRuntimeState::environment_view`, update atmosphere LUT
+  parameters, and synchronize per-view environment products.
+- `PrepareCurrentView(...)` — called while wiring the active
+  `RenderContext` view to set `current_view.atmo_lut_manager` and keep static
+  environment data aligned with the current view's atmosphere availability.
+- `ExecutePerViewPasses(ViewId, RenderContext&, CommandRecorder&)` — called
+  from `Renderer::OnRender` per-view loop (current STEP 2) to execute the
+  atmosphere LUT compute, sky capture, and IBL compute passes. Encapsulates
+  the full sequencing and intermediate `EnvironmentStaticData` updates
+  between passes. Returns early (no-op) when dirty-tracking indicates no
+  work is needed.
+- `PublishForView(ViewId, RenderContext&, PerViewRuntimeState&, ...)` —
+  called from `RepublishCurrentViewBindings` to handle the environment
+  portion of optional-family publication.
+- `NoteViewSeen(ViewId, frame::SequenceNumber)` /
+  `EvictInactiveViewProducts(...)` — owns the inactive-view eviction window
+  currently tracked through `last_seen_view_frame_seq_`.
+- `EvictViewProducts(ViewId)` — called when a view is removed or its
+  cached products are invalidated.
+- `Shutdown()` — called during `Renderer::OnShutdown`.
+
+Accessor methods for callers that need runtime environment objects:
+
+- `GetBrdfLutManager()` / `GetIblManager()` / `GetIblComputePass()`
+- `GetStaticDataManager()`
+- `GetOrCreateAtmosphereLutManagerForView(ViewId)`
+- `RequestSkyCapture()` / `RequestIblRegeneration()`
+- `SetAtmosphereBlueNoiseEnabled(bool)` / `GetAtmosphereDebugFlags()`
+
+### 11.3 Integration with Renderer
+
+The `Renderer` class changes:
+
+1. **New member.** A single `unique_ptr<EnvironmentLightingService>`
+   replaces the environment publishers, managers, passes, configs, and
+   environment-owned tracking state currently stored directly on `Renderer`.
+2. **Conditional initialization.** In `OnAttached`, if
+   `HasCapability(kEnvironmentLighting)`, create the service and call
+   `Initialize(...)`. Otherwise the pointer stays null.
+3. **Frame-start delegation.** In `BeginFrameServices`, the renderer no longer
+   advances `environment_view_data_publisher_`,
+   `environment_frame_bindings_publisher_`, or `env_static_manager_`
+   directly. It calls `env_service_->OnFrameStart(...)`.
+4. **Scene-prep delegation.** In `RunScenePrep`, the environment-specific
+   block that populates `runtime_state.environment_view`, updates atmosphere
+   LUT parameters, and touches `GetOrCreateSkyAtmosphereLutManagerForView(...)`
+   moves into `env_service_->UpdatePreparedViewState(...)`.
+5. **Current-view wiring delegation.** In
+   `PrepareAndWireViewConstantsForView`, the environment-specific
+   `current_view.atmo_lut_manager` assignment and static-data synchronization
+   move into `env_service_->PrepareCurrentView(...)`.
+6. **Execution delegation.** In `Renderer::OnRender`, the ~130-line STEP 2
+   environment pass execution block is replaced by a single guarded call:
+
+   ```cpp
+   if (env_lighting_service_) {
+     env_lighting_service_->ExecutePerViewPasses(view_id, render_context, recorder);
+   }
+   ```
+
+   The renderer no longer references `sky_capture_pass_`,
+   `sky_atmo_lut_compute_pass_`, or `ibl_compute_pass_` directly. The
+   remaining per-view loop structure (STEP 1 scene prep → STEP 2 env
+   service call → STEP 3 framebuffer → STEP 4 pipeline graph) is
+   pipeline-agnostic and stable for any future pipeline (Deferred,
+   Forward+, etc.).
+7. **Publication delegation.** In `PublishOptionalFamilyViewBindings`, the
+   environment block is replaced by a call to
+   `env_service_->PublishForView(...)`. The shadow publication block remains
+   unchanged in phase 2.
+8. **Eviction delegation.** `Renderer` delegates both direct per-view eviction
+   and inactive-view environment eviction bookkeeping to the service.
+9. **Shutdown delegation.** `OnShutdown` calls `env_service_->Shutdown()`
+   before resetting the pointer.
+10. **Public API delegation.** The existing environment bridge methods on
+   `Renderer` become thin one-line forwards to the service for phase 2. A
+   `GetEnvironmentLightingService()` accessor is optional and may be added if
+   it helps future extractions, but pass/pipeline call sites do not need to
+   churn just to complete this refactor.
+
+### 11.4 Integration with ForwardPipeline
+
+`ForwardPipeline` currently accesses environment functionality through
+bridged renderer APIs. After extraction, these bridged calls still go
+through the renderer, which delegates to the service. The pipeline does not
+hold a direct pointer to the service, and phase 2 does not require broad
+environment-pass churn.
+
+Representative bridge methods that continue to work unchanged:
+
+- `SetAtmosphereBlueNoiseEnabled(...)` — renderer delegates to service
+- `GetSkyAtmosphereLutManagerForView(...)` — renderer delegates to service
+
+The pipeline does not need modification. The bridge pattern from phase 1
+handles this transparently.
+
+### 11.5 Service Dependencies
+
+The service needs these inputs, provided by the renderer at construction or
+per-call:
+
+- `Graphics&` — for GPU resource creation
+- `RendererConfig&` — for reading environment-related config
+- `upload::UploadCoordinator&` and upload staging provider access — needed by
+  BRDF LUT and per-view atmosphere LUT managers
+- inline staging provider and `InlineTransfersCoordinator&` — needed by the
+  environment publishers
+- `renderer::resources::TextureBinder&` — needed by
+  `EnvironmentStaticDataManager`
+- per-view identifiers and view state at publish-time
+
+The service does **not** receive a `Renderer*` or `Renderer&`. This keeps
+the dependency arrow clean: `Renderer` → `EnvironmentLightingService`, never
+the reverse.
+
+### 11.6 File Placement
+
+New files:
+
+- `src/Oxygen/Renderer/Environment/EnvironmentLightingService.h`
+- `src/Oxygen/Renderer/Environment/EnvironmentLightingService.cpp`
+
+Existing environment-related files (e.g., `BrdfLutManager`,
+`SkyAtmosphereLutManager`, `IblManager`, `EnvironmentStaticDataManager`) stay
+where they are. They become dependencies of the new service instead of being
+held directly by `Renderer`.
+
+### 11.7 Test Strategy
+
+The extraction is a structural refactor. The primary validation is:
+
+1. **All relevant renderer proof suites remain green.**
+   Specifically: the suites that exercise environment publication, atmosphere
+   setup, or IBL/static-environment binding through the active renderer proof
+   surface.
+2. **Full-build gate.** `cmake --build --preset windows-debug --parallel 8`
+   passes.
+3. **Focused extraction proof.** Extend the active renderer proof surface with
+   focused checks for:
+   - capability-present environment delegation/publication
+   - capability-absent environment no-op behavior
+   - per-view environment cache eviction
+4. **Runtime gate.** `Oxygen.Examples.RenderScene.exe` and
+   `Oxygen.Examples.MultiView.exe` run without regression.
+   `Oxygen.Examples.DemoShell.exe` is a secondary smoke if its current preset
+   includes environment lighting.
+5. **Absent-capability gate.** Keep the existing
+   `OffscreenSceneFacade.Tests` reduced-capability execution proof green so a
+   renderer without `kEnvironmentLighting` still works.
+
+A focused unit test for the service is optional but recommended. It should
+verify that `Initialize` + `Shutdown` do not crash, and that
+`PublishForView` produces non-default environment bindings when given a
+valid view.
+
+## 12. Capability-Family Service Extraction Guide
+
+This section documents the pattern established by the Environment Lighting
+extraction so that future extractions follow a consistent approach.
+
+### 12.1 When to Extract
+
+Extract a capability family into a service when:
+
+- the family owns 3+ member variables in `Renderer`
+- the family has identifiable initialization, per-view, and shutdown
+  lifecycle phases
+- the family's dependencies do not form a cycle with other unextracted
+  families
+
+### 12.2 Steps
+
+1. **Inventory.** List every `Renderer` member variable, private method, and
+   public method that belongs to the family. Use the existing
+   current-state inventory in [ARCHITECTURE.md](./ARCHITECTURE.md) §3.2.1
+   as a starting reference.
+
+2. **Create the service class.** Place it under
+   `src/Oxygen/Renderer/<FamilyName>/`. It should have:
+   - `Initialize(...)` — receives only the specific dependencies it needs
+   - `OnFrameStart(...)` — if the family has per-frame work or publisher
+     lifecycle
+   - `UpdatePreparedViewState(...)` / `PrepareCurrentView(...)` when the family
+     contributes per-view runtime state or `RenderContext` wiring
+   - `PublishForView(...)` — if the family publishes optional bindings
+   - `NoteViewSeen(...)` / `EvictViewProducts(ViewId)` when the family holds
+     per-view state or eviction tracking
+   - `Shutdown()` — tears down owned objects
+
+3. **Move member variables.** Cut them from `Renderer.h` and add them as
+   private members of the service. Do this mechanically: the variable names
+   and types stay the same.
+
+4. **Move initialization logic.** Find the code in `Renderer::OnAttached`
+   (or `EnsureXxxInitialized`) that creates the family's objects. Move it
+   into the service's `Initialize` method.
+
+5. **Move publication logic.** Find the family's block inside
+   `Renderer::PublishOptionalFamilyViewBindings`. Move it into the service's
+   `PublishForView` method. Replace the original block with a one-line
+   delegation call.
+
+6. **Move per-view state management.** Find per-view maps, create-on-access
+   helpers, and eviction logic. Move them into the service.
+
+7. **Move debug/runtime toggles.** Move runtime toggle state that belongs to
+   the family. Only move console bindings if they actually exist; do not invent
+   new console surface just to satisfy the pattern.
+
+8. **Move shutdown logic.** Find teardown code in `Renderer::OnShutdown`.
+   Move it into the service's `Shutdown` method. Call `Shutdown` from
+   `Renderer::OnShutdown`.
+
+9. **Update Renderer.** Replace the removed members with a single
+   `unique_ptr<XxxService>`. Gate creation on `HasCapability(kXxx)`. Add a
+   public `GetXxxService()` accessor only if it meaningfully helps callers;
+   existing bridge methods may remain as thin forwards.
+
+10. **Update callers.** Public methods that moved to the service either
+    become thin forwards on `Renderer` (if many external callers exist) or
+    callers switch to `renderer.GetXxxService()->Method()`.
+
+11. **Validate.** Full build, all affected test suites, runtime examples.
+
+### 12.3 Rules
+
+- The service class must not hold a `Renderer*` back-pointer.
+- The service receives only the specific objects it needs.
+- Publisher instances for the extracted family move with the service so the
+  renderer no longer owns family-specific publisher members.
+- The service does not interact with other capability-family services
+  directly. Cross-family coordination goes through the renderer.
