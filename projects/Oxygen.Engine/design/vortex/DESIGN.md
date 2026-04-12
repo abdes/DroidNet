@@ -1,6 +1,15 @@
 # Vortex Renderer Design
 
-Status: `initial design baseline`
+Status: `early draft — illustrative shapes only, not complete LLD`
+
+> **Note:** This document is an early draft that captures illustrative solution
+> shapes. It is NOT a complete low-level design. Each implementation phase in
+> [PLAN.md](./PLAN.md) identifies specific design deliverables that must be
+> written (either as updates to this document or as standalone phase LLD
+> documents in `design/vortex/lld/`) before implementation begins. Areas not
+> yet covered here include: SceneTextureSetupMode, SceneTextureBindings,
+> SceneTextureExtracts, InitViewsModule, SceneRenderBuilder, velocity
+> distribution design, extraction/handoff, and per-subsystem LLDs.
 
 This document captures the concrete solution shapes for the Vortex renderer:
 subsystem service contracts, SceneTextures design, GBuffer layout, frame
