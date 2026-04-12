@@ -253,7 +253,7 @@ static_assert(offsetof(VsmShaderRasterPageJob, virtual_page_level) == 80U);
 static_assert(offsetof(VsmShaderRasterPageJob, physical_page_index) == 84U);
 static_assert(offsetof(VsmShaderRasterPageJob, job_flags) == 88U);
 
-// Packed indirect command layout for ExecuteIndirect(kDrawWithRootConstant).
+// Packed indirect command layout for ExecuteIndirect(kDraw + push constants).
 //
 // DWORD0 is the per-draw root constant (`g_DrawIndex`), followed by the native
 // D3D12 draw-arguments payload.

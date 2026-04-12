@@ -1143,8 +1143,11 @@ auto VsmHzbUpdaterPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
       *impl_->dispatch_args_buffer, ResourceStates::kIndirectArgument);
     recorder.FlushBarriers();
     recorder.SetMarker("VsmHzbUpdaterPass.ExecuteIndirect.BuildPerPage");
-    recorder.ExecuteIndirect(*impl_->dispatch_args_buffer, 0U, 1U,
-      CommandRecorder::IndirectCommandLayout::kDispatch);
+    recorder.ExecuteIndirect(*impl_->dispatch_args_buffer,
+      CommandRecorder::IndirectCommandDesc {
+        .kind = CommandRecorder::IndirectCommandKind::kDispatch,
+      },
+      oxygen::graphics::BufferRange { 0U, 0U });
 
     recorder.RequireResourceState(
       *impl_->scratch_textures[destination_slot], ResourceStates::kCopySource);

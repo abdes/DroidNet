@@ -2293,14 +2293,33 @@ auto VsmShadowRasterizerPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
         SelectPipelineStateForPartition(partition.pass_mask));
       RebindCommonRootParameters(recorder);
       impl_->BindJobViewConstants(recorder, Context(), local_page_index);
-      recorder.SetMarker("VsmShadowRasterizerPass.ExecuteIndirectCounted");
-      recorder.ExecuteIndirectCounted(*state.command_buffer,
-        MakePartitionCommandOffset(
-          local_page_index, state.max_commands_per_page),
-        state.max_commands_per_page,
-        CommandRecorder::IndirectCommandLayout::kDrawWithRootConstant,
-        *state.count_buffer,
-        static_cast<std::uint64_t>(local_page_index) * sizeof(std::uint32_t));
+      recorder.SetMarker("VsmShadowRasterizerPass.ExecuteIndirect");
+      recorder.ExecuteIndirect(*state.command_buffer,
+        CommandRecorder::IndirectCommandDesc {
+          .kind = CommandRecorder::IndirectCommandKind::kDraw,
+          .push_constants = CommandRecorder::IndirectPushConstantsDesc {
+            .binding_slot_desc = RootConstantsBindingSlot(),
+            .dest_offset_in_32bit_values = 0U,
+            .value_count = 1U,
+          },
+        },
+        CommandRecorder::IndirectExecutionDesc {
+          .argument_buffer_range = oxygen::graphics::BufferRange {
+            MakePartitionCommandOffset(
+              local_page_index, state.max_commands_per_page),
+            0U,
+          },
+          .command_count = CommandRecorder::IndirectCommandCount {
+            state.max_commands_per_page
+          },
+          .count_buffer
+          = oxygen::observer_ptr<const Buffer> { state.count_buffer.get() },
+          .count_buffer_range = oxygen::graphics::BufferRange {
+            static_cast<std::uint64_t>(local_page_index)
+              * sizeof(std::uint32_t),
+            sizeof(std::uint32_t),
+          },
+        });
     }
   }
 
