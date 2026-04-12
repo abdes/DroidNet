@@ -16,12 +16,11 @@
 namespace oxygen::renderer::internal {
 
 void CompositionViewImpl::PrepareForRender(const CompositionView& descriptor,
-  uint32_t submission_order, frame::SequenceNumber frame_seq,
-  Graphics& graphics, ViewLifecycleAccessTag tag)
+  const uint32_t submission_order, Graphics& graphics,
+  const ViewLifecycleAccessTag tag)
 {
   descriptor_ = descriptor;
   submission_order_ = submission_order;
-  last_seen_frame_ = frame_seq;
   EnsureResources(graphics, tag);
 }
 

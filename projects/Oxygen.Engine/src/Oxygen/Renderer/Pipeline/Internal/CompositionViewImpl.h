@@ -10,7 +10,6 @@
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -47,8 +46,7 @@ public:
   OXYGEN_DEFAULT_MOVABLE(CompositionViewImpl)
 
   OXGN_RNDR_API void PrepareForRender(const CompositionView& descriptor,
-    uint32_t submission_order, frame::SequenceNumber frame_seq,
-    Graphics& graphics, ViewLifecycleAccessTag tag);
+    uint32_t submission_order, Graphics& graphics, ViewLifecycleAccessTag tag);
 
   [[nodiscard]] auto GetDescriptor() const noexcept -> const CompositionView&
   {
@@ -57,10 +55,6 @@ public:
   [[nodiscard]] auto GetSubmissionOrder() const noexcept -> uint32_t
   {
     return submission_order_;
-  }
-  [[nodiscard]] auto GetLastSeenFrame() const noexcept -> frame::SequenceNumber
-  {
-    return last_seen_frame_;
   }
   [[nodiscard]] auto UsesHdrRenderTargets() const noexcept -> bool
   {
@@ -88,22 +82,11 @@ public:
     return sdr_framebuffer_;
   }
 
-  [[nodiscard]] auto GetPublishedViewId() const noexcept -> ViewId
-  {
-    return published_view_id_;
-  }
-  auto SetPublishedViewId(ViewId id, ViewLifecycleAccessTag /*tag*/) noexcept
-    -> void
-  {
-    published_view_id_ = id;
-  }
-
 private:
   void EnsureResources(Graphics& graphics, ViewLifecycleAccessTag tag);
 
   CompositionView descriptor_;
   uint32_t submission_order_ { 0 };
-  frame::SequenceNumber last_seen_frame_;
 
   // GPU resources.
   std::shared_ptr<graphics::Texture> hdr_texture_;
@@ -115,9 +98,6 @@ private:
   uint32_t render_target_height_ { 0 };
   bool uses_hdr_render_targets_ { false };
   graphics::Color clear_color_ { 0.0F, 0.0F, 0.0F, 1.0F };
-
-  // Publication/runtime linkage.
-  ViewId published_view_id_ { kInvalidViewId };
 };
 
 } // namespace oxygen::renderer::internal

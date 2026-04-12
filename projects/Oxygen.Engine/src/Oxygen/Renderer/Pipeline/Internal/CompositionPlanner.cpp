@@ -38,11 +38,7 @@ void CompositionPlanner::PlanCompositingTasks()
       continue;
     }
     if (ShouldCopyPrimarySceneView(packet)) {
-      const auto published_view_id = packet.View().GetPublishedViewId();
-      CHECK_F(published_view_id != kInvalidViewId,
-        "primary scene view '{}' requires a published ViewId before planning "
-        "copy compositing",
-        packet.View().GetDescriptor().name);
+      const auto published_view_id = packet.PublishedViewId();
       DLOG_F(2,
         "scene view '{}' planned as copy (published_view_id={} opacity={})",
         packet.View().GetDescriptor().name, published_view_id.get(),

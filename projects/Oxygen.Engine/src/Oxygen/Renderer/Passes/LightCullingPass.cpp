@@ -635,8 +635,10 @@ auto LightCullingPass::DoExecute(CommandRecorder& recorder) -> co::Co<>
     ClusterGridSlot { impl_->cluster_grid_srv },
     ClusterIndexListSlot { impl_->light_index_list_srv }, impl_->grid_dims,
     impl_->light_grid_z_params);
-  Context().GetRenderer().UpdateCurrentViewLightCullingConfig(
-    Context(), impl_->published_config);
+  Context().GetRenderer().UpdateCurrentViewDynamicBindings(Context(),
+    engine::Renderer::CurrentViewDynamicBindingsUpdate {
+      .light_culling = impl_->published_config,
+    });
 
   if (impl_->cluster_grid_uav == kInvalidShaderVisibleIndex
     || impl_->light_index_list_uav == kInvalidShaderVisibleIndex) {

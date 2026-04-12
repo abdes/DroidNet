@@ -77,7 +77,7 @@ auto MakeCompositeTarget(const std::shared_ptr<FakeGraphics>& graphics)
   return graphics->CreateFramebuffer(fb_desc);
 }
 
-auto MakeInputs() -> FramePlanBuilder::Inputs
+auto MakeInputs(const ViewId published_view_id) -> FramePlanBuilder::Inputs
 {
   static const oxygen::engine::ToneMapPassConfig tone_map_config {};
   static const oxygen::engine::ShaderPassConfig shader_pass_config {};
@@ -86,15 +86,16 @@ auto MakeInputs() -> FramePlanBuilder::Inputs
     .pending_auto_exposure_reset = std::nullopt,
     .tone_map_pass_config = observer_ptr { &tone_map_config },
     .shader_pass_config = observer_ptr { &shader_pass_config },
+    .resolve_published_view_id
+    = [published_view_id](const ViewId) { return published_view_id; },
   };
 }
 
 void PrepareView(CompositionViewImpl& view_impl, const CompositionView& desc,
-  FakeGraphics& graphics, const ViewId published_view_id)
+  FakeGraphics& graphics, const ViewId /*published_view_id*/)
 {
   const auto tag = ViewLifecycleTagFactory::Get();
-  view_impl.PrepareForRender(desc, 0U, SequenceNumber { 1 }, graphics, tag);
-  view_impl.SetPublishedViewId(published_view_id, tag);
+  view_impl.PrepareForRender(desc, 0U, graphics, tag);
 }
 
 TEST(CompositionPlannerTest, PrimarySceneViewUsesCopyTaskAtFullOpacity)
@@ -112,7 +113,7 @@ TEST(CompositionPlannerTest, PrimarySceneViewUsesCopyTaskAtFullOpacity)
   std::array views { &view_impl };
   builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
     std::span<CompositionViewImpl* const> { views.data(), views.size() },
-    MakeInputs());
+    MakeInputs(ViewId { 201U }));
 
   CompositionPlanner planner(observer_ptr { &builder });
   planner.PlanCompositingTasks();
@@ -140,7 +141,7 @@ TEST(CompositionPlannerTest, PartialOpacitySceneViewUsesTextureBlendTask)
   std::array views { &view_impl };
   builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
     std::span<CompositionViewImpl* const> { views.data(), views.size() },
-    MakeInputs());
+    MakeInputs(ViewId { 202U }));
 
   CompositionPlanner planner(observer_ptr { &builder });
   planner.PlanCompositingTasks();
@@ -169,7 +170,7 @@ TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
   std::array views { &view_impl };
   builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
     std::span<CompositionViewImpl* const> { views.data(), views.size() },
-    MakeInputs());
+    MakeInputs(ViewId { 203U }));
 
   CompositionPlanner planner(observer_ptr { &builder });
   planner.PlanCompositingTasks();
@@ -196,7 +197,7 @@ TEST(CompositionPlannerTest, SceneViewPlansDepthPrePassByDefault)
   std::array views { &view_impl };
   builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
     std::span<CompositionViewImpl* const> { views.data(), views.size() },
-    MakeInputs());
+    MakeInputs(ViewId { 204U }));
 
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
   const auto& plan = builder.GetFrameViewPackets().front().Plan();
@@ -215,7 +216,7 @@ TEST(CompositionPlannerTest, DisabledDepthPrePassPolicyPropagatesToScenePlan)
   CompositionViewImpl view_impl;
   PrepareView(view_impl, scene_view, *graphics, ViewId { 205U });
 
-  auto inputs = MakeInputs();
+  auto inputs = MakeInputs(ViewId { 205U });
   inputs.frame_settings.depth_prepass_mode = DepthPrePassMode::kDisabled;
 
   FramePlanBuilder builder;
@@ -245,7 +246,7 @@ TEST(CompositionPlannerTest, WireframeScenePlanDisablesDepthPrePass)
   std::array views { &view_impl };
   builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
     std::span<CompositionViewImpl* const> { views.data(), views.size() },
-    MakeInputs());
+    MakeInputs(ViewId { 206U }));
 
   ASSERT_EQ(builder.GetFrameViewPackets().size(), 1U);
   const auto& plan = builder.GetFrameViewPackets().front().Plan();
@@ -264,7 +265,7 @@ TEST(CompositionPlannerTest, DepthPrepassDebugModesForceNeutralToneMapping)
   CompositionViewImpl view_impl;
   PrepareView(view_impl, scene_view, *graphics, ViewId { 207U });
 
-  auto inputs = MakeInputs();
+  auto inputs = MakeInputs(ViewId { 207U });
   auto shader_pass_config = oxygen::engine::ShaderPassConfig {};
   shader_pass_config.debug_mode = ShaderDebugMode::kSceneDepthRaw;
   inputs.shader_pass_config = observer_ptr { &shader_pass_config };

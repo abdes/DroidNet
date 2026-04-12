@@ -29,11 +29,22 @@ struct ViewLifecycleService::State {
 };
 
 ViewLifecycleService::ViewLifecycleService(
-  engine::Renderer& renderer, RenderViewCoroutine render_view_coroutine)
-  : renderer_(observer_ptr { &renderer })
+  UpsertPublishedViewCallback upsert_published_view,
+  ResolvePublishedViewCallback resolve_published_view,
+  PruneStalePublishedViewsCallback prune_stale_published_views,
+  RegisterViewGraphCallback register_view_graph,
+  RenderViewCoroutine render_view_coroutine)
+  : upsert_published_view_(std::move(upsert_published_view))
+  , resolve_published_view_(std::move(resolve_published_view))
+  , prune_stale_published_views_(std::move(prune_stale_published_views))
+  , register_view_graph_(std::move(register_view_graph))
   , render_view_coroutine_(std::move(render_view_coroutine))
   , state_(std::make_unique<State>())
 {
+  DCHECK_NOTNULL_F(upsert_published_view_);
+  DCHECK_NOTNULL_F(resolve_published_view_);
+  DCHECK_NOTNULL_F(prune_stale_published_views_);
+  DCHECK_NOTNULL_F(register_view_graph_);
   DCHECK_NOTNULL_F(render_view_coroutine_);
 }
 
@@ -46,7 +57,6 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& context,
   state_->sorted_views.clear();
   state_->sorted_views.reserve(view_descs.size());
 
-  const auto frame_seq = context.GetFrameSequenceNumber();
   uint32_t index = 0;
   for (auto desc : view_descs) { // Copy so we can normalize viewport.
     if (desc.view.viewport.width <= 0 || desc.view.viewport.height <= 0) {
@@ -73,8 +83,8 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& context,
     }
 
     auto& view_impl = state_->view_pool[desc.id];
-    view_impl.PrepareForRender(desc, index++, frame_seq, graphics,
-      access::ViewLifecycleTagFactory::Get());
+    view_impl.PrepareForRender(
+      desc, index++, graphics, access::ViewLifecycleTagFactory::Get());
     state_->sorted_views.push_back(&view_impl);
   }
 
@@ -89,8 +99,8 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& context,
 
 void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
 {
-  DCHECK_NOTNULL_F(renderer_.get());
-  const auto published_view_id = view.GetPublishedViewId();
+  const auto published_view_id
+    = resolve_published_view_(view.GetDescriptor().id);
   CHECK_F(published_view_id != kInvalidViewId,
     "RegisterViewRenderGraph called for unpublished view '{}'",
     view.GetDescriptor().name);
@@ -98,13 +108,12 @@ void ViewLifecycleService::RegisterViewRenderGraph(CompositionViewImpl& view)
   renderer::SceneCameraViewResolver resolver(
     [camera](const ViewId&) -> scene::SceneNode { return camera; },
     view.GetDescriptor().view.viewport);
-  renderer_->RegisterViewRenderGraph(
+  register_view_graph_(
     published_view_id, render_view_coroutine_, resolver(published_view_id));
 }
 
 void ViewLifecycleService::PublishViews(engine::FrameContext& context)
 {
-  DCHECK_NOTNULL_F(renderer_.get());
   const auto build_view_context
     = [](const CompositionViewImpl& view,
         const ViewId exposure_view_id) -> engine::ViewContext {
@@ -141,18 +150,19 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
 
   for (auto* view : state_->sorted_views) {
     auto view_ctx = build_view_context(*view, kInvalidViewId);
-    if (view->GetPublishedViewId() == kInvalidViewId) {
-      view->SetPublishedViewId(context.RegisterView(std::move(view_ctx)),
-        access::ViewLifecycleTagFactory::Get());
+    const auto previous_published_view_id
+      = resolve_published_view_(view->GetDescriptor().id);
+    const auto published_view_id = upsert_published_view_(
+      context, view->GetDescriptor().id, std::move(view_ctx));
+    if (previous_published_view_id == kInvalidViewId) {
       LOG_F(INFO,
         "Registered View '{}' (IntentID: {}) with Engine "
         "(PublishedViewId: {})",
         view->GetDescriptor().name, view->GetDescriptor().id.get(),
-        view->GetPublishedViewId().get());
+        published_view_id.get());
     } else {
-      context.UpdateView(view->GetPublishedViewId(), std::move(view_ctx));
       DLOG_F(1, "Updated View '{}' (PublishedViewId: {})",
-        view->GetDescriptor().name, view->GetPublishedViewId().get());
+        view->GetDescriptor().name, published_view_id.get());
     }
   }
 
@@ -163,7 +173,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
   }
 
   for (auto* view : state_->sorted_views) {
-    const auto self_published_view_id = view->GetPublishedViewId();
+    const auto self_published_view_id
+      = resolve_published_view_(view->GetDescriptor().id);
     CHECK_F(self_published_view_id != kInvalidViewId,
       "View '{}' must be published before exposure resolution",
       view->GetDescriptor().name);
@@ -189,7 +200,7 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
         "frame",
         view->GetDescriptor().name, source_it->second.GetDescriptor().name);
 
-      resolved_exposure_view_id = source_it->second.GetPublishedViewId();
+      resolved_exposure_view_id = resolve_published_view_(requested_source_id);
       CHECK_F(resolved_exposure_view_id != kInvalidViewId,
         "View '{}' references exposure source '{}' before publication",
         view->GetDescriptor().name, source_it->second.GetDescriptor().name);
@@ -197,14 +208,13 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
 
     auto resolved_view_ctx
       = build_view_context(*view, resolved_exposure_view_id);
-    context.UpdateView(
-      view->GetPublishedViewId(), std::move(resolved_view_ctx));
+    upsert_published_view_(
+      context, view->GetDescriptor().id, std::move(resolved_view_ctx));
   }
 }
 
 void ViewLifecycleService::RegisterRenderGraphs()
 {
-  DCHECK_NOTNULL_F(renderer_.get());
   for (auto* view : state_->sorted_views) {
     RegisterViewRenderGraph(*view);
   }
@@ -212,26 +222,12 @@ void ViewLifecycleService::RegisterRenderGraphs()
 
 void ViewLifecycleService::UnpublishStaleViews(engine::FrameContext& context)
 {
-  DCHECK_NOTNULL_F(renderer_.get());
-  const auto current_frame = context.GetFrameSequenceNumber();
-  static constexpr frame::SequenceNumber kMaxIdleFrames { 60 };
-  for (auto it = state_->view_pool.begin(); it != state_->view_pool.end();) {
-    if (current_frame - it->second.GetLastSeenFrame() > kMaxIdleFrames) {
-      LOG_F(INFO, "Reaping View resources for ID {}", it->first);
-
-      if (it->second.GetPublishedViewId() != kInvalidViewId) {
-        LOG_F(INFO,
-          "Unpublishing View '{}' (PublishedViewId: {}) from Engine and "
-          "Renderer",
-          it->second.GetDescriptor().name,
-          it->second.GetPublishedViewId().get());
-        context.RemoveView(it->second.GetPublishedViewId());
-        renderer_->UnregisterViewRenderGraph(it->second.GetPublishedViewId());
-      }
-
-      it = state_->view_pool.erase(it);
-    } else {
-      ++it;
+  const auto stale_view_ids = prune_stale_published_views_(context);
+  for (const auto stale_view_id : stale_view_ids) {
+    if (const auto it = state_->view_pool.find(stale_view_id);
+      it != state_->view_pool.end()) {
+      LOG_F(INFO, "Reaping View resources for ID {}", stale_view_id);
+      state_->view_pool.erase(it);
     }
   }
 }

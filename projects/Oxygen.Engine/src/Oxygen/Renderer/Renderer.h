@@ -597,10 +597,22 @@ public:
   OXGN_RNDR_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
 
+  //! Upsert the published runtime view for a pipeline-authored intent view id.
+  OXGN_RNDR_API auto UpsertPublishedRuntimeView(FrameContext& frame_context,
+    ViewId intent_view_id, ViewContext view) -> ViewId;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto ResolvePublishedRuntimeViewId(
+    ViewId intent_view_id) const noexcept -> ViewId;
+  OXGN_RNDR_API auto RemovePublishedRuntimeView(
+    FrameContext& frame_context, ViewId intent_view_id) -> void;
+  OXGN_RNDR_API auto PruneStalePublishedRuntimeViews(
+    FrameContext& frame_context) -> std::vector<ViewId>;
+
   //! Unregister a previously published view render graph.
   /*!
-    Removes render graph entries and clears any cached per-view prepared state
-    in the renderer. Safe to call even when the view is not registered.
+    Removes render graph entries and clears any cached per-view prepared
+    state
+    in the renderer. Safe to call even when the view is not
+    registered.
 
     @param view_id The unique identifier for the view to remove
   */
@@ -725,6 +737,12 @@ public:
 
   OXGN_RNDR_NDAPI auto GetShadowManager() const noexcept
     -> observer_ptr<renderer::ShadowManager>;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto
+  GetConventionalShadowDepthTexture() const noexcept
+    -> std::shared_ptr<graphics::Texture>;
+  OXGN_RNDR_API auto ExecuteCurrentViewVirtualShadowShell(
+    const RenderContext& render_context, graphics::CommandRecorder& recorder,
+    observer_ptr<const graphics::Texture> scene_depth_texture) -> co::Co<>;
 
   OXGN_RNDR_NDAPI auto GetSkyAtmosphereLutManagerForView(
     ViewId view_id) const noexcept
@@ -747,14 +765,16 @@ public:
   OXGN_RNDR_NDAPI auto GetIblComputePass() const noexcept
     -> observer_ptr<IblComputePass>;
 
-  //! Update clustered-lighting state for the active view and republish the
-  //! current view's lighting routing without rebuilding shadow publications.
-  OXGN_RNDR_API auto UpdateCurrentViewLightCullingConfig(
-    const RenderContext& render_context, const LightCullingConfig& config)
-    -> void;
-  OXGN_RNDR_API auto UpdateCurrentViewVirtualShadowFrameBindings(
-    const RenderContext& render_context, const VsmFrameBindings& bindings)
-    -> void;
+  struct CurrentViewDynamicBindingsUpdate {
+    std::optional<LightCullingConfig> light_culling {};
+    std::optional<VsmFrameBindings> virtual_shadow {};
+  };
+
+  //! Update renderer-owned dynamic bindings for the active view and republish
+  //! only the current view's dynamic system bindings.
+  OXGN_RNDR_API auto UpdateCurrentViewDynamicBindings(
+    const RenderContext& render_context,
+    const CurrentViewDynamicBindingsUpdate& update) -> void;
 
   //=== Debug Overrides ===---------------------------------------------------//
 
@@ -880,6 +900,7 @@ private:
     graphics::CommandRecorder& recorder) -> co::Co<bool>;
   auto GetOrCreateSkyAtmosphereLutManagerForView(ViewId view_id)
     -> observer_ptr<internal::SkyAtmosphereLutManager>;
+  auto EvictPerViewCachedProducts(ViewId view_id) -> void;
   auto EvictInactivePerViewState(frame::SequenceNumber current_seq,
     const std::unordered_set<ViewId>& active_views) -> void;
 
@@ -978,7 +999,16 @@ private:
   std::unordered_map<ViewId, RenderGraphFactory> render_graphs_;
 
   mutable std::shared_mutex view_state_mutex_;
+  struct PublishedRuntimeViewState {
+    ViewId published_view_id { kInvalidViewId };
+    frame::SequenceNumber last_seen_frame { 0U };
+  };
+  static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {
+    60
+  };
   std::unordered_map<ViewId, bool> view_ready_states_;
+  std::unordered_map<ViewId, PublishedRuntimeViewState>
+    published_runtime_views_by_intent_;
 
   // Cache of resolved views published for the current frame before OnPreRender.
   // Used by OnPreRender/OnRender to ensure scene prep and rendering use the

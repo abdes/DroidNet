@@ -1428,8 +1428,11 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
       "VsmShadowRenderer: skipping live shell for view={} because no prepared "
       "view state was captured",
       view_id.get());
-    render_context.GetRenderer().UpdateCurrentViewVirtualShadowFrameBindings(
-      render_context, engine::VsmFrameBindings {});
+    render_context.GetRenderer().UpdateCurrentViewDynamicBindings(
+      render_context,
+      engine::Renderer::CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = engine::VsmFrameBindings {},
+      });
     co_return;
   }
 
@@ -1499,8 +1502,11 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
         view_id.get());
       cache_manager_.AbortFrame();
       frame_open = false;
-      render_context.GetRenderer().UpdateCurrentViewVirtualShadowFrameBindings(
-        render_context, engine::VsmFrameBindings {});
+      render_context.GetRenderer().UpdateCurrentViewDynamicBindings(
+        render_context,
+        engine::Renderer::CurrentViewDynamicBindingsUpdate {
+          .virtual_shadow = engine::VsmFrameBindings {},
+        });
       co_return;
     }
     const auto current_frame = *committed_frame;
@@ -1592,15 +1598,17 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
     co_await projection_pass_->Execute(render_context, recorder);
 
     const auto projection_output = projection_pass_->GetCurrentOutput(view_id);
-    render_context.GetRenderer().UpdateCurrentViewVirtualShadowFrameBindings(
+    render_context.GetRenderer().UpdateCurrentViewDynamicBindings(
       render_context,
-      engine::VsmFrameBindings {
-        .directional_shadow_mask_slot = projection_output.available
-          ? projection_output.directional_shadow_mask_srv_index
-          : kInvalidShaderVisibleIndex,
-        .screen_shadow_mask_slot = projection_output.available
-          ? projection_output.shadow_mask_srv_index
-          : kInvalidShaderVisibleIndex,
+      engine::Renderer::CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = engine::VsmFrameBindings {
+          .directional_shadow_mask_slot = projection_output.available
+            ? projection_output.directional_shadow_mask_srv_index
+            : kInvalidShaderVisibleIndex,
+          .screen_shadow_mask_slot = projection_output.available
+            ? projection_output.shadow_mask_srv_index
+            : kInvalidShaderVisibleIndex,
+        },
       });
 
     cache_manager_.QueueFrameExtraction(recorder);
@@ -1630,8 +1638,11 @@ auto VsmShadowRenderer::ExecutePreparedViewShell(
     }
     invalidation_pass_->ResetInput();
     page_request_generator_pass_->ResetFrameInputs();
-    render_context.GetRenderer().UpdateCurrentViewVirtualShadowFrameBindings(
-      render_context, engine::VsmFrameBindings {});
+    render_context.GetRenderer().UpdateCurrentViewDynamicBindings(
+      render_context,
+      engine::Renderer::CurrentViewDynamicBindingsUpdate {
+        .virtual_shadow = engine::VsmFrameBindings {},
+      });
     throw;
   }
   co_return;
