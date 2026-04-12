@@ -69,8 +69,9 @@ public:
     -> oxygen::engine::ModulePhaseMask override
   {
     using enum core::PhaseId;
-    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
-      kPublishViews, kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+    return engine::MakeModuleMask<kFrameStart, kInput, kSceneMutation,
+      kGameplay, kPublishViews, kGuiUpdate, kPreRender, kCompositing,
+      kFrameEnd>();
   }
 
   ~MainModule() override;
@@ -92,6 +93,7 @@ public:
 
   auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
     -> void override;
+  auto OnInput(observer_ptr<engine::FrameContext> context) -> co::Co<> override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGameplay(observer_ptr<engine::FrameContext> context)
