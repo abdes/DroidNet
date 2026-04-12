@@ -1,238 +1,288 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress (pre-execution baseline; scaffold exists but build integration is incomplete)`
+Status: `in_progress — Phase 0 incomplete (scaffold on disk, not in build graph)`
 
-This document is the resumability ledger for the Vortex renderer effort. It is
-the place to record what is actually in the repo, what has been verified, what
-is still missing, and exactly where implementation should resume next.
+This document is the **running resumability ledger** for the Vortex renderer.
+It records what is actually in the repo, what has been verified, what is still
+missing, and exactly where to resume. All claims must be evidence-backed.
 
 Related:
 
-- [PRD.md](./PRD.md)
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [DESIGN.md](./DESIGN.md)
-- [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)
-- [PLAN.md](./PLAN.md)
+- [PRD.md](./PRD.md) — stable product requirements
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — stable architecture
+- [DESIGN.md](./DESIGN.md) — evolving LLD (early draft)
+- [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — authoritative file layout
+- [PLAN.md](./PLAN.md) — active execution plan
 
-Historical references:
+## Ledger Rules
 
-- [parity-analysis.md](./parity-analysis.md) — rewrite-direction analysis that
-  informed the LLD package
-- [vortex-initial-design.md](./vortex-initial-design.md) — predecessor
-  migration sketch; no longer the active low-level design baseline
+1. **Evidence, not intention.** Every entry records what exists in code and
+   what validation was run, not what was planned or discussed.
+2. **No-false-completion.** A phase is `done` only when: code exists,
+   required docs are updated, and validation evidence is recorded here.
+3. **Missing-delta explicit.** If build or tests were not run, the phase
+   stays `in_progress` with the missing validation delta listed.
+4. **Scope-drift trigger.** If scope changes or the current design is found
+   incomplete, update design docs before claiming further progress.
+5. **Per-session update.** Each implementation session must update this file
+   with: changed files, commands run, results, and remaining blockers.
 
-## Current Verified Baseline
+## Phase Summary
 
-The repo currently contains a partial Vortex scaffold, not a validated
-implementation:
+| Phase | Name | Status | Blocker |
+| ----- | ---- | ------ | ------- |
+| 0 | Scaffold and Build Integration | `in_progress` | `add_subdirectory("Vortex")` not in parent CMake |
+| 1 | Substrate Migration | `not_started` | Phase 0 |
+| 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
+| 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
+| 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
+| 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
+| 6 | Legacy Deprecation | `not_started` | Phase 5 |
+| 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
 
-- `src/Oxygen/Vortex/CMakeLists.txt` declares the `Oxygen.Vortex` module, but
-  its file lists currently contain only `api_export.h`.
-- `src/Oxygen/Vortex/api_export.h` exists.
-- `src/Oxygen/Vortex/Test/CMakeLists.txt` exists, but the link test block is
-  still commented out.
-- `src/Oxygen/Vortex/` already contains the planned top-level directory tree,
-  but the directories are placeholders only (`.gitkeep` files).
-- `src/Oxygen/CMakeLists.txt` does **not** add `Vortex`, so the module is not
-  part of the main build graph yet.
-- The active production renderer remains `Oxygen.Renderer`; the current desktop
-  path is still driven by `Renderer` plus `ForwardPipeline`.
-- The three facade patterns Vortex must preserve already exist in the legacy
-  renderer: `ForSinglePassHarness()`, `ForRenderGraphHarness()`, and
-  `ForOffscreenScene()`.
+## Design Deliverable Tracker
 
-## Validation Evidence
+Each design deliverable required by PLAN.md is tracked here. A phase's
+implementation cannot begin until its design prerequisites are met.
 
-Validated in this session:
+| ID | Deliverable | Required By | Status | Location |
+| -- | ----------- | ----------- | ------ | -------- |
+| D.1 | SceneTextures four-part contract | Phase 2 | `not_started` | TBD (DESIGN.md update or standalone LLD) |
+| D.2 | SceneRenderBuilder bootstrap | Phase 2 | `not_started` | TBD |
+| D.3 | SceneRenderer shell dispatch | Phase 2 | `not_started` | TBD |
+| D.4 | Depth prepass LLD | Phase 3 | `not_started` | `design/vortex/lld/depth-prepass.md` |
+| D.5 | Base pass LLD | Phase 3 | `not_started` | `design/vortex/lld/base-pass.md` |
+| D.6 | Deferred lighting LLD | Phase 3 | `not_started` | `design/vortex/lld/deferred-lighting.md` |
+| D.7 | Shader contracts LLD | Phase 3 | `not_started` | `design/vortex/lld/shader-contracts.md` |
+| D.8 | InitViews LLD | Phase 3 | `not_started` | `design/vortex/lld/init-views.md` |
+| D.9 | LightingService LLD | Phase 4A | `not_started` | `design/vortex/lld/lighting-service.md` |
+| D.10 | PostProcessService LLD | Phase 4B | `not_started` | `design/vortex/lld/post-process-service.md` |
+| D.11 | ShadowService LLD | Phase 4C | `not_started` | `design/vortex/lld/shadow-service.md` |
+| D.12 | EnvironmentLightingService LLD | Phase 4D | `not_started` | `design/vortex/lld/environment-service.md` |
+| D.13 | Migration playbook | Phase 4E | `not_started` | `design/vortex/lld/migration-playbook.md` |
+| D.14 | DiagnosticsService LLD | Phase 5A | `not_started` | `design/vortex/lld/diagnostics-service.md` |
+| D.15 | TranslucencyModule LLD | Phase 5B | `not_started` | `design/vortex/lld/translucency.md` |
+| D.16 | OcclusionModule LLD | Phase 5C | `not_started` | `design/vortex/lld/occlusion.md` |
+| D.17 | Multi-view composition LLD | Phase 5D | `not_started` | `design/vortex/lld/multi-view-composition.md` |
+| D.18 | Offscreen rendering LLD | Phase 5E | `not_started` | `design/vortex/lld/offscreen-rendering.md` |
 
-- repo inspection:
-  - `src/Oxygen/Vortex/CMakeLists.txt`
-  - `src/Oxygen/Vortex/api_export.h`
-  - `src/Oxygen/Vortex/Test/CMakeLists.txt`
-  - `src/Oxygen/CMakeLists.txt`
-  - `src/Oxygen/Renderer/Renderer.h`
-  - `src/Oxygen/Renderer/Pipeline/ForwardPipeline.h`
-- build-system check:
-  - `cmake --build --preset windows-debug --target Oxygen.Vortex --parallel 4`
-  - Result: FAIL with `unknown target 'Oxygen.Vortex'`
-  - Meaning: the Vortex module scaffold exists on disk, but it is not wired
-    into the parent Oxygen CMake graph yet
+---
 
-Not validated in this session:
+## Documentation Sync Log
 
-- no successful Vortex target build
-- no Vortex link test
-- no Vortex unit tests
-- no runtime smoke
+### 2026-04-13 — PLAN.md synchronization
 
-## Current Status by Slice
+- Changed files this session:
+  - `design/vortex/PLAN.md`
+- Commands used for verification:
+  - repo inspection via `rg`
+  - targeted section rereads
+  - `git diff -- design/vortex/PLAN.md`
+- Result:
+  - PLAN.md now explicitly covers Phase 2 activation/validation for `Stencil`
+    and `CustomDepth`
+  - Phase 5 feature-gated runtime validation now includes `no-shadowing` and
+    `no-volumetrics`
+  - Phase 7 now maps `MegaLights-class lighting extensions`,
+    `Heterogeneous volumes`, and `Hair strands` to explicit future activation
+    slots
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run
+  - no phase status changed
+- Ledger impact:
+  - Phase 2 work-item list below must include 2.12 from the updated plan
+  - Phase 5 runtime-variant scope below must reflect the expanded PRD §6.6 set
+- Remaining blocker:
+  - Phase 0 is still incomplete; no implementation progress is claimed from this
+    documentation-only session
 
-### V.0 Scaffold
+---
 
-Status: `in_progress`
+## Phase 0 — Scaffold and Build Integration
 
-Implemented evidence:
+**Status:** `in_progress`
 
-- `src/Oxygen/Vortex/` directory tree exists
-- `src/Oxygen/Vortex/CMakeLists.txt` exists
-- `src/Oxygen/Vortex/api_export.h` exists
-- `src/Oxygen/Vortex/Test/CMakeLists.txt` exists
+### What Exists
 
-Remaining to clear exit gate:
+| Item | Path | Verified |
+| ---- | ---- | -------- |
+| Directory tree | `src/Oxygen/Vortex/` (subdirs with `.gitkeep`) | Yes — repo inspection |
+| CMakeLists.txt | `src/Oxygen/Vortex/CMakeLists.txt` | Yes — declares `Oxygen.Vortex`, links deps, C++23 |
+| Export header | `src/Oxygen/Vortex/api_export.h` | Yes — exists |
+| Test CMake | `src/Oxygen/Vortex/Test/CMakeLists.txt` | Yes — link test block commented out |
 
-- add `add_subdirectory("Vortex")` to `src/Oxygen/CMakeLists.txt`
-- confirm the target name/alias emitted by the module matches the intended
-  `oxygen::vortex` linkage surface
-- run a successful build of the Vortex module through the normal preset
+### What Is Missing
 
-Resume point:
+| Item | Detail |
+| ---- | ------ |
+| Parent CMake wiring | `src/Oxygen/CMakeLists.txt` does NOT contain `add_subdirectory("Vortex")` |
+| Successful build | `cmake --build --preset windows-debug --target Oxygen.Vortex` fails: "unknown target" |
+| Target alias verification | `oxygen::vortex` not verified |
 
-- wire the module into the parent CMake graph first; do not start copying
-  implementation slices while the scaffold target is still absent from the
-  build
+### Validation Log
 
-### V.1 Cross-Cutting Types
+| Date | Command | Result |
+| ---- | ------- | ------ |
+| (initial) | `cmake --build --preset windows-debug --target Oxygen.Vortex --parallel 4` | FAIL — "unknown target 'Oxygen.Vortex'" |
 
-Status: `not started`
+### Resume Point
 
-Required baseline:
+Wire `add_subdirectory("Vortex")` into `src/Oxygen/CMakeLists.txt`, then verify
+the target builds with an empty source set.
 
-- copy the pipeline-agnostic type headers from legacy `Renderer/Types/`
-- rename namespace/include/export-macro surfaces to `oxygen::vortex` and
-  `OXGN_VRTX_*`
-- add the headers to `OXYGEN_VORTEX_HEADERS`
+---
 
-Exit gate:
+## Phase 1 — Substrate Migration
 
-- full build passes with the copied type headers in the Vortex target
+**Status:** `not_started`
 
-### V.2 Upload, Resources, ScenePrep
+### Steps (from PLAN.md §3)
 
-Status: `not started`
+| Step | Task | Status | Evidence |
+| ---- | ---- | ------ | -------- |
+| 1.1 | Cross-cutting types (14 headers) | `not_started` | — |
+| 1.2 | Upload subsystem (14 files) | `not_started` | — |
+| 1.3 | Resources subsystem (7 files) | `not_started` | — |
+| 1.4 | ScenePrep subsystem (15 files) | `not_started` | — |
+| 1.5 | Internal utilities (7 files) | `not_started` | — |
+| 1.6 | Pass base classes (3 files) | `not_started` | — |
+| 1.7 | View assembly + composition | `not_started` | — |
+| 1.8 | Renderer orchestrator | `not_started` | — |
+| 1.9 | Smoke test | `not_started` | — |
 
-Required baseline:
+### Resume Point
 
-- copy `Upload/`, `Resources/`, and `ScenePrep/` into `src/Oxygen/Vortex/`
-- keep this slice mechanical only
+Phase 0 must be completed first.
 
-Exit gate:
+---
 
-- full build passes
+## Phase 2 — SceneTextures + SceneRenderer Shell
 
-### V.3 Internal Utilities
+**Status:** `not_started`
 
-Status: `not started`
+### Design Prerequisites
 
-Required baseline:
+| Deliverable | Status |
+| ----------- | ------ |
+| D.1 SceneTextures four-part contract | `not_started` |
+| D.2 SceneRenderBuilder bootstrap | `not_started` |
+| D.3 SceneRenderer shell dispatch | `not_started` |
 
-- copy the renderer-core internal utilities called out in
-  `vortex-initial-design.md`
+### Work Items (from PLAN.md §4)
 
-Exit gate:
+| ID | Task | Status | Evidence |
+| -- | ---- | ------ | -------- |
+| 2.1–2.4 | SceneTextures four-part contract | `not_started` | — |
+| 2.5 | ShadingMode enum | `not_started` | — |
+| 2.6 | SceneRenderBuilder | `not_started` | — |
+| 2.7 | SceneRenderer shell (23-stage skeleton) | `not_started` | — |
+| 2.8 | Wire SceneRenderer into Renderer | `not_started` | — |
+| 2.9 | PostRenderCleanup | `not_started` | — |
+| 2.10 | ResolveSceneColor | `not_started` | — |
+| 2.11 | Stages directory structure | `not_started` | — |
+| 2.12 | Validate first active `SceneTextures` subset (`SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`, `Velocity`, `CustomDepth`) | `not_started` | — |
 
-- full build passes
+### Resume Point
 
-### V.4 Pass Base Classes
+Phase 1 + design deliverables D.1–D.3 must be completed first.
 
-Status: `not started`
+---
 
-Required baseline:
+## Phase 3 — Deferred Core
 
-- copy the base pass classes into `src/Oxygen/Vortex/Passes/`
-- adapt `RenderPass` to the Vortex `RenderContext`
+**Status:** `not_started`
 
-Exit gate:
+### Design Prerequisites
 
-- full build passes
+| Deliverable | Status |
+| ----------- | ------ |
+| D.4 Depth prepass LLD | `not_started` |
+| D.5 Base pass LLD | `not_started` |
+| D.6 Deferred lighting LLD | `not_started` |
+| D.7 Shader contracts LLD | `not_started` |
+| D.8 InitViews LLD | `not_started` |
 
-### V.5 Pipeline Framework
+### Resume Point
 
-Status: `not started`
+Phase 2 + design deliverables D.4–D.8 must be completed first.
 
-Required baseline:
+---
 
-- copy the pipeline framework into `src/Oxygen/Vortex/Pipeline/`
-- update pipeline types to point at Vortex-owned types instead of legacy ones
+## Phase 4 — Migration-Critical Services + First Migration
 
-Exit gate:
+**Status:** `not_started`
 
-- full build passes
+### Per-Service Status
 
-### V.6 Renderer Orchestrator
+| Service | Deliverable | Design Status | Impl Status |
+| ------- | ----------- | ------------- | ----------- |
+| 4A LightingService | D.9 | `not_started` | `not_started` |
+| 4B PostProcessService | D.10 | `not_started` | `not_started` |
+| 4C ShadowService | D.11 | `not_started` | `not_started` |
+| 4D EnvironmentLightingService | D.12 | `not_started` | `not_started` |
+| 4E Examples/Async migration | D.13 | `not_started` | `not_started` |
+| 4F Composition/presentation validation | — | — | `not_started` |
 
-Status: `not started`
+### Resume Point
 
-Required baseline:
+Phase 3 must be completed first. 4A–4D are parallelizable. 4E requires all
+four services. 4F follows 4E.
 
-- copy the renderer shell and direct dependencies into `src/Oxygen/Vortex/`
-- strip domain-specific environment, shadow, lighting, diagnostics, and VSM
-  ownership from the initial Vortex renderer
-- preserve the frame loop skeleton, view registry, composition queue, upload
-  services, capability queries, and the three non-runtime facades
+---
 
-Exit gate:
+## Phase 5 — Remaining Services + Runtime Scenarios
 
-- full build passes
-- Vortex renderer instantiates with an empty capability set
-- frame loop executes as an empty shell without domain systems
+**Status:** `not_started`
 
-### V.7 Smoke Test
+### Per-Item Status
 
-Status: `not started`
+| Item | Deliverable | Design Status | Impl Status |
+| ---- | ----------- | ------------- | ----------- |
+| 5A DiagnosticsService | D.14 | `not_started` | `not_started` |
+| 5B TranslucencyModule | D.15 | `not_started` | `not_started` |
+| 5C OcclusionModule | D.16 | `not_started` | `not_started` |
+| 5D Multi-view / per-view mode | D.17 | `not_started` | `not_started` |
+| 5E Offscreen / facade validation | D.18 | `not_started` | `not_started` |
+| 5F Feature-gated runtime variants (`depth-only`, `shadow-only`, `no-environment`, `no-shadowing`, `no-volumetrics`, `diagnostics-only`) | — | — | `not_started` |
 
-Required baseline:
+### Resume Point
 
-- add `src/Oxygen/Vortex/Test/Link_test.cpp`
-- enable the commented link-test block in `src/Oxygen/Vortex/Test/CMakeLists.txt`
+Phase 4 must be completed first. 5A–5E are parallelizable. 5F requires all
+services.
 
-Exit gate:
+---
 
-- Vortex link test passes
-- full build passes
+## Phase 6 — Legacy Deprecation
+
+**Status:** `not_started`
+
+### Resume Point
+
+Phase 5 must be completed first.
+
+---
 
 ## Architectural Resume Notes
 
 When implementation resumes, keep these baseline facts explicit:
 
-- the active Vortex source-of-truth package is:
-  `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `PROJECT-LAYOUT.md`, and `PLAN.md`
-- Vortex is a replacement desktop renderer module, not an incremental rename of
-  the current forward-first renderer.
+- The active Vortex source-of-truth package is:
+  `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `PROJECT-LAYOUT.md`, `PLAN.md`,
+  and this file.
+- DESIGN.md is an **early draft** — it covers illustrative shapes (SceneRenderer
+  class structure, SceneTextures allocation, GBuffer format, frame dispatch,
+  subsystem contracts, base pass, deferred lighting, substrate adaptation,
+  shader organization) but is NOT complete LLD. Missing areas include:
+  SceneTextureSetupMode, SceneTextureBindings, SceneTextureExtracts,
+  InitViewsModule, SceneRenderBuilder, velocity distribution, extraction/handoff,
+  per-subsystem LLD.
+- Each phase in PLAN.md identifies specific design deliverables that must be
+  completed before implementation begins.
 - The current legacy renderer is still the live implementation and the current
   source of reusable substrate.
-- The first production-shaped compatibility surface to preserve is the trio of
-  non-runtime facades.
-- The current desktop runtime architecture is still `ForwardPipeline`-driven,
-  so any claim that Vortex is active must be backed by concrete code and build
-  evidence, not by design docs alone.
-
-## Update Rules For This File
-
-Each implementation session must update this document with evidence, not
-intention.
-
-Required on every meaningful change:
-
-- changed files
-- commands run
-- result of each validation command
-- exact remaining blocker to the next exit gate
-
-Mandatory discipline:
-
-- do not mark a slice complete unless code exists, related docs are updated,
-  and validation evidence is recorded here
-- if build or tests were not run, keep the slice `in_progress` and list the
-  missing validation delta explicitly
-- if scope changes or the current design is found incomplete, update the vortex
-  design docs before claiming further implementation progress
-
-## Recommended Next Step
-
-1. Keep future Vortex implementation and status updates aligned to the current
-   five-document LLD package:
-   `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `PROJECT-LAYOUT.md`, and
-   `PLAN.md`.
-2. Finish V.0 by wiring `src/Oxygen/Vortex` into `src/Oxygen/CMakeLists.txt`
-   and proving the target builds.
-3. Only then begin the mechanical copy slices V.1 through V.5.
+- Referenced historical documents `vortex-initial-design.md` and
+  `parity-analysis.md` do not exist in the repo; the current five-document
+  package supersedes them.
+- The active production path is `Oxygen.Renderer` + `ForwardPipeline`.
+- Use frame 10 as the RenderDoc baseline capture point.
