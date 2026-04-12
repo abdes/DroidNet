@@ -29,6 +29,8 @@
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Renderer/Test/Resources/GeometryUploaderTest.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
 
 namespace {
@@ -486,7 +488,9 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, FinalizeCreatesDefaultForwardPipeline)
   facade.SetSceneSource(Renderer::SceneSourceInput {
     .scene = observer_ptr<oxygen::scene::Scene> { scene_.get() },
   });
-  facade.SetViewIntent(MakeViewIntent());
+  auto view_intent = MakeViewIntent();
+  view_intent.SetWithAtmosphere(true);
+  facade.SetViewIntent(std::move(view_intent));
   facade.SetOutputTarget(MakeOutputTarget());
 
   auto result = facade.Finalize();
@@ -580,6 +584,36 @@ NOLINT_TEST_F(
   EXPECT_EQ(stats.last_frame.views, 1U);
   EXPECT_EQ(stats.last_frame.scene_views, 1U);
   EXPECT_GT(stats.last_frame.render_graph_ms, 0.0);
+}
+
+NOLINT_TEST_F(OffscreenSceneFacadeTest,
+  ExecuteDefaultForwardPipelinePublishesEnvironmentThroughService)
+{
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+  environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  scene_->SetEnvironment(std::move(environment));
+
+  auto facade = renderer_->ForOffscreenScene();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 0U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 7U },
+  });
+  facade.SetSceneSource(Renderer::SceneSourceInput {
+    .scene = observer_ptr<oxygen::scene::Scene> { scene_.get() },
+  });
+  facade.SetViewIntent(MakeViewIntent());
+  facade.SetOutputTarget(MakeOutputTarget());
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  NOLINT_EXPECT_NO_THROW(oxygen::co::Run(
+    loop, [&]() -> oxygen::co::Co<void> { co_await result->Execute(); }));
+
+  EXPECT_NE(renderer_->GetEnvironmentStaticDataManager().get(), nullptr);
+  EXPECT_NE(renderer_->GetIblManager().get(), nullptr);
+  EXPECT_NE(renderer_->GetIblComputePass().get(), nullptr);
 }
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest,

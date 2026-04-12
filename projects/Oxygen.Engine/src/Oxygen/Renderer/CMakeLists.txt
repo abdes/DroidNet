@@ -175,6 +175,8 @@ set(
   "ImGui/ImGuiPass.cpp"
   "ImGui/GpuTimelinePanel.cpp"
   "ImGui/GpuTimelinePresentationSmoother.cpp"
+  "Environment/EnvironmentLightingService.cpp"
+  "Environment/EnvironmentLightingService.h"
   "Internal/BlueNoiseData.h"
   "Internal/BrdfLutManager.cpp"
   "Internal/BrdfLutManager.h"
