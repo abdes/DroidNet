@@ -1,4 +1,4 @@
 ConanPresets-*.json
-.omx
-conductor
+.omx/
+conductor/
 .planning/
