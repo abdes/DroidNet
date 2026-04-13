@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -117,8 +118,20 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   const auto offset = partition_base + head;
   head += aligned;
 
-  Allocation out(
-    buffer_, OffsetBytes { offset }, SizeBytes { bytes }, mapped_ptr_ + offset);
+  CHECK_LE_F(offset, capacity_,
+    "RingBufferStaging allocation offset {} exceeds capacity {}", offset,
+    capacity_);
+  CHECK_LE_F(bytes, capacity_ - offset,
+    "RingBufferStaging allocation size {} at offset {} exceeds capacity {}",
+    bytes, offset, capacity_);
+
+  auto mapped_bytes
+    = std::span<std::byte> { mapped_ptr_, static_cast<std::size_t>(capacity_) };
+  auto allocation_bytes = mapped_bytes.subspan(
+    static_cast<std::size_t>(offset), static_cast<std::size_t>(bytes));
+
+  Allocation out(buffer_, OffsetBytes { offset }, SizeBytes { bytes },
+    allocation_bytes.data());
 
   // Record that this partition observed the current retire counter at the
   // time of allocation. If we later reuse this partition without retire_count_
@@ -299,7 +312,8 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   const auto current = capacity_per_partition_;
   const auto baseline = current > 0 ? current : kInitialBytesPerPartition;
   const auto grow = current > 0
-    ? static_cast<std::uint64_t>(current * (1.0 + static_cast<double>(slack_)))
+    ? static_cast<std::uint64_t>(
+        static_cast<double>(current) * (1.0 + static_cast<double>(slack_)))
     : baseline;
   // Grow to fit the current bump head plus the new allocation.
   // Using only `required` here can under-size the new partition capacity,

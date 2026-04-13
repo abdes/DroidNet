@@ -37,13 +37,13 @@ namespace oxygen::vortex::sceneprep {
 class ScenePrepState {
 public:
   struct ViewLocalData {
-    std::vector<RenderItemData> collected_items {};
-    std::vector<std::size_t> retained_indices {};
-    std::vector<PassMask> pass_masks {};
+    std::vector<RenderItemData> collected_items;
+    std::vector<std::size_t> retained_indices;
+    std::vector<PassMask> pass_masks;
   };
 
   struct CachedNodeBasics {
-    scene::NodeHandle node_handle {};
+    scene::NodeHandle node_handle;
     bool cast_shadows { true };
     bool receive_shadows { true };
     glm::mat4 world_transform { 1.0F };

@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
@@ -90,7 +91,7 @@ struct RenderContext {
   frame::SequenceNumber frame_sequence { 0 };
   std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
     view_outputs;
-  float delta_time { 1.0F / 60.0F };
+  float delta_time { time::SimulationClock::kMinDeltaTimeSeconds };
   observer_ptr<oxygen::scene::Scene> scene { nullptr };
 
   [[nodiscard]] auto GetSceneMutable() noexcept
@@ -148,7 +149,7 @@ struct RenderContext {
     scene.reset(nullptr);
     frame_slot = frame::kInvalidSlot;
     frame_sequence = frame::SequenceNumber {};
-    delta_time = 1.0F / 60.0F;
+    delta_time = time::SimulationClock::kMinDeltaTimeSeconds;
     pass_enable_flags.clear();
   }
 

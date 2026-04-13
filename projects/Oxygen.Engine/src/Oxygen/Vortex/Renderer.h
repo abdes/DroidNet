@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <chrono>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -16,7 +15,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -25,6 +23,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
@@ -90,7 +89,7 @@ public:
   struct FrameSessionInput {
     frame::Slot frame_slot { frame::kInvalidSlot };
     frame::SequenceNumber frame_sequence { 1U };
-    float delta_time_seconds { 1.0F / 60.0F };
+    float delta_time_seconds { time::SimulationClock::kMinDeltaTimeSeconds };
     observer_ptr<scene::Scene> scene { nullptr };
   };
 
@@ -109,7 +108,7 @@ public:
 
   struct CoreShaderInputsInput {
     ViewId view_id {};
-    ViewConstants value {};
+    ViewConstants value;
   };
 
   class ValidatedSinglePassHarnessContext {
@@ -148,16 +147,18 @@ public:
     auto Release() noexcept -> void;
 
     observer_ptr<Renderer> renderer_ { nullptr };
-    std::unique_ptr<RenderContext> render_context_
-      { std::make_unique<RenderContext>() };
-    std::optional<ResolvedView> current_resolved_view_ {};
-    std::optional<PreparedSceneFrame> current_prepared_frame_ {};
+    std::unique_ptr<RenderContext> render_context_ {
+      std::make_unique<RenderContext>()
+    };
+    std::optional<ResolvedView> current_resolved_view_;
+    std::optional<PreparedSceneFrame> current_prepared_frame_;
     bool active_ { false };
   };
 
   class SinglePassHarnessFacade {
   public:
     OXGN_VRTX_API explicit SinglePassHarnessFacade(Renderer& renderer) noexcept;
+    ~SinglePassHarnessFacade() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(SinglePassHarnessFacade)
     OXYGEN_DEFAULT_MOVABLE(SinglePassHarnessFacade)
@@ -180,11 +181,11 @@ public:
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
-    std::optional<FrameSessionInput> frame_session_ {};
-    std::optional<OutputTargetInput> output_target_ {};
-    std::optional<ResolvedViewInput> resolved_view_ {};
-    std::optional<PreparedFrameInput> prepared_frame_ {};
-    std::optional<CoreShaderInputsInput> core_shader_inputs_ {};
+    std::optional<FrameSessionInput> frame_session_;
+    std::optional<OutputTargetInput> output_target_;
+    std::optional<ResolvedViewInput> resolved_view_;
+    std::optional<PreparedFrameInput> prepared_frame_;
+    std::optional<CoreShaderInputsInput> core_shader_inputs_;
   };
 
   using RenderGraphHarnessInput = std::function<co::Co<void>(
@@ -192,6 +193,8 @@ public:
 
   class ValidatedRenderGraphHarness {
   public:
+    ~ValidatedRenderGraphHarness() = default;
+
     ValidatedRenderGraphHarness(ValidatedSinglePassHarnessContext context,
       RenderGraphHarnessInput graph, ViewId view_id)
       : context_(std::move(context))
@@ -217,7 +220,7 @@ public:
 
     auto Execute(graphics::CommandRecorder& recorder) const -> co::Co<void>
     {
-      auto& render_context = context_.GetRenderContext();
+      const auto& render_context = context_.GetRenderContext();
       render_context.ClearRegisteredPasses();
       co_await graph_(view_id_, render_context, recorder);
     }
@@ -232,6 +235,7 @@ public:
   public:
     OXGN_VRTX_API explicit RenderGraphHarnessFacade(
       Renderer& renderer) noexcept;
+    ~RenderGraphHarnessFacade() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(RenderGraphHarnessFacade)
     OXYGEN_DEFAULT_MOVABLE(RenderGraphHarnessFacade)
@@ -256,12 +260,12 @@ public:
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
-    std::optional<FrameSessionInput> frame_session_ {};
-    std::optional<OutputTargetInput> output_target_ {};
-    std::optional<ResolvedViewInput> resolved_view_ {};
-    std::optional<PreparedFrameInput> prepared_frame_ {};
-    std::optional<CoreShaderInputsInput> core_shader_inputs_ {};
-    std::optional<RenderGraphHarnessInput> render_graph_ {};
+    std::optional<FrameSessionInput> frame_session_;
+    std::optional<OutputTargetInput> output_target_;
+    std::optional<ResolvedViewInput> resolved_view_;
+    std::optional<PreparedFrameInput> prepared_frame_;
+    std::optional<CoreShaderInputsInput> core_shader_inputs_;
+    std::optional<RenderGraphHarnessInput> render_graph_;
   };
 
   struct SceneSourceInput {
@@ -305,6 +309,7 @@ public:
       FrameSessionInput frame_session, SceneSourceInput scene_source,
       OffscreenSceneViewInput view_intent, OutputTargetInput output_target,
       OffscreenPipelineInput pipeline);
+    ~ValidatedOffscreenSceneSession() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(ValidatedOffscreenSceneSession)
     OXYGEN_DEFAULT_MOVABLE(ValidatedOffscreenSceneSession)
@@ -320,7 +325,7 @@ public:
     observer_ptr<Renderer> renderer_ { nullptr };
     FrameSessionInput frame_session_ {};
     SceneSourceInput scene_source_ {};
-    OffscreenSceneViewInput view_intent_ {};
+    OffscreenSceneViewInput view_intent_;
     OutputTargetInput output_target_ {};
     OffscreenPipelineInput pipeline_ {};
   };
@@ -328,6 +333,7 @@ public:
   class OffscreenSceneFacade {
   public:
     OXGN_VRTX_API explicit OffscreenSceneFacade(Renderer& renderer) noexcept;
+    ~OffscreenSceneFacade() = default;
 
     OXYGEN_MAKE_NON_COPYABLE(OffscreenSceneFacade)
     OXYGEN_DEFAULT_MOVABLE(OffscreenSceneFacade)
@@ -336,7 +342,7 @@ public:
       -> OffscreenSceneFacade&;
     OXGN_VRTX_API auto SetSceneSource(SceneSourceInput scene)
       -> OffscreenSceneFacade&;
-    OXGN_VRTX_API auto SetViewIntent(OffscreenSceneViewInput view)
+    OXGN_VRTX_API auto SetViewIntent(const OffscreenSceneViewInput& view)
       -> OffscreenSceneFacade&;
     OXGN_VRTX_API auto SetOutputTarget(OutputTargetInput target)
       -> OffscreenSceneFacade&;
@@ -350,11 +356,11 @@ public:
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
-    std::optional<FrameSessionInput> frame_session_ {};
-    std::optional<SceneSourceInput> scene_source_ {};
-    std::optional<OffscreenSceneViewInput> view_intent_ {};
-    std::optional<OutputTargetInput> output_target_ {};
-    std::optional<OffscreenPipelineInput> pipeline_ {};
+    std::optional<FrameSessionInput> frame_session_;
+    std::optional<SceneSourceInput> scene_source_;
+    std::optional<OffscreenSceneViewInput> view_intent_;
+    std::optional<OutputTargetInput> output_target_;
+    std::optional<OffscreenPipelineInput> pipeline_;
   };
 
   struct LastFrameStats {
@@ -511,7 +517,7 @@ private:
     kPhase1DefaultRuntimeCapabilityFamilies
   };
 
-  ViewConstants view_const_cpu_ {};
+  ViewConstants view_const_cpu_;
   std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;
   std::unique_ptr<upload::UploadCoordinator> uploader_;
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
@@ -533,7 +539,7 @@ private:
 
   struct PendingComposition {
     CompositionSubmission submission {};
-    std::shared_ptr<graphics::Surface> target_surface {};
+    std::shared_ptr<graphics::Surface> target_surface;
     std::uint64_t sequence_in_frame { 0 };
   };
 
@@ -542,7 +548,8 @@ private:
   std::uint64_t next_composition_sequence_in_frame_ { 0 };
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
-  float last_frame_dt_seconds_ { 1.0F / 60.0F };
+  float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };
+  bool shutdown_called_ { false };
   observer_ptr<console::Console> console_ { nullptr };
 };
 

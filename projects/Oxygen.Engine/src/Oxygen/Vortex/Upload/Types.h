@@ -13,7 +13,6 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -44,7 +43,7 @@ namespace oxygen::vortex::upload {
  - kCreated: New buffer created (first call, previously absent).
  - kResized: Existing buffer replaced with a larger one.
 */
-enum class EnsureBufferResult { kUnchanged, kCreated, kResized };
+enum class EnsureBufferResult : uint8_t { kUnchanged, kCreated, kResized };
 
 using TicketId = NamedType<uint64_t, struct TicketIdTag,
   // clang-format off
@@ -96,7 +95,7 @@ struct UploadSubresource {
 };
 
 struct UploadDataView {
-  std::span<const std::byte> bytes {};
+  std::span<const std::byte> bytes;
 };
 
 //! Source texel data view for texture uploads.
@@ -111,7 +110,7 @@ struct UploadDataView {
  slice_pitch is typically row_pitch * num_rows.
 */
 struct UploadTextureSourceSubresource {
-  std::span<const std::byte> bytes {};
+  std::span<const std::byte> bytes;
   uint32_t row_pitch { 0 };
   uint32_t slice_pitch { 0 };
 };
@@ -124,7 +123,7 @@ struct UploadTextureSourceSubresource {
  their corresponding source subresource indices.
 */
 struct UploadTextureSourceView {
-  std::vector<UploadTextureSourceSubresource> subresources {};
+  std::vector<UploadTextureSourceSubresource> subresources;
 };
 
 #if defined(__cpp_lib_move_only_function)                                      \
@@ -140,7 +139,7 @@ struct UploadRequest {
   std::string debug_name;
 
   std::variant<UploadBufferDesc, UploadTextureDesc> desc;
-  std::vector<UploadSubresource> subresources {};
+  std::vector<UploadSubresource> subresources;
 
   // For buffers: UploadDataView or UploadProducer.
   // For textures: UploadTextureSourceView or UploadProducer.

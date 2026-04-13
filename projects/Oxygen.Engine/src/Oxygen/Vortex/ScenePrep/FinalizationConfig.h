@@ -33,14 +33,14 @@ template < // clang-format off
   typename DrawMetadataUploadFT = void
 > // clang-format on
 struct FinalizationConfig {
-  struct _DummyStage {
+  struct DummyStage_ {
     template <typename... Args>
     constexpr void operator()(Args&&...) const noexcept
     {
     }
   };
   template <typename T>
-  using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
+  using StageOrDummy = std::conditional_t<std::is_void_v<T>, DummyStage_, T>;
 
   // Essential stages (use `void` to omit)
   [[no_unique_address]] StageOrDummy<DrawMetadataEmitFT> draw_md_emit {};

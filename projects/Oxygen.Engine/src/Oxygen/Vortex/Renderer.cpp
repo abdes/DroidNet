@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -42,6 +43,9 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 namespace oxygen::vortex {
 
 namespace {
+
+  constexpr auto kRendererStagingAlignment
+    = packing::kStructuredBufferAlignment;
 
   auto ResolveViewOutputTexture(const engine::FrameContext& context,
     const ViewId view_id) -> std::shared_ptr<graphics::Texture>
@@ -98,8 +102,8 @@ namespace {
   }
 
   auto TrackCompositionSourceTexture(graphics::ResourceRegistry& registry,
-    graphics::CommandRecorder& recorder,
-    const graphics::Texture& texture) -> void
+    graphics::CommandRecorder& recorder, const graphics::Texture& texture)
+    -> void
   {
     CHECK_F(registry.Contains(texture),
       "Vortex: composition source texture '{}' must be registered in the "
@@ -133,10 +137,10 @@ namespace {
     const auto& src_desc = source.GetDescriptor();
     const auto& dst_desc = backbuffer.GetDescriptor();
 
-    const uint32_t dst_x = static_cast<uint32_t>(
-      std::clamp(viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
-    const uint32_t dst_y = static_cast<uint32_t>(
-      std::clamp(viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
+    const uint32_t dst_x = static_cast<uint32_t>(std::clamp(
+      viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
+    const uint32_t dst_y = static_cast<uint32_t>(std::clamp(
+      viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
 
     const uint32_t max_dst_w
       = dst_desc.width > dst_x ? dst_desc.width - dst_x : 0U;
@@ -150,8 +154,10 @@ namespace {
       return;
     }
 
-    recorder.RequireResourceState(source, graphics::ResourceStates::kCopySource);
-    recorder.RequireResourceState(backbuffer, graphics::ResourceStates::kCopyDest);
+    recorder.RequireResourceState(
+      source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(
+      backbuffer, graphics::ResourceStates::kCopyDest);
     recorder.FlushBarriers();
 
     const graphics::TextureSlice src_slice {
@@ -201,16 +207,16 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
 
   uploader_ = std::make_unique<upload::UploadCoordinator>(
     observer_ptr { gfx.get() }, policy);
-  upload_staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16,
-      upload::kDefaultRingBufferStagingSlack, "Vortex.UploadStaging");
+  upload_staging_provider_ = uploader_->CreateRingBufferStaging(
+    frame::kFramesInFlight, kRendererStagingAlignment,
+    upload::kDefaultRingBufferStagingSlack, "Vortex.UploadStaging");
 
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
   inline_staging_provider_ = std::make_shared<upload::RingBufferStaging>(
     upload::internal::UploaderTagFactory::Get(), observer_ptr { gfx.get() },
-    frame::kFramesInFlight, 16, upload::kDefaultRingBufferStagingSlack,
-    "Vortex.InlineStaging");
+    frame::kFramesInFlight, kRendererStagingAlignment,
+    upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   render_context_pool_
@@ -223,10 +229,17 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 {
 }
 
-Renderer::~Renderer() { OnShutdown(); }
+Renderer::~Renderer()
+{
+  CHECK_F(shutdown_called_,
+    "Renderer destroyed without prior OnShutdown(); EngineModule users must "
+    "call OnShutdown() before destruction");
+}
 
 auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 {
+  CHECK_F(!shutdown_called_,
+    "Renderer::OnAttached() must not be called after shutdown");
   engine_ = engine;
   return true;
 }
@@ -244,6 +257,11 @@ auto Renderer::ApplyConsoleCVars(
 
 auto Renderer::OnShutdown() noexcept -> void
 {
+  if (shutdown_called_) {
+    return;
+  }
+  shutdown_called_ = true;
+
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
@@ -253,6 +271,8 @@ auto Renderer::OnShutdown() noexcept -> void
   resolved_views_.clear();
   view_ready_states_.clear();
   published_runtime_views_by_intent_.clear();
+  console_.reset();
+  engine_.reset();
 }
 
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
@@ -278,7 +298,8 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   const auto dt_seconds
     = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get())
         .count();
-  last_frame_dt_seconds_ = dt_seconds > 0.0F ? dt_seconds : 1.0F / 60.0F;
+  CHECK_GT_F(dt_seconds, 0.0F, "Frame delta time must be positive");
+  last_frame_dt_seconds_ = dt_seconds;
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
@@ -354,8 +375,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   }
 
   std::ranges::stable_sort(submissions,
-    [](const PendingComposition& lhs,
-      const PendingComposition& rhs) -> bool {
+    [](const PendingComposition& lhs, const PendingComposition& rhs) -> bool {
       return lhs.sequence_in_frame < rhs.sequence_in_frame;
     });
 
@@ -363,7 +383,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
 
   if (!compositing_pass_) {
-    compositing_pass_config_ = std::make_shared<internal::CompositingPassConfig>();
+    compositing_pass_config_
+      = std::make_shared<internal::CompositingPassConfig>();
     compositing_pass_config_->debug_name = "VortexCompositingPass";
     compositing_pass_
       = std::make_shared<internal::CompositingPass>(compositing_pass_config_);
@@ -379,8 +400,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     CHECK_F(static_cast<bool>(payload.composite_target),
       "Compositing requires a target framebuffer");
 
-    auto recorder_ptr = gfx->AcquireCommandRecorder(
-      queue_key, "Vortex Renderer Compositing");
+    auto recorder_ptr
+      = gfx->AcquireCommandRecorder(queue_key, "Vortex Renderer Compositing");
     CHECK_F(static_cast<bool>(recorder_ptr),
       "Compositing recorder acquisition failed");
 
@@ -407,14 +428,16 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
       switch (task.type) {
       case CompositingTaskType::kCopy: {
-        auto source = ResolveViewOutputTexture(*context, task.copy.source_view_id);
+        auto source
+          = ResolveViewOutputTexture(*context, task.copy.source_view_id);
         if (!source) {
           continue;
         }
 
         TrackCompositionSourceTexture(
           gfx->GetResourceRegistry(), recorder, *source);
-        if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
+        if (source->GetDescriptor().format
+          != backbuffer.GetDescriptor().format) {
           compositing_pass_config_->source_texture = source;
           compositing_pass_config_->viewport = task.copy.viewport;
           compositing_pass_config_->alpha = 1.0F;
@@ -427,7 +450,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         break;
       }
       case CompositingTaskType::kBlend: {
-        auto source = ResolveViewOutputTexture(*context, task.blend.source_view_id);
+        auto source
+          = ResolveViewOutputTexture(*context, task.blend.source_view_id);
         if (!source) {
           continue;
         }
@@ -448,7 +472,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
         TrackCompositionSourceTexture(gfx->GetResourceRegistry(), recorder,
           *task.texture_blend.source_texture);
-        compositing_pass_config_->source_texture = task.texture_blend.source_texture;
+        compositing_pass_config_->source_texture
+          = task.texture_blend.source_texture;
         compositing_pass_config_->viewport = task.texture_blend.viewport;
         compositing_pass_config_->alpha = task.texture_blend.alpha;
         co_await compositing_pass_->PrepareResources(comp_context, recorder);
@@ -675,9 +700,9 @@ auto Renderer::GetInlineTransfersCoordinator()
 auto Renderer::EnsureViewConstantsManager(Graphics& gfx) -> void
 {
   if (!view_const_manager_) {
-    view_const_manager_ = std::make_unique<internal::ViewConstantsManager>(
-      observer_ptr { &gfx },
-      static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
+    view_const_manager_
+      = std::make_unique<internal::ViewConstantsManager>(observer_ptr { &gfx },
+        static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
   }
 }
 
@@ -704,11 +729,10 @@ auto Renderer::WireContext(RenderContext& context,
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   -> void
 {
+  CHECK_GT_F(session.delta_time_seconds, 0.0F, "Delta time must be positive");
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
-  last_frame_dt_seconds_ = session.delta_time_seconds > 0.0F
-    ? session.delta_time_seconds
-    : 1.0F / 60.0F;
+  last_frame_dt_seconds_ = session.delta_time_seconds;
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
@@ -1038,7 +1062,8 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
   }
 
   CHECK_F(resolved_view_.has_value() || core_shader_inputs_.has_value(),
-    "Render-graph harness requires either a resolved view or core shader inputs");
+    "Render-graph harness requires either a resolved view or core shader "
+    "inputs");
   const auto view_id = resolved_view_.has_value()
     ? resolved_view_->view_id
     : core_shader_inputs_.value().view_id;
@@ -1104,7 +1129,7 @@ Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
   : renderer_(observer_ptr { &renderer })
   , frame_session_(frame_session)
   , scene_source_(scene_source)
-  , view_intent_(view_intent)
+  , view_intent_(std::move(view_intent))
   , output_target_(output_target)
   , pipeline_(pipeline)
 {
@@ -1141,8 +1166,8 @@ auto Renderer::OffscreenSceneFacade::SetSceneSource(SceneSourceInput scene)
   return *this;
 }
 
-auto Renderer::OffscreenSceneFacade::SetViewIntent(OffscreenSceneViewInput view)
-  -> OffscreenSceneFacade&
+auto Renderer::OffscreenSceneFacade::SetViewIntent(
+  const OffscreenSceneViewInput& view) -> OffscreenSceneFacade&
 {
   view_intent_.emplace(view);
   return *this;

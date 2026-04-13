@@ -23,9 +23,9 @@ struct UploadPolicy {
   };
   struct AlignmentPolicy {
     // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT / typical Vulkan row pitch (bytes)
-    Alignment row_pitch_alignment { 256U };
+    Alignment row_pitch_alignment { 256U }; // NOLINT
     // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT (bytes)
-    Alignment placement_alignment { 512U };
+    Alignment placement_alignment { 512U }; // NOLINT
     // Relaxed buffer copy alignment, although NVIDIA recommends 16 (bytes) for
     // best performance.
     Alignment buffer_copy_alignment { 4U };

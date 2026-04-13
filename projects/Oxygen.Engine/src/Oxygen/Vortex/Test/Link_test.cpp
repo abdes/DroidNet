@@ -14,7 +14,9 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/OxCo/Run.h>
@@ -22,6 +24,12 @@
 #include <Oxygen/Vortex/Renderer.h>
 
 #include "Fakes/Graphics.h"
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace {
 
@@ -52,8 +60,7 @@ auto VerifySourceHermeticity() -> void
     std::size_t line_number = 0;
     while (std::getline(file, line)) {
       ++line_number;
-      if (std::string_view { line }.find(kLegacyIncludeNeedle)
-        == std::string_view::npos) {
+      if (!std::string_view { line }.contains(kLegacyIncludeNeedle)) {
         continue;
       }
 
@@ -68,14 +75,13 @@ auto VerifyBoundaryContracts() -> void
   namespace fs = std::filesystem;
 
   const auto root = fs::path { OXYGEN_VORTEX_SOURCE_DIR };
-  const auto verify_absent = [](const fs::path& file, std::string_view needle)
-  {
+  const auto verify_absent = [](const fs::path& file, std::string_view needle) {
     auto input = std::ifstream(file);
     auto line = std::string {};
     std::size_t line_number = 0;
     while (std::getline(input, line)) {
       ++line_number;
-      if (std::string_view { line }.find(needle) == std::string_view::npos) {
+      if (!std::string_view { line }.contains(needle)) {
         continue;
       }
 
@@ -94,6 +100,22 @@ auto VerifyBoundaryContracts() -> void
 
 auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 {
+  frame_context.SetFrameSlot(oxygen::frame::Slot { 0U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  frame_context.SetModuleTimingData(
+    oxygen::engine::ModuleTimingData {
+      .game_delta_time = oxygen::time::SimulationClock::kMinDeltaTime,
+      .fixed_delta_time = oxygen::time::SimulationClock::kMinDeltaTime,
+      .time_scale = 1.0F,
+      .is_paused = false,
+      .interpolation_alpha = 0.0F,
+      .current_fps = 60.0F,
+      .fixed_steps_this_frame = 1U,
+    },
+    oxygen::engine::internal::EngineTagFactory::Get());
+
   const auto frame = observer_ptr<FrameContext> { &frame_context };
 
   renderer.OnFrameStart(frame);
@@ -128,6 +150,7 @@ auto main() -> int
     auto frame_context = FrameContext {};
 
     RunFrameHooks(renderer, frame_context);
+    renderer.OnShutdown();
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

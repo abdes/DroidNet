@@ -31,14 +31,14 @@ template < // clang-format off
   typename ProducerT = void
 > // clang-format on
 struct CollectionConfig {
-  struct _DummyStage {
+  struct DummyStage_ {
     template <typename... Args>
     constexpr void operator()(Args&&...) const noexcept
     {
     }
   };
   template <typename T>
-  using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
+  using StageOrDummy = std::conditional_t<std::is_void_v<T>, DummyStage_, T>;
 
   // Optional stages (use `void` to omit) – wrapped so that `void` parameters
   // do not declare invalid members yet presence booleans still reflect intent.

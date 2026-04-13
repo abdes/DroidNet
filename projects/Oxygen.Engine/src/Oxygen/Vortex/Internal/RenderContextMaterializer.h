@@ -11,7 +11,6 @@
 #include <optional>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>

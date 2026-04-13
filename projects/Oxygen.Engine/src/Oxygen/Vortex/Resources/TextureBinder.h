@@ -129,38 +129,25 @@ public:
       = 64ULL * 1024ULL * 1024ULL;
     static constexpr std::size_t kDefaultMaxDeferredRetriesPerFrame = 4U;
 
-    constexpr UploadLimits() noexcept
-      : max_upload_bytes_per_frame(kDefaultMaxUploadBytesPerFrame)
-      , max_pending_upload_bytes(kDefaultMaxPendingUploadBytes)
-      , deferred_retry_low_watermark_bytes(
-          kDefaultDeferredRetryLowWatermarkBytes)
-      , max_deferred_retries_per_frame(kDefaultMaxDeferredRetriesPerFrame)
-    {
-    }
-
-    constexpr UploadLimits(const std::size_t max_upload_bytes_per_frame,
-      const std::size_t max_pending_upload_bytes,
-      const std::size_t deferred_retry_low_watermark_bytes,
-      const std::size_t max_deferred_retries_per_frame) noexcept
-      : max_upload_bytes_per_frame(max_upload_bytes_per_frame)
-      , max_pending_upload_bytes(max_pending_upload_bytes)
-      , deferred_retry_low_watermark_bytes(
-          deferred_retry_low_watermark_bytes)
-      , max_deferred_retries_per_frame(max_deferred_retries_per_frame)
-    {
-    }
-
-    std::size_t max_upload_bytes_per_frame;
-    std::size_t max_pending_upload_bytes;
-    std::size_t deferred_retry_low_watermark_bytes;
-    std::size_t max_deferred_retries_per_frame;
+    std::size_t max_upload_bytes_per_frame { kDefaultMaxUploadBytesPerFrame };
+    std::size_t max_pending_upload_bytes { kDefaultMaxPendingUploadBytes };
+    std::size_t deferred_retry_low_watermark_bytes {
+      kDefaultDeferredRetryLowWatermarkBytes
+    };
+    std::size_t max_deferred_retries_per_frame {
+      kDefaultMaxDeferredRetriesPerFrame
+    };
   };
 
   OXGN_VRTX_API TextureBinder(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> uploader,
-    observer_ptr<content::IAssetLoader> texture_loader,
-    UploadLimits limits = {});
+    observer_ptr<content::IAssetLoader> texture_loader, UploadLimits limits);
+
+  OXGN_VRTX_API TextureBinder(observer_ptr<Graphics> gfx,
+    observer_ptr<ProviderT> staging_provider,
+    observer_ptr<CoordinatorT> uploader,
+    observer_ptr<content::IAssetLoader> texture_loader);
 
   OXYGEN_MAKE_NON_COPYABLE(TextureBinder)
   OXYGEN_MAKE_NON_MOVABLE(TextureBinder)
