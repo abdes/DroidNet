@@ -29,6 +29,10 @@ class Framebuffer;
 } // namespace graphics
 } // namespace oxygen
 
+namespace oxygen::vortex {
+struct RenderContext;
+} // namespace oxygen::vortex
+
 namespace oxygen::vortex::internal {
 
 class CompositionViewImpl;
@@ -41,7 +45,7 @@ public:
   using PruneStalePublishedViewsCallback
     = std::function<std::vector<ViewId>(engine::FrameContext&)>;
   using RenderViewCoroutine = std::function<co::Co<>(
-    ViewId, const engine::RenderContext&, graphics::CommandRecorder&)>;
+    ViewId, const vortex::RenderContext&, graphics::CommandRecorder&)>;
   using RegisterViewGraphCallback
     = std::function<void(ViewId, const RenderViewCoroutine&, ResolvedView)>;
 
