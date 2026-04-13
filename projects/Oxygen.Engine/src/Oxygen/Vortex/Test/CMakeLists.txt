@@ -41,4 +41,14 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 # -- GTest Test Programs -------------------------------------------------------
 
-# Add m_gtest_program entries here as source files are added to the module.
+m_gtest_program(
+  RendererCapability
+  SOURCES
+    "RendererCapability_test.cpp"
+)
+
+m_gtest_program(
+  RendererCompositionQueue
+  SOURCES
+    "RendererCompositionQueue_test.cpp"
+)

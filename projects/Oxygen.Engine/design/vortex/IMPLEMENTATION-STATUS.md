@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 substrate migration is now complete with a Vortex-side hermeticity guard and refreshed FOUND-03 proof; Phase 2 SceneTextures + SceneRenderer shell work is the next implementation frontier`
+Status: `done — Phase 1 substrate migration was re-closed by 01-14 after restoring renderer-core composition execution, repairing the capability/default and boundary contracts, and passing the strengthened proof suite; Phase 2 may resume from the repaired substrate baseline`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -70,7 +70,86 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
-### 2026-04-13 — Phase 1 plan 01-13 closed FOUND-03 with a Vortex-local hermeticity guard and final proof refresh
+### 2026-04-13 — Phase 1 re-closed after 01-14 remediation and strengthened proof
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/RendererCapability.h`
+  - `src/Oxygen/Vortex/Internal/CompositingPass.h`
+  - `src/Oxygen/Vortex/Internal/CompositingPass.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/ShaderDebugMode.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/ShaderPassConfig.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/ToneMapPassConfig.h`
+  - `src/Oxygen/Vortex/Test/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Test/Link_test.cpp`
+  - `src/Oxygen/Vortex/Test/RendererCapability_test.cpp`
+  - `src/Oxygen/Vortex/Test/RendererCompositionQueue_test.cpp`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `rg -n 'kDeferredShading' src/Oxygen/Vortex/RendererCapability.h`
+  - `rg -n 'Internal/RenderContextPool.h' src/Oxygen/Vortex/Renderer.h`
+  - `rg -n 'SceneRenderer/ShaderDebugMode.h|SceneRenderer/ShaderPassConfig.h|SceneRenderer/ToneMapPassConfig.h' src/Oxygen/Vortex/CMakeLists.txt`
+  - `rg -n 'oxygen::imgui' src/Oxygen/Vortex/CMakeLists.txt`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Renderer.LinkTest --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.' --output-on-failure`
+  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'`
+  - `powershell -NoProfile -Command "$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll"`
+- Result:
+  - `Renderer::OnCompositing()` now drains queued submissions through a Vortex-owned compositing path instead of clearing them unused
+  - `RendererCapabilityFamily` now contains the required Phase 1 `kDeferredShading` vocabulary entry, while the default runtime capability set is reduced to truthful substrate families only
+  - the temporary `FramePlanBuilder` support contracts now live under `SceneRenderer/Internal/` and are no longer exported as public Phase 1 API
+  - `oxygen-vortex` no longer links `oxygen::imgui`, and the final Ninja query shows no `Oxygen.ImGui` edge
+  - `Renderer.h` no longer leaks `Internal/RenderContextPool.h`
+  - Vortex now carries local regression coverage for composition-queue execution and capability/default hygiene, and the hardened `Link_test` also rejects the reopened boundary regressions
+  - the strengthened proof suite passed on the repaired tree: Vortex build/tests (`3/3`), targeted legacy substrate regressions (`25/25`), and final target-edge proof
+- Code / validation delta:
+  - Phase 1 returns from `reopened` to `done`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md` is restored from `gaps_found` to `passed`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md` marks the `01-14` remediation checks green
+  - Phase 2 may resume from the repaired Phase 1 baseline
+- Remaining blocker:
+  - none at the Phase 1 boundary; next action is Phase 2 execution
+### 2026-04-13 — Phase 1 reopened after comprehensive architecture/LLD compliance review
+
+- Changed files this session:
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/.continue-here.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-14-PLAN.md`
+- Commands used for verification:
+  - `rg -n '^#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Renderer.LinkTest --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.LinkTest$' --output-on-failure`
+  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'`
+  - `powershell -NoProfile -Command "$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll"`
+  - `rg -n 'DispatchSceneRendererPreRender|DispatchSceneRendererRender|DispatchSceneRendererCompositing|RegisterComposition|pending_compositions_' src/Oxygen/Vortex/Renderer.cpp src/Oxygen/Vortex/Renderer.h`
+  - `rg -n 'kDeferredShading|RendererCapabilityFamily' src/Oxygen/Vortex/RendererCapability.h design/vortex/DESIGN.md design/vortex/lld/substrate-migration-guide.md`
+  - `rg -n 'oxygen::imgui|RenderContextPool.h|ShaderDebugMode|ShaderPassConfig|ToneMapPassConfig' src/Oxygen/Vortex/CMakeLists.txt src/Oxygen/Vortex/Renderer.h src/Oxygen/Vortex/SceneRenderer`
+- Result:
+  - the earlier `01-13` hermeticity proof remains valid: the Vortex source tree has no `Oxygen/Renderer/*` include seam, `oxygen-vortex` builds, `Oxygen.Vortex.LinkTest` passes, the targeted 25-test legacy substrate regression suite passes, and the Debug Ninja query still shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+  - however, the broader compliance review found five unresolved Phase 1 violations:
+    - `Renderer::OnCompositing()` still drops queued composition work instead of preserving the renderer-core composition execution contract
+    - `RendererCapabilityFamily` is still missing the required Phase 1 `kDeferredShading` vocabulary entry, and the default runtime capability set over-claims later-domain families
+    - `ShaderDebugMode`, `ShaderPassConfig`, and `ToneMapPassConfig` are exported as public SceneRenderer-facing contracts even though Phase 1 only authorized the bounded step-1.7 redistribution slice
+    - `oxygen-vortex` still publicly links `oxygen::imgui`, leaking Diagnostics/UI domain ownership into the Phase 1 substrate boundary
+    - public `Renderer.h` still includes `Oxygen/Vortex/Internal/RenderContextPool.h`, violating the `Internal/` header rule
+  - the previous `Phase 1 is complete` claim is therefore superseded
+- Code / validation delta:
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md` is downgraded from `passed` to `gaps_found`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md` now defines the remediation verification pack required to close the reopened gaps
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-14-PLAN.md` is now the active repair plan for Phase 1
+  - no Phase 2 implementation work may begin while these reopened Phase 1 issues remain
+- Remaining blocker:
+  - execute `01-14` to repair the renderer-core contract and ABI/dependency hygiene gaps, then rerun the strengthened Phase 1 proof suite before restoring any completion claim
+
+### 2026-04-13 — Phase 1 plan 01-13 closed FOUND-03 with a Vortex-local hermeticity guard and final proof refresh [historical entry later superseded by the reopened-phase review]
 
 - Changed files this session:
   - `src/Oxygen/Vortex/Test/CMakeLists.txt`
@@ -94,9 +173,9 @@ implementation cannot begin until its design prerequisites are met.
 - Code / validation delta:
   - Phase 1 now has both the source-level seam fix and a local regression guard against reintroducing `Oxygen/Renderer/*` under `src/Oxygen/Vortex`
   - the build, smoke path, targeted regressions, and linked-artifact dependency proof are all refreshed after the guard landed
-  - Phase 1 is now **complete**
+  - Phase 1 was reported as **complete** at this point, but that claim is now superseded by the later reopened-phase review above
 - Remaining blocker:
-  - none for Phase 1; resume with Phase 2 SceneTextures + SceneRenderer shell work
+  - historical state only; see the reopened-phase blocker entry above for the current control point
 
 ### 2026-04-13 — Phase 1 plan 01-12 removed the last FramePlanBuilder source seam
 
@@ -825,14 +904,14 @@ design and execution work starts.
 | 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.6 | Pass base classes (3 files) | `done` | `01-10` landed `Passes/RenderPass`, `GraphicsRenderPass`, and `ComputeRenderPass` together with the Vortex-owned root contracts, then rebuilt `oxygen-vortex` successfully |
-| 1.7 | View assembly + composition | `done` | `01-08` landed the public headers and `01-09` landed the private `Internal/` plus `SceneRenderer/Internal/` files, then rebuilt `oxygen-vortex` successfully |
-| 1.8 | Renderer orchestrator | `done` | `01-10` landed the stripped Vortex renderer shell, rebuilt `oxygen-vortex`, and recorded the final post-orchestrator Debug Ninja query proving `bin/Debug/Oxygen.Vortex-d.dll` still has no `Oxygen.Renderer` dependency edge |
-| 1.9 | Smoke test | `done` | `01-11` upgraded `Oxygen.Vortex.LinkTest` into a real renderer smoke path, ran it through `ctest`, then ran the targeted legacy substrate regression suite successfully in the same Debug build tree |
+| 1.7 | View assembly + composition | `done` | `01-14` moved the temporary planning/config contracts behind `SceneRenderer/Internal/`, preserved the intended private scene-planning boundary, and verified the repaired Vortex/legacy proof pack |
+| 1.8 | Renderer orchestrator | `done` | `01-14` restored renderer-core composition execution, added `kDeferredShading`, reduced the default capability set to truthful substrate families, removed the `oxygen::imgui` link edge, and removed the public `Internal/` header leak |
+| 1.9 | Smoke test | `done` | `01-14` expanded the Vortex-side proof surface with `RendererCapability` and `RendererCompositionQueue` regressions plus the hardened `Link_test`, then passed the strengthened proof suite |
 
 ### Resume Point
 
-Phase 1 is complete. Resume with Phase 2 SceneTextures + SceneRenderer shell
-once the relevant design deliverables are loaded.
+Phase 1 is complete again. Resume with Phase 2 planning/execution from the
+repaired substrate baseline.
 
 ---
 
