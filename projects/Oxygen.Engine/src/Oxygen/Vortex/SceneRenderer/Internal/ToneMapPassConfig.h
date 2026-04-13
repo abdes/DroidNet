@@ -17,7 +17,6 @@ class Texture;
 
 namespace oxygen::vortex {
 
-//! Configuration for Vortex tone mapping and exposure planning.
 struct ToneMapPassConfig {
   std::shared_ptr<graphics::Texture> source_texture;
   std::shared_ptr<graphics::Texture> output_texture;

@@ -18,9 +18,9 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Vortex/Internal/FrameViewPacket.h>
 #include <Oxygen/Vortex/RenderMode.h>
-#include <Oxygen/Vortex/SceneRenderer/ShaderDebugMode.h>
-#include <Oxygen/Vortex/SceneRenderer/ShaderPassConfig.h>
-#include <Oxygen/Vortex/SceneRenderer/ToneMapPassConfig.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ShaderDebugMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ShaderPassConfig.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ToneMapPassConfig.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::scene {
