@@ -5,9 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/ToneMapPass.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
@@ -24,12 +21,12 @@ struct FramePlanDebugModeIntent {
   bool requires_neutral_tonemap { false };
 };
 
-auto EvaluateFramePlanDebugModeIntent(engine::ShaderDebugMode mode)
+auto EvaluateFramePlanDebugModeIntent(ShaderDebugMode mode)
   -> FramePlanDebugModeIntent
 {
   return FramePlanDebugModeIntent {
-    .is_non_ibl = engine::IsNonIblDebugMode(mode),
-    .requires_neutral_tonemap = mode != engine::ShaderDebugMode::kDisabled,
+    .is_non_ibl = IsNonIblDebugMode(mode),
+    .requires_neutral_tonemap = mode != ShaderDebugMode::kDisabled,
   };
 }
 
@@ -52,7 +49,7 @@ void FramePlanBuilder::BuildFrameViewPackets(observer_ptr<scene::Scene> scene,
   frame_wire_color_ = inputs.frame_settings.wire_color;
   frame_shader_debug_mode_ = inputs.shader_pass_config
     ? inputs.shader_pass_config->debug_mode
-    : engine::ShaderDebugMode::kDisabled;
+    : ShaderDebugMode::kDisabled;
   frame_gpu_debug_mouse_down_position_
     = inputs.frame_settings.gpu_debug_mouse_down_position;
 

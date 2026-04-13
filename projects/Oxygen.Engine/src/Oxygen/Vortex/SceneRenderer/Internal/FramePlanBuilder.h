@@ -16,15 +16,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Internal/FrameViewPacket.h>
 #include <Oxygen/Vortex/RenderMode.h>
+#include <Oxygen/Vortex/SceneRenderer/ShaderDebugMode.h>
+#include <Oxygen/Vortex/SceneRenderer/ShaderPassConfig.h>
+#include <Oxygen/Vortex/SceneRenderer/ToneMapPassConfig.h>
 #include <Oxygen/Vortex/api_export.h>
-
-namespace oxygen::engine {
-struct ShaderPassConfig;
-struct ToneMapPassConfig;
-}
 
 namespace oxygen::scene {
 class Scene;
@@ -47,8 +44,8 @@ public:
 
     FrameSettings frame_settings {};
     std::optional<float> pending_auto_exposure_reset;
-    observer_ptr<const engine::ToneMapPassConfig> tone_map_pass_config;
-    observer_ptr<const engine::ShaderPassConfig> shader_pass_config;
+    observer_ptr<const ToneMapPassConfig> tone_map_pass_config;
+    observer_ptr<const ShaderPassConfig> shader_pass_config;
     std::function<ViewId(ViewId)> resolve_published_view_id;
   };
 
@@ -83,7 +80,7 @@ public:
   {
     return frame_render_mode_;
   }
-  [[nodiscard]] auto ShaderDebugMode() const -> engine::ShaderDebugMode
+  [[nodiscard]] auto ShaderDebugMode() const -> ::oxygen::vortex::ShaderDebugMode
   {
     return frame_shader_debug_mode_;
   }
@@ -118,8 +115,8 @@ private:
   bool frame_gpu_debug_pass_enabled_ { true };
   bool frame_want_auto_exposure_ { false };
   RenderMode frame_render_mode_ { RenderMode::kSolid };
-  engine::ShaderDebugMode frame_shader_debug_mode_ {
-    engine::ShaderDebugMode::kDisabled
+  ::oxygen::vortex::ShaderDebugMode frame_shader_debug_mode_ {
+    ::oxygen::vortex::ShaderDebugMode::kDisabled
   };
   graphics::Color frame_wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
   std::optional<SubPixelPosition> frame_gpu_debug_mouse_down_position_;
