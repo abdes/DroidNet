@@ -1,0 +1,145 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <memory>
+
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/FacadePresets.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+
+namespace {
+
+using oxygen::Format;
+using oxygen::Graphics;
+using oxygen::RendererConfig;
+using oxygen::TextureType;
+using oxygen::ViewId;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
+using oxygen::graphics::QueueRole;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::TextureDesc;
+using oxygen::vortex::Renderer;
+using oxygen::vortex::testing::FakeGraphics;
+
+class FacadePresetsTest : public ::testing::Test {
+protected:
+  void SetUp() override
+  {
+    graphics_ = std::make_shared<FakeGraphics>();
+    graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto config = RendererConfig {};
+    config.upload_queue_key
+      = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+    renderer_ = std::make_unique<Renderer>(
+      std::weak_ptr<Graphics>(graphics_), std::move(config));
+    framebuffer_ = MakeFramebuffer();
+  }
+
+  [[nodiscard]] auto MakeFramebuffer() const -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = TextureDesc {};
+    color_desc.width = 64U;
+    color_desc.height = 64U;
+    color_desc.format = Format::kRGBA8UNorm;
+    color_desc.texture_type = TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = "FacadePresetsTest.Color";
+
+    auto color = graphics_->CreateTexture(color_desc);
+
+    auto fb_desc = FramebufferDesc {};
+    fb_desc.AddColorAttachment({ .texture = color });
+    return graphics_->CreateFramebuffer(fb_desc);
+  }
+
+  [[nodiscard]] auto MakeResolvedViewInput() const
+    -> Renderer::ResolvedViewInput
+  {
+    auto params = oxygen::ResolvedView::Params {};
+    params.view_config.viewport = {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 64.0F,
+      .height = 64.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    return Renderer::ResolvedViewInput {
+      .view_id = ViewId { 91U },
+      .value = oxygen::ResolvedView(params),
+    };
+  }
+
+  [[nodiscard]] static auto MakePreparedFrameInput()
+    -> Renderer::PreparedFrameInput
+  {
+    return Renderer::PreparedFrameInput {};
+  }
+
+  std::shared_ptr<FakeGraphics> graphics_ {};
+  std::shared_ptr<Framebuffer> framebuffer_ {};
+  std::unique_ptr<Renderer> renderer_ {};
+};
+
+NOLINT_TEST_F(
+  FacadePresetsTest, FullscreenPresetFinalizesWithOnlyCoreShaderInputs)
+{
+  auto facade
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      ViewId { 5U });
+
+  EXPECT_TRUE(facade.CanFinalize());
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetRenderContext().current_view.view_id, ViewId { 5U });
+}
+
+NOLINT_TEST_F(FacadePresetsTest,
+  PreparedScenePresetFinalizesFromResolvedViewAndPreparedFrame)
+{
+  auto facade = oxygen::vortex::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      MakeResolvedViewInput(), MakePreparedFrameInput());
+
+  EXPECT_TRUE(facade.CanFinalize());
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetRenderContext().current_view.view_id, ViewId { 91U });
+}
+
+NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
+{
+  auto facade
+    = oxygen::vortex::harness::render_graph::presets::ForSingleViewGraph(
+      *renderer_,
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      MakeResolvedViewInput(),
+      [](ViewId, const oxygen::vortex::RenderContext&,
+        oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
+        co_return;
+      });
+
+  EXPECT_TRUE(facade.CanFinalize());
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetViewId(), ViewId { 91U });
+}
+
+} // namespace
