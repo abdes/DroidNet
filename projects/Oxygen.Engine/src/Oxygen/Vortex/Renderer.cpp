@@ -554,6 +554,9 @@ auto Renderer::RemovePublishedRuntimeView(
 
   frame_context.RemoveView(published_view_id);
   UnregisterViewRenderGraph(published_view_id);
+  if (view_const_manager_) {
+    view_const_manager_->RemoveView(published_view_id);
+  }
 }
 
 auto Renderer::PruneStalePublishedRuntimeViews(
@@ -581,6 +584,9 @@ auto Renderer::PruneStalePublishedRuntimeViews(
   for (const auto published_view_id : stale_published_ids) {
     frame_context.RemoveView(published_view_id);
     UnregisterViewRenderGraph(published_view_id);
+    if (view_const_manager_) {
+      view_const_manager_->RemoveView(published_view_id);
+    }
   }
 
   return stale_intent_ids;
@@ -669,7 +675,8 @@ auto Renderer::EnsureViewConstantsManager(Graphics& gfx) -> void
 {
   if (!view_const_manager_) {
     view_const_manager_ = std::make_unique<internal::ViewConstantsManager>(
-      observer_ptr { &gfx }, sizeof(ViewConstants::GpuData));
+      observer_ptr { &gfx },
+      static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
   }
 }
 

@@ -12,8 +12,10 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
@@ -30,7 +32,11 @@ using oxygen::Graphics;
 using oxygen::RendererConfig;
 using oxygen::ViewId;
 using oxygen::engine::FrameContext;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::TextureDesc;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -75,7 +81,69 @@ protected:
       oxygen::engine::internal::EngineTagFactory::Get());
   }
 
+  [[nodiscard]] auto MakeFramebuffer() const -> std::shared_ptr<Framebuffer>
+  {
+    auto color_desc = TextureDesc {};
+    color_desc.width = 64U;
+    color_desc.height = 64U;
+    color_desc.format = oxygen::Format::kRGBA8UNorm;
+    color_desc.texture_type = oxygen::TextureType::kTexture2D;
+    color_desc.is_render_target = true;
+    color_desc.is_shader_resource = true;
+    color_desc.initial_state = ResourceStates::kCommon;
+    color_desc.debug_name = "RuntimeViewPublicationTest.Color";
+
+    auto color = graphics_->CreateTexture(color_desc);
+
+    auto fb_desc = FramebufferDesc {};
+    fb_desc.AddColorAttachment({ .texture = color });
+    return graphics_->CreateFramebuffer(fb_desc);
+  }
+
+  [[nodiscard]] auto MaterializeViewConstantsBuffer(const ViewId view_id) const
+    -> std::shared_ptr<const oxygen::graphics::Buffer>
+  {
+    if (!framebuffer_) {
+      framebuffer_ = MakeFramebuffer();
+    }
+
+    auto params = oxygen::ResolvedView::Params {};
+    params.view_config.viewport = {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 64.0F,
+      .height = 64.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+
+    auto result = renderer_->ForSinglePassHarness()
+                    .SetFrameSession(Renderer::FrameSessionInput {
+                      .frame_slot = oxygen::frame::Slot { 0U },
+                      .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+                      .delta_time_seconds = 1.0F / 60.0F,
+                    })
+                    .SetOutputTarget(Renderer::OutputTargetInput {
+                      .framebuffer
+                      = oxygen::observer_ptr<const Framebuffer>(framebuffer_.get()),
+                    })
+                    .SetResolvedView(Renderer::ResolvedViewInput {
+                      .view_id = view_id,
+                      .value = oxygen::ResolvedView(params),
+                    })
+                    .SetPreparedFrame(Renderer::PreparedFrameInput {})
+                    .Finalize();
+
+    EXPECT_TRUE(result.has_value());
+    if (!result.has_value()) {
+      return {};
+    }
+
+    return result->GetRenderContext().view_constants;
+  }
+
   std::shared_ptr<FakeGraphics> graphics_ {};
+  mutable std::shared_ptr<Framebuffer> framebuffer_ {};
   std::unique_ptr<Renderer> renderer_ {};
 };
 
@@ -141,6 +209,53 @@ NOLINT_TEST_F(
   EXPECT_THROW(
     static_cast<void>(frame_context.GetViewContext(published_view_id)),
     std::out_of_range);
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  RemovePublishedRuntimeViewReleasesTrackedViewConstantsForPublishedView)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+
+  const auto intent_view_id = ViewId { 14U };
+  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
+    frame_context, intent_view_id, MakeViewContext("removable-view-constants"));
+  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
+
+  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(first_buffer, nullptr);
+
+  renderer_->RemovePublishedRuntimeView(frame_context, intent_view_id);
+
+  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(second_buffer, nullptr);
+  EXPECT_NE(second_buffer.get(), first_buffer.get());
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  PruneStalePublishedRuntimeViewsReleasesTrackedViewConstantsForPublishedView)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+
+  const auto intent_view_id = ViewId { 15U };
+  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
+    frame_context, intent_view_id, MakeViewContext("stale-view-constants"));
+  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
+
+  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(first_buffer, nullptr);
+
+  frame_context.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 1000U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  const auto pruned = renderer_->PruneStalePublishedRuntimeViews(frame_context);
+
+  ASSERT_EQ(pruned.size(), 1U);
+  EXPECT_EQ(pruned.front(), intent_view_id);
+
+  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(second_buffer, nullptr);
+  EXPECT_NE(second_buffer.get(), first_buffer.get());
 }
 
 } // namespace

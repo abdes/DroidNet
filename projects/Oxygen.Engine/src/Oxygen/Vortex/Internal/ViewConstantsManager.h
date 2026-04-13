@@ -64,10 +64,18 @@ public:
   OXGN_VRTX_API auto WriteViewConstants(
     ViewId view_id, const void* snapshot, std::size_t size_bytes) -> BufferInfo;
 
+  //! Release all tracked buffers for the specified view across every frame slot.
+  OXGN_VRTX_API auto RemoveView(ViewId view_id) -> void;
+
   //! Get current frame slot.
   [[nodiscard]] auto GetCurrentSlot() const noexcept -> frame::Slot
   {
     return current_slot_;
+  }
+
+  [[nodiscard]] auto GetTrackedBufferCount() const noexcept -> std::size_t
+  {
+    return buffers_.size();
   }
 
 private:
@@ -88,6 +96,8 @@ private:
         ^ (std::hash<std::uint64_t> {}(key.view_id.get()) << 1);
     }
   };
+
+  auto ReleaseBuffer(BufferInfo& info) -> void;
 
   observer_ptr<Graphics> gfx_;
   std::uint32_t buffer_size_;
