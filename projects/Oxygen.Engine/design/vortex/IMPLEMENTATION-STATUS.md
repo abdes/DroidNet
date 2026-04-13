@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `blocked — Phase 1 execution cannot proceed until the substrate plan set is regenerated to cover the full migration scope`
+Status: `in_progress — Phase 1 execution started; 01-01 migrated the first step-1.1 type slice`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `blocked` | The current `.planning` plan set does not cover the resources / ScenePrep / internal-utility work required by Phase 1 |
+| 1 | Substrate Migration | `in_progress` | Step 1.1 remains incomplete until `01-02` lands the remaining type headers |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,67 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-01 started with the step-1.1 frame-binding slice
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Types/CompositingTask.h`
+  - `src/Oxygen/Vortex/Types/DebugFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/DrawFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/LightCullingConfig.h`
+  - `src/Oxygen/Vortex/Types/LightingFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/ShadowFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/SyntheticSunData.h`
+  - `src/Oxygen/Vortex/Types/VsmFrameBindings.h`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Types/CompositingTask.h src/Oxygen/Vortex/Types/DebugFrameBindings.h src/Oxygen/Vortex/Types/DrawFrameBindings.h src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h src/Oxygen/Vortex/Types/LightingFrameBindings.h src/Oxygen/Vortex/Types/ShadowFrameBindings.h src/Oxygen/Vortex/Types/VsmFrameBindings.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `rg -n "oxygen-renderer|Oxygen\\.Renderer" out/build-ninja/src/Oxygen/Vortex/CMakeFiles/Export out/build-ninja/src/Oxygen/Vortex/CMakeFiles/oxygen-vortex.dir/Debug/CXXDependInfo.json`
+- Result:
+  - the first frame-binding half of step `1.1` now lives under
+    `src/Oxygen/Vortex/Types/`
+  - `LightingFrameBindings.h` now uses Vortex-local
+    `LightCullingConfig.h` and `SyntheticSunData.h` so the migrated slice
+    carries no `Oxygen/Renderer/` include seam
+  - `oxygen-vortex` builds successfully in Debug after the type migration
+  - the generated Vortex export/depend info shows no `oxygen-renderer` /
+    `Oxygen.Renderer` reference
+- Code / validation delta:
+  - step `1.1` is **still in progress**; the remaining type headers are
+    deferred to `01-02`
+  - no broader link-test or runtime validation was run in this plan
+- Remaining blocker:
+  - execute `01-02` to land the remaining step-1.1 type headers before the
+    rest of Phase 1 continues
+
+### 2026-04-13 — Phase 1 plan set repaired
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/*-PLAN.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - structural inspection of all Phase 1 plan files
+  - per-plan checks for `wave`, `depends_on`, `requirements`, task count,
+    `<read_first>`, and `<acceptance_criteria>`
+- Result:
+  - the full 11-plan Phase 1 set now matches roadmap steps `1.1` through `1.9`
+  - `01-04` through `01-06` now cover resources, ScenePrep, and selected
+    internals instead of continuing upload work
+  - `01-08` now closes only step `1.7`
+  - `01-09` and `01-10` keep step `1.8` split between support-file migration
+    and orchestrator migration
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run during plan repair
+  - Phase 1 is planned and ready to execute, not complete
+- Remaining blocker:
+  - execute the repaired Phase 1 plan set and collect build/test evidence
 
 ### 2026-04-13 — Phase 1 execute-phase blocker recorded
 
@@ -174,33 +235,38 @@ design and execution work starts.
 
 ## Phase 1 — Substrate Migration
 
-**Status:** `blocked`
+**Status:** `in_progress`
 
-### What Is Missing
+### What Exists
 
-- A trustworthy Phase 1 execution plan set. The current `.planning` artifacts
-  do not align with the source-of-truth Vortex design package:
-  - `ROADMAP.md` still expects `01-04` through `01-06` to cover resources,
-    ScenePrep, and selected internals.
-  - `01-04-PLAN.md`, `01-05-PLAN.md`, and `01-06-PLAN.md` instead continue the
-    upload subsystem and never introduce the required resources / ScenePrep
-    migration files.
-  - `01-08-PLAN.md` attempts to mark steps `1.4` through `1.7` complete even
-    though the missing resources / ScenePrep / internal-utility work is absent
-    from the current phase plan set.
-
-Execution must stop at this blocker until the Phase 1 plan artifacts are
-regenerated or corrected.
+- A repaired 11-plan Phase 1 execution set under
+  `.planning/workstreams/vortex/phases/01-substrate-migration/`.
+- Plan coverage now matches the source-of-truth Vortex design package:
+  - `01-04` covers resources
+  - `01-05` covers ScenePrep data/config
+  - `01-06` covers ScenePrep execution plus the selected substrate-only
+    internal utilities
+  - `01-08` closes only step `1.7`
+  - `01-09` and `01-10` keep step `1.8` split between support-file migration
+    and the stripped orchestrator
+- Every Phase 1 plan now has 2 tasks plus the required `<read_first>` and
+  `<acceptance_criteria>` blocks.
+- The first step-1.1 slice is now migrated under `src/Oxygen/Vortex/Types/`:
+  `CompositingTask.h`, `DebugFrameBindings.h`, `DrawFrameBindings.h`,
+  `EnvironmentFrameBindings.h`, `LightingFrameBindings.h`,
+  `ShadowFrameBindings.h`, `VsmFrameBindings.h`, plus the Vortex-local
+  `LightCullingConfig.h` and `SyntheticSunData.h` payload types required by
+  `LightingFrameBindings.h`.
 
 ### Steps (from PLAN.md §3)
 
 | Step | Task | Status | Evidence |
 | ---- | ---- | ------ | -------- |
-| 1.1 | Cross-cutting types (14 headers) | `not_started` | — |
+| 1.1 | Cross-cutting types (14 headers) | `in_progress` | `01-01` migrated the frame-binding slice; remaining type headers are scheduled for `01-02` |
 | 1.2 | Upload subsystem (14 files) | `not_started` | — |
-| 1.3 | Resources subsystem (7 files) | `blocked` | current `.planning` phase plans never schedule this work |
-| 1.4 | ScenePrep subsystem (15 files) | `blocked` | current `.planning` phase plans never schedule this work |
-| 1.5 | Internal utilities (7 files) | `blocked` | current `.planning` phase plans cannot truthfully close this step |
+| 1.3 | Resources subsystem (7 files) | `planned` | Phase 1 plan `01-04` |
+| 1.4 | ScenePrep subsystem (15 files) | `planned` | Phase 1 plans `01-05` and `01-06` |
+| 1.5 | Internal utilities (7 files) | `planned` | Phase 1 plan `01-06` |
 | 1.6 | Pass base classes (3 files) | `not_started` | — |
 | 1.7 | View assembly + composition | `not_started` | — |
 | 1.8 | Renderer orchestrator | `not_started` | — |
@@ -208,8 +274,8 @@ regenerated or corrected.
 
 ### Resume Point
 
-Repair or regenerate the Phase 1 `.planning` plan set first; only then resume
-execution from the first corrected incomplete plan.
+Continue with `01-02` to finish the remaining step-1.1 type headers, then
+resume the Phase 1 sequence.
 
 ---
 
