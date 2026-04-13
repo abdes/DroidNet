@@ -96,9 +96,9 @@ implementation cannot begin until its design prerequisites are met.
   - `rg -n 'Internal/RenderContextPool.h' src/Oxygen/Vortex/Renderer.h`
   - `rg -n 'SceneRenderer/ShaderDebugMode.h|SceneRenderer/ShaderPassConfig.h|SceneRenderer/ToneMapPassConfig.h' src/Oxygen/Vortex/CMakeLists.txt`
   - `rg -n 'oxygen::imgui' src/Oxygen/Vortex/CMakeLists.txt`
-  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Renderer.LinkTest --parallel 4`
+  - `rg -n '^#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests --parallel 4`
   - `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.' --output-on-failure`
-  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'`
   - `powershell -NoProfile -Command "$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll"`
 - Result:
   - `Renderer::OnCompositing()` now drains queued submissions through a Vortex-owned compositing path instead of clearing them unused
@@ -107,7 +107,7 @@ implementation cannot begin until its design prerequisites are met.
   - `oxygen-vortex` no longer links `oxygen::imgui`, and the final Ninja query shows no `Oxygen.ImGui` edge
   - `Renderer.h` no longer leaks `Internal/RenderContextPool.h`
   - Vortex now carries local regression coverage for composition-queue execution and capability/default hygiene, and the hardened `Link_test` also rejects the reopened boundary regressions
-  - the strengthened proof suite passed on the repaired tree: Vortex build/tests (`3/3`), targeted legacy substrate regressions (`25/25`), and final target-edge proof
+  - the strengthened Vortex-only proof suite passed on the repaired tree: Vortex build, Vortex-local tests (`3/3`), hermeticity scan, and final target-edge proof
 - Code / validation delta:
   - Phase 1 returns from `reopened` to `done`
   - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md` is restored from `gaps_found` to `passed`
