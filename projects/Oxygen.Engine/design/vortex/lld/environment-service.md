@@ -12,7 +12,14 @@
 
 - **Stage 14** (reserved): volumetrics / heterogeneous volumes / clouds
 - **Stage 15** (active): sky/atmosphere rendering, height fog, distance
-  fog, and IBL (image-based lighting) data production
+  fog, and related environment composition
+
+Environment-owned probe / IBL products remain part of the same service, but
+they are **not** defined as same-frame outputs of the stage-15 sky/fog pass.
+They are persistent or change-driven environment products that the service
+prepares when needed and publishes per view when valid. This avoids the
+impossible stage-order dependency where stage 12 would otherwise need data
+that stage 15 had not produced yet.
 
 All environment-family work is grouped under this single service. Stage 14
 is a reserved no-op slot in Phase 4D that prevents architectural shock when
@@ -42,7 +49,7 @@ src/Oxygen/Vortex/
         │   ├── FogPass.h/.cpp
         │   └── IblProbePass.h/.cpp
         └── Types/
-            ├── IblFrameData.h
+            ├── EnvironmentFrameBindings.h
             ├── SkyParams.h
             └── FogParams.h
 ```
@@ -62,41 +69,63 @@ class EnvironmentLightingService : public ISubsystemService {
   void OnFrameStart(const FrameContext& frame) override;
   void Shutdown() override;
 
-  /// Stage 15: sky, atmosphere, fog, IBL. Per-view execution.
+  /// Stage 15: sky, atmosphere, fog composition. Per-view execution.
   void RenderSkyAndFog(RenderContext& ctx,
                         const SceneTextures& scene_textures);
-
-  /// Access IBL data for lighting consumers.
-  [[nodiscard]] auto GetIblData() const -> const IblFrameData*;
 
  private:
   Renderer& renderer_;
   std::unique_ptr<SkyRenderer> sky_;
   std::unique_ptr<FogRenderer> fog_;
   std::unique_ptr<IblProcessor> ibl_;
-  IblFrameData ibl_data_;
+  EnvironmentFrameBindings environment_bindings_;
 };
 
 }  // namespace oxygen::vortex
 ```
 
-### 2.3 IblFrameData
+### 2.3 EnvironmentFrameBindings
 
 ```cpp
-struct IblFrameData {
+struct EnvironmentProbeBindings {
   uint32_t environment_map_srv{kInvalidIndex};   // Cubemap SRV
   uint32_t irradiance_map_srv{kInvalidIndex};    // Diffuse irradiance SRV
   uint32_t prefiltered_map_srv{kInvalidIndex};   // Specular prefiltered SRV
   uint32_t brdf_lut_srv{kInvalidIndex};          // BRDF integration LUT SRV
+};
+
+struct EnvironmentEvaluationParameters {
   float ambient_intensity{1.0f};
+  float average_brightness{1.0f};
+  float blend_fraction{0.0f};
+  uint32_t flags{0};  // dynamic/static, sky-visible, bridge-eligible, etc.
+};
+
+struct EnvironmentFrameBindings {
+  EnvironmentProbeBindings probes;
+  EnvironmentEvaluationParameters evaluation;
 };
 ```
 
+The split is intentional. Probe handles and samplers evolve on a different axis
+from evaluation policy. UE 5.7 also effectively separates those concerns:
+processed / captured probe resources are one layer, while brightness, dynamic
+state, and shadowing / occlusion behavior are another. Keeping both layers in
+one typed payload gives Vortex the same flexibility without importing UE's
+entire parameter surface.
+
 ### 2.4 Per-View Publication
 
-`IblFrameData` is published per-view through `EnvironmentFrameBindings`
-in `ViewFrameBindings`. Deferred lighting at stage 12 reads IBL data for
-ambient contribution.
+`EnvironmentFrameBindings` is published per-view through
+`ViewFrameBindings`. The canonical long-lived consumer is future
+`IndirectLightingService` at stage 13. If Phase 4 temporarily samples the
+published ambient probe data in stage 12, that is a narrowly bounded migration
+bridge and must be treated as temporary prose-visible debt rather than a
+redefinition of stage ownership.
+
+The bridge, when enabled, may consume only the stable ambient subset of
+`EnvironmentEvaluationParameters`. Reflection, SSAO, skylight shadowing, and
+other canonical indirect-light controls remain reserved for stage 13.
 
 ## 3. Data Flow and Dependencies
 
@@ -108,6 +137,7 @@ ambient contribution.
 | Scene | Fog parameters (height, density, color) | Fog rendering |
 | SceneTextures | SceneColor (RTV) | Sky renders into SceneColor |
 | SceneTextures | SceneDepth (SRV) | Depth-based fog |
+| Environment state | Environment source changes / warm-up flags | Probe refresh when required |
 
 ### 3.2 Outputs
 
@@ -115,12 +145,19 @@ ambient contribution.
 | ------- | -------- | -------- |
 | Sky contribution | SceneColor | Direct render |
 | Fog contribution | SceneColor | Composite over scene |
-| IblFrameData | LightingService (stage 12) | Via `GetIblData()` |
-| IblFrameData | ForwardLighting consumers | Via ViewFrameBindings publication |
+| `EnvironmentFrameBindings` | Future `IndirectLightingService` (stage 13) | Published through `ViewFrameBindings` |
+| `EnvironmentFrameBindings` | Forward lighting / translucency consumers | Published through `ViewFrameBindings` |
+| `EnvironmentFrameBindings` | Phase 4 ambient bridge, if explicitly enabled | Published through `ViewFrameBindings` |
 
 ### 3.3 Execution Flow
 
 ```text
+EnvironmentLightingService::OnFrameStart(frame)
+  │
+  └─ Environment probe refresh (change-driven / amortized)
+        └─ Generate irradiance / prefiltered probe products when required
+        └─ Publish EnvironmentFrameBindings when valid
+
 EnvironmentLightingService::RenderSkyAndFog(ctx, scene_textures)
   │
   ├─ Sky pass:
@@ -132,10 +169,7 @@ EnvironmentLightingService::RenderSkyAndFog(ctx, scene_textures)
   │     └─ Apply height fog + distance fog
   │     └─ Blend fog color into SceneColor
   │
-  └─ IBL update (if environment changed):
-        └─ Generate irradiance map from environment cubemap
-        └─ Generate prefiltered specular map
-        └─ BRDF LUT is precomputed (persistent)
+  └─ Stage 15 finishes with sky/fog composition only
 ```
 
 ## 4. Resource Management
@@ -143,8 +177,8 @@ EnvironmentLightingService::RenderSkyAndFog(ctx, scene_textures)
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
 | Environment cubemap | Persistent (scene) | Loaded from scene assets |
-| Irradiance map | Persistent (scene) | Regenerated on environment change |
-| Prefiltered specular map | Persistent (scene) | Mip chain for roughness |
+| Irradiance map | Persistent (scene) | Regenerated on environment change or warm-up |
+| Prefiltered specular map | Persistent (scene) | Mip chain for roughness; amortizable across frames |
 | BRDF integration LUT | Persistent (global) | Precomputed once at init |
 | Sky/fog PSOs | Persistent | Cached |
 
@@ -218,10 +252,18 @@ float4 FogPassPS(FullscreenVSOutput input) : SV_Target {
 - Stage 14: reserved no-op (volumetrics, Phase 7D)
 - Stage 15: `environment_->RenderSkyAndFog(ctx, scene_textures)`
 
+Environment probe publication may be refreshed during lifecycle work such as
+`OnFrameStart()`. Stage 15 remains the sky/fog composition stage only.
+
+The reserved stage-14 family remains one Environment-owned umbrella, but it is
+expected to contain multiple internal steps when activated (for example
+volumetric fog, heterogeneous volumes, cloud rendering, and related
+composition work), not one monolithic future pass.
+
 ### 6.2 Null-Safe Behavior
 
-When null: no sky, no fog, no IBL. SceneColor shows only direct lighting
-against a black background. Deferred lighting has no ambient contribution.
+When null: no sky, no fog, and no published environment probe data. SceneColor
+shows only the lighting families that remain active.
 
 ### 6.3 Capability Gate
 
@@ -233,8 +275,9 @@ Requires `kEnvironmentLighting`.
    plane pixels only (no sky bleeding through geometry).
 2. **Fog validation:** Place camera at known distance → verify fog opacity
    matches expected exponential falloff.
-3. **IBL integration:** White metallic sphere → verify specular reflections
-   from environment map appear.
+3. **Environment publication:** Inspect the published
+   `EnvironmentFrameBindings` payload → verify probe SRVs are valid when the
+   environment is active.
 4. **RenderDoc:** Frame 10, inspect SceneColor after stage 15 — sky should
    be visible in background, fog should attenuate distant geometry.
 

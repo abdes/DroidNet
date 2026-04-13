@@ -19,7 +19,7 @@ Related documents:
 | [PLAN.md](./PLAN.md) | Phased execution plan |
 | [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) | Authoritative file placement |
 | [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) | Tracker |
-| [lld/README.md](lld/README.md) | LLD package index (D.1–D.18) |
+| [lld/README.md](lld/README.md) | LLD package index and reserved future LLDs |
 
 ## 1. Design Summary
 
@@ -49,6 +49,7 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 | Topic | LLD |
 | --- | --- |
 | Phase 1 substrate migration | [`substrate-migration-guide.md`](lld/substrate-migration-guide.md) |
+| ScenePrep refactor and publication contract | [`sceneprep-refactor.md`](lld/sceneprep-refactor.md) |
 | SceneTextures four-part contract | [`scene-textures.md`](lld/scene-textures.md) |
 | SceneRenderBuilder + SceneRenderer shell | [`scene-renderer-shell.md`](lld/scene-renderer-shell.md) |
 | Depth prepass (stage 3) | [`depth-prepass.md`](lld/depth-prepass.md) |

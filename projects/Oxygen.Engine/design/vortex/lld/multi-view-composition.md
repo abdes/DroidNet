@@ -26,11 +26,11 @@ routes each view's output to the correct surface.
 
 | Stage | Iteration | Notes |
 | ----- | --------- | ----- |
-| 2 (InitViews) | Per view | Separate visibility per view |
+| 2 (InitViews) | Per frame with per-view prepared outputs | One frame-shared collection pass, then one prepared-scene payload per view |
 | 3 (DepthPrepass) | Per view | Separate depth per view |
 | 5 (Occlusion) | Per view | Separate HZB per view |
-| 6 (LightGrid) | Per frame | Shared light data |
-| 8 (ShadowDepths) | Per frame | Shared shadow maps |
+| 6 (LightGrid) | Per frame setup + per-view publication | Shared light-data family, published per view |
+| 8 (ShadowDepths) | Per frame setup + per-view publication | Shared allocation work is allowed; published shadow payload remains per view |
 | 9 (BasePass) | Per view | Separate GBuffers per view |
 | 12 (DeferredLighting) | Per view | Per-view SceneColor accumulation |
 | 15 (Environment) | Per view | Per-view sky/fog |
@@ -43,7 +43,7 @@ routes each view's output to the correct surface.
 void SceneRenderer::OnRender(RenderContext& ctx) {
   auto& views = renderer_.GetPublishedViews();
 
-  // Stage 2 remains a per-frame stage that publishes per-view visibility data
+  // Stage 2 remains a per-frame stage that publishes one prepared-scene payload per view
   if (init_views_) init_views_->Execute(ctx, scene_textures_);          // 2
 
   // Per-frame stages (shared)
@@ -112,7 +112,7 @@ When `shading_mode == kForward`:
 
 - BasePass writes directly to SceneColor (forward lighting, no GBuffers)
 - Stage 12 deferred lighting is skipped for this view
-- Forward lighting uses ForwardLightData from LightingService
+- Forward lighting uses the published forward-light package from LightingService
 
 ### 3.3 Mixed-Mode Frame
 
@@ -200,8 +200,9 @@ per-view capability overrides:
 view1_descriptor.capability_overrides = ~kShadowing;
 ```
 
-When a service is disabled for a view, its stage is a null-safe no-op for
-that view iteration.
+When a service is disabled for a view, that view receives no publication from
+that service and the consuming stages behave as null-safe no-ops for that view
+iteration.
 
 ## 7. Testability Approach
 
@@ -212,7 +213,8 @@ that view iteration.
 3. **PiP composition:** Primary + secondary view → verify secondary appears
    as sub-rect overlay.
 4. **Capability override:** Disable shadows for secondary view → verify
-   no shadow pass runs for that view, shadow pass still runs for primary.
+   the secondary view receives empty shadow bindings while the primary view
+   still receives valid shadow data.
 5. **RenderDoc:** Frame 10, verify correct stage ordering per view in event
    list.
 

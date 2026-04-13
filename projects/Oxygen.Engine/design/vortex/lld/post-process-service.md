@@ -8,10 +8,13 @@
 
 ### 1.1 What This Covers
 
-`PostProcessService` — the stage-22 owner responsible for HDR → LDR tone
-mapping, auto-exposure, bloom, and the AA/TSR-facing slot. This is the
-final rendering pass before composition and the minimum requirement for
-visible screen output.
+`PostProcessService` — the stage-22 owner responsible for the per-view
+post-processing family: HDR → LDR tonemapping, exposure, bloom, the temporal
+AA / TSR-facing slot, and related per-view post histories.
+
+The service writes into a SceneRenderer-supplied post target. It does **not**
+own presentation, extraction, or handoff policy; those remain with
+SceneRenderer stage 21 / stage 23 and Renderer Core composition ownership.
 
 ### 1.2 Stage Position
 
@@ -94,28 +97,32 @@ class PostProcessService : public ISubsystemService {
 ```text
 PostProcessService::Execute(ctx, scene_textures)
   │
-  ├─ 1. Auto-exposure (if enabled)
-  │     └─ Read SceneColor → compute luminance histogram
-  │     └─ Adapt exposure from previous frame
-  │     └─ Output: exposure value (float)
+  ├─ 0. Optional temporal upscaler / TAA slot
+  │     └─ Consume resolved SceneColor + SceneVelocity + histories
+  │     └─ Write updated temporal history when enabled
+  │
+  ├─ 1. Exposure work
+  │     └─ Compute luminance histogram or use fixed-exposure fallback
+  │     └─ Update EyeAdaptation state for the current view
   │
   ├─ 2. Bloom (if enabled)
-  │     └─ Downsample SceneColor (bright pass)
+  │     └─ Downsample bright scene signal
   │     └─ Gaussian blur chain (4-6 levels)
   │     └─ Upsample and composite
-  │     └─ Output: bloom texture (same resolution as SceneColor)
+  │     └─ Output: filtered bloom texture at service-chosen resolution
   │
   └─ 3. Tonemap (always)
-        └─ Read SceneColor + bloom + exposure
+        └─ Read post-temporal scene signal + bloom + exposure state
         └─ Apply tonemap operator (ACES or Filmic)
-        └─ Output: LDR result to final output target
+        └─ Output: LDR result to the SceneRenderer-supplied post target
 ```
 
 ### 3.2 Phase 4B Minimum
 
-Tonemap is the only hard requirement for visible output. Auto-exposure and
-bloom are implemented if straightforward to carry from legacy. If not
-feasible in Phase 4B, tonemap alone with fixed exposure is sufficient.
+Tonemap is the only hard requirement for visible output. Phase 4B may start
+with tonemap plus fixed-exposure fallback. Auto-exposure and bloom are added
+if straightforward. The temporal slot and history ownership are fixed in the
+design even if temporal AA / TSR remains inactive in Phase 4B.
 
 ## 4. Data Flow and Dependencies
 
@@ -123,17 +130,18 @@ feasible in Phase 4B, tonemap alone with fixed exposure is sufficient.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| SceneTextures | SceneColor (SRV) | HDR lit scene |
+| SceneTextures | SceneColor (SRV) | HDR resolved scene signal |
 | SceneTextures | SceneDepth (SRV) | Depth-aware effects (DOF in future) |
-| SceneTextures | Velocity (SRV) | TAA/TSR motion vectors (future) |
-| Previous frame | Adapted exposure | Temporal exposure adaptation |
+| SceneTextures | Velocity (SRV) | TAA / TSR motion vectors when enabled |
+| Previous frame | EyeAdaptation / temporal histories | Post-owned history state |
 
 ### 4.2 Outputs
 
 | Product | Target | Notes |
 | ------- | ------ | ----- |
-| Tonemapped LDR output | Back buffer or composition target | Final visible output |
-| Adapted exposure | Persistent state | For next frame's adaptation |
+| Tonemapped LDR output | SceneRenderer-supplied post target | Consumed by composition / offscreen handoff |
+| EyeAdaptation state | Persistent per-view history | For next frame's adaptation |
+| TemporalAA / TSR histories | Persistent per-view history | Updated only when temporal path is active |
 
 ## 5. Shader Contracts
 
@@ -212,9 +220,11 @@ float4 TonemapPS(FullscreenVSOutput input) : SV_Target {
 
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
-| Bloom mip chain (4-6 levels) | Per frame | Half-res, quarter-res, etc. |
+| Bloom mip chain (4-6 levels) | Per frame | Service-chosen filtered resolutions |
 | Exposure histogram buffer | Per frame | 256-bin histogram |
-| Adapted exposure buffer | Persistent | Temporal adaptation state |
+| EyeAdaptation buffer | Persistent per view | Temporal adaptation state |
+| TemporalAA history | Persistent per view | Reserved in Phase 4B, active when temporal path lands |
+| TSR history | Persistent per view | Future post-owned history family |
 | Tonemap PSO | Persistent | Cached |
 | Bloom PSOs (down/up) | Persistent | Cached |
 
@@ -224,10 +234,15 @@ float4 TonemapPS(FullscreenVSOutput input) : SV_Target {
 
 `post_process_->Execute(ctx, scene_textures)` at stage 22.
 
+Stage 21 remains a thin optional resolve owned by SceneRenderer. Stage 22 must
+therefore accept either the resolved scene signal or the original scene color
+when no separate resolve work was needed.
+
 ### 7.2 Null-Safe Behavior
 
-When null: no tone mapping occurs. SceneColor HDR values are presented
-directly (will appear washed-out/overexposed without tonemapping).
+When null: SceneRenderer routes the resolved scene signal directly to its
+composition / offscreen target with no post-family work. Presentation and
+handoff ownership still remain outside the service.
 
 ### 7.3 Capability Gate
 
@@ -237,18 +252,19 @@ produces output.
 ## 8. Testability Approach
 
 1. **Tonemap validation:** Render constant-color scene (HDR value 2.0) →
-   verify tonemap output matches expected ACES curve value.
+   verify tonemap output in the post target matches the expected ACES curve
+   value.
 2. **Exposure adaptation:** Render scene across frames with changing
-   brightness → verify exposure adapts over time.
+   brightness → verify EyeAdaptation state adapts over time.
 3. **Bloom validation:** Place bright emissive object → verify bloom glow
-   around object in final output.
+   around object in the post target.
 4. **RenderDoc:** Frame 10, inspect post-process pass inputs (SceneColor)
-   and output (LDR back buffer).
+   and output (LDR post target).
 
 ## 9. Open Questions
 
 1. **Tonemap operator selection:** ACES vs Filmic vs AgX. Phase 4B uses
    ACES; selection can be config-driven later.
-2. **TAA integration:** Temporal anti-aliasing requires SceneVelocity and
-   history buffers. Deferred to Phase 5 or 7. The slot exists in
-   PostProcessService but is not populated.
+2. **Initial temporal path:** TAA vs TSR for the first active temporal
+   implementation. The stage-22 ownership and history contract are fixed now;
+   only the first active algorithm choice is deferred.

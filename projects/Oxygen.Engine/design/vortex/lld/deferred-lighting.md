@@ -79,14 +79,15 @@ class LightingService {
  public:
   void RenderDeferredLighting(RenderContext& ctx,
                                const SceneTextures& scene_textures);
-  [[nodiscard]] auto GetForwardLightData() const -> const ForwardLightData*;
 };
 ```
 
 The Phase 3 inline implementation should be written to facilitate this
 migration with minimal restructuring. The CPU-side orchestration is temporary;
 the shader-family home already follows the final Lighting-domain owner to avoid
-future shader-path churn.
+future shader-path churn. Phase 4A also introduces a separately published
+forward-light family under the Lighting domain, but that supporting product
+does not replace the canonical per-light deferred direct-lighting contract.
 
 ### 2.4 Ownership and Lifetime
 
@@ -143,8 +144,10 @@ struct DeferredLightConstants {
 };
 ```
 
-Phase 4A replaces this with `ForwardLightData` structured buffer for batch
-access.
+Phase 4A keeps this per-light payload model as the canonical deferred
+direct-lighting path. The Lighting service adds a separately published
+forward-light package for translucency and later optional optimizations, but
+stage 12 does not become defined by that package.
 
 ## 4. Data Flow and Dependencies
 

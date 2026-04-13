@@ -160,7 +160,7 @@ Phase 3 uses kA through kD (4 GBuffers). kE and kF are reserved slots.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Per-view visible primitive lists | Determines what to draw |
+| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Determines what to draw without scene re-traversal |
 | DepthPrepassModule (stage 3) | SceneDepth (read), completeness state | Early-Z optimization |
 | SceneTextures | GBuffer RTVs, SceneColor RTV, SceneDepth DSV | Render targets |
 | GeometryUploader | Vertex/index buffer bindings | Mesh data |
@@ -199,7 +199,7 @@ After stage 10 (inline):
 ```text
 BasePassModule::Execute(ctx, scene_textures)
   │
-  ├─ Read current view visibility packet from ctx
+  ├─ Read current view prepared-scene payload from ctx
   │     │
   │     ├─ Set render targets:
   │     │     RTV[0] = GBufferA
@@ -210,10 +210,10 @@ BasePassModule::Execute(ctx, scene_textures)
   │     │     DSV    = SceneDepth (DEPTH_READ if early_z, DEPTH_WRITE otherwise)
   │     │
   │     ├─ mesh_processor_->BuildDrawCommands(
-  │     │     current_view_visibility.visible_primitives)
-  │     │     Filter: opaque + masked geometry participating in the deferred
-  │     │             opaque contract (no translucent)
-  │     │     Group: by material (minimize PSO/binding changes)
+  │     │     current_view_prepared_scene)
+  │     │     Consume published prepared-scene partitions / items
+  │     │     Filter/refine: opaque + masked deferred participants only
+  │     │     Group: by material / mesh without rebuilding coarse routing
   │     │
   │     ├─ for each draw command:
   │     │     ├─ Bind GBuffer PSO (material-specific variant)
@@ -311,10 +311,10 @@ class BasePassMeshProcessor {
  public:
   explicit BasePassMeshProcessor(Renderer& renderer);
 
-  /// Filter and group visible primitives for GBuffer rendering.
-  /// Groups by material to minimize PSO/binding state changes.
+  /// Build GBuffer draw commands from the current view's prepared-scene
+  /// payload. Groups by material to minimize PSO/binding state changes.
   void BuildDrawCommands(
-      std::span<const VisiblePrimitive> visible_primitives,
+      const PreparedSceneFrame& prepared_scene,
       ShadingMode mode);
 
   [[nodiscard]] auto GetDrawCommands() const
@@ -330,11 +330,12 @@ class BasePassMeshProcessor {
 
 ### 6.2 Material Grouping Strategy
 
-1. Sort visible primitives by material index (primary) then by mesh
-   (secondary, for instancing).
-2. Within each material group, emit one PSO bind + material resource bind,
+1. Start from the published prepared-scene routing for the current view.
+2. Refine / group by material index (primary) then by mesh (secondary, for
+   instancing).
+3. Within each material group, emit one PSO bind + material resource bind,
    then N draw calls for N meshes using that material.
-3. Instanced draws where mesh + material match across multiple instances.
+4. Instanced draws where mesh + material match across multiple instances.
 
 ## 7. Stage Integration
 
@@ -382,7 +383,9 @@ Per ARCHITECTURE.md §5.1.3, velocity is written across stages:
 
 After GBuffer MRT draws, a velocity completion pass runs:
 
-1. Filter visible primitives to only dynamic geometry (`is_dynamic == true`).
+1. Refine the current view's prepared-scene payload to dynamic geometry only.
+   In the canonical design this is a local refinement over published prepared
+   data, not a second scene traversal.
 2. For each: bind previous-frame transform, current-frame transform.
 3. Compute screen-space velocity = current clip position − previous clip
    position.
