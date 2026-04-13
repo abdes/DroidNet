@@ -441,6 +441,13 @@ public:
     textures_.insert_or_assign(key, std::move(texture));
   }
 
+  auto SetCookedTexturePayload(
+    content::ResourceKey key, std::span<const std::uint8_t> payload) -> void
+  {
+    cooked_payloads_.insert_or_assign(
+      key, std::vector<uint8_t>(payload.begin(), payload.end()));
+  }
+
   auto SetLoadFailure(content::ResourceKey key) -> void
   {
     textures_.insert_or_assign(key, nullptr);

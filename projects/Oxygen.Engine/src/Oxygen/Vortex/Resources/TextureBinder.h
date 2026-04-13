@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -119,10 +120,18 @@ public:
   using ProviderT = vortex::upload::StagingProvider;
   using CoordinatorT = vortex::upload::UploadCoordinator;
 
+  struct UploadLimits {
+    std::size_t max_upload_bytes_per_frame { 128ULL * 1024ULL * 1024ULL };
+    std::size_t max_pending_upload_bytes { 128ULL * 1024ULL * 1024ULL };
+    std::size_t deferred_retry_low_watermark_bytes { 64ULL * 1024ULL * 1024ULL };
+    std::size_t max_deferred_retries_per_frame { 4U };
+  };
+
   OXGN_VRTX_API TextureBinder(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> uploader,
-    observer_ptr<content::IAssetLoader> texture_loader);
+    observer_ptr<content::IAssetLoader> texture_loader,
+    UploadLimits limits = {});
 
   OXYGEN_MAKE_NON_COPYABLE(TextureBinder)
   OXYGEN_MAKE_NON_MOVABLE(TextureBinder)
@@ -152,6 +161,15 @@ public:
 
   OXGN_VRTX_NDAPI auto IsResourceReady(
     const content::ResourceKey& key) const noexcept -> bool override;
+
+  [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadCount() const noexcept
+    -> std::size_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadBytes() const noexcept
+    -> std::size_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetDeferredRetryCount() const noexcept
+    -> std::size_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadByteBudget() const noexcept
+    -> std::size_t;
 
 private:
   class Impl;

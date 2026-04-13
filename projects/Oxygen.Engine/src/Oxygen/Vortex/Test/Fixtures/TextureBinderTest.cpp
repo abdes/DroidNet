@@ -45,7 +45,8 @@ auto TextureBinderTest::SetUp() -> void
 
   texture_binder_ = std::make_unique<resources::TextureBinder>(
     observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
-    observer_ptr { uploader_.get() }, observer_ptr { texture_loader_.get() });
+    observer_ptr { uploader_.get() }, observer_ptr { texture_loader_.get() },
+    BinderLimits());
 }
 
 auto TextureBinderTest::AllocatedSrvCount() const -> uint32_t
