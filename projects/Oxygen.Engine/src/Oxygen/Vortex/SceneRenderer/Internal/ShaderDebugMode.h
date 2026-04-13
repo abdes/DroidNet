@@ -11,7 +11,6 @@
 
 namespace oxygen::vortex {
 
-//! Debug visualization mode for Vortex shading passes.
 enum class ShaderDebugMode : uint8_t {
   kDisabled = 0,
   kLightCullingHeatMap = 1,

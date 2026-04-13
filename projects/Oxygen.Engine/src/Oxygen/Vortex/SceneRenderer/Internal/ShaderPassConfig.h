@@ -12,7 +12,7 @@
 
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Vortex/SceneRenderer/ShaderDebugMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Internal/ShaderDebugMode.h>
 
 namespace oxygen::graphics {
 class Texture;
@@ -20,7 +20,6 @@ class Texture;
 
 namespace oxygen::vortex {
 
-//! Configuration for the Vortex shading pass planning contract.
 struct ShaderPassConfig {
   std::shared_ptr<const graphics::Texture> color_texture = nullptr;
   bool clear_color_target = true;

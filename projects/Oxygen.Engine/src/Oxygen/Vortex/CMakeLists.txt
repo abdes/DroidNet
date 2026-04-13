@@ -60,9 +60,6 @@ set(
   "RendererTag.h"
   "RenderMode.h"
   "SceneCameraViewResolver.h"
-  "SceneRenderer/ShaderDebugMode.h"
-  "SceneRenderer/ShaderPassConfig.h"
-  "SceneRenderer/ToneMapPassConfig.h"
   "Passes/ComputeRenderPass.h"
   "Passes/GraphicsRenderPass.h"
   "Passes/RenderPass.h"
@@ -153,6 +150,9 @@ set(
   "SceneRenderer/DepthPrePassPolicy.h"
   "SceneRenderer/Internal/FramePlanBuilder.cpp"
   "SceneRenderer/Internal/FramePlanBuilder.h"
+  "SceneRenderer/Internal/ShaderDebugMode.h"
+  "SceneRenderer/Internal/ShaderPassConfig.h"
+  "SceneRenderer/Internal/ToneMapPassConfig.h"
   "SceneRenderer/Internal/ViewRenderPlan.h"
   "Types/ViewConstants.cpp"
   "Upload/AtlasBuffer.cpp"
@@ -204,7 +204,6 @@ target_link_libraries(
     oxygen::data
     oxygen::scene
     oxygen::engine
-    oxygen::imgui
     oxygen::graphics-common
     oxygen::nexus
 )
