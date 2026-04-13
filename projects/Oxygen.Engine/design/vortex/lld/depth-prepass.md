@@ -17,7 +17,7 @@ in the Vortex frame that writes to render targets.
 
 | Position | Stage | Notes |
 | -------- | ----- | ----- |
-| Predecessor | Stage 2 (InitViews) | Visibility lists, per-view command packets |
+| Predecessor | Stage 2 (InitViews) | Current-view prepared-scene payload published |
 | **This** | **Stage 3 — DepthPrepass** | Depth-only + partial velocity |
 | Successor | Stage 5 (Occlusion/HZB — reserved) or Stage 9 (BasePass) | |
 
@@ -138,7 +138,7 @@ enum class DepthPrePassCompleteness : std::uint8_t {
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Per-view visible primitive lists | Determines what to draw |
+| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Determines what to draw without scene re-traversal |
 | SceneTextures | SceneDepth DSV | Render target |
 | SceneTextures | Velocity UAV (optional) | Partial velocity output |
 | Renderer | Depth-only PSO cache | Pipeline state |
@@ -176,15 +176,16 @@ DepthPrepassModule::Execute(ctx, scene_textures)
   │
   ├─ if config_.mode == kDisabled → return
   │
-  ├─ Read current view visibility packet from ctx
+  ├─ Read current view prepared-scene payload from ctx
   │     │
   │     ├─ Set render targets:
   │     │     DSV = scene_textures.GetSceneDepth() (depth-stencil view)
   │     │     No color RTs bound (depth-only pass)
   │     │
-  │     ├─ mesh_processor_->BuildDrawCommands(current_view_visibility.visible_primitives)
-  │     │     Filter: opaque geometry only
-  │     │     Sort: front-to-back by distance_sq
+  │     ├─ mesh_processor_->BuildDrawCommands(current_view_prepared_scene, include_masked)
+  │     │     Consume published prepared-scene ranges / items
+  │     │     Filter/refine: opaque + masked participants only
+  │     │     Sort/refine: front-to-back within the prepared-scene contract
   │     │
   │     ├─ for each draw command:
   │     │     ├─ Bind depth-only PSO (VS only, no PS for opaque)
@@ -310,10 +311,12 @@ class DepthPrepassMeshProcessor {
  public:
   explicit DepthPrepassMeshProcessor(Renderer& renderer);
 
-  /// Filter and sort visible primitives for depth-only drawing.
+  /// Build depth-only draw commands from the current view's prepared-scene
+  /// payload. Helper visibility lists, if any, are local projections over the
+  /// prepared frame rather than a second authoritative input contract.
   /// Outputs: sorted draw commands for opaque geometry.
   void BuildDrawCommands(
-      std::span<const VisiblePrimitive> visible_primitives,
+      const PreparedSceneFrame& prepared_scene,
       bool include_masked);
 
   /// Access built commands.
@@ -351,7 +354,7 @@ SceneRenderer calls `DepthPrepassModule::Execute(ctx, scene_textures)` at
 stage 3. The module:
 
 1. Checks policy (disabled → early return)
-2. Iterates per-view visibility lists from RenderContext
+2. Reads the current view's published `PreparedSceneFrame` from RenderContext
 3. Issues GPU draw commands
 4. Copies depth extract
 5. Sets completeness state

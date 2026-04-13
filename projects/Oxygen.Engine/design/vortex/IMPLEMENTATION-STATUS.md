@@ -899,7 +899,7 @@ When implementation resumes, keep these baseline facts explicit:
 - The current legacy renderer is still the live implementation and the current
   source of reusable substrate.
 - Referenced historical documents `vortex-initial-design.md` and
-  `parity-analysis.md` do not exist in the repo; the current five-document
+  `parity-analysis.md` do not exist in the repo; the current Vortex design
   package supersedes them.
 - The active production path is `Oxygen.Renderer` + `ForwardPipeline`.
 - Use frame 10 as the RenderDoc baseline capture point.

@@ -9,35 +9,38 @@
 ### 1.1 What This Covers
 
 `InitViewsModule` — the stage-2 orchestrator responsible for visibility
-culling, ScenePrep dispatch, per-view command generation, and dynamic
+culling, ScenePrep dispatch, per-view prepared-scene publication, and dynamic
 primitive-mask tracking. It is the first scene-specific render stage in the
-23-stage frame and the gateway through which all downstream GPU passes
-receive their work.
+23-stage frame and the gateway through which all downstream GPU passes receive
+their work.
 
 ### 1.2 Stage Position
 
 | Position | Stage | Notes |
 | -------- | ----- | ----- |
 | Predecessor | Stage 1 (OnPreRender) | Frame constants, camera, SceneTextures allocation |
-| **This** | **Stage 2 — InitViews** | Visibility + command generation |
-| Successor | Stage 3 (DepthPrepass) | Depth-only pass consuming visibility lists |
+| **This** | **Stage 2 — InitViews** | Visibility + prepared-scene publication |
+| Successor | Stage 3 (DepthPrepass) | Depth-only pass consuming the current-view prepared payload |
 
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 2
 - [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — frame dispatch pipeline
-- UE5 reference: `BeginInitViews` family (~6.5 k lines)
+- [sceneprep-refactor.md](sceneprep-refactor.md) — authoritative ScenePrep
+  runtime contract and traversal budget
 
 ### 1.4 Required Invariants For This Module
 
 This module must preserve the following invariants from
 [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
 
-- `InitViews` is the per-frame publisher of per-view visibility packets
+- `InitViews` is the per-frame publisher of per-view prepared scene packets
 - `SceneRenderer`, not `InitViewsModule`, owns downstream per-view iteration
-- downstream stages consume published visibility for the current view selected
-  in `RenderContext`
+- downstream stages consume the published prepared-scene payload for the
+  current view selected in `RenderContext`
+- the desktop runtime path pays one full scene traversal per scene per frame,
+  then only per-view refinement over cached candidates
 
 ## 2. Interface Contracts
 
@@ -70,24 +73,21 @@ class InitViewsModule {
   auto operator=(const InitViewsModule&) -> InitViewsModule& = delete;
 
   /// Stage 2 entry point. Called once per frame.
-  /// Iterates all published views, builds per-view visibility packets, and
-  /// publishes them for downstream per-view stage execution owned by
+  /// Iterates all published views, builds per-view prepared-scene payloads,
+  /// and publishes them for downstream per-view stage execution owned by
   /// SceneRenderer.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
  private:
   Renderer& renderer_;
 
-  // ScenePrep pipeline — owns scene traversal + visibility
-  std::unique_ptr<ScenePrep::ScenePrepPipeline> scene_prep_;
+  // Persistent ScenePrep substrate owned for the lifetime of the stage.
+  std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
+  sceneprep::ScenePrepState scene_prep_state_;
 
-  // Per-view visibility results (rebuilt each frame)
-  struct ViewVisibility {
-    ViewId view_id;
-    std::vector<VisiblePrimitive> visible_primitives;
-    uint32_t dynamic_primitive_mask{0};
-  };
-  std::vector<ViewVisibility> view_visibilities_;
+  // Per-view prepared-scene backing storage, reused across frames.
+  struct PreparedSceneViewStorage;
+  std::unordered_map<ViewId, PreparedSceneViewStorage> prepared_views_;
 };
 
 }  // namespace oxygen::vortex
@@ -99,7 +99,8 @@ class InitViewsModule {
 | ----- | -------- | -------- |
 | `InitViewsModule` | `SceneRenderer` (unique_ptr) | Same as SceneRenderer |
 | `ScenePrepPipeline` | `InitViewsModule` (unique_ptr) | Same as InitViewsModule |
-| `ViewVisibility` vec | `InitViewsModule` | Rebuilt per frame |
+| `ScenePrepState` | `InitViewsModule` | Persistent across frames |
+| per-view prepared-scene storage | `InitViewsModule` | Reused across frames, isolated per view |
 
 ## 3. Data Flow and Dependencies
 
@@ -108,15 +109,15 @@ class InitViewsModule {
 | Source | Data | Access Pattern |
 | ------ | ---- | -------------- |
 | Engine | Published CompositionViews (ViewId, camera, ZOrder) | Via Renderer → CompositionView API |
-| Engine | Scene node graph (transforms, geometry, materials) | Via ScenePrepPipeline::Collect() |
+| Engine | Scene node graph (transforms, geometry, materials) | One frame-shared ScenePrep traversal, then cached-candidate reuse per view |
 | SceneTextures | Resolution, format config | Via SceneTexturesConfig |
 
 ### 3.2 Outputs
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Per-view visible-primitive lists | DepthPrepassModule, BasePassModule | Stored in RenderContext (per-view slot or typed publish) |
-| Dynamic primitive masks | BasePassModule (material routing) | Stored alongside visibility lists |
+| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later per-view stages | Stored in RenderContext / typed per-view publication |
+| Dynamic primitive classification | BasePassModule (velocity completion), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices |
 | Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
 
 ### 3.3 Sequence Diagram
@@ -126,31 +127,36 @@ SceneRenderer::OnRender(ctx)
   │
   ├─ InitViewsModule::Execute(ctx, scene_textures)
   │     │
-  │     ├─ for each published view:
-  │     │     ├─ ScenePrepPipeline::Collect(scene, view, frame_id, state, reset)
-  │     │     ├─ Frustum culling → visible primitive list
-  │     │     ├─ Dynamic primitive mask compilation
-  │     │     └─ Store ViewVisibility in ctx
+  │     ├─ ScenePrepPipeline::BeginFrameCollection(scene, frame_id, persistent_state)
+  │     │     └─ one full scene traversal for the scene
   │     │
-  │     └─ ScenePrepPipeline::Finalize()
+  │     ├─ for each published view:
+  │     │     ├─ ScenePrepPipeline::PrepareView(scene, view, frame_id, persistent_state, storage)
+  │     │     ├─ per-view frustum / LOD refinement over cached candidates only
+  │     │     ├─ ScenePrepPipeline::FinalizeView(persistent_state, storage)
+  │     │     └─ Publish PreparedSceneFrame for the view
+  │     │
+  │     └─ Publish optional per-view auxiliary classification products
   │
-  ├─ DepthPrepassModule::Execute(ctx, ...)   // consumes visibility
-  └─ BasePassModule::Execute(ctx, ...)        // consumes visibility
+  ├─ DepthPrepassModule::Execute(ctx, ...)   // consumes current-view PreparedSceneFrame
+  └─ BasePassModule::Execute(ctx, ...)       // consumes current-view PreparedSceneFrame
 ```
 
 ## 4. Resource Management
 
 ### 4.1 GPU Resources
 
-InitViewsModule is CPU-only in Phase 3. No GPU resources are allocated.
-Visibility is computed on the CPU via frustum culling.
+InitViewsModule owns no render or compute passes in Phase 3. Visibility is
+computed on the CPU via frustum culling, but stage-2 finalization may
+materialize view-local structured-buffer payloads (for example draw metadata
+and related prepared-scene arrays) through Renderer-Core-owned upload helpers.
 
 ### 4.2 CPU Allocations
 
 | Resource | Lifetime | Strategy |
 | -------- | -------- | -------- |
-| Visible-primitive vectors | Per frame | Reuse capacity across frames (clear + rebuild) |
-| ScenePrepState | Per frame | Owned by ScenePrepPipeline, reset per Collect() |
+| per-view prepared-scene backing storage | Per view per frame | Reuse capacity across frames, isolate storage per view |
+| `ScenePrepState` | Persistent | Owned by `InitViewsModule`, reset once per frame and once per view by phase |
 
 ### 4.3 Future GPU Resources (Phase 5+)
 
@@ -171,96 +177,88 @@ stage 2. If `init_views_` is null, stage 2 is skipped with zero overhead.
 
 ### 6.2 Null-Safe Behavior
 
-When null: downstream per-view stages receive no published visibility packets.
-DepthPrepass and BasePass therefore emit no draw calls. SceneTextures remain in
-their post-allocation state.
+When null: downstream per-view stages receive no published prepared-scene
+payloads.
+DepthPrepass and BasePass therefore receive no current-view prepared-scene
+payload and emit no draw calls. SceneTextures remain in their post-allocation
+state.
 
 ### 6.3 Capability Gate
 
 `InitViewsModule` requires `kScenePreparation`. In the Phase 3 deferred-core
 baseline that capability is expected to be active; if it is intentionally
-absent, stage 2 stays null and no visibility packets are published.
+absent, stage 2 stays null and no prepared-scene payloads are published.
 
 ## 7. ScenePrep Integration
 
-### 7.1 ScenePrepPipeline Usage Pattern
+### 7.1 Authoritative ScenePrep Contract
+
+The authoritative ScenePrep runtime contract lives in
+[sceneprep-refactor.md](sceneprep-refactor.md). `InitViewsModule` must use the
+phase-explicit flow defined there; it must not use a stack-local per-view
+`ScenePrepState` or a "first view resets everything" pattern.
+
+### 7.2 ScenePrepPipeline Usage Pattern
 
 ```cpp
 void InitViewsModule::Execute(RenderContext& ctx,
                                SceneTextures& scene_textures) {
-  // Reset per-frame state
-  view_visibilities_.clear();
-
   auto& views = renderer_.GetPublishedViews();
+  auto& state = scene_prep_state_;
+  const auto& scene = renderer_.GetActiveScene();
+
+  // Exactly one full scene traversal for the scene in this frame.
+  scene_prep_->BeginFrameCollection(scene, ctx.frame_id(), state);
 
   for (const auto& view : views) {
-    ScenePrepState state;
-    bool reset = (view == views.front());
+    auto& storage = AcquirePreparedSceneViewStorage(view.GetViewId());
 
-    scene_prep_->Collect(
-        renderer_.GetActiveScene(),
-        view,
-        ctx.frame_id(),
-        state,
-        reset);
+    scene_prep_->PrepareView(scene, view, ctx.frame_id(), state, storage);
+    scene_prep_->FinalizeView(state, storage);
 
-    // Build visibility from ScenePrepState
-    ViewVisibility vis;
-    vis.view_id = view.GetViewId();
-    BuildVisiblePrimitiveList(state, view, vis);
-    view_visibilities_.push_back(std::move(vis));
+    // Publish per-view prepared-scene payload for downstream stages.
+    ctx.PublishPreparedSceneFrame(view.GetViewId(), storage.published_view);
   }
-
-  scene_prep_->Finalize();
-
-  // Publish per-view visibility packets for downstream per-view stages
-  ctx.SetViewVisibilities(view_visibilities_);
 }
 ```
 
-### 7.2 Frustum Culling
+### 7.3 Traversal Model and Per-View Refinement
 
-Phase 3 implements CPU frustum culling:
+Phase 3 implements CPU view refinement with this required cost model:
 
-1. For each scene node in ScenePrepState, test AABB against view frustum.
-2. Nodes passing the test are added to the ViewVisibility's visible list.
-3. Dynamic primitives (animated, WPO) are flagged in the dynamic mask.
+1. perform one full scene traversal to build frame-shared candidate caches
+2. for each published view, iterate cached candidates only
+3. perform per-view frustum culling, LOD selection, and dynamic classification
+   during that cached-candidate scan
+4. finalize one published `PreparedSceneFrame` for the view
+5. never re-traverse the scene graph in stage 3, stage 9, or later stages
 
 GPU-driven culling (compute shader, HZB feedback) is deferred to Phase 5
 (OcclusionModule integration).
 
-## 8. Visible Primitive Record
+## 8. Published Prepared-Scene Contract
 
-```cpp
-struct VisiblePrimitive {
-  uint32_t node_index;         // Index into ScenePrepState node array
-  uint32_t mesh_lod_index;     // Selected LOD level
-  uint32_t material_index;     // Material binding index
-  float distance_sq;           // Squared distance to camera (for sorting)
-  bool is_dynamic;             // True for animated/WPO geometry
-  bool casts_shadow;           // From node flags
-};
-```
+The stage-2 canonical published product is `PreparedSceneFrame`, not a raw
+`ScenePrepState` and not a second competing scene-prep payload.
 
-Downstream consumers (DepthPrepass, BasePass) iterate this list and filter
-by their own criteria (e.g., depth prepass skips translucent, base pass
-routes by material shader).
+If `InitViewsModule` keeps any lightweight "visible primitive" helper for local
+CPU hot paths, it is an internal helper only and must be keyed to indices in
+the current view's `PreparedSceneFrame`.
 
 ## 9. Testability Approach
 
 1. **Unit test:** Construct `InitViewsModule` with a mock scene containing
-   known geometry. Verify that frustum culling produces correct
-   visible/invisible splits for a given camera.
+   known geometry. Verify one frame-shared collection traversal and correct
+   per-view refinement for a given camera.
 2. **Integration test:** Run full InitViews → DepthPrepass → BasePass
    pipeline. Verify that GBuffer contains data only for geometry present in the
-   published visibility packets consumed by downstream per-view stages.
+   published prepared-scene payload consumed by downstream per-view stages.
 3. **RenderDoc validation:** At frame 10, inspect that draw calls in
-   DepthPrepass and BasePass match the visibility lists from InitViews
-   (draw count ≈ visible primitive count).
+   DepthPrepass and BasePass match the published prepared-scene payload from
+   InitViews without hidden scene re-traversal in the downstream stages.
 
 ## 10. Open Questions
 
-1. **Sorting order:** Should visible primitives be sorted front-to-back for
-   depth prepass or should each downstream stage sort independently? Current
-   design: InitViews sorts by distance; downstream stages consume in order.
-   This may be revisited if GPU-driven sorting is added.
+None for the baseline contract. Any future GPU-driven culling or compact
+helper-list optimization must preserve the traversal budget and publication
+model defined in [sceneprep-refactor.md](sceneprep-refactor.md).

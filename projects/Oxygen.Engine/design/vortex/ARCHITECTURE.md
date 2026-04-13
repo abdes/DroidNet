@@ -19,8 +19,9 @@ Reference:
 
 - [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — authoritative project layout
   reference
-- [parity-analysis.md](./parity-analysis.md) — UE5-aligned desktop renderer
-  analysis
+- UE 5.7 parity evidence is integrated directly into this document and the
+  Vortex LLD set; there is no separate `parity-analysis.md` document in this
+  package
 
 ## Table of Contents
 
@@ -32,6 +33,7 @@ Reference:
 - [6. Runtime Architecture](#6-runtime-architecture)
 - [7. Data and Resource Architecture](#7-data-and-resource-architecture)
 - [8. Subsystem Architecture](#8-subsystem-architecture)
+- [9. Refinement Contract](#9-refinement-contract)
 - [10. Shader Architecture](#10-shader-architecture)
 - [11. Cross-Cutting Concerns](#11-cross-cutting-concerns)
 
@@ -508,7 +510,7 @@ a "render graph"; the execution semantics are fundamentally different.
 | --- | --- | --- |
 | `DeferredShadingSceneRenderer` | `SceneRenderer` | Same architectural role: thin dispatcher owning frame ordering, `SceneTextures`, and mode selection. Does not inline stage logic. |
 | `SceneRenderBuilder` | `SceneRenderBuilder` in `SceneRenderer/` | UE 5.7 literally uses `FSceneRenderBuilder` plus `CreateSceneRenderer(...)` during renderer bootstrap. In Vortex this remains a scene-layer bootstrap helper invoked by Renderer Core during initialization, not a second renderer layer. |
-| `SceneVisibility` | `InitViewsModule` stage module in `SceneRenderer/Stages/InitViews/` | Owns visibility, scene traversal dispatch (calls `ScenePrep/` as utility), per-view command generation, culling task orchestration. Own types: visibility task data, view command packets, dynamic primitive masks. ~6.5k lines in UE5. |
+| `SceneVisibility` | `InitViewsModule` stage module in `SceneRenderer/Stages/InitViews/` | Owns stage-2 visibility orchestration, ScenePrep frame-shared collection dispatch, per-view prepared-scene publication, and culling task orchestration. Its local helper data may include compact visibility projections, but the canonical downstream publication contract is the per-view prepared-scene payload. ~6.5k lines in UE5. |
 | `SceneTextures` | `SceneTextures` | Same architectural role: canonical scene product family owned by the scene renderer. |
 | `SceneTextureParameters` | `SceneTextures` bindings via `RenderContext` and shader-binding helpers | Same architectural role, different Oxygen packaging; parameter exposure is a binding/publication concern, not a separate architectural tier. |
 | `DepthRendering` | `DepthPrepassModule` stage module in `SceneRenderer/Stages/DepthPrepass/` | Owns depth-only passes, mesh processor, dithered-mask passes, partial depth products. Produces `SceneDepth` and `PartialDepth`. Writes partial `SceneVelocity` for static geometry. ~1.35k lines in UE5. |
@@ -518,8 +520,8 @@ a "render graph"; the execution semantics are fundamentally different.
 | `LightGridInjection` | `LightingService` shared light-grid stage | Same architectural role, explicitly demoted from frame spine to shared supporting subsystem. |
 | `CompositionLighting` (pre-base-pass) | reserved `MaterialCompositionService` pre-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessBeforeBasePass(...)`. UE's family spans deferred decals and AO-related work. Vortex intentionally maps only the material-surface modification subset here. |
 | `CompositionLighting` (post-base-pass) | reserved `MaterialCompositionService` post-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessAfterBasePass(...)`. Vortex keeps deferred decal application and material classification here, while AO remains owned by `IndirectLightingService`. |
-| `LightRendering` | `LightingService` deferred direct-lighting stage | Same role: consume GBuffers, shadows, IBL, and light data. Owns stencil-volume geometry helpers, deferred light shader families. ~3.3k lines in UE5. |
-| `IndirectLightRendering` | reserved `IndirectLightingService` stage | GI, reflections, SSR, subsurface scattering. Owns AO framework, indirect/reflection shader families, temporal history. Produces `ScreenSpaceAO` into `SceneTextures`. Consumes IBL data from `EnvironmentLightingService`. ~3.6k lines in UE5. |
+| `LightRendering` | `LightingService` deferred direct-lighting stage | Same role: consume GBuffers, shadows, and direct-light data. Owns stencil-volume geometry helpers and deferred-light shader families. If an early migration phase needs a bounded environment-ambient bridge before stage 13 exists, that exception must be documented explicitly and must not redefine stage 12 as the canonical indirect-light owner. ~3.3k lines in UE5. |
+| `IndirectLightRendering` | reserved `IndirectLightingService` stage | GI, reflections, SSR, subsurface scattering, and canonical skylight / indirect environment evaluation. Owns AO framework, indirect/reflection shader families, temporal history. Produces `ScreenSpaceAO` into `SceneTextures`. Consumes environment-owned probe / IBL products published by `EnvironmentLightingService`. ~3.6k lines in UE5. |
 | `ShadowDepthRendering` + `ShadowRendering` | `ShadowService` | Same split between shadow-map production and later lighting consumption. |
 | `SkyAtmosphereRendering` + `FogRendering` | `EnvironmentLightingService` | Same family role, grouped under one Oxygen service for bounded ownership. |
 | `VolumetricFog` + `VolumetricCloudRendering` | reserved future `EnvironmentLightingService` stages | UE 5.7 splits this area across `ComputeVolumetricFog(...)`, `RenderHeterogeneousVolumes(...)`, and `RenderVolumetricCloud(...)`. Vortex intentionally groups these atmosphere-adjacent volumetric stages under the Environment family. |
@@ -566,7 +568,7 @@ Allowed architectural differences:
 | # | UE5 Flow Stage | Vortex Flow Stage | Owner | Integration Note |
 | --- | --- | --- | --- | --- |
 | 1 | `SceneRenderBuilder` / scene renderer bootstrap | Renderer Core bootstrap invokes `SceneRenderBuilder` | Renderer Core | UE 5.7 uses `FSceneRenderBuilder` and `CreateSceneRenderer(...)` during bootstrap. Vortex mirrors the bootstrap role without making this a per-frame scene stage. |
-| 2 | `BeginInitViews` / `SceneVisibility` | `InitViewsModule::Execute` | InitViewsModule | Visibility, scene traversal dispatch via `ScenePrep/`, per-view command generation, culling task orchestration. Renderer Core provides scenario-agnostic view registration and context allocation. |
+| 2 | `BeginInitViews` / `SceneVisibility` | `InitViewsModule::Execute` | InitViewsModule | Visibility, scene traversal dispatch via `ScenePrep/`, per-view prepared-scene publication, and culling task orchestration. Renderer Core provides scenario-agnostic view registration and context allocation. |
 | 3 | `RenderPrePass` / opaque `RenderVelocities` | `DepthPrepassModule::Execute` | DepthPrepassModule | Produces `SceneDepth`, `PartialDepth`, and partial `SceneVelocity` for static geometry. |
 | 4 | `RenderNanite` / virtualized geometry slot | reserved `GeometryVirtualizationService` stage | future GeometryVirtualizationService | Preserved architecturally even while inactive. |
 | 5 | `RenderOcclusion` / HZB | `OcclusionModule::Execute` | OcclusionModule | HZB generation, occlusion queries, temporal HZB handoff through `SceneTextures` history. |
@@ -749,7 +751,7 @@ Phase-3/4/5 LLDs must preserve.
 
 | Invariant | Required Rule |
 | --- | --- |
-| per-view iteration owner | `SceneRenderer` owns per-view iteration. Stage 2 (`InitViews`) runs as the per-frame publisher of per-view visibility packets. Downstream per-view stages consume the current view selected in `RenderContext`; they must not silently take over full-frame iteration. |
+| per-view iteration owner | `SceneRenderer` owns per-view iteration. Stage 2 (`InitViews`) runs as the per-frame publisher of per-view prepared-scene packets. Downstream per-view stages consume the current view selected in `RenderContext`; they must not silently take over full-frame iteration. |
 | Stage 10 contract | The canonical stage-10 boundary is `SceneTextures::RebuildWithGBuffers()` followed by refresh/republication of shared scene-texture routing metadata. No alternate `TransitionGBuffersToSRV()`-style API may replace or narrow this contract. |
 | Stage 12 Phase-3 ownership | In Phase 3, stage 12 is temporary inline `SceneRenderer::RenderDeferredLighting(ctx, scene_textures)` orchestration. In Phase 4A, CPU-side ownership moves to `LightingService`. During both phases, the deferred-light shader family remains owned by the Lighting domain. |
 | published scene-texture routing | Passes consume scene textures only through published `SceneTextureBindings` routed by `ViewFrameBindings`. They must not synthesize ad hoc scene-texture bindings locally or bypass the established publication stack. |
@@ -1406,7 +1408,7 @@ This inventory is the designer-facing map of current domain families.
 
 | Subsystem | Directory | Key UE5 Alignment | Scope | Status |
 | --- | --- | --- | --- | --- |
-| Environment Lighting | `Environment/` | `SkyAtmosphereRendering`, `FogRendering` | atmosphere, sky, IBL, fog, future volumetrics | active |
+| Environment Lighting | `Environment/` | `SkyAtmosphereRendering`, `FogRendering` | atmosphere, sky, fog, environment-probe / IBL publication, future volumetrics | active |
 | Shadows | `Shadows/` | `ShadowRendering`, `ShadowDepthRendering` | conventional shadows, VSM, future shadow-family products | active |
 | Lighting | `Lighting/` | `LightRendering`, `LightGridInjection` | direct lighting, forward-light family, clustered grid | active |
 | Post-Process | `PostProcess/` | `PostProcessing` | tonemap, exposure, bloom, AA/TSR-facing post family | active |
@@ -1447,6 +1449,27 @@ Before finalizing a subsystem design, confirm:
 5. the design does not create reverse dependencies or service-internal leakage
 6. the subsystem’s non-goals are stated so it does not quietly become a second
    frame orchestrator
+
+## 9. Refinement Contract
+
+This section defines how lower-level Vortex design documents refine this
+architecture without weakening it.
+
+Rules:
+
+1. [DESIGN.md](./DESIGN.md) and the LLD set may refine API surfaces, payload
+   shapes, and implementation-facing contracts, but they must not change
+   architectural ownership without an explicit update here first.
+2. Cross-cutting LLDs may become the authoritative contract for one bounded
+   seam when the architecture already allocates the owner and dependency
+   direction. For example, the ScenePrep -> InitViews -> prepared-scene seam
+   is refined by `lld/sceneprep-refactor.md` without changing the layer model.
+3. If a lower-level document needs to change who owns a stage, product family,
+   or cross-frame state boundary, this architecture document must be updated
+   first.
+4. If a lower-level document needs a narrower optimization helper contract, it
+   must still preserve the canonical published product defined at the
+   architectural layer.
 
 ## 10. Shader Architecture
 

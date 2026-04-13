@@ -70,8 +70,8 @@ class OcclusionModule {
   /// Stage 5 entry point. Per-view execution.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
-  /// Query whether a primitive is visible (after Execute).
-  [[nodiscard]] auto IsVisible(uint32_t node_index) const -> bool;
+  /// Query whether a prepared-scene item is visible (after Execute).
+  [[nodiscard]] auto IsVisible(uint32_t render_item_index) const -> bool;
 
  private:
   Renderer& renderer_;
@@ -89,7 +89,7 @@ class OcclusionModule {
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
 | SceneTextures | SceneDepth (SRV) | HZB source |
-| InitViewsModule | Visible primitive lists | Occlusion test candidates |
+| InitViewsModule | Current-view `PreparedSceneFrame` payload | Occlusion test candidates without scene re-traversal |
 | Previous frame | Temporal HZB | Two-phase occlusion test |
 
 ### 3.2 Outputs
@@ -97,7 +97,7 @@ class OcclusionModule {
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
 | HZB texture (mip chain) | OcclusionModule (internal), SSR (future) | Per-view GPU texture |
-| Occlusion results | BasePassModule, LightingService | Refined visibility lists |
+| Occlusion results | BasePassModule, LightingService | Refined prepared-scene visibility classification keyed to the current prepared payload |
 | Temporal HZB | Next frame | Per-view history state |
 
 ### 3.3 HZB Generation
@@ -173,8 +173,9 @@ void HzbBuildCS(uint3 dtid : SV_DispatchThreadID) {
 ### 6.2 Null-Safe Behavior
 
 When null: no occlusion culling. All primitives from InitViews pass through
-to downstream stages. Functionally correct but potentially slower for
-complex scenes.
+to downstream stages as originally published in the current view's
+prepared-scene payload. Functionally correct but potentially slower for complex
+scenes.
 
 ### 6.3 Capability Gate
 
@@ -200,4 +201,4 @@ count may disable occlusion for simpler dispatch.
    is observed.
 2. **GPU-driven indirect draw:** When integrated with GPU-driven rendering
    pipeline (Phase 7+), occlusion results feed into indirect draw argument
-   buffers rather than CPU visibility lists.
+   buffers rather than stage-local CPU visibility lists.

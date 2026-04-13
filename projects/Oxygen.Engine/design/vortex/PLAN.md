@@ -276,7 +276,8 @@ requires its own LLD section or document.
 | Base pass LLD | BasePassModule, GBuffer MRT output, base-pass mesh processor, material shader contract (GBufferOutput), velocity completion for skinned/WPO geometry, forward-mode branch | `design/vortex/lld/base-pass.md` or DESIGN.md update |
 | Deferred lighting LLD | Fullscreen pass-per-light approach, deferred light pixel shader, stencil-bounded sphere/cone geometry, SceneColor accumulation | `design/vortex/lld/deferred-lighting.md` or DESIGN.md update |
 | Shader contracts LLD | Vortex shader directory setup, `Contracts/` and `Shared/` initial files, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration | `design/vortex/lld/shader-contracts.md` |
-| InitViews LLD | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view command generation | `design/vortex/lld/init-views.md` or DESIGN.md update |
+| InitViews LLD | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication | `design/vortex/lld/init-views.md` or DESIGN.md update |
+| ScenePrep refactor LLD | Authoritative ScenePrep runtime contract, traversal budget, prepared-scene publication, multi-view-safe state ownership | `design/vortex/lld/sceneprep-refactor.md` |
 
 ### Work Items
 
@@ -295,7 +296,7 @@ requires its own LLD section or document.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 3B.1 | Implement `InitViewsModule` | `SceneRenderer/Stages/InitViews/` — visibility, ScenePrep dispatch, per-view command generation, culling orchestration |
+| 3B.1 | Implement `InitViewsModule` | `SceneRenderer/Stages/InitViews/` — visibility, ScenePrep dispatch, per-view prepared-scene publication, culling orchestration |
 | 3B.2 | Wire into SceneRenderer stage 2 dispatch | |
 
 #### 3C: Depth Prepass
@@ -369,10 +370,10 @@ criteria):
 
 | Service | Design Deliverable | Covers |
 | ------- | ----------------- | ------ |
-| LightingService | `design/vortex/lld/lighting-service.md` | Light grid build, ForwardLightData product, deferred lighting ownership transfer from Phase 3, forward-light bindings, per-view publication |
+| LightingService | `design/vortex/lld/lighting-service.md` | Light grid build, published forward-light package, deferred-lighting ownership transfer from Phase 3, per-view publication, deferred-path invariants |
 | PostProcessService | `design/vortex/lld/post-process-service.md` | Tonemap pass (minimum for visible output), auto-exposure, bloom, AA/TSR slot |
 | ShadowService | `design/vortex/lld/shadow-service.md` | Conventional shadow map rendering, shadow data product, shadow-to-lighting wire, VSM slot reservation |
-| EnvironmentLightingService | `design/vortex/lld/environment-service.md` | Sky/atmosphere passes, IBL data product, fog, stage 14 reservation |
+| EnvironmentLightingService | `design/vortex/lld/environment-service.md` | Sky/atmosphere/fog composition, environment-probe / IBL publication, stage 14 reservation |
 | Migration playbook | `design/vortex/lld/migration-playbook.md` | Async example analysis, integration seam mapping, behavior parity checklist, visual baseline capture, composition-to-screen validation |
 
 ### Dependency Constraints Within Phase 4
@@ -395,13 +396,14 @@ the migrated example presents correctly through Vortex's composition path.
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4A.1 | Implement `Lighting/LightingService.h/.cpp` | Service lifecycle, capability gating |
-| 4A.2 | Implement light grid build (stage 6) | Clustered light-grid, `ForwardLightData` product |
+| 4A.2 | Implement light grid build (stage 6) | Clustered light-grid and published forward-light package as shared supporting data |
 | 4A.3 | Transfer deferred lighting from Phase 3 inline → LightingService | Stage 12 now dispatched via service |
-| 4A.4 | Implement forward light data publication | Per-view typed publication through `ViewFrameBindings` |
+| 4A.4 | Implement forward light data publication | Per-view typed publication through `ViewFrameBindings` / `LightingFrameBindings` |
 | 4A.5 | Implement lighting shader families | `Shaders/Vortex/Services/Lighting/` — light grid, deferred light, forward common |
 
-**Exit gate:** Light grid produces valid clustered data. Deferred lighting
-dispatched through service. Forward light data queryable and published per view.
+**Exit gate:** Light grid produces valid clustered data. Deferred lighting is
+dispatched through the service without redefining the canonical per-light
+stage-12 path. Forward-light bindings are published per view.
 
 ### 4B: PostProcessService
 
@@ -413,8 +415,8 @@ dispatched through service. Forward light data queryable and published per view.
 | 4B.4 | Implement bloom | If straightforward to carry from legacy |
 | 4B.5 | Implement post-process shader families | `Shaders/Vortex/Services/PostProcess/` |
 
-**Exit gate:** Tonemapped output to screen. Visual: HDR → LDR with correct
-exposure.
+**Exit gate:** Tonemapped output reaches the SceneRenderer-supplied post target.
+Visual: HDR → LDR with correct exposure.
 
 ### 4C: ShadowService
 
@@ -434,15 +436,17 @@ shadow pass ordering.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 4D.1 | Implement `Environment/EnvironmentLightingService.h/.cpp` | Service lifecycle, IBL data product |
-| 4D.2 | Implement sky/atmosphere rendering (stage 15) | Sky pass, atmosphere |
+| 4D.1 | Implement `Environment/EnvironmentLightingService.h/.cpp` | Service lifecycle, environment-probe / IBL publication |
+| 4D.2 | Implement sky/atmosphere rendering (stage 15) | Sky pass, atmosphere composition |
 | 4D.3 | Implement fog | Height fog, distance fog |
-| 4D.4 | Implement IBL data publication | Per-view typed publication |
-| 4D.5 | Reserve stage 14 volumetrics | No-op slot within Environment family |
+| 4D.4 | Implement environment-probe / IBL publication | Per-view typed publication from environment-owned persistent state |
+| 4D.5 | Reserve stage 14 volumetrics | No-op slot within the Environment family; future internal stage family, not one monolithic pass |
 | 4D.6 | Implement environment shader families | `Shaders/Vortex/Services/Environment/` |
 
-**Exit gate:** Sky renders. IBL ambient visible. Fog applies. Visual: scene
-with sky, ambient, and distance fog.
+**Exit gate:** Sky renders. Fog applies. Environment-owned ambient probe data is
+published and available to the appropriate consumers. If Phase 4 uses a
+temporary ambient bridge before stage 13 exists, that bridge is explicitly
+documented and does not violate stage order.
 
 ### 4E: First Migration — `Examples/Async`
 
@@ -453,26 +457,27 @@ Oxygen runtime flow.
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4E.1 | Capture legacy `Examples/Async` visual baseline | RenderDoc frame 10 baseline |
-| 4E.2 | Port `Examples/Async` from legacy Renderer to Vortex | Engine/renderer seam integration, no compatibility clutter |
+| 4E.2 | Port `Examples/Async` from legacy Renderer to Vortex | Engine/renderer seam integration through the real SceneRenderer/composition path, no compatibility clutter |
 | 4E.3 | Visual parity validation | RenderDoc capture comparison against legacy baseline |
 | 4E.4 | Behavior parity validation | Workflows, async operations, observable behavior match |
 | 4E.5 | Validate `ForSinglePassHarness()` against Vortex | Non-runtime facade check |
 | 4E.6 | Validate `ForRenderGraphHarness()` against Vortex | Non-runtime facade check |
 
 **Exit gate:** `Examples/Async` runs on Vortex with correct visual output
-matching legacy reference. Migration uses no long-lived compatibility clutter.
-Two non-runtime facades verified.
+matching legacy reference through the real composition submission path and
+presentation surface. Migration uses no long-lived compatibility clutter. Two
+non-runtime facades verified.
 
 ### 4F: Composition and Presentation Validation
 
-Validates that the Vortex composition path works end-to-end for the first
-migration target.
+Deepens proof for the resolve / extraction / handoff artifacts that sit around
+the already-live runtime composition path used by the first migration target.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 4F.1 | Validate single-view composition to screen | `CompositionView` → SceneRenderer → `CompositionSubmission` → presentation |
-| 4F.2 | Validate `ResolveSceneColor` end-to-end | Stage 21 scene color resolve produces correct final color |
-| 4F.3 | Validate `PostRenderCleanup` extraction/handoff | Stage 23 extraction handoff through Renderer Core helpers |
+| 4F.1 | Validate single-view composition and presentation artifacts | `CompositionView` → SceneRenderer → `CompositionSubmission` → presentation remains correct under inspection |
+| 4F.2 | Validate `ResolveSceneColor` artifact behavior end-to-end | Stage 21 resolve runs only when needed and produces the correct post-process input |
+| 4F.3 | Validate `PostRenderCleanup` extraction/handoff artifacts | Stage 23 extraction handoff through Renderer Core helpers produces the correct outputs |
 
 **Exit gate:** `Examples/Async` presents correct output through Vortex
 composition path. No composition artifacts, no missing handoffs, no dropped
@@ -485,7 +490,8 @@ frames.
   Environment
 - Two non-runtime facades verified against Vortex substrate
 - Composition path validated end-to-end
-- RenderDoc frame 10 capture shows correct pass ordering and visual output
+- RenderDoc frame 10 capture shows correct active stage-family ordering,
+  artifact boundaries, and visual output
 - No long-lived compatibility clutter in the migrated example
 
 ---
@@ -505,6 +511,7 @@ variants.
 | `design/vortex/lld/occlusion.md` | 5C | HZB generation, occlusion queries, temporal handoff |
 | `design/vortex/lld/multi-view-composition.md` | 5D | Multi-view dispatch, per-view ShadingMode selection, multi-surface output, PiP, editor viewport model |
 | `design/vortex/lld/offscreen-rendering.md` | 5E | ForOffscreenScene facade, deferred/forward mode selection per scenario, thumbnail/preview use cases |
+| `design/vortex/lld/shadow-local-lights.md` | 5G | ShadowService expansion for spot-light and point-light conventional shadows after the directional-first Phase 4C baseline |
 
 ### Dependency Constraints
 
@@ -515,10 +522,11 @@ Phase 4 (migration complete)
  ├─► 5C: OcclusionModule (needs SceneDepth from Phase 3)
  ├─► 5D: Multi-view and per-view mode validation (needs composition from 4F)
  ├─► 5E: Offscreen and facade validation (independent)
- └─► 5F: Feature-gated runtime variants (needs all services)
+ ├─► 5F: Feature-gated runtime variants (needs all services)
+ └─► 5G: Local-light conventional shadow expansion (needs 4C baseline)
 ```
 
-5A–5E are parallelizable. 5F requires all services to be active.
+5A–5E and 5G are parallelizable. 5F requires all services to be active.
 
 ### 5A: DiagnosticsService
 
@@ -604,11 +612,30 @@ output, including depth-only, shadow-only, no-environment, no-shadowing,
 no-volumetrics, and diagnostics-only assemblies. Capability gating correctly
 enables/disables subsystems without crashes.
 
+### 5G: ShadowService Local-Light Conventional Expansion
+
+Completes the conventional-shadow baseline that Phase 4C intentionally scoped
+to directional-first delivery.
+
+| ID | Task | Scope |
+| -- | ---- | ----- |
+| 5G.1 | Expand `ShadowService` conventional local-light support | Spot-light conventional shadows as the first required local-light path |
+| 5G.2 | Implement point-light conventional shadow storage strategy | Preferred baseline: one-pass cubemap depth targets unless later evidence justifies another approved conventional path |
+| 5G.3 | Publish per-view local-light shadow bindings | Extend `ShadowFrameBindings` without freezing a VSM ABI |
+| 5G.4 | Validate local-light shadow consumption | Deferred lighting and translucency consume the published bindings correctly |
+
+**Exit gate:** Spot-light conventional shadows are functional. Point-light
+conventional shadows have an explicit implemented strategy or a documented
+product-level deferral decision backed by the Phase 5G design. Shadow
+publication remains per-view and future-safe for VSM.
+
 ### Exit Gate (Phase 5 — Overall)
 
 - All subsystem services active (Lighting, PostProcess, Shadows, Environment,
   Diagnostics)
 - TranslucencyModule and OcclusionModule functional
+- Local-light conventional shadows validated or explicitly deferred by the
+  Phase 5G design decision
 - Multi-view, PiP, and per-view ShadingMode validated
 - All three non-runtime facades verified against Vortex
 - Offscreen deferred and forward modes validated
@@ -660,10 +687,15 @@ requires its own LLD and concrete scoping before implementation begins.
 
 | Family | Stage | Scope |
 | ------ | ----- | ----- |
-| IndirectLightingService | Stage 13 | GI, reflections (Lumen-equivalent) |
+| IndirectLightingService | Stage 13 | Canonical indirect environment evaluation, SSAO, reflections, GI (Lumen-equivalent later) |
 | SSAO / ScreenSpaceAO | — | IndirectLightingService ambient occlusion product |
 | MegaLights-class lighting extensions | Stage 12 | LightingService direct-lighting extension family for advanced many-light / area-light style evaluation |
 | Tiled/clustered deferred | Stage 12 | Optimization path for deferred lighting; profiling-justified |
+
+Design prerequisite for the first activation of stage 13:
+- `design/vortex/lld/indirect-lighting-service.md` — future `IndirectLightingService`
+  contract, including retirement of the temporary Phase 4 environment-ambient
+  bridge
 
 ### 7C: Advanced Shadows
 
@@ -746,10 +778,11 @@ Phase 4 complete
  ├─► 5C (occlusion module)
  ├─► 5D (multi-view validation)
  ├─► 5E (offscreen / facade validation)
- └─► 5F (feature-gated variants — needs all services)
+ ├─► 5F (feature-gated variants — needs all services)
+ └─► 5G (local-light conventional shadow expansion)
 ```
 
-5A–5E are parallelizable. 5F requires all services to be active.
+5A–5E and 5G are parallelizable. 5F requires all services to be active.
 
 ## 11. Milestones
 
@@ -800,6 +833,8 @@ Exit criteria:
 
 - All subsystem services active (adds Diagnostics to Phase 4 set)
 - TranslucencyModule and OcclusionModule functional
+- Local-light conventional shadows validated or explicitly deferred by the
+  Phase 5G design decision
 - Multi-view, PiP, per-view ShadingMode validated (PRD §6.5)
 - All three non-runtime facades verified (adds ForOffscreenScene)
 - Offscreen deferred and forward modes validated (PRD §6.4)
@@ -837,7 +872,7 @@ final target — including future-phase items per PRD §8.13.
 | **LightingService** | Phase 4A | not started | Light grid + deferred lighting + forward data | Stages 6, 12 |
 | **PostProcessService** | Phase 4B | not started | Tonemap, exposure, bloom | Stage 22 |
 | **ShadowService** | Phase 4C | not started | Conventional shadows; VSM reserved for Phase 7C | Stage 8 |
-| **EnvironmentLightingService** | Phase 4D | not started | Sky, fog, IBL; volumetrics reserved for Phase 7D | Stages 14 (reserved), 15 |
+| **EnvironmentLightingService** | Phase 4D | not started | Sky, fog, environment-probe / IBL publication; volumetrics reserved for Phase 7D | Stages 14 (reserved), 15 |
 | **Examples/Async migration** | Phase 4E | not started | Full Vortex runtime | PRD §6.1.1 — first success gate |
 | **Composition/presentation** | Phase 4F | not started | Single-view composition to screen, resolve, handoff | Validated end-to-end during first migration |
 | **ResolveSceneColor** | Phase 2 (stub) → Phase 4F (real) | not started | Scene color resolve | Stage 21 |
@@ -848,10 +883,11 @@ final target — including future-phase items per PRD §8.13.
 | **Multi-view / multi-surface** | Phase 5D | not started | Multi-view dispatch, PiP, per-view ShadingMode | PRD §6.5 |
 | **Offscreen rendering** | Phase 5E | not started | ForOffscreenScene, deferred/forward mode, previews | PRD §6.4 |
 | **Feature-gated variants** | Phase 5F | not started | Depth-only, shadow-only, no-environment, no-shadowing, no-volumetrics, diagnostics-only | PRD §6.6 full scenario set |
+| **Local-light conventional shadows** | Phase 5G | not started | Spot-light conventional shadows and explicit point-light conventional strategy under ShadowService | Extends the directional-first Phase 4C baseline |
 | **Non-runtime facades** | Phase 1 (substrate) → Phase 4E–5E (validation) | not started | ForSinglePassHarness (4E), ForRenderGraphHarness (4E), ForOffscreenScene (5E) | |
 | **GeometryVirtualizationService** | Phase 7A | not started | Nanite-equivalent mesh virtualization | Stage 4 |
 | **MaterialCompositionService** | Phase 7A | not started | DBuffer decals, deferred decals, material classification | Stages 7, 11 |
-| **IndirectLightingService** | Phase 7B | not started | GI, reflections (Lumen-equivalent) | Stage 13 |
+| **IndirectLightingService** | Phase 7B | not started | GI, reflections, canonical indirect environment evaluation, ambient-bridge retirement | Stage 13 |
 | **SSAO / ScreenSpaceAO** | Phase 7B | not started | IndirectLightingService ambient occlusion product | |
 | **MegaLights-class lighting extensions** | Phase 7B | not started | Advanced direct-lighting extension family under LightingService | Stage 12 |
 | **Tiled/clustered deferred** | Phase 7B | not started | Deferred lighting optimization path | Profiling-justified |
@@ -939,6 +975,8 @@ Deferred to Phase 7 (post-release — see §9 and Feature Activation Matrix §12
 for the complete assignment):
 
 - Virtual shadow maps — Phase 7C (ShadowService internal strategy)
+- Local-light conventional shadow expansion beyond the Phase 4C directional-first
+  baseline — Phase 5G (ShadowService internal strategy update)
 - Geometry virtualization — Phase 7A (Nanite-equivalent, stage 4)
 - GI / reflections — Phase 7B (Lumen-equivalent, stage 13)
 - MegaLights-class lighting extensions — Phase 7B (LightingService stage-12 extension family)

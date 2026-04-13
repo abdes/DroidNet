@@ -10,19 +10,23 @@
 
 `LightingService` — the capability-family service owning two frame stages:
 
-- **Stage 6**: clustered light-grid build (`ForwardLightData` product)
+- **Stage 6**: clustered light-grid build and publication of the forward-light
+  family as shared supporting data
 - **Stage 12**: deferred direct lighting (fullscreen pass-per-light → SceneColor)
 
-Phase 4A migrates the Phase 3 inline deferred lighting into this service
-and adds the clustered light-grid that feeds both deferred (stage 12) and
-forward (stage 18 translucency) consumers.
+Phase 4A migrates the Phase 3 inline deferred lighting into this service and
+adds the clustered light-grid that feeds forward consumers such as
+translucency and later optional optimizations.
 
 ### 1.2 What It Replaces
 
 The Phase 3 inline `SceneRenderer::RenderDeferredLighting(ctx, scene_textures)`
-method moves
-into `LightingService::RenderDeferredLighting()`. The Phase 3 per-light
-CBV approach is replaced with a `ForwardLightData` structured buffer.
+method moves into `LightingService::RenderDeferredLighting()`.
+
+The important constraint is what does **not** change: stage 12 remains the
+canonical correctness-first deferred direct-lighting stage using per-light
+deferred dispatch. The new stage-6 forward-light publication family is shared
+supporting data, not the new definition of deferred lighting.
 
 ### 1.3 Architectural Authority
 
@@ -47,8 +51,8 @@ src/Oxygen/Vortex/
         │   ├── DeferredLightPass.h/.cpp
         │   └── LightGridBuildPass.h/.cpp
         └── Types/
-            ├── ForwardLightData.h
-            ├── ForwardLocalLight.h
+            ├── ForwardLightFrameBindings.h
+            ├── ForwardLocalLightRecord.h
             └── LightGridMetadata.h
 ```
 
@@ -75,10 +79,6 @@ class LightingService : public ISubsystemService {
   void RenderDeferredLighting(RenderContext& ctx,
                                const SceneTextures& scene_textures);
 
-  /// Access shared forward light data for translucency and other consumers.
-  [[nodiscard]] auto GetForwardLightData() const
-      -> const ForwardLightData*;
-
  private:
   Renderer& renderer_;
   std::unique_ptr<LightGridBuilder> light_grid_builder_;
@@ -91,47 +91,47 @@ class LightingService : public ISubsystemService {
 
 ### 2.3 ForwardLocalLight Record
 
-Six `float4`-aligned structured record (96 bytes), matching UE5
-`FForwardLightData` layout:
+Six `float4`-aligned structured record (96 bytes), matching the UE5-style
+local-light record convention. This record is **not** the whole published
+per-view forward-light contract; it is only the shared local-light storage
+element:
 
 ```cpp
-struct ForwardLocalLight {
+struct ForwardLocalLightRecord {
   glm::vec4 position_and_inv_radius;
   glm::vec4 color_id_falloff_and_ray_bias;
   glm::vec4 direction_and_extra_data;
   glm::vec4 spot_angles_and_source_radius;
   glm::vec4 tangent_ies_and_specular_scale;
-  glm::vec4 rect_data_and_shadow_data;
+  glm::vec4 rect_data_and_linkage;
 };
 ```
 
-### 2.4 ForwardLightData Product
+### 2.4 Published Forward-Light Package
 
 ```cpp
-struct ForwardLightData {
-  std::vector<ForwardLocalLight> local_lights;
+struct ForwardLightFrameBindings {
+  // Shared storage
+  uint32_t local_light_buffer_srv{kInvalidIndex};
+
+  // Per-view clustered access package
+  uint32_t grid_metadata_buffer_srv{kInvalidIndex};
+  uint32_t grid_indirection_srv{kInvalidIndex};
+
+  // Directional-light selection for forward consumers
+  uint32_t selected_directional_light_index{kInvalidIndex};
   uint32_t directional_light_count{0};
   uint32_t local_light_count{0};
-
-  // Light grid metadata (per-view)
-  struct GridMetadata {
-    uint32_t grid_x, grid_y, grid_z;     // cluster dimensions
-    float z_near, z_far;                   // Z slicing range
-    uint32_t total_cells;
-  };
-  GridMetadata grid;
-
-  // GPU buffer handles
-  uint32_t light_buffer_srv{kInvalidIndex};      // Structured buffer SRV
-  uint32_t grid_indirection_srv{kInvalidIndex};  // Cell → light index SRV
+  uint32_t flags{0};
 };
 ```
 
 ### 2.5 Per-View Publication
 
-ForwardLightData is published through `ViewFrameBindings` via
-`PerViewStructuredPublisher`. Each view receives light grid indices routed
-through the per-view binding stack.
+The lighting service publishes `ForwardLightFrameBindings` through
+`LightingFrameBindings`, which is then routed through `ViewFrameBindings`.
+Consumers access the forward-light family through the published per-view
+binding stack; they do not reach into `LightingService` internals directly.
 
 ## 3. Data Flow and Dependencies
 
@@ -144,9 +144,9 @@ through the per-view binding stack.
 
 | Output | Consumer | Delivery |
 | ------ | -------- | -------- |
-| ForwardLightData | Stage 12 (deferred lighting) | Via `GetForwardLightData()` |
-| ForwardLightData | Stage 18 (translucency) | Via `GetForwardLightData()` |
-| Light grid SRV | All lighting consumers | Published in ViewFrameBindings |
+| `ForwardLocalLightRecord` buffer | Published forward-light family | Shared storage owned by LightingService |
+| `ForwardLightFrameBindings` | Stage 18 (translucency), forward-only materials, diagnostics | Published through `LightingFrameBindings` / `ViewFrameBindings` |
+| Deferred-light draw list | Stage 12 (deferred lighting) | Internal service-owned per-light direct-light data |
 
 ### 3.2 Stage 12 — RenderDeferredLighting
 
@@ -154,24 +154,31 @@ through the per-view binding stack.
 | ----- | ------ | ------- |
 | GBufferA–D (SRV) | SceneTextures (from stage 10) | Material data for BRDF |
 | SceneDepth (SRV) | SceneTextures | Position reconstruction |
-| ShadowFrameData | ShadowService (stage 8) | Shadow attenuation terms |
-| IblFrameData | EnvironmentService (stage 15) | Ambient contribution |
-| ForwardLightData | Self (stage 6) | Light parameters |
+| `ShadowFrameBindings` | ShadowService (stage 8 publication) | Shadow attenuation terms |
+| Deferred-light draw list | Self | Canonical per-light direct-light parameters |
+| `EnvironmentFrameBindings` | Environment service publication | Optional bounded ambient bridge only when that Phase 4 exception is explicitly enabled |
 
 | Output | Target | Blend Mode |
 | ------ | ------ | ---------- |
 | SceneColor | SceneTextures | Additive (ONE, ONE) |
+
+Stage 12 remains the canonical deferred **direct**-lighting stage. If Phase 4
+needs some environment ambient visible before `IndirectLightingService` exists,
+the only allowed shortcut is a narrowly documented ambient bridge that consumes
+already-published environment probe data. That bridge is a migration aid, not a
+redefinition of stage 12 ownership.
 
 ### 3.3 Sequence Diagram
 
 ```text
 SceneRenderer::OnRender(ctx)
   ├─ Stage 6:  lighting_->BuildLightGrid(ctx)
-  │              └─ Builds ForwardLightData structured buffer
-  │              └─ Publishes to ViewFrameBindings
+  │              └─ Builds local-light record storage
+  │              └─ Publishes per-view forward-light bindings
+  │              └─ Prepares internal deferred-light draw data
   ├─ ...stages 7-11...
   └─ Stage 12: lighting_->RenderDeferredLighting(ctx, scene_textures)
-                 └─ For each light: fullscreen/stencil-bounded draw
+                 └─ For each light: canonical fullscreen/stencil-bounded draw
                  └─ Accumulates into SceneColor
 ```
 
@@ -179,8 +186,9 @@ SceneRenderer::OnRender(ctx)
 
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
-| ForwardLightData structured buffer | Per frame | Upload ring buffer |
-| Light grid indirection buffer | Per frame | Per-view grid data |
+| Forward-local-light structured buffer | Per frame | Upload ring buffer |
+| Light-grid metadata / indirection buffers | Per frame | Per-view clustered access data |
+| Deferred-light draw payloads | Per frame | Internal direct-light parameters |
 | Light volume geometry (sphere, cone) | Persistent | Shared with Phase 3 |
 | Deferred lighting PSOs | Persistent | Cached by renderer |
 
@@ -197,16 +205,25 @@ SceneRenderer::OnRender(ctx)
 ### 5.2 Deferred Light Shaders
 
 Carried forward from Phase 3 (see [deferred-lighting.md](deferred-lighting.md) §5),
-now with ForwardLightData structured buffer access instead of per-light CBV:
+with the deferred-light family remaining the canonical direct-light path. The
+forward-light buffers published at stage 6 are owned by the same service
+family, but they are for forward consumers and future optional optimizations,
+not a required replacement for per-light deferred-light payloads.
 
 ```hlsl
-// Access ForwardLocalLight from structured buffer
-StructuredBuffer<ForwardLocalLight> LightBuffer : register(t0, space1);
-uint LightIndex;  // from light grid or per-draw constant
-
-ForwardLocalLight GetLight() {
-  return LightBuffer[LightIndex];
+// Deferred-light shaders keep their explicit per-light payload contract.
+cbuffer DeferredLightConstants : register(b1) {
+  float4 LightPositionAndRadius;
+  float4 LightColorAndIntensity;
+  float4 LightDirectionAndFalloff;
+  float4 SpotAngles;
 }
+
+// LightingService also owns family-local common files for forward-light
+// publication and future optional clustered consumers:
+//   Services/Lighting/LightGridCommon.hlsli
+//   Services/Lighting/ForwardLightingCommon.hlsli
+//   Services/Lighting/DeferredLightingCommon.hlsli
 ```
 
 ### 5.3 Catalog Additions (Phase 4A)
@@ -215,7 +232,7 @@ ForwardLocalLight GetLight() {
 | ---------- | ------- | ----- |
 | `VortexLightGridBuildCS` | cs_6_0 | Compute: clustered grid build |
 
-Phase 3 deferred light entrypoints unchanged.
+Phase 3 deferred-light entrypoints remain canonical for stage 12 in Phase 4A.
 
 ## 6. Stage Integration
 
@@ -237,9 +254,12 @@ Requires `kLightingData` + `kDeferredShading`.
 
 1. Move `SceneRenderer::RenderDeferredLighting()` body into
    `LightingService::RenderDeferredLighting()`.
-2. Replace per-light CBV with `ForwardLightData` structured buffer reads.
-3. Add `BuildLightGrid()` (new, stage 6).
-4. Add `ForwardLightData` publication to ViewFrameBindings.
+2. Add `BuildLightGrid()` (new, stage 6) and publish the forward-light family
+   through `LightingFrameBindings` / `ViewFrameBindings`.
+3. Keep the deferred-light draw contract separate from the published
+   forward-light package so stage 12 stays canonically per-light.
+4. If Phase 4 enables the temporary ambient bridge, document it explicitly as
+   environment-probe sampling from already-published persistent state.
 5. Wire SceneRenderer dispatch: `lighting_->BuildLightGrid(ctx)` at stage 6,
    `lighting_->RenderDeferredLighting(ctx, scene_textures)` at stage 12.
 
@@ -249,12 +269,14 @@ Requires `kLightingData` + `kDeferredShading`.
    cell occupancy matches expected light coverage.
 2. **Deferred lighting comparison:** Same scene rendered with Phase 3 inline
    vs Phase 4A service → pixel-identical SceneColor output.
-3. **Forward data publication:** Query `GetForwardLightData()` → verify
-   local light count and buffer SRV are valid.
+3. **Forward data publication:** Inspect the published
+   `LightingFrameBindings` / `ViewFrameBindings` payload for the current view →
+   verify counts and SRVs are valid.
 4. **RenderDoc:** Frame 10, verify light grid buffer contents and deferred
    lighting draw calls.
 
 ## 9. Open Questions
 
-None — lightingService is the most well-specified Phase 4 service. The
-clustered grid approach follows established UE5/industry patterns.
+None. The key Phase 4 design decision is already fixed here: the clustered
+forward-light family is shared supporting data, while stage 12 remains the
+canonical deferred direct-lighting path.

@@ -10,7 +10,7 @@
 
 `TranslucencyModule` — the stage-18 owner responsible for forward-lit
 translucent rendering. Translucent objects (glass, particles, effects) are
-rendered with forward lighting using `ForwardLightData` from
+rendered with forward lighting using the published forward-light family from
 `LightingService`, composited over the deferred opaque result in
 SceneColor.
 
@@ -30,7 +30,7 @@ It has no persistent state between frames and is dispatched per-view.
 ### 1.4 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 18
-- Forward light data consumption from LightingService
+- Published forward-light family consumption from LightingService
 
 ## 2. Interface Contracts
 
@@ -77,10 +77,10 @@ class TranslucencyModule {
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Per-view visible primitive lists | Translucent geometry filter |
-| LightingService | ForwardLightData (structured buffer) | Forward lighting evaluation |
-| ShadowService | ShadowFrameData | Shadow terms |
-| EnvironmentService | IblFrameData | Ambient contribution |
+| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Translucent geometry refinement without scene re-traversal |
+| LightingService | `LightingFrameBindings` publication | Forward lighting evaluation |
+| ShadowService | `ShadowFrameBindings` publication | Shadow terms |
+| EnvironmentLightingService | `EnvironmentFrameBindings` publication | Ambient contribution |
 | SceneTextures | SceneColor (RTV) | Composite target |
 | SceneTextures | SceneDepth (DSV, read) | Depth test (no write) |
 
@@ -95,8 +95,8 @@ class TranslucencyModule {
 ```text
 TranslucencyModule::Execute(ctx, scene_textures)
   │
-  ├─ for each view:
-  │     ├─ Filter visible primitives to translucent geometry only
+  ├─ Read current view prepared-scene payload from ctx
+  │     ├─ Refine the prepared-scene payload to translucent participants only
   │     ├─ Sort back-to-front by distance_sq (painter's algorithm)
   │     │
   │     ├─ Set render targets:
@@ -105,10 +105,9 @@ TranslucencyModule::Execute(ctx, scene_textures)
   │     │
   │     └─ for each translucent draw command:
   │           ├─ Bind forward-lit PSO (per-material variant)
-  │           ├─ Bind ForwardLightData structured buffer
+  │           ├─ Bind published lighting / shadow / environment bindings
   │           ├─ Bind material resources
   │           └─ DrawIndexedInstanced(...)
-  │
   └─ (SceneColor now contains opaque + translucent)
 ```
 
@@ -137,12 +136,12 @@ struct TranslucencyPSOutput {
 TranslucencyPSOutput TranslucencyForwardPS(ForwardVSOutput input) {
   MaterialSurface surface = EvaluateMaterial(input);
 
-  // Forward lighting: iterate visible lights from ForwardLightData
+  // Forward lighting: iterate visible lights from the published forward-light package
   float3 lighting = EvaluateForwardLighting(
     surface, input.worldPos, CameraPosition,
-    LightBuffer, LocalLightCount);
+    ForwardLightBindings);
 
-  float3 ambient = EvaluateIBLAmbient(surface, IblData);
+  float3 ambient = EvaluateEnvironmentAmbient(surface, EnvironmentBindings);
 
   TranslucencyPSOutput output;
   output.color = float4(lighting + ambient + surface.emissive,
@@ -171,7 +170,7 @@ When null: no translucent rendering. Only opaque deferred result visible.
 
 ### 6.3 Capability Gate
 
-Requires `kLightingData` (for ForwardLightData access).
+Requires `kLightingData` (for published forward-light access).
 
 ## 7. Sorting
 

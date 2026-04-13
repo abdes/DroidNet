@@ -40,8 +40,8 @@ auto ForSinglePassHarness(
 **Vortex adaptation:**
 
 - Creates a minimal Vortex `Renderer` with only the required capabilities
-- Executes a single pass through the 23-stage dispatch (most stages are
-  no-ops)
+- Executes one validated pass against the Vortex substrate without requiring
+  the full runtime scene path
 - Validates that the pass produces correct output to the provided
   render target
 
@@ -65,7 +65,7 @@ auto ForRenderGraphHarness(
 
 **Vortex adaptation:**
 
-- Creates a Vortex `Renderer` and `SceneRenderer`
+- Creates a Vortex `Renderer` and, when needed, a `SceneRenderer`
 - Allows the caller to define a custom render graph
 - Validates resource transitions and pass ordering
 
@@ -140,7 +140,7 @@ OffscreenRenderer::Render(scene)
   ├─ SceneRenderer::OnRender(ctx)
   │     └─ Full 23-stage dispatch (or forward-only subset)
   ├─ SceneRenderer::OnCompositing(ctx)
-  │     └─ Copy SceneColor → output_target
+  │     └─ Produce composition submission targeting output_target
   ├─ SceneRenderer::OnFrameEnd()
   │
   └─ Return (output_target contains rendered result)
@@ -163,7 +163,8 @@ works correctly.
 The Vortex `Renderer` must support:
 
 - Rendering to an arbitrary output target (not just the swap chain)
-- Single-view rendering with no composition step
+- Single-view rendering through the normal resolve / post / composition handoff
+  with an offscreen target in place of swap-chain presentation
 - Headless rendering (no window, no swap chain)
 
 These are capabilities of the existing `Renderer` facade that must be

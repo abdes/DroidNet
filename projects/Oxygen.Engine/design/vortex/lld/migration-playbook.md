@@ -23,6 +23,8 @@ PostProcess, Shadows, Environment) are operational.
 
 ### 1.3 Architectural Authority
 
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — runtime seam ownership, composition,
+  resolve, extraction, and handoff boundaries
 - PRD §6.1.1 — first migration exit criterion
 - [PLAN.md §6](../PLAN.md) — Phase 4E step plan
 
@@ -85,6 +87,12 @@ auto renderer = oxygen::vortex::CreateRenderer(gfx, config);
 The `RendererConfig` structure should carry over. Verify that config fields
 map correctly between legacy and Vortex.
 
+This step is not a cosmetic constructor swap. Before treating the migration as
+viable, verify that the Vortex bootstrap path reaches the real
+`SceneRenderBuilder` / `SceneRenderer` runtime seam and that Renderer Core owns
+view assembly, publication, composition planning, target resolution, and
+compositing execution per the architecture.
+
 ### 3.3 Step 3: Scene Setup
 
 Verify scene setup code works unchanged:
@@ -113,6 +121,11 @@ renderer.OnFrameEnd(frame);
 The Vortex renderer delegates to `SceneRenderer` internally. The external
 frame loop API should be compatible.
 
+Compatibility of the outer loop is necessary but not sufficient. The migrated
+example must prove that composition submission, resolve behavior, and handoff
+artifacts travel through the real Vortex runtime seams rather than through an
+example-local shortcut.
+
 ### 3.5 Step 5: Async Operation Validation
 
 `Examples/Async` exercises asynchronous operations:
@@ -138,8 +151,10 @@ These facades must produce valid output when backed by Vortex.
 2. Compare against baseline:
    - **Back buffer:** Pixel-level comparison. Expect near-identical output.
      Minor floating-point differences acceptable (< 1/255 per channel).
-   - **Pass ordering:** Verify 23-stage dispatch appears in RenderDoc event
-     list (stages may have different names but order must match).
+   - **Stage-family visibility:** Verify the active stage families are
+     discoverable by stable names and appear in the correct relative order.
+     Bootstrap work may appear outside the main stage list, and resolve /
+     extraction only appear when active.
    - **GBuffer inspection:** Verify GBufferA–D contain valid data matching
      scene geometry.
 
@@ -149,7 +164,7 @@ These facades must produce valid output when backed by Vortex.
 | --------- | ------ | --------- |
 | Visual match | PSNR or perceptual diff | > 40 dB (near-identical) |
 | Depth accuracy | Depth buffer comparison | < 0.001 max error |
-| Frame timing | Average frame time | Within 20% of legacy |
+| Frame timing | Average frame time | Informational only unless product leadership promotes it to a hard gate |
 | Async behavior | Observable behavior match | All behaviors documented in baseline |
 | No compatibility clutter | Code inspection | Zero legacy compatibility shims |
 
@@ -200,10 +215,14 @@ Per PLAN.md, the migration must leave zero long-lived compatibility shims:
 
 ## 7. Composition and Presentation Validation (Phase 4F)
 
+The migration already requires the real runtime composition path to be live.
+Phase 4F therefore deepens proof of the surrounding artifacts rather than
+introducing composition for the first time.
+
 After visual/behavior parity is confirmed:
 
-1. Validate single-view composition to screen (final output correct)
-2. Validate `ResolveSceneColor` end-to-end (HDR → resolve → tonemap chain)
+1. Validate single-view composition to screen under explicit inspection
+2. Validate `ResolveSceneColor` end-to-end when resolve work is actually needed
 3. Validate `PostRenderCleanup` extraction/handoff (SceneTextureExtracts
    correctly populated, no GPU resource leaks)
 
@@ -219,6 +238,6 @@ After visual/behavior parity is confirmed:
 ## 9. Open Questions
 
 1. **Frame timing parity:** Vortex deferred path may be faster or slower
-   than legacy forward path depending on scene complexity. The 20% threshold
-   is a starting point; actual performance comparison is informational, not
-   a hard gate.
+   than legacy forward path depending on scene complexity. Performance
+   comparison is informational by default; do not silently treat it as a
+   blocking product gate unless that decision is elevated explicitly.

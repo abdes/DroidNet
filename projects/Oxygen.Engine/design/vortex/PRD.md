@@ -67,8 +67,8 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
    general desktop scene mode.
 2. **UE5-aligned frame structure.** Top-level orchestration mirrors UE5 desktop
    rendering: depth prepass → occlusion/HZB → light grid → shadows → base
-   pass → GBuffer rebuild → deferred lighting → indirect/reflections → fog →
-   sky → translucency → post-processing.
+   pass → GBuffer rebuild → deferred lighting → indirect/reflections → sky →
+   fog → translucency → post-processing.
 3. **Scene textures product.** Introduce a `SceneTextures` product aligned to
    UE5 desktop: SceneColor, SceneDepth, Velocity, GBufferA–F, CustomDepth,
    Stencil, SSAO, LightingChannels. The full logical family is committed at the

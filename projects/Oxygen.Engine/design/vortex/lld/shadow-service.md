@@ -10,9 +10,10 @@
 
 `ShadowService` — the stage-8 owner responsible for shadow depth map
 production. Phase 4C implements conventional cascaded shadow maps for
-directional lights and atlas-based shadow maps for local lights (point,
-spot). The service produces `ShadowFrameData` consumed by deferred
-lighting at stage 12.
+directional lights first, with spot-light shadows optional and point-light
+shadow strategy explicitly deferred pending a dedicated design decision. The
+service produces typed shadow publications consumed by deferred lighting at
+stage 12.
 
 ### 1.2 Stage Position
 
@@ -72,8 +73,8 @@ class ShadowService : public ISubsystemService {
   /// Stage 8: render shadow depth maps. Per-frame execution.
   void RenderShadowDepths(RenderContext& ctx);
 
-  /// Query shadow data for lighting consumers (stage 12, 18).
-  [[nodiscard]] auto GetShadowData() const -> const ShadowFrameData&;
+  /// CPU-side inspection hook for tests and diagnostics.
+  [[nodiscard]] auto InspectShadowData() const -> const ShadowFrameData&;
 
   /// VSM support check. Returns false in Phase 4C.
   [[nodiscard]] auto HasVsm() const -> bool;
@@ -124,7 +125,9 @@ struct ShadowFrameData {
 ### 2.4 Per-View Publication
 
 ShadowFrameData is published per-view through `ShadowFrameBindings` in
-`ViewFrameBindings`, making shadow data accessible to all lighting shaders.
+`ViewFrameBindings`, making shadow data accessible to lighting and later
+translucency shaders. GPU consumers use the publication seam; CPU inspection
+uses `InspectShadowData()` only for tests / diagnostics.
 
 ## 3. Data Flow and Dependencies
 
@@ -141,9 +144,9 @@ ShadowFrameData is published per-view through `ShadowFrameBindings` in
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| ShadowFrameData | LightingService (stage 12) | Via `GetShadowData()` |
-| ShadowFrameData | TranslucencyModule (stage 18) | Via `GetShadowData()` |
-| Shadow atlas SRV | All shadow consumers | Published in ViewFrameBindings |
+| `ShadowFrameBindings` | LightingService (stage 12) | Published through `ViewFrameBindings` |
+| `ShadowFrameBindings` | TranslucencyModule (stage 18) | Published through `ViewFrameBindings` when that stage activates |
+| CPU inspection view of `ShadowFrameData` | Tests / diagnostics | Via `InspectShadowData()` only |
 
 ### 3.3 Execution Flow
 
@@ -154,9 +157,9 @@ ShadowService::RenderShadowDepths(ctx)
   │     └─ PSSM (Practical Split Scheme Maps) split distances
   │     └─ Per-cascade: compute light VP matrix, atlas region
   │
-  ├─ Allocate atlas regions for local light shadows
-  │     └─ Point lights: cubemap face or dual-paraboloid (1 atlas region)
-  │     └─ Spot lights: single perspective (1 atlas region)
+  ├─ Allocate conventional shadow targets
+  │     └─ Spot lights: optional single-perspective allocation in Phase 4C
+  │     └─ Point lights: deferred pending explicit storage strategy
   │
   ├─ for each cascade / local shadow:
   │     ├─ Set viewport to atlas region
@@ -164,7 +167,7 @@ ShadowService::RenderShadowDepths(ctx)
   │     ├─ Cull geometry to light frustum
   │     └─ Draw shadow-casting geometry (depth-only)
   │
-  └─ Populate ShadowFrameData with cascade/local data + atlas SRV
+  └─ Populate ShadowFrameData and publish per-view ShadowFrameBindings
 ```
 
 ## 4. Resource Management
@@ -176,23 +179,19 @@ ShadowService::RenderShadowDepths(ctx)
 | Per-cascade VP matrices | Per frame | Computed from camera + light |
 | Shadow depth PSO | Persistent | Shared with depth prepass variant |
 
-### 4.1 Shadow Atlas Layout
+### 4.1 Allocator Policy
 
-```text
-┌─────────────────────────────────────┐
-│ Cascade 0   │ Cascade 1              │
-│ (1024×1024) │ (1024×1024)            │
-├─────────────┼────────────────────────┤
-│ Cascade 2   │ Cascade 3              │
-│ (1024×1024) │ (1024×1024)            │
-├─────────────┼───┬───┬───┬───────────┤
-│ Point 0     │P1 │P2 │P3 │  (unused) │
-│ (512×512)   │   │   │   │           │
-└─────────────┴───┴───┴───┴───────────┘
-```
+Phase 4C may start with one simple atlas allocator, but the **contract**
+must not freeze that shape. The design must allow:
 
-Default atlas: 2048×2048, D32_FLOAT. Cascade regions occupy the top half;
-local light shadows are packed into the bottom half.
+- one simple atlas as an initial implementation
+- dedicated CSM targets or atlas partitions for cascades
+- a non-atlas point-light path (for example cubemap depth targets) if that
+  becomes the selected strategy
+- future VSM payloads without inheriting the conventional-atlas ABI
+
+The fixed texture layout is therefore an implementation choice, not part of
+the long-lived interface contract.
 
 ## 5. Shader Contracts
 
@@ -254,13 +253,15 @@ float SampleShadowCascade(float3 worldPos, uint cascadeIndex,
 
 ### 6.1 Dispatch Contract
 
-`shadows_->RenderShadowDepths(ctx)` at stage 8. Per-frame execution
-(shadows are shared across views for directional lights).
+`shadows_->RenderShadowDepths(ctx)` at stage 8. The service may perform
+frame-shared allocation / cache work, but the published shadow payload remains
+per-view. Directional-shadow sharing across compatible views is an optimization
+only, not the default semantic.
 
 ### 6.2 Null-Safe Behavior
 
 When null: no shadow maps produced. Deferred lighting renders without
-shadow terms (fully lit). `GetShadowData()` returns empty data.
+shadow terms (fully lit). Published `ShadowFrameBindings` are empty.
 
 ### 6.3 Capability Gate
 
@@ -272,15 +273,14 @@ Requires `kShadowing`.
    cascade splits cover camera frustum correctly.
 2. **Shadow visual:** Ground plane under directional light → visible shadow
    from occluder.
-3. **Atlas inspection:** RenderDoc frame 10, inspect shadow atlas texture.
-   Verify cascade regions contain valid depth data.
+3. **Conventional target inspection:** RenderDoc frame 10, inspect the chosen
+   shadow targets. Verify cascade regions contain valid depth data.
 4. **Shadow terms:** Compare lit/shadowed pixels in SceneColor — shadowed
    regions should be darker by shadow attenuation factor.
 
 ## 8. Open Questions
 
-1. **Point light shadows:** Cubemap faces vs dual-paraboloid. Phase 4C can
-   start with spot lights only for local shadows. Point light shadows are
-   more complex and can follow.
+1. **Point light shadows:** Explicitly deferred beyond the Phase 4C baseline
+   until the storage strategy is chosen.
 2. **VSM integration:** `Shadows/Vsm/` directory exists but is empty.
    Virtual shadow maps are Phase 7C scope.
