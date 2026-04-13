@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 0 incomplete (scaffold on disk, not in build graph)`
+Status: `in_progress — Phase 0 partially complete (scaffold wired into build graph; empty-target and alias validation pending)`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -31,7 +31,7 @@ Related:
 
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
-| 0 | Scaffold and Build Integration | `in_progress` | `add_subdirectory("Vortex")` not in parent CMake |
+| 0 | Scaffold and Build Integration | `in_progress` | Empty-target build and `oxygen::vortex` alias proof still pending |
 | 1 | Substrate Migration | `not_started` | Phase 0 |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
@@ -108,7 +108,9 @@ implementation cannot begin until its design prerequisites are met.
 | Item | Path | Verified |
 | ---- | ---- | -------- |
 | Directory tree | `src/Oxygen/Vortex/` (subdirs with `.gitkeep`) | Yes — repo inspection |
+| Parent CMake wiring | `src/Oxygen/CMakeLists.txt` | Yes — `add_subdirectory("Vortex")` now present once |
 | CMakeLists.txt | `src/Oxygen/Vortex/CMakeLists.txt` | Yes — declares `Oxygen.Vortex`, links deps, C++23 |
+| Module anchor source | `src/Oxygen/Vortex/ModuleAnchor.cpp` | Yes — minimal translation unit added so the scaffolded library can generate |
 | Export header | `src/Oxygen/Vortex/api_export.h` | Yes — exists |
 | Test CMake | `src/Oxygen/Vortex/Test/CMakeLists.txt` | Yes — link test block commented out |
 
@@ -116,20 +118,26 @@ implementation cannot begin until its design prerequisites are met.
 
 | Item | Detail |
 | ---- | ------ |
-| Parent CMake wiring | `src/Oxygen/CMakeLists.txt` does NOT contain `add_subdirectory("Vortex")` |
-| Successful build | `cmake --build --preset windows-debug --target Oxygen.Vortex` fails: "unknown target" |
-| Target alias verification | `oxygen::vortex` not verified |
+| Successful empty-target build | Vortex target is present in generated Ninja files, but the actual library build has not yet been proven end to end |
+| Target alias verification | `oxygen::vortex` still needs proof through a real consumer target (`Oxygen.Vortex.LinkTest`) |
+| Preset-help target listing | `cmake --build --preset windows-debug --target help` currently fails during CMake regeneration in `out/build-ninja/_deps/ccache.cmake-subbuild` with `ninja: error: failed recompaction: Permission denied` |
 
 ### Validation Log
 
 | Date | Command | Result |
 | ---- | ------- | ------ |
 | (initial) | `cmake --build --preset windows-debug --target Oxygen.Vortex --parallel 4` | FAIL — "unknown target 'Oxygen.Vortex'" |
+| 2026-04-13 | `rg -n 'add_subdirectory\\("Vortex"\\)' src/Oxygen/CMakeLists.txt` | PASS — parent CMake now wires `Vortex` once |
+| 2026-04-13 | `cmake --preset windows-default` | PASS — configure/generate now succeeds with `oxygen-vortex` in the generated project graph |
+| 2026-04-13 | `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t targets all \| Select-String 'vortex'` | PASS — generated Debug Ninja graph contains `oxygen-vortex`, `Oxygen.Vortex-d.dll`, and Vortex source-tree targets |
+| 2026-04-13 | `cmake --build --preset windows-debug --target help` | FAIL — regeneration blocked in `_deps/ccache.cmake-subbuild` by `ninja: error: failed recompaction: Permission denied` |
 
 ### Resume Point
 
-Wire `add_subdirectory("Vortex")` into `src/Oxygen/CMakeLists.txt`, then verify
-the target builds with an empty source set.
+Enable the minimal Vortex link-test consumer, prove `oxygen::vortex` through a
+real executable, and determine whether the remaining preset-build issue is
+limited to the generated `ccache.cmake` subbuild or also affects the actual
+Vortex target build.
 
 ---
 

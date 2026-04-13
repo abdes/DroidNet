@@ -53,6 +53,7 @@ set(
 )
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
+  "ModuleAnchor.cpp"
 )
 
 target_sources(
