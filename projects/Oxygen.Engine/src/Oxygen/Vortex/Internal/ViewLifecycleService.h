@@ -21,6 +21,9 @@
 
 namespace oxygen {
 class Graphics;
+namespace engine {
+class RenderContext;
+}
 namespace graphics {
 class Framebuffer;
 } // namespace graphics
