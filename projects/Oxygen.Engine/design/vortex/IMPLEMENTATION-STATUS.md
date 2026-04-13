@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.3 are complete, repaired 01-06 is now the remaining ScenePrep-only blocker, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.3 are complete, repaired 01-06 landed the ScenePrep-only data/config slice, repaired 01-07 now owns the remaining ScenePrep execution blocker, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-06` now owns the remaining ScenePrep-only data/config slice after the step 1.3 resource migration landed |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-06` landed the remaining ScenePrep-only data/config slice; repaired `01-07` now owns `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.*` before step 1.4 can close |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,36 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-06 migrated the remaining ScenePrep-only data/config slice
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/ScenePrep/CollectionConfig.h`
+  - `src/Oxygen/Vortex/ScenePrep/Concepts.h`
+  - `src/Oxygen/Vortex/ScenePrep/FinalizationConfig.h`
+  - `src/Oxygen/Vortex/ScenePrep/RenderItemProto.h`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepContext.h`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepState.h`
+  - `src/Oxygen/Vortex/ScenePrep/Types.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/ScenePrep/CollectionConfig.h src/Oxygen/Vortex/ScenePrep/Concepts.h src/Oxygen/Vortex/ScenePrep/FinalizationConfig.h src/Oxygen/Vortex/ScenePrep/RenderItemProto.h src/Oxygen/Vortex/ScenePrep/ScenePrepContext.h src/Oxygen/Vortex/ScenePrep/ScenePrepState.h src/Oxygen/Vortex/ScenePrep/Types.h`
+  - `rg -n 'ScenePrep/CollectionConfig.h|ScenePrep/ScenePrepContext.h|ScenePrep/Types.h' src/Oxygen/Vortex/CMakeLists.txt`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll`
+- Result:
+  - the remaining ScenePrep-only data/config contracts now live under `src/Oxygen/Vortex/ScenePrep/`
+  - `src/Oxygen/Vortex/CMakeLists.txt` now exports those headers without re-owning the ABI files already landed by `01-04`
+  - `CollectionConfig.h` and `FinalizationConfig.h` keep the deferred execution entry points as forward declarations instead of widening `01-06` into `Extractors.h`, `Finalizers.h`, or `ScenePrepPipeline.*`
+  - `oxygen-vortex` builds successfully in Debug after the ScenePrep-only header slice lands
+  - the generated Debug Ninja target query for `bin/Debug/Oxygen.Vortex-d.dll` still shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+- Code / validation delta:
+  - step `1.4` is now **in progress**: the ScenePrep-only data/config slice is complete, but `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h` remain deferred to `01-07`
+  - no Vortex/legacy link-test or runtime validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-07` to land `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, then close step `1.4`
 
 ### 2026-04-13 — Phase 1 plan 01-05 migrated `Resources/*` and closed step 1.3
 
@@ -500,6 +530,10 @@ design and execution work starts.
 - Repaired `01-05` is now complete: the full `Resources/*` slice builds under
   `src/Oxygen/Vortex/Resources/`, and the linked Vortex DLL still carries no
   `Oxygen.Renderer` dependency edge.
+- Repaired `01-06` is now complete: the remaining ScenePrep-only data/config
+  contracts build under `src/Oxygen/Vortex/ScenePrep/`, while
+  `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and
+  `ScenePrepPipeline.cpp/.h` remain explicitly deferred to `01-07`.
 
 ### Steps (from PLAN.md §3)
 
@@ -508,7 +542,7 @@ design and execution work starts.
 | 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
 | 1.2 | Upload subsystem (14 files) | `done` | `01-03` migrated the full `Upload/` slice, built `oxygen-vortex`, and proved the linked Vortex DLL has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
-| 1.4 | ScenePrep subsystem (15 files) | `planned` | Repaired Phase 1 plans `01-06` and `01-07` now split remaining ScenePrep-only files from execution files |
+| 1.4 | ScenePrep subsystem (15 files) | `in_progress` | `01-06` landed `CollectionConfig.h`, `Concepts.h`, `FinalizationConfig.h`, `RenderItemProto.h`, `ScenePrepContext.h`, `ScenePrepState.h`, and `Types.h`; `01-07` still owns `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h` before step 1.4 can close |
 | 1.5 | Internal utilities (7 files) | `planned` | Repaired Phase 1 plan `01-07` |
 | 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-08` |
 | 1.7 | View assembly + composition | `planned` | Repaired Phase 1 plans `01-08` and `01-09` |
@@ -517,8 +551,9 @@ design and execution work starts.
 
 ### Resume Point
 
-Continue with repaired `01-06` to migrate the remaining ScenePrep-only
-step-`1.4` files now that the resource subsystem is fully Vortex-owned.
+Continue with repaired `01-07` to land `ScenePrep/Extractors.h`,
+`ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, then close
+step `1.4` before moving into the selected internal-utility slice.
 
 ---
 
