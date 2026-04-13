@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `done — Phase 0 complete (build graph wired, empty target builds, alias consumer passes)`
+Status: `blocked — Phase 1 execution cannot proceed until the substrate plan set is regenerated to cover the full migration scope`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `not_started` | Phase 0 |
+| 1 | Substrate Migration | `blocked` | The current `.planning` plan set does not cover the resources / ScenePrep / internal-utility work required by Phase 1 |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,36 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 execute-phase blocker recorded
+
+- Changed files this session:
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+- Commands used for verification:
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" init execute-phase 1 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" phase-plan-index 1 --ws vortex`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-04-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-05-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-06-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-08-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/ROADMAP.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+- Result:
+  - execute-phase preflight found scope drift between the intended Phase 1 scope and the generated `.planning` micro-plan set
+  - `ROADMAP.md` and `01-VALIDATION.md` still require resources, ScenePrep, and internal-utility migration work, but the current `01-04` through `01-06` plan files instead continue the upload migration
+  - `01-08-PLAN.md` attempts to record steps `1.4` through `1.7` as complete even though the missing resources / ScenePrep / internal-utility slices are not planned anywhere in the current phase directory
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run because execution was blocked before a trustworthy task boundary existed
+  - Phase 1 remains incomplete and must not be reported as having started beyond preflight discovery
+- Ledger impact:
+  - Phase 1 status is now `blocked`
+  - execution must not resume from the current plan set until the missing step coverage is repaired
+- Remaining blocker:
+  - regenerate or repair the Phase 1 `.planning/workstreams/vortex/phases/01-substrate-migration/*-PLAN.md` files so they explicitly cover steps `1.3`, `1.4`, and `1.5` before implementation resumes
 
 ### 2026-04-13 — PLAN.md synchronization
 
@@ -144,7 +174,23 @@ design and execution work starts.
 
 ## Phase 1 — Substrate Migration
 
-**Status:** `not_started`
+**Status:** `blocked`
+
+### What Is Missing
+
+- A trustworthy Phase 1 execution plan set. The current `.planning` artifacts
+  do not align with the source-of-truth Vortex design package:
+  - `ROADMAP.md` still expects `01-04` through `01-06` to cover resources,
+    ScenePrep, and selected internals.
+  - `01-04-PLAN.md`, `01-05-PLAN.md`, and `01-06-PLAN.md` instead continue the
+    upload subsystem and never introduce the required resources / ScenePrep
+    migration files.
+  - `01-08-PLAN.md` attempts to mark steps `1.4` through `1.7` complete even
+    though the missing resources / ScenePrep / internal-utility work is absent
+    from the current phase plan set.
+
+Execution must stop at this blocker until the Phase 1 plan artifacts are
+regenerated or corrected.
 
 ### Steps (from PLAN.md §3)
 
@@ -152,9 +198,9 @@ design and execution work starts.
 | ---- | ---- | ------ | -------- |
 | 1.1 | Cross-cutting types (14 headers) | `not_started` | — |
 | 1.2 | Upload subsystem (14 files) | `not_started` | — |
-| 1.3 | Resources subsystem (7 files) | `not_started` | — |
-| 1.4 | ScenePrep subsystem (15 files) | `not_started` | — |
-| 1.5 | Internal utilities (7 files) | `not_started` | — |
+| 1.3 | Resources subsystem (7 files) | `blocked` | current `.planning` phase plans never schedule this work |
+| 1.4 | ScenePrep subsystem (15 files) | `blocked` | current `.planning` phase plans never schedule this work |
+| 1.5 | Internal utilities (7 files) | `blocked` | current `.planning` phase plans cannot truthfully close this step |
 | 1.6 | Pass base classes (3 files) | `not_started` | — |
 | 1.7 | View assembly + composition | `not_started` | — |
 | 1.8 | Renderer orchestrator | `not_started` | — |
@@ -162,7 +208,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Phase 0 must be completed first.
+Repair or regenerate the Phase 1 `.planning` plan set first; only then resume
+execution from the first corrected incomplete plan.
 
 ---
 
