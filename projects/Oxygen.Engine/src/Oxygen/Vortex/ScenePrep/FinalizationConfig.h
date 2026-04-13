@@ -20,8 +20,7 @@ auto TransformUploadFinalizer(const ScenePrepState& state) -> void;
 auto MaterialUploadFinalizer(const ScenePrepState& state) -> void;
 auto DrawMetadataEmitFinalizer(
   const ScenePrepState& state, const RenderItemData& item) -> void;
-auto DrawMetadataSortAndPartitionFinalizer(const ScenePrepState& state)
-  -> void;
+auto DrawMetadataSortAndPartitionFinalizer(const ScenePrepState& state) -> void;
 auto DrawMetadataUploadFinalizer(const ScenePrepState& state) -> void;
 
 //! Configuration for the Finalization phase (draw preparation).

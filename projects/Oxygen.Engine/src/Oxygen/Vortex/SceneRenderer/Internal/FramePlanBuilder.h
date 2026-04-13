@@ -37,7 +37,9 @@ public:
     struct FrameSettings {
       RenderMode render_mode { RenderMode::kSolid };
       graphics::Color wire_color { 1.0F, 1.0F, 1.0F, 1.0F };
-      DepthPrePassMode depth_prepass_mode { DepthPrePassMode::kOpaqueAndMasked };
+      DepthPrePassMode depth_prepass_mode {
+        DepthPrePassMode::kOpaqueAndMasked
+      };
       bool gpu_debug_pass_enabled { true };
       std::optional<SubPixelPosition> gpu_debug_mouse_down_position;
     };
@@ -80,7 +82,8 @@ public:
   {
     return frame_render_mode_;
   }
-  [[nodiscard]] auto ShaderDebugMode() const -> ::oxygen::vortex::ShaderDebugMode
+  [[nodiscard]] auto ShaderDebugMode() const
+    -> ::oxygen::vortex::ShaderDebugMode
   {
     return frame_shader_debug_mode_;
   }

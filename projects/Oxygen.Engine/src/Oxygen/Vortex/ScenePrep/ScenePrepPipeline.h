@@ -11,12 +11,12 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/ScenePrep/Types.h>
 #include <Oxygen/Vortex/api_export.h>
-#include <Oxygen/Scene/Scene.h>
 
 namespace oxygen {
 class ResolvedView;

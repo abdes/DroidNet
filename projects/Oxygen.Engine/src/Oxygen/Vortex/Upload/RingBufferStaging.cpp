@@ -21,10 +21,10 @@
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
-using oxygen::vortex::upload::FenceValue;
 using oxygen::graphics::BufferDesc;
 using oxygen::graphics::BufferMemory;
 using oxygen::graphics::BufferUsage;
+using oxygen::vortex::upload::FenceValue;
 
 namespace {
 

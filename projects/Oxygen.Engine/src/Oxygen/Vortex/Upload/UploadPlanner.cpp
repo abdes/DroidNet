@@ -30,8 +30,8 @@ inline auto AlignUp(uint64_t v, uint64_t a) -> uint64_t
   return (v + (a - 1ULL)) & ~(a - 1ULL);
 }
 
-using oxygen::vortex::upload::UploadItem;
 using oxygen::graphics::BufferUploadRegion;
+using oxygen::vortex::upload::UploadItem;
 
 // Use AlignUp defined earlier in this translation unit.
 

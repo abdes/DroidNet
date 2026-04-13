@@ -34,13 +34,9 @@ public:
   auto operator=(const BasicRenderContextPool&)
     -> BasicRenderContextPool& = delete;
   BasicRenderContextPool(BasicRenderContextPool&&) = default;
-  auto operator=(BasicRenderContextPool&&) -> BasicRenderContextPool&
-    = default;
+  auto operator=(BasicRenderContextPool&&) -> BasicRenderContextPool& = default;
 
-  ~BasicRenderContextPool()
-  {
-    DLOG_F(2, "RenderContextPool was destroyed.");
-  }
+  ~BasicRenderContextPool() { DLOG_F(2, "RenderContextPool was destroyed."); }
 
   auto Acquire(frame::Slot slot) -> RenderContextT&
   {

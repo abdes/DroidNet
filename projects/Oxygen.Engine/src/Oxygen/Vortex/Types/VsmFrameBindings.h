@@ -22,7 +22,9 @@ namespace oxygen::vortex {
  the conventional shadow product ABI.
 */
 struct alignas(16) VsmFrameBindings {
-  ShaderVisibleIndex directional_shadow_mask_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex directional_shadow_mask_slot {
+    kInvalidShaderVisibleIndex
+  };
   ShaderVisibleIndex screen_shadow_mask_slot { kInvalidShaderVisibleIndex };
   std::array<std::uint32_t, 2> _pad_to_16 {};
 };

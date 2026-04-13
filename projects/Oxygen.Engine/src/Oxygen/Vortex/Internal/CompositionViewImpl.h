@@ -17,8 +17,8 @@
 namespace oxygen {
 class Graphics;
 namespace graphics {
-class Texture;
-class Framebuffer;
+  class Texture;
+  class Framebuffer;
 } // namespace graphics
 } // namespace oxygen
 
@@ -27,9 +27,9 @@ namespace oxygen::vortex::internal {
 class ViewLifecycleAccessTag;
 
 namespace access {
-struct ViewLifecycleTagFactory {
-  static OXGN_VRTX_API auto Get() noexcept -> ViewLifecycleAccessTag;
-};
+  struct ViewLifecycleTagFactory {
+    static OXGN_VRTX_API auto Get() noexcept -> ViewLifecycleAccessTag;
+  };
 } // namespace access
 
 class ViewLifecycleAccessTag {

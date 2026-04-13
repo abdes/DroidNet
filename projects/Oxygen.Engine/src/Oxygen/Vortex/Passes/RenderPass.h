@@ -72,9 +72,8 @@ protected:
   virtual auto OnExecute(graphics::CommandRecorder& recorder) -> void = 0;
   virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
 
-  OXGN_VRTX_API auto BindDrawIndexConstant(
-    graphics::CommandRecorder& recorder, std::uint32_t draw_index) const
-    -> void;
+  OXGN_VRTX_API auto BindDrawIndexConstant(graphics::CommandRecorder& recorder,
+    std::uint32_t draw_index) const -> void;
   OXGN_VRTX_API auto EmitDrawRange(graphics::CommandRecorder& recorder,
     const DrawMetadata* records, uint32_t begin, uint32_t end,
     uint32_t& emitted_count, uint32_t& skipped_invalid,

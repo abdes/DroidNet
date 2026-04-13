@@ -22,10 +22,10 @@
 namespace oxygen {
 class Graphics;
 namespace engine {
-class RenderContext;
+  class RenderContext;
 }
 namespace graphics {
-class Framebuffer;
+  class Framebuffer;
 } // namespace graphics
 } // namespace oxygen
 

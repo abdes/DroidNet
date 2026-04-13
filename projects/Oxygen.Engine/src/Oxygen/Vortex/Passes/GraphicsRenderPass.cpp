@@ -68,14 +68,14 @@ auto GraphicsRenderPass::BindViewConstantsBuffer(
     Context().view_constants->GetGPUVirtualAddress());
 }
 
-auto GraphicsRenderPass::BindIndicesBuffer(
-  CommandRecorder& /*recorder*/) const -> void
+auto GraphicsRenderPass::BindIndicesBuffer(CommandRecorder& /*recorder*/) const
+  -> void
 {
 }
 
 auto GraphicsRenderPass::BindPassConstantsIndexConstant(
-  CommandRecorder& recorder, const ShaderVisibleIndex pass_constants_index) const
-  -> void
+  CommandRecorder& recorder,
+  const ShaderVisibleIndex pass_constants_index) const -> void
 {
   DCHECK_F(last_built_pso_desc_.has_value());
 

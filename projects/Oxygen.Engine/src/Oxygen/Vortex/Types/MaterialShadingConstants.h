@@ -73,8 +73,10 @@ struct alignas(packing::kShaderDataFieldAlignment) MaterialShadingConstants {
   uint32_t _pad1 { 0U };
 };
 static_assert(sizeof(ShaderVisibleIndex) == sizeof(uint32_t));
-static_assert(offsetof(MaterialShadingConstants, ambient_occlusion_texture_index) == 64U);
-static_assert(offsetof(MaterialShadingConstants, emissive_texture_index) == 68U);
+static_assert(
+  offsetof(MaterialShadingConstants, ambient_occlusion_texture_index) == 64U);
+static_assert(
+  offsetof(MaterialShadingConstants, emissive_texture_index) == 68U);
 static_assert(offsetof(MaterialShadingConstants, alpha_cutoff) == 72U);
 static_assert(offsetof(MaterialShadingConstants, _pad2) == 76U);
 static_assert(

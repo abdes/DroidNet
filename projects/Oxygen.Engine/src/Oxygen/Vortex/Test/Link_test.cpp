@@ -26,10 +26,10 @@
 namespace {
 
 using oxygen::Graphics;
+using oxygen::observer_ptr;
 using oxygen::RendererConfig;
 using oxygen::engine::FrameContext;
 using oxygen::graphics::QueueRole;
-using oxygen::observer_ptr;
 using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::testing::FakeGraphics;
@@ -53,13 +53,12 @@ auto VerifySourceHermeticity() -> void
     while (std::getline(file, line)) {
       ++line_number;
       if (std::string_view { line }.find(kLegacyIncludeNeedle)
-          == std::string_view::npos) {
+        == std::string_view::npos) {
         continue;
       }
 
-      throw std::runtime_error(
-        "legacy include seam found at " + entry.path().generic_string() + ':'
-        + std::to_string(line_number));
+      throw std::runtime_error("legacy include seam found at "
+        + entry.path().generic_string() + ':' + std::to_string(line_number));
     }
   }
 }
