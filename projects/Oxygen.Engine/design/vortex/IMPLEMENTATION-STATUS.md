@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.2 and repaired 01-04 prerequisite ABI bundle are complete; repaired 01-05 now migrates resources, and repaired 01-10 carries the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.3 are complete, repaired 01-06 is now the remaining ScenePrep-only blocker, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-05` now owns step 1.3 `Resources/*` migration on top of the landed prerequisite ABI bundle |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-06` now owns the remaining ScenePrep-only data/config slice after the step 1.3 resource migration landed |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,40 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-05 migrated `Resources/*` and closed step 1.3
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp`
+  - `src/Oxygen/Vortex/Resources/DrawMetadataEmitter.h`
+  - `src/Oxygen/Vortex/Resources/GeometryUploader.cpp`
+  - `src/Oxygen/Vortex/Resources/GeometryUploader.h`
+  - `src/Oxygen/Vortex/Resources/IResourceBinder.h`
+  - `src/Oxygen/Vortex/Resources/MaterialBinder.cpp`
+  - `src/Oxygen/Vortex/Resources/MaterialBinder.h`
+  - `src/Oxygen/Vortex/Resources/TextureBinder.cpp`
+  - `src/Oxygen/Vortex/Resources/TextureBinder.h`
+  - `src/Oxygen/Vortex/Resources/TransformUploader.cpp`
+  - `src/Oxygen/Vortex/Resources/TransformUploader.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp src/Oxygen/Vortex/Resources/DrawMetadataEmitter.h src/Oxygen/Vortex/Resources/GeometryUploader.cpp src/Oxygen/Vortex/Resources/GeometryUploader.h src/Oxygen/Vortex/Resources/IResourceBinder.h src/Oxygen/Vortex/Resources/MaterialBinder.cpp src/Oxygen/Vortex/Resources/MaterialBinder.h src/Oxygen/Vortex/Resources/TextureBinder.cpp src/Oxygen/Vortex/Resources/TextureBinder.h src/Oxygen/Vortex/Resources/TransformUploader.cpp src/Oxygen/Vortex/Resources/TransformUploader.h`
+  - `rg -n 'ScenePrepState.h|ScenePrep/Types.h' src/Oxygen/Vortex/Resources/DrawMetadataEmitter.h src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `powershell -NoProfile -Command \"$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; $query = & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll 2>&1; if ($query -match 'oxygen-renderer|Oxygen\\.Renderer') { Write-Error 'oxygen-vortex target still depends on Oxygen.Renderer'; exit 1 }\"`
+- Result:
+  - the full step-`1.3` resource subsystem now lives under `src/Oxygen/Vortex/Resources/`
+  - `src/Oxygen/Vortex/CMakeLists.txt` now wires the migrated resource files into `oxygen-vortex`
+  - the stale `ScenePrepState.h` and `ScenePrep/Types.h` includes were removed instead of widening the repaired prerequisite boundary
+  - `oxygen-vortex` builds successfully in Debug after the resource slice lands
+  - the generated Debug Ninja target query for `bin/Debug/Oxygen.Vortex-d.dll` shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+- Code / validation delta:
+  - step `1.3` is now **complete**
+  - no Vortex/legacy link-test or runtime validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-06` to migrate the remaining ScenePrep-only data/config files
 
 ### 2026-04-13 — Phase 1 plan 01-04 landed the prerequisite ABI bundle for resources
 
@@ -463,6 +497,9 @@ design and execution work starts.
 - Repaired `01-04` is now complete: the prerequisite ABI bundle needed by
   `Resources/*` lives under Vortex ownership and `oxygen-vortex` builds with
   that bundle alone while the resource implementation remains deferred.
+- Repaired `01-05` is now complete: the full `Resources/*` slice builds under
+  `src/Oxygen/Vortex/Resources/`, and the linked Vortex DLL still carries no
+  `Oxygen.Renderer` dependency edge.
 
 ### Steps (from PLAN.md §3)
 
@@ -470,7 +507,7 @@ design and execution work starts.
 | ---- | ---- | ------ | -------- |
 | 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
 | 1.2 | Upload subsystem (14 files) | `done` | `01-03` migrated the full `Upload/` slice, built `oxygen-vortex`, and proved the linked Vortex DLL has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
-| 1.3 | Resources subsystem (7 files) | `planned` | Repaired `01-04` landed the prerequisite ABI bundle and build proof; repaired `01-05` still owns the actual `Resources/*` migration |
+| 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
 | 1.4 | ScenePrep subsystem (15 files) | `planned` | Repaired Phase 1 plans `01-06` and `01-07` now split remaining ScenePrep-only files from execution files |
 | 1.5 | Internal utilities (7 files) | `planned` | Repaired Phase 1 plan `01-07` |
 | 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-08` |
@@ -480,8 +517,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Continue with repaired `01-05` to migrate the actual `Resources/*` step-`1.3`
-files on top of the landed prerequisite ABI bundle.
+Continue with repaired `01-06` to migrate the remaining ScenePrep-only
+step-`1.4` files now that the resource subsystem is fully Vortex-owned.
 
 ---
 
