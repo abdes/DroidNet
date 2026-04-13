@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.3 are complete, repaired 01-06 landed the ScenePrep-only data/config slice, repaired 01-07 now owns the remaining ScenePrep execution blocker, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.5 are complete, repaired 01-08 now owns the pass-base substrate, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-06` landed the remaining ScenePrep-only data/config slice; repaired `01-07` now owns `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.*` before step 1.4 can close |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-07` closed steps `1.4` and `1.5`; repaired `01-08` now owns the pass-base substrate for step `1.6` |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -47,28 +47,65 @@ implementation cannot begin until its design prerequisites are met.
 
 | ID | Deliverable | Required By | Status | Location |
 | -- | ----------- | ----------- | ------ | -------- |
-| D.1 | SceneTextures four-part contract | Phase 2 | `not_started` | TBD (DESIGN.md update or standalone LLD) |
-| D.2 | SceneRenderBuilder bootstrap | Phase 2 | `not_started` | TBD |
-| D.3 | SceneRenderer shell dispatch | Phase 2 | `not_started` | TBD |
-| D.4 | Depth prepass LLD | Phase 3 | `not_started` | `design/vortex/lld/depth-prepass.md` |
-| D.5 | Base pass LLD | Phase 3 | `not_started` | `design/vortex/lld/base-pass.md` |
-| D.6 | Deferred lighting LLD | Phase 3 | `not_started` | `design/vortex/lld/deferred-lighting.md` |
-| D.7 | Shader contracts LLD | Phase 3 | `not_started` | `design/vortex/lld/shader-contracts.md` |
-| D.8 | InitViews LLD | Phase 3 | `not_started` | `design/vortex/lld/init-views.md` |
-| D.9 | LightingService LLD | Phase 4A | `not_started` | `design/vortex/lld/lighting-service.md` |
-| D.10 | PostProcessService LLD | Phase 4B | `not_started` | `design/vortex/lld/post-process-service.md` |
-| D.11 | ShadowService LLD | Phase 4C | `not_started` | `design/vortex/lld/shadow-service.md` |
-| D.12 | EnvironmentLightingService LLD | Phase 4D | `not_started` | `design/vortex/lld/environment-service.md` |
-| D.13 | Migration playbook | Phase 4E | `not_started` | `design/vortex/lld/migration-playbook.md` |
-| D.14 | DiagnosticsService LLD | Phase 5A | `not_started` | `design/vortex/lld/diagnostics-service.md` |
-| D.15 | TranslucencyModule LLD | Phase 5B | `not_started` | `design/vortex/lld/translucency.md` |
-| D.16 | OcclusionModule LLD | Phase 5C | `not_started` | `design/vortex/lld/occlusion.md` |
-| D.17 | Multi-view composition LLD | Phase 5D | `not_started` | `design/vortex/lld/multi-view-composition.md` |
-| D.18 | Offscreen rendering LLD | Phase 5E | `not_started` | `design/vortex/lld/offscreen-rendering.md` |
+| D.1 | SceneTextures four-part contract | Phase 2 | `done` | [`lld/scene-textures.md`](lld/scene-textures.md) |
+| D.2 | SceneRenderBuilder bootstrap | Phase 2 | `done` | [`lld/scene-renderer-shell.md`](lld/scene-renderer-shell.md) |
+| D.3 | SceneRenderer shell dispatch | Phase 2 | `done` | [`lld/scene-renderer-shell.md`](lld/scene-renderer-shell.md) |
+| D.4 | Depth prepass LLD | Phase 3 | `done` | [`lld/depth-prepass.md`](lld/depth-prepass.md) |
+| D.5 | Base pass LLD | Phase 3 | `done` | [`lld/base-pass.md`](lld/base-pass.md) |
+| D.6 | Deferred lighting LLD | Phase 3 | `done` | [`lld/deferred-lighting.md`](lld/deferred-lighting.md) |
+| D.7 | Shader contracts LLD | Phase 3 | `done` | [`lld/shader-contracts.md`](lld/shader-contracts.md) |
+| D.8 | InitViews LLD | Phase 3 | `done` | [`lld/init-views.md`](lld/init-views.md) |
+| D.9 | LightingService LLD | Phase 4A | `done` | [`lld/lighting-service.md`](lld/lighting-service.md) |
+| D.10 | PostProcessService LLD | Phase 4B | `done` | [`lld/post-process-service.md`](lld/post-process-service.md) |
+| D.11 | ShadowService LLD | Phase 4C | `done` | [`lld/shadow-service.md`](lld/shadow-service.md) |
+| D.12 | EnvironmentLightingService LLD | Phase 4D | `done` | [`lld/environment-service.md`](lld/environment-service.md) |
+| D.13 | Migration playbook | Phase 4E | `done` | [`lld/migration-playbook.md`](lld/migration-playbook.md) |
+| D.14 | DiagnosticsService LLD | Phase 5A | `done` | [`lld/diagnostics-service.md`](lld/diagnostics-service.md) |
+| D.15 | TranslucencyModule LLD | Phase 5B | `done` | [`lld/translucency.md`](lld/translucency.md) |
+| D.16 | OcclusionModule LLD | Phase 5C | `done` | [`lld/occlusion.md`](lld/occlusion.md) |
+| D.17 | Multi-view composition LLD | Phase 5D | `done` | [`lld/multi-view-composition.md`](lld/multi-view-composition.md) |
+| D.18 | Offscreen rendering LLD | Phase 5E | `done` | [`lld/offscreen-rendering.md`](lld/offscreen-rendering.md) |
 
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-07 migrated the ScenePrep execution slice and selected substrate-only internals
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Internal/BlueNoiseData.h`
+  - `src/Oxygen/Vortex/Internal/PerViewStructuredPublisher.h`
+  - `src/Oxygen/Vortex/Internal/RenderContextMaterializer.h`
+  - `src/Oxygen/Vortex/Internal/RenderContextPool.h`
+  - `src/Oxygen/Vortex/Internal/RenderScope.h`
+  - `src/Oxygen/Vortex/Internal/ViewConstantsManager.cpp`
+  - `src/Oxygen/Vortex/Internal/ViewConstantsManager.h`
+  - `src/Oxygen/Vortex/ScenePrep/Extractors.h`
+  - `src/Oxygen/Vortex/ScenePrep/Finalizers.h`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepState.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/ScenePrep/Extractors.h src/Oxygen/Vortex/ScenePrep/Finalizers.h src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h`
+  - `rg -n 'ScenePrep/ScenePrepPipeline.cpp|ScenePrep/Extractors.h|ScenePrep/Finalizers.h' src/Oxygen/Vortex/CMakeLists.txt`
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_|IIblProvider|ISkyCaptureProvider|ISkyAtmosphereLutProvider|IBrdfLutProvider|IblManager|SunResolver|EnvironmentStaticDataManager|ConventionalShadow' src/Oxygen/Vortex/Internal/BlueNoiseData.h src/Oxygen/Vortex/Internal/PerViewStructuredPublisher.h src/Oxygen/Vortex/Internal/RenderContextMaterializer.h src/Oxygen/Vortex/Internal/RenderContextPool.h src/Oxygen/Vortex/Internal/RenderScope.h src/Oxygen/Vortex/Internal/ViewConstantsManager.cpp src/Oxygen/Vortex/Internal/ViewConstantsManager.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll`
+- Result:
+  - `src/Oxygen/Vortex/ScenePrep/Extractors.h`, `Finalizers.h`, and `ScenePrepPipeline.cpp/.h` now live under Vortex ownership, so the deferred execution half of step `1.4` is no longer outstanding
+  - the selected substrate-only utility slice now lives under `src/Oxygen/Vortex/Internal/` without importing light, shadow, or environment-specific internals
+  - `RenderContextPool.h` and `RenderContextMaterializer.h` were moved into Vortex ownership as dependency-safe templates so `01-07` did not have to pull `RenderContext.h` or `Renderer.h` forward from `01-10`
+  - the stale `LightManager` hook was removed from the Vortex `ScenePrep` state/pipeline because compiling the new execution slice exposed it as a later-domain dependency outside the Phase 1 substrate boundary
+  - `oxygen-vortex` builds successfully in Debug after the ScenePrep execution and selected internal utility slice land
+  - the generated Debug Ninja target query for `bin/Debug/Oxygen.Vortex-d.dll` still shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+- Code / validation delta:
+  - steps `1.4` and `1.5` are now complete with build and dependency-edge evidence
+  - no Vortex runtime/facade validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-08` to land the step-`1.6` pass-base substrate before the public half of step `1.7`
 
 ### 2026-04-13 — Phase 1 plan 01-06 migrated the remaining ScenePrep-only data/config slice
 
@@ -534,6 +571,10 @@ design and execution work starts.
   contracts build under `src/Oxygen/Vortex/ScenePrep/`, while
   `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and
   `ScenePrepPipeline.cpp/.h` remain explicitly deferred to `01-07`.
+- Repaired `01-07` is now complete: the deferred ScenePrep execution files and
+  selected substrate-only internal utilities build under Vortex ownership, and
+  the linked Vortex DLL still carries no `oxygen-renderer` / `Oxygen.Renderer`
+  dependency edge.
 
 ### Steps (from PLAN.md §3)
 
@@ -542,8 +583,8 @@ design and execution work starts.
 | 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
 | 1.2 | Upload subsystem (14 files) | `done` | `01-03` migrated the full `Upload/` slice, built `oxygen-vortex`, and proved the linked Vortex DLL has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
-| 1.4 | ScenePrep subsystem (15 files) | `in_progress` | `01-06` landed `CollectionConfig.h`, `Concepts.h`, `FinalizationConfig.h`, `RenderItemProto.h`, `ScenePrepContext.h`, `ScenePrepState.h`, and `Types.h`; `01-07` still owns `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h` before step 1.4 can close |
-| 1.5 | Internal utilities (7 files) | `planned` | Repaired Phase 1 plan `01-07` |
+| 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
+| 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-08` |
 | 1.7 | View assembly + composition | `planned` | Repaired Phase 1 plans `01-08` and `01-09` |
 | 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
@@ -551,9 +592,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Continue with repaired `01-07` to land `ScenePrep/Extractors.h`,
-`ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, then close
-step `1.4` before moving into the selected internal-utility slice.
+Continue with repaired `01-08` to land the step-`1.6` pass-base classes and
+the public half of step `1.7`.
 
 ---
 

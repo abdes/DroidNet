@@ -104,6 +104,13 @@ set(
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
+  "Internal/BlueNoiseData.h"
+  "Internal/PerViewStructuredPublisher.h"
+  "Internal/RenderContextMaterializer.h"
+  "Internal/RenderContextPool.h"
+  "Internal/RenderScope.h"
+  "Internal/ViewConstantsManager.cpp"
+  "Internal/ViewConstantsManager.h"
   "PreparedSceneFrame.cpp"
   "Resources/DrawMetadataEmitter.cpp"
   "Resources/GeometryUploader.cpp"

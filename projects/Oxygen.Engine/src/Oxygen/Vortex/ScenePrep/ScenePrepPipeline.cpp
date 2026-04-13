@@ -63,9 +63,6 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
     static_cast<void>(
       traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
         const auto& node_impl = *visited.node_impl;
-        if (const auto light_manager = state.GetLightManager()) {
-          light_manager->CollectFromNode(visited.handle, node_impl);
-        }
         if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
           return scene::VisitResult::kContinue;
         }
@@ -120,9 +117,6 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
   static_cast<void>(
     traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
       const auto& node_impl = *visited.node_impl;
-      if (const auto light_manager = state.GetLightManager()) {
-        light_manager->CollectFromNode(visited.handle, node_impl);
-      }
       if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
         return scene::VisitResult::kContinue;
       }
