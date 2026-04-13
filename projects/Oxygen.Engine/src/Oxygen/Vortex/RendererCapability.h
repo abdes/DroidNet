@@ -24,7 +24,8 @@ enum class RendererCapabilityFamily : std::uint32_t {
   kEnvironmentLighting = OXYGEN_FLAG(4),
   kFinalOutputComposition = OXYGEN_FLAG(5),
   kDiagnosticsAndProfiling = OXYGEN_FLAG(6),
-  kAll = 0x7FU,
+  kDeferredShading = OXYGEN_FLAG(7),
+  kAll = 0xFFU,
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(RendererCapabilityFamily)
@@ -34,11 +35,7 @@ using CapabilitySet = RendererCapabilityFamily;
 inline constexpr auto kPhase1DefaultRuntimeCapabilityFamilies
   = RendererCapabilityFamily::kScenePreparation
   | RendererCapabilityFamily::kGpuUploadAndAssetBinding
-  | RendererCapabilityFamily::kLightingData
-  | RendererCapabilityFamily::kShadowing
-  | RendererCapabilityFamily::kEnvironmentLighting
-  | RendererCapabilityFamily::kFinalOutputComposition
-  | RendererCapabilityFamily::kDiagnosticsAndProfiling;
+  | RendererCapabilityFamily::kFinalOutputComposition;
 
 struct PipelineCapabilityRequirements {
   CapabilitySet required { CapabilitySet::kNone };
@@ -113,6 +110,7 @@ struct PipelineCapabilityValidation {
   append_family(Family::kEnvironmentLighting, "EnvironmentLighting");
   append_family(Family::kFinalOutputComposition, "FinalOutputComposition");
   append_family(Family::kDiagnosticsAndProfiling, "DiagnosticsAndProfiling");
+  append_family(Family::kDeferredShading, "DeferredShading");
 
   DCHECK_EQ_F(
     checked, capabilities, "Unchecked RendererCapabilityFamily value detected");

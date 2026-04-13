@@ -14,11 +14,18 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
+#include <Oxygen/Vortex/Internal/RenderContextPool.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
@@ -33,6 +40,150 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 } // namespace oxygen::vortex::internal
 
 namespace oxygen::vortex {
+
+namespace {
+
+  auto ResolveViewOutputTexture(const engine::FrameContext& context,
+    const ViewId view_id) -> std::shared_ptr<graphics::Texture>
+  {
+    try {
+      const auto& view_ctx = context.GetViewContext(view_id);
+      if (!view_ctx.composite_source) {
+        LOG_F(ERROR,
+          "View {} ('{}'/{}) missing composite_source framebuffer for "
+          "compositing",
+          view_id.get(), view_ctx.metadata.name, view_ctx.metadata.purpose);
+        return {};
+      }
+
+      const auto& fb_desc = view_ctx.composite_source->GetDescriptor();
+      if (fb_desc.color_attachments.empty()
+        || !fb_desc.color_attachments[0].texture) {
+        LOG_F(ERROR,
+          "View {} ('{}'/{}) composite_source has no color attachment texture",
+          view_id.get(), view_ctx.metadata.name, view_ctx.metadata.purpose);
+        return {};
+      }
+
+      return fb_desc.color_attachments[0].texture;
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "View {} output could not be resolved: {}", view_id.get(),
+        ex.what());
+      return {};
+    }
+  }
+
+  auto TrackCompositionFramebuffer(graphics::CommandRecorder& recorder,
+    const graphics::Framebuffer& framebuffer) -> void
+  {
+    const auto& fb_desc = framebuffer.GetDescriptor();
+    for (const auto& attachment : fb_desc.color_attachments) {
+      if (!attachment.texture) {
+        continue;
+      }
+
+      auto initial = attachment.texture->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kPresent;
+      }
+      recorder.BeginTrackingResourceState(*attachment.texture, initial, true);
+    }
+
+    if (fb_desc.depth_attachment.texture) {
+      recorder.BeginTrackingResourceState(*fb_desc.depth_attachment.texture,
+        graphics::ResourceStates::kDepthWrite, true);
+      recorder.FlushBarriers();
+    }
+  }
+
+  auto TrackCompositionSourceTexture(graphics::ResourceRegistry& registry,
+    graphics::CommandRecorder& recorder,
+    const graphics::Texture& texture) -> void
+  {
+    CHECK_F(registry.Contains(texture),
+      "Vortex: composition source texture '{}' must be registered in the "
+      "ResourceRegistry before compositing",
+      texture.GetDescriptor().debug_name);
+    if (recorder.IsResourceTracked(texture)) {
+      return;
+    }
+
+    auto initial = texture.GetDescriptor().initial_state;
+    CHECK_F(initial != graphics::ResourceStates::kUnknown
+        && initial != graphics::ResourceStates::kUndefined,
+      "Vortex: composition source texture '{}' must either already have "
+      "resource-state tracking or declare a valid initial_state",
+      texture.GetDescriptor().debug_name);
+    recorder.BeginTrackingResourceState(texture, initial, true);
+  }
+
+  auto CopyTextureToRegion(graphics::CommandRecorder& recorder,
+    graphics::Texture& source, graphics::Texture& backbuffer,
+    const ViewPort& viewport) -> void
+  {
+    CHECK_F(recorder.IsResourceTracked(source),
+      "Vortex: copy source texture '{}' must already be tracked for "
+      "compositing",
+      source.GetDescriptor().debug_name);
+    CHECK_F(recorder.IsResourceTracked(backbuffer),
+      "Vortex: compositing backbuffer '{}' must already be tracked",
+      backbuffer.GetDescriptor().debug_name);
+
+    const auto& src_desc = source.GetDescriptor();
+    const auto& dst_desc = backbuffer.GetDescriptor();
+
+    const uint32_t dst_x = static_cast<uint32_t>(
+      std::clamp(viewport.top_left_x, 0.0F, static_cast<float>(dst_desc.width)));
+    const uint32_t dst_y = static_cast<uint32_t>(
+      std::clamp(viewport.top_left_y, 0.0F, static_cast<float>(dst_desc.height)));
+
+    const uint32_t max_dst_w
+      = dst_desc.width > dst_x ? dst_desc.width - dst_x : 0U;
+    const uint32_t max_dst_h
+      = dst_desc.height > dst_y ? dst_desc.height - dst_y : 0U;
+
+    const uint32_t copy_width = std::min(src_desc.width, max_dst_w);
+    const uint32_t copy_height = std::min(src_desc.height, max_dst_h);
+
+    if (copy_width == 0 || copy_height == 0) {
+      return;
+    }
+
+    recorder.RequireResourceState(source, graphics::ResourceStates::kCopySource);
+    recorder.RequireResourceState(backbuffer, graphics::ResourceStates::kCopyDest);
+    recorder.FlushBarriers();
+
+    const graphics::TextureSlice src_slice {
+      .x = 0,
+      .y = 0,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+
+    const graphics::TextureSlice dst_slice {
+      .x = dst_x,
+      .y = dst_y,
+      .z = 0,
+      .width = copy_width,
+      .height = copy_height,
+      .depth = 1,
+    };
+
+    constexpr graphics::TextureSubResourceSet subresources {
+      .base_mip_level = 0,
+      .num_mip_levels = 1,
+      .base_array_slice = 0,
+      .num_array_slices = 1,
+    };
+
+    recorder.CopyTexture(
+      source, src_slice, subresources, backbuffer, dst_slice, subresources);
+  }
+
+} // namespace
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
   const CapabilitySet capability_families)
@@ -62,7 +213,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
-  render_context_pool_ = std::make_unique<internal::RenderContextPool>();
+  render_context_pool_
+    = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
 }
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
@@ -95,6 +247,8 @@ auto Renderer::OnShutdown() noexcept -> void
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
+  compositing_pass_.reset();
+  compositing_pass_config_.reset();
   render_graphs_.clear();
   resolved_views_.clear();
   view_ready_states_.clear();
@@ -172,10 +326,156 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   if (context != nullptr) {
     co_await DispatchSceneRendererCompositing(*context);
   }
-  {
+
+  if (context == nullptr) {
     std::lock_guard lock(composition_mutex_);
     pending_compositions_.clear();
+    co_return;
   }
+
+  std::vector<PendingComposition> submissions;
+  {
+    std::lock_guard lock(composition_mutex_);
+    if (pending_compositions_.empty()) {
+      co_return;
+    }
+    submissions = std::move(pending_compositions_);
+    pending_compositions_.clear();
+  }
+
+  const auto& anchor = submissions.front();
+  for (const auto& pending : submissions) {
+    const bool same_composite_target = anchor.submission.composite_target.get()
+      == pending.submission.composite_target.get();
+    const bool same_target_surface
+      = anchor.target_surface.get() == pending.target_surface.get();
+    CHECK_F(same_composite_target && same_target_surface,
+      "Phase-1 composition queue requires a single target per frame");
+  }
+
+  std::ranges::stable_sort(submissions,
+    [](const PendingComposition& lhs, const PendingComposition& rhs) {
+      return lhs.sequence_in_frame < rhs.sequence_in_frame;
+    });
+
+  auto gfx = GetGraphics();
+  CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
+
+  if (!compositing_pass_) {
+    compositing_pass_config_ = std::make_shared<internal::CompositingPassConfig>();
+    compositing_pass_config_->debug_name = "VortexCompositingPass";
+    compositing_pass_
+      = std::make_shared<internal::CompositingPass>(compositing_pass_config_);
+  }
+
+  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+  for (const auto& pending : submissions) {
+    const auto& payload = pending.submission;
+    if (payload.tasks.empty()) {
+      continue;
+    }
+
+    CHECK_F(static_cast<bool>(payload.composite_target),
+      "Compositing requires a target framebuffer");
+
+    auto recorder_ptr = gfx->AcquireCommandRecorder(
+      queue_key, "Vortex Renderer Compositing");
+    CHECK_F(static_cast<bool>(recorder_ptr),
+      "Compositing recorder acquisition failed");
+
+    auto& recorder = *recorder_ptr;
+    auto& target_fb = *payload.composite_target;
+    TrackCompositionFramebuffer(recorder, target_fb);
+
+    const auto& fb_desc = target_fb.GetDescriptor();
+    CHECK_F(!fb_desc.color_attachments.empty(),
+      "Compositing requires a color attachment");
+    CHECK_F(static_cast<bool>(fb_desc.color_attachments[0].texture),
+      "Compositing target missing color texture");
+    auto& backbuffer = *fb_desc.color_attachments[0].texture;
+
+    RenderContext comp_context {};
+    comp_context.SetRenderer(this, gfx.get());
+    comp_context.pass_target = observer_ptr { payload.composite_target.get() };
+    comp_context.frame_slot = frame_slot_;
+    comp_context.frame_sequence = frame::SequenceNumber { frame_seq_num_ };
+
+    for (const auto& task : payload.tasks) {
+      graphics::GpuEventScope task_scope(
+        recorder, "CompositingTask", MakeGpuEventScopeOptions());
+
+      switch (task.type) {
+      case CompositingTaskType::kCopy: {
+        auto source = ResolveViewOutputTexture(*context, task.copy.source_view_id);
+        if (!source) {
+          continue;
+        }
+
+        TrackCompositionSourceTexture(
+          gfx->GetResourceRegistry(), recorder, *source);
+        if (source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
+          compositing_pass_config_->source_texture = source;
+          compositing_pass_config_->viewport = task.copy.viewport;
+          compositing_pass_config_->alpha = 1.0F;
+          co_await compositing_pass_->PrepareResources(comp_context, recorder);
+          co_await compositing_pass_->Execute(comp_context, recorder);
+          break;
+        }
+
+        CopyTextureToRegion(recorder, *source, backbuffer, task.copy.viewport);
+        break;
+      }
+      case CompositingTaskType::kBlend: {
+        auto source = ResolveViewOutputTexture(*context, task.blend.source_view_id);
+        if (!source) {
+          continue;
+        }
+
+        TrackCompositionSourceTexture(
+          gfx->GetResourceRegistry(), recorder, *source);
+        compositing_pass_config_->source_texture = source;
+        compositing_pass_config_->viewport = task.blend.viewport;
+        compositing_pass_config_->alpha = task.blend.alpha;
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        break;
+      }
+      case CompositingTaskType::kBlendTexture: {
+        if (!task.texture_blend.source_texture) {
+          continue;
+        }
+
+        TrackCompositionSourceTexture(gfx->GetResourceRegistry(), recorder,
+          *task.texture_blend.source_texture);
+        compositing_pass_config_->source_texture = task.texture_blend.source_texture;
+        compositing_pass_config_->viewport = task.texture_blend.viewport;
+        compositing_pass_config_->alpha = task.texture_blend.alpha;
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        break;
+      }
+      case CompositingTaskType::kTaa:
+      default:
+        DLOG_F(1, "Skip compositing: task type not implemented");
+        break;
+      }
+    }
+
+    recorder.RequireResourceStateFinal(
+      backbuffer, graphics::ResourceStates::kPresent);
+    recorder.FlushBarriers();
+
+    if (pending.target_surface) {
+      const auto surfaces = context->GetSurfaces();
+      for (size_t i = 0; i < surfaces.size(); ++i) {
+        if (surfaces[i].get() == pending.target_surface.get()) {
+          context->SetSurfacePresentable(i, true);
+          break;
+        }
+      }
+    }
+  }
+
   co_return;
 }
 
