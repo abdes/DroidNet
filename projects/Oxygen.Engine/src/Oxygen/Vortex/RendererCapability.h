@@ -15,6 +15,7 @@
 
 namespace oxygen::vortex {
 
+// NOLINTNEXTLINE(*-enum-size)
 enum class RendererCapabilityFamily : std::uint32_t {
   kNone = 0,
   kScenePreparation = OXYGEN_FLAG(0),

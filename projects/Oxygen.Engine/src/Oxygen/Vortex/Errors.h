@@ -11,7 +11,7 @@
 
 namespace oxygen::vortex {
 
-enum class RendererError : int {
+enum class RendererError : uint8_t {
   kSurfaceExpired,
 };
 

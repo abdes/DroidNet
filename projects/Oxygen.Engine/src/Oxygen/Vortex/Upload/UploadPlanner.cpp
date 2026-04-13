@@ -64,7 +64,11 @@ inline auto TryValidateBufReq(const oxygen::vortex::upload::UploadRequest& r)
     LOG_F(WARNING, "-skip- request would overflow destination buffer");
     return std::nullopt;
   }
-  return ValidBufReq { bdesc.dst, bdesc.dst_offset, bdesc.size_bytes };
+  return ValidBufReq {
+    .dst = bdesc.dst,
+    .dst_offset = bdesc.dst_offset,
+    .size = bdesc.size_bytes,
+  };
 }
 
 struct SortKey {
@@ -74,7 +78,7 @@ struct SortKey {
 
 inline auto MakeSortKey(const ValidBufReq& v) -> SortKey
 {
-  return SortKey { v.dst.get(), v.dst_offset };
+  return SortKey { .dst_ptr = v.dst.get(), .dst_offset = v.dst_offset };
 }
 
 //! Build a TextureUploadPlan or return an UploadError when the computed
@@ -126,7 +130,7 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
   for (size_t idx = 0; idx < requests.size(); ++idx) {
     const auto& r = requests[idx];
     if (auto v = TryValidateBufReq(r)) {
-      valid.push_back(IndexedValid { idx, *v });
+      valid.push_back(IndexedValid { .index = idx, .valid = *v });
     }
   }
 
@@ -150,7 +154,7 @@ auto UploadPlanner::PlanBuffers(std::span<const UploadRequest> requests,
     }
   }
 
-  std::sort(valid.begin(), valid.end(), [&](const auto& a, const auto& b) {
+  std::ranges::sort(valid, [&](const auto& a, const auto& b) -> bool {
     const auto ka = MakeSortKey(a.valid);
     const auto kb = MakeSortKey(b.valid);
     const auto fa = first_occurrence[ka.dst_ptr];
@@ -432,8 +436,7 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
     return std::unexpected(UploadError::kInvalidRequest);
   }
 
-  std::sort(
-    planned.begin(), planned.end(), [](const Planned& a, const Planned& b) {
+  std::ranges::sort(planned, [](const Planned& a, const Planned& b) -> bool {
       const auto ak = std::tuple { a.sr.array_slice, a.sr.mip, a.sr.y, a.sr.x };
       const auto bk = std::tuple { b.sr.array_slice, b.sr.mip, b.sr.y, b.sr.x };
       return ak < bk;
@@ -667,8 +670,7 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
     return std::unexpected(UploadError::kInvalidRequest);
   }
 
-  std::sort(
-    planned.begin(), planned.end(), [](const Planned3D& a, const Planned3D& b) {
+  std::ranges::sort(planned, [](const Planned3D& a, const Planned3D& b) -> bool {
       const auto ak
         = std::tuple { a.sr.array_slice, a.sr.mip, a.sr.z, a.sr.y, a.sr.x };
       const auto bk

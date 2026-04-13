@@ -187,7 +187,8 @@ void ViewLifecycleService::SyncActiveViews(engine::FrameContext& /*context*/,
   }
 
   std::stable_sort(state_->sorted_views.begin(), state_->sorted_views.end(),
-    [](const CompositionViewImpl* a, const CompositionViewImpl* b) {
+    [](const CompositionViewImpl* a,
+      const CompositionViewImpl* b) -> bool {
       if (a->GetDescriptor().z_order != b->GetDescriptor().z_order) {
         return a->GetDescriptor().z_order < b->GetDescriptor().z_order;
       }

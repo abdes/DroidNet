@@ -46,7 +46,7 @@ auto ViewConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
     return {};
   }
 
-  const BufferKey key { current_slot_, view_id };
+  const BufferKey key { .slot = current_slot_, .view_id = view_id };
 
   // Check if buffer already exists
   if (auto it = buffers_.find(key); it != buffers_.end()) {
@@ -73,13 +73,13 @@ auto ViewConstantsManager::GetOrCreateBuffer(ViewId view_id) -> BufferInfo
 
   // Persistently map the buffer
   void* mapped_ptr = buffer->Map();
-  if (!mapped_ptr) {
+  if (mapped_ptr == nullptr) {
     LOG_F(ERROR, "Failed to map ViewConstants buffer for view {} slot {}",
       view_id.get(), current_slot_);
     return {};
   }
 
-  BufferInfo info { buffer, mapped_ptr };
+  BufferInfo info { .buffer = buffer, .mapped_ptr = mapped_ptr };
   buffers_[key] = info;
 
   LOG_F(1,
@@ -94,7 +94,7 @@ auto ViewConstantsManager::WriteViewConstants(
   ViewId view_id, const void* snapshot, std::size_t size_bytes) -> BufferInfo
 {
   auto info = GetOrCreateBuffer(view_id);
-  if (!info.buffer || !info.mapped_ptr) {
+  if (!info.buffer || info.mapped_ptr == nullptr) {
     LOG_F(ERROR,
       "ViewConstantsManager::WriteViewConstants failed for view {} - no "
       "buffer",
@@ -146,10 +146,9 @@ auto ViewConstantsManager::ReleaseBuffer(BufferInfo& info) -> void
     return;
   }
 
-  auto gfx = gfx_;
   auto& reclaimer = gfx_->GetDeferredReclaimer();
   reclaimer.RegisterDeferredAction(
-    [gfx, buffer = std::move(buffer)]() mutable { buffer.reset(); });
+    [buffer = std::move(buffer)]() mutable -> void { buffer.reset(); });
 }
 
 } // namespace oxygen::vortex::internal

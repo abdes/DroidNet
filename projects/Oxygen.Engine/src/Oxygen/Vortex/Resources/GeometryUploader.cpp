@@ -184,12 +184,12 @@ private:
   };
 
   struct PendingAssetEviction {
-    data::AssetKey asset_key {};
+    data::AssetKey asset_key;
     content::EvictionReason reason { content::EvictionReason::kRefCountZero };
   };
 
   struct GeometryIdentityKey {
-    data::AssetKey asset_key {};
+    data::AssetKey asset_key;
     std::uint32_t lod_index { 0U };
 
     [[nodiscard]] auto operator==(
@@ -210,7 +210,7 @@ private:
   };
 
   struct GeometryEntry {
-    data::AssetKey asset_key {};
+    data::AssetKey asset_key;
     std::uint32_t lod_index { 0U };
     std::shared_ptr<const data::Mesh> mesh;
 
@@ -294,7 +294,7 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
   , free_indices_(std::make_shared<std::vector<bindless::HeapIndex>>())
   , slot_reuse_(slot_reclaimer_,
       [free_indices = free_indices_](
-        bindless::HeapIndex index, std::monostate /*unused*/) {
+        bindless::HeapIndex index, std::monostate /*unused*/) -> void {
         if (free_indices) {
           free_indices->push_back(index);
         }
@@ -1078,10 +1078,10 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
   std::size_t error_count = 0;
 
   auto retire_one = [&](auto& entry,
-                      std::optional<vortex::upload::UploadTicket>& ticket_opt,
-                      ShaderVisibleIndex& published,
-                      ShaderVisibleIndex& pending,
-                      std::uint64_t& pending_generation) {
+                        std::optional<vortex::upload::UploadTicket>& ticket_opt,
+                        ShaderVisibleIndex& published,
+                        ShaderVisibleIndex& pending,
+                        std::uint64_t& pending_generation) -> void {
     if (!ticket_opt.has_value()) {
       return;
     }

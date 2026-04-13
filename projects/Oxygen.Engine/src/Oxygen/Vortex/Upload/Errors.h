@@ -14,7 +14,7 @@
 namespace oxygen::vortex::upload {
 
 //! Domain-specific Upload error codes exposed as std::error_code.
-enum class UploadError : int {
+enum class UploadError : uint8_t {
   kInvalidRequest,
   kStagingAllocFailed,
   kRecordingFailed,
@@ -34,9 +34,12 @@ enum class UploadError : int {
 //! Category for upload errors.
 class UploadErrorCategory : public std::error_category {
 public:
-  const char* name() const noexcept override { return "Upload Error"; }
+  [[nodiscard]] auto name() const noexcept -> const char* override
+  {
+    return "Upload Error";
+  }
 
-  std::string message(int ev) const override
+  [[nodiscard]] auto message(int ev) const -> std::string override
   {
     switch (static_cast<UploadError>(ev)) {
     case UploadError::kStagingMapFailed:
@@ -72,7 +75,7 @@ public:
 OXGN_VRTX_NDAPI const UploadErrorCategory& GetUploadErrorCategory() noexcept;
 
 // Helper to create std::error_code from UploadError
-inline std::error_code make_error_code(UploadError e) noexcept
+inline auto make_error_code(UploadError e) noexcept -> std::error_code
 {
   return { static_cast<int>(e), GetUploadErrorCategory() };
 }

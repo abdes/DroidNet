@@ -125,12 +125,12 @@ public:
 
     [[nodiscard]] auto GetRenderContext() noexcept -> RenderContext&
     {
-      return render_context_;
+      return *render_context_;
     }
 
     [[nodiscard]] auto GetRenderContext() const noexcept -> const RenderContext&
     {
-      return render_context_;
+      return *render_context_;
     }
 
   private:
@@ -148,7 +148,8 @@ public:
     auto Release() noexcept -> void;
 
     observer_ptr<Renderer> renderer_ { nullptr };
-    RenderContext render_context_ {};
+    std::unique_ptr<RenderContext> render_context_
+      { std::make_unique<RenderContext>() };
     std::optional<ResolvedView> current_resolved_view_ {};
     std::optional<PreparedSceneFrame> current_prepared_frame_ {};
     bool active_ { false };

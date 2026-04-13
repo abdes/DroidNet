@@ -6,7 +6,7 @@
 
 #include <limits>
 
-#include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/RenderScope.h>
@@ -49,7 +49,7 @@ auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
   out.reserve(b::kRootParamTableCount);
 
   for (uint32_t i = 0; i < b::kRootParamTableCount; ++i) {
-    const b::RootParamDesc& desc = b::kRootParamTable[i];
+    const b::RootParamDesc& desc = b::kRootParamTable.at(i);
     g::RootBindingDesc binding {};
     binding.binding_slot_desc.register_index = desc.shader_register;
     binding.binding_slot_desc.register_space = desc.register_space;
@@ -58,7 +58,7 @@ auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
     switch (desc.kind) {
     case b::RootParamKind::DescriptorTable: {
       if (desc.ranges_count > 0 && desc.ranges.data() != nullptr) {
-        const b::RootParamRange& range = desc.ranges[0];
+        const b::RootParamRange& range = desc.ranges.front();
         g::DescriptorTableBinding table {};
         table.view_type
           = RangeTypeToViewType(static_cast<b::RangeType>(range.range_type));
@@ -98,8 +98,8 @@ auto RenderPass::RootConstantsBindingSlot() -> graphics::BindingSlotDesc
 {
   namespace b = oxygen::bindless::generated::d3d12;
 
-  const auto& desc = b::kRootParamTable[static_cast<std::size_t>(
-    b::RootParam::kRootConstants)];
+  const auto& desc = b::kRootParamTable.at(
+    static_cast<std::size_t>(b::RootParam::kRootConstants));
   return graphics::BindingSlotDesc {
     .register_index = desc.shader_register,
     .register_space = desc.register_space,
@@ -243,8 +243,8 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
 {
   for (uint32_t draw_index = begin; draw_index < end; ++draw_index) {
     const auto& metadata = records[draw_index];
-    if ((metadata.is_indexed && metadata.index_count == 0)
-      || (!metadata.is_indexed && metadata.vertex_count == 0)) {
+    if (((metadata.is_indexed != 0U) && metadata.index_count == 0)
+      || ((metadata.is_indexed == 0U) && metadata.vertex_count == 0)) {
       ++skipped_invalid;
       continue;
     }
@@ -252,7 +252,7 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
     try {
       BindDrawIndexConstant(recorder, draw_index);
       recorder.Draw(
-        metadata.is_indexed ? metadata.index_count : metadata.vertex_count,
+        metadata.is_indexed != 0U ? metadata.index_count : metadata.vertex_count,
         metadata.instance_count, 0, 0);
       ++emitted_count;
     } catch (const std::exception& ex) {

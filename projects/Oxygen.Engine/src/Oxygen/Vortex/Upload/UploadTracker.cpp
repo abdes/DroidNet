@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Upload/UploadTracker.h>
-
 #include <algorithm>
+
+#include <Oxygen/Vortex/Upload/UploadTracker.h>
 
 namespace oxygen::vortex::upload {
 
@@ -16,7 +16,7 @@ UploadTracker::~UploadTracker() = default;
 auto UploadTracker::Register(const FenceValue fence, const uint64_t bytes,
   const std::string_view debug_name) -> UploadTicket
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   const auto id = next_ticket_;
   next_ticket_ = TicketId { id.get() + 1 };
 
@@ -35,7 +35,7 @@ auto UploadTracker::Register(const FenceValue fence, const uint64_t bytes,
 auto UploadTracker::RegisterFailedImmediate(
   const std::string_view debug_name, const UploadError error) -> UploadTicket
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   const auto id = next_ticket_;
   next_ticket_ = TicketId { id.get() + 1 };
 
@@ -54,7 +54,7 @@ auto UploadTracker::RegisterFailedImmediate(
 auto UploadTracker::MarkFenceCompleted(const FenceValue completed) -> void
 {
   {
-    std::lock_guard<std::mutex> lk(mu_);
+    std::scoped_lock lk(mu_);
     if (completed_fence_.Get() < completed) {
       completed_fence_.Set(completed);
     }
@@ -71,7 +71,7 @@ auto UploadTracker::MarkFenceCompleted(const FenceValue completed) -> void
 auto UploadTracker::IsComplete(const TicketId id) const
   -> std::expected<bool, UploadError>
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   if (const auto it = entries_.find(id); it != entries_.end()) {
     return it->second.completed;
   }
@@ -81,7 +81,7 @@ auto UploadTracker::IsComplete(const TicketId id) const
 auto UploadTracker::TryGetResult(const TicketId id) const
   -> std::optional<UploadResult>
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   if (const auto it = entries_.find(id); it != entries_.end()) {
     if (it->second.completed) {
       return it->second.result;
@@ -99,7 +99,7 @@ auto UploadTracker::Await(const TicketId id)
     return std::unexpected(UploadError::kTicketNotFound);
   }
 
-  cv_.wait(lk, [&]() noexcept {
+  cv_.wait(lk, [&]() noexcept -> bool {
     const auto current = entries_.find(id);
     return current == entries_.end() || current->second.completed;
   });
@@ -123,7 +123,7 @@ auto UploadTracker::AwaitAll(const std::span<const UploadTicket> tickets)
     }
   }
 
-  cv_.wait(lk, [&]() noexcept {
+  cv_.wait(lk, [&]() noexcept -> bool {
     bool all_completed = true;
     for (const auto& t : tickets) {
       const auto current = entries_.find(t.id);
@@ -162,7 +162,7 @@ auto UploadTracker::CompletedFenceValue() noexcept
 auto UploadTracker::Cancel(const TicketId id)
   -> std::expected<bool, UploadError>
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   const auto it = entries_.find(id);
   if (it == entries_.end()) {
     return std::unexpected(UploadError::kTicketNotFound);
@@ -182,9 +182,9 @@ auto UploadTracker::Cancel(const TicketId id)
 
 auto UploadTracker::HasPending() const -> bool
 {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::scoped_lock lk(mu_);
   return std::ranges::any_of(
-    entries_, [](const auto& p) { return !p.second.completed; });
+    entries_, [](const auto& p) -> bool { return !p.second.completed; });
 }
 
 auto UploadTracker::LastRegisteredFence() const -> FenceValue
@@ -201,18 +201,20 @@ auto UploadTracker::MarkEntryCompleted(Entry& e) -> void
   e.result.error = std::nullopt; // No error for successful completion
 }
 
-auto UploadTracker::OnFrameStart(UploaderTag, frame::Slot slot) -> void
+auto UploadTracker::OnFrameStart(UploaderTag /*tag*/, frame::Slot slot) -> void
 {
   std::size_t erased = 0;
   {
-    std::lock_guard<std::mutex> lk(mu_);
+    std::scoped_lock lk(mu_);
     current_slot_ = slot;
 
     // Frame-slot recycling removes entries created in the recycled slot.
     // Notify waiting threads if anything was erased so they can observe
     // TicketNotFound instead of blocking on stale predicates.
     erased = std::erase_if(entries_,
-      [slot](const auto& pair) { return pair.second.creation_slot == slot; });
+      [slot](const auto& pair) -> bool {
+        return pair.second.creation_slot == slot;
+      });
   }
   if (erased != 0U) {
     cv_.notify_all();
@@ -227,7 +229,7 @@ auto UploadTracker::AwaitAllPending()
   while (true) {
     std::vector<UploadTicket> pending;
     {
-      std::lock_guard<std::mutex> lk(mu_);
+      std::scoped_lock lk(mu_);
       for (const auto& p : entries_) {
         if (!p.second.completed) {
           pending.emplace_back(p.first, p.second.fence);

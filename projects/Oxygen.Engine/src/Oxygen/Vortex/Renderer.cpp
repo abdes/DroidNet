@@ -259,7 +259,7 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 {
   resolved_views_.clear();
   {
-    std::lock_guard lock(composition_mutex_);
+    std::scoped_lock lock(composition_mutex_);
     pending_compositions_.clear();
     next_composition_sequence_in_frame_ = 0;
   }
@@ -328,14 +328,14 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   }
 
   if (context == nullptr) {
-    std::lock_guard lock(composition_mutex_);
+    std::scoped_lock lock(composition_mutex_);
     pending_compositions_.clear();
     co_return;
   }
 
   std::vector<PendingComposition> submissions;
   {
-    std::lock_guard lock(composition_mutex_);
+    std::scoped_lock lock(composition_mutex_);
     if (pending_compositions_.empty()) {
       co_return;
     }
@@ -354,7 +354,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   }
 
   std::ranges::stable_sort(submissions,
-    [](const PendingComposition& lhs, const PendingComposition& rhs) {
+    [](const PendingComposition& lhs,
+      const PendingComposition& rhs) -> bool {
       return lhs.sequence_in_frame < rhs.sequence_in_frame;
     });
 
@@ -490,7 +491,7 @@ auto Renderer::RegisterViewRenderGraph(
 {
   std::unique_lock lock(view_registration_mutex_);
   render_graphs_.insert_or_assign(view_id, std::move(factory));
-  resolved_views_.insert_or_assign(view_id, std::move(view));
+  resolved_views_.insert_or_assign(view_id, view);
 }
 
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
@@ -602,7 +603,7 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
 auto Renderer::RegisterComposition(CompositionSubmission submission,
   std::shared_ptr<graphics::Surface> target_surface) -> void
 {
-  std::lock_guard lock(composition_mutex_);
+  std::scoped_lock lock(composition_mutex_);
   if (!pending_compositions_.empty()) {
     const auto& anchor = pending_compositions_.front();
     const bool same_composite_target = anchor.submission.composite_target.get()
@@ -785,14 +786,14 @@ Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
   const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
   std::optional<ViewConstants> core_shader_inputs)
   : renderer_(observer_ptr { &renderer })
+  , active_(true)
 {
   renderer.BeginStandaloneFrameExecution(session);
-  active_ = true;
   try {
-    renderer.WireContext(render_context_, {});
-    render_context_.scene = session.scene;
-    render_context_.pass_target = pass_target;
-    renderer.InitializeStandaloneCurrentView(render_context_,
+    renderer.WireContext(*render_context_, {});
+    render_context_->scene = session.scene;
+    render_context_->pass_target = pass_target;
+    renderer.InitializeStandaloneCurrentView(*render_context_,
       current_resolved_view_, current_prepared_frame_, view_id, resolved_view,
       prepared_frame, core_shader_inputs);
   } catch (...) {
@@ -811,8 +812,8 @@ Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
   ValidatedSinglePassHarnessContext&& other) noexcept
   : renderer_(std::exchange(other.renderer_, nullptr))
   , render_context_(std::move(other.render_context_))
-  , current_resolved_view_(std::move(other.current_resolved_view_))
-  , current_prepared_frame_(std::move(other.current_prepared_frame_))
+  , current_resolved_view_(other.current_resolved_view_)
+  , current_prepared_frame_(other.current_prepared_frame_)
   , active_(std::exchange(other.active_, false))
 {
   RebindCurrentViewPointers();
@@ -829,8 +830,8 @@ auto Renderer::ValidatedSinglePassHarnessContext::operator=(
   Release();
   renderer_ = std::exchange(other.renderer_, nullptr);
   render_context_ = std::move(other.render_context_);
-  current_resolved_view_ = std::move(other.current_resolved_view_);
-  current_prepared_frame_ = std::move(other.current_prepared_frame_);
+  current_resolved_view_ = other.current_resolved_view_;
+  current_prepared_frame_ = other.current_prepared_frame_;
   active_ = std::exchange(other.active_, false);
   RebindCurrentViewPointers();
   return *this;
@@ -839,11 +840,11 @@ auto Renderer::ValidatedSinglePassHarnessContext::operator=(
 auto Renderer::ValidatedSinglePassHarnessContext::
   RebindCurrentViewPointers() noexcept -> void
 {
-  render_context_.current_view.resolved_view
+  render_context_->current_view.resolved_view
     = current_resolved_view_.has_value()
     ? observer_ptr<const ResolvedView> { &*current_resolved_view_ }
     : observer_ptr<const ResolvedView> {};
-  render_context_.current_view.prepared_frame
+  render_context_->current_view.prepared_frame
     = current_prepared_frame_.has_value()
     ? observer_ptr<const PreparedSceneFrame> { &*current_prepared_frame_ }
     : observer_ptr<const PreparedSceneFrame> {};
@@ -857,7 +858,7 @@ auto Renderer::ValidatedSinglePassHarnessContext::Release() noexcept -> void
   if (renderer_ != nullptr) {
     renderer_->EndOffscreenFrame();
   }
-  render_context_.current_view = {};
+  render_context_->current_view = {};
   current_resolved_view_.reset();
   current_prepared_frame_.reset();
   renderer_.reset();
@@ -1036,9 +1037,11 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
     return std::unexpected<ValidationReport> { materialized.error() };
   }
 
+  CHECK_F(resolved_view_.has_value() || core_shader_inputs_.has_value(),
+    "Render-graph harness requires either a resolved view or core shader inputs");
   const auto view_id = resolved_view_.has_value()
     ? resolved_view_->view_id
-    : core_shader_inputs_->view_id;
+    : core_shader_inputs_.value().view_id;
   return ValidatedRenderGraphHarness(
     std::move(materialized.value()), *render_graph_, view_id);
 }

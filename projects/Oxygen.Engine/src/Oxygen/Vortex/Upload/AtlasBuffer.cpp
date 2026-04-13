@@ -26,7 +26,7 @@ struct ElementRefTag { };
 */
 AtlasBuffer::AtlasBuffer(observer_ptr<Graphics> gfx, const std::uint32_t stride,
   std::string debug_label, const bindless::DomainToken domain)
-  : gfx_(std::move(gfx))
+  : gfx_(gfx)
   , debug_label_(std::move(debug_label))
   , stride_(stride)
   , domain_(domain)
@@ -90,10 +90,10 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
   const std::uint64_t min_bytes
     = static_cast<std::uint64_t>(min_elements) * stride_;
   const std::uint64_t current_bytes
-    = primary_buffer_ ? primary_buffer_->GetSize() : 0ull;
+    = primary_buffer_ ? primary_buffer_->GetSize() : 0ULL;
   const std::uint64_t target_bytes = primary_buffer_
     ? (std::max)(current_bytes,
-        static_cast<std::uint64_t>(min_bytes * (1.0f + slack)))
+        static_cast<std::uint64_t>(min_bytes * (1.0F + slack)))
     : min_bytes;
 
   // Fast path: if a primary buffer exists and the target size is not
@@ -164,7 +164,7 @@ auto AtlasBuffer::Allocate(const std::uint32_t count)
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
-  std::uint32_t idx;
+  std::uint32_t idx { 0U };
   if (!free_list_.empty()) {
     idx = free_list_.back();
     free_list_.pop_back();
@@ -205,7 +205,7 @@ auto AtlasBuffer::Release(const ElementRef ref, const frame::Slot slot) -> void
     // Phase 1 invariant: only primary chunk exists
     return;
   }
-  retire_lists_[slot.get()].push_back(ref.element_);
+  retire_lists_.at(slot.get()).push_back(ref.element_);
   stats_.releases++;
 }
 
@@ -225,7 +225,7 @@ auto AtlasBuffer::Release(const ElementRef ref, const frame::Slot slot) -> void
 */
 auto AtlasBuffer::OnFrameStart(const frame::Slot slot) -> void
 {
-  auto& list = retire_lists_[slot.get()];
+  auto& list = retire_lists_.at(slot.get());
   if (!list.empty()) {
     // Move retired elements into free list
     free_list_.insert(free_list_.end(), list.begin(), list.end());

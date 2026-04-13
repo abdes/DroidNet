@@ -4,14 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
-
 #include <utility>
 
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace {
 
@@ -85,7 +84,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
     return std::unexpected(make_error_code(UploadError::kInvalidRequest));
   }
 
-  auto& slot = slots_[slot_index];
+  auto& slot = slots_.at(slot_index);
 
   if (element_count == 0) {
     LOG_F(1, "TransientStructuredBuffer::Allocate skipped (slot={} count=0)",
@@ -173,7 +172,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
       SlotAlloc alloc_entry {};
       alloc_entry.allocation = std::move(slot.allocation);
       alloc_entry.srv_index = srv_index;
-      alloc_entry.native_view = std::move(native_view);
+      alloc_entry.native_view = native_view;
       alloc_entry.sequence = current_frame_;
       slot.allocs.emplace_back(std::move(alloc_entry));
 
@@ -237,7 +236,7 @@ auto TransientStructuredBuffer::ResetSlot(std::uint32_t slot_index) -> void
   if (slot_index >= slots_.size()) {
     return;
   }
-  auto& slot = slots_[slot_index];
+  auto& slot = slots_.at(slot_index);
   // Release all per-slot allocations & views
   for (auto& a : slot.allocs) {
     ReleaseAllocView(a);
@@ -322,7 +321,7 @@ auto TransientStructuredBuffer::ActiveSlot() const noexcept -> SlotData const*
   if (slot_index >= slots_.size()) {
     return nullptr;
   }
-  return &slots_[slot_index];
+  return &slots_.at(slot_index);
 }
 
 auto TransientStructuredBuffer::ActiveSlot() noexcept -> SlotData*
@@ -331,7 +330,7 @@ auto TransientStructuredBuffer::ActiveSlot() noexcept -> SlotData*
   if (slot_index >= slots_.size()) {
     return nullptr;
   }
-  return &slots_[slot_index];
+  return &slots_.at(slot_index);
 }
 
 } // namespace oxygen::vortex::upload

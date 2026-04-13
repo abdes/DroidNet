@@ -115,8 +115,8 @@ namespace {
       return std::nullopt;
     }
 
-    const std::size_t block = static_cast<std::size_t>(fmt.block_size);
-    const std::size_t bpb = static_cast<std::size_t>(fmt.bytes_per_block);
+    const auto block = static_cast<std::size_t>(fmt.block_size);
+    const auto bpb = static_cast<std::size_t>(fmt.bytes_per_block);
 
     std::size_t total = 0U;
     for (std::uint32_t layer = 0U; layer < desc.array_size; ++layer) {
@@ -647,7 +647,7 @@ private:
   observer_ptr<vortex::upload::UploadCoordinator> uploader_;
   observer_ptr<vortex::upload::StagingProvider> staging_provider_;
   observer_ptr<content::IAssetLoader> texture_loader_;
-  UploadLimits limits_ {};
+  UploadLimits limits_;
 
   std::shared_ptr<CallbackGate> callback_gate_;
 
@@ -1240,8 +1240,8 @@ auto TextureBinder::Impl::DumpEstimatedTextureMemory(
     ++count;
   }
 
-  std::sort(records.begin(), records.end(),
-    [](const Record& a, const Record& b) { return a.bytes > b.bytes; });
+  std::ranges::sort(records,
+    [](const Record& a, const Record& b) -> bool { return a.bytes > b.bytes; });
 
   const auto emit_count = (std::min)(records.size(), top_n);
 
@@ -1818,7 +1818,8 @@ auto TextureBinder::Impl::ReleaseEntryTexturesIfOwned(TextureEntry& entry)
   auto placeholder = std::move(entry.placeholder_texture);
   const bool same_texture = texture && placeholder && texture == placeholder;
 
-  const auto release_if_owned = [&](std::shared_ptr<graphics::Texture>&& tex) {
+  const auto release_if_owned
+    = [&](std::shared_ptr<graphics::Texture>&& tex) -> void {
     if (!tex) {
       return;
     }

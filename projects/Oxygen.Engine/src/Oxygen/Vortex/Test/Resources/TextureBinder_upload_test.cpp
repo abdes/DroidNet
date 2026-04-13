@@ -83,11 +83,11 @@ protected:
   [[nodiscard]] auto BinderLimits() const
     -> oxygen::vortex::resources::TextureBinder::UploadLimits override
   {
-    return {
-      .max_upload_bytes_per_frame = 512U,
-      .max_pending_upload_bytes = 1024U,
-      .deferred_retry_low_watermark_bytes = 256U,
-      .max_deferred_retries_per_frame = 2U,
+    return oxygen::vortex::resources::TextureBinder::UploadLimits {
+      512U,
+      1024U,
+      256U,
+      2U,
     };
   }
 };
@@ -486,8 +486,8 @@ NOLINT_TEST_F(
   ASSERT_GT(bytes_per_texture, 0U);
 
   const auto key_count = pending_budget / bytes_per_texture + 2U;
-  const auto keys = MakeSyntheticTextureKeys(Loader(),
-    std::span(payload.data(), payload.size()), key_count);
+  const auto keys = MakeSyntheticTextureKeys(
+    Loader(), std::span(payload.data(), payload.size()), key_count);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
@@ -516,8 +516,8 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
   ASSERT_GT(bytes_per_texture, 0U);
 
   const auto key_count = pending_budget / bytes_per_texture + 2U;
-  const auto keys = MakeSyntheticTextureKeys(Loader(),
-    std::span(payload.data(), payload.size()), key_count);
+  const auto keys = MakeSyntheticTextureKeys(
+    Loader(), std::span(payload.data(), payload.size()), key_count);
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(

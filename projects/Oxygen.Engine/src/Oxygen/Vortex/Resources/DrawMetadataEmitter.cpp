@@ -153,7 +153,8 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
       [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
         return bindless::HeapIndex { frame_write_count_ };
       },
-      [](oxygen::nexus::DomainKey /*domain*/, bindless::HeapIndex /*index*/) {},
+      [](oxygen::nexus::DomainKey /*domain*/,
+        bindless::HeapIndex /*index*/) -> void {},
       slot_reclaimer_)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::vortex::DrawMetadata)),
@@ -391,7 +392,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   for (std::size_t i = 0; i < n; ++i) {
     perm[i] = static_cast<std::uint32_t>(i);
   }
-  std::ranges::stable_sort(perm, [&](std::uint32_t a, std::uint32_t b) {
+  std::ranges::stable_sort(
+    perm, [&](std::uint32_t a, std::uint32_t b) -> bool {
     const auto& ka = keys_[a];
     const auto& kb = keys_[b];
     if (ka.bucket_order != kb.bucket_order) {
@@ -417,8 +419,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
     if (ka.ib_srv != kb.ib_srv) {
       return ka.ib_srv < kb.ib_srv;
     }
-    return a < b;
-  });
+      return a < b;
+    });
 
   std::vector<oxygen::vortex::DrawMetadata> reordered;
   reordered.reserve(n);

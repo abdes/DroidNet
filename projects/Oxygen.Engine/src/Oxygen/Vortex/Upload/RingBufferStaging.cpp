@@ -87,7 +87,9 @@ namespace {
     UnregisterResourceIfPresent(gfx, old_buffer);
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.RegisterDeferredAction(
-      [old_buffer = std::move(old_buffer)]() mutable { old_buffer.reset(); });
+      [old_buffer = std::move(old_buffer)]() mutable -> void {
+        old_buffer.reset();
+      });
   }
 
 } // namespace
@@ -105,7 +107,7 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   if (!ensure) {
     return std::unexpected(ensure.error());
   }
-  if (!buffer_ || !mapped_ptr_) {
+  if (!buffer_ || (mapped_ptr_ == nullptr)) {
     return std::unexpected(UploadError::kStagingAllocFailed);
   }
 
@@ -136,16 +138,16 @@ auto RingBufferStaging::Allocate(SizeBytes size, std::string_view debug_name)
   if (Stats().avg_allocation_size == 0) {
     Stats().avg_allocation_size = static_cast<std::uint32_t>(bytes);
   } else {
-    const auto new_avg = alpha * static_cast<double>(bytes)
-      + (1.0 - alpha) * static_cast<double>(Stats().avg_allocation_size);
+    const auto new_avg = (alpha * static_cast<double>(bytes))
+      + ((1.0 - alpha) * static_cast<double>(Stats().avg_allocation_size));
     Stats().avg_allocation_size = static_cast<std::uint32_t>(new_avg);
   }
 
   return out;
 }
 
-auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue completed)
-  -> void
+auto RingBufferStaging::RetireCompleted(
+  UploaderTag /*tag*/, FenceValue completed) -> void
 {
   // Only bump when the completed fence actually advances, to avoid false
   // positives in the partition reuse warning.
@@ -156,7 +158,8 @@ auto RingBufferStaging::RetireCompleted(UploaderTag, FenceValue completed)
 }
 
 // Notify of frame slot change without RTTI
-auto RingBufferStaging::OnFrameStart(UploaderTag, frame::Slot slot) -> void
+auto RingBufferStaging::OnFrameStart(UploaderTag /*tag*/, frame::Slot slot)
+  -> void
 {
   OnFrameStartInternal(slot);
 }
@@ -210,7 +213,7 @@ auto RingBufferStaging::RecreateBuffer(
   UnMap();
   DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
 
-  UploadError error_code;
+  UploadError error_code { UploadError::kStagingAllocFailed };
   try {
     buffer_ = gfx_->CreateBuffer(desc);
     RegisterResourceIfNeeded(gfx_, buffer_);
@@ -321,7 +324,7 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   // the registry before dropping the final reference.
   DeferUnregisterAndReleaseBuffer(gfx_, buffer_);
   // Now, safe to re-assign
-  UploadError error_code;
+  UploadError error_code { UploadError::kStagingAllocFailed };
   try {
     buffer_ = gfx_->CreateBuffer(desc);
     RegisterResourceIfNeeded(gfx_, buffer_);
@@ -378,8 +381,8 @@ RingBufferStaging::~RingBufferStaging()
 }
 
 // Notify of frame slot change without RTTI
-auto RingBufferStaging::OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
-  -> void
+auto RingBufferStaging::OnFrameStart(
+  InlineCoordinatorTag /*tag*/, frame::Slot slot) -> void
 {
   OnFrameStartInternal(slot);
 }
@@ -430,7 +433,7 @@ auto RingBufferStaging::Map() -> std::expected<void, UploadError>
   DCHECK_F(mapped_ptr_ == nullptr);
 
   mapped_ptr_ = static_cast<std::byte*>(buffer_->Map());
-  if (!mapped_ptr_) {
+  if (mapped_ptr_ == nullptr) {
     return std::unexpected(UploadError::kStagingMapFailed);
   }
   Stats().map_calls++;

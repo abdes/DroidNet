@@ -111,10 +111,10 @@ auto QuantizeMaterialScalar(const float value) noexcept -> std::uint32_t
 template <typename VectorT>
 auto HashFloatVector(std::size_t& seed, const VectorT& value) -> void
 {
-  for (int i = 0; i < 4; ++i) {
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    oxygen::HashCombine(seed, value[i]);
-  }
+  oxygen::HashCombine(seed, value[0]);
+  oxygen::HashCombine(seed, value[1]);
+  oxygen::HashCombine(seed, value[2]);
+  oxygen::HashCombine(seed, value[3]);
 }
 
 template <typename VectorT>
@@ -490,7 +490,7 @@ private:
     bool alive { true };
   };
   struct PendingMaterialEviction {
-    data::AssetKey asset_key {};
+    data::AssetKey asset_key;
     content::EvictionReason reason { content::EvictionReason::kRefCountZero };
   };
 
@@ -642,7 +642,7 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   , asset_loader_(asset_loader)
   , slot_reuse_(slot_reclaimer_,
       [free_indices = free_indices_](
-        bindless::HeapIndex index, std::monostate /*unused*/) {
+        bindless::HeapIndex index, std::monostate /*unused*/) -> void {
         if (free_indices) {
           free_indices->push_back(index);
         }
@@ -1250,10 +1250,7 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
         // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
         dirty_epoch_[entry_index] = 0U;
       }
-      dirty_indices_.erase(
-        std::remove(dirty_indices_.begin(), dirty_indices_.end(),
-          static_cast<std::uint32_t>(entry_index)),
-        dirty_indices_.end());
+      std::erase(dirty_indices_, static_cast<std::uint32_t>(entry_index));
 
       LOG_F(2, "MaterialBinder: eviction processed for {} (reason={})",
         data::to_string(eviction.asset_key), eviction.reason);

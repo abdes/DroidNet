@@ -8,7 +8,7 @@
 
 namespace oxygen::vortex::upload {
 
-const UploadErrorCategory& GetUploadErrorCategory() noexcept
+auto GetUploadErrorCategory() noexcept -> const UploadErrorCategory&
 {
   static UploadErrorCategory instance;
   return instance;

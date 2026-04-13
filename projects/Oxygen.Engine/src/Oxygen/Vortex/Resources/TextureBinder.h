@@ -121,10 +121,39 @@ public:
   using CoordinatorT = vortex::upload::UploadCoordinator;
 
   struct UploadLimits {
-    std::size_t max_upload_bytes_per_frame { 128ULL * 1024ULL * 1024ULL };
-    std::size_t max_pending_upload_bytes { 128ULL * 1024ULL * 1024ULL };
-    std::size_t deferred_retry_low_watermark_bytes { 64ULL * 1024ULL * 1024ULL };
-    std::size_t max_deferred_retries_per_frame { 4U };
+    static constexpr std::size_t kDefaultMaxUploadBytesPerFrame
+      = 128ULL * 1024ULL * 1024ULL;
+    static constexpr std::size_t kDefaultMaxPendingUploadBytes
+      = 128ULL * 1024ULL * 1024ULL;
+    static constexpr std::size_t kDefaultDeferredRetryLowWatermarkBytes
+      = 64ULL * 1024ULL * 1024ULL;
+    static constexpr std::size_t kDefaultMaxDeferredRetriesPerFrame = 4U;
+
+    constexpr UploadLimits() noexcept
+      : max_upload_bytes_per_frame(kDefaultMaxUploadBytesPerFrame)
+      , max_pending_upload_bytes(kDefaultMaxPendingUploadBytes)
+      , deferred_retry_low_watermark_bytes(
+          kDefaultDeferredRetryLowWatermarkBytes)
+      , max_deferred_retries_per_frame(kDefaultMaxDeferredRetriesPerFrame)
+    {
+    }
+
+    constexpr UploadLimits(const std::size_t max_upload_bytes_per_frame,
+      const std::size_t max_pending_upload_bytes,
+      const std::size_t deferred_retry_low_watermark_bytes,
+      const std::size_t max_deferred_retries_per_frame) noexcept
+      : max_upload_bytes_per_frame(max_upload_bytes_per_frame)
+      , max_pending_upload_bytes(max_pending_upload_bytes)
+      , deferred_retry_low_watermark_bytes(
+          deferred_retry_low_watermark_bytes)
+      , max_deferred_retries_per_frame(max_deferred_retries_per_frame)
+    {
+    }
+
+    std::size_t max_upload_bytes_per_frame;
+    std::size_t max_pending_upload_bytes;
+    std::size_t deferred_retry_low_watermark_bytes;
+    std::size_t max_deferred_retries_per_frame;
   };
 
   OXGN_VRTX_API TextureBinder(observer_ptr<Graphics> gfx,
