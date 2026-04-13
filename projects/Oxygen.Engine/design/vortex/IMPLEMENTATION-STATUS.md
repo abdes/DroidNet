@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 carries the 01-12 FramePlanBuilder seam fix plus a passing Vortex build/smoke target, but 01-13 still has to add the Vortex-side hermeticity guard and rerun the full FOUND-03 proof before the phase can be claimed complete`
+Status: `in_progress — Phase 1 substrate migration is now complete with a Vortex-side hermeticity guard and refreshed FOUND-03 proof; Phase 2 SceneTextures + SceneRenderer shell work is the next implementation frontier`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | `01-13` must add the Vortex-side hermeticity guard and rerun the final FOUND-03 proof suite |
+| 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Execution not started |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,34 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-13 closed FOUND-03 with a Vortex-local hermeticity guard and final proof refresh
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/Test/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Test/Link_test.cpp`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VERIFICATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n '^#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.LinkTest$' --output-on-failure`
+  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'`
+  - `powershell -NoProfile -Command "$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll"`
+- Result:
+  - `Oxygen.Vortex.LinkTest` now scans `src/Oxygen/Vortex` recursively before executing the smoke path, so the Vortex-local test surface fails immediately if any legacy renderer include seam returns
+  - the Vortex-wide seam scan still reports no `Oxygen/Renderer/*` match after the `01-12` `FramePlanBuilder` repair
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4` passed again with the guard compiled into the test surface
+  - `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.LinkTest$' --output-on-failure` passed with the hermeticity guard active
+  - the targeted legacy substrate regression suite still passed (`25/25`)
+  - the final Debug Ninja target query for `bin/Debug/Oxygen.Vortex-d.dll` still showed no `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+  - `01-VERIFICATION.md` now moves from `gaps_found` to `passed`, and `FOUND-03` is satisfied
+- Code / validation delta:
+  - Phase 1 now has both the source-level seam fix and a local regression guard against reintroducing `Oxygen/Renderer/*` under `src/Oxygen/Vortex`
+  - the build, smoke path, targeted regressions, and linked-artifact dependency proof are all refreshed after the guard landed
+  - Phase 1 is now **complete**
+- Remaining blocker:
+  - none for Phase 1; resume with Phase 2 SceneTextures + SceneRenderer shell work
 
 ### 2026-04-13 — Phase 1 plan 01-12 removed the last FramePlanBuilder source seam
 
@@ -722,7 +750,7 @@ design and execution work starts.
 
 ## Phase 1 — Substrate Migration
 
-**Status:** `in_progress`
+**Status:** `done`
 
 ### What Exists
 
@@ -783,6 +811,9 @@ design and execution work starts.
   `FramePlanBuilder` no longer imports `Oxygen/Renderer/*`, and the remaining
   shader-debug/pass-config planning contracts now live under
   `src/Oxygen/Vortex/SceneRenderer/`.
+- Repaired `01-13` is now complete: `Oxygen.Vortex.LinkTest` carries a
+  Vortex-local hermeticity guard, the full FOUND-03 proof suite passes again,
+  and `01-VERIFICATION.md` is now `passed`.
 
 ### Steps (from PLAN.md §3)
 
@@ -800,9 +831,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Phase 1 remains `in_progress`. Resume with `01-13` to add the Vortex-side
-hermeticity guard, rerun the full `FOUND-03` proof suite, and update
-`01-VERIFICATION.md` before moving to Phase 2.
+Phase 1 is complete. Resume with Phase 2 SceneTextures + SceneRenderer shell
+once the relevant design deliverables are loaded.
 
 ---
 
