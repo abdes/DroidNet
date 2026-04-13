@@ -50,6 +50,15 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "api_export.h"
+  "Types/CompositingTask.h"
+  "Types/DebugFrameBindings.h"
+  "Types/DrawFrameBindings.h"
+  "Types/EnvironmentFrameBindings.h"
+  "Types/LightCullingConfig.h"
+  "Types/LightingFrameBindings.h"
+  "Types/ShadowFrameBindings.h"
+  "Types/SyntheticSunData.h"
+  "Types/VsmFrameBindings.h"
 )
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
