@@ -360,9 +360,9 @@ Use `oxygen::bindless::generated::d3d12::kStrategyJson` to parse at runtime.
 
 ## References
 
-- **Bindless Rendering Design**: See `design/BindlessRenderingDesign.md` for
+- **Bindless Rendering Design**: See `design/renderer-core/bindless-rendering-design.md` for
   architectural details
-- **Root Signature**: See `design/BindlessRenderingRootSignature.md` for binding
+- **Root Signature**: See `design/renderer-core/bindless-root-signature-design.md` for binding
   conventions
 - **Pipeline Design**: See `design/PipelineDesign.md` for PSO integration
 

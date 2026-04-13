@@ -210,5 +210,5 @@ after build and fails configure early if the expected package files are missing.
 
 ## Related Documentation
 
-- [ShaderBake vNext design](../../../../../../design/shaderbake-vnext.md)
+- [ShaderBake vNext design](../../../../../../design/content-pipeline/shaderbake-vnext-design.md)
 - [Shader system runtime contract](../../../../../../src/Oxygen/Renderer/Docs/shader-system.md)

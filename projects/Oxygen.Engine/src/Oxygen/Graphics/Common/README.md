@@ -257,7 +257,7 @@ component wraps this with appropriate lifecycle management.
   manager if you need custom memory pooling.
 - Bindless and root signatures: implement bindless root signature creation, root
   binding tables, and pipeline-state setup consistent with `PipelineState`
-  design docs in `design/BindlessRenderingDesign.md`.
+  design docs in `design/renderer-core/bindless-rendering-design.md`.
 - PSO caching: implement backend pipeline state object caching keyed by
   `PipelineState` descriptions.
 - Custom `Commander` extensions: while the base `Commander` component is
@@ -365,7 +365,7 @@ component wraps this with appropriate lifecycle management.
 
 ## Next steps / further reading
 
-- Review design docs in `design/BindlessRenderingDesign.md`,
+- Review design docs in `design/renderer-core/bindless-rendering-design.md`,
   `BindlessRenderingRootSignature.md` and `PipelineDesign.md`.
 - Inspect `Examples/D3D12-Renderer` for a sample backend wiring and sample usage
   patterns.

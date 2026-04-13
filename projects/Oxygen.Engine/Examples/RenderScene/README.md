@@ -182,7 +182,7 @@ The Stage 13 optimization followed exactly that workflow:
 5. rerun the same capture-and-timing flow for before/after evidence
 
 The longer write-up, including the UE5 reference model that guided that
-optimization, lives in `design/VsmPerformanceOptimizationPlaybook.md`.
+optimization, lives in `design/renderer-shadows/virtual-shadow-map-performance-playbook.md`.
 
 ## Depth PrePass Measurement Workflow
 
