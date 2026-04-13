@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `done — Phase 1 substrate migration is complete with the post-orchestrator FOUND-03 proof, the Vortex step-1.9 smoke path, and the targeted legacy substrate regressions recorded`
+Status: `in_progress — Phase 1 carries the 01-12 FramePlanBuilder seam fix plus a passing Vortex build/smoke target, but 01-13 still has to add the Vortex-side hermeticity guard and rerun the full FOUND-03 proof before the phase can be claimed complete`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `done` | — |
+| 1 | Substrate Migration | `in_progress` | `01-13` must add the Vortex-side hermeticity guard and rerun the final FOUND-03 proof suite |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Execution not started |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -70,7 +70,34 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
-### 2026-04-13 — Phase 1 plan 01-11 closed step 1.9 and the Phase 1 exit gate
+### 2026-04-13 — Phase 1 plan 01-12 removed the last FramePlanBuilder source seam
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h`
+  - `src/Oxygen/Vortex/SceneRenderer/ShaderDebugMode.h`
+  - `src/Oxygen/Vortex/SceneRenderer/ShaderPassConfig.h`
+  - `src/Oxygen/Vortex/SceneRenderer/ToneMapPassConfig.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `powershell -NoProfile -Command "$bad = rg -n '#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.cpp; if ($LASTEXITCODE -ne 1) { Write-Error 'legacy renderer include seam remains in FramePlanBuilder'; exit 1 }; rg -n 'SceneRenderer/ShaderDebugMode.h|SceneRenderer/ShaderPassConfig.h|SceneRenderer/ToneMapPassConfig.h' src/Oxygen/Vortex/CMakeLists.txt | Out-Null"`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4`
+  - `powershell -NoProfile -Command "$bad = rg -n '#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex; if ($LASTEXITCODE -ne 1) { Write-Error 'legacy renderer include seam still exists under src/Oxygen/Vortex'; exit 1 }; exit 0"`
+- Result:
+  - `FramePlanBuilder` now consumes Vortex-owned `SceneRenderer/ShaderDebugMode.h`, `ShaderPassConfig.h`, and `ToneMapPassConfig.h` instead of importing `Oxygen/Renderer/*`
+  - the Vortex module now exports the rehomed planning contracts from `src/Oxygen/Vortex/SceneRenderer/`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4` passed after the seam fix
+  - the Vortex-wide include scan now returns no `Oxygen/Renderer/*` matches under `src/Oxygen/Vortex`
+  - the stale `01-11` Phase 1 completion claim is superseded by the explicit `01-VERIFICATION.md` gap report; Phase 1 remains `in_progress` until `01-13` adds the hermeticity guard and reruns the full proof suite
+- Code / validation delta:
+  - the remaining `FOUND-03` source/API seam in `FramePlanBuilder` is now **removed**
+  - the Vortex build and smoke target evidence is refreshed after the seam fix
+  - Phase 1 remains `in_progress`; `01-13` still owns the Vortex-side hermeticity guard and the final re-verification update
+- Remaining blocker:
+  - execute `01-13` to add the Vortex-local hermeticity guard, rerun the full proof suite, and update `01-VERIFICATION.md` before claiming Phase 1 complete
+
+### 2026-04-13 — Phase 1 plan 01-11 closed step 1.9 and recorded the smoke/regression evidence
 
 - Changed files this session:
   - `src/Oxygen/Vortex/Test/CMakeLists.txt`
@@ -88,10 +115,10 @@ implementation cannot begin until its design prerequisites are met.
   - the generated workspace does not define `ctest --preset windows-debug`, so the regression gate was run with the equivalent Debug build-tree invocation `ctest --test-dir out/build-ninja -C Debug ...`
 - Code / validation delta:
   - step `1.9` is now **complete**
-  - `FOUND-02` and `FOUND-03` now have the Phase 1 smoke/regression evidence required for the exit gate
-  - Phase 1 is now **complete**
+  - `01-11` landed the smoke/regression evidence, but the source-level `FOUND-03` seam in `FramePlanBuilder` remained unresolved until the later `01-12` repair identified by `01-VERIFICATION.md`
+  - Phase 1 remained `in_progress` pending the seam fix and the later `01-13` hermeticity guard plus re-verification
 - Remaining blocker:
-  - none for Phase 1; resume with Phase 2 execution when ready
+  - execute `01-12` to remove the `FramePlanBuilder` seam, then `01-13` to add the hermeticity guard and rerun the full proof suite
 ### 2026-04-13 — Phase 1 plan 01-10 landed step 1.6, the stripped renderer orchestrator, and the final FOUND-03 proof
 
 - Changed files this session:
@@ -695,7 +722,7 @@ design and execution work starts.
 
 ## Phase 1 — Substrate Migration
 
-**Status:** `done`
+**Status:** `in_progress`
 
 ### What Exists
 
@@ -752,6 +779,10 @@ design and execution work starts.
   `oxygen::vortex::Renderer` with an empty capability set, drives the stripped
   frame-hook sequence successfully, and the targeted legacy substrate
   regression suite passes in the Debug build tree.
+- Repaired `01-12` is now complete for its owned seam-fix slice:
+  `FramePlanBuilder` no longer imports `Oxygen/Renderer/*`, and the remaining
+  shader-debug/pass-config planning contracts now live under
+  `src/Oxygen/Vortex/SceneRenderer/`.
 
 ### Steps (from PLAN.md §3)
 
@@ -769,8 +800,9 @@ design and execution work starts.
 
 ### Resume Point
 
-Phase 1 is complete. Resume with Phase 2 implementation when the
-`SceneTextures` and `SceneRenderer` shell work begins.
+Phase 1 remains `in_progress`. Resume with `01-13` to add the Vortex-side
+hermeticity guard, rerun the full `FOUND-03` proof suite, and update
+`01-VERIFICATION.md` before moving to Phase 2.
 
 ---
 
