@@ -493,8 +493,10 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
 
   DLOG_F(1, "Writing {} draw metadata to {}", count, fmt::ptr(ptr));
 
-  std::memcpy(
-    ptr, Cpu().data(), Cpu().size() * sizeof(oxygen::vortex::DrawMetadata));
+  if (!alloc.TryWriteRange(std::span { Cpu() })) {
+    LOG_F(ERROR, "Failed to write draw metadata payload");
+    return;
+  }
 
   // Store the SRV index for the most recent allocation. This may change per
   // view when the emitter is used in per-view mode; callers should query the
@@ -513,8 +515,10 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
     const auto bounds_alloc = *bounds_result;
     auto* bounds_ptr = bounds_alloc.mapped_ptr;
     if (bounds_ptr != nullptr) {
-      std::memcpy(bounds_ptr, draw_bounding_spheres_.data(),
-        draw_bounding_spheres_.size() * sizeof(glm::vec4));
+      if (!bounds_alloc.TryWriteRange(std::span { draw_bounding_spheres_ })) {
+        LOG_F(ERROR, "Failed to write draw bounds payload");
+        return;
+      }
       draw_bounds_srv_index_ = bounds_alloc.srv;
     }
   }
@@ -532,8 +536,11 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
     const auto instance_alloc = *instance_result;
     auto* instance_ptr = instance_alloc.mapped_ptr;
     if (instance_ptr != nullptr) {
-      std::memcpy(instance_ptr, instance_transform_indices_.data(),
-        instance_transform_indices_.size() * sizeof(std::uint32_t));
+      if (!instance_alloc.TryWriteRange(
+            std::span { instance_transform_indices_ })) {
+        LOG_F(ERROR, "Failed to write instance metadata payload");
+        return;
+      }
       instance_data_srv_index_ = instance_alloc.srv;
       DLOG_F(1, "Uploaded {} instance transform indices", instance_count);
     }

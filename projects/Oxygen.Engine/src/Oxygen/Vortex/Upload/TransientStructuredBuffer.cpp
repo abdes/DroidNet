@@ -180,6 +180,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
       TransientAllocation out {};
       out.srv = srv_index;
       out.mapped_ptr = const_cast<std::byte*>(aligned_ptr);
+      out.size_bytes = size_bytes;
       out.sequence = current_frame_;
       out.slot = current_slot_;
       LOG_F(1,

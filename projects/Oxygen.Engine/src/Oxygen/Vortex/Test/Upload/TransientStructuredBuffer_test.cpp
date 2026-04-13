@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -235,6 +236,44 @@ NOLINT_TEST_F(
 
   // Assert: allocation for previous sequence should now be considered invalid
   EXPECT_FALSE(alloc.IsValid(frame::SequenceNumber { 2 }));
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest, AllocationTryWriteObjectCopiesPod)
+{
+  struct Payload {
+    std::uint32_t a { 0U };
+    std::uint32_t b { 0U };
+  };
+
+  TransientStructuredBuffer transient_buffer(
+    GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(Payload)));
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+
+  auto alloc_result = transient_buffer.Allocate(1);
+  ASSERT_TRUE(alloc_result.has_value());
+
+  const Payload expected { .a = 0xAABBCCDDU, .b = 0x11223344U };
+  EXPECT_TRUE(alloc_result->TryWriteObject(expected));
+
+  const auto* payload = static_cast<const Payload*>(alloc_result->mapped_ptr);
+  ASSERT_NE(payload, nullptr);
+  EXPECT_EQ(payload->a, expected.a);
+  EXPECT_EQ(payload->b, expected.b);
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  AllocationTryWriteRangeRejectsWritesLargerThanAllocation)
+{
+  TransientStructuredBuffer transient_buffer(
+    GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(std::uint32_t)));
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
+
+  auto alloc_result = transient_buffer.Allocate(2);
+  ASSERT_TRUE(alloc_result.has_value());
+
+  const std::array<std::uint32_t, 3> values { 1U, 2U, 3U };
+  EXPECT_FALSE(alloc_result->TryWriteRange(
+    std::span<const std::uint32_t> { values.data(), values.size() }));
 }
 
 // Reset can be called multiple times and leaves object in cleared state

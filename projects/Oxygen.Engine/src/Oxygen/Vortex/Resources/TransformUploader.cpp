@@ -172,12 +172,14 @@ auto TransformUploader::EnsureFrameResources() -> void
   DLOG_F(1, "TransformUploader writing {} transforms to {}", count,
     fmt::ptr(w_alloc.mapped_ptr));
 
-  // Direct memory write (no upload descriptors needed)
-  std::memcpy(w_alloc.mapped_ptr, transforms_.data(),
-    transforms_.size() * sizeof(glm::mat4));
-
-  std::memcpy(n_alloc.mapped_ptr, normal_matrices_.data(),
-    normal_matrices_.size() * sizeof(glm::mat4));
+  if (!w_alloc.TryWriteRange(std::span { transforms_ })) {
+    LOG_F(ERROR, "Failed to write world transforms into transient buffer");
+    return;
+  }
+  if (!n_alloc.TryWriteRange(std::span { normal_matrices_ })) {
+    LOG_F(ERROR, "Failed to write normal matrices into transient buffer");
+    return;
+  }
 
   // Cache SRV indices for GetWorldsSrvIndex() / GetNormalsSrvIndex()
   worlds_srv_index_ = w_alloc.srv;
