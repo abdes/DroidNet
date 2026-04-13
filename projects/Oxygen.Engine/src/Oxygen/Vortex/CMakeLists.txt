@@ -50,6 +50,7 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "api_export.h"
+  "RendererTag.h"
   "Types/CompositingTask.h"
   "Types/EnvironmentViewData.h"
   "Types/DebugFrameBindings.h"
@@ -63,11 +64,23 @@ set(
   "Types/ViewConstants.h"
   "Types/ViewFrameBindings.h"
   "Types/VsmFrameBindings.h"
+  "Upload/AtlasBuffer.h"
+  "Upload/Errors.h"
+  "Upload/RingBufferStaging.h"
+  "Upload/StagingProvider.h"
+  "Upload/TransientStructuredBuffer.h"
+  "Upload/Types.h"
+  "Upload/UploaderTag.h"
 )
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
   "Types/ViewConstants.cpp"
+  "Upload/AtlasBuffer.cpp"
+  "Upload/Errors.cpp"
+  "Upload/RingBufferStaging.cpp"
+  "Upload/StagingProvider.cpp"
+  "Upload/TransientStructuredBuffer.cpp"
 )
 
 target_sources(
