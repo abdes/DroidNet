@@ -132,11 +132,16 @@ ViewLifecycleService::ViewLifecycleService(
   , render_view_coroutine_(std::move(render_view_coroutine))
   , state_(std::make_unique<State>())
 {
-  DCHECK_NOTNULL_F(upsert_published_view_);
-  DCHECK_NOTNULL_F(resolve_published_view_);
-  DCHECK_NOTNULL_F(prune_stale_published_views_);
-  DCHECK_NOTNULL_F(register_view_graph_);
-  DCHECK_NOTNULL_F(render_view_coroutine_);
+  CHECK_F(static_cast<bool>(upsert_published_view_),
+    "ViewLifecycleService requires an upsert_published_view callback");
+  CHECK_F(static_cast<bool>(resolve_published_view_),
+    "ViewLifecycleService requires a resolve_published_view callback");
+  CHECK_F(static_cast<bool>(prune_stale_published_views_),
+    "ViewLifecycleService requires a prune_stale_published_views callback");
+  CHECK_F(static_cast<bool>(register_view_graph_),
+    "ViewLifecycleService requires a register_view_graph callback");
+  CHECK_F(static_cast<bool>(render_view_coroutine_),
+    "ViewLifecycleService requires a render_view_coroutine callback");
 }
 
 ViewLifecycleService::~ViewLifecycleService() = default;

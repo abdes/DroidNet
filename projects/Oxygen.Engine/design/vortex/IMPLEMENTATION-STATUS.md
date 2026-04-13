@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.5 and the public half of step 1.7 are complete, step 1.7 remains open for 01-09, and repaired 01-10 carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.5 and 1.7 are complete, and repaired 01-10 now carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-08` landed the public step `1.7` headers; `01-09` still owns the private composition slice and `01-10` still owns step `1.6` with the root contracts |
+| 1 | Substrate Migration | `in_progress` | Step `1.7` is now closed; `01-10` still owns step `1.6` with the root contracts plus the stripped renderer orchestrator |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,38 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-09 closed the private half of step 1.7
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Internal/CompositionPlanner.cpp`
+  - `src/Oxygen/Vortex/Internal/CompositionPlanner.h`
+  - `src/Oxygen/Vortex/Internal/CompositionViewImpl.cpp`
+  - `src/Oxygen/Vortex/Internal/CompositionViewImpl.h`
+  - `src/Oxygen/Vortex/Internal/FrameViewPacket.cpp`
+  - `src/Oxygen/Vortex/Internal/FrameViewPacket.h`
+  - `src/Oxygen/Vortex/Internal/ViewLifecycleService.cpp`
+  - `src/Oxygen/Vortex/Internal/ViewLifecycleService.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Internal/ViewRenderPlan.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Renderer/Pipeline|PipelineSettings|Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Internal/CompositionPlanner.cpp src/Oxygen/Vortex/Internal/CompositionPlanner.h src/Oxygen/Vortex/Internal/CompositionViewImpl.cpp src/Oxygen/Vortex/Internal/CompositionViewImpl.h src/Oxygen/Vortex/Internal/FrameViewPacket.cpp src/Oxygen/Vortex/Internal/FrameViewPacket.h src/Oxygen/Vortex/Internal/ViewLifecycleService.cpp src/Oxygen/Vortex/Internal/ViewLifecycleService.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `rg -n '\| 1\.7 \||FramePlanBuilder.cpp|ViewRenderPlan.h|01-10' design/vortex/IMPLEMENTATION-STATUS.md`
+- Result:
+  - the renderer-core private step-`1.7` files now live under `src/Oxygen/Vortex/Internal/`
+  - `FramePlanBuilder.cpp/.h` and `ViewRenderPlan.h` now live under `src/Oxygen/Vortex/SceneRenderer/Internal/`, matching `PROJECT-LAYOUT.md`
+  - `FramePlanBuilder` no longer owns the discarded `PipelineSettings` type; it now consumes a local planning input shape scoped to the scene-renderer private slice
+  - `oxygen-vortex` builds successfully in Debug after the full private step-`1.7` rehome lands
+- Code / validation delta:
+  - step `1.7` is now **complete**
+  - step `1.6` remains deferred to `01-10`; this plan did not pull the pass bases, `RenderContext.h`, or `Renderer.h/.cpp` forward
+  - no Vortex runtime/facade validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-10` to land step `1.6`, the remaining root-support files, the stripped renderer orchestrator, and the final post-orchestrator dependency-edge proof
 
 ### 2026-04-13 — Phase 1 plan 01-08 landed the public step-1.7 header slice
 
@@ -647,8 +679,11 @@ design and execution work starts.
 - Repaired `01-08` is now complete for its owned public slice: the step `1.7`
   root vocabulary (`CompositionView.h`, `RendererCapability.h`,
   `RenderMode.h`) and `SceneRenderer/DepthPrePassPolicy.h` now live under
-  Vortex ownership while the private composition infrastructure remains
-  deferred to `01-09`.
+  Vortex ownership.
+- Repaired `01-09` is now complete: the private composition infrastructure
+  lives under `src/Oxygen/Vortex/Internal/` and
+  `src/Oxygen/Vortex/SceneRenderer/Internal/`, and `oxygen-vortex` builds with
+  the full step-`1.7` rehome in place.
 
 ### Steps (from PLAN.md §3)
 
@@ -660,15 +695,15 @@ design and execution work starts.
 | 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-10` still owns the pass bases together with the later-wave root contracts |
-| 1.7 | View assembly + composition | `in_progress` | `01-08` landed `CompositionView.h`, `RendererCapability.h`, `RenderMode.h`, and `SceneRenderer/DepthPrePassPolicy.h`; `01-09` still owns the private composition infrastructure |
+| 1.7 | View assembly + composition | `done` | `01-08` landed the public headers and `01-09` landed the private `Internal/` plus `SceneRenderer/Internal/` files, then rebuilt `oxygen-vortex` successfully |
 | 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
 | 1.9 | Smoke test | `not_started` | — |
 
 ### Resume Point
 
-Continue with repaired `01-09` to land the private half of step `1.7`, then
-`01-10` to land step `1.6` together with the later-wave root contracts and
-stripped orchestrator.
+Continue with repaired `01-10` to land step `1.6` together with the later-wave
+root contracts and stripped orchestrator, then finish Phase 1 with `01-11`
+smoke and regression validation.
 
 ---
 
