@@ -424,3 +424,4 @@ FodyWeavers.xsd
 
 Trash/
 /Testing
+.omx/state/current-task-baseline.json
