@@ -23,6 +23,14 @@ argument forwarding.
 Builds CMake targets without execution, optimized for CI/CD workflows and
 development automation.
 
+### `oxytidy.ps1` - Scoped Parallel clang-tidy
+
+Runs `clang-tidy` against selected source roots using the repo's
+`compile_commands.json`, `.clang-tidy`, and `.clangd` Add/Remove flag rules.
+It sanitizes the compile database for Clang consumption, executes one
+translation unit per worker, filters diagnostics back to the requested scope,
+and never uses autofix flags.
+
 ### `oxy-targets.ps1` - Shared Library
 
 Core functionality module providing CMake File API integration, preset
@@ -102,6 +110,15 @@ oxybuild my-target -BuildDir "custom/build"
 oxyrun gr-d3d -DryRun
 oxybuild base -DryRun
 
+# Run clang-tidy on Vortex using repo defaults
+oxytidy src/Oxygen/Vortex -SummaryOnly
+
+# Inspect the exact translation units that would run
+oxytidy src/Oxygen/Vortex -ListFiles
+
+# Smoke-test a single translation unit
+oxytidy src/Oxygen/Vortex/ScenePrep/ScenePrepPipeline.cpp -MaxFiles 1
+
 # Combine options
 oxyrun asyncsim -Config Release -NoBuild -- --benchmark
 ```
@@ -139,6 +156,29 @@ oxybuild.ps1 [-Target] <string> [-BuildDir <string>] [-Config <string>] [-DryRun
 - `BuildDir` - Build directory path (default: "out/build")
 - `Config` - Build configuration (default: "Debug")
 - `DryRun` - Show commands without executing them
+
+### `oxytidy.ps1`
+
+**Syntax:**
+
+```powershell
+oxytidy.ps1 [[-Paths] <string[]>] [-Configuration <string>] [-BuildDir <string>] [-Jobs <int>] [-IncludeTests] [-MaxFiles <int>] [-Checks <string>] [-LogDir <string>] [-ListFiles] [-SummaryOnly] [-NoQuiet] [-Help]
+```
+
+**Parameters:**
+
+- `Paths` - Files or directories to analyze. Defaults to `src/Oxygen/Vortex`.
+- `Configuration` - Multi-config slice to select from `compile_commands.json` (default: `Debug`).
+- `BuildDir` - Override the directory that contains `compile_commands.json`.
+- `Jobs` - Parallel worker count.
+- `IncludeTests` - Include files under `Test/` in the selected paths.
+- `MaxFiles` - Limit the number of translation units, useful for smoke tests.
+- `Checks` - Optional `clang-tidy --checks=...` override string.
+- `LogDir` - Output directory for logs and the sanitized compile database.
+- `ListFiles` - Print the selected translation units and exit.
+- `SummaryOnly` - Print only the summary instead of replaying every diagnostic.
+- `NoQuiet` - Do not pass `--quiet` to `clang-tidy`.
+- `Help` - Show built-in usage and examples.
 
 ## Fuzzy Matching Examples
 
@@ -178,6 +218,17 @@ Smart executable discovery with multiple strategies:
 - Runtime output directory scanning (fallback)
 - Build directory pattern matching (final fallback)
 - Windows executable extensions: `.exe`, `.bat`, `.cmd`, `.com`
+
+### Scoped clang-tidy workflow
+
+`oxytidy.ps1` is optimized for large multi-config Windows builds:
+
+- Reads the compile database location from `.clangd` by default.
+- Applies `.clangd` `Remove` and `Add` rules to a sanitized temporary compile database.
+- Selects a single configuration slice, for example `Debug`, to avoid duplicate work from multi-config databases.
+- Runs `clang-tidy` per translation unit in parallel instead of invoking one huge monolithic process.
+- Filters reported diagnostics to the requested source roots so results stay in your code.
+- Writes logs under `out/clang-tidy/<scope>-<timestamp>/`.
 
 ### Error Handling
 
