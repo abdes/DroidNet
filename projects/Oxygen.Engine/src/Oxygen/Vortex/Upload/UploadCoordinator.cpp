@@ -822,7 +822,7 @@ auto UploadCoordinator::SubmitRun(
   auto& allocation = *allocation_result;
   FillStagingForPlan(plan, run, allocation);
   return OptimizeBufferRun(run, plan).and_then(
-    [&](BufferUploadPlan opt)
+    [&](const BufferUploadPlan& opt)
       -> std::expected<std::vector<UploadTicket>, UploadError> {
       return RecordBufferRun(opt, run, allocation)
         .and_then([&](graphics::FenceValue fence)

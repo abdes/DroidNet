@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -45,6 +45,13 @@ protected:
     renderer_ = std::make_unique<Renderer>(
       std::weak_ptr<Graphics>(graphics_), std::move(config));
     framebuffer_ = MakeFramebuffer();
+  }
+
+  void TearDown() override
+  {
+    if (renderer_) {
+      renderer_->OnShutdown();
+    }
   }
 
   [[nodiscard]] auto MakeFramebuffer() const -> std::shared_ptr<Framebuffer>
@@ -98,9 +105,9 @@ protected:
       graphics_->QueueKeyFor(QueueRole::kGraphics), name, false);
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::shared_ptr<Framebuffer> framebuffer_ {};
-  std::unique_ptr<Renderer> renderer_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::shared_ptr<Framebuffer> framebuffer_;
+  std::unique_ptr<Renderer> renderer_;
 };
 
 NOLINT_TEST_F(RenderGraphHarnessFacadeTest, CanFinalizeRequiresRenderGraph)

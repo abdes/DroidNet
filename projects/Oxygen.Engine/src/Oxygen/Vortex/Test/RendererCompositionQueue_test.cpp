@@ -68,7 +68,7 @@ public:
   mutable std::uint32_t present_count_ { 0U };
 
 private:
-  std::shared_ptr<Texture> backbuffer_ {};
+  std::shared_ptr<Texture> backbuffer_;
 };
 
 class RendererCompositionQueueTest : public ::testing::Test {
@@ -79,11 +79,19 @@ protected:
     graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
     auto config = RendererConfig {};
-    config.upload_queue_key = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+    config.upload_queue_key
+      = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
     renderer_ = std::make_unique<Renderer>(
       std::weak_ptr<Graphics>(graphics_), std::move(config));
 
     frame_context_ = std::make_unique<FrameContext>();
+  }
+
+  void TearDown() override
+  {
+    if (renderer_) {
+      renderer_->OnShutdown();
+    }
   }
 
   [[nodiscard]] auto MakeColorTexture(std::string_view debug_name) const
@@ -104,7 +112,8 @@ protected:
   }
 
   [[nodiscard]] auto MakeFramebuffer(
-    const std::shared_ptr<Texture>& texture) const -> std::shared_ptr<Framebuffer>
+    const std::shared_ptr<Texture>& texture) const
+    -> std::shared_ptr<Framebuffer>
   {
     auto fb_desc = FramebufferDesc {};
     fb_desc.AddColorAttachment({ .texture = texture });
@@ -120,20 +129,21 @@ protected:
 
     oxygen::vortex::CompositionSubmission submission;
     submission.composite_target = target;
-    submission.tasks.push_back(oxygen::vortex::CompositingTask::MakeTextureBlend(
-      source, oxygen::ViewPort { .top_left_x = 0.0F,
-                .top_left_y = 0.0F,
-                .width = 64.0F,
-                .height = 64.0F,
-                .min_depth = 0.0F,
-                .max_depth = 1.0F },
-      1.0F));
+    submission.tasks.push_back(
+      oxygen::vortex::CompositingTask::MakeTextureBlend(source,
+        oxygen::ViewPort { .top_left_x = 0.0F,
+          .top_left_y = 0.0F,
+          .width = 64.0F,
+          .height = 64.0F,
+          .min_depth = 0.0F,
+          .max_depth = 1.0F },
+        1.0F));
     return submission;
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  std::unique_ptr<Renderer> renderer_ {};
-  std::unique_ptr<FrameContext> frame_context_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::unique_ptr<Renderer> renderer_;
+  std::unique_ptr<FrameContext> frame_context_;
 };
 
 NOLINT_TEST_F(RendererCompositionQueueTest,
@@ -145,8 +155,9 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 
   frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
 
-  auto harness = oxygen::vortex::harness::single_pass::presets::
-    ForFullscreenGraphicsPass(*renderer_,
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
       Renderer::FrameSessionInput {
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
@@ -157,8 +168,10 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 
   graphics_->draw_log_.draws.clear();
 
-  renderer_->RegisterComposition(MakeSubmission("Queue.SourceA", target), surface);
-  renderer_->RegisterComposition(MakeSubmission("Queue.SourceB", target), surface);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.SourceA", target), surface);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.SourceB", target), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
@@ -180,8 +193,9 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto target_a = MakeFramebuffer(surface_a_texture);
   auto target_b = MakeFramebuffer(surface_b_texture);
 
-  auto harness = oxygen::vortex::harness::single_pass::presets::
-    ForFullscreenGraphicsPass(*renderer_,
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
       Renderer::FrameSessionInput {
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
@@ -190,15 +204,16 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
-  renderer_->RegisterComposition(MakeSubmission("Queue.SourceA", target_a), surface_a);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.SourceA", target_a), surface_a);
 
   NOLINT_EXPECT_DEATH(renderer_->RegisterComposition(
                         MakeSubmission("Queue.SourceB", target_b), surface_b),
     ".*single target per frame.*");
 }
 
-NOLINT_TEST_F(RendererCompositionQueueTest,
-  OnCompositingDrainsQueuedSubmissionsExactlyOnce)
+NOLINT_TEST_F(
+  RendererCompositionQueueTest, OnCompositingDrainsQueuedSubmissionsExactlyOnce)
 {
   auto surface_texture = MakeColorTexture("Queue.SingleSurface");
   auto surface = std::make_shared<FakeSurface>(surface_texture);
@@ -206,8 +221,9 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
 
   frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
 
-  auto harness = oxygen::vortex::harness::single_pass::presets::
-    ForFullscreenGraphicsPass(*renderer_,
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
       Renderer::FrameSessionInput {
         .frame_slot = oxygen::frame::Slot { 0U },
         .frame_sequence = oxygen::frame::SequenceNumber { 1U },
@@ -216,7 +232,8 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto active_frame = harness.Finalize();
   ASSERT_TRUE(active_frame.has_value());
 
-  renderer_->RegisterComposition(MakeSubmission("Queue.Drain", target), surface);
+  renderer_->RegisterComposition(
+    MakeSubmission("Queue.Drain", target), surface);
 
   auto loop = oxygen::co::testing::TestEventLoop {};
   oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {

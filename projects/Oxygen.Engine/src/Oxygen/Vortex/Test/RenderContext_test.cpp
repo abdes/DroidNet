@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Vortex/RenderContext.h>
 
 namespace {
@@ -31,7 +32,8 @@ TEST(RenderContextTest, ResetClearsPhase1PerViewAndFrameState)
   EXPECT_EQ(context.frame_slot, oxygen::frame::kInvalidSlot);
   EXPECT_EQ(context.frame_sequence, oxygen::frame::SequenceNumber {});
   EXPECT_TRUE(context.view_outputs.empty());
-  EXPECT_EQ(context.delta_time, 1.0F / 60.0F);
+  EXPECT_EQ(
+    context.delta_time, oxygen::time::SimulationClock::kMinDeltaTimeSeconds);
   EXPECT_EQ(context.pass_target.get(), nullptr);
   EXPECT_EQ(context.view_constants.get(), nullptr);
   EXPECT_EQ(context.material_constants.get(), nullptr);

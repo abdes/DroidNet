@@ -14,6 +14,7 @@
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
+
 namespace oxygen::vortex::sceneprep {
 
 struct RenderItemData {
@@ -22,7 +23,7 @@ struct RenderItemData {
   // Source scene-node identity retained for the frame so downstream VSM
   // invalidation/history publication can map rendered primitives back to scene
   // mutations without storing handles inside SceneNodeImpl.
-  oxygen::scene::NodeHandle node_handle {};
+  oxygen::scene::NodeHandle node_handle;
 
   // Resolved geometry reference (stable identity + resolved LOD mesh).
   sceneprep::GeometryRef geometry;

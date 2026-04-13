@@ -22,11 +22,11 @@ using oxygen::Graphics;
 using oxygen::RendererConfig;
 using oxygen::graphics::QueueRole;
 using oxygen::vortex::CapabilitySet;
+using oxygen::vortex::kPhase1DefaultRuntimeCapabilityFamilies;
 using oxygen::vortex::PipelineCapabilityRequirements;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ValidateCapabilityRequirements;
-using oxygen::vortex::kPhase1DefaultRuntimeCapabilityFamilies;
 using oxygen::vortex::testing::FakeGraphics;
 
 class RendererCapabilityBindingTest : public ::testing::Test {
@@ -41,20 +41,35 @@ protected:
     -> std::shared_ptr<Renderer>
   {
     auto config = RendererConfig {};
-    config.upload_queue_key = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    return std::make_shared<Renderer>(
-      std::weak_ptr<Graphics>(graphics_), std::move(config), capabilities);
+    config.upload_queue_key
+      = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+    return std::shared_ptr<Renderer>(
+      new Renderer(
+        std::weak_ptr<Graphics>(graphics_), std::move(config), capabilities),
+      [](Renderer* renderer) {
+        if (renderer != nullptr) {
+          renderer->OnShutdown();
+          delete renderer;
+        }
+      });
   }
 
   [[nodiscard]] auto MakeDefaultRenderer() -> std::shared_ptr<Renderer>
   {
     auto config = RendererConfig {};
-    config.upload_queue_key = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    return std::make_shared<Renderer>(
-      std::weak_ptr<Graphics>(graphics_), std::move(config));
+    config.upload_queue_key
+      = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+    return std::shared_ptr<Renderer>(
+      new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config)),
+      [](Renderer* renderer) {
+        if (renderer != nullptr) {
+          renderer->OnShutdown();
+          delete renderer;
+        }
+      });
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
 };
 
 NOLINT_TEST(RendererCapabilityTest,
@@ -112,8 +127,8 @@ NOLINT_TEST(RendererCapabilityTest, ValidationReportsMissingFamilies)
       | RendererCapabilityFamily::kDiagnosticsAndProfiling);
 }
 
-NOLINT_TEST_F(RendererCapabilityBindingTest,
-  RendererUsesPhase1DefaultCapabilitiesByDefault)
+NOLINT_TEST_F(
+  RendererCapabilityBindingTest, RendererUsesPhase1DefaultCapabilitiesByDefault)
 {
   const auto renderer = MakeDefaultRenderer();
   EXPECT_EQ(

@@ -43,35 +43,66 @@ public:
     static_assert(std::is_default_constructible_v<RenderContextT>);
     static_assert(requires(RenderContextT& context) { context.Reset(); });
 
+    auto& in_use = InUseFlagForSlot(slot);
+    auto& context = ContextForSlot(slot);
     const auto idx = static_cast<std::size_t>(slot.get());
     bool expected = false;
-    if (!in_use_[idx].compare_exchange_strong(expected, true)) {
+    if (!in_use.compare_exchange_strong(expected, true)) {
       LOG_F(WARNING,
         "Failed to acquire RenderContext: slot {0} is already in use.", idx);
       throw std::runtime_error(
         "RenderContextPool::Acquire: slot already in use");
     }
 
-    pool_[idx].Reset();
+    context.Reset();
     DLOG_F(2, "RenderContextPool successfully acquired slot {0}.", idx);
-    return pool_[idx];
+    return context;
   }
 
   auto Release(frame::Slot slot) -> void
   {
+    auto& context = ContextForSlot(slot);
+    auto& in_use = InUseFlagForSlot(slot);
     const auto idx = static_cast<std::size_t>(slot.get());
-    pool_[idx].Reset();
-    in_use_[idx].store(false);
+    context.Reset();
+    in_use.store(false);
     DLOG_F(2, "RenderContextPool released slot {0}.", idx);
   }
 
   [[nodiscard]] auto IsInUse(frame::Slot slot) const noexcept -> bool
   {
-    const auto idx = static_cast<std::size_t>(slot.get());
-    return in_use_[idx].load();
+    return InUseFlagForSlot(slot).load();
   }
 
 private:
+  [[nodiscard]] static auto SlotIndex(frame::Slot slot) noexcept -> std::size_t
+  {
+    return static_cast<std::size_t>(slot.get());
+  }
+
+  auto ContextForSlot(frame::Slot slot) -> RenderContextT&
+  {
+    const auto idx = SlotIndex(slot);
+    CHECK_LT_F(idx, pool_.size(), "Invalid RenderContextPool slot {}", idx);
+    return *(pool_.begin() + static_cast<std::ptrdiff_t>(idx));
+  }
+
+  [[nodiscard]] auto InUseFlagForSlot(frame::Slot slot) noexcept
+    -> std::atomic_bool&
+  {
+    const auto idx = SlotIndex(slot);
+    CHECK_LT_F(idx, in_use_.size(), "Invalid RenderContextPool slot {}", idx);
+    return *(in_use_.begin() + static_cast<std::ptrdiff_t>(idx));
+  }
+
+  [[nodiscard]] auto InUseFlagForSlot(frame::Slot slot) const noexcept
+    -> const std::atomic_bool&
+  {
+    const auto idx = SlotIndex(slot);
+    CHECK_LT_F(idx, in_use_.size(), "Invalid RenderContextPool slot {}", idx);
+    return *(in_use_.cbegin() + static_cast<std::ptrdiff_t>(idx));
+  }
+
   std::array<RenderContextT, frame::kFramesInFlight.get()> pool_ {};
   std::array<std::atomic_bool,
     static_cast<std::size_t>(frame::kFramesInFlight.get())>

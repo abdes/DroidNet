@@ -12,6 +12,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -52,6 +53,13 @@ protected:
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
     renderer_ = std::make_unique<Renderer>(
       std::weak_ptr<Graphics>(graphics_), std::move(config));
+  }
+
+  void TearDown() override
+  {
+    if (renderer_) {
+      renderer_->OnShutdown();
+    }
   }
 
   [[nodiscard]] static auto MakeViewContext(std::string_view name)
@@ -121,11 +129,12 @@ protected:
                     .SetFrameSession(Renderer::FrameSessionInput {
                       .frame_slot = oxygen::frame::Slot { 0U },
                       .frame_sequence = oxygen::frame::SequenceNumber { 1U },
-                      .delta_time_seconds = 1.0F / 60.0F,
+                      .delta_time_seconds
+                      = oxygen::time::SimulationClock::kMinDeltaTimeSeconds,
                     })
                     .SetOutputTarget(Renderer::OutputTargetInput {
-                      .framebuffer
-                      = oxygen::observer_ptr<const Framebuffer>(framebuffer_.get()),
+                      .framebuffer = oxygen::observer_ptr<const Framebuffer>(
+                        framebuffer_.get()),
                     })
                     .SetResolvedView(Renderer::ResolvedViewInput {
                       .view_id = view_id,
@@ -142,9 +151,9 @@ protected:
     return result->GetRenderContext().view_constants;
   }
 
-  std::shared_ptr<FakeGraphics> graphics_ {};
-  mutable std::shared_ptr<Framebuffer> framebuffer_ {};
-  std::unique_ptr<Renderer> renderer_ {};
+  std::shared_ptr<FakeGraphics> graphics_;
+  mutable std::shared_ptr<Framebuffer> framebuffer_;
+  std::unique_ptr<Renderer> renderer_;
 };
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,

@@ -82,7 +82,7 @@ private:
   std::optional<ScenePrepContext> ctx_;
   observer_ptr<ScenePrepState> prep_state_;
   FailureStats failure_stats_ {};
-  std::unordered_map<std::string, std::uint64_t> failure_occurrences_ {};
+  std::unordered_map<std::string, std::uint64_t> failure_occurrences_;
 };
 
 template <typename CollectionCfg, typename FinalizationCfg>

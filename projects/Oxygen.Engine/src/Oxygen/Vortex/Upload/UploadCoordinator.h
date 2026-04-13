@@ -32,7 +32,7 @@ namespace oxygen::vortex::upload {
 
 // Default growth factor for ring staging buffers. This is the single source of
 // truth for RingBufferStaging slack unless a call site explicitly overrides it.
-inline constexpr float kDefaultRingBufferStagingSlack = 0.25f;
+inline constexpr float kDefaultRingBufferStagingSlack = 0.25F;
 
 // Forward declaration to avoid including UploadPlanner.h in the header
 struct BufferUploadPlan;

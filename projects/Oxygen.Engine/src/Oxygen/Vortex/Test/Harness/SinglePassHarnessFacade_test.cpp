@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -41,6 +41,13 @@ protected:
     renderer_ = std::make_unique<Renderer>(
       std::weak_ptr<Graphics>(graphics_), std::move(config));
     framebuffer_ = MakeFramebuffer();
+  }
+
+  void TearDown() override
+  {
+    if (renderer_) {
+      renderer_->OnShutdown();
+    }
   }
 
   [[nodiscard]] auto MakeFramebuffer() const -> std::shared_ptr<Framebuffer>

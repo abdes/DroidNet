@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <limits>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>

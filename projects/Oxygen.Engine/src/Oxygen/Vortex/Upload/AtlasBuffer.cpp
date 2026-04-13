@@ -160,7 +160,7 @@ auto AtlasBuffer::Allocate(const std::uint32_t count)
   -> std::expected<ElementRef, std::error_code>
 {
   if (count != 1) {
-    // FIXME: Phase 1: only single-element allocations supported
+    // FIXME: only single-element allocations supported
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 

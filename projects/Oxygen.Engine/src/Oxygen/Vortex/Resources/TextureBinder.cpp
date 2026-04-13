@@ -551,8 +551,7 @@ public:
   [[nodiscard]] auto GetPendingUploadCount() const noexcept -> std::size_t;
   [[nodiscard]] auto GetPendingUploadBytes() const noexcept -> std::size_t;
   [[nodiscard]] auto GetDeferredRetryCount() const noexcept -> std::size_t;
-  [[nodiscard]] auto GetPendingUploadByteBudget() const noexcept
-    -> std::size_t;
+  [[nodiscard]] auto GetPendingUploadByteBudget() const noexcept -> std::size_t;
 
 private:
   enum class FailurePolicy : uint8_t {
@@ -689,9 +688,16 @@ private:
 TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
   observer_ptr<ProviderT> staging_provider, observer_ptr<CoordinatorT> uploader,
   observer_ptr<content::IAssetLoader> texture_loader, UploadLimits limits)
-  : impl_(
-      std::make_unique<Impl>(
-        gfx, staging_provider, uploader, texture_loader, limits))
+  : impl_(std::make_unique<Impl>(
+      gfx, staging_provider, uploader, texture_loader, limits))
+{
+}
+
+TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
+  observer_ptr<ProviderT> staging_provider, observer_ptr<CoordinatorT> uploader,
+  observer_ptr<content::IAssetLoader> texture_loader)
+  : TextureBinder(gfx, staging_provider, uploader, texture_loader,
+      TextureBinder::UploadLimits {})
 {
 }
 
@@ -935,8 +941,7 @@ auto TextureBinder::Impl::GetOrAllocate(
 TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> staging_provider,
   const observer_ptr<CoordinatorT> uploader,
-  const observer_ptr<content::IAssetLoader> texture_loader,
-  UploadLimits limits)
+  const observer_ptr<content::IAssetLoader> texture_loader, UploadLimits limits)
   : gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(staging_provider)
@@ -1455,7 +1460,8 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
     }
     ++lifecycle_async_backlog_deferrals_;
     LOG_F(WARNING,
-      "Deferring decoded texture {} because pending upload backlog would exceed "
+      "Deferring decoded texture {} because pending upload backlog would "
+      "exceed "
       "{} bytes",
       resource_key, limits_.max_pending_upload_bytes);
   } else {

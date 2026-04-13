@@ -8,6 +8,7 @@
 
 #include <type_traits>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Vortex/ScenePrep/Concepts.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/Types.h>
@@ -41,22 +42,22 @@ template < // clang-format off
   typename ProducerT = void
 > // clang-format on
 struct CollectionConfig {
-  struct _DummyStage {
+  struct DummyStage_ {
     template <typename... Args>
-    constexpr void operator()(Args&&...) const noexcept
+    constexpr void operator()(Args&&... /*args*/) const noexcept
     {
     }
   };
   template <typename T>
-  using StageOrDummy = std::conditional_t<std::is_void_v<T>, _DummyStage, T>;
+  using StageOrDummy = std::conditional_t<std::is_void_v<T>, DummyStage_, T>;
 
   // Optional stages (use `void` to omit) - wrapped so that `void` parameters
   // do not declare invalid members yet presence booleans still reflect intent.
-  [[no_unique_address]] StageOrDummy<PreFilterT> pre_filter {};
-  [[no_unique_address]] StageOrDummy<TransformResolveT> transform_resolve {};
-  [[no_unique_address]] StageOrDummy<MeshResolverT> mesh_resolver {};
-  [[no_unique_address]] StageOrDummy<VisibilityFilterT> visibility_filter {};
-  [[no_unique_address]] StageOrDummy<ProducerT> producer {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<PreFilterT> pre_filter {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<TransformResolveT> transform_resolve {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<MeshResolverT> mesh_resolver {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<VisibilityFilterT> visibility_filter {};
+  OXYGEN_NO_UNIQUE_ADDRESS StageOrDummy<ProducerT> producer {};
 
   // Presence checks for `if constexpr`
   // clang-format off

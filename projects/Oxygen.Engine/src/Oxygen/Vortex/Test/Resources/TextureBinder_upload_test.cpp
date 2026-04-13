@@ -485,7 +485,7 @@ NOLINT_TEST_F(
   const auto bytes_per_texture = decoded->GetDataSize();
   ASSERT_GT(bytes_per_texture, 0U);
 
-  const auto key_count = pending_budget / bytes_per_texture + 2U;
+  const auto key_count = (pending_budget / bytes_per_texture) + 2U;
   const auto keys = MakeSyntheticTextureKeys(
     Loader(), std::span(payload.data(), payload.size()), key_count);
 
@@ -515,7 +515,7 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
   const auto bytes_per_texture = decoded->GetDataSize();
   ASSERT_GT(bytes_per_texture, 0U);
 
-  const auto key_count = pending_budget / bytes_per_texture + 2U;
+  const auto key_count = (pending_budget / bytes_per_texture) + 2U;
   const auto keys = MakeSyntheticTextureKeys(
     Loader(), std::span(payload.data(), payload.size()), key_count);
 

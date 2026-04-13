@@ -359,7 +359,7 @@ private:
 
   // Internal stuff
   const scn::SceneNodeImpl* node_ { nullptr };
-  scn::NodeHandle node_handle_ {};
+  scn::NodeHandle node_handle_;
   RenderableFacade renderable_facade_;
   TransformFacade transform_facade_;
 };

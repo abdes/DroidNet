@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
 
 #include <Oxygen/Data/AssetKey.h>
@@ -31,8 +30,8 @@ namespace oxygen::vortex::sceneprep {
    duration of the render item snapshot.
 */
 struct MaterialRef {
-  oxygen::data::AssetKey source_asset_key {};
-  oxygen::data::AssetKey resolved_asset_key {};
+  oxygen::data::AssetKey source_asset_key;
+  oxygen::data::AssetKey resolved_asset_key;
   std::shared_ptr<const oxygen::data::MaterialAsset> resolved_asset;
 
   [[nodiscard]] auto IsValid() const noexcept -> bool
