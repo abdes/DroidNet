@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Vortex/Upload/AtlasBuffer.h>
 
 namespace oxygen::vortex::upload {
@@ -35,9 +36,17 @@ AtlasBuffer::AtlasBuffer(observer_ptr<Graphics> gfx, const std::uint32_t stride,
 
 AtlasBuffer::~AtlasBuffer()
 {
-  if (primary_buffer_) {
-    gfx_->GetResourceRegistry().UnRegisterResource(*primary_buffer_);
+  if (!primary_buffer_) {
+    return;
   }
+
+  auto buffer = std::move(primary_buffer_);
+  auto& registry = gfx_->GetResourceRegistry();
+  if (registry.Contains(*buffer)) {
+    registry.UnRegisterResource(*buffer);
+  }
+
+  gfx_->GetDeferredReclaimer().RegisterDeferredRelease(std::move(buffer));
 }
 
 /*!
