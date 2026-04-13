@@ -25,8 +25,19 @@ receive their work.
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 2
+- [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — frame dispatch pipeline
 - UE5 reference: `BeginInitViews` family (~6.5 k lines)
+
+### 1.4 Required Invariants For This Module
+
+This module must preserve the following invariants from
+[ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
+
+- `InitViews` is the per-frame publisher of per-view visibility packets
+- `SceneRenderer`, not `InitViewsModule`, owns downstream per-view iteration
+- downstream stages consume published visibility for the current view selected
+  in `RenderContext`
 
 ## 2. Interface Contracts
 
@@ -59,7 +70,9 @@ class InitViewsModule {
   auto operator=(const InitViewsModule&) -> InitViewsModule& = delete;
 
   /// Stage 2 entry point. Called once per frame.
-  /// Iterates all published views and builds per-view command packets.
+  /// Iterates all published views, builds per-view visibility packets, and
+  /// publishes them for downstream per-view stage execution owned by
+  /// SceneRenderer.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
  private:
@@ -158,14 +171,15 @@ stage 2. If `init_views_` is null, stage 2 is skipped with zero overhead.
 
 ### 6.2 Null-Safe Behavior
 
-When null: downstream stages receive empty visibility lists. DepthPrepass
-and BasePass produce no draw calls. SceneTextures remain in their
-post-allocation state.
+When null: downstream per-view stages receive no published visibility packets.
+DepthPrepass and BasePass therefore emit no draw calls. SceneTextures remain in
+their post-allocation state.
 
 ### 6.3 Capability Gate
 
-`InitViewsModule` requires `kScenePreparation` capability. It is always
-instantiated when `SceneRenderer` is created (Phase 3 baseline).
+`InitViewsModule` requires `kScenePreparation`. In the Phase 3 deferred-core
+baseline that capability is expected to be active; if it is intentionally
+absent, stage 2 stays null and no visibility packets are published.
 
 ## 7. ScenePrep Integration
 
@@ -199,7 +213,7 @@ void InitViewsModule::Execute(RenderContext& ctx,
 
   scene_prep_->Finalize();
 
-  // Publish to RenderContext for downstream consumption
+  // Publish per-view visibility packets for downstream per-view stages
   ctx.SetViewVisibilities(view_visibilities_);
 }
 ```
@@ -238,7 +252,8 @@ routes by material shader).
    known geometry. Verify that frustum culling produces correct
    visible/invisible splits for a given camera.
 2. **Integration test:** Run full InitViews → DepthPrepass → BasePass
-   pipeline. Verify that GBuffer contains data only for visible geometry.
+   pipeline. Verify that GBuffer contains data only for geometry present in the
+   published visibility packets consumed by downstream per-view stages.
 3. **RenderDoc validation:** At frame 10, inspect that draw calls in
    DepthPrepass and BasePass match the visibility lists from InitViews
    (draw count ≈ visible primitive count).

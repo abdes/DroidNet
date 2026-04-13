@@ -26,9 +26,24 @@ future extension.
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 9
+- [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — velocity distribution (stages 3, 9, 19)
 - [DESIGN.md §6](../DESIGN.md) — BasePass design (GBuffer layout, config)
 - UE5 reference: `RenderBasePass` family (~3.35 k lines)
+
+### 1.4 Required Invariants For This Module
+
+This module must preserve the following invariants from
+[ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
+
+- `SceneRenderer` owns per-view iteration; `BasePassModule::Execute(...)`
+  consumes the current view only
+- masked opaque materials remain part of the deferred opaque contract and write
+  GBuffers in this stage
+- stage 10 remains the canonical `RebuildWithGBuffers()` plus routing-refresh
+  boundary; BasePass must not invent a narrower alternate API
+- velocity completion here is the stage-9 contribution within the distributed
+  3/9/19 ownership model
 
 ## 2. Interface Contracts
 
@@ -91,9 +106,9 @@ enum class ShadingMode : std::uint8_t {
 };
 ```
 
-Phase 3 implements `kDeferred` only. The forward branch is structurally
-present in the config but `Execute()` asserts/logs and returns if
-`kForward` is requested.
+Phase 3 implements the deferred path only. The forward branch remains a
+declared seam for later phases, but it is not a valid Phase 3 runtime mode and
+must not silently degrade at execution time.
 
 ### 2.4 Ownership and Lifetime
 
@@ -184,7 +199,7 @@ After stage 10 (inline):
 ```text
 BasePassModule::Execute(ctx, scene_textures)
   │
-  ├─ for each view in ctx.GetViewVisibilities():
+  ├─ Read current view visibility packet from ctx
   │     │
   │     ├─ Set render targets:
   │     │     RTV[0] = GBufferA
@@ -194,8 +209,10 @@ BasePassModule::Execute(ctx, scene_textures)
   │     │     RTV[4] = SceneColor
   │     │     DSV    = SceneDepth (DEPTH_READ if early_z, DEPTH_WRITE otherwise)
   │     │
-  │     ├─ mesh_processor_->BuildDrawCommands(view.visible_primitives)
-  │     │     Filter: opaque geometry only (no translucent)
+  │     ├─ mesh_processor_->BuildDrawCommands(
+  │     │     current_view_visibility.visible_primitives)
+  │     │     Filter: opaque + masked geometry participating in the deferred
+  │     │             opaque contract (no translucent)
   │     │     Group: by material (minimize PSO/binding changes)
   │     │
   │     ├─ for each draw command:
@@ -326,13 +343,17 @@ class BasePassMeshProcessor {
 SceneRenderer calls `BasePassModule::Execute(ctx, scene_textures)` at
 stage 9.
 
-Immediately after stage 9, SceneRenderer calls the inline stage 10:
+Immediately after stage 9, SceneRenderer executes the inline stage 10
+SceneTextures rebuild boundary:
 
 ```cpp
-scene_textures_.TransitionGBuffersToSRV();  // state transition only
+scene_textures_.RebuildWithGBuffers();
+RefreshSceneTextureBindings(ctx);
 ```
 
-This marks GBuffer products as readable for deferred lighting.
+This is the canonical product-setup transition for deferred lighting. It is not
+just a resource-state flip; it is the point where GBuffers become readable and
+the shared scene-texture routing metadata is refreshed.
 
 ### 7.2 Null-Safe Behavior
 
@@ -412,7 +433,9 @@ PSO compact at 5 MRT).
 1. **Forward mode detail:** The `kForward` shading mode branch needs full
    design when Phase 5+ addresses forward-rendered special materials. Phase
    3 is deferred-only.
-2. **Alpha-tested materials in BasePass:** Should masked materials write to
-   GBuffers or only to depth in prepass? Current design: masked geometry is
-   depth-prepass only; base pass draws opaque only. Reconsider if masked
-   materials need GBuffer data.
+2. **Masked-material sort policy:** Masked materials participate in the
+   deferred opaque contract in Phase 3 and therefore write GBuffers in the base
+   pass after any participating depth-prepass work. The remaining open point is
+   whether the mesh-processor sort key should mirror UE-style prepass-dependent
+   masked ordering exactly in Phase 3 or use a simpler stable material-first
+   rule until profiling justifies further specialization.

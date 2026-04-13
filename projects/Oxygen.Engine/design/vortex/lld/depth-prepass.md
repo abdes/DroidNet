@@ -24,9 +24,22 @@ in the Vortex frame that writes to render targets.
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 3
+- [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [ARCHITECTURE.md §7.3.2](../ARCHITECTURE.md) — SceneDepth, PartialDepth products
 - [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — distributed velocity writes
 - UE5 reference: `RenderPrePass` family (~1.35 k lines)
+
+### 1.4 Required Invariants For This Module
+
+This module must preserve the following invariants from
+[ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
+
+- `SceneRenderer` owns per-view iteration; `DepthPrepassModule::Execute(...)`
+  consumes the current view only
+- velocity remains the stage-3 partial contribution within the distributed
+  3/9/19 ownership model
+- masked opaque participation here is depth-policy work only; it does not
+  remove masked materials from the deferred opaque/base-pass contract
 
 ## 2. Interface Contracts
 
@@ -87,11 +100,11 @@ class DepthPrepassModule {
 
 ### 2.3 DepthPrePassPolicy Integration
 
-Reuses the existing policy types from the legacy renderer (migrated in
-Phase 1):
+Reuses the Vortex policy types defined in `SceneRenderer/DepthPrePassPolicy.h`
+(migrated in Phase 1):
 
 ```cpp
-// Already exists in Types/
+// Already exists in SceneRenderer/DepthPrePassPolicy.h
 enum class DepthPrePassMode : std::uint8_t {
   kDisabled,
   kOpaqueAndMasked,
@@ -107,7 +120,7 @@ enum class DepthPrePassCompleteness : std::uint8_t {
 - `kDisabled`: Stage 3 is a no-op. Downstream must not rely on SceneDepth.
 - `kOpaqueAndMasked`: Full opaque + masked geometry depth pass.
 - `kIncomplete`: Prepass ran but not all geometry was covered (e.g., if
-  masked geometry has alpha test but prepass can't do alpha test).
+  a future policy intentionally excludes a participating opaque class).
 - `kComplete`: All opaque geometry has valid depth, downstream can skip
   depth writes in BasePass.
 
@@ -163,13 +176,13 @@ DepthPrepassModule::Execute(ctx, scene_textures)
   │
   ├─ if config_.mode == kDisabled → return
   │
-  ├─ for each view in ctx.GetViewVisibilities():
+  ├─ Read current view visibility packet from ctx
   │     │
   │     ├─ Set render targets:
   │     │     DSV = scene_textures.GetSceneDepth() (depth-stencil view)
   │     │     No color RTs bound (depth-only pass)
   │     │
-  │     ├─ mesh_processor_->BuildDrawCommands(view.visible_primitives)
+  │     ├─ mesh_processor_->BuildDrawCommands(current_view_visibility.visible_primitives)
   │     │     Filter: opaque geometry only
   │     │     Sort: front-to-back by distance_sq
   │     │
@@ -180,14 +193,16 @@ DepthPrepassModule::Execute(ctx, scene_textures)
   │     │
   │     ├─ if config_.mode == kOpaqueAndMasked:
   │     │     ├─ Masked geometry sub-pass (with alpha-test PS)
-  │     │     └─ Uses HAS_VELOCITY permutation if write_velocity
+  │     │     └─ Participates in the same opaque depth contract as masked
+  │     │        materials later do in BasePass
   │     │
   │     └─ if config_.write_velocity:
   │           └─ Write zero-velocity for static geometry to Velocity buffer
   │
   ├─ Copy SceneDepth → PartialDepth (resource copy)
   │
-  ├─ Update SceneTextures setup mode flags
+  ├─ SceneRenderer updates SceneTextures setup mode flags and refreshes
+  │  shared routing metadata after this stage boundary
   │
   └─ completeness_ = kComplete (or kIncomplete if masked fails)
 ```
@@ -273,14 +288,15 @@ void DepthPrepassPS(DepthPrepassVSOutput input) {
 
 | Define | Values | Purpose |
 | ------ | ------ | ------- |
-| `HAS_VELOCITY` | 0/1 | Enable velocity output for static geometry |
+| `HAS_VELOCITY` | 0/1 | Catalog-managed permutation family for velocity-enabled vs non-velocity variants |
 
 ### 5.4 Catalog Registration
 
 ```cpp
-// VortexDepthPrepassVS (opaque, no velocity)
-// VortexDepthPrepassVS_Velocity (opaque, with velocity)
-// VortexDepthPrepassPS (masked alpha-test)
+// One registered vertex entrypoint with catalog-managed HAS_VELOCITY
+// permutation family, plus masked alpha-test PS entrypoint.
+// VortexDepthPrepassVS
+// VortexDepthPrepassPS
 ```
 
 ## 6. Mesh Processor
@@ -366,9 +382,8 @@ Phase 3 when SceneRenderer is active.
 
 ## 9. Open Questions
 
-1. **Velocity write strategy:** Should velocity for static geometry use a
-   compute pass (write zero) or should the depth VS emit previous-frame
-   clip position and a velocity PS compute the delta? Current design: VS
-   emits both positions with HAS_VELOCITY permutation, separate velocity
-   write pass. This allows reuse of the same geometry pass without a
-   second dispatch.
+1. **Static-geometry velocity path:** UE 5.7 treats depth-prepass and velocity
+   as deliberately split concerns with policy-dependent coupling. Vortex Phase 3
+   currently keeps the correctness-first contract of writing only the partial
+   static contribution here, but the exact single-pass vs split-pass realization
+   should stay aligned with the chosen `DepthPrePassPolicy` implementation.
