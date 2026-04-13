@@ -51,6 +51,7 @@ set(
   OXYGEN_VORTEX_HEADERS
   "api_export.h"
   "Types/CompositingTask.h"
+  "Types/EnvironmentViewData.h"
   "Types/DebugFrameBindings.h"
   "Types/DrawFrameBindings.h"
   "Types/EnvironmentFrameBindings.h"
@@ -58,11 +59,15 @@ set(
   "Types/LightingFrameBindings.h"
   "Types/ShadowFrameBindings.h"
   "Types/SyntheticSunData.h"
+  "Types/ViewColorData.h"
+  "Types/ViewConstants.h"
+  "Types/ViewFrameBindings.h"
   "Types/VsmFrameBindings.h"
 )
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
+  "Types/ViewConstants.cpp"
 )
 
 target_sources(
