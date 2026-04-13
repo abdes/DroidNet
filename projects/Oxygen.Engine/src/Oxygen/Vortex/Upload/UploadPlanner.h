@@ -87,8 +87,9 @@ public:
   /*! Packs valid requests, assigns aligned src_offset, no coalescing.
    Invalid requests (null dst, size==0, out-of-bounds) are skipped.
   */
-  OXGN_VRTX_API static auto PlanBuffers(std::span<const UploadRequest> requests,
-    const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>;
+  [[nodiscard]] OXGN_VRTX_API static auto PlanBuffers(
+    std::span<const UploadRequest> requests, const UploadPolicy& policy)
+    -> std::expected<BufferUploadPlan, UploadError>;
 
   //! Stage 3: Coalesce contiguous regions targeting the same destination.
   /*! Produces a new plan with fewer uploads by merging adjacent items when
@@ -96,7 +97,7 @@ public:
    concatenated preserving order. The representative request for a merged
    item is request_indices.front().
   */
-  OXGN_VRTX_API static auto OptimizeBuffers(
+  [[nodiscard]] OXGN_VRTX_API static auto OptimizeBuffers(
     std::span<const UploadRequest> requests, const BufferUploadPlan& plan,
     const UploadPolicy& policy) -> std::expected<BufferUploadPlan, UploadError>;
 
@@ -108,7 +109,8 @@ public:
    texture upload for mip 0, array slice 0. When a destination texture is
    present in desc.dst, its descriptor overrides width/height/format.
   */
-  OXGN_VRTX_API static auto PlanTexture2D(const UploadTextureDesc& desc,
+  [[nodiscard]] OXGN_VRTX_API static auto PlanTexture2D(
+    const UploadTextureDesc& desc,
     std::span<const UploadSubresource> subresources, const UploadPolicy& policy)
     -> std::expected<TextureUploadPlan, UploadError>;
 
@@ -118,7 +120,8 @@ public:
    array_slice=0. Partial regions use x/y/z/width/height/depth where depth=0
    means full depth at that mip.
   */
-  OXGN_VRTX_API static auto PlanTexture3D(const UploadTextureDesc& desc,
+  [[nodiscard]] OXGN_VRTX_API static auto PlanTexture3D(
+    const UploadTextureDesc& desc,
     std::span<const UploadSubresource> subresources, const UploadPolicy& policy)
     -> std::expected<TextureUploadPlan, UploadError>;
 };

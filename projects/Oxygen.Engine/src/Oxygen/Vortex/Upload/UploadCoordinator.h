@@ -70,6 +70,10 @@ public:
     std::span<const UploadRequest> reqs, StagingProvider& provider)
     -> std::expected<std::vector<UploadTicket>, UploadError>;
 
+  //! Request that a staging provider release excess capacity immediately.
+  OXGN_VRTX_API auto TrimStagingProvider(StagingProvider& provider,
+    std::string_view reason = "UploadCoordinator.Trim") -> bool;
+
   // Shutdown helpers -----------------------------------------------------//
   // Prevents any new submissions and waits for outstanding upload work to
   // complete. Call during Renderer/Engine shutdown to ensure the transfer

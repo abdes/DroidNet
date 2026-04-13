@@ -235,6 +235,36 @@ NOLINT_TEST_F(RingBufferStagingTest, EnsureCapacity_UnMapOnGrowth)
 }
 
 /*!
+ Explicit trim should shrink a previously grown ring buffer back toward the
+ baseline size without waiting for the idle-frame threshold.
+*/
+NOLINT_TEST_F(RingBufferStagingTest, ExplicitTrimShrinksGrownBuffer)
+{
+  auto provider = MakeRingBuffer(SlotCount { 1 }, 64u, 0.5f);
+  ASSERT_NE(provider, nullptr);
+
+  const auto large_request = SizeBytes { 12ULL * 1024ULL * 1024ULL };
+  {
+    auto alloc = provider->Allocate(large_request, "grow-for-trim");
+    ASSERT_TRUE(alloc.has_value());
+  }
+
+  const auto grown_stats = provider->GetStats();
+  ASSERT_GT(grown_stats.current_buffer_size, 0u);
+
+  SimulateFrameStart(Slot { 0 });
+
+  const bool trimmed = Uploader().TrimStagingProvider(
+    *provider, "RingBufferStaging.ExplicitTrim");
+
+  ASSERT_TRUE(trimmed);
+  const auto trimmed_stats = provider->GetStats();
+  EXPECT_LT(trimmed_stats.current_buffer_size, grown_stats.current_buffer_size);
+
+  GfxPtr()->Flush();
+}
+
+/*!
  When RetireCompleted is called with advancing fence values, the internal
  retire_count_ should increase which prevents partition-reuse warnings. This
  test simulates two frames, triggers RetireCompleted between them, and then

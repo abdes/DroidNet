@@ -190,29 +190,9 @@ auto RingBufferStaging::MaybeShrinkAfterIdle(const std::string_view debug_name)
   if (capacity_per_partition_ <= 2ULL * kInitialBytesPerPartition) {
     return;
   }
-
-  // Trim back to the initial per-partition capacity.
-  const auto aligned_per_partition
-    = AlignUp(kInitialBytesPerPartition, alignment_);
-
-  const auto old_total_capacity = capacity_;
-  const auto old_per_partition = capacity_per_partition_;
-
-  const auto result = RecreateBuffer(aligned_per_partition, debug_name);
-  if (!result) {
-    const auto error_code
-      = oxygen::vortex::upload::make_error_code(result.error());
-    LOG_F(WARNING, "Idle trim failed: {}", error_code.message());
-    return;
+  if (TrimExcessCapacity(debug_name)) {
+    consecutive_idle_frames_ = 0U;
   }
-
-  LOG_F(INFO,
-    "Trimmed upload buffer after {} idle frames: total {} -> {} bytes, "
-    "per-partition {} -> {} bytes",
-    consecutive_idle_frames_, old_total_capacity, capacity_, old_per_partition,
-    capacity_per_partition_);
-
-  consecutive_idle_frames_ = 0U;
 }
 
 auto RingBufferStaging::RecreateBuffer(
@@ -401,6 +381,34 @@ auto RingBufferStaging::OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
   -> void
 {
   OnFrameStartInternal(slot);
+}
+
+auto RingBufferStaging::TrimExcessCapacity(const std::string_view debug_name)
+  -> bool
+{
+  if (capacity_per_partition_ <= kInitialBytesPerPartition) {
+    return false;
+  }
+
+  const auto aligned_per_partition
+    = AlignUp(kInitialBytesPerPartition, alignment_);
+  const auto old_total_capacity = capacity_;
+  const auto old_per_partition = capacity_per_partition_;
+
+  const auto result = RecreateBuffer(aligned_per_partition, debug_name);
+  if (!result) {
+    const auto error_code
+      = oxygen::vortex::upload::make_error_code(result.error());
+    LOG_F(WARNING, "Explicit trim failed: {}", error_code.message());
+    return false;
+  }
+
+  LOG_F(INFO,
+    "Trimmed upload buffer '{}': total {} -> {} bytes, per-partition {} -> {} "
+    "bytes",
+    debug_name, old_total_capacity, capacity_, old_per_partition,
+    capacity_per_partition_);
+  return true;
 }
 
 auto RingBufferStaging::FinalizeStats() -> void
