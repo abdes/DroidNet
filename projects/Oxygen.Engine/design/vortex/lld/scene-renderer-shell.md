@@ -167,6 +167,9 @@ private:
   void RefreshSceneTextureBindings(RenderContext& ctx);
   [[nodiscard]] auto ResolveShadingModeForCurrentView(
     const RenderContext& ctx) const -> ShadingMode;
+  void RenderDeferredLighting(
+    RenderContext& ctx,
+    const SceneTextures& scene_textures);
   void ResolveSceneColor(RenderContext& ctx);
   void PostRenderCleanup(RenderContext& ctx);
 };
@@ -245,7 +248,7 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   // === Stage 11: reserved — MaterialCompositionService::PostBasePass ===
 
   // === Stage 12: Deferred direct lighting ===
-  // if (lighting_) lighting_->RenderDeferredLighting(ctx, scene_textures_);
+  // RenderDeferredLighting(ctx, scene_textures_);
 
   // === Stage 13: reserved — IndirectLightingService ===
 

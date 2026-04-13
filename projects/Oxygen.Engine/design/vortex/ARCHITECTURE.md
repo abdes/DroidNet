@@ -740,6 +740,28 @@ but its architectural position must not move.
 | Multi-view execution must preserve stage-family order | UE preserves family order while varying internal pass structure and per-view branches | Legacy executes per-view render graphs under renderer-owned ordering | Correct; Vortex may vary realization strategy, not the stage spine |
 | Post-render extraction/handoff happen after scene-stage work | UE has explicit render-finish and scene-texture extraction steps at the end | Legacy finishes through compositing/frame-end paths rather than mid-scene stages | Correct; extraction/composition concerns must stay out of lighting/base/translucency families |
 
+### 6.3.1 Deferred-Core Invariants
+
+The following invariants are intentionally repeated here because they are easy
+for implementers to violate while still producing compiling code. These are not
+phase-local preferences; they are architectural constraints that later
+Phase-3/4/5 LLDs must preserve.
+
+| Invariant | Required Rule |
+| --- | --- |
+| per-view iteration owner | `SceneRenderer` owns per-view iteration. Stage 2 (`InitViews`) runs as the per-frame publisher of per-view visibility packets. Downstream per-view stages consume the current view selected in `RenderContext`; they must not silently take over full-frame iteration. |
+| Stage 10 contract | The canonical stage-10 boundary is `SceneTextures::RebuildWithGBuffers()` followed by refresh/republication of shared scene-texture routing metadata. No alternate `TransitionGBuffersToSRV()`-style API may replace or narrow this contract. |
+| Stage 12 Phase-3 ownership | In Phase 3, stage 12 is temporary inline `SceneRenderer::RenderDeferredLighting(ctx, scene_textures)` orchestration. In Phase 4A, CPU-side ownership moves to `LightingService`. During both phases, the deferred-light shader family remains owned by the Lighting domain. |
+| published scene-texture routing | Passes consume scene textures only through published `SceneTextureBindings` routed by `ViewFrameBindings`. They must not synthesize ad hoc scene-texture bindings locally or bypass the established publication stack. |
+| deferred opaque contract for masked materials | Masked opaque materials participate in the deferred opaque contract. They may participate in depth prepass according to policy, but they still write GBuffers in the base pass; they are not a depth-only side path and must not be rerouted into translucency. |
+| distributed velocity ownership | Velocity remains a distributed cross-stage concern owned by stages 3, 9, and reserved stage 19. No implementation may reintroduce a standalone velocity stage/module or silently collapse ownership into one unrelated pass family. |
+
+Enforcement rule:
+
+- if an implementation or LLD would violate one of the invariants above, the
+  correct response is to update this architecture document first rather than
+  treat the drift as a local implementation detail
+
 ### 6.4 Runtime Persistence Boundaries
 
 Cross-frame state is allowed only where it has a stable architectural owner.

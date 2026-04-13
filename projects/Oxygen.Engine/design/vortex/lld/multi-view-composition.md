@@ -43,20 +43,23 @@ routes each view's output to the correct surface.
 void SceneRenderer::OnRender(RenderContext& ctx) {
   auto& views = renderer_.GetPublishedViews();
 
+  // Stage 2 remains a per-frame stage that publishes per-view visibility data
+  if (init_views_) init_views_->Execute(ctx, scene_textures_);          // 2
+
   // Per-frame stages (shared)
   if (lighting_) lighting_->BuildLightGrid(ctx);        // stage 6
   if (shadows_) shadows_->RenderShadowDepths(ctx);      // stage 8
 
   // Per-view stages
   for (const auto& view : views) {
-    ctx.SetActiveView(view);
+    ctx.SetCurrentView(view);
 
-    if (init_views_) init_views_->Execute(ctx, scene_textures_);     // 2
     if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_); // 3
     if (occlusion_) occlusion_->Execute(ctx, scene_textures_);       // 5
     if (base_pass_) base_pass_->Execute(ctx, scene_textures_);       // 9
 
-    scene_textures_.TransitionGBuffersToSRV();                         // 10
+    scene_textures_.RebuildWithGBuffers();                             // 10
+    RefreshSceneTextureBindings(ctx);
 
     if (lighting_) lighting_->RenderDeferredLighting(ctx, scene_textures_); // 12
     if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);  // 15

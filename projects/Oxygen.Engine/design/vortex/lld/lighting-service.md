@@ -19,7 +19,8 @@ forward (stage 18 translucency) consumers.
 
 ### 1.2 What It Replaces
 
-The Phase 3 inline `SceneRenderer::RenderDeferredLighting()` method moves
+The Phase 3 inline `SceneRenderer::RenderDeferredLighting(ctx, scene_textures)`
+method moves
 into `LightingService::RenderDeferredLighting()`. The Phase 3 per-light
 CBV approach is replaced with a `ForwardLightData` structured buffer.
 

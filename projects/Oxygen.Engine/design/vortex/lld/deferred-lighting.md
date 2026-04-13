@@ -28,8 +28,20 @@ a file-separated method. In Phase 4A it migrates into `LightingService`.
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 12
+- [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [DESIGN.md §7](../DESIGN.md) — deferred lighting design
 - UE5 reference: `RenderLights` / `RenderDeferredLighting` families
+
+### 1.4 Required Invariants For This Module
+
+This module must preserve the following invariants from
+[ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
+
+- in Phase 3, stage 12 is temporary inline `SceneRenderer` orchestration
+- the deferred-light shader family still belongs to the Lighting domain and is
+  authored under that file home even before CPU-side ownership migrates
+- scene-texture access flows through published `ViewFrameBindings` →
+  `SceneTextureBindings`; no local binding synthesis is allowed
 
 ## 2. Interface Contracts
 
@@ -42,7 +54,7 @@ src/Oxygen/Vortex/
 └── SceneRenderer/
     ├── SceneRenderer.h
     ├── SceneRenderer.cpp
-    └── SceneRendererDeferredLighting.cpp   ← Phase 3 inline
+    └── SceneRendererDeferredLighting.cpp   ← Phase 3 inline orchestration owner
 ```
 
 ### 2.2 Phase 3 Method Signature
@@ -51,14 +63,16 @@ src/Oxygen/Vortex/
 namespace oxygen::vortex {
 
 // Private method of SceneRenderer, defined in separate .cpp
-void SceneRenderer::RenderDeferredLighting(RenderContext& ctx);
+void SceneRenderer::RenderDeferredLighting(
+  RenderContext& ctx,
+  const SceneTextures& scene_textures);
 
 }  // namespace oxygen::vortex
 ```
 
 ### 2.3 Phase 4A Target (LightingService)
 
-When migrated in Phase 4A, the method moves into:
+When migrated in Phase 4A, the CPU-side method moves into:
 
 ```cpp
 class LightingService {
@@ -70,7 +84,9 @@ class LightingService {
 ```
 
 The Phase 3 inline implementation should be written to facilitate this
-migration with minimal restructuring.
+migration with minimal restructuring. The CPU-side orchestration is temporary;
+the shader-family home already follows the final Lighting-domain owner to avoid
+future shader-path churn.
 
 ### 2.4 Ownership and Lifetime
 
@@ -166,9 +182,11 @@ After stage 12:
 ### 4.4 Execution Flow
 
 ```text
-SceneRenderer::RenderDeferredLighting(ctx)
+SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
   │
-  ├─ Bind SceneTextures as SRVs (GBufferA-D, SceneDepth)
+  ├─ Read current view from RenderContext
+  ├─ Load published SceneTextureBindings for the current view
+  ├─ Bind SceneTextures as SRVs (GBufferA-D, SceneDepth) through the published routing metadata
   ├─ Set blend state: Additive (SrcBlend=ONE, DestBlend=ONE)
   │
   ├─ for each directional light:
@@ -325,12 +343,14 @@ cbuffer ViewConstants : register(b0) {
   float3 CameraPosition;
 };
 
-// Load scene texture bindings from per-view data.
-// Implementation depends on Phase 3 binding strategy.
-SceneTextureBindingData LoadBindingsFromView() {
-  // Placeholder: load from root CBV / structured buffer
-  // Actual implementation routes through ViewFrameBindings
-  return (SceneTextureBindingData)0;
+StructuredBuffer<ViewFrameBindingsData> ViewBindingsBuffer : register(t0, space1);
+StructuredBuffer<SceneTextureBindingData> SceneTextureBindingsBuffer : register(t1, space1);
+
+SceneTextureBindingData LoadBindingsFromView(uint viewIndex) {
+  return LoadSceneTextureBindingsForView(
+    ViewBindingsBuffer,
+    SceneTextureBindingsBuffer,
+    viewIndex);
 }
 
 #endif // VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
@@ -346,8 +366,6 @@ SceneTextureBindingData LoadBindingsFromView() {
 | `VortexDeferredLightPointPS` | ps_6_0 | GBuffer read + BRDF + attenuation |
 | `VortexDeferredLightSpotVS` | vs_6_0 | Cone volume |
 | `VortexDeferredLightSpotPS` | ps_6_0 | GBuffer read + BRDF + attenuation + angle |
-| `VortexFullscreenTriangleVS` | vs_6_0 | Shared fullscreen vertex shader |
-
 ## 6. Light Volume Geometry
 
 ### 6.1 Unit Sphere (Point Lights)
@@ -408,7 +426,8 @@ DSV:              SceneDepth (depth read, stencil read+write)
 
 ### 8.1 Dispatch Contract
 
-SceneRenderer calls `RenderDeferredLighting(ctx)` at stage 12. This is a
+SceneRenderer calls `RenderDeferredLighting(ctx, scene_textures)` at stage 12
+for the current view after setting that view in `RenderContext`. This is a
 private method of SceneRenderer defined in a separate .cpp file.
 
 ### 8.2 Null-Safe Behavior
@@ -457,5 +476,9 @@ stage 12 is skipped.
 
 ## 11. Open Questions
 
-None for Phase 3 scope. The pass-per-light approach is straightforward
-and correct. Tiled/clustered optimization deferred to Phase 4A.
+None. The Phase 3 contract is fully specified after fixing:
+
+- stage-12 ownership as temporary inline SceneRenderer orchestration with a
+  future LightingService migration path
+- explicit published-binding access through ViewFrameBindings
+- fullscreen directional vs bounded local-light rendering patterns

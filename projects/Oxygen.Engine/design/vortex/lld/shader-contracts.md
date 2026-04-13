@@ -24,9 +24,22 @@ These contracts must be established before individual stage shaders are written.
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §10](../ARCHITECTURE.md) — shader architecture (authoritative)
+- [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants that
+  constrain Phase-3 shader ownership and routing
 - [ARCHITECTURE.md §10.2](../ARCHITECTURE.md) — six-stratum model
 - [ARCHITECTURE.md §10.6](../ARCHITECTURE.md) — file-organization contract
 - [ARCHITECTURE.md §10.7](../ARCHITECTURE.md) — family ownership rules
+
+### 1.4 Required Invariants For This Document
+
+This shader contract must preserve the following invariants from
+[ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
+
+- shader-side `SceneTextureBindings` mirrors the published CPU contract exactly
+- passes consume scene textures only through published routing metadata, never
+  through locally synthesized binding conventions
+- deferred-light shaders stay in the Lighting-domain shader home even while the
+  Phase-3 CPU-side stage-12 owner is temporarily `SceneRenderer`
 
 ## 2. Shader Directory Structure
 
@@ -83,11 +96,12 @@ Cross-language numeric/layout constants shared between C++ and HLSL.
 #ifndef VORTEX_SCENE_DEFINITIONS_HLSLI
 #define VORTEX_SCENE_DEFINITIONS_HLSLI
 
-// GBuffer indices — must match GBufferIndex enum in C++
+// Active GBuffer indices for Phase 3. These match the active shader-visible
+// subset of the C++ GBuffer vocabulary (A-D active, E/F reserved).
 #define GBUFFER_A 0  // World normal (encoded)
 #define GBUFFER_B 1  // Metallic, specular, roughness
 #define GBUFFER_C 2  // Base color, AO
-#define GBUFFER_D 3  // Custom data / shading model
+#define GBUFFER_D 3  // Custom data only (shading model is packed into GBUFFER_B.a)
 #define GBUFFER_COUNT 4
 
 // SceneTextureBindings valid_flags — must match SetupMode::Flag
@@ -97,6 +111,7 @@ Cross-language numeric/layout constants shared between C++ and HLSL.
 #define SCENE_TEXTURE_FLAG_GBUFFERS     (1u << 3)
 #define SCENE_TEXTURE_FLAG_SCENE_COLOR  (1u << 4)
 #define SCENE_TEXTURE_FLAG_STENCIL      (1u << 5)
+#define SCENE_TEXTURE_FLAG_CUSTOM_DEPTH (1u << 6)
 
 // Shading model IDs (packed into GBufferB.a)
 #define SHADING_MODEL_DEFAULT_LIT  0
@@ -192,6 +207,7 @@ struct SceneTextureBindingData {
   uint velocity_srv;
   uint stencil_srv;
   uint custom_depth_srv;
+  uint custom_stencil_srv;
   uint gbuffer_srvs[GBUFFER_COUNT];
   uint scene_color_uav;
   uint valid_flags;
@@ -331,15 +347,20 @@ typed domain products.
 // It carries indices to ViewFrameBindings and from there to domain payloads.
 // The actual struct layout is defined by the C++ ViewConstants type.
 
-// Access SceneTextureBindings from the per-view frame bindings.
-// The caller must have ViewFrameBindings loaded; the index into the
-// SceneTextureBindingData structured buffer comes from
-// ViewFrameBindings::scene_texture_bindings_index.
+// Minimum view-routing payload required by the renderer contract.
+// The real ViewFrameBindings structure may contain additional fields, but this
+// index is the stable seam Phase 3 depends on.
+struct ViewFrameBindingsData {
+  uint scene_texture_bindings_index;
+};
 
-SceneTextureBindingData LoadSceneTextureBindings(
+// Access SceneTextureBindings from the published per-view frame bindings.
+SceneTextureBindingData LoadSceneTextureBindingsForView(
+    StructuredBuffer<ViewFrameBindingsData> viewBindingsBuffer,
     StructuredBuffer<SceneTextureBindingData> bindingsBuffer,
-    uint index) {
-  return bindingsBuffer[index];
+    uint viewIndex) {
+  ViewFrameBindingsData viewBindings = viewBindingsBuffer[viewIndex];
+  return bindingsBuffer[viewBindings.scene_texture_bindings_index];
 }
 
 #endif // VORTEX_VIEW_FRAME_BINDINGS_HLSLI
@@ -648,7 +669,10 @@ runtime cache.
 | `VortexDeferredLightPointPS` | `Services/Lighting/DeferredLightPoint.hlsl` | ps_6_0 | Pixel |
 | `VortexDeferredLightSpotVS` | `Services/Lighting/DeferredLightSpot.hlsl` | vs_6_0 | Stencil cone |
 | `VortexDeferredLightSpotPS` | `Services/Lighting/DeferredLightSpot.hlsl` | ps_6_0 | Pixel |
-| `VortexFullscreenTriangleVS` | shared (inline from hlsli) | vs_6_0 | Utility |
+
+Deferred-light shaders live under `Services/Lighting/` even in Phase 3 because
+the shader-family owner is already the Lighting domain; only the CPU-side stage
+12 orchestration remains temporarily inline in `SceneRenderer` until Phase 4A.
 
 ### 7.2 Catalog Registration Pattern
 
@@ -672,7 +696,7 @@ Phase 3 uses minimal permutations:
 
 | Shader | Permutations | Purpose |
 | ------ | ------------ | ------- |
-| Depth prepass | `HAS_VELOCITY` | Enable/disable velocity output |
+| Depth prepass | `HAS_VELOCITY` | Catalog-managed permutation family for velocity-enabled vs non-velocity variants |
 | Base pass | `SHADING_MODE_FORWARD` | Deferred (default) vs forward branch |
 | Deferred lighting | None initially | One variant per light type |
 
