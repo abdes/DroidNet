@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 step 1.1 is complete; 01-03 starts step 1.2 upload migration`
+Status: `in_progress — Phase 1 steps 1.1-1.2 are complete; 01-04 starts step 1.3 resources migration`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Step 1.2 upload migration is next (`01-03`) |
+| 1 | Substrate Migration | `in_progress` | Step 1.3 resources migration is next (`01-04`) |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,60 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-03 completed step-1.2 upload migration
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/RendererTag.h`
+  - `src/Oxygen/Vortex/Upload/AtlasBuffer.cpp`
+  - `src/Oxygen/Vortex/Upload/AtlasBuffer.h`
+  - `src/Oxygen/Vortex/Upload/Errors.cpp`
+  - `src/Oxygen/Vortex/Upload/Errors.h`
+  - `src/Oxygen/Vortex/Upload/InlineTransfersCoordinator.cpp`
+  - `src/Oxygen/Vortex/Upload/InlineTransfersCoordinator.h`
+  - `src/Oxygen/Vortex/Upload/RingBufferStaging.cpp`
+  - `src/Oxygen/Vortex/Upload/RingBufferStaging.h`
+  - `src/Oxygen/Vortex/Upload/StagingProvider.cpp`
+  - `src/Oxygen/Vortex/Upload/StagingProvider.h`
+  - `src/Oxygen/Vortex/Upload/TransientStructuredBuffer.cpp`
+  - `src/Oxygen/Vortex/Upload/TransientStructuredBuffer.h`
+  - `src/Oxygen/Vortex/Upload/Types.h`
+  - `src/Oxygen/Vortex/Upload/UploaderTag.h`
+  - `src/Oxygen/Vortex/Upload/UploadCoordinator.cpp`
+  - `src/Oxygen/Vortex/Upload/UploadCoordinator.h`
+  - `src/Oxygen/Vortex/Upload/UploadHelpers.cpp`
+  - `src/Oxygen/Vortex/Upload/UploadHelpers.h`
+  - `src/Oxygen/Vortex/Upload/UploadPlanner.cpp`
+  - `src/Oxygen/Vortex/Upload/UploadPlanner.h`
+  - `src/Oxygen/Vortex/Upload/UploadPolicy.cpp`
+  - `src/Oxygen/Vortex/Upload/UploadPolicy.h`
+  - `src/Oxygen/Vortex/Upload/UploadTracker.cpp`
+  - `src/Oxygen/Vortex/Upload/UploadTracker.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Upload/AtlasBuffer.cpp src/Oxygen/Vortex/Upload/AtlasBuffer.h src/Oxygen/Vortex/Upload/Errors.cpp src/Oxygen/Vortex/Upload/Errors.h src/Oxygen/Vortex/Upload/RingBufferStaging.cpp src/Oxygen/Vortex/Upload/RingBufferStaging.h src/Oxygen/Vortex/Upload/StagingProvider.cpp src/Oxygen/Vortex/Upload/StagingProvider.h src/Oxygen/Vortex/Upload/TransientStructuredBuffer.cpp src/Oxygen/Vortex/Upload/TransientStructuredBuffer.h src/Oxygen/Vortex/Upload/Types.h src/Oxygen/Vortex/Upload/UploaderTag.h`
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Upload/InlineTransfersCoordinator.cpp src/Oxygen/Vortex/Upload/InlineTransfersCoordinator.h src/Oxygen/Vortex/Upload/UploadCoordinator.cpp src/Oxygen/Vortex/Upload/UploadCoordinator.h src/Oxygen/Vortex/Upload/UploadHelpers.cpp src/Oxygen/Vortex/Upload/UploadHelpers.h src/Oxygen/Vortex/Upload/UploadPlanner.cpp src/Oxygen/Vortex/Upload/UploadPlanner.h src/Oxygen/Vortex/Upload/UploadPolicy.cpp src/Oxygen/Vortex/Upload/UploadPolicy.h src/Oxygen/Vortex/Upload/UploadTracker.cpp src/Oxygen/Vortex/Upload/UploadTracker.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll`
+- Result:
+  - the complete step-`1.2` upload slice now lives under
+    `src/Oxygen/Vortex/Upload/`, including the foundation, staging,
+    coordination, planner, policy, helper, and tracker files
+  - `src/Oxygen/Vortex/RendererTag.h` was added so the migrated upload headers
+    can stop including `Oxygen/Renderer/RendererTag.h` while keeping the
+    migration mechanical
+  - `oxygen-vortex` builds successfully in Debug after the full upload
+    migration lands
+  - the generated Debug Ninja target query for
+    `bin/Debug/Oxygen.Vortex-d.dll` shows no `oxygen-renderer` /
+    `Oxygen.Renderer` dependency edge
+- Code / validation delta:
+  - step `1.2` is now **complete**
+  - no Vortex runtime or link-test validation was run in this plan
+- Remaining blocker:
+  - execute `01-04` to migrate the step-`1.3` resources slice
 
 ### 2026-04-13 — Phase 1 plan 01-02 completed the remaining step-1.1 type migration
 
@@ -286,13 +340,17 @@ design and execution work starts.
   including the `01-01` frame-binding slice plus
   `EnvironmentViewData.h`, `ViewColorData.h`, `ViewConstants.h`,
   `ViewConstants.cpp`, and `ViewFrameBindings.h`.
+- Step `1.2` is now fully migrated under `src/Oxygen/Vortex/Upload/`,
+  including upload staging, atlas buffering, inline transfer retirement,
+  upload planning, coordinator orchestration, policy, helpers, and tracker
+  support.
 
 ### Steps (from PLAN.md §3)
 
 | Step | Task | Status | Evidence |
 | ---- | ---- | ------ | -------- |
 | 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
-| 1.2 | Upload subsystem (14 files) | `not_started` | — |
+| 1.2 | Upload subsystem (14 files) | `done` | `01-03` migrated the full `Upload/` slice, built `oxygen-vortex`, and proved the linked Vortex DLL has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.3 | Resources subsystem (7 files) | `planned` | Phase 1 plan `01-04` |
 | 1.4 | ScenePrep subsystem (15 files) | `planned` | Phase 1 plans `01-05` and `01-06` |
 | 1.5 | Internal utilities (7 files) | `planned` | Phase 1 plan `01-06` |
@@ -303,8 +361,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Continue with `01-03` to begin step `1.2` (upload foundation and staging),
-then resume the Phase 1 sequence.
+Continue with `01-04` to begin step `1.3` (resources migration), then resume
+the Phase 1 sequence.
 
 ---
 
