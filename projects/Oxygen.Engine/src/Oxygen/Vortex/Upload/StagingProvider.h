@@ -157,6 +157,13 @@ public:
   {
   }
 
+  //! Optional explicit trim hook for providers that can release excess upload
+  //! memory on demand.
+  virtual auto TrimExcessCapacity(std::string_view /*debug_name*/) -> bool
+  {
+    return false;
+  }
+
   //! Optional telemetry; providers may override to expose stats.
   [[nodiscard]] auto GetStats() const -> const StagingStats& { return stats_; }
 

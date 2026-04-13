@@ -79,6 +79,77 @@ auto UsageToTargetState(BufferUsage usage) -> ResourceStates
   return ResourceStates::kCommon;
 }
 
+struct BufferCopyStatePolicy {
+  ResourceStates initial_state { ResourceStates::kCommon };
+  bool keep_initial_state { false };
+  ResourceStates final_graphics_state { ResourceStates::kCommon };
+};
+
+auto MakeSingleBufferCopyStatePolicy(
+  const oxygen::observer_ptr<CommandQueue>& queue, const Buffer& dst)
+  -> BufferCopyStatePolicy
+{
+  if (IsCopyQueue(queue)) {
+    return BufferCopyStatePolicy {
+      .initial_state = ResourceStates::kCommon,
+      .keep_initial_state = true,
+      .final_graphics_state = ResourceStates::kCommon,
+    };
+  }
+
+  return BufferCopyStatePolicy {
+    .initial_state = ResourceStates::kCopyDest,
+    .keep_initial_state = false,
+    .final_graphics_state = UsageToTargetState(dst.GetUsage()),
+  };
+}
+
+auto MakeBatchBufferCopyStatePolicy(
+  const oxygen::observer_ptr<CommandQueue>& queue, const Buffer& dst)
+  -> BufferCopyStatePolicy
+{
+  if (IsCopyQueue(queue)) {
+    return BufferCopyStatePolicy {
+      .initial_state = ResourceStates::kCommon,
+      .keep_initial_state = true,
+      .final_graphics_state = ResourceStates::kCommon,
+    };
+  }
+
+  return BufferCopyStatePolicy {
+    .initial_state = ResourceStates::kCommon,
+    .keep_initial_state = false,
+    .final_graphics_state = UsageToTargetState(dst.GetUsage()),
+  };
+}
+
+struct TextureCopyStatePolicy {
+  ResourceStates tracking_initial_state { ResourceStates::kCommon };
+  bool keep_initial_state { false };
+  bool use_implicit_promotion { false };
+  ResourceStates final_graphics_state { ResourceStates::kCommon };
+};
+
+auto MakeTextureCopyStatePolicy(const oxygen::observer_ptr<CommandQueue>& queue,
+  const Texture& dst) -> TextureCopyStatePolicy
+{
+  const bool is_copy_queue = IsCopyQueue(queue);
+  const auto dst_initial_state = dst.GetDescriptor().initial_state;
+  const auto tracking_initial_state
+    = (dst_initial_state == ResourceStates::kUnknown
+        || dst_initial_state == ResourceStates::kUndefined)
+    ? ResourceStates::kCommon
+    : dst_initial_state;
+
+  return TextureCopyStatePolicy {
+    .tracking_initial_state = tracking_initial_state,
+    .keep_initial_state = is_copy_queue,
+    .use_implicit_promotion
+    = is_copy_queue && CanImplicitlyPromoteFromCommon(tracking_initial_state),
+    .final_graphics_state = ResourceStates::kCommon,
+  };
+}
+
 auto PackTexture2DToStaging(const UploadPolicy& policy,
   const oxygen::graphics::TextureDesc& dst_desc, const TextureUploadPlan& plan,
   const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
@@ -292,17 +363,10 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffer");
   auto queue = gfx.GetCommandQueue(key);
-  const bool is_copy_queue = IsCopyQueue(queue);
-
-  // Begin tracking with appropriate parameters for the queue type.
-  // Copy queues: start from kCommon and restore to kCommon when done.
-  // Graphics queues: start from kCopyDest and don't restore initial state.
-  const auto initial_state
-    = is_copy_queue ? ResourceStates::kCommon : ResourceStates::kCopyDest;
-  const bool keep_initial_state = is_copy_queue;
+  const auto state_policy = MakeSingleBufferCopyStatePolicy(queue, *desc.dst);
 
   recorder->BeginTrackingResourceState(
-    *desc.dst, initial_state, keep_initial_state);
+    *desc.dst, state_policy.initial_state, state_policy.keep_initial_state);
   recorder->RequireResourceState(*desc.dst, ResourceStates::kCopyDest);
   recorder->FlushBarriers();
   recorder->CopyBuffer(
@@ -311,9 +375,9 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   // For copy queues, let the resource state tracker automatically restore to
   // kCommon (because keep_initial_state = true). For graphics queues,
   // transition to the appropriate usage-specific state.
-  if (!is_copy_queue) {
-    const auto target_state = UsageToTargetState(desc.dst->GetUsage());
-    recorder->RequireResourceState(*desc.dst, target_state);
+  if (!state_policy.keep_initial_state) {
+    recorder->RequireResourceState(
+      *desc.dst, state_policy.final_graphics_state);
     recorder->FlushBarriers();
   }
 
@@ -392,30 +456,14 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture2D");
   auto queue = gfx.GetCommandQueue(key);
-  const bool is_copy_queue = IsCopyQueue(queue);
-
-  // Track the destination texture using its declared initial state when
-  // available. This avoids issuing barriers with an incorrect StateBefore.
-  const auto dst_initial_state = tdesc.dst->GetDescriptor().initial_state;
-  const auto tracking_initial_state
-    = (dst_initial_state == ResourceStates::kUnknown
-        || dst_initial_state == ResourceStates::kUndefined)
-    ? ResourceStates::kCommon
-    : dst_initial_state;
-
-  // On copy/transfer queues, resources in COMMON can be implicitly promoted
-  // for copy operations and decay back to COMMON after execution. Avoiding
-  // explicit COPY_DEST transitions here prevents DX12 debug-layer complaints
-  // when the runtime relies on implicit promotion for CopyTextureRegion.
-  const bool use_implicit_promotion
-    = is_copy_queue && CanImplicitlyPromoteFromCommon(tracking_initial_state);
+  const auto state_policy = MakeTextureCopyStatePolicy(queue, *tdesc.dst);
 
   // For copy queues, keep_initial_state=true restores the tracked state when
   // the command list closes. For graphics queues, manage transitions
   // explicitly.
-  recorder->BeginTrackingResourceState(
-    *tdesc.dst, tracking_initial_state, is_copy_queue);
-  if (!use_implicit_promotion) {
+  recorder->BeginTrackingResourceState(*tdesc.dst,
+    state_policy.tracking_initial_state, state_policy.keep_initial_state);
+  if (!state_policy.use_implicit_promotion) {
     recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
   }
@@ -424,8 +472,9 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   // For copy queues, the resource tracker will auto-restore to kCommon.
   // For graphics queues, explicitly transition back to kCommon.
-  if (!is_copy_queue) {
-    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
+  if (!state_policy.keep_initial_state) {
+    recorder->RequireResourceState(
+      *tdesc.dst, state_policy.final_graphics_state);
     recorder->FlushBarriers();
   }
 
@@ -497,20 +546,11 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture3D");
   auto queue = gfx.GetCommandQueue(key);
-  const bool is_copy_queue = IsCopyQueue(queue);
+  const auto state_policy = MakeTextureCopyStatePolicy(queue, *tdesc.dst);
 
-  const auto dst_initial_state = tdesc.dst->GetDescriptor().initial_state;
-  const auto tracking_initial_state
-    = (dst_initial_state == ResourceStates::kUnknown
-        || dst_initial_state == ResourceStates::kUndefined)
-    ? ResourceStates::kCommon
-    : dst_initial_state;
-  const bool use_implicit_promotion
-    = is_copy_queue && CanImplicitlyPromoteFromCommon(tracking_initial_state);
-
-  recorder->BeginTrackingResourceState(
-    *tdesc.dst, tracking_initial_state, is_copy_queue);
-  if (!use_implicit_promotion) {
+  recorder->BeginTrackingResourceState(*tdesc.dst,
+    state_policy.tracking_initial_state, state_policy.keep_initial_state);
+  if (!state_policy.use_implicit_promotion) {
     recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
     recorder->FlushBarriers();
   }
@@ -519,8 +559,9 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   // For copy queues, the resource tracker will auto-restore to kCommon.
   // For graphics queues, explicitly transition back to kCommon.
-  if (!is_copy_queue) {
-    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCommon);
+  if (!state_policy.keep_initial_state) {
+    recorder->RequireResourceState(
+      *tdesc.dst, state_policy.final_graphics_state);
     recorder->FlushBarriers();
   }
 
@@ -609,6 +650,12 @@ auto UploadCoordinator::SubmitMany(
       std::make_move_iterator(exp_tickets->end()));
   }
   return out;
+}
+
+auto UploadCoordinator::TrimStagingProvider(
+  StagingProvider& provider, const std::string_view reason) -> bool
+{
+  return provider.TrimExcessCapacity(reason);
 }
 
 auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
@@ -861,15 +908,11 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       = (!current_dst) || (current_dst.get() != dst.get());
     if (first_for_dst) {
       current_dst = dst;
+      const auto state_policy
+        = MakeBatchBufferCopyStatePolicy(queue, *current_dst);
 
-      // Begin tracking with appropriate parameters for the queue type.
-      // Copy queues: start from kCommon and restore to kCommon when done.
-      // Graphics queues: start from kCommon and don't restore initial state.
-      const auto initial_state = ResourceStates::kCommon;
-      const bool keep_initial_state = is_copy_queue;
-
-      recorder->BeginTrackingResourceState(
-        *current_dst, initial_state, keep_initial_state);
+      recorder->BeginTrackingResourceState(*current_dst,
+        state_policy.initial_state, state_policy.keep_initial_state);
       recorder->RequireResourceState(*current_dst, ResourceStates::kCopyDest);
       recorder->FlushBarriers();
     }
@@ -890,7 +933,8 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
     // Copy queues will automatically restore to kCommon due to
     // keep_initial_state=true.
     if ((is_last || next_diff) && !is_copy_queue) {
-      recorder->RequireResourceState(*dst, UsageToTargetState(dst->GetUsage()));
+      recorder->RequireResourceState(
+        *dst, MakeBatchBufferCopyStatePolicy(queue, *dst).final_graphics_state);
       recorder->FlushBarriers();
     }
   }

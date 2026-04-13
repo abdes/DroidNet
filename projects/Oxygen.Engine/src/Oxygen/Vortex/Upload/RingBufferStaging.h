@@ -93,6 +93,9 @@ public:
   OXGN_VRTX_API auto OnFrameStart(
     InlineCoordinatorTag /*tag*/, frame::Slot slot) -> void override;
 
+  OXGN_VRTX_API auto TrimExcessCapacity(std::string_view debug_name)
+    -> bool override;
+
 protected:
   auto FinalizeStats() -> void override;
 
