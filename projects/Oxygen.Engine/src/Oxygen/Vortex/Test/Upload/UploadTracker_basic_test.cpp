@@ -12,6 +12,7 @@
 
 #include <array>
 #include <chrono>
+#include <future>
 #include <thread>
 
 namespace oxygen::vortex::upload::internal {
@@ -28,6 +29,7 @@ using oxygen::vortex::upload::FenceValue;
 using oxygen::vortex::upload::TicketId;
 using oxygen::vortex::upload::UploadTicket;
 using oxygen::vortex::upload::UploadTracker;
+using oxygen::vortex::upload::UploadError;
 using oxygen::vortex::upload::internal::UploaderTagFactory;
 
 //! Verify registration and marking fence completion propagates to tickets.
@@ -156,6 +158,73 @@ NOLINT_TEST(UploadTrackerTest, AwaitAllMaxFence)
   EXPECT_TRUE(results[1].success);
 
   worker.join();
+}
+
+//! Await should unblock with TicketNotFound if slot cleanup erases the ticket
+//! while another thread is waiting for completion.
+NOLINT_TEST(UploadTrackerTest, AwaitReturnsNotFoundWhenEntryIsErasedDuringWait)
+{
+  UploadTracker tracker;
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 1 });
+  const auto ticket = tracker.Register(FenceValue { 10 }, 42, "await-erased");
+
+  auto future = std::async(
+    std::launch::async, [&]() { return tracker.Await(ticket.id); });
+
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 5 }),
+    std::future_status::timeout);
+
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 1 });
+
+  const auto result = future.get();
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), UploadError::kTicketNotFound);
+}
+
+//! AwaitAll should not recreate erased entries or hang when slot cleanup
+//! removes a tracked ticket during the wait.
+NOLINT_TEST(UploadTrackerTest, AwaitAllReturnsNotFoundWhenEntryIsErasedDuringWait)
+{
+  UploadTracker tracker;
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 2 });
+  const auto ticket = tracker.Register(FenceValue { 20 }, 64, "await-all-erased");
+
+  auto future = std::async(std::launch::async, [&]() {
+    const std::array tickets { ticket };
+    return tracker.AwaitAll(std::span<const UploadTicket> { tickets });
+  });
+
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 5 }),
+    std::future_status::timeout);
+
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 2 });
+
+  const auto result = future.get();
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), UploadError::kTicketNotFound);
+}
+
+//! AwaitAllPending should recover cleanly when slot cleanup erases pending
+//! entries while it is blocked in AwaitAll().
+NOLINT_TEST(UploadTrackerTest, AwaitAllPendingReturnsEmptyAfterCleanupErasesEntries)
+{
+  UploadTracker tracker;
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 3 });
+  const auto ticket
+    = tracker.Register(FenceValue { 30 }, 96, "await-all-pending-erased");
+
+  auto future = std::async(
+    std::launch::async, [&]() { return tracker.AwaitAllPending(); });
+
+  EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 5 }),
+    std::future_status::timeout);
+
+  tracker.OnFrameStart(UploaderTagFactory::Get(), Slot { 3 });
+
+  const auto result = future.get();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_TRUE(result->empty());
+  EXPECT_FALSE(tracker.IsComplete(ticket.id).has_value());
 }
 
 //! CompletedFenceValue is monotonic and never regresses on lower values.

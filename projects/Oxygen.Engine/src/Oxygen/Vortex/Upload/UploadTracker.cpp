@@ -95,15 +95,21 @@ auto UploadTracker::Await(const TicketId id)
 {
   std::unique_lock lk(mu_);
 
-  // Check if ticket exists first
-  const auto it = entries_.find(id);
-  if (it == entries_.end()) {
+  if (!entries_.contains(id)) {
     return std::unexpected(UploadError::kTicketNotFound);
   }
 
-  cv_.wait(lk, [&]() noexcept { return it->second.completed; });
+  cv_.wait(lk, [&]() noexcept {
+    const auto current = entries_.find(id);
+    return current == entries_.end() || current->second.completed;
+  });
 
-  return it->second.result;
+  const auto current = entries_.find(id);
+  if (current == entries_.end()) {
+    return std::unexpected(UploadError::kTicketNotFound);
+  }
+
+  return current->second.result;
 }
 
 auto UploadTracker::AwaitAll(const std::span<const UploadTicket> tickets)
@@ -117,14 +123,27 @@ auto UploadTracker::AwaitAll(const std::span<const UploadTicket> tickets)
     }
   }
 
-  cv_.wait(lk, [&]() {
-    return std::ranges::all_of(
-      tickets, [&](const auto& t) { return entries_[t.id].completed; });
+  cv_.wait(lk, [&]() noexcept {
+    bool all_completed = true;
+    for (const auto& t : tickets) {
+      const auto current = entries_.find(t.id);
+      if (current == entries_.end()) {
+        return true;
+      }
+      if (!current->second.completed) {
+        all_completed = false;
+      }
+    }
+    return all_completed;
   });
 
   std::vector<UploadResult> results;
   for (const auto& t : tickets) {
-    results.push_back(entries_[t.id].result);
+    const auto current = entries_.find(t.id);
+    if (current == entries_.end()) {
+      return std::unexpected(UploadError::kTicketNotFound);
+    }
+    results.push_back(current->second.result);
   }
   return results;
 }
@@ -184,12 +203,20 @@ auto UploadTracker::MarkEntryCompleted(Entry& e) -> void
 
 auto UploadTracker::OnFrameStart(UploaderTag, frame::Slot slot) -> void
 {
-  std::lock_guard<std::mutex> lk(mu_);
-  current_slot_ = slot;
+  std::size_t erased = 0;
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    current_slot_ = slot;
 
-  // Radical cleanup: erase all entries created in this slot
-  std::erase_if(entries_,
-    [slot](const auto& pair) { return pair.second.creation_slot == slot; });
+    // Frame-slot recycling removes entries created in the recycled slot.
+    // Notify waiting threads if anything was erased so they can observe
+    // TicketNotFound instead of blocking on stale predicates.
+    erased = std::erase_if(entries_,
+      [slot](const auto& pair) { return pair.second.creation_slot == slot; });
+  }
+  if (erased != 0U) {
+    cv_.notify_all();
+  }
 }
 
 auto UploadTracker::AwaitAllPending()
