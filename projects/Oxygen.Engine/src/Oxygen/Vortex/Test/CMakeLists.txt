@@ -107,6 +107,13 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  ViewConstantsManager
+  SOURCES
+    "Fakes/Graphics.h"
+    "Internal/ViewConstantsManager_test.cpp"
+)
+
+m_gtest_program(
   RendererFacadePresets
   SOURCES
     "Fakes/Graphics.h"

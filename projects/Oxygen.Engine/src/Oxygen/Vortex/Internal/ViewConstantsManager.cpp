@@ -6,6 +6,7 @@
 
 #include "ViewConstantsManager.h"
 
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 
@@ -24,12 +25,9 @@ ViewConstantsManager::ViewConstantsManager(
 
 ViewConstantsManager::~ViewConstantsManager()
 {
-  // Unmap all buffers
   for (auto& [key, info] : buffers_) {
-    if (info.buffer && info.mapped_ptr) {
-      info.buffer->UnMap();
-      info.mapped_ptr = nullptr;
-    }
+    static_cast<void>(key);
+    ReleaseBuffer(info);
   }
   buffers_.clear();
 }
@@ -115,6 +113,43 @@ auto ViewConstantsManager::WriteViewConstants(
   // Persistently mapped - write directly
   std::memcpy(info.mapped_ptr, snapshot, size_bytes);
   return info;
+}
+
+auto ViewConstantsManager::RemoveView(ViewId view_id) -> void
+{
+  for (auto it = buffers_.begin(); it != buffers_.end();) {
+    if (it->first.view_id != view_id) {
+      ++it;
+      continue;
+    }
+
+    ReleaseBuffer(it->second);
+    it = buffers_.erase(it);
+  }
+}
+
+auto ViewConstantsManager::ReleaseBuffer(BufferInfo& info) -> void
+{
+  auto buffer = std::move(info.buffer);
+  info.mapped_ptr = nullptr;
+
+  if (!buffer) {
+    return;
+  }
+
+  if (buffer->IsMapped()) {
+    buffer->UnMap();
+  }
+
+  if (gfx_ == nullptr) {
+    buffer.reset();
+    return;
+  }
+
+  auto gfx = gfx_;
+  auto& reclaimer = gfx_->GetDeferredReclaimer();
+  reclaimer.RegisterDeferredAction(
+    [gfx, buffer = std::move(buffer)]() mutable { buffer.reset(); });
 }
 
 } // namespace oxygen::vortex::internal
