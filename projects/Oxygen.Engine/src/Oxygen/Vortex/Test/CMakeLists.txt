@@ -19,7 +19,7 @@ include(GTestHelpers)
 # -- Library Link Test ---------------------------------------------------------
 
 set(link_test_target "Oxygen.Vortex.LinkTest")
-add_executable(${link_test_target} "Link_test.cpp")
+add_executable(${link_test_target} "Fakes/Graphics.h" "Link_test.cpp")
 set_target_properties(
   ${link_test_target}
   PROPERTIES
