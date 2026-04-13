@@ -27,6 +27,10 @@ set_target_properties(
       "Testing"
 )
 target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_definitions(
+  ${link_test_target}
+  PRIVATE OXYGEN_VORTEX_SOURCE_DIR="${PROJECT_SOURCE_DIR}/src/Oxygen/Vortex"
+)
 target_link_libraries(${link_test_target} PRIVATE oxygen::vortex)
 add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
