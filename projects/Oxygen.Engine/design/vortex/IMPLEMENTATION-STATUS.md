@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 0 partially complete (scaffold wired into build graph; empty-target and alias validation pending)`
+Status: `done — Phase 0 complete (build graph wired, empty target builds, alias consumer passes)`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -31,7 +31,7 @@ Related:
 
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
-| 0 | Scaffold and Build Integration | `in_progress` | Empty-target build and `oxygen::vortex` alias proof still pending |
+| 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `not_started` | Phase 0 |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
@@ -101,7 +101,7 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Phase 0 — Scaffold and Build Integration
 
-**Status:** `in_progress`
+**Status:** `done`
 
 ### What Exists
 
@@ -112,15 +112,13 @@ implementation cannot begin until its design prerequisites are met.
 | CMakeLists.txt | `src/Oxygen/Vortex/CMakeLists.txt` | Yes — declares `Oxygen.Vortex`, links deps, C++23 |
 | Module anchor source | `src/Oxygen/Vortex/ModuleAnchor.cpp` | Yes — minimal translation unit added so the scaffolded library can generate |
 | Export header | `src/Oxygen/Vortex/api_export.h` | Yes — exists |
-| Test CMake | `src/Oxygen/Vortex/Test/CMakeLists.txt` | Yes — link test block commented out |
+| Test CMake | `src/Oxygen/Vortex/Test/CMakeLists.txt` | Yes — `Oxygen.Vortex.LinkTest` is enabled and links against `oxygen::vortex` |
+| Link smoke source | `src/Oxygen/Vortex/Test/Link_test.cpp` | Yes — minimal consumer includes `Oxygen/Vortex/api_export.h` and exits 0 |
 
 ### What Is Missing
 
-| Item | Detail |
-| ---- | ------ |
-| Successful empty-target build | Vortex target is present in generated Ninja files, but the actual library build has not yet been proven end to end |
-| Target alias verification | `oxygen::vortex` still needs proof through a real consumer target (`Oxygen.Vortex.LinkTest`) |
-| Preset-help target listing | `cmake --build --preset windows-debug --target help` currently fails during CMake regeneration in `out/build-ninja/_deps/ccache.cmake-subbuild` with `ninja: error: failed recompaction: Permission denied` |
+None for Phase 0 exit. The standard preset build path, the generated target, and
+the alias consumer have all been proven. Remaining work begins in Phase 1.
 
 ### Validation Log
 
@@ -131,13 +129,16 @@ implementation cannot begin until its design prerequisites are met.
 | 2026-04-13 | `cmake --preset windows-default` | PASS — configure/generate now succeeds with `oxygen-vortex` in the generated project graph |
 | 2026-04-13 | `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t targets all \| Select-String 'vortex'` | PASS — generated Debug Ninja graph contains `oxygen-vortex`, `Oxygen.Vortex-d.dll`, and Vortex source-tree targets |
 | 2026-04-13 | `cmake --build --preset windows-debug --target help` | FAIL — regeneration blocked in `_deps/ccache.cmake-subbuild` by `ninja: error: failed recompaction: Permission denied` |
+| 2026-04-13 | `rg -n 'Oxygen\\.Vortex\\.LinkTest\|oxygen::vortex\|Link_test\\.cpp' src/Oxygen/Vortex/Test/CMakeLists.txt src/Oxygen/Vortex/Test/Link_test.cpp` | PASS — minimal alias smoke target and source are present |
+| 2026-04-13 | `cmake --preset windows-default` | PASS — configure/generate succeeds after enabling the link smoke target |
+| 2026-04-13 | `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja oxygen-vortex Oxygen.Vortex.LinkTest` | PASS — both the Vortex library and the alias consumer build in Debug |
+| 2026-04-13 | `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\\.Vortex\\.LinkTest$' --output-on-failure` | PASS — `Oxygen.Vortex.LinkTest` passes |
+| 2026-04-13 | `Remove-Item out/build-ninja/_deps/ccache.cmake-subbuild/.ninja_log{,.restat}; cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest` | PASS — standard preset build path works after resetting the generated ccache subbuild logs |
 
 ### Resume Point
 
-Enable the minimal Vortex link-test consumer, prove `oxygen::vortex` through a
-real executable, and determine whether the remaining preset-build issue is
-limited to the generated `ccache.cmake` subbuild or also affects the actual
-Vortex target build.
+Phase 0 is complete. Resume with Phase 1 substrate migration once the Phase 1
+design and execution work starts.
 
 ---
 
