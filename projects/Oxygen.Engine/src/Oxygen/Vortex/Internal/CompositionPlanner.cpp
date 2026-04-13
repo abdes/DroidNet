@@ -13,15 +13,15 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
-auto ShouldCopyPrimarySceneView(const FrameViewPacket& packet) -> bool
-{
-  const auto& view = packet.View();
-  const auto& desc = view.GetDescriptor();
-  return packet.Plan().Intent() == ViewRenderIntent::kSceneAndComposite
-    && desc.camera.has_value()
-    && desc.z_order == CompositionView::kZOrderScene
-    && packet.GetCompositeOpacity() >= 1.0F;
-}
+  auto ShouldCopyPrimarySceneView(const FrameViewPacket& packet) -> bool
+  {
+    const auto& view = packet.View();
+    const auto& desc = view.GetDescriptor();
+    return packet.Plan().Intent() == ViewRenderIntent::kSceneAndComposite
+      && desc.camera.has_value()
+      && desc.z_order == CompositionView::kZOrderScene
+      && packet.GetCompositeOpacity() >= 1.0F;
+  }
 
 } // namespace
 
@@ -50,9 +50,9 @@ void CompositionPlanner::PlanCompositingTasks()
 
     DLOG_F(2, "view '{}' planned as texture blend (opacity={})",
       packet.View().GetDescriptor().name, packet.GetCompositeOpacity());
-    planned_composition_tasks.push_back(CompositingTask::MakeTextureBlend(
-      packet.GetCompositeTexture(), packet.GetCompositeViewport(),
-      packet.GetCompositeOpacity()));
+    planned_composition_tasks.push_back(
+      CompositingTask::MakeTextureBlend(packet.GetCompositeTexture(),
+        packet.GetCompositeViewport(), packet.GetCompositeOpacity()));
   }
 }
 

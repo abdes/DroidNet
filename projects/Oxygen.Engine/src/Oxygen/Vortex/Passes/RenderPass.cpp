@@ -63,8 +63,8 @@ auto RenderPass::BuildRootBindings() -> std::vector<graphics::RootBindingItem>
         table.view_type
           = RangeTypeToViewType(static_cast<b::RangeType>(range.range_type));
         table.base_index = range.base_register;
-        table.count = range.num_descriptors
-            == std::numeric_limits<uint32_t>::max()
+        table.count
+          = range.num_descriptors == std::numeric_limits<uint32_t>::max()
           ? (std::numeric_limits<uint32_t>::max)()
           : range.num_descriptors;
         binding.data = table;
@@ -98,8 +98,8 @@ auto RenderPass::RootConstantsBindingSlot() -> graphics::BindingSlotDesc
 {
   namespace b = oxygen::bindless::generated::d3d12;
 
-  const auto& desc
-    = b::kRootParamTable[static_cast<std::size_t>(b::RootParam::kRootConstants)];
+  const auto& desc = b::kRootParamTable[static_cast<std::size_t>(
+    b::RootParam::kRootConstants)];
   return graphics::BindingSlotDesc {
     .register_index = desc.shader_register,
     .register_space = desc.register_space,
@@ -196,7 +196,8 @@ auto RenderPass::IssueDrawCallsOverPass(
 {
   try {
     const auto prepared = Context().current_view.prepared_frame;
-    if (!prepared || !prepared->IsValid() || prepared->draw_metadata_bytes.empty()) {
+    if (!prepared || !prepared->IsValid()
+      || prepared->draw_metadata_bytes.empty()) {
       return;
     }
 
@@ -208,8 +209,8 @@ auto RenderPass::IssueDrawCallsOverPass(
     uint32_t draw_errors = 0;
 
     if (prepared->partitions.empty()) {
-      const auto count
-        = prepared->draw_metadata_bytes.size() / sizeof(oxygen::vortex::DrawMetadata);
+      const auto count = prepared->draw_metadata_bytes.size()
+        / sizeof(oxygen::vortex::DrawMetadata);
       for (uint32_t i = 0; i < count; ++i) {
         if (!records[i].flags.IsSet(pass_bit)) {
           continue;
@@ -250,7 +251,8 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
 
     try {
       BindDrawIndexConstant(recorder, draw_index);
-      recorder.Draw(metadata.is_indexed ? metadata.index_count : metadata.vertex_count,
+      recorder.Draw(
+        metadata.is_indexed ? metadata.index_count : metadata.vertex_count,
         metadata.instance_count, 0, 0);
       ++emitted_count;
     } catch (const std::exception& ex) {

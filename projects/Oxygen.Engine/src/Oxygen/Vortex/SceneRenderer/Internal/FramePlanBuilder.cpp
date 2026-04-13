@@ -16,19 +16,19 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
-struct FramePlanDebugModeIntent {
-  bool is_non_ibl { false };
-  bool requires_neutral_tonemap { false };
-};
-
-auto EvaluateFramePlanDebugModeIntent(ShaderDebugMode mode)
-  -> FramePlanDebugModeIntent
-{
-  return FramePlanDebugModeIntent {
-    .is_non_ibl = IsNonIblDebugMode(mode),
-    .requires_neutral_tonemap = mode != ShaderDebugMode::kDisabled,
+  struct FramePlanDebugModeIntent {
+    bool is_non_ibl { false };
+    bool requires_neutral_tonemap { false };
   };
-}
+
+  auto EvaluateFramePlanDebugModeIntent(ShaderDebugMode mode)
+    -> FramePlanDebugModeIntent
+  {
+    return FramePlanDebugModeIntent {
+      .is_non_ibl = IsNonIblDebugMode(mode),
+      .requires_neutral_tonemap = mode != ShaderDebugMode::kDisabled,
+    };
+  }
 
 } // namespace
 

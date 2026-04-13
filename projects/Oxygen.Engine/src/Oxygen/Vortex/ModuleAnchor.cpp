@@ -10,6 +10,6 @@ namespace oxygen::vortex {
 
 // Minimal exported symbol to give the scaffolded shared library a concrete
 // translation unit during Phase 0 build integration.
-OXGN_VRTX_API void ModuleAnchor() {}
+OXGN_VRTX_API void ModuleAnchor() { }
 
 } // namespace oxygen::vortex

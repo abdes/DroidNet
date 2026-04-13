@@ -261,8 +261,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
   // upload failed), indices remain invalid and the draw is skipped.
   const auto indices = geometry_uploader_
     ? geometry_uploader_->GetShaderVisibleIndices(geo_handle)
-    : oxygen::vortex::resources::GeometryUploader::
-        MeshShaderVisibleIndices {};
+    : oxygen::vortex::resources::GeometryUploader::MeshShaderVisibleIndices {};
 
   for (const auto& view : views_span) {
     const auto index_view = view.IndexBuffer();

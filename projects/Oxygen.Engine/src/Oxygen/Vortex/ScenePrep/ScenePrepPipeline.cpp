@@ -6,8 +6,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Vortex/ScenePrep/ScenePrepPipeline.h>
 
 namespace oxygen::vortex::sceneprep {
 

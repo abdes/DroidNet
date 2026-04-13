@@ -134,8 +134,8 @@ public:
   OXGN_VRTX_API ~GeometryUploader();
 
   //! Called once per frame to advance uploader frame lifecycle state.
-  OXGN_VRTX_API auto OnFrameStart(
-    vortex::RendererTag, oxygen::frame::Slot slot) -> void;
+  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag, oxygen::frame::Slot slot)
+    -> void;
 
   //! Handle interning and management
   OXGN_VRTX_API auto GetOrAllocate(

@@ -10,10 +10,10 @@
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/ScenePrep/MaterialRef.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
 namespace oxygen::vortex::sceneprep {
 
 struct RenderItemData {

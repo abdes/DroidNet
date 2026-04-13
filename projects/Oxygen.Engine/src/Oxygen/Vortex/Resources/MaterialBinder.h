@@ -109,8 +109,8 @@ public:
   OXGN_VRTX_API ~MaterialBinder();
 
   //! Must be called once per frame before any other operations.
-  OXGN_VRTX_API auto OnFrameStart(
-    vortex::RendererTag, oxygen::frame::Slot slot) -> void;
+  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag, oxygen::frame::Slot slot)
+    -> void;
 
   //! Ensures all material GPU resources are prepared for the current frame.
   //! MUST be called after OnFrameStart() and before any

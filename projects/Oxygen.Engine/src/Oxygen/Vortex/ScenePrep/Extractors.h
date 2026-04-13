@@ -17,12 +17,12 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/Concepts.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Vortex/ScenePrep/ScenePrepContext.h>
 #include <Oxygen/Vortex/ScenePrep/Types.h>
-#include <Oxygen/Scene/Types/Flags.h>
 
 namespace oxygen::vortex::sceneprep {
 

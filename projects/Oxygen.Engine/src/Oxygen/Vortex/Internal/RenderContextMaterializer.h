@@ -36,8 +36,8 @@ public:
   using ResolvedViewInput = typename RendererT::ResolvedViewInput;
   using PreparedFrameInput = typename RendererT::PreparedFrameInput;
   using CoreShaderInputsInput = typename RendererT::CoreShaderInputsInput;
-  using ValidatedSinglePassHarnessContext
-    = typename RendererT::ValidatedSinglePassHarnessContext;
+  using ValidatedSinglePassHarnessContext =
+    typename RendererT::ValidatedSinglePassHarnessContext;
 
   struct SinglePassHarnessStaging {
     std::optional<FrameSessionInput> frame_session;

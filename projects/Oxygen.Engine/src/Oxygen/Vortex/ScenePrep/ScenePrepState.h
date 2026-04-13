@@ -52,12 +52,11 @@ public:
    managers. Any argument may be null. Users may observe them via the provided
    getter methods which return oxygen::observer_ptr to express non-ownership.
   */
-  ScenePrepState(
-    std::unique_ptr<resources::GeometryUploader> geometry,
+  ScenePrepState(std::unique_ptr<resources::GeometryUploader> geometry,
     std::unique_ptr<resources::TransformUploader> transform,
     std::unique_ptr<resources::MaterialBinder> material,
-    std::unique_ptr<resources::DrawMetadataEmitter> draw_emitter = nullptr)
-    noexcept
+    std::unique_ptr<resources::DrawMetadataEmitter> draw_emitter
+    = nullptr) noexcept
     : geometry_uploader_(std::move(geometry))
     , transform_mgr_(std::move(transform))
     , material_binder_(std::move(material))

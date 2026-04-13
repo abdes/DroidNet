@@ -15,9 +15,9 @@
 #include <shared_mutex>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -227,7 +227,8 @@ public:
 
   class RenderGraphHarnessFacade {
   public:
-    OXGN_VRTX_API explicit RenderGraphHarnessFacade(Renderer& renderer) noexcept;
+    OXGN_VRTX_API explicit RenderGraphHarnessFacade(
+      Renderer& renderer) noexcept;
 
     OXYGEN_MAKE_NON_COPYABLE(RenderGraphHarnessFacade)
     OXYGEN_DEFAULT_MOVABLE(RenderGraphHarnessFacade)
@@ -374,8 +375,8 @@ public:
 
   using RenderGraphFactory = RenderGraphHarnessInput;
 
-  OXGN_VRTX_API explicit Renderer(std::weak_ptr<Graphics> graphics,
-    RendererConfig config);
+  OXGN_VRTX_API explicit Renderer(
+    std::weak_ptr<Graphics> graphics, RendererConfig config);
   OXGN_VRTX_API explicit Renderer(std::weak_ptr<Graphics> graphics,
     RendererConfig config, CapabilitySet capability_families);
 
@@ -389,7 +390,8 @@ public:
     return "VortexRendererModule";
   }
 
-  [[nodiscard]] auto GetPriority() const noexcept -> engine::ModulePriority override
+  [[nodiscard]] auto GetPriority() const noexcept
+    -> engine::ModulePriority override
   {
     return engine::kRendererModulePriority;
   }
@@ -425,8 +427,9 @@ public:
 
   OXGN_VRTX_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
-  OXGN_VRTX_API auto UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
-    ViewId intent_view_id, engine::ViewContext view) -> ViewId;
+  OXGN_VRTX_API auto UpsertPublishedRuntimeView(
+    engine::FrameContext& frame_context, ViewId intent_view_id,
+    engine::ViewContext view) -> ViewId;
   [[nodiscard]] OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
@@ -501,7 +504,9 @@ private:
   std::weak_ptr<Graphics> gfx_weak_;
   observer_ptr<IAsyncEngine> engine_ { nullptr };
   RendererConfig config_ {};
-  CapabilitySet capability_families_ { kPhase1DefaultRuntimeCapabilityFamilies };
+  CapabilitySet capability_families_ {
+    kPhase1DefaultRuntimeCapabilityFamilies
+  };
 
   ViewConstants view_const_cpu_ {};
   std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;

@@ -71,10 +71,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 {
 }
 
-Renderer::~Renderer()
-{
-  OnShutdown();
-}
+Renderer::~Renderer() { OnShutdown(); }
 
 auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 {
@@ -82,8 +79,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
   return true;
 }
 
-auto Renderer::RegisterConsoleBindings(observer_ptr<console::Console> console) noexcept
-  -> void
+auto Renderer::RegisterConsoleBindings(
+  observer_ptr<console::Console> console) noexcept -> void
 {
   console_ = console;
 }
@@ -125,7 +122,8 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   frame_seq_num_ = context->GetFrameSequenceNumber().get();
   const auto dt = context->GetModuleTimingData().game_delta_time;
   const auto dt_seconds
-    = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get()).count();
+    = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get())
+        .count();
   last_frame_dt_seconds_ = dt_seconds > 0.0F ? dt_seconds : 1.0F / 60.0F;
 
   const auto tag = internal::RendererTagFactory::Get();
@@ -140,8 +138,8 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   }
 }
 
-auto Renderer::OnTransformPropagation(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+auto Renderer::OnTransformPropagation(
+  observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   if (context != nullptr) {
     if (auto scene = context->GetScene()) {
@@ -151,7 +149,8 @@ auto Renderer::OnTransformPropagation(observer_ptr<engine::FrameContext> context
   co_return;
 }
 
-auto Renderer::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<>
+auto Renderer::OnPreRender(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   if (context != nullptr) {
     co_await DispatchSceneRendererPreRender(*context);
@@ -167,7 +166,8 @@ auto Renderer::OnRender(observer_ptr<engine::FrameContext> context) -> co::Co<>
   co_return;
 }
 
-auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::Co<>
+auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
 {
   if (context != nullptr) {
     co_await DispatchSceneRendererCompositing(*context);
@@ -179,7 +179,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::
   co_return;
 }
 
-auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/) -> void
+auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
+  -> void
 {
   resolved_views_.clear();
 }
@@ -207,10 +208,11 @@ auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   }
 
   const auto published_view_id = frame_context.RegisterView(std::move(view));
-  published_runtime_views_by_intent_[intent_view_id] = PublishedRuntimeViewState {
-    .published_view_id = published_view_id,
-    .last_seen_frame = frame_context.GetFrameSequenceNumber(),
-  };
+  published_runtime_views_by_intent_[intent_view_id]
+    = PublishedRuntimeViewState {
+        .published_view_id = published_view_id,
+        .last_seen_frame = frame_context.GetFrameSequenceNumber(),
+      };
   return published_view_id;
 }
 
@@ -254,8 +256,8 @@ auto Renderer::RemovePublishedRuntimeView(
   UnregisterViewRenderGraph(published_view_id);
 }
 
-auto Renderer::PruneStalePublishedRuntimeViews(engine::FrameContext& frame_context)
-  -> std::vector<ViewId>
+auto Renderer::PruneStalePublishedRuntimeViews(
+  engine::FrameContext& frame_context) -> std::vector<ViewId>
 {
   const auto current_frame = frame_context.GetFrameSequenceNumber();
   auto stale_intent_ids = std::vector<ViewId> {};
@@ -326,14 +328,9 @@ auto Renderer::ForOffscreenScene() -> OffscreenSceneFacade
   return OffscreenSceneFacade(*this);
 }
 
-auto Renderer::GetStats() const noexcept -> Stats
-{
-  return {};
-}
+auto Renderer::GetStats() const noexcept -> Stats { return {}; }
 
-auto Renderer::ResetStats() noexcept -> void
-{
-}
+auto Renderer::ResetStats() noexcept -> void { }
 
 auto Renderer::IsViewReady(const ViewId view_id) const -> bool
 {
@@ -347,15 +344,16 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return gfx_weak_.lock();
 }
 
-auto Renderer::MakeGpuEventScopeOptions() const -> graphics::GpuEventScopeOptions
+auto Renderer::MakeGpuEventScopeOptions() const
+  -> graphics::GpuEventScopeOptions
 {
   return {};
 }
 
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&
 {
-  CHECK_NOTNULL_F(upload_staging_provider_.get(),
-    "Renderer staging provider is unavailable");
+  CHECK_NOTNULL_F(
+    upload_staging_provider_.get(), "Renderer staging provider is unavailable");
   return *upload_staging_provider_;
 }
 
@@ -400,8 +398,9 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
 {
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
-  last_frame_dt_seconds_
-    = session.delta_time_seconds > 0.0F ? session.delta_time_seconds : 1.0F / 60.0F;
+  last_frame_dt_seconds_ = session.delta_time_seconds > 0.0F
+    ? session.delta_time_seconds
+    : 1.0F / 60.0F;
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
@@ -417,8 +416,9 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
 
 auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
   std::optional<ResolvedView>& current_resolved_view,
-  std::optional<PreparedSceneFrame>& current_prepared_frame, const ViewId view_id,
-  const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
+  std::optional<PreparedSceneFrame>& current_prepared_frame,
+  const ViewId view_id, const ResolvedView& resolved_view,
+  const PreparedSceneFrame& prepared_frame,
   const std::optional<ViewConstants>& view_constants_override) -> void
 {
   current_resolved_view = resolved_view;
@@ -440,20 +440,19 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
   if (!view_constants_override.has_value()) {
     UpdateViewConstantsFromView(resolved_view);
   }
-  view_const_cpu_.SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
+  view_const_cpu_
+    .SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
     .SetFrameSlot(frame_slot_, ViewConstants::kRenderer)
     .SetFrameSequenceNumber(
       frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer);
 
   const auto snapshot = view_const_cpu_.GetSnapshot();
-  const auto buffer_info
-    = view_const_manager_->WriteViewConstants(view_id, &snapshot, sizeof(snapshot));
+  const auto buffer_info = view_const_manager_->WriteViewConstants(
+    view_id, &snapshot, sizeof(snapshot));
   render_context.view_constants = buffer_info.buffer;
 }
 
-auto Renderer::EndOffscreenFrame() noexcept -> void
-{
-}
+auto Renderer::EndOffscreenFrame() noexcept -> void { }
 
 auto Renderer::DispatchSceneRendererPreRender(engine::FrameContext& /*context*/)
   -> co::Co<>
@@ -467,8 +466,8 @@ auto Renderer::DispatchSceneRendererRender(engine::FrameContext& /*context*/)
   co_return;
 }
 
-auto Renderer::DispatchSceneRendererCompositing(engine::FrameContext& /*context*/)
-  -> co::Co<>
+auto Renderer::DispatchSceneRendererCompositing(
+  engine::FrameContext& /*context*/) -> co::Co<>
 {
   co_return;
 }
@@ -495,7 +494,8 @@ Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
   }
 }
 
-Renderer::ValidatedSinglePassHarnessContext::~ValidatedSinglePassHarnessContext()
+Renderer::ValidatedSinglePassHarnessContext::
+  ~ValidatedSinglePassHarnessContext()
 {
   Release();
 }
@@ -529,13 +529,15 @@ auto Renderer::ValidatedSinglePassHarnessContext::operator=(
   return *this;
 }
 
-auto Renderer::ValidatedSinglePassHarnessContext::RebindCurrentViewPointers() noexcept
-  -> void
+auto Renderer::ValidatedSinglePassHarnessContext::
+  RebindCurrentViewPointers() noexcept -> void
 {
-  render_context_.current_view.resolved_view = current_resolved_view_.has_value()
+  render_context_.current_view.resolved_view
+    = current_resolved_view_.has_value()
     ? observer_ptr<const ResolvedView> { &*current_resolved_view_ }
     : observer_ptr<const ResolvedView> {};
-  render_context_.current_view.prepared_frame = current_prepared_frame_.has_value()
+  render_context_.current_view.prepared_frame
+    = current_prepared_frame_.has_value()
     ? observer_ptr<const PreparedSceneFrame> { &*current_prepared_frame_ }
     : observer_ptr<const PreparedSceneFrame> {};
 }
@@ -555,7 +557,8 @@ auto Renderer::ValidatedSinglePassHarnessContext::Release() noexcept -> void
   active_ = false;
 }
 
-Renderer::SinglePassHarnessFacade::SinglePassHarnessFacade(Renderer& renderer) noexcept
+Renderer::SinglePassHarnessFacade::SinglePassHarnessFacade(
+  Renderer& renderer) noexcept
   : renderer_(observer_ptr { &renderer })
 {
 }
@@ -574,8 +577,8 @@ auto Renderer::SinglePassHarnessFacade::SetOutputTarget(
   return *this;
 }
 
-auto Renderer::SinglePassHarnessFacade::SetResolvedView(
-  ResolvedViewInput view) -> SinglePassHarnessFacade&
+auto Renderer::SinglePassHarnessFacade::SetResolvedView(ResolvedViewInput view)
+  -> SinglePassHarnessFacade&
 {
   resolved_view_.emplace(view);
   return *this;
@@ -606,12 +609,12 @@ auto Renderer::SinglePassHarnessFacade::Validate() const -> ValidationReport
   auto materializer = internal::RenderContextMaterializer(*renderer_);
   return materializer.ValidateSinglePass(
     internal::RenderContextMaterializer::SinglePassHarnessStaging {
-    .frame_session = frame_session_,
-    .output_target = output_target_,
-    .resolved_view = resolved_view_,
-    .prepared_frame = prepared_frame_,
-    .core_shader_inputs = core_shader_inputs_,
-  });
+      .frame_session = frame_session_,
+      .output_target = output_target_,
+      .resolved_view = resolved_view_,
+      .prepared_frame = prepared_frame_,
+      .core_shader_inputs = core_shader_inputs_,
+    });
 }
 
 auto Renderer::SinglePassHarnessFacade::Finalize()
@@ -620,12 +623,12 @@ auto Renderer::SinglePassHarnessFacade::Finalize()
   auto materializer = internal::RenderContextMaterializer(*renderer_);
   return materializer.MaterializeSinglePass(
     internal::RenderContextMaterializer::SinglePassHarnessStaging {
-    .frame_session = frame_session_,
-    .output_target = output_target_,
-    .resolved_view = resolved_view_,
-    .prepared_frame = prepared_frame_,
-    .core_shader_inputs = core_shader_inputs_,
-  });
+      .frame_session = frame_session_,
+      .output_target = output_target_,
+      .resolved_view = resolved_view_,
+      .prepared_frame = prepared_frame_,
+      .core_shader_inputs = core_shader_inputs_,
+    });
 }
 
 Renderer::RenderGraphHarnessFacade::RenderGraphHarnessFacade(
@@ -648,8 +651,8 @@ auto Renderer::RenderGraphHarnessFacade::SetOutputTarget(
   return *this;
 }
 
-auto Renderer::RenderGraphHarnessFacade::SetResolvedView(
-  ResolvedViewInput view) -> RenderGraphHarnessFacade&
+auto Renderer::RenderGraphHarnessFacade::SetResolvedView(ResolvedViewInput view)
+  -> RenderGraphHarnessFacade&
 {
   resolved_view_.emplace(view);
   return *this;
@@ -686,9 +689,8 @@ auto Renderer::RenderGraphHarnessFacade::CanFinalize() const -> bool
 auto Renderer::RenderGraphHarnessFacade::Validate() const -> ValidationReport
 {
   auto materializer = internal::RenderContextMaterializer(*renderer_);
-  auto report
-    = materializer.ValidateSinglePass(
-      internal::RenderContextMaterializer::SinglePassHarnessStaging {
+  auto report = materializer.ValidateSinglePass(
+    internal::RenderContextMaterializer::SinglePassHarnessStaging {
       .frame_session = frame_session_,
       .output_target = output_target_,
       .resolved_view = resolved_view_,
@@ -715,9 +717,8 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
   }
 
   auto materializer = internal::RenderContextMaterializer(*renderer_);
-  auto materialized
-    = materializer.MaterializeSinglePass(
-      internal::RenderContextMaterializer::SinglePassHarnessStaging {
+  auto materialized = materializer.MaterializeSinglePass(
+    internal::RenderContextMaterializer::SinglePassHarnessStaging {
       .frame_session = frame_session_,
       .output_target = output_target_,
       .resolved_view = resolved_view_,
@@ -810,7 +811,8 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
   co_return;
 }
 
-Renderer::OffscreenSceneFacade::OffscreenSceneFacade(Renderer& renderer) noexcept
+Renderer::OffscreenSceneFacade::OffscreenSceneFacade(
+  Renderer& renderer) noexcept
   : renderer_(observer_ptr { &renderer })
 {
 }
@@ -843,8 +845,8 @@ auto Renderer::OffscreenSceneFacade::SetOutputTarget(OutputTargetInput target)
   return *this;
 }
 
-auto Renderer::OffscreenSceneFacade::SetPipeline(OffscreenPipelineInput pipeline)
-  -> OffscreenSceneFacade&
+auto Renderer::OffscreenSceneFacade::SetPipeline(
+  OffscreenPipelineInput pipeline) -> OffscreenSceneFacade&
 {
   pipeline_.emplace(pipeline);
   return *this;
