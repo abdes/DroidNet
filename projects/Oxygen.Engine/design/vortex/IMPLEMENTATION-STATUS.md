@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.5 and 1.7 are complete, and repaired 01-10 now carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.8 are complete with the final post-orchestrator FOUND-03 proof, and 01-11 still owns the step-1.9 smoke/regression gate`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Step `1.7` is now closed; `01-10` still owns step `1.6` with the root contracts plus the stripped renderer orchestrator |
+| 1 | Substrate Migration | `in_progress` | Steps `1.6` and `1.8` are now closed; `01-11` still owns the smoke/regression gate for step `1.9` and the Phase 1 exit claim |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,44 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-10 landed step 1.6, the stripped renderer orchestrator, and the final FOUND-03 proof
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Errors.h`
+  - `src/Oxygen/Vortex/FacadePresets.h`
+  - `src/Oxygen/Vortex/Internal/ViewLifecycleService.h`
+  - `src/Oxygen/Vortex/Passes/ComputeRenderPass.cpp`
+  - `src/Oxygen/Vortex/Passes/ComputeRenderPass.h`
+  - `src/Oxygen/Vortex/Passes/GraphicsRenderPass.cpp`
+  - `src/Oxygen/Vortex/Passes/GraphicsRenderPass.h`
+  - `src/Oxygen/Vortex/Passes/RenderPass.cpp`
+  - `src/Oxygen/Vortex/Passes/RenderPass.h`
+  - `src/Oxygen/Vortex/RenderContext.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/SceneCameraViewResolver.cpp`
+  - `src/Oxygen/Vortex/SceneCameraViewResolver.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_|LightManager|ShadowManager|EnvironmentLightingService' src/Oxygen/Vortex/Errors.h src/Oxygen/Vortex/FacadePresets.h src/Oxygen/Vortex/Passes/ComputeRenderPass.cpp src/Oxygen/Vortex/Passes/ComputeRenderPass.h src/Oxygen/Vortex/Passes/GraphicsRenderPass.cpp src/Oxygen/Vortex/Passes/GraphicsRenderPass.h src/Oxygen/Vortex/Passes/RenderPass.cpp src/Oxygen/Vortex/Passes/RenderPass.h src/Oxygen/Vortex/RenderContext.h src/Oxygen/Vortex/SceneCameraViewResolver.cpp src/Oxygen/Vortex/SceneCameraViewResolver.h`
+  - `rg -n 'ForwardPipeline|RenderingPipeline|LightManager|ShadowManager|EnvironmentLightingService|Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Renderer.h src/Oxygen/Vortex/Renderer.cpp`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `powershell -NoProfile -Command "$ninja = (Select-String -Path 'out/build-ninja/CMakeCache.txt' -Pattern '^CMAKE_MAKE_PROGRAM:FILEPATH=(.+)$').Matches[0].Groups[1].Value; & $ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll"`
+- Result:
+  - the remaining Phase 1 root-support files now live under Vortex ownership as `Errors.h`, `FacadePresets.h`, `RenderContext.h`, and `SceneCameraViewResolver.cpp/.h`
+  - the step-`1.6` pass bases now live under `src/Oxygen/Vortex/Passes/` and compile against Vortex-owned `RenderContext` / `Renderer` contracts instead of the legacy renderer namespace
+  - `Renderer.h/.cpp` now provide a stripped substrate-only Vortex renderer shell with no `ForwardPipeline`, `RenderingPipeline`, `LightManager`, `ShadowManager`, or `EnvironmentLightingService` ownership
+  - `oxygen-vortex` builds successfully in Debug after the stripped renderer orchestrator lands
+  - the final Debug Ninja target query for `bin/Debug/Oxygen.Vortex-d.dll` lists only Vortex objects plus non-renderer engine dependencies; it contains no `oxygen-renderer` / `Oxygen.Renderer` dependency edge after the orchestrator landed
+- Code / validation delta:
+  - steps `1.6` and `1.8` are now **complete**
+  - `FOUND-03` now has the final post-orchestrator dependency-edge proof required by `01-10`
+  - Phase 1 remains `in_progress` because step `1.9` smoke plus the legacy substrate regression gate are still owned by `01-11`
+- Remaining blocker:
+  - execute `01-11` to run the Vortex smoke path and the targeted legacy substrate regressions before claiming Phase 1 complete
 
 ### 2026-04-13 — Phase 1 plan 01-09 closed the private half of step 1.7
 
@@ -684,6 +722,10 @@ design and execution work starts.
   lives under `src/Oxygen/Vortex/Internal/` and
   `src/Oxygen/Vortex/SceneRenderer/Internal/`, and `oxygen-vortex` builds with
   the full step-`1.7` rehome in place.
+- Repaired `01-10` is now complete for its owned code slice: the Vortex root
+  support files, pass bases, and stripped renderer shell all build under
+  Vortex ownership, and the final post-orchestrator Debug Ninja target query
+  still shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge.
 
 ### Steps (from PLAN.md §3)
 
@@ -694,16 +736,16 @@ design and execution work starts.
 | 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
 | 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
-| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-10` still owns the pass bases together with the later-wave root contracts |
+| 1.6 | Pass base classes (3 files) | `done` | `01-10` landed `Passes/RenderPass`, `GraphicsRenderPass`, and `ComputeRenderPass` together with the Vortex-owned root contracts, then rebuilt `oxygen-vortex` successfully |
 | 1.7 | View assembly + composition | `done` | `01-08` landed the public headers and `01-09` landed the private `Internal/` plus `SceneRenderer/Internal/` files, then rebuilt `oxygen-vortex` successfully |
-| 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
+| 1.8 | Renderer orchestrator | `done` | `01-10` landed the stripped Vortex renderer shell, rebuilt `oxygen-vortex`, and recorded the final post-orchestrator Debug Ninja query proving `bin/Debug/Oxygen.Vortex-d.dll` still has no `Oxygen.Renderer` dependency edge |
 | 1.9 | Smoke test | `not_started` | — |
 
 ### Resume Point
 
-Continue with repaired `01-10` to land step `1.6` together with the later-wave
-root contracts and stripped orchestrator, then finish Phase 1 with `01-11`
-smoke and regression validation.
+Continue with `01-11` to run the step-`1.9` Vortex smoke path plus the targeted
+legacy substrate regressions. Do not claim Phase 1 complete until those gates
+pass.
 
 ---
 
