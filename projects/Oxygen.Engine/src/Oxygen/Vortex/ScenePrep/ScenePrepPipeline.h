@@ -6,7 +6,12 @@
 
 #pragma once
 
+#include <cstdint>
+#include <exception>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 
 #include <Oxygen/Base/Macros.h>
@@ -26,6 +31,12 @@ namespace oxygen::vortex::sceneprep {
 
 class ScenePrepPipeline {
 public:
+  struct FailureStats {
+    std::uint64_t total_failures { 0U };
+    std::uint64_t logged_failures { 0U };
+    std::uint64_t suppressed_failures { 0U };
+  };
+
   ScenePrepPipeline() = default;
 
   OXYGEN_DEFAULT_COPYABLE(ScenePrepPipeline)
@@ -46,6 +57,11 @@ public:
 
   OXGN_VRTX_API auto Finalize() -> void;
 
+  [[nodiscard]] auto GetFailureStats() const noexcept -> FailureStats
+  {
+    return failure_stats_;
+  }
+
 protected:
   virtual auto CollectImpl(std::optional<ScenePrepContext> ctx,
     ScenePrepState& state, RenderItemProto& item) -> void
@@ -53,9 +69,19 @@ protected:
 
   virtual auto FinalizeImpl(ScenePrepState& state) -> void = 0;
 
+  OXGN_VRTX_API auto RecordCollectionFailure(std::string_view stage,
+    const std::optional<ScenePrepContext>& ctx,
+    const scene::SceneNodeImpl* node, std::string_view message) -> void;
+
+  OXGN_VRTX_API auto RecordCollectionFailure(std::string_view stage,
+    const std::optional<ScenePrepContext>& ctx,
+    const scene::SceneNodeImpl* node, const std::exception& ex) -> void;
+
 private:
   std::optional<ScenePrepContext> ctx_;
   observer_ptr<ScenePrepState> prep_state_;
+  FailureStats failure_stats_ {};
+  std::unordered_map<std::string, std::uint64_t> failure_occurrences_ {};
 };
 
 template <typename CollectionCfg, typename FinalizationCfg>
@@ -72,6 +98,19 @@ public:
   auto CollectImpl(std::optional<ScenePrepContext> ctx, ScenePrepState& state,
     RenderItemProto& item) -> void override
   {
+    const auto run_stage = [&](const std::string_view stage_name,
+                             auto&& fn) -> bool {
+      try {
+        fn();
+        return !item.IsDropped();
+      } catch (const std::exception& ex) {
+        this->RecordCollectionFailure(
+          stage_name, ctx, item.GetNodePtr(), ex);
+      }
+      item.MarkDropped();
+      return false;
+    };
+
     bool seeded_from_frame_cache = false;
     if (ctx && ctx->HasView()) {
       if (const auto* cached = state.TryGetNodeBasics(item.GetNodePtr())) {
@@ -88,32 +127,32 @@ public:
 
     if constexpr (CollectionCfg::has_pre_filter) {
       if (!seeded_from_frame_cache) {
-        collection_.pre_filter(*ctx, state, item);
-        if (item.IsDropped()) {
+        if (!run_stage("pre_filter",
+              [&]() { collection_.pre_filter(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_transform_resolve) {
       if (!item.GetTransformHandle().IsValid()) {
-        collection_.transform_resolve(*ctx, state, item);
-        if (item.IsDropped()) {
+        if (!run_stage("transform_resolve",
+              [&]() { collection_.transform_resolve(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_mesh_resolver) {
       if (ctx && ctx->HasView()) {
-        collection_.mesh_resolver(*ctx, state, item);
-        if (item.IsDropped()) {
+        if (!run_stage("mesh_resolver",
+              [&]() { collection_.mesh_resolver(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_visibility_filter) {
       if (ctx && ctx->HasView()) {
-        collection_.visibility_filter(*ctx, state, item);
-        if (item.IsDropped()) {
+        if (!run_stage("visibility_filter",
+              [&]() { collection_.visibility_filter(*ctx, state, item); })) {
           return;
         }
       }
@@ -124,7 +163,10 @@ public:
 
     if constexpr (CollectionCfg::has_producer) {
       if (ctx && ctx->HasView()) {
-        collection_.producer(*ctx, state, item);
+        if (!run_stage(
+              "producer", [&]() { collection_.producer(*ctx, state, item); })) {
+          return;
+        }
       }
     }
 

@@ -12,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -512,6 +513,51 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(prod_called, 0);
+}
+
+NOLINT_TEST_F(
+  ScenePrepPipelineTest, Collect_RecordsStageFailuresAndSuppressesDuplicateLogs)
+{
+  auto pre = [](const sceneprep::ScenePrepContext& /*ctx*/,
+               sceneprep::ScenePrepState& /*st*/,
+               sceneprep::RenderItemProto& /*it*/) {
+    throw std::runtime_error("pre filter exploded");
+  };
+
+  using ConfigT
+    = sceneprep::CollectionConfig<decltype(pre), void, void, void, void>;
+  ConfigT cfg { .pre_filter = pre };
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+      cfg, final_cfg);
+
+  const auto view = ViewRef();
+  ASSERT_TRUE(view.has_value());
+
+  oxygen::testing::ScopedLogCapture capture(
+    "ScenePrepFailureCapture", loguru::Verbosity_ERROR,
+    [](const loguru::Message& message) {
+      return std::string_view(message.message).find("ScenePrep view-phase stage")
+        != std::string_view::npos;
+    });
+
+  pipeline->CollectSingleView(SceneRef(), *view,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
+  pipeline->CollectSingleView(SceneRef(), *view,
+    oxygen::frame::SequenceNumber { 2 }, StateRef(), true);
+
+  const auto stats = pipeline->GetFailureStats();
+  EXPECT_EQ(stats.total_failures, 6U);
+  EXPECT_EQ(stats.logged_failures, 3U);
+  EXPECT_EQ(stats.suppressed_failures, 3U);
+  EXPECT_TRUE(StateRef().CollectedItems().empty());
+
+  EXPECT_EQ(capture.Count("stage 'pre_filter'"), 3);
+  EXPECT_EQ(capture.Count("RootA"), 1);
+  EXPECT_EQ(capture.Count("RootB"), 1);
+  EXPECT_EQ(capture.Count("ChildOfA"), 1);
 }
 
 } // namespace
