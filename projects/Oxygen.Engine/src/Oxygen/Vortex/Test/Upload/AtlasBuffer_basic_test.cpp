@@ -338,4 +338,30 @@ NOLINT_TEST(AtlasBuffer, EnsureCapacityUnchanged)
   EXPECT_EQ(stats.ensure_calls, 3u);
 }
 
+//! Destroying an atlas after growth must not hang while deferred releases drain
+//! during Graphics teardown.
+NOLINT_TEST(AtlasBuffer, DestroyAfterGrowthDoesNotHangAtShutdown)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    oxygen::observer_ptr<oxygen::Graphics> gfx_ptr(gfx.get());
+
+    {
+      AtlasBuffer atlas(gfx_ptr, 64U, "TeardownAtlas");
+      ASSERT_TRUE(atlas.EnsureCapacity(4U, 0.0F).has_value());
+
+      auto a0 = atlas.Allocate();
+      ASSERT_TRUE(a0.has_value());
+
+      const auto grown = atlas.EnsureCapacity(32U, 0.0F);
+      ASSERT_TRUE(grown.has_value());
+      EXPECT_EQ(*grown, EnsureBufferResult::kResized);
+    }
+
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
 } // namespace

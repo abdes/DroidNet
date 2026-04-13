@@ -370,4 +370,30 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
   EXPECT_EQ(ca.normal_texture_index, cb.normal_texture_index);
 }
 
+//! MaterialBinder teardown must remain well-defined after atlas uploads have
+//! been prepared for the current frame.
+NOLINT_TEST_F(
+  MaterialBinderLifecycleTest, TeardownAfterEnsureFrameResourcesDoesNotHang)
+{
+  const ResourceKey base_color_key { 7601U };
+  const ResourceKey normal_key { 7602U };
+
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  oxygen::vortex::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  const auto handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+
+  MatBinder().EnsureFrameResources();
+  EXPECT_NE(MatBinder().GetMaterialShadingSrvIndex(),
+    oxygen::kInvalidShaderVisibleIndex);
+}
+
 } // namespace
