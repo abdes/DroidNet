@@ -23,6 +23,8 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Resources/DrawMetadataEmitter.h>
+#include <Oxygen/Vortex/Resources/GeometryUploader.h>
+#include <Oxygen/Vortex/Resources/MaterialBinder.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
