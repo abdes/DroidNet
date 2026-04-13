@@ -75,6 +75,59 @@ NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
 }
 
 /*!
+ Destroying a provider that never allocated a backing buffer must remain
+ well-defined.
+*/
+NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+    auto provider = uploader->CreateRingBufferStaging(
+      SlotCount { 1 }, kTestAlignment, kTestSlack, "RingBufferStaging.NoAlloc");
+
+    provider.reset();
+    uploader.reset();
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
+/*!
+ Destroying a provider after allocation setup failed must not dereference a null
+ backing buffer during teardown.
+*/
+NOLINT_TEST(RingBufferStaging, DestroyAfterFailedAllocationDoesNotCrash)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    gfx->SetThrowOnCreateBuffer(true);
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+    auto provider = uploader->CreateRingBufferStaging(
+      SlotCount { 1 }, kTestAlignment, kTestSlack,
+      "RingBufferStaging.FailAlloc");
+
+    const auto alloc = provider->Allocate(kTestAllocationSize, "fail-alloc");
+    EXPECT_FALSE(alloc.has_value());
+
+    provider.reset();
+    uploader.reset();
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
+/*!
  Allocation construction is invalid with null buffer/ptr; ensure checks fire.
 */
 NOLINT_TEST_F(RingBufferStagingErrorTest, Allocation_Construct_Invalid_Deaths)

@@ -81,14 +81,13 @@ namespace {
     }
 
     auto old_buffer = std::move(buffer);
+    // The buffer object must stay alive until deferred reclamation runs, but
+    // the registry entry does not. Unregister now while Graphics composition
+    // state is unquestionably alive, then defer only the final shared_ptr drop.
+    UnregisterResourceIfPresent(gfx, old_buffer);
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.RegisterDeferredAction(
-      [gfx, old_buffer = std::move(old_buffer)]() mutable {
-        if (gfx != nullptr && old_buffer != nullptr) {
-          UnregisterResourceIfPresent(gfx, old_buffer);
-        }
-        old_buffer.reset();
-      });
+      [old_buffer = std::move(old_buffer)]() mutable { old_buffer.reset(); });
   }
 
 } // namespace
@@ -371,8 +370,10 @@ RingBufferStaging::~RingBufferStaging()
     buffer_->UnMap();
     Stats().unmap_calls++;
   }
-  gfx_->GetResourceRegistry().UnRegisterResource(*buffer_);
-  buffer_.reset();
+  if (buffer_) {
+    gfx_->GetResourceRegistry().UnRegisterResource(*buffer_);
+    buffer_.reset();
+  }
   mapped_ptr_ = nullptr;
 }
 

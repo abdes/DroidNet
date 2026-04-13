@@ -329,4 +329,38 @@ NOLINT_TEST_F(RingBufferStagingTest, UnMap_Idempotent)
   EXPECT_GE(after.unmap_calls, before.unmap_calls);
 }
 
+/*!
+ Destroying Graphics after a staging-buffer growth must not hang while deferred
+ releases are drained. This exercises the same path reported in teardown where
+ an old staging buffer is kept alive after growth and released during Graphics
+ destruction.
+*/
+NOLINT_TEST(RingBufferStaging, DeferredReleaseAfterGrowthDoesNotHangAtShutdown)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+    auto provider
+      = uploader->CreateRingBufferStaging(oxygen::frame::SlotCount { 1 }, 16U,
+        0.5F, "RingBufferStaging.ShutdownRegression");
+
+    auto initial = provider->Allocate(SizeBytes { 8 }, "initial");
+    ASSERT_TRUE(initial.has_value());
+
+    auto grown = provider->Allocate(
+      SizeBytes { 12ULL * 1024ULL * 1024ULL }, "force-growth");
+    ASSERT_TRUE(grown.has_value());
+
+    provider.reset();
+    uploader.reset();
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
 } // namespace
