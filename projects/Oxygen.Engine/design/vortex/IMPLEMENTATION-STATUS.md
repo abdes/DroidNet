@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.5 are complete, repaired 01-08 now owns only the public step-1.7 headers, and repaired 01-10 carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.5 and the public half of step 1.7 are complete, step 1.7 remains open for 01-09, and repaired 01-10 carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-07` closed steps `1.4` and `1.5`; repaired `01-08` now owns only the public step `1.7` headers before `01-10` lands step `1.6` with the root contracts |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-08` landed the public step `1.7` headers; `01-09` still owns the private composition slice and `01-10` still owns step `1.6` with the root contracts |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,33 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-08 landed the public step-1.7 header slice
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/CompositionView.h`
+  - `src/Oxygen/Vortex/RendererCapability.h`
+  - `src/Oxygen/Vortex/RenderMode.h`
+  - `src/Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'RenderingPipeline|PipelineFeature|PipelineSettings|Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/CompositionView.h src/Oxygen/Vortex/RendererCapability.h src/Oxygen/Vortex/RenderMode.h`
+  - `rg -n 'CompositionView.h|RendererCapability.h|RenderMode.h' src/Oxygen/Vortex/CMakeLists.txt`
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `rg -n '\| 1\.6 \||\| 1\.7 \||01-09|01-10' design/vortex/IMPLEMENTATION-STATUS.md`
+- Result:
+  - the public step-`1.7` root vocabulary now lives under `src/Oxygen/Vortex/` as `CompositionView.h`, `RendererCapability.h`, and `RenderMode.h`
+  - `DepthPrePassPolicy.h` now lives under `src/Oxygen/Vortex/SceneRenderer/`, matching `PROJECT-LAYOUT.md`
+  - `src/Oxygen/Vortex/CMakeLists.txt` lists only the public step-`1.7` header slice added by `01-08`
+  - `oxygen-vortex` builds successfully in Debug after the public header slice lands
+- Code / validation delta:
+  - step `1.7` is now **in progress**: the public header half is complete, but the private composition infrastructure remains deferred to `01-09`
+  - step `1.6` remains deferred to `01-10`; this plan did not pull the pass bases, `RenderContext.h`, or `Renderer.h/.cpp` forward
+  - no Vortex runtime/facade validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-09` to land the private half of step `1.7`, then `01-10` to land step `1.6` with the later root-contract wave
 
 ### 2026-04-13 — Phase 1 plan 01-07 migrated the ScenePrep execution slice and selected substrate-only internals
 
@@ -617,6 +644,11 @@ design and execution work starts.
   selected substrate-only internal utilities build under Vortex ownership, and
   the linked Vortex DLL still carries no `oxygen-renderer` / `Oxygen.Renderer`
   dependency edge.
+- Repaired `01-08` is now complete for its owned public slice: the step `1.7`
+  root vocabulary (`CompositionView.h`, `RendererCapability.h`,
+  `RenderMode.h`) and `SceneRenderer/DepthPrePassPolicy.h` now live under
+  Vortex ownership while the private composition infrastructure remains
+  deferred to `01-09`.
 
 ### Steps (from PLAN.md §3)
 
@@ -627,16 +659,16 @@ design and execution work starts.
 | 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
 | 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
-| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-10` |
-| 1.7 | View assembly + composition | `planned` | Repaired Phase 1 plans `01-08` and `01-09` |
+| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-10` still owns the pass bases together with the later-wave root contracts |
+| 1.7 | View assembly + composition | `in_progress` | `01-08` landed `CompositionView.h`, `RendererCapability.h`, `RenderMode.h`, and `SceneRenderer/DepthPrePassPolicy.h`; `01-09` still owns the private composition infrastructure |
 | 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
 | 1.9 | Smoke test | `not_started` | — |
 
 ### Resume Point
 
-Continue with repaired `01-08` to land only the public half of step `1.7`,
-then `01-09`, then `01-10` to land step `1.6` together with the later-wave
-root contracts and stripped orchestrator.
+Continue with repaired `01-09` to land the private half of step `1.7`, then
+`01-10` to land step `1.6` together with the later-wave root contracts and
+stripped orchestrator.
 
 ---
 

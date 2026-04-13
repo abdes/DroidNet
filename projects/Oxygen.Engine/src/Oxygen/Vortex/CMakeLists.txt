@@ -124,6 +124,7 @@ set(
   "ScenePrep/Finalizers.h"
   "ScenePrep/ScenePrepPipeline.cpp"
   "ScenePrep/ScenePrepPipeline.h"
+  "SceneRenderer/DepthPrePassPolicy.h"
   "Types/ViewConstants.cpp"
   "Upload/AtlasBuffer.cpp"
   "Upload/Errors.cpp"
