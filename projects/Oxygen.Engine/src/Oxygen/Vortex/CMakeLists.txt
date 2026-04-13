@@ -50,8 +50,11 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "api_export.h"
+  "CompositionView.h"
   "PreparedSceneFrame.h"
+  "RendererCapability.h"
   "RendererTag.h"
+  "RenderMode.h"
   "Types/CompositingTask.h"
   "Types/ConventionalShadowDrawRecord.h"
   "Types/DrawMetadata.h"
