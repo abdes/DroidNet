@@ -135,7 +135,7 @@
 **Input action modifiers and transformers:**
 - Problem: input mappings omit ignore flags, mapping modifiers, and initial-value transformers.
 - Blocks: richer rebinding flows, modifier-aware actions, and parity with the documented input design.
-- Files: `src/Oxygen/Input/InputActionMapping.h`, `src/Oxygen/Input/InputActionMapping.cpp`, `design/pak_input.md`
+- Files: `src/Oxygen/Input/InputActionMapping.h`, `src/Oxygen/Input/InputActionMapping.cpp`, `design/content-pipeline/pak-v7-input-format-historical-reference.md`
 
 **Network reconciliation, deterministic RNG, and adaptive budgeting:**
 - Problem: core engine phases are declared in the frame model but left as TODO/no-op logic.

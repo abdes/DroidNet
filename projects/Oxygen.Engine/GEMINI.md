@@ -73,5 +73,5 @@ The project uses CMake with Conan for dependency management.
 - `CMakeLists.txt`: Root build configuration.
 - `src/Oxygen/Base/Logging.h`: Main logging entry point.
 - `src/Oxygen/OxCo/Co.h`: Coroutine framework entry point.
-- `design/BindlessRenderingDesign.md`: Detailed explanation of the rendering architecture.
+- `design/renderer-core/bindless-rendering-design.md`: Detailed explanation of the rendering architecture.
 - `src/Oxygen/Core/Constants.h`: Engine space/directions conventions.

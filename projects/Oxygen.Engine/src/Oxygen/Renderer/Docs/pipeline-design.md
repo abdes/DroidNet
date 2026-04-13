@@ -83,7 +83,7 @@ flowchart TB
   `shader-system.md` §1.
 
 - For descriptor allocation, resource/view registration, and automatic table
-  updates, see `design/BindlessRenderingDesign.md`.
+  updates, see `design/renderer-core/bindless-rendering-design.md`.
 
 **PSO and Bindless Workflow:**
 
@@ -472,4 +472,4 @@ For the full shader system specification, see `shader-system.md`.
 | --- | --- |
 | `shader-system.md` | Root signature contract, GPU data layouts, shader conventions |
 | `passes/design-overview.md` | Forward+ architecture and pass system overview |
-| `design/BindlessRenderingDesign.md` | Descriptor allocation and bindless resource management |
+| `design/renderer-core/bindless-rendering-design.md` | Descriptor allocation and bindless resource management |

@@ -5,7 +5,7 @@ This folder contains the greenfield low-level VSM module. It is intentionally se
 Cross-reference:
 
 - performance investigation and tuning workflow:
-  `design/VsmPerformanceOptimizationPlaybook.md`
+  `design/renderer-shadows/virtual-shadow-map-performance-playbook.md`
 
 ## Ownership Split
 

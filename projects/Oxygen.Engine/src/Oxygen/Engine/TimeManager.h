@@ -29,7 +29,7 @@ namespace oxygen::engine {
  Manages Physical, Simulation, Presentation, and Network clocks, provides
  per-frame integration (BeginFrame/EndFrame), and exposes basic performance
  metrics. This implementation intentionally omits Timeline and Deterministic
- clocks until those are introduced (see design/Time.md Phase 3).
+ clocks until those are introduced (see design/runtime-core/time-management-system-design.md Phase 3).
 
  ### Configuration Philosophy
 

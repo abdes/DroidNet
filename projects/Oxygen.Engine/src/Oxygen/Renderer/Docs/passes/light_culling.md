@@ -406,5 +406,5 @@ be documented as a confirmed consumer.
   of this pass)
 - [Shader Pass](shader_pass.md): primary consumer of the light grid
 - [Design Overview](design-overview.md): pass ordering in the Forward+ pipeline
-- [LightCullingRemediationPlan](../../../../design/LightCullingRemediationPlan.md):
+- [LightCullingRemediationPlan](../../../../../design/renderer-shadows/light-culling-remediation-plan.md):
   phased remediation history and validation evidence

@@ -371,5 +371,5 @@ unless a concrete consumer is identified.
 - [Data Flow](data_flow.md): overall renderer pipeline and multi-view
   architecture
 - [Bindless Conventions](../bindless_conventions.md): descriptor slot management
-- [DepthPrePassRemediationPlan](../../../../design/DepthPrePassRemediationPlan.md):
+- [DepthPrePassRemediationPlan](../../../../../design/renderer-shadows/depth-prepass-remediation-plan.md):
   phased remediation history and validation evidence
