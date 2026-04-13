@@ -1,87 +1,81 @@
 ---
 phase: 01-substrate-migration
-verified: 2026-04-13T12:58:47Z
+verified: 2026-04-13
 status: passed
-score: 3/3 must-haves verified
+score: 7/7 truths verified
 overrides_applied: 0
 gaps: []
 ---
 
 # Phase 1: Substrate Migration Verification Report
 
-**Phase Goal:** Architecture-neutral renderer substrate lives in Vortex with no new systems and no dependency on the legacy renderer module.
-**Verified:** 2026-04-13T12:58:47Z
+**Phase Goal:** Architecture-neutral renderer substrate lives in Vortex with no
+new systems and no dependency on the legacy renderer module.
+**Verified:** 2026-04-13
 **Status:** passed
-**Re-verification:** Yes — `01-13` reran the full proof suite after the `01-12` seam fix and added a Vortex-local hermeticity guard
+**Superseding note:** this report supersedes the earlier `gaps_found` verdict.
+`01-14` repaired the reopened renderer-core and boundary issues, and the
+strengthened proof suite passed on the repaired tree.
 
-## Goal Achievement
-
-### Observable Truths
+## Verified Truths
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Cross-cutting types, upload/resources, scene prep, internals, and pass bases compile under `Oxygen.Vortex`. | ✓ VERIFIED | `src/Oxygen/Vortex/CMakeLists.txt` enumerates the migrated substrate slices, and `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4` passed again on 2026-04-13 after the hermeticity guard landed. |
-| 2 | View assembly and composition infrastructure live in Vortex-owned layout. | ✓ VERIFIED | `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h:21-23` now imports only Vortex-owned scene-renderer contracts, `src/Oxygen/Vortex/Internal/CompositionPlanner.cpp:10,34` still wires that slice into live Vortex composition planning, and `rg -n '^#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex` returned no matches. |
-| 3 | `vortex::Renderer` instantiates and frame-loop hooks execute without relying on `Oxygen.Renderer`. | ✓ VERIFIED | `src/Oxygen/Vortex/Test/CMakeLists.txt:32` passes the Vortex source root into `Oxygen.Vortex.LinkTest`, `src/Oxygen/Vortex/Test/Link_test.cpp:37-101` now rejects any legacy include seam before constructing `oxygen::vortex::Renderer`, and `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.LinkTest$' --output-on-failure` passed. |
+| 1 | The migrated Vortex substrate builds and the Vortex-local smoke/regression surface runs. | ✓ VERIFIED | `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Renderer.LinkTest --parallel 4` passed, and `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.' --output-on-failure` passed. |
+| 2 | Renderer Core no longer drops queued composition work. | ✓ VERIFIED | `Oxygen.Vortex.RendererCompositionQueue.Tests` passed, including `RegisterCompositionQueuesMultipleSubmissionsForSingleTarget` and `OnCompositingDrainsQueuedSubmissionsExactlyOnce`, proving queued submissions are executed and drained exactly once. |
+| 3 | The required Phase 1 capability vocabulary exists while the default runtime contract stays substrate-only. | ✓ VERIFIED | `RendererCapability.h` now exposes `kDeferredShading`, `kAll` includes it, `kPhase1DefaultRuntimeCapabilityFamilies` is reduced to `ScenePreparation | GpuUploadAndAssetBinding | FinalOutputComposition`, and `Oxygen.Vortex.RendererCapability.Tests` passed. |
+| 4 | Public Phase 1 headers are free of `Internal/` implementation includes. | ✓ VERIFIED | `rg -n 'Internal/RenderContextPool.h' src/Oxygen/Vortex/Renderer.h` returned no matches, and `Renderer.h` now uses forward declarations for renderer-private storage. |
+| 5 | Phase 1 no longer exports illegal public SceneRenderer planning contracts. | ✓ VERIFIED | The planning/config contracts were moved to `SceneRenderer/Internal/*`, `FramePlanBuilder.h` now consumes the private headers, and `rg -n 'SceneRenderer/ShaderDebugMode.h|SceneRenderer/ShaderPassConfig.h|SceneRenderer/ToneMapPassConfig.h' src/Oxygen/Vortex/CMakeLists.txt` returned no matches. |
+| 6 | The Vortex module ABI remains free of both legacy renderer and Diagnostics/UI dependency edges. | ✓ VERIFIED | The full Ninja query for `bin/Debug/Oxygen.Vortex-d.dll` matched neither `oxygen-renderer` / `Oxygen.Renderer` nor `oxygen-imgui` / `Oxygen.ImGui`. |
+| 7 | The reopened proof suite is stronger than the earlier sign-off. | ✓ VERIFIED | The final proof pack combined Vortex-local regressions, the hardened `Oxygen.Vortex.LinkTest` boundary scan, the targeted 25-test legacy substrate suite, and the final target-edge query on the same repaired tree. |
 
-**Score:** 3/3 truths verified
+**Score:** 7/7 truths verified
 
-### Required Artifacts
+## Resolved Reopened Gaps
 
-| Artifact | Expected | Status | Details |
+| Gap | Resolution | Evidence |
+| --- | --- | --- |
+| `G-01` renderer-core composition hollow | `Renderer::OnCompositing()` now drains queued submissions through a Vortex-owned queue-drain path and private compositing pass instead of clearing the queue unused. | `Renderer.cpp`, `Internal/CompositingPass.*`, `Oxygen.Vortex.RendererCompositionQueue.Tests` |
+| `G-02` missing `kDeferredShading` vocabulary | `RendererCapabilityFamily` now contains `kDeferredShading`, `kAll` includes it, and the default Phase 1 capability set no longer over-claims later-domain families. | `RendererCapability.h`, `Oxygen.Vortex.RendererCapability.Tests` |
+| `G-03` illegal public planning contracts | `ShaderDebugMode`, `ShaderPassConfig`, and `ToneMapPassConfig` were moved to `SceneRenderer/Internal/` and removed from the exported header set. | `CMakeLists.txt`, `SceneRenderer/Internal/*`, `Link_test.cpp` boundary scan |
+| `G-04` Diagnostics/UI dependency leak | `oxygen-vortex` no longer links `oxygen::imgui`, and the final target query rejects that edge. | `CMakeLists.txt`, Ninja query |
+| `G-05` public internal header leak | `Renderer.h` no longer includes `Internal/RenderContextPool.h`. | `Renderer.h`, grep verification, `Link_test.cpp` boundary scan |
+
+## Requirement Coverage
+
+| Requirement | Description | Status | Evidence |
 | --- | --- | --- | --- |
-| `src/Oxygen/Vortex/CMakeLists.txt` | Wires migrated Phase 1 substrate into `oxygen-vortex` | ✓ VERIFIED | Lists Types, Upload, Resources, ScenePrep, Internal, pass-base, and renderer files, including `SceneRenderer/Internal/FramePlanBuilder.cpp/.h`. |
-| `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.h` | Vortex-owned view-assembly contract | ✓ VERIFIED | Includes only `Oxygen/Vortex/SceneRenderer/ShaderDebugMode.h`, `ShaderPassConfig.h`, and `ToneMapPassConfig.h`; the public `Inputs` contract now stays within Vortex-owned planning contracts. |
-| `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.cpp` | Vortex-owned composition/view-plan logic | ✓ VERIFIED | Builds against the Vortex-owned planning contracts and the Vortex-wide seam scan reports no legacy renderer include match under `src/Oxygen/Vortex`. |
-| `src/Oxygen/Vortex/Renderer.h` / `Renderer.cpp` | Substrate renderer shell and frame hooks | ✓ VERIFIED | 450-line header and 808-line implementation; build and smoke test pass. |
-| `src/Oxygen/Vortex/Test/Link_test.cpp` | Real smoke path for Phase 1 exit gate | ✓ VERIFIED | The test now performs a Vortex-local recursive seam scan before running the renderer frame hooks, and the smoke path still passes through CTest. |
+| `FOUND-02` | Architecture-neutral substrate code moves into `Oxygen.Vortex` while preserving the intended renderer-core substrate behavior and boundaries. | ✓ SATISFIED | Renderer-core composition execution is restored, the capability/default contract is truthful, the public/private boundary is repaired, the Vortex smoke/regression suite passes, and the final reopened proof pack is green. |
+| `FOUND-03` | Vortex does not depend on `Oxygen.Renderer` through module, API-contract, runtime ownership, or bridge seams. | ✓ SATISFIED | The source seam scan remains clean, the targeted 25-test legacy substrate regression suite passed, and the final Ninja target query still shows no `Oxygen.Renderer` edge. |
 
-### Key Link Verification
+## Proof Pack
 
-| From | To | Via | Status | Details |
-| --- | --- | --- | --- | --- |
-| `src/Oxygen/Vortex/CMakeLists.txt` | `SceneRenderer/Internal/FramePlanBuilder.cpp/.h` | `target_sources` | ✓ WIRED | `FramePlanBuilder` is part of the compiled `oxygen-vortex` target. |
-| `src/Oxygen/Vortex/Internal/CompositionPlanner.cpp` | `SceneRenderer/Internal/FramePlanBuilder.h` | include + `frame_plan_builder_->GetFrameViewPackets()` | ✓ WIRED | The legacy-dependent planning slice is not orphaned. |
-| `src/Oxygen/Vortex/Test/CMakeLists.txt` | `Oxygen.Vortex.LinkTest` | `add_executable` + `add_test` | ✓ WIRED | Registered in source and generated `out/build-ninja/src/Oxygen/Vortex/Test/CTestTestfile.cmake`. |
-| `src/Oxygen/Vortex/Test/CMakeLists.txt` | `Link_test.cpp` seam scan | `target_compile_definitions` | ✓ WIRED | `OXYGEN_VORTEX_SOURCE_DIR` gives the test executable a Vortex-local source-root guardrail. |
-| `Oxygen.Vortex.LinkTest` | `oxygen::vortex::Renderer` frame hooks | hermeticity scan + direct hook calls in `Link_test.cpp` | ✓ WIRED | The smoke path now fails early on source-level legacy include regressions and still executes all Phase 1 frame hooks. |
-| `bin/Debug/Oxygen.Vortex-d.dll` | `oxygen-renderer` | Ninja query | ✓ CLEAR | `ninja -t query bin/Debug/Oxygen.Vortex-d.dll | Select-String 'oxygen-renderer|Oxygen\.Renderer'` produced no matches. |
+Commands run on the repaired tree:
 
-### Data-Flow Trace (Level 4)
+1. `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+2. `rg -n 'kDeferredShading' src/Oxygen/Vortex/RendererCapability.h`
+3. `rg -n 'Internal/RenderContextPool.h' src/Oxygen/Vortex/Renderer.h`
+4. `rg -n 'SceneRenderer/ShaderDebugMode.h|SceneRenderer/ShaderPassConfig.h|SceneRenderer/ToneMapPassConfig.h' src/Oxygen/Vortex/CMakeLists.txt`
+5. `rg -n 'oxygen::imgui' src/Oxygen/Vortex/CMakeLists.txt`
+6. `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest Oxygen.Vortex.RendererCapability.Tests Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Renderer.LinkTest --parallel 4`
+7. `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.' --output-on-failure`
+8. `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'`
+9. `ninja -C out/build-ninja -f build-Debug.ninja -t query bin/Debug/Oxygen.Vortex-d.dll`
 
-| Artifact | Data Variable | Source | Produces Real Data | Status |
-| --- | --- | --- | --- | --- |
-| `src/Oxygen/Vortex/Renderer.cpp` | `frame_slot_`, `frame_seq_num_`, hook execution | `FrameContext` passed by `Link_test.cpp` | Yes | ✓ FLOWING |
-| `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.cpp` | `shader_pass_config`, `tone_map_pass_config`, `frame_shader_debug_mode_` | `Oxygen/Vortex/SceneRenderer/ShaderPassConfig.h`, `ToneMapPassConfig.h`, and `ShaderDebugMode.h` | Yes | ✓ FLOWING |
+Results:
 
-### Behavioral Spot-Checks
+- `Oxygen.Vortex.LinkTest` passed with the boundary scan active.
+- `Oxygen.Vortex.RendererCapability.Tests` passed.
+- `Oxygen.Vortex.RendererCompositionQueue.Tests` passed.
+- The targeted legacy substrate regression suite passed (`25/25`).
+- The final target query showed no `Oxygen.Renderer` or `Oxygen.ImGui` dependency edge.
 
-| Behavior | Command | Result | Status |
-| --- | --- | --- | --- |
-| Vortex substrate builds | `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LinkTest --parallel 4` | Build passed | ✓ PASS |
-| Vortex source tree stays hermetic | `rg -n '^#include <Oxygen/Renderer/|Oxygen/Renderer/' src/Oxygen/Vortex` | No matches | ✓ PASS |
-| Vortex renderer smoke path executes | `ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Vortex\.LinkTest$' --output-on-failure` | `1/1` tests passed | ✓ PASS |
-| Targeted legacy substrate regressions still pass | `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R 'Oxygen\.Renderer\.(LinkTest|CompositionPlanner\.Tests|SceneCameraViewResolver\.Tests|RenderContext\.Tests|RenderContextMaterializer\.Tests|RendererCapability\.Tests|RendererCompositionQueue\.Tests|RendererPublicationSplit\.Tests|RendererFacadePresets\.Tests|SinglePassHarnessFacade\.Tests|RenderGraphHarnessFacade\.Tests|OffscreenSceneFacade\.Tests|GpuTimelineProfiler\.Tests|LightCullingConfig\.Tests|ScenePrep\.Tests|UploadCoordinator\.Tests|RingBufferStaging\.Tests|UploadTracker\.Tests|AtlasBuffer\.Tests|UploadPlanner\.Tests|TransientStructuredBuffer\.Tests|TextureBinder\.Tests|MaterialBinder\.Tests|TransformUploader\.Tests|DrawMetadataEmitter\.Tests)'` | `25/25` tests passed | ✓ PASS |
-| Linked Vortex DLL has no direct legacy target edge | `ninja -t query bin/Debug/Oxygen.Vortex-d.dll | Select-String 'oxygen-renderer|Oxygen\.Renderer'` | No matches | ✓ PASS |
+## Outcome Summary
 
-### Requirements Coverage
-
-| Requirement | Source Plan | Description | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| `FOUND-02` | `01-01` through `01-11` | Architecture-neutral substrate code moves into `Oxygen.Vortex` while preserving buildability and frame-loop integrity. | ✓ SATISFIED | Migrated substrate files are present under `src/Oxygen/Vortex/**`; the Vortex target builds; `Oxygen.Vortex.LinkTest` and the targeted substrate regressions pass. |
-| `FOUND-03` | `01-10` through `01-13` | Vortex does not depend on `Oxygen.Renderer` through module, API-contract, runtime ownership, or bridge seams. | ✓ SATISFIED | `FramePlanBuilder` now consumes Vortex-owned planning contracts, the Vortex-wide seam scan returns no matches, `Oxygen.Vortex.LinkTest` enforces that guard locally, the targeted legacy substrate regressions still pass, and the Debug Ninja query shows no `oxygen-renderer` / `Oxygen.Renderer` dependency edge. |
-
-### Anti-Patterns Found
-
-None. The `FramePlanBuilder` seam is removed, and the Vortex-local smoke surface now fails if any legacy include seam is reintroduced under `src/Oxygen/Vortex`.
-
-### Gaps Summary
-
-Phase 1 now passes cleanly. The `01-12` seam fix removed the last `FramePlanBuilder` source/API bridge, and `01-13` added a Vortex-local hermeticity guard so `Oxygen.Vortex.LinkTest` rejects any reintroduced legacy include seam before running the smoke path.
-
-The full proof suite passed again after that guard landed: the Vortex target rebuilt, the smoke test passed, the 25-test targeted legacy substrate regression suite stayed green, and the final Debug Ninja query still showed no `oxygen-renderer` / `Oxygen.Renderer` dependency edge. `FOUND-03` is therefore satisfied, and Phase 1 can truthfully move from `gaps_found` to `passed`.
+Phase 1 is re-closed. The repaired tree now proves both hermetic separation and
+the fuller renderer-core substrate contract that the earlier sign-off missed.
 
 ---
 
-_Verified: 2026-04-13T12:58:47Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-04-13_
+_Verifier: Codex execute-plan remediation run for `01-14`_
