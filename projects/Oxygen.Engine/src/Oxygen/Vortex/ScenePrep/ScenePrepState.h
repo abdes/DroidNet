@@ -36,6 +36,12 @@ namespace oxygen::vortex::sceneprep {
 //! frames).
 class ScenePrepState {
 public:
+  struct ViewLocalData {
+    std::vector<RenderItemData> collected_items {};
+    std::vector<std::size_t> retained_indices {};
+    std::vector<PassMask> pass_masks {};
+  };
+
   struct CachedNodeBasics {
     scene::NodeHandle node_handle {};
     bool cast_shadows { true };
@@ -78,50 +84,66 @@ public:
 
   auto ReserveCapacityForItems(const std::size_t item_count) -> void
   {
-    collected_items_.reserve(collected_items_.size() + item_count);
-    retained_indices_.reserve(retained_indices_.size() + item_count);
+    view_local_.collected_items.reserve(
+      view_local_.collected_items.size() + item_count);
+    view_local_.retained_indices.reserve(
+      view_local_.retained_indices.size() + item_count);
   }
 
-  auto CollectedCount() const -> std::size_t { return collected_items_.size(); }
+  auto CollectedCount() const -> std::size_t
+  {
+    return view_local_.collected_items.size();
+  }
 
   auto CollectedItems() const -> std::span<const RenderItemData>
   {
-    return { collected_items_.data(), collected_items_.size() };
+    return { view_local_.collected_items.data(),
+      view_local_.collected_items.size() };
   }
 
   auto CollectItem(RenderItemData item) -> void
   {
-    collected_items_.push_back(std::move(item));
+    view_local_.collected_items.push_back(std::move(item));
   }
 
   auto MarkItemRetained(const std::size_t index) -> void
   {
-    assert(not std::ranges::contains(retained_indices_, index));
-    assert(index < collected_items_.size());
-    retained_indices_.push_back(index);
+    assert(not std::ranges::contains(view_local_.retained_indices, index));
+    assert(index < view_local_.collected_items.size());
+    view_local_.retained_indices.push_back(index);
   }
 
-  auto RetainedCount() const -> std::size_t { return retained_indices_.size(); }
+  auto RetainedCount() const -> std::size_t
+  {
+    return view_local_.retained_indices.size();
+  }
 
   auto RetainedItems() const
   {
-    return retained_indices_
+    return view_local_.retained_indices
       | std::views::transform(
         [&](const std::size_t i) -> const RenderItemData& {
-          return collected_items_[i];
+          return view_local_.collected_items[i];
         });
   }
 
   auto RetainedItems()
   {
-    return retained_indices_
+    return view_local_.retained_indices
       | std::views::transform([&](const std::size_t i) -> RenderItemData& {
-          return collected_items_[i];
+          return view_local_.collected_items[i];
         });
   }
 
-  //! Pass masks aligned with retained_indices.
-  std::vector<PassMask> pass_masks; // TODO: clean-up this public member
+  [[nodiscard]] auto PassMasks() noexcept -> std::vector<PassMask>&
+  {
+    return view_local_.pass_masks;
+  }
+
+  [[nodiscard]] auto PassMasks() const noexcept -> const std::vector<PassMask>&
+  {
+    return view_local_.pass_masks;
+  }
 
   //! Get non-owning observer to geometry uploader (maybe nullptr).
   constexpr auto GetGeometryUploader() const noexcept
@@ -154,10 +176,7 @@ public:
   //! Reset per-frame data while preserving persistent caches.
   auto ResetFrameData() -> void
   {
-    // Clear collection phase data
-    collected_items_.clear();
-    retained_indices_.clear();
-    pass_masks.clear();
+    view_local_ = {};
     if (draw_emitter_) {
       draw_emitter_->ResetViewData();
     }
@@ -172,9 +191,7 @@ public:
     // Clear per-view transient data while preserving frame-phase caches
     // (filtered node list and cached node basics) so later views can reuse the
     // frame traversal without inheriting the previous view's collected items.
-    collected_items_.clear();
-    retained_indices_.clear();
-    pass_masks.clear();
+    view_local_ = {};
     if (draw_emitter_) {
       draw_emitter_->ResetViewData();
     }
@@ -223,11 +240,7 @@ public:
   }
 
 private:
-  //! Raw items collected during scene traversal.
-  std::vector<RenderItemData> collected_items_;
-
-  //! Indices of items that passed filtering.
-  std::vector<std::size_t> retained_indices_;
+  ViewLocalData view_local_ {};
 
   //! Modern geometry uploader with stable handles and bindless access.
   std::unique_ptr<resources::GeometryUploader> geometry_uploader_;
