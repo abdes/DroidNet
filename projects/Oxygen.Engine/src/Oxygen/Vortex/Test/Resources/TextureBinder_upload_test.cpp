@@ -19,6 +19,7 @@
 namespace {
 
 using oxygen::content::ResourceKey;
+using oxygen::vortex::testing::DecodeCookedTexturePayload;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload;
 using oxygen::vortex::testing::MakeCookedTexture8x8Bc7MipChainPayload;
@@ -60,7 +61,36 @@ using oxygen::vortex::testing::TextureBinderTest;
   return nullptr;
 }
 
+[[nodiscard]] auto MakeSyntheticTextureKeys(
+  oxygen::vortex::testing::FakeAssetLoader& loader,
+  const std::span<const std::uint8_t> payload, const std::size_t count)
+  -> std::vector<ResourceKey>
+{
+  auto keys = std::vector<ResourceKey> {};
+  keys.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    const auto key = loader.MintSyntheticTextureKey();
+    loader.SetCookedTexturePayload(key, payload);
+    keys.push_back(key);
+  }
+  return keys;
+}
+
 class TextureBinderUploadTest : public TextureBinderTest { };
+
+class TextureBinderBacklogTest : public TextureBinderTest {
+protected:
+  [[nodiscard]] auto BinderLimits() const
+    -> oxygen::vortex::resources::TextureBinder::UploadLimits override
+  {
+    return {
+      .max_upload_bytes_per_frame = 512U,
+      .max_pending_upload_bytes = 1024U,
+      .deferred_retry_low_watermark_bytes = 256U,
+      .max_deferred_retries_per_frame = 2U,
+    };
+  }
+};
 
 //! Descriptor repoint must happen only after upload completion.
 /*! The binder stores an upload ticket and must not repoint the per-entry SRV
@@ -439,6 +469,85 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
 
   EXPECT_EQ(fallback_texture_after, fallback_texture_before);
   EXPECT_EQ(placeholder_texture_after, placeholder_texture_before);
+}
+
+//! Pending decoded uploads must stay within a fixed byte budget; excess loads
+//! are deferred for later retry instead of accumulating unbounded CPU memory.
+NOLINT_TEST_F(
+  TextureBinderBacklogTest, PendingUploadBacklogIsBoundedAndDefersExcessLoads)
+{
+  const auto payload = MakeCookedTexture1x1Rgba8Payload();
+  const auto decoded
+    = DecodeCookedTexturePayload(std::span(payload.data(), payload.size()));
+  ASSERT_NE(decoded, nullptr);
+
+  const auto pending_budget = TexBinder().GetPendingUploadByteBudget();
+  const auto bytes_per_texture = decoded->GetDataSize();
+  ASSERT_GT(bytes_per_texture, 0U);
+
+  const auto key_count = pending_budget / bytes_per_texture + 2U;
+  const auto keys = MakeSyntheticTextureKeys(Loader(),
+    std::span(payload.data(), payload.size()), key_count);
+
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  for (const auto key : keys) {
+    (void)TexBinder().GetOrAllocate(key);
+  }
+
+  EXPECT_LE(TexBinder().GetPendingUploadBytes(), pending_budget);
+  EXPECT_LT(TexBinder().GetPendingUploadCount(), keys.size());
+  EXPECT_GT(TexBinder().GetDeferredRetryCount(), 0U);
+}
+
+//! Deferred overflow retries must eventually drain and leave all requested
+//! textures resident once enough frame starts advance upload completion.
+NOLINT_TEST_F(TextureBinderBacklogTest,
+  DeferredOverflowRetriesEventuallyCompleteQueuedTextures)
+{
+  const auto payload = MakeCookedTexture1x1Rgba8Payload();
+  const auto decoded
+    = DecodeCookedTexturePayload(std::span(payload.data(), payload.size()));
+  ASSERT_NE(decoded, nullptr);
+
+  const auto pending_budget = TexBinder().GetPendingUploadByteBudget();
+  const auto bytes_per_texture = decoded->GetDataSize();
+  ASSERT_GT(bytes_per_texture, 0U);
+
+  const auto key_count = pending_budget / bytes_per_texture + 2U;
+  const auto keys = MakeSyntheticTextureKeys(Loader(),
+    std::span(payload.data(), payload.size()), key_count);
+
+  auto q
+    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
+      oxygen::graphics::QueueRole::kTransfer));
+  ASSERT_NE(q, nullptr);
+
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  for (const auto key : keys) {
+    (void)TexBinder().GetOrAllocate(key);
+  }
+
+  for (std::uint32_t slot = 2U; slot < 6U; ++slot) {
+    Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+      oxygen::frame::Slot { slot });
+    TexBinder().OnFrameStart();
+    q->Signal((std::numeric_limits<std::uint64_t>::max)());
+  }
+
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 6U });
+  TexBinder().OnFrameStart();
+
+  for (const auto key : keys) {
+    EXPECT_TRUE(TexBinder().IsResourceReady(key));
+  }
+  EXPECT_EQ(TexBinder().GetPendingUploadCount(), 0U);
+  EXPECT_EQ(TexBinder().GetPendingUploadBytes(), 0U);
+  EXPECT_EQ(TexBinder().GetDeferredRetryCount(), 0U);
 }
 
 } // namespace

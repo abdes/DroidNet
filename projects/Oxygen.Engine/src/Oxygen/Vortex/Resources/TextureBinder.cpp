@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -51,13 +52,6 @@
 namespace oxygen::vortex::resources {
 
 namespace {
-
-  // Limit how much CPU-visible staging memory TextureBinder can consume per
-  // frame. This directly bounds RingBufferStaging growth (per partition) and
-  // avoids multi-GB upload buffers when many large textures become ready at
-  // once.
-  constexpr std::size_t kMaxTextureUploadBytesPerFrame
-    = 128ULL * 1024ULL * 1024ULL;
 
   struct UploadLayout {
     std::vector<vortex::upload::UploadSubresource> dst_subresources;
@@ -536,7 +530,7 @@ class TextureBinder::Impl {
 public:
   Impl(observer_ptr<Graphics> gfx, observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> uploader,
-    observer_ptr<content::IAssetLoader> texture_loader);
+    observer_ptr<content::IAssetLoader> texture_loader, UploadLimits limits);
 
   ~Impl();
 
@@ -554,6 +548,11 @@ public:
     const content::ResourceKey& resource_key) const noexcept -> bool;
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
   auto DumpEstimatedTextureMemory(std::size_t top_n) const -> void;
+  [[nodiscard]] auto GetPendingUploadCount() const noexcept -> std::size_t;
+  [[nodiscard]] auto GetPendingUploadBytes() const noexcept -> std::size_t;
+  [[nodiscard]] auto GetDeferredRetryCount() const noexcept -> std::size_t;
+  [[nodiscard]] auto GetPendingUploadByteBudget() const noexcept
+    -> std::size_t;
 
 private:
   enum class FailurePolicy : uint8_t {
@@ -592,6 +591,11 @@ private:
     VersionedBindlessHandle handle;
   };
 
+  struct DeferredRetry {
+    content::ResourceKey key;
+    VersionedBindlessHandle handle;
+  };
+
   struct PendingEviction {
     content::ResourceKey key;
     content::EvictionReason reason { content::EvictionReason::kRefCountZero };
@@ -608,6 +612,7 @@ private:
     std::shared_ptr<data::TextureResource> tex_res) -> void;
 
   auto SubmitQueuedTextureUploads(std::size_t max_bytes) -> void;
+  auto ReissueDeferredLoads(std::size_t max_retries) -> void;
 
   auto HandleLoadFailure(content::ResourceKey resource_key, TextureEntry& entry,
     FailurePolicy policy,
@@ -642,6 +647,7 @@ private:
   observer_ptr<vortex::upload::UploadCoordinator> uploader_;
   observer_ptr<vortex::upload::StagingProvider> staging_provider_;
   observer_ptr<content::IAssetLoader> texture_loader_;
+  UploadLimits limits_ {};
 
   std::shared_ptr<CallbackGate> callback_gate_;
 
@@ -649,8 +655,13 @@ private:
   nexus::GenerationTracker slot_generations_;
   std::uint32_t slot_generation_capacity_ { 0U };
 
-  std::mutex pending_uploads_mutex_;
+  mutable std::mutex pending_uploads_mutex_;
   std::deque<PendingUpload> pending_uploads_;
+  std::size_t pending_upload_bytes_ { 0U };
+
+  mutable std::mutex deferred_retries_mutex_;
+  std::deque<DeferredRetry> deferred_retries_;
+  std::unordered_set<content::ResourceKey> deferred_retry_keys_;
 
   std::mutex eviction_mutex_;
   std::deque<PendingEviction> pending_evictions_;
@@ -671,13 +682,16 @@ private:
   std::uint64_t lifecycle_generation_bumps_ { 0U };
   std::uint64_t lifecycle_stale_discard_count_ { 0U };
   std::uint64_t lifecycle_async_enqueued_ { 0U };
+  std::uint64_t lifecycle_async_backlog_deferrals_ { 0U };
+  std::uint64_t lifecycle_async_retries_ { 0U };
 };
 
 TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
   observer_ptr<ProviderT> staging_provider, observer_ptr<CoordinatorT> uploader,
-  observer_ptr<content::IAssetLoader> texture_loader)
+  observer_ptr<content::IAssetLoader> texture_loader, UploadLimits limits)
   : impl_(
-      std::make_unique<Impl>(gfx, staging_provider, uploader, texture_loader))
+      std::make_unique<Impl>(
+        gfx, staging_provider, uploader, texture_loader, limits))
 {
 }
 
@@ -714,6 +728,26 @@ auto TextureBinder::DumpEstimatedTextureMemory(const std::size_t top_n) const
   -> void
 {
   impl_->DumpEstimatedTextureMemory(top_n);
+}
+
+auto TextureBinder::GetPendingUploadCount() const noexcept -> std::size_t
+{
+  return impl_->GetPendingUploadCount();
+}
+
+auto TextureBinder::GetPendingUploadBytes() const noexcept -> std::size_t
+{
+  return impl_->GetPendingUploadBytes();
+}
+
+auto TextureBinder::GetDeferredRetryCount() const noexcept -> std::size_t
+{
+  return impl_->GetDeferredRetryCount();
+}
+
+auto TextureBinder::GetPendingUploadByteBudget() const noexcept -> std::size_t
+{
+  return impl_->GetPendingUploadByteBudget();
 }
 
 // Index-based allocation has been removed. Use the ResourceKey-only API.
@@ -901,15 +935,33 @@ auto TextureBinder::Impl::GetOrAllocate(
 TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> staging_provider,
   const observer_ptr<CoordinatorT> uploader,
-  const observer_ptr<content::IAssetLoader> texture_loader)
+  const observer_ptr<content::IAssetLoader> texture_loader,
+  UploadLimits limits)
   : gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(staging_provider)
   , texture_loader_(texture_loader)
+  , limits_(limits)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   CHECK_NOTNULL_F(texture_loader_, "IAssetLoader cannot be null");
+
+  if (limits_.max_upload_bytes_per_frame == 0U) {
+    limits_.max_upload_bytes_per_frame = 1U;
+  }
+  if (limits_.max_pending_upload_bytes == 0U) {
+    limits_.max_pending_upload_bytes = limits_.max_upload_bytes_per_frame;
+  }
+  if (limits_.deferred_retry_low_watermark_bytes == 0U
+    || limits_.deferred_retry_low_watermark_bytes
+      > limits_.max_pending_upload_bytes) {
+    limits_.deferred_retry_low_watermark_bytes
+      = (std::max)(std::size_t { 1U }, limits_.max_pending_upload_bytes / 2U);
+  }
+  if (limits_.max_deferred_retries_per_frame == 0U) {
+    limits_.max_deferred_retries_per_frame = 1U;
+  }
 
   callback_gate_ = std::make_shared<CallbackGate>();
   CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
@@ -997,6 +1049,9 @@ TextureBinder::Impl::~Impl()
   LOG_F(
     INFO, "lifecycle.stale_discards   : {}", lifecycle_stale_discard_count_);
   LOG_F(INFO, "lifecycle.async_enqueued   : {}", lifecycle_async_enqueued_);
+  LOG_F(INFO, "lifecycle.async_deferrals  : {}",
+    lifecycle_async_backlog_deferrals_);
+  LOG_F(INFO, "lifecycle.async_retries    : {}", lifecycle_async_retries_);
   LOG_F(INFO, "GetOrAllocate calls  : {}", total_get_or_allocate_calls_);
   LOG_F(INFO, "upload submissions   : {}", total_upload_submissions_);
   LOG_F(INFO, "cache hits     : {}", cache_hits_);
@@ -1128,7 +1183,8 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     entry.pending_handle = VersionedBindlessHandle {};
   }
 
-  SubmitQueuedTextureUploads(kMaxTextureUploadBytesPerFrame);
+  SubmitQueuedTextureUploads(limits_.max_upload_bytes_per_frame);
+  ReissueDeferredLoads(limits_.max_deferred_retries_per_frame);
 }
 
 auto TextureBinder::Impl::OnFrameEnd() -> void { }
@@ -1364,15 +1420,47 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
 {
   // This callback may execute off the render thread. Do not touch render
   // thread-owned state here (e.g. texture_map_, SRV descriptors).
-  {
+  bool deferred = false;
+  if (tex_res) {
+    const auto data_bytes = tex_res->GetDataSize();
+    std::scoped_lock lock(pending_uploads_mutex_);
+    const bool would_exceed_backlog_cap = pending_upload_bytes_ != 0U
+      && pending_upload_bytes_ + data_bytes > limits_.max_pending_upload_bytes;
+    if (!would_exceed_backlog_cap) {
+      pending_upload_bytes_ += data_bytes;
+      pending_uploads_.push_back(PendingUpload {
+        .key = resource_key,
+        .resource = std::move(tex_res),
+        .handle = handle,
+      });
+    } else {
+      deferred = true;
+    }
+  } else {
     std::scoped_lock lock(pending_uploads_mutex_);
     pending_uploads_.push_back(PendingUpload {
       .key = resource_key,
-      .resource = std::move(tex_res),
+      .resource = nullptr,
       .handle = handle,
     });
   }
-  ++lifecycle_async_enqueued_;
+
+  if (deferred) {
+    std::scoped_lock lock(deferred_retries_mutex_);
+    if (deferred_retry_keys_.insert(resource_key).second) {
+      deferred_retries_.push_back(DeferredRetry {
+        .key = resource_key,
+        .handle = handle,
+      });
+    }
+    ++lifecycle_async_backlog_deferrals_;
+    LOG_F(WARNING,
+      "Deferring decoded texture {} because pending upload backlog would exceed "
+      "{} bytes",
+      resource_key, limits_.max_pending_upload_bytes);
+  } else {
+    ++lifecycle_async_enqueued_;
+  }
 
   if (texture_loader_) {
     (void)texture_loader_->ReleaseResource(resource_key);
@@ -1440,6 +1528,7 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     }
 
     PendingUpload pending;
+    std::size_t pending_bytes = 0U;
     {
       std::scoped_lock lock(pending_uploads_mutex_);
       if (pending_uploads_.empty()) {
@@ -1447,6 +1536,11 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
       }
       pending = std::move(pending_uploads_.front());
       pending_uploads_.pop_front();
+      if (pending.resource) {
+        pending_bytes = pending.resource->GetDataSize();
+        pending_upload_bytes_
+          -= (std::min)(pending_upload_bytes_, pending_bytes);
+      }
     }
 
     TextureEntry* entry_ptr = this->FindEntryOrLog(pending.key);
@@ -1480,6 +1574,7 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
     } else if (submitted_bytes + data_bytes > max_bytes) {
       {
         std::scoped_lock lock(pending_uploads_mutex_);
+        pending_upload_bytes_ += pending_bytes;
         pending_uploads_.push_front(std::move(pending));
       }
       return;
@@ -1571,6 +1666,43 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
       std::move(prepared.layout.src_view), prepared.layout.trailing_bytes);
 
     submitted_bytes += data_bytes;
+  }
+}
+
+auto TextureBinder::Impl::ReissueDeferredLoads(const std::size_t max_retries)
+  -> void
+{
+  for (std::size_t attempts = 0; attempts < max_retries; ++attempts) {
+    {
+      std::scoped_lock lock(pending_uploads_mutex_);
+      if (pending_upload_bytes_ >= limits_.deferred_retry_low_watermark_bytes) {
+        return;
+      }
+    }
+
+    DeferredRetry retry {};
+    {
+      std::scoped_lock lock(deferred_retries_mutex_);
+      if (deferred_retries_.empty()) {
+        return;
+      }
+      retry = deferred_retries_.front();
+      deferred_retries_.pop_front();
+      deferred_retry_keys_.erase(retry.key);
+    }
+
+    auto* entry_ptr = FindEntryOrLog(retry.key);
+    if (entry_ptr == nullptr) {
+      continue;
+    }
+    auto& entry = *entry_ptr;
+    if (entry.evicted || retry.handle != CurrentDescriptorHandle_(entry)
+      || entry.pending_ticket.has_value()) {
+      continue;
+    }
+
+    ++lifecycle_async_retries_;
+    InitiateAsyncLoad(retry.key, entry, "deferred_backlog_retry");
   }
 }
 
@@ -1981,6 +2113,30 @@ auto TextureBinder::Impl::SubmitTextureData(
     LOG_F(ERROR, "Texture upload failed ({}): {}", debug_name,
       error_code.message());
   }
+}
+
+auto TextureBinder::Impl::GetPendingUploadCount() const noexcept -> std::size_t
+{
+  std::scoped_lock lock(pending_uploads_mutex_);
+  return pending_uploads_.size();
+}
+
+auto TextureBinder::Impl::GetPendingUploadBytes() const noexcept -> std::size_t
+{
+  std::scoped_lock lock(pending_uploads_mutex_);
+  return pending_upload_bytes_;
+}
+
+auto TextureBinder::Impl::GetDeferredRetryCount() const noexcept -> std::size_t
+{
+  std::scoped_lock lock(deferred_retries_mutex_);
+  return deferred_retries_.size();
+}
+
+auto TextureBinder::Impl::GetPendingUploadByteBudget() const noexcept
+  -> std::size_t
+{
+  return limits_.max_pending_upload_bytes;
 }
 
 } // namespace oxygen::vortex::resources

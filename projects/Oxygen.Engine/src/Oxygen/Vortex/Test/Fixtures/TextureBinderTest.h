@@ -40,6 +40,11 @@ protected:
   TextureBinderTest() = default;
 
   virtual auto ConfigureGraphics(FakeGraphics& /*gfx*/) -> void { }
+  [[nodiscard]] virtual auto BinderLimits() const
+    -> resources::TextureBinder::UploadLimits
+  {
+    return {};
+  }
 
   auto SetUp() -> void override;
 
