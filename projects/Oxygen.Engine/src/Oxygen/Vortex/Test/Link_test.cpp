@@ -5,8 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
@@ -30,6 +34,36 @@ using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::testing::FakeGraphics;
 
+auto VerifySourceHermeticity() -> void
+{
+  namespace fs = std::filesystem;
+
+  constexpr auto kLegacyIncludeNeedle = std::string_view { "Oxygen/"
+                                                           "Renderer/" };
+  const auto root = fs::path { OXYGEN_VORTEX_SOURCE_DIR };
+
+  for (const auto& entry : fs::recursive_directory_iterator(root)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+
+    auto file = std::ifstream(entry.path());
+    auto line = std::string {};
+    std::size_t line_number = 0;
+    while (std::getline(file, line)) {
+      ++line_number;
+      if (std::string_view { line }.find(kLegacyIncludeNeedle)
+          == std::string_view::npos) {
+        continue;
+      }
+
+      throw std::runtime_error(
+        "legacy include seam found at " + entry.path().generic_string() + ':'
+        + std::to_string(line_number));
+    }
+  }
+}
+
 auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 {
   const auto frame = observer_ptr<FrameContext> { &frame_context };
@@ -52,6 +86,8 @@ auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 auto main() -> int
 {
   try {
+    VerifySourceHermeticity();
+
     auto graphics = std::make_shared<FakeGraphics>();
     graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
 
