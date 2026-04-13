@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.5 are complete, repaired 01-08 now owns the pass-base substrate, and repaired 01-10 still carries the final post-orchestrator FOUND-03 proof`
+Status: `in_progress — Phase 1 steps 1.1-1.5 are complete, repaired 01-08 now owns only the public step-1.7 headers, and repaired 01-10 carries step 1.6 plus the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Repaired `01-07` closed steps `1.4` and `1.5`; repaired `01-08` now owns the pass-base substrate for step `1.6` |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-07` closed steps `1.4` and `1.5`; repaired `01-08` now owns only the public step `1.7` headers before `01-10` lands step `1.6` with the root contracts |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -105,7 +105,46 @@ implementation cannot begin until its design prerequisites are met.
   - steps `1.4` and `1.5` are now complete with build and dependency-edge evidence
   - no Vortex runtime/facade validation was run in this plan
 - Remaining blocker:
-  - execute repaired `01-08` to land the step-`1.6` pass-base substrate before the public half of step `1.7`
+  - execute repaired `01-08` to land only the public half of step `1.7`, then `01-09`, then `01-10` to land step `1.6` with the later root-contract wave
+
+### 2026-04-13 — Phase 1 tail repaired after the `01-08` pass-base/root-contract blocker
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/.continue-here.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-08-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-10-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-11-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-08-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-10-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-11-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `Get-Content .planning/workstreams/vortex/ROADMAP.md`
+  - `Get-Content .planning/workstreams/vortex/STATE.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/.continue-here.md`
+  - `Get-Content design/vortex/PLAN.md`
+  - `Get-Content design/vortex/PROJECT-LAYOUT.md`
+  - `Get-Content src/Oxygen/Renderer/Passes/RenderPass.cpp`
+  - `Get-Content src/Oxygen/Renderer/Passes/GraphicsRenderPass.cpp`
+  - `Get-Content src/Oxygen/Renderer/Passes/ComputeRenderPass.cpp`
+- Result:
+  - `01-08` now owns only `CompositionView.h`, `RendererCapability.h`, `RenderMode.h`, and `SceneRenderer/DepthPrePassPolicy.h`
+  - the plan set no longer claims the step-`1.6` pass bases can land before Vortex owns `RenderContext` / `Renderer`
+  - `01-09` still closes the private half of step `1.7`
+  - `01-10` now owns the step-`1.6` pass bases together with the later-wave root contracts, stripped renderer orchestrator, and final post-orchestrator dependency-edge proof
+  - the roadmap, validation contract, resume note, and state file now all point execution back to the completed-state handoff at `01-08`
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run during this planning repair
+  - Phase 1 remains `in_progress`; the next executable plan is repaired `01-08`
+- Remaining blocker:
+  - execute repaired `01-08`, `01-09`, and `01-10` in order from the current completed state at `01-07`
 
 ### 2026-04-13 — Phase 1 plan 01-06 migrated the remaining ScenePrep-only data/config slice
 
@@ -268,8 +307,9 @@ implementation cannot begin until its design prerequisites are met.
   - the remaining ScenePrep, pass-base, composition, and orchestrator scopes
     shift down one slot so no single remaining plan exceeds the checker
     file-budget threshold
-  - `01-10` now owns the remaining root-support files plus the stripped
-    orchestrator and records the final post-orchestrator dependency-edge proof
+  - `01-10` now owns the step-`1.6` pass bases together with the remaining
+    root-support files plus the stripped orchestrator and records the final
+    post-orchestrator dependency-edge proof
   - the roadmap, validation contract, and resume note now all point execution
     back to the repaired `01-04` boundary
   - task-structure verification confirms all three repaired plans still have
@@ -421,9 +461,10 @@ implementation cannot begin until its design prerequisites are met.
   - the full 11-plan Phase 1 set now matches roadmap steps `1.1` through `1.9`
   - `01-04` through `01-06` now cover resources, ScenePrep, and selected
     internals instead of continuing upload work
-  - `01-08` now closes only step `1.7`
-  - `01-09` and `01-10` keep step `1.8` split between support-file migration
-    and orchestrator migration
+  - `01-08` now lands only the public half of step `1.7`
+  - `01-09` closes the private half of step `1.7`
+  - `01-10` now owns step `1.6`, the remaining root-support files, and the
+    stripped orchestrator for step `1.8`
 - Code / validation delta:
   - no implementation code changed
   - no build or tests were run during plan repair
@@ -547,10 +588,11 @@ design and execution work starts.
   - `01-06` covers only the remaining ScenePrep-only data/config files
   - `01-07` covers ScenePrep execution plus the selected substrate-only
     internal utilities
-  - `01-08` covers pass bases plus the public half of step `1.7`
+  - `01-08` covers only the public half of step `1.7`
   - `01-09` closes the private half of step `1.7`
-  - `01-10` covers the remaining root-support files, the stripped
-    orchestrator, and the final post-orchestrator dependency-edge proof
+  - `01-10` covers the step-`1.6` pass bases, the remaining root-support
+    files, the stripped orchestrator, and the final post-orchestrator
+    dependency-edge proof
 - Every Phase 1 plan now has 2 tasks plus the required `<read_first>` and
   `<acceptance_criteria>` blocks.
 - Step `1.1` is now fully migrated under `src/Oxygen/Vortex/Types/`,
@@ -585,15 +627,16 @@ design and execution work starts.
 | 1.3 | Resources subsystem (7 files) | `done` | `01-05` landed the full `Resources/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `Oxygen.Renderer` dependency edge |
 | 1.4 | ScenePrep subsystem (15 files) | `done` | `01-07` landed `ScenePrep/Extractors.h`, `ScenePrep/Finalizers.h`, and `ScenePrepPipeline.cpp/.h`, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
 | 1.5 | Internal utilities (7 files) | `done` | `01-07` landed the selected substrate-only `Internal/*` slice, built `oxygen-vortex`, and proved the linked Vortex DLL still has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
-| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-08` |
+| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-10` |
 | 1.7 | View assembly + composition | `planned` | Repaired Phase 1 plans `01-08` and `01-09` |
 | 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
 | 1.9 | Smoke test | `not_started` | — |
 
 ### Resume Point
 
-Continue with repaired `01-08` to land the step-`1.6` pass-base classes and
-the public half of step `1.7`.
+Continue with repaired `01-08` to land only the public half of step `1.7`,
+then `01-09`, then `01-10` to land step `1.6` together with the later-wave
+root contracts and stripped orchestrator.
 
 ---
 
