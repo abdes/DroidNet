@@ -33,7 +33,7 @@ public:
   OXGN_VRTX_API explicit RenderPass(std::string_view name);
   ~RenderPass() override = default;
 
-  OXYGEN_DEFAULT_COPYABLE(RenderPass)
+  OXYGEN_MAKE_NON_COPYABLE(RenderPass)
   OXYGEN_DEFAULT_MOVABLE(RenderPass)
 
   OXGN_VRTX_NDAPI auto PrepareResources(const RenderContext& context,

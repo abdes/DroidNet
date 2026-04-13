@@ -17,7 +17,8 @@ auto ScenePrepPipeline::RecordCollectionFailure(const std::string_view stage,
 {
   ++failure_stats_.total_failures;
 
-  const auto phase = ctx.has_value() && ctx->HasView() ? "view" : "frame";
+  const auto* const phase
+    = ctx.has_value() && ctx->HasView() ? "view" : "frame";
   const auto node_name = node != nullptr ? node->GetName() : "<unknown>";
   const auto frame_sequence
     = ctx.has_value() ? ctx->GetFrameSequenceNumber().get() : 0U;
@@ -95,9 +96,11 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
 
     auto traversal = scene::SceneTraversal(scene.shared_from_this());
     static_cast<void>(
-      traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
+      traversal.Traverse([&](const auto& visited, bool /*dry_run*/)
+                           -> scene::VisitResult {
         const auto& node_impl = *visited.node_impl;
-        if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+        if (!node_impl.template HasComponent<
+              scene::detail::RenderableComponent>()) {
           return scene::VisitResult::kContinue;
         }
         DLOG_F(3, "Node: {}", node_impl.GetName());
@@ -149,9 +152,11 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
 
   auto traversal = scene::SceneTraversal(scene.shared_from_this());
   static_cast<void>(
-    traversal.Traverse([&](const auto& visited, bool /*dry_run*/) {
+    traversal.Traverse([&](const auto& visited, bool /*dry_run*/)
+                         -> scene::VisitResult {
       const auto& node_impl = *visited.node_impl;
-      if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+      if (!node_impl.template HasComponent<
+            scene::detail::RenderableComponent>()) {
         return scene::VisitResult::kContinue;
       }
       DLOG_F(3, "Node: {}", node_impl.GetName());

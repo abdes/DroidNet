@@ -8,7 +8,6 @@
 
 #include <cstdint>
 #include <span>
-#include <vector>
 
 #include <glm/vec4.hpp>
 
@@ -50,7 +49,7 @@ struct PreparedSceneFrame {
 
   // Partition map (Task 11 scaffolding): pass mask -> contiguous draw range.
   struct PartitionRange {
-    PassMask pass_mask {}; // bitfield identifying pass categories
+    PassMask pass_mask; // bitfield identifying pass categories
     uint32_t begin = 0; // inclusive begin draw index
     uint32_t end = 0; // exclusive end draw index
   };

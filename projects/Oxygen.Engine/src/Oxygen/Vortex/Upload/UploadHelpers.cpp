@@ -136,8 +136,10 @@ auto EnsureBufferAndSrv(Graphics& gfx,
     gfx.GetDeferredReclaimer().RegisterDeferredRelease(buffer);
 
     registry.Replace(
-      *buffer, new_buffer, [&](const graphics::BufferViewDescription&) {
-        return std::optional<graphics::BufferViewDescription>(view_desc);
+      *buffer, new_buffer,
+      [&](const graphics::BufferViewDescription&)
+        -> std::optional<graphics::BufferViewDescription> {
+        return { view_desc };
       });
     // new_buffer is now owned by registry; update our shared_ptr to match.
     buffer = std::move(new_buffer);

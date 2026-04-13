@@ -78,8 +78,8 @@ namespace {
     const auto mip_level = sub_resources.base_mip_level;
 
     return {
-      (std::max)(1u, texture_desc.width >> mip_level),
-      (std::max)(1u, texture_desc.height >> mip_level),
+      (std::max)(1U, texture_desc.width >> mip_level),
+      (std::max)(1U, texture_desc.height >> mip_level),
     };
   }
 
@@ -209,9 +209,9 @@ auto CompositingPass::SetupRenderTargets(
   const auto* fb = GetFramebuffer();
   CHECK_NOTNULL_F(fb);
   const auto rtvs = fb->GetRenderTargetViews();
-  CHECK_F(!rtvs.empty() && rtvs[0]->IsValid(),
+  CHECK_F(!rtvs.empty() && rtvs.front()->IsValid(),
     "framebuffer missing a valid color RTV");
-  std::array<graphics::NativeView, 1> color_rtvs { rtvs[0] };
+  std::array<graphics::NativeView, 1> color_rtvs { rtvs.front() };
   recorder.SetRenderTargets(std::span(color_rtvs), std::nullopt);
 }
 
@@ -248,15 +248,15 @@ auto CompositingPass::GetOutputAttachment() const
   -> const graphics::FramebufferAttachment&
 {
   const auto* fb = GetFramebuffer();
-  if (!fb) {
+  if (fb == nullptr) {
     throw std::runtime_error("CompositingPass: framebuffer is null");
   }
   const auto& fb_desc = fb->GetDescriptor();
   if (fb_desc.color_attachments.empty()
-    || !fb_desc.color_attachments[0].texture) {
+    || !fb_desc.color_attachments.front().texture) {
     throw std::runtime_error("CompositingPass: missing color attachment");
   }
-  return fb_desc.color_attachments[0];
+  return fb_desc.color_attachments.front();
 }
 
 auto CompositingPass::GetOutputTexture() const -> const graphics::Texture&
@@ -314,7 +314,7 @@ auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
 
   chunk.mapped_ptr
     = static_cast<std::byte*>(chunk.buffer->Map(0, desc.size_bytes));
-  if (!chunk.mapped_ptr) {
+  if (chunk.mapped_ptr == nullptr) {
     throw std::runtime_error(
       "CompositingPass: Failed to map pass constants buffer");
   }
@@ -336,7 +336,7 @@ auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
       throw std::runtime_error(
         "CompositingPass: Failed to allocate CBV descriptor handle");
     }
-    chunk.indices[slot] = allocator.GetShaderVisibleIndex(cbv_handle);
+    chunk.indices.at(slot) = allocator.GetShaderVisibleIndex(cbv_handle);
 
     auto cbv_view = registry.RegisterView(
       *chunk.buffer, std::move(cbv_handle), cbv_view_desc);
@@ -359,7 +359,7 @@ auto CompositingPass::GetCurrentFramePassConstantsState()
     "frame_slot {} out of bounds for pass constants",
     Context().frame_slot.get());
 
-  auto& state = pass_constants_frames_[slot_index];
+  auto& state = pass_constants_frames_.at(slot_index);
   if (state.frame_sequence != Context().frame_sequence) {
     ReleasePassConstantsFrameState(state);
     state.frame_sequence = Context().frame_sequence;
@@ -394,7 +394,7 @@ auto CompositingPass::ReleasePassConstantsFrameState(
     chunk.buffer.reset();
     chunk.mapped_ptr = nullptr;
     chunk.indices.fill(kInvalidShaderVisibleIndex);
-    chunk.used_slots = 0u;
+    chunk.used_slots = 0U;
   }
   state.chunks.clear();
   state.frame_sequence = frame::kInvalidSequenceNumber;
@@ -458,7 +458,7 @@ auto CompositingPass::UpdatePassConstants(
   const float alpha = detail::SanitizeCompositingAlphaValue(config_->alpha);
   const CompositingPassConstants constants {
     .source_texture_index = source_texture_index.get(),
-    .sampler_index = 0u,
+    .sampler_index = 0U,
     .alpha = alpha,
     .pad0 = 0.0F,
   };
@@ -476,7 +476,7 @@ auto CompositingPass::UpdatePassConstants(
   auto* slot_ptr = chunk.mapped_ptr
     + static_cast<std::ptrdiff_t>(slot * kPassConstantsStride);
   std::memcpy(slot_ptr, &constants, sizeof(constants));
-  SetPassConstantsIndex(chunk.indices[slot]);
+  SetPassConstantsIndex(chunk.indices.at(slot));
 }
 
 auto CompositingPass::CreatePipelineStateDesc()
@@ -557,7 +557,7 @@ auto CompositingPass::NeedRebuildPipelineState() const -> bool
   const auto& color_desc = attachment.texture->GetDescriptor();
   const auto output_format = ResolveAttachmentFormat(attachment);
   if (last_built->FramebufferLayout().color_target_formats.empty()
-    || last_built->FramebufferLayout().color_target_formats[0]
+    || last_built->FramebufferLayout().color_target_formats.front()
       != output_format) {
     return true;
   }

@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Scene.h>
@@ -46,7 +47,7 @@ public:
 
   OXGN_VRTX_API auto Collect(const scene::Scene& scene,
     std::optional<::oxygen::observer_ptr<const ResolvedView>> view,
-    frame::SequenceNumber frame_id, ScenePrepState& state, bool reset_state)
+    frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state)
     -> void;
 
   //! Single-view fused collection path.
@@ -98,14 +99,13 @@ public:
   auto CollectImpl(std::optional<ScenePrepContext> ctx, ScenePrepState& state,
     RenderItemProto& item) -> void override
   {
-    const auto run_stage = [&](const std::string_view stage_name,
-                             auto&& fn) -> bool {
+    const auto run_stage
+      = [&](const std::string_view stage_name, auto&& fn) -> bool {
       try {
         fn();
         return !item.IsDropped();
       } catch (const std::exception& ex) {
-        this->RecordCollectionFailure(
-          stage_name, ctx, item.GetNodePtr(), ex);
+        this->RecordCollectionFailure(stage_name, ctx, item.GetNodePtr(), ex);
       }
       item.MarkDropped();
       return false;
@@ -210,8 +210,8 @@ public:
   }
 
 private:
-  [[no_unique_address]] CollectionCfg collection_;
-  [[no_unique_address]] FinalizationCfg finalization_;
+  OXYGEN_NO_UNIQUE_ADDRESS CollectionCfg collection_;
+  OXYGEN_NO_UNIQUE_ADDRESS FinalizationCfg finalization_;
 };
 
 } // namespace oxygen::vortex::sceneprep

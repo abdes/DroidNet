@@ -41,7 +41,8 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
       [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
         return bindless::HeapIndex { frame_write_count_ };
       },
-      [](oxygen::nexus::DomainKey /*domain*/, bindless::HeapIndex /*index*/) {},
+      [](oxygen::nexus::DomainKey /*domain*/,
+        bindless::HeapIndex /*index*/) -> void {},
       slot_reclaimer_)
   , worlds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,

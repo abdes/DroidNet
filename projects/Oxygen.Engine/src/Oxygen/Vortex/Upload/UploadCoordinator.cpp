@@ -10,7 +10,6 @@
 #include <functional>
 #include <span>
 #include <thread>
-#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -211,8 +210,8 @@ auto PackTexture2DToStaging(const UploadPolicy& policy,
       const auto src_off
         = static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch);
       const auto dst_off = region.buffer_offset
-        + static_cast<uint64_t>(row)
-          * static_cast<uint64_t>(region.buffer_row_pitch);
+        + (static_cast<uint64_t>(row)
+          * static_cast<uint64_t>(region.buffer_row_pitch));
       std::memcpy(dst_staging + dst_off,
         s.bytes.data() + static_cast<std::size_t>(src_off),
         static_cast<std::size_t>(copy_bytes_per_row));
@@ -290,14 +289,14 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
       const auto src_slice_off
         = static_cast<uint64_t>(z) * static_cast<uint64_t>(s.slice_pitch);
       const auto dst_slice_off = region.buffer_offset
-        + static_cast<uint64_t>(z)
-          * static_cast<uint64_t>(region.buffer_slice_pitch);
+        + (static_cast<uint64_t>(z)
+          * static_cast<uint64_t>(region.buffer_slice_pitch));
       for (uint32_t row = 0; row < rows; ++row) {
         const auto src_off = src_slice_off
-          + static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch);
+          + (static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch));
         const auto dst_off = dst_slice_off
-          + static_cast<uint64_t>(row)
-            * static_cast<uint64_t>(region.buffer_row_pitch);
+          + (static_cast<uint64_t>(row)
+            * static_cast<uint64_t>(region.buffer_row_pitch));
         std::memcpy(dst_staging + dst_off,
           s.bytes.data() + static_cast<std::size_t>(src_off),
           static_cast<std::size_t>(copy_bytes_per_row));
@@ -425,8 +424,8 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
     const auto& src_view = std::get<UploadTextureSourceView>(req.data);
-    if (!PackTexture2DToStaging(policy, tdesc.dst->GetDescriptor(), plan,
-          src_view, reinterpret_cast<std::byte*>(staging.Ptr()))) {
+    if (!PackTexture2DToStaging(
+          policy, tdesc.dst->GetDescriptor(), plan, src_view, staging.Ptr())) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
@@ -435,8 +434,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
     if (!producer) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
-    std::span<std::byte> dst(
-      reinterpret_cast<std::byte*>(staging.Ptr()), total_bytes);
+    std::span<std::byte> dst(staging.Ptr(), total_bytes);
     if (!producer(dst)) {
       return tracker.RegisterFailedImmediate(
         req.debug_name, UploadError::kProducerFailed);
@@ -517,8 +515,8 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
     const auto& src_view = std::get<UploadTextureSourceView>(req.data);
-    if (!PackTexture3DToStaging(policy, tdesc.dst->GetDescriptor(), plan,
-          src_view, reinterpret_cast<std::byte*>(staging.Ptr()))) {
+    if (!PackTexture3DToStaging(
+          policy, tdesc.dst->GetDescriptor(), plan, src_view, staging.Ptr())) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
@@ -527,8 +525,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
     if (!producer) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
-    std::span<std::byte> dst(
-      reinterpret_cast<std::byte*>(staging.Ptr()), total_bytes);
+    std::span<std::byte> dst(staging.Ptr(), total_bytes);
     if (!producer(dst)) {
       return tracker.RegisterFailedImmediate(
         req.debug_name, UploadError::kProducerFailed);
@@ -636,7 +633,7 @@ auto UploadCoordinator::SubmitMany(
       if (!submit_result) {
         return std::unexpected(submit_result.error());
       }
-      out.emplace_back(std::move(*submit_result));
+      out.emplace_back(*submit_result);
       ++idx;
       continue;
     }
@@ -721,8 +718,8 @@ auto UploadCoordinator::RetireCompleted() -> void
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto UploadCoordinator::OnFrameStart(vortex::RendererTag, frame::Slot slot)
-  -> void
+auto UploadCoordinator::OnFrameStart(
+  vortex::RendererTag /*tag*/, frame::Slot slot) -> void
 {
   static auto tag = internal::UploaderTagFactory::Get();
 
@@ -824,12 +821,15 @@ auto UploadCoordinator::SubmitRun(
   }
   auto& allocation = *allocation_result;
   FillStagingForPlan(plan, run, allocation);
-  return OptimizeBufferRun(run, plan).and_then([&](BufferUploadPlan opt) {
-    return RecordBufferRun(opt, run, allocation)
-      .and_then([&](graphics::FenceValue fence) {
-        return MakeTicketsForPlan(plan, run, fence);
-      });
-  });
+  return OptimizeBufferRun(run, plan).and_then(
+    [&](BufferUploadPlan opt)
+      -> std::expected<std::vector<UploadTicket>, UploadError> {
+      return RecordBufferRun(opt, run, allocation)
+        .and_then([&](graphics::FenceValue fence)
+                    -> std::expected<std::vector<UploadTicket>, UploadError> {
+          return MakeTicketsForPlan(plan, run, fence);
+        });
+    });
 }
 
 auto UploadCoordinator::PlanBufferRun(std::span<const UploadRequest> run)
@@ -921,7 +921,7 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       staging.Offset().get() + it.region.src_offset, it.region.size);
 
     const bool is_last = (idx2 + 1 == optimized.uploads.size());
-    const bool next_diff = !is_last && [&]() {
+    const bool next_diff = !is_last && [&]() -> bool {
       const auto& next_it = optimized.uploads[idx2 + 1];
       const auto next_rep = next_it.request_indices.front();
       const auto& next_r = run[next_rep];

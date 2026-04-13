@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 

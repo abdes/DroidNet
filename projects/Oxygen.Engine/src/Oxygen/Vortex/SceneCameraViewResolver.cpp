@@ -16,6 +16,13 @@
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 namespace oxygen::vortex {
+namespace {
+
+constexpr float kDefaultNearPlane = 0.1F;
+constexpr float kDefaultFarPlane = 1000.0F;
+constexpr std::size_t kOrthographicFarExtentIndex = 5U;
+
+} // namespace
 
 auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
   std::optional<oxygen::ViewPort> viewport_override) -> ResolvedView
@@ -26,8 +33,8 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
     params.view_matrix = Mat4(1.0F);
     params.proj_matrix = Mat4(1.0F);
     params.depth_range = NdcDepthRange::ZeroToOne;
-    params.near_plane = 0.1F;
-    params.far_plane = 1000.0F;
+    params.near_plane = kDefaultNearPlane;
+    params.far_plane = kDefaultFarPlane;
     return ResolvedView(params);
   }
 
@@ -51,8 +58,8 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
   }(cam_pos, cam_rot);
 
   Mat4 proj_m { 1.0F };
-  float near_plane = 0.1F;
-  float far_plane = 1000.0F;
+  float near_plane = kDefaultNearPlane;
+  float far_plane = kDefaultFarPlane;
   std::optional<float> camera_ev {};
   NdcDepthRange src_range = NdcDepthRange::ZeroToOne;
   if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
@@ -64,7 +71,7 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
     proj_m = camo->get().ProjectionMatrix();
     const auto ext = camo->get().GetExtents();
     near_plane = ext[4];
-    far_plane = ext[5];
+    far_plane = ext[kOrthographicFarExtentIndex];
     camera_ev = camo->get().Exposure().GetEv();
   }
 
