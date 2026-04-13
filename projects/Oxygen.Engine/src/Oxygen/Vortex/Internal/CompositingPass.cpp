@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Internal/CompositingAlphaSanitizer.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 
@@ -34,14 +35,12 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
-  constexpr float kDefaultAlpha = 1.0F;
-
-  auto SanitizeAlpha(const float alpha) -> float
+  auto SanitizeAlphaForConfig(const std::string_view debug_name,
+    const float alpha) -> oxygen::vortex::internal::detail::SanitizedAlphaResult
   {
-    if (!std::isfinite(alpha)) {
-      return kDefaultAlpha;
-    }
-    return std::clamp(alpha, 0.0F, 1.0F);
+    static oxygen::vortex::internal::detail::AlphaWarningLimiter limiter {};
+    return oxygen::vortex::internal::detail::SanitizeCompositingAlpha(
+      debug_name, alpha, limiter);
   }
 
   auto CheckTrackedTexture(const graphics::CommandRecorder& recorder,
@@ -145,15 +144,16 @@ auto CompositingPass::ValidateConfig() -> void
       "CompositingPass: source texture and output texture must be distinct");
   }
 
-  const auto sanitized_alpha = SanitizeAlpha(config_->alpha);
-  if (!std::isfinite(config_->alpha)) {
+  const auto sanitized_alpha
+    = SanitizeAlphaForConfig(config_->debug_name, config_->alpha);
+  if (sanitized_alpha.log_invalid_alpha) {
     LOG_F(WARNING, "invalid alpha={}, resetting to default {}", config_->alpha,
-      kDefaultAlpha);
-    config_->alpha = sanitized_alpha;
-  } else if (config_->alpha != sanitized_alpha) {
-    LOG_F(WARNING, "clamping alpha={} to {}", config_->alpha, sanitized_alpha);
-    config_->alpha = sanitized_alpha;
+      sanitized_alpha.alpha);
+  } else if (sanitized_alpha.log_clamped_alpha) {
+    LOG_F(WARNING, "clamping alpha={} to {}", config_->alpha,
+      sanitized_alpha.alpha);
   }
+  config_->alpha = sanitized_alpha.alpha;
 
   clamped_viewport_ = GetClampedViewport();
   has_drawable_region_ = HasPositiveArea(clamped_viewport_);
@@ -173,8 +173,10 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   CheckTrackedTexture(recorder, source, "source");
   CheckTrackedTexture(recorder, output, "output");
 
-  recorder.RequireResourceState(source, graphics::ResourceStates::kShaderResource);
-  recorder.RequireResourceState(output, graphics::ResourceStates::kRenderTarget);
+  recorder.RequireResourceState(
+    source, graphics::ResourceStates::kShaderResource);
+  recorder.RequireResourceState(
+    output, graphics::ResourceStates::kRenderTarget);
   recorder.FlushBarriers();
 
   EnsurePassConstantsBuffer();
@@ -354,7 +356,8 @@ auto CompositingPass::GetCurrentFramePassConstantsState()
     "frame_slot must be valid before allocating pass constants");
   const auto slot_index = static_cast<size_t>(Context().frame_slot.get());
   CHECK_LT_F(slot_index, pass_constants_frames_.size(),
-    "frame_slot {} out of bounds for pass constants", Context().frame_slot.get());
+    "frame_slot {} out of bounds for pass constants",
+    Context().frame_slot.get());
 
   auto& state = pass_constants_frames_[slot_index];
   if (state.frame_sequence != Context().frame_sequence) {
@@ -452,7 +455,7 @@ auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
 auto CompositingPass::UpdatePassConstants(
   const ShaderVisibleIndex source_texture_index) -> void
 {
-  const float alpha = SanitizeAlpha(config_->alpha);
+  const float alpha = detail::SanitizeCompositingAlphaValue(config_->alpha);
   const CompositingPassConstants constants {
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0u,
