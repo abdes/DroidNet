@@ -11,6 +11,40 @@
 
 namespace oxygen::vortex::sceneprep {
 
+auto ScenePrepPipeline::RecordCollectionFailure(const std::string_view stage,
+  const std::optional<ScenePrepContext>& ctx, const scene::SceneNodeImpl* node,
+  const std::string_view message) -> void
+{
+  ++failure_stats_.total_failures;
+
+  const auto phase = ctx.has_value() && ctx->HasView() ? "view" : "frame";
+  const auto node_name = node != nullptr ? node->GetName() : "<unknown>";
+  const auto frame_sequence
+    = ctx.has_value() ? ctx->GetFrameSequenceNumber().get() : 0U;
+  const auto key = std::string(phase) + "|" + std::string(stage) + "|"
+    + std::string(node_name) + "|" + std::string(message);
+
+  const auto [it, inserted] = failure_occurrences_.try_emplace(key, 0U);
+  ++it->second;
+
+  if (!inserted) {
+    ++failure_stats_.suppressed_failures;
+    return;
+  }
+
+  ++failure_stats_.logged_failures;
+  LOG_F(ERROR,
+    "ScenePrep {}-phase stage '{}' failed for node '{}' (frame={}): {}",
+    phase, stage, node_name, frame_sequence, message);
+}
+
+auto ScenePrepPipeline::RecordCollectionFailure(const std::string_view stage,
+  const std::optional<ScenePrepContext>& ctx, const scene::SceneNodeImpl* node,
+  const std::exception& ex) -> void
+{
+  RecordCollectionFailure(stage, ctx, node, ex.what());
+}
+
 auto ScenePrepPipeline::Collect(const scene::Scene& scene,
   std::optional<::oxygen::observer_ptr<const ResolvedView>> view,
   frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state) -> void
@@ -50,7 +84,7 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
         // In View-phase we do not repopulate the global list.
         (void)items_before; // silence unused warning
       } catch (const std::exception& ex) {
-        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+        RecordCollectionFailure("node_collect", ctx_, node_impl, ex);
       }
     }
   } else {
@@ -85,7 +119,7 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
           }
 
         } catch (const std::exception& ex) {
-          LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+          RecordCollectionFailure("node_collect", ctx_, &node_impl, ex);
         }
         return scene::VisitResult::kContinue;
       }));
@@ -125,7 +159,7 @@ auto ScenePrepPipeline::CollectSingleView(const scene::Scene& scene,
         RenderItemProto item { node_impl, visited.handle };
         CollectImpl(ctx_, *prep_state_, item);
       } catch (const std::exception& ex) {
-        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+        RecordCollectionFailure("node_collect", ctx_, &node_impl, ex);
       }
       return scene::VisitResult::kContinue;
     }));
