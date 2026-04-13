@@ -31,7 +31,6 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Vortex/CompositionView.h>
-#include <Oxygen/Vortex/Internal/RenderContextPool.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -64,6 +63,9 @@ namespace console {
 } // namespace oxygen
 
 namespace oxygen::vortex::internal {
+template <typename RenderContextT> class BasicRenderContextPool;
+class CompositingPass;
+struct CompositingPassConfig;
 class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
@@ -514,7 +516,10 @@ private:
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
   std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
-  std::unique_ptr<internal::RenderContextPool> render_context_pool_;
+  std::shared_ptr<internal::CompositingPass> compositing_pass_;
+  std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
+  std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
+    render_context_pool_;
 
   mutable std::shared_mutex view_registration_mutex_;
   std::unordered_map<ViewId, RenderGraphFactory> render_graphs_;
