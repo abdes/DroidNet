@@ -66,9 +66,15 @@ set(
   "Types/VsmFrameBindings.h"
   "Upload/AtlasBuffer.h"
   "Upload/Errors.h"
+  "Upload/InlineTransfersCoordinator.h"
   "Upload/RingBufferStaging.h"
   "Upload/StagingProvider.h"
   "Upload/TransientStructuredBuffer.h"
+  "Upload/UploadCoordinator.h"
+  "Upload/UploadHelpers.h"
+  "Upload/UploadPlanner.h"
+  "Upload/UploadPolicy.h"
+  "Upload/UploadTracker.h"
   "Upload/Types.h"
   "Upload/UploaderTag.h"
 )
@@ -78,9 +84,15 @@ set(
   "Types/ViewConstants.cpp"
   "Upload/AtlasBuffer.cpp"
   "Upload/Errors.cpp"
+  "Upload/InlineTransfersCoordinator.cpp"
   "Upload/RingBufferStaging.cpp"
   "Upload/StagingProvider.cpp"
   "Upload/TransientStructuredBuffer.cpp"
+  "Upload/UploadCoordinator.cpp"
+  "Upload/UploadHelpers.cpp"
+  "Upload/UploadPlanner.cpp"
+  "Upload/UploadPolicy.cpp"
+  "Upload/UploadTracker.cpp"
 )
 
 target_sources(
