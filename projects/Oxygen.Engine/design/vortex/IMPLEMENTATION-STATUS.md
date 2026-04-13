@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 steps 1.1-1.2 are complete; 01-04 starts step 1.3 resources migration`
+Status: `in_progress — Phase 1 steps 1.1-1.2 and repaired 01-04 prerequisite ABI bundle are complete; repaired 01-05 now migrates resources, and repaired 01-10 carries the final post-orchestrator FOUND-03 proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Step 1.3 resources migration is next (`01-04`) |
+| 1 | Substrate Migration | `in_progress` | Repaired `01-05` now owns step 1.3 `Resources/*` migration on top of the landed prerequisite ABI bundle |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,120 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-04 landed the prerequisite ABI bundle for resources
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/PreparedSceneFrame.cpp`
+  - `src/Oxygen/Vortex/PreparedSceneFrame.h`
+  - `src/Oxygen/Vortex/ScenePrep/GeometryRef.h`
+  - `src/Oxygen/Vortex/ScenePrep/Handles.h`
+  - `src/Oxygen/Vortex/ScenePrep/MaterialRef.h`
+  - `src/Oxygen/Vortex/ScenePrep/RenderItemData.h`
+  - `src/Oxygen/Vortex/Types/ConventionalShadowDrawRecord.h`
+  - `src/Oxygen/Vortex/Types/DrawMetadata.h`
+  - `src/Oxygen/Vortex/Types/MaterialShadingConstants.h`
+  - `src/Oxygen/Vortex/Types/PassMask.h`
+  - `src/Oxygen/Vortex/Types/ProceduralGridMaterialConstants.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Types/ConventionalShadowDrawRecord.h src/Oxygen/Vortex/Types/DrawMetadata.h src/Oxygen/Vortex/Types/MaterialShadingConstants.h src/Oxygen/Vortex/Types/PassMask.h src/Oxygen/Vortex/Types/ProceduralGridMaterialConstants.h`
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/PreparedSceneFrame.cpp src/Oxygen/Vortex/PreparedSceneFrame.h src/Oxygen/Vortex/ScenePrep/GeometryRef.h src/Oxygen/Vortex/ScenePrep/Handles.h src/Oxygen/Vortex/ScenePrep/MaterialRef.h src/Oxygen/Vortex/ScenePrep/RenderItemData.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `rg -n 'PreparedSceneFrame.cpp|ScenePrep/Handles.h|ScenePrep/RenderItemData.h' src/Oxygen/Vortex/CMakeLists.txt`
+  - `rg -n 'prerequisite ABI|01-05|step 1\\.3' design/vortex/IMPLEMENTATION-STATUS.md`
+- Result:
+  - the full prerequisite ABI bundle required by `Resources/*` now lives under
+    `src/Oxygen/Vortex/`: `PreparedSceneFrame.h/.cpp`,
+    `ScenePrep/GeometryRef.h`, `ScenePrep/Handles.h`,
+    `ScenePrep/MaterialRef.h`, `ScenePrep/RenderItemData.h`,
+    `Types/PassMask.h`, `Types/DrawMetadata.h`,
+    `Types/MaterialShadingConstants.h`,
+    `Types/ProceduralGridMaterialConstants.h`, and
+    `Types/ConventionalShadowDrawRecord.h`
+  - `src/Oxygen/Vortex/CMakeLists.txt` now wires the complete prerequisite
+    ABI bundle into `oxygen-vortex` while still leaving `Resources/*` out of
+    the target for repaired `01-05`
+  - `oxygen-vortex` builds successfully in Debug with the prerequisite bundle
+    alone
+  - the Vortex target emits an IDE warning listing `Resources/*` files that
+    exist on disk but are not yet part of the target; this is expected at the
+    repaired `01-04` boundary and confirms those files remain deferred to
+    `01-05`
+- Code / validation delta:
+  - repaired `01-04` is now **complete**
+  - step `1.3` remains open because no `Resources/*` implementation files were
+    added to the Vortex target in this plan
+  - no Vortex/legacy link-test or runtime validation was run in this plan
+- Remaining blocker:
+  - execute repaired `01-05` to migrate `Resources/*` on top of the landed
+    prerequisite ABI bundle
+
+### 2026-04-13 — Phase 1 plan repair resolved the `01-04` prerequisite blocker
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/.continue-here.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-04-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-05-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-06-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-07-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-08-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-10-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md`
+  - `.planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-04-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-05-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-06-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-07-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-08-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-10-PLAN.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-RESEARCH.md`
+  - `Get-Content design/vortex/PLAN.md`
+  - `Get-Content design/vortex/PROJECT-LAYOUT.md`
+  - `Get-Content .planning/workstreams/vortex/ROADMAP.md`
+  - `Get-Content .planning/workstreams/vortex/phases/01-substrate-migration/01-VALIDATION.md`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-04-PLAN.md"`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-05-PLAN.md"`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-10-PLAN.md"`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-04-PLAN.md"`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-05-PLAN.md"`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure ".planning/workstreams/vortex/phases/01-substrate-migration/01-09-PLAN.md"`
+- Result:
+  - `01-04` now truthfully owns only the prerequisite ABI bundle that `Resources/*` already depends on:
+    `Types/PassMask.h`, `Types/DrawMetadata.h`,
+    `Types/MaterialShadingConstants.h`,
+    `Types/ProceduralGridMaterialConstants.h`,
+    `Types/ConventionalShadowDrawRecord.h`,
+    `ScenePrep/Handles.h`, `ScenePrep/GeometryRef.h`,
+    `ScenePrep/MaterialRef.h`, `ScenePrep/RenderItemData.h`, and
+    `PreparedSceneFrame.h/.cpp`
+  - `01-05` now owns `Resources/*` and closes step `1.3`
+  - the remaining ScenePrep, pass-base, composition, and orchestrator scopes
+    shift down one slot so no single remaining plan exceeds the checker
+    file-budget threshold
+  - `01-10` now owns the remaining root-support files plus the stripped
+    orchestrator and records the final post-orchestrator dependency-edge proof
+  - the roadmap, validation contract, and resume note now all point execution
+    back to the repaired `01-04` boundary
+  - task-structure verification confirms all three repaired plans still have
+    two executable tasks with `files`, `action`, `verify`, `done`,
+    `<read_first>`, and `<acceptance_criteria>` intact
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run during this planning repair
+  - Phase 1 remains `in_progress`; execution must resume at `01-04` and still
+    collect build/test evidence before any stronger completion claim
+- Remaining blocker:
+  - execute the repaired `01-04` plan and verify the prerequisite ABI bundle
+    in code before moving to repaired `01-05` for the actual resource
+    migration
 
 ### 2026-04-13 — Phase 1 plan 01-03 completed step-1.2 upload migration
 
@@ -327,13 +441,15 @@ design and execution work starts.
 - A repaired 11-plan Phase 1 execution set under
   `.planning/workstreams/vortex/phases/01-substrate-migration/`.
 - Plan coverage now matches the source-of-truth Vortex design package:
-  - `01-04` covers resources
-  - `01-05` covers ScenePrep data/config
-  - `01-06` covers ScenePrep execution plus the selected substrate-only
+  - `01-04` lands only the prerequisite ABI bundle required by resources
+  - `01-05` covers `Resources/*` and closes step `1.3`
+  - `01-06` covers only the remaining ScenePrep-only data/config files
+  - `01-07` covers ScenePrep execution plus the selected substrate-only
     internal utilities
-  - `01-08` closes only step `1.7`
-  - `01-09` and `01-10` keep step `1.8` split between support-file migration
-    and the stripped orchestrator
+  - `01-08` covers pass bases plus the public half of step `1.7`
+  - `01-09` closes the private half of step `1.7`
+  - `01-10` covers the remaining root-support files, the stripped
+    orchestrator, and the final post-orchestrator dependency-edge proof
 - Every Phase 1 plan now has 2 tasks plus the required `<read_first>` and
   `<acceptance_criteria>` blocks.
 - Step `1.1` is now fully migrated under `src/Oxygen/Vortex/Types/`,
@@ -344,6 +460,9 @@ design and execution work starts.
   including upload staging, atlas buffering, inline transfer retirement,
   upload planning, coordinator orchestration, policy, helpers, and tracker
   support.
+- Repaired `01-04` is now complete: the prerequisite ABI bundle needed by
+  `Resources/*` lives under Vortex ownership and `oxygen-vortex` builds with
+  that bundle alone while the resource implementation remains deferred.
 
 ### Steps (from PLAN.md §3)
 
@@ -351,18 +470,18 @@ design and execution work starts.
 | ---- | ---- | ------ | -------- |
 | 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
 | 1.2 | Upload subsystem (14 files) | `done` | `01-03` migrated the full `Upload/` slice, built `oxygen-vortex`, and proved the linked Vortex DLL has no `oxygen-renderer` / `Oxygen.Renderer` dependency edge |
-| 1.3 | Resources subsystem (7 files) | `planned` | Phase 1 plan `01-04` |
-| 1.4 | ScenePrep subsystem (15 files) | `planned` | Phase 1 plans `01-05` and `01-06` |
-| 1.5 | Internal utilities (7 files) | `planned` | Phase 1 plan `01-06` |
-| 1.6 | Pass base classes (3 files) | `not_started` | — |
-| 1.7 | View assembly + composition | `not_started` | — |
-| 1.8 | Renderer orchestrator | `not_started` | — |
+| 1.3 | Resources subsystem (7 files) | `planned` | Repaired `01-04` landed the prerequisite ABI bundle and build proof; repaired `01-05` still owns the actual `Resources/*` migration |
+| 1.4 | ScenePrep subsystem (15 files) | `planned` | Repaired Phase 1 plans `01-06` and `01-07` now split remaining ScenePrep-only files from execution files |
+| 1.5 | Internal utilities (7 files) | `planned` | Repaired Phase 1 plan `01-07` |
+| 1.6 | Pass base classes (3 files) | `planned` | Repaired Phase 1 plan `01-08` |
+| 1.7 | View assembly + composition | `planned` | Repaired Phase 1 plans `01-08` and `01-09` |
+| 1.8 | Renderer orchestrator | `planned` | Repaired Phase 1 plan `01-10` also carries the final post-orchestrator `FOUND-03` proof |
 | 1.9 | Smoke test | `not_started` | — |
 
 ### Resume Point
 
-Continue with `01-04` to begin step `1.3` (resources migration), then resume
-the Phase 1 sequence.
+Continue with repaired `01-05` to migrate the actual `Resources/*` step-`1.3`
+files on top of the landed prerequisite ABI bundle.
 
 ---
 
