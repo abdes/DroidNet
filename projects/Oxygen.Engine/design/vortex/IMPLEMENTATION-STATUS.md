@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 1 execution started; 01-01 migrated the first step-1.1 type slice`
+Status: `in_progress — Phase 1 step 1.1 is complete; 01-03 starts step 1.2 upload migration`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -32,7 +32,7 @@ Related:
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
-| 1 | Substrate Migration | `in_progress` | Step 1.1 remains incomplete until `01-02` lands the remaining type headers |
+| 1 | Substrate Migration | `in_progress` | Step 1.2 upload migration is next (`01-03`) |
 | 2 | SceneTextures + SceneRenderer Shell | `not_started` | Phase 1 + design deliverables |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
@@ -69,6 +69,37 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-13 — Phase 1 plan 01-02 completed the remaining step-1.1 type migration
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Types/EnvironmentViewData.h`
+  - `src/Oxygen/Vortex/Types/ViewColorData.h`
+  - `src/Oxygen/Vortex/Types/ViewConstants.cpp`
+  - `src/Oxygen/Vortex/Types/ViewConstants.h`
+  - `src/Oxygen/Vortex/Types/ViewFrameBindings.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n 'Oxygen/Renderer/|OXGN_RNDR_' src/Oxygen/Vortex/Types/EnvironmentViewData.h src/Oxygen/Vortex/Types/LightCullingConfig.h src/Oxygen/Vortex/Types/SyntheticSunData.h src/Oxygen/Vortex/Types/ViewColorData.h src/Oxygen/Vortex/Types/ViewConstants.cpp src/Oxygen/Vortex/Types/ViewConstants.h src/Oxygen/Vortex/Types/ViewFrameBindings.h`
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --preset windows-default`
+  - `D:/dev/ninja/ninja.exe -C out/build-ninja -f build-Debug.ninja -t query oxygen-vortex`
+- Result:
+  - the remaining step-`1.1` files now live under `src/Oxygen/Vortex/Types/`:
+    `EnvironmentViewData.h`, `ViewColorData.h`, `ViewConstants.h`,
+    `ViewConstants.cpp`, and `ViewFrameBindings.h`
+  - `ViewConstants.cpp` is now part of the `oxygen-vortex` private source list
+  - `oxygen-vortex` builds successfully in Debug after the remaining type
+    migration
+  - the generated Debug Ninja target query for `oxygen-vortex` shows no
+    `oxygen-renderer` / `Oxygen.Renderer` dependency edge
+- Code / validation delta:
+  - step `1.1` is now **complete**
+  - no Vortex/legacy link-test or runtime validation was run in this plan
+- Remaining blocker:
+  - begin step `1.2` with `01-03` to migrate the upload foundation and staging
+    slice
 
 ### 2026-04-13 — Phase 1 plan 01-01 started with the step-1.1 frame-binding slice
 
@@ -251,18 +282,16 @@ design and execution work starts.
     and the stripped orchestrator
 - Every Phase 1 plan now has 2 tasks plus the required `<read_first>` and
   `<acceptance_criteria>` blocks.
-- The first step-1.1 slice is now migrated under `src/Oxygen/Vortex/Types/`:
-  `CompositingTask.h`, `DebugFrameBindings.h`, `DrawFrameBindings.h`,
-  `EnvironmentFrameBindings.h`, `LightingFrameBindings.h`,
-  `ShadowFrameBindings.h`, `VsmFrameBindings.h`, plus the Vortex-local
-  `LightCullingConfig.h` and `SyntheticSunData.h` payload types required by
-  `LightingFrameBindings.h`.
+- Step `1.1` is now fully migrated under `src/Oxygen/Vortex/Types/`,
+  including the `01-01` frame-binding slice plus
+  `EnvironmentViewData.h`, `ViewColorData.h`, `ViewConstants.h`,
+  `ViewConstants.cpp`, and `ViewFrameBindings.h`.
 
 ### Steps (from PLAN.md §3)
 
 | Step | Task | Status | Evidence |
 | ---- | ---- | ------ | -------- |
-| 1.1 | Cross-cutting types (14 headers) | `in_progress` | `01-01` migrated the frame-binding slice; remaining type headers are scheduled for `01-02` |
+| 1.1 | Cross-cutting types (14 headers) | `done` | `01-01` migrated the frame-binding slice; `01-02` landed the remaining type headers, built `oxygen-vortex`, and verified no `Oxygen.Renderer` dependency edge |
 | 1.2 | Upload subsystem (14 files) | `not_started` | — |
 | 1.3 | Resources subsystem (7 files) | `planned` | Phase 1 plan `01-04` |
 | 1.4 | ScenePrep subsystem (15 files) | `planned` | Phase 1 plans `01-05` and `01-06` |
@@ -274,8 +303,8 @@ design and execution work starts.
 
 ### Resume Point
 
-Continue with `01-02` to finish the remaining step-1.1 type headers, then
-resume the Phase 1 sequence.
+Continue with `01-03` to begin step `1.2` (upload foundation and staging),
+then resume the Phase 1 sequence.
 
 ---
 
