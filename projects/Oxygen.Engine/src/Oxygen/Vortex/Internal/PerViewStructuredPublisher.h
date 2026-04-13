@@ -59,7 +59,11 @@ public:
       return kInvalidShaderVisibleIndex;
     }
 
-    std::memcpy(allocation->mapped_ptr, &payload, sizeof(Payload));
+    if (!allocation->TryWriteObject(payload)) {
+      LOG_F(ERROR, "{}: failed to write payload for view {}", debug_label_,
+        view_id.get());
+      return kInvalidShaderVisibleIndex;
+    }
     return allocation->srv;
   }
 

@@ -8,9 +8,12 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <optional>
+#include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -99,6 +102,7 @@ public:
   struct TransientAllocation {
     ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
     void* mapped_ptr { nullptr };
+    std::uint64_t size_bytes { 0 };
     frame::SequenceNumber sequence { frame::SequenceNumber { 0 } };
     frame::Slot slot { frame::kInvalidSlot };
 
@@ -107,6 +111,39 @@ public:
     auto IsValid(frame::SequenceNumber seq) const noexcept -> bool
     {
       return sequence == seq && srv.IsValid() && mapped_ptr != nullptr;
+    }
+
+    template <typename T>
+    auto TryWriteObject(const T& value) const noexcept -> bool
+    {
+      static_assert(std::is_trivially_copyable_v<T>,
+        "TransientAllocation::TryWriteObject requires a trivially copyable "
+        "payload");
+      if (mapped_ptr == nullptr || size_bytes < sizeof(T)) {
+        return false;
+      }
+
+      std::memcpy(mapped_ptr, &value, sizeof(T));
+      return true;
+    }
+
+    template <typename T, std::size_t Extent>
+    auto TryWriteRange(std::span<T, Extent> values) const noexcept -> bool
+    {
+      using ValueT = std::remove_const_t<T>;
+      static_assert(std::is_trivially_copyable_v<ValueT>,
+        "TransientAllocation::TryWriteRange requires trivially copyable "
+        "elements");
+      const auto required_bytes = values.size_bytes();
+      if (mapped_ptr == nullptr || size_bytes < required_bytes) {
+        return false;
+      }
+      if (required_bytes == 0U) {
+        return true;
+      }
+
+      std::memcpy(mapped_ptr, values.data(), required_bytes);
+      return true;
     }
   };
 
