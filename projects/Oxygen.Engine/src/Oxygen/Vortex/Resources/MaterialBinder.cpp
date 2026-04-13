@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <deque>
 #include <memory>
@@ -99,6 +100,139 @@ namespace {
 }
 
 //! Create a content-based hash key for material deduplication.
+constexpr float kMaterialScalarQuantizationScale = 1024.0F;
+
+auto QuantizeMaterialScalar(const float value) noexcept -> std::uint32_t
+{
+  return static_cast<std::uint32_t>(
+    std::round(value * kMaterialScalarQuantizationScale));
+}
+
+template <typename VectorT>
+auto HashFloatVector(std::size_t& seed, const VectorT& value) -> void
+{
+  for (int i = 0; i < 4; ++i) {
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    oxygen::HashCombine(seed, value[i]);
+  }
+}
+
+template <typename VectorT>
+auto HashQuantizedFloatVector(std::size_t& seed, const VectorT& value) -> void
+{
+  for (int i = 0; i < 4; ++i) {
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    oxygen::HashCombine(seed, QuantizeMaterialScalar(value[i]));
+  }
+}
+
+struct MaterialTextureBindingKeys {
+  oxygen::content::ResourceKey base_color {};
+  oxygen::content::ResourceKey normal {};
+  oxygen::content::ResourceKey metallic {};
+  oxygen::content::ResourceKey roughness {};
+  oxygen::content::ResourceKey ambient_occlusion {};
+  oxygen::content::ResourceKey emissive {};
+  oxygen::content::ResourceKey specular {};
+  oxygen::content::ResourceKey sheen_color {};
+  oxygen::content::ResourceKey clearcoat {};
+  oxygen::content::ResourceKey clearcoat_normal {};
+  oxygen::content::ResourceKey transmission {};
+  oxygen::content::ResourceKey thickness {};
+
+  [[nodiscard]] static auto From(const oxygen::data::MaterialAsset& material)
+    -> MaterialTextureBindingKeys
+  {
+    return MaterialTextureBindingKeys {
+      .base_color = material.GetBaseColorTextureKey(),
+      .normal = material.GetNormalTextureKey(),
+      .metallic = material.GetMetallicTextureKey(),
+      .roughness = material.GetRoughnessTextureKey(),
+      .ambient_occlusion = material.GetAmbientOcclusionTextureKey(),
+      .emissive = material.GetEmissiveTextureKey(),
+      .specular = material.GetSpecularTextureKey(),
+      .sheen_color = material.GetSheenColorTextureKey(),
+      .clearcoat = material.GetClearcoatTextureKey(),
+      .clearcoat_normal = material.GetClearcoatNormalTextureKey(),
+      .transmission = material.GetTransmissionTextureKey(),
+      .thickness = material.GetThicknessTextureKey(),
+    };
+  }
+
+  auto HashInto(std::size_t& seed) const noexcept -> void
+  {
+    oxygen::HashCombine(seed, base_color);
+    oxygen::HashCombine(seed, normal);
+    oxygen::HashCombine(seed, metallic);
+    oxygen::HashCombine(seed, roughness);
+    oxygen::HashCombine(seed, ambient_occlusion);
+    oxygen::HashCombine(seed, emissive);
+    oxygen::HashCombine(seed, specular);
+    oxygen::HashCombine(seed, sheen_color);
+    oxygen::HashCombine(seed, clearcoat);
+    oxygen::HashCombine(seed, clearcoat_normal);
+    oxygen::HashCombine(seed, transmission);
+    oxygen::HashCombine(seed, thickness);
+  }
+};
+
+struct ProceduralGridIdentity {
+  std::array<float, 2> spacing { 0.0F, 0.0F };
+  std::uint32_t major_every { 0U };
+  float line_thickness { 0.0F };
+  float major_thickness { 0.0F };
+  float axis_thickness { 0.0F };
+  float fade_start { 0.0F };
+  float fade_end { 0.0F };
+  std::array<float, 4> minor_color { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::array<float, 4> major_color { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::array<float, 4> axis_x_color { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::array<float, 4> axis_y_color { 0.0F, 0.0F, 0.0F, 0.0F };
+  std::array<float, 4> origin_color { 0.0F, 0.0F, 0.0F, 0.0F };
+
+  [[nodiscard]] static auto From(const oxygen::data::MaterialAsset& material)
+    -> ProceduralGridIdentity
+  {
+    const auto spacing = material.GetGridSpacing();
+    const auto minor = material.GetGridMinorColor();
+    const auto major = material.GetGridMajorColor();
+    const auto axis_x = material.GetGridAxisColorX();
+    const auto axis_y = material.GetGridAxisColorY();
+    const auto origin = material.GetGridOriginColor();
+    return ProceduralGridIdentity {
+      .spacing = { spacing[0], spacing[1] },
+      .major_every = material.GetGridMajorEvery(),
+      .line_thickness = material.GetGridLineThickness(),
+      .major_thickness = material.GetGridMajorThickness(),
+      .axis_thickness = material.GetGridAxisThickness(),
+      .fade_start = material.GetGridFadeStart(),
+      .fade_end = material.GetGridFadeEnd(),
+      .minor_color = { minor[0], minor[1], minor[2], minor[3] },
+      .major_color = { major[0], major[1], major[2], major[3] },
+      .axis_x_color = { axis_x[0], axis_x[1], axis_x[2], axis_x[3] },
+      .axis_y_color = { axis_y[0], axis_y[1], axis_y[2], axis_y[3] },
+      .origin_color = { origin[0], origin[1], origin[2], origin[3] },
+    };
+  }
+
+  auto HashInto(std::size_t& seed) const noexcept -> void
+  {
+    oxygen::HashCombine(seed, spacing[0]);
+    oxygen::HashCombine(seed, spacing[1]);
+    oxygen::HashCombine(seed, major_every);
+    oxygen::HashCombine(seed, line_thickness);
+    oxygen::HashCombine(seed, major_thickness);
+    oxygen::HashCombine(seed, axis_thickness);
+    oxygen::HashCombine(seed, fade_start);
+    oxygen::HashCombine(seed, fade_end);
+    HashFloatVector(seed, minor_color);
+    HashFloatVector(seed, major_color);
+    HashFloatVector(seed, axis_x_color);
+    HashFloatVector(seed, axis_y_color);
+    HashFloatVector(seed, origin_color);
+  }
+};
+
 auto MakeMaterialKey(
   const oxygen::vortex::sceneprep::MaterialRef& material) noexcept
   -> std::uint64_t
@@ -110,97 +244,22 @@ auto MakeMaterialKey(
   // Avoid hashing raw author indices to prevent identity leaks and improve
   // stability across pipelines.
 
+  const auto& asset = *material.resolved_asset;
   std::size_t seed = 0U;
-  constexpr float kScalarScale = 1024.0F;
 
-  const auto base_color = material.resolved_asset->GetBaseColor();
-  for (int i = 0; i < 4; ++i) {
-    constexpr float kColorScale = 1024.0F;
-    const auto quantized
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      = static_cast<std::uint32_t>(std::round(base_color[i] * kColorScale));
-    oxygen::HashCombine(seed, quantized);
-  }
-
-  const auto metalness_q = static_cast<std::uint32_t>(
-    std::round(material.resolved_asset->GetMetalness() * kScalarScale));
-  const auto roughness_q = static_cast<std::uint32_t>(
-    std::round(material.resolved_asset->GetRoughness() * kScalarScale));
-  const auto normal_scale_q = static_cast<std::uint32_t>(
-    std::round(material.resolved_asset->GetNormalScale() * kScalarScale));
-  const auto ao_q = static_cast<std::uint32_t>(
-    std::round(material.resolved_asset->GetAmbientOcclusion() * kScalarScale));
-
-  oxygen::HashCombine(seed, metalness_q);
-  oxygen::HashCombine(seed, roughness_q);
-  oxygen::HashCombine(seed, normal_scale_q);
-  oxygen::HashCombine(seed, ao_q);
-
-  oxygen::HashCombine(seed, material.resolved_asset->GetBaseColorTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetNormalTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetMetallicTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetRoughnessTextureKey());
+  HashQuantizedFloatVector(seed, asset.GetBaseColor());
+  oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetMetalness()));
+  oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetRoughness()));
+  oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetNormalScale()));
   oxygen::HashCombine(
-    seed, material.resolved_asset->GetAmbientOcclusionTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetEmissiveTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetSpecularTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetSheenColorTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetClearcoatTextureKey());
-  oxygen::HashCombine(
-    seed, material.resolved_asset->GetClearcoatNormalTextureKey());
-  oxygen::HashCombine(
-    seed, material.resolved_asset->GetTransmissionTextureKey());
-  oxygen::HashCombine(seed, material.resolved_asset->GetThicknessTextureKey());
+    seed, QuantizeMaterialScalar(asset.GetAmbientOcclusion()));
 
-  const auto material_domain = material.resolved_asset->GetMaterialDomain();
-  const auto material_flags = material.resolved_asset->GetFlags();
-  oxygen::HashCombine(seed, material_domain);
-  oxygen::HashCombine(seed, material_flags);
-  if (material.resolved_asset->HasProceduralGrid()) {
-    const auto grid_spacing = material.resolved_asset->GetGridSpacing();
-    oxygen::HashCombine(seed, grid_spacing[0]);
-    oxygen::HashCombine(seed, grid_spacing[1]);
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridMajorEvery());
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridLineThickness());
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridMajorThickness());
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridAxisThickness());
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeStart());
-    oxygen::HashCombine(seed, material.resolved_asset->GetGridFadeEnd());
-    {
-      const auto grid_minor = material.resolved_asset->GetGridMinorColor();
-      oxygen::HashCombine(seed, grid_minor[0]);
-      oxygen::HashCombine(seed, grid_minor[1]);
-      oxygen::HashCombine(seed, grid_minor[2]);
-      oxygen::HashCombine(seed, grid_minor[3]);
-    }
-    {
-      const auto grid_major = material.resolved_asset->GetGridMajorColor();
-      oxygen::HashCombine(seed, grid_major[0]);
-      oxygen::HashCombine(seed, grid_major[1]);
-      oxygen::HashCombine(seed, grid_major[2]);
-      oxygen::HashCombine(seed, grid_major[3]);
-    }
-    {
-      const auto grid_axis_x = material.resolved_asset->GetGridAxisColorX();
-      oxygen::HashCombine(seed, grid_axis_x[0]);
-      oxygen::HashCombine(seed, grid_axis_x[1]);
-      oxygen::HashCombine(seed, grid_axis_x[2]);
-      oxygen::HashCombine(seed, grid_axis_x[3]);
-    }
-    {
-      const auto grid_axis_y = material.resolved_asset->GetGridAxisColorY();
-      oxygen::HashCombine(seed, grid_axis_y[0]);
-      oxygen::HashCombine(seed, grid_axis_y[1]);
-      oxygen::HashCombine(seed, grid_axis_y[2]);
-      oxygen::HashCombine(seed, grid_axis_y[3]);
-    }
-    {
-      const auto grid_origin = material.resolved_asset->GetGridOriginColor();
-      oxygen::HashCombine(seed, grid_origin[0]);
-      oxygen::HashCombine(seed, grid_origin[1]);
-      oxygen::HashCombine(seed, grid_origin[2]);
-      oxygen::HashCombine(seed, grid_origin[3]);
-    }
+  MaterialTextureBindingKeys::From(asset).HashInto(seed);
+  oxygen::HashCombine(seed, asset.GetMaterialDomain());
+  oxygen::HashCombine(seed, asset.GetFlags());
+
+  if (asset.HasProceduralGrid()) {
+    ProceduralGridIdentity::From(asset).HashInto(seed);
   }
 
   return static_cast<std::uint64_t>(seed);
