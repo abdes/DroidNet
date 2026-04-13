@@ -369,6 +369,7 @@ SceneTextureBindingData LoadBindingsFromView(uint viewIndex) {
 | `VortexDeferredLightPointPS` | ps_6_0 | GBuffer read + BRDF + attenuation |
 | `VortexDeferredLightSpotVS` | vs_6_0 | Cone volume |
 | `VortexDeferredLightSpotPS` | ps_6_0 | GBuffer read + BRDF + attenuation + angle |
+
 ## 6. Light Volume Geometry
 
 ### 6.1 Unit Sphere (Point Lights)
