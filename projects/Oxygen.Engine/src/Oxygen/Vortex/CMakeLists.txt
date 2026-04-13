@@ -50,6 +50,7 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "api_export.h"
+  "PreparedSceneFrame.h"
   "RendererTag.h"
   "Types/CompositingTask.h"
   "Types/ConventionalShadowDrawRecord.h"
@@ -69,6 +70,10 @@ set(
   "Types/ViewConstants.h"
   "Types/ViewFrameBindings.h"
   "Types/VsmFrameBindings.h"
+  "ScenePrep/GeometryRef.h"
+  "ScenePrep/Handles.h"
+  "ScenePrep/MaterialRef.h"
+  "ScenePrep/RenderItemData.h"
   "Upload/AtlasBuffer.h"
   "Upload/Errors.h"
   "Upload/InlineTransfersCoordinator.h"
@@ -86,6 +91,7 @@ set(
 set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
+  "PreparedSceneFrame.cpp"
   "Types/ViewConstants.cpp"
   "Upload/AtlasBuffer.cpp"
   "Upload/Errors.cpp"
