@@ -116,6 +116,7 @@ set(
   OXYGEN_VORTEX_PRIVATE_SOURCES
   "ModuleAnchor.cpp"
   "Internal/BlueNoiseData.h"
+  "Internal/CompositingAlphaSanitizer.h"
   "Internal/CompositingPass.cpp"
   "Internal/CompositingPass.h"
   "Internal/CompositionPlanner.cpp"

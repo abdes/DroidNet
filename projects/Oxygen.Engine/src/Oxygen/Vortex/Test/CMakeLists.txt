@@ -74,6 +74,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  CompositingPass
+  SOURCES
+    "Internal/CompositingPass_test.cpp"
+)
+
+m_gtest_program(
   RendererCompositionQueue
   SOURCES
     "RendererCompositionQueue_test.cpp"
