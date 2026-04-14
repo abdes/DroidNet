@@ -76,7 +76,7 @@ protected:
   }
 
   auto CreateColorFramebuffer(const std::shared_ptr<Texture>& color_texture,
-    std::string_view debug_name) -> std::shared_ptr<Framebuffer>
+    [[maybe_unused]] std::string_view debug_name) -> std::shared_ptr<Framebuffer>
   {
     CHECK_NOTNULL_F(color_texture.get(),
       "ShaderPass depth-state tests require a color target");
