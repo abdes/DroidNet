@@ -121,6 +121,8 @@ set(
   "ModuleAnchor.cpp"
   "Internal/BlueNoiseData.h"
   "Internal/CompositingAlphaSanitizer.h"
+  "Internal/GpuTimelineProfiler.cpp"
+  "Internal/GpuTimelineProfiler.h"
   "Internal/CompositingPass.cpp"
   "Internal/CompositingPass.h"
   "Internal/CompositionPlanner.cpp"
@@ -216,6 +218,8 @@ target_link_libraries(
     oxygen::engine
     oxygen::graphics-common
     oxygen::nexus
+  PRIVATE
+    oxygen::profiling
 )
 
 # ------------------------------------------------------------------------------
