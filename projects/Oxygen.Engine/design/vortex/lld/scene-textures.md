@@ -74,12 +74,12 @@ Typed index vocabulary for GBuffer access.
 
 ```cpp
 enum class GBufferIndex : std::uint8_t {
-  kA = 0,  // World normal (encoded)         → R10G10B10A2_UNORM
-  kB = 1,  // Metallic, specular, roughness  → R8G8B8A8_UNORM
-  kC = 2,  // Base color, AO                 → R8G8B8A8_SRGB
-  kD = 3,  // Custom data / shading model    → R8G8B8A8_UNORM
-  kE = 4,  // Shadow factors (reserved)
-  kF = 5,  // World tangent (reserved)
+  kNormal = 0,        // World normal (encoded)         → R10G10B10A2_UNORM
+  kMaterial = 1,      // Metallic, specular, roughness  → R8G8B8A8_UNORM
+  kBaseColor = 2,     // Base color, AO                 → R8G8B8A8_SRGB
+  kCustomData = 3,    // Custom data / shading model    → R8G8B8A8_UNORM
+  kShadowFactors = 4, // Shadow factors (reserved)
+  kWorldTangent = 5,  // World tangent (reserved)
 
   kCount = 6,
   kActiveCount = 4,  // Phase-1: A-D only
@@ -315,7 +315,7 @@ Stage 3 (Depth Prepass)
   └─ Bindings regenerated with depth SRVs
 
 Stage 9 (Base Pass)
-  └─ Writes: GBufferA-D (MRT), SceneColor (emissive), velocity completion
+  └─ Writes: GBufferNormal/Material/BaseColor/CustomData (MRT), SceneColor (emissive), velocity completion
   └─ SetupMode += kGBuffers | kSceneColor
 
 Stage 10 (Rebuild)
@@ -324,7 +324,7 @@ Stage 10 (Rebuild)
   └─ GBuffers now readable by downstream stages
 
 Stage 12 (Deferred Lighting)
-  └─ Reads: GBufferA-D, SceneDepth, shadow data, IBL
+  └─ Reads: GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, IBL
   └─ Writes: SceneColor (accumulated lighting)
 
 Stage 22 (Post-Process)
@@ -354,17 +354,18 @@ Stage 23 (Cleanup)
 | SceneDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent; carries scene depth + scene stencil family |
 | PartialDepth | `R32_FLOAT` | `extent.x × extent.y` | Persistent |
 | Stencil | Scene/custom stencil family | `extent.x × extent.y` | Routed from the stencil aspect of `SceneDepth`, and from `CustomDepth` when the optional custom path is enabled |
-| GBufferA | `R10G10B10A2_UNORM` | `extent.x × extent.y` | Persistent |
-| GBufferB | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
-| GBufferC | `R8G8B8A8_SRGB` | `extent.x × extent.y` | Persistent |
-| GBufferD | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
+| GBufferNormal | `R10G10B10A2_UNORM` | `extent.x × extent.y` | Persistent |
+| GBufferMaterial | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
+| GBufferBaseColor | `R8G8B8A8_SRGB` | `extent.x × extent.y` | Persistent |
+| GBufferCustomData | `R8G8B8A8_UNORM` | `extent.x × extent.y` | Persistent |
 | Velocity | `R16G16_FLOAT` | `extent.x × extent.y` | Persistent (if enabled) |
 | CustomDepth | `D32_FLOAT_S8X24_UINT` | `extent.x × extent.y` | Persistent (if enabled); carries custom depth + optional custom stencil family |
 
 ### 5.2 Allocation Strategy
 
 All textures are allocated at construction time based on
-`SceneTexturesConfig`. GBufferE-F slots are reserved in the array but not
+`SceneTexturesConfig`. `GBufferShadowFactors` / `GBufferWorldTangent` remain
+reserved in the array but are not
 allocated until `gbuffer_count > 4`.
 
 ### 5.3 Resize Behavior
@@ -456,7 +457,7 @@ At frame 10 baseline:
 - Verify SceneColor, SceneDepth, and GBuffer textures appear in the resource
   list with expected formats and dimensions.
 - Verify the first active subset is present and queryable: `SceneColor`,
-  `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`, `Velocity`, and
+  `SceneDepth`, `PartialDepth`, `GBufferNormal`/`Material`/`BaseColor`/`CustomData`, `Stencil`, `Velocity`, and
   `CustomDepth`.
 - Verify stencil-family routing exists through the scene depth/stencil resource
   and, when enabled, through the custom depth/stencil resource.

@@ -114,7 +114,7 @@ Cross-language numeric/layout constants shared between C++ and HLSL.
 #define SCENE_TEXTURE_FLAG_STENCIL      (1u << 5)
 #define SCENE_TEXTURE_FLAG_CUSTOM_DEPTH (1u << 6)
 
-// Shading model IDs (packed into GBufferB.a)
+// Shading model IDs (packed into GBufferMaterial.a)
 #define SHADING_MODEL_DEFAULT_LIT  0
 #define SHADING_MODEL_UNLIT        1
 #define SHADING_MODEL_SUBSURFACE   2
@@ -272,7 +272,7 @@ float3 DecodeGBufferNormal(float4 gbufferA) {
   return OctahedronDecode(oct);
 }
 
-// --- Material packing (GBufferB: metallic, specular, roughness, shading model) ---
+// --- Material packing (GBufferMaterial: metallic, specular, roughness, shading model) ---
 
 float4 EncodeGBufferMaterial(float metallic, float specular,
                               float roughness, uint shadingModel) {
@@ -289,7 +289,7 @@ void DecodeGBufferMaterial(float4 gbufferB,
   shadingModel = uint(gbufferB.a * 255.0 + 0.5);
 }
 
-// --- Base color + AO (GBufferC) ---
+// --- Base color + AO (GBufferBaseColor) ---
 
 float4 EncodeGBufferBaseColor(float3 baseColor, float ao) {
   return float4(baseColor, ao);
@@ -350,18 +350,22 @@ typed domain products.
 
 // Minimum view-routing payload required by the renderer contract.
 // The real ViewFrameBindings structure may contain additional fields, but this
-// index is the stable seam Phase 3 depends on.
+// scene-texture slot is the stable seam Phase 3 depends on.
 struct ViewFrameBindingsData {
-  uint scene_texture_bindings_index;
+  uint scene_texture_frame_slot;
 };
 
-// Access SceneTextureBindings from the published per-view frame bindings.
-SceneTextureBindingData LoadSceneTextureBindingsForView(
-    StructuredBuffer<ViewFrameBindingsData> viewBindingsBuffer,
-    StructuredBuffer<SceneTextureBindingData> bindingsBuffer,
-    uint viewIndex) {
-  ViewFrameBindingsData viewBindings = viewBindingsBuffer[viewIndex];
-  return bindingsBuffer[viewBindings.scene_texture_bindings_index];
+// Access the current view's SceneTextureBindings through the published
+// ViewFrameBindings slot carried in ViewConstants.
+SceneTextureBindingData LoadSceneTextureBindingsForCurrentView(
+    uint currentViewFrameBindingsSlot) {
+  StructuredBuffer<ViewFrameBindingsData> viewBindingsBuffer =
+      ResourceDescriptorHeap[currentViewFrameBindingsSlot];
+  ViewFrameBindingsData viewBindings = viewBindingsBuffer[0];
+
+  StructuredBuffer<SceneTextureBindingData> bindingsBuffer =
+      ResourceDescriptorHeap[viewBindings.scene_texture_frame_slot];
+  return bindingsBuffer[0];
 }
 
 #endif // VORTEX_VIEW_FRAME_BINDINGS_HLSLI

@@ -117,12 +117,12 @@ for the complete four-part contract (config, setup mode, bindings, extracts).
 
 ```cpp
 enum class GBufferIndex : std::uint8_t {
-  kA = 0,  // World normal (encoded)
-  kB = 1,  // Metallic, specular, roughness
-  kC = 2,  // Base color
-  kD = 3,  // Custom data / shading model
-  kE = 4,  // Precomputed shadow factors (optional)
-  kF = 5,  // World tangent (optional)
+  kNormal = 0,        // World normal (encoded)
+  kMaterial = 1,      // Metallic, specular, roughness
+  kBaseColor = 2,     // Base color
+  kCustomData = 3,    // Custom data / shading model
+  kShadowFactors = 4, // Precomputed shadow factors (optional)
+  kWorldTangent = 5,  // World tangent (optional)
 };
 ```
 
@@ -130,10 +130,10 @@ enum class GBufferIndex : std::uint8_t {
 
 | Buffer | Format | Content |
 | --- | --- | --- |
-| GBufferA | `R10G10B10A2_UNORM` | Encoded world normal |
-| GBufferB | `R8G8B8A8_UNORM` | Metallic, specular, roughness, shading model ID |
-| GBufferC | `R8G8B8A8_SRGB` | Base color, AO |
-| GBufferD | `R8G8B8A8_UNORM` | Custom data (subsurface, cloth, etc.) |
+| GBufferNormal | `R10G10B10A2_UNORM` | Encoded world normal |
+| GBufferMaterial | `R8G8B8A8_UNORM` | Metallic, specular, roughness, shading model ID |
+| GBufferBaseColor | `R8G8B8A8_SRGB` | Base color, AO |
+| GBufferCustomData | `R8G8B8A8_UNORM` | Custom data (subsurface, cloth, etc.) |
 
 GBufferE/F are reserved — deferred to after the initial deferred path works.
 
@@ -291,7 +291,7 @@ EngineShaderCatalog registration table.
 | Occlusion / HZB | SceneDepth | Depth prepass |
 | Shadow depth | Light list, view data | LightingService, InitViews |
 | Base pass | Shadow maps (optional) | ShadowService |
-| Deferred lighting | GBufferA–D, SceneDepth, shadow data, IBL | Base pass, ShadowService, EnvironmentService |
+| Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, IBL | Base pass, ShadowService, EnvironmentService |
 | Translucency | SceneColor, SceneDepth, forward light data | Prior stages, LightingService |
 | Post-process | SceneColor, SceneDepth, Velocity | Prior stages |
 | Diagnostics | Any SceneTextures product | Prior stages |

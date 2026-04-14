@@ -152,7 +152,7 @@ binding stack; they do not reach into `LightingService` internals directly.
 
 | Input | Source | Purpose |
 | ----- | ------ | ------- |
-| GBufferA–D (SRV) | SceneTextures (from stage 10) | Material data for BRDF |
+| GBufferNormal/Material/BaseColor/CustomData (SRV) | SceneTextures (from stage 10) | Material data for BRDF |
 | SceneDepth (SRV) | SceneTextures | Position reconstruction |
 | `ShadowFrameBindings` | ShadowService (stage 8 publication) | Shadow attenuation terms |
 | Deferred-light draw list | Self | Canonical per-light direct-light parameters |

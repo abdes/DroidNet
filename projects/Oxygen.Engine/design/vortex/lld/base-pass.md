@@ -124,18 +124,17 @@ must not silently degrade at execution time.
 
 | RT Slot | Target | Content | Format |
 | ------- | ------ | ------- | ------ |
-| SV_Target0 | GBufferA | Encoded world normal (octahedral) | R10G10B10A2_UNORM |
-| SV_Target1 | GBufferB | Metallic, specular, roughness, shading model ID | R8G8B8A8_UNORM |
-| SV_Target2 | GBufferC | Base color RGB, AO | R8G8B8A8_SRGB |
-| SV_Target3 | GBufferD | Custom data (subsurface, cloth, etc.) | R8G8B8A8_UNORM |
+| SV_Target0 | GBufferNormal | Encoded world normal (octahedral) | R10G10B10A2_UNORM |
+| SV_Target1 | GBufferMaterial | Metallic, specular, roughness, shading model ID | R8G8B8A8_UNORM |
+| SV_Target2 | GBufferBaseColor | Base color RGB, AO | R8G8B8A8_SRGB |
+| SV_Target3 | GBufferCustomData | Custom data (subsurface, cloth, etc.) | R8G8B8A8_UNORM |
 | SV_Target4 | SceneColor | Emissive accumulation | R16G16B16A16_FLOAT |
 | DS | SceneDepth | Depth/stencil | D32_FLOAT_S8X24_UINT |
 
 ### 3.2 Depth Write Behavior
 
 - If `early_z_pass_done == true`: depth test enabled, depth write
-  **disabled** (reads prepass depth, does not overwrite). Uses
-  `D3D12_DEPTH_WRITE_MASK_ZERO`.
+  **disabled** (reads prepass depth, does not overwrite).
 - If `early_z_pass_done == false`: depth test and write both enabled.
   BasePass writes depth directly (fallback when prepass is disabled).
 
@@ -143,16 +142,17 @@ must not silently degrade at execution time.
 
 ```cpp
 enum class GBufferIndex : std::uint8_t {
-  kA = 0,  // World normal (encoded)
-  kB = 1,  // Metallic, specular, roughness
-  kC = 2,  // Base color
-  kD = 3,  // Custom data / shading model
-  kE = 4,  // Precomputed shadow factors (reserved, Phase 7+)
-  kF = 5,  // World tangent (reserved, Phase 7+)
+  kNormal = 0,        // World normal (encoded)
+  kMaterial = 1,      // Metallic, specular, roughness
+  kBaseColor = 2,     // Base color
+  kCustomData = 3,    // Custom data / shading model
+  kShadowFactors = 4, // Precomputed shadow factors (reserved, Phase 7+)
+  kWorldTangent = 5,  // World tangent (reserved, Phase 7+)
 };
 ```
 
-Phase 3 uses kA through kD (4 GBuffers). kE and kF are reserved slots.
+Phase 3 uses `kNormal` through `kCustomData` (4 GBuffers).
+`kShadowFactors` and `kWorldTangent` are reserved slots.
 
 ## 4. Data Flow and Dependencies
 
@@ -170,7 +170,7 @@ Phase 3 uses kA through kD (4 GBuffers). kE and kF are reserved slots.
 
 | Product | Target | Notes |
 | ------- | ------ | ----- |
-| GBufferA–D | SceneTextures GBuffer textures | Full opaque scene material data |
+| GBufferNormal/Material/BaseColor/CustomData | SceneTextures GBuffer textures | Full opaque scene material data |
 | SceneColor | SceneTextures SceneColor | Emissive accumulation (additive) |
 | Velocity (completed) | SceneTextures Velocity | Skinned/WPO geometry contributions added |
 
@@ -179,13 +179,13 @@ Phase 3 uses kA through kD (4 GBuffers). kE and kF are reserved slots.
 ```text
 Before stage 9:
   SceneDepth   = valid (from stage 3)
-  GBufferA–D   = allocated, cleared
+  GBufferNormal/Material/BaseColor/CustomData = allocated, cleared
   SceneColor   = allocated, cleared
   Velocity     = partially written (static only, from stage 3)
 
 After stage 9:
   SceneDepth   = unchanged (read-only, or written if no prepass)
-  GBufferA–D   = written (full opaque scene)
+  GBufferNormal/Material/BaseColor/CustomData = written (full opaque scene)
   SceneColor   = written (emissive contribution)
   Velocity     = complete (static + skinned/WPO)
 
@@ -202,10 +202,10 @@ BasePassModule::Execute(ctx, scene_textures)
   ├─ Read current view prepared-scene payload from ctx
   │     │
   │     ├─ Set render targets:
-  │     │     RTV[0] = GBufferA
-  │     │     RTV[1] = GBufferB
-  │     │     RTV[2] = GBufferC
-  │     │     RTV[3] = GBufferD
+  │     │     RTV[0] = GBufferNormal
+  │     │     RTV[1] = GBufferMaterial
+  │     │     RTV[2] = GBufferBaseColor
+  │     │     RTV[3] = GBufferCustomData
   │     │     RTV[4] = SceneColor
   │     │     DSV    = SceneDepth (DEPTH_READ if early_z, DEPTH_WRITE otherwise)
   │     │
@@ -236,10 +236,10 @@ All Vortex material shaders in deferred mode **must** output `GBufferOutput`:
 
 ```hlsl
 struct GBufferOutput {
-  float4 GBufferA : SV_Target0;  // encoded normal
-  float4 GBufferB : SV_Target1;  // metallic, specular, roughness, shading model
-  float4 GBufferC : SV_Target2;  // base color, AO
-  float4 GBufferD : SV_Target3;  // custom data
+  float4 GBufferNormal : SV_Target0;  // encoded normal
+  float4 GBufferMaterial : SV_Target1;  // metallic, specular, roughness, shading model
+  float4 GBufferBaseColor : SV_Target2;  // base color, AO
+  float4 GBufferCustomData : SV_Target3;  // custom data
   float4 Emissive : SV_Target4;  // emissive → SceneColor
 };
 ```
@@ -349,7 +349,7 @@ SceneTextures rebuild boundary:
 
 ```cpp
 scene_textures_.RebuildWithGBuffers();
-RefreshSceneTextureBindings(ctx);
+RefreshSceneTextureBindings();
 ```
 
 This is the canonical product-setup transition for deferred lighting. It is not
@@ -403,7 +403,7 @@ PSO compact at 5 MRT).
 
 | Resource | Type | Lifetime | Notes |
 | -------- | ---- | -------- | ----- |
-| GBufferA–D textures | Owned by SceneTextures | Per frame | BasePass writes, does not allocate |
+| GBufferNormal/Material/BaseColor/CustomData textures | Owned by SceneTextures | Per frame | BasePass writes, does not allocate |
 | SceneColor texture | Owned by SceneTextures | Per frame | Emissive additive write |
 | Velocity texture | Owned by SceneTextures | Per frame | Completion write |
 | GBuffer PSO variants | Renderer PSO cache | Persistent | Per-material-family |
@@ -412,7 +412,7 @@ PSO compact at 5 MRT).
 
 | Texture | Before Stage 9 | During Stage 9 | After Stage 10 |
 | ------- | -------------- | -------------- | -------------- |
-| GBufferA–D | RENDER_TARGET | RENDER_TARGET (writing) | SHADER_RESOURCE (reading) |
+| GBufferNormal/Material/BaseColor/CustomData | RENDER_TARGET | RENDER_TARGET (writing) | SHADER_RESOURCE (reading) |
 | SceneColor | RENDER_TARGET | RENDER_TARGET (additive) | RENDER_TARGET (still writable) |
 | SceneDepth | DEPTH_READ | DEPTH_READ (or DEPTH_WRITE if no prepass) | DEPTH_READ |
 
@@ -422,10 +422,10 @@ PSO compact at 5 MRT).
    material grouping produces minimal PSO changes and correct draw counts.
 2. **GBuffer validation:** Render a known scene (colored sphere on gray
    plane). Read back GBuffer textures:
-   - GBufferA: normals match expected directions (up for floor, radial for
+   - GBufferNormal: normals match expected directions (up for floor, radial for
      sphere)
-   - GBufferB: metallic/roughness match material parameters
-   - GBufferC: base color matches material albedo
+   - GBufferMaterial: metallic/roughness match material parameters
+   - GBufferBaseColor: base color matches material albedo
 3. **RenderDoc validation:** At frame 10, inspect GBuffer MRT after stage 9.
    Verify all 4 GBuffers + SceneColor contain expected data.
 4. **Velocity validation:** Animate an object, verify Velocity texture shows

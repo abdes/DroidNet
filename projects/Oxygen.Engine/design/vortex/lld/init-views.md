@@ -18,7 +18,7 @@ their work.
 
 | Position | Stage | Notes |
 | -------- | ----- | ----- |
-| Predecessor | Stage 1 (OnPreRender) | Frame constants, camera, SceneTextures allocation |
+| Predecessor | Stage 1 (OnFrameStart) | Frame constants, camera, SceneTextures allocation |
 | **This** | **Stage 2 — InitViews** | Visibility + prepared-scene publication |
 | Successor | Stage 3 (DepthPrepass) | Depth-only pass consuming the current-view prepared payload |
 
@@ -64,8 +64,7 @@ namespace oxygen::vortex {
 
 class InitViewsModule {
  public:
-  explicit InitViewsModule(Renderer& renderer,
-                           const SceneTexturesConfig& config);
+  explicit InitViewsModule(Renderer& renderer);
   ~InitViewsModule();
 
   // Non-copyable, non-movable (owns pipeline state)
@@ -73,10 +72,14 @@ class InitViewsModule {
   auto operator=(const InitViewsModule&) -> InitViewsModule& = delete;
 
   /// Stage 2 entry point. Called once per frame.
-  /// Iterates all published views, builds per-view prepared-scene payloads,
-  /// and publishes them for downstream per-view stage execution owned by
-  /// SceneRenderer.
+  /// Iterates `RenderContext::frame_views`, builds one prepared-scene payload
+  /// per eligible scene view, and stores those payloads for downstream
+  /// SceneRenderer-owned per-view execution.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+
+  /// Query a published prepared-scene payload for a view after Execute().
+  [[nodiscard]] auto GetPreparedSceneFrame(ViewId view_id) const
+      -> const PreparedSceneFrame*;
 
  private:
   Renderer& renderer_;
@@ -108,15 +111,15 @@ class InitViewsModule {
 
 | Source | Data | Access Pattern |
 | ------ | ---- | -------------- |
-| Engine | Published CompositionViews (ViewId, camera, ZOrder) | Via Renderer → CompositionView API |
-| Engine | Scene node graph (transforms, geometry, materials) | One frame-shared ScenePrep traversal, then cached-candidate reuse per view |
+| Renderer Core | `RenderContext::frame_views` | Per-frame view set materialized from published runtime views |
+| Renderer Core | `RenderContext::scene` | Active scene for one frame-shared ScenePrep traversal |
 | SceneTextures | Resolution, format config | Via SceneTexturesConfig |
 
 ### 3.2 Outputs
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later per-view stages | Stored in RenderContext / typed per-view publication |
+| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later per-view stages | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` during downstream per-view iteration |
 | Dynamic primitive classification | BasePassModule (velocity completion), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices |
 | Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
 
@@ -203,21 +206,24 @@ phase-explicit flow defined there; it must not use a stack-local per-view
 ```cpp
 void InitViewsModule::Execute(RenderContext& ctx,
                                SceneTextures& scene_textures) {
-  auto& views = renderer_.GetPublishedViews();
   auto& state = scene_prep_state_;
-  const auto& scene = renderer_.GetActiveScene();
+  const auto* scene = ctx.GetScene().get();
+  const auto frame_id = ctx.frame_sequence;
+
+  CHECK_NOTNULL_F(scene, "InitViewsModule requires an active scene");
 
   // Exactly one full scene traversal for the scene in this frame.
-  scene_prep_->BeginFrameCollection(scene, ctx.frame_id(), state);
+  scene_prep_->BeginFrameCollection(*scene, frame_id, state);
 
-  for (const auto& view : views) {
-    auto& storage = AcquirePreparedSceneViewStorage(view.GetViewId());
+  for (const auto& view_entry : ctx.frame_views) {
+    if (!view_entry.is_scene_view || view_entry.resolved_view == nullptr) {
+      continue;
+    }
+    auto& storage = AcquirePreparedSceneViewStorage(view_entry.view_id);
 
-    scene_prep_->PrepareView(scene, view, ctx.frame_id(), state, storage);
+    scene_prep_->PrepareView(
+      *scene, *view_entry.resolved_view, frame_id, state, storage);
     scene_prep_->FinalizeView(state, storage);
-
-    // Publish per-view prepared-scene payload for downstream stages.
-    ctx.PublishPreparedSceneFrame(view.GetViewId(), storage.published_view);
   }
 }
 ```
@@ -239,7 +245,11 @@ GPU-driven culling (compute shader, HZB feedback) is deferred to Phase 5
 ## 8. Published Prepared-Scene Contract
 
 The stage-2 canonical published product is `PreparedSceneFrame`, not a raw
-`ScenePrepState` and not a second competing scene-prep payload.
+`ScenePrepState` and not a second competing scene-prep payload. `InitViewsModule`
+publishes by retaining per-view backing storage and exposing view-keyed payloads
+through `GetPreparedSceneFrame(...)`; `SceneRenderer` then binds the selected
+payload into `RenderContext.current_view.prepared_frame` before stage-3 and
+later per-view dispatch.
 
 If `InitViewsModule` keeps any lightweight "visible primitive" helper for local
 CPU hot paths, it is an internal helper only and must be keyed to indices in

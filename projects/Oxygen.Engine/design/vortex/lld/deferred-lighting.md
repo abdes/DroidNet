@@ -53,8 +53,7 @@ In Phase 3, deferred lighting is a file-separated method of `SceneRenderer`:
 src/Oxygen/Vortex/
 └── SceneRenderer/
     ├── SceneRenderer.h
-    ├── SceneRenderer.cpp
-    └── SceneRendererDeferredLighting.cpp   ← Phase 3 inline orchestration owner
+    └── SceneRenderer.cpp   ← Phase 3 inline orchestration owner
 ```
 
 ### 2.2 Phase 3 Method Signature
@@ -155,7 +154,7 @@ stage 12 does not become defined by that package.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| SceneTextures | GBufferA–D (SRV) | Material data for BRDF evaluation |
+| SceneTextures | GBufferNormal/Material/BaseColor/CustomData (SRV) | Material data for BRDF evaluation |
 | SceneTextures | SceneDepth (SRV) | Position reconstruction |
 | SceneTextures | SceneColor (RTV) | Accumulation target |
 | Scene | Light list (position, color, type, radius, etc.) | Per-light parameters |
@@ -171,13 +170,13 @@ stage 12 does not become defined by that package.
 
 ```text
 Before stage 12:
-  GBufferA–D    = SRV (readable, from stage 10 transition)
+  GBufferNormal/Material/BaseColor/CustomData = SRV (readable, from stage 10 transition)
   SceneColor    = contains emissive from BasePass (stage 9)
   SceneDepth    = SRV (readable)
   Stencil       = cleared (available for stencil-bounded lighting)
 
 After stage 12:
-  GBufferA–D    = SRV (unchanged)
+  GBufferNormal/Material/BaseColor/CustomData = SRV (unchanged)
   SceneColor    = emissive + direct lighting accumulated
   Stencil       = cleared (each light clears its stencil marks)
 ```
@@ -189,7 +188,7 @@ SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
   │
   ├─ Read current view from RenderContext
   ├─ Load published SceneTextureBindings for the current view
-  ├─ Bind SceneTextures as SRVs (GBufferA-D, SceneDepth) through the published routing metadata
+  ├─ Bind SceneTextures as SRVs (GBufferNormal/Material/BaseColor/CustomData, SceneDepth) through the published routing metadata
   ├─ Set blend state: Additive (SrcBlend=ONE, DestBlend=ONE)
   │
   ├─ for each directional light:
@@ -237,7 +236,7 @@ FullscreenVSOutput DeferredLightDirectionalVS(uint vid : SV_VertexID) {
 }
 
 float4 DeferredLightDirectionalPS(FullscreenVSOutput input) : SV_Target {
-  SceneTextureBindingData bindings = LoadBindingsFromView();
+  SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
 
   float3 result = EvaluateDeferredLight(
     input.uv,
@@ -280,7 +279,7 @@ LightVolumeVSOutput DeferredLightPointVS(float3 localPos : POSITION) {
 }
 
 float4 DeferredLightPointPS(LightVolumeVSOutput input) : SV_Target {
-  SceneTextureBindingData bindings = LoadBindingsFromView();
+  SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
 
   float3 worldPos = ReconstructWorldPosition(
     input.screenUV,
@@ -344,16 +343,11 @@ cbuffer ViewConstants : register(b0) {
   float4x4 ViewProjection;
   float4x4 InvViewProjection;
   float3 CameraPosition;
+  uint ViewFrameBindingsSlot;
 };
 
-StructuredBuffer<ViewFrameBindingsData> ViewBindingsBuffer : register(t0, space1);
-StructuredBuffer<SceneTextureBindingData> SceneTextureBindingsBuffer : register(t1, space1);
-
-SceneTextureBindingData LoadBindingsFromView(uint viewIndex) {
-  return LoadSceneTextureBindingsForView(
-    ViewBindingsBuffer,
-    SceneTextureBindingsBuffer,
-    viewIndex);
+SceneTextureBindingData LoadBindingsFromCurrentView() {
+  return LoadSceneTextureBindingsForCurrentView(ViewFrameBindingsSlot);
 }
 
 #endif // VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
