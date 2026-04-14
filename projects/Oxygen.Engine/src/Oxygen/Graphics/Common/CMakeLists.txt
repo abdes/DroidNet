@@ -72,13 +72,11 @@ set(
   "Forward.h"
   "FrameCaptureController.h"
   "Framebuffer.h"
-  "GpuEventScope.h"
   "Graphics.h"
   "MemoryBlock.h"
   "NativeObject.h"
   "ObjectRelease.h"
   "PipelineState.h"
-  "ProfileScope.h"
   "Queues.h"
   "ReadbackErrors.h"
   "ReadbackManager.h"
@@ -130,7 +128,6 @@ set(
   "Internal/QueueManager.h"
   "Internal/ToStringConverters.cpp"
   "PipelineState.cpp"
-  "ProfileScope.cpp"
   "ReadbackManager.cpp"
   "ReadbackTracker.cpp"
   "ReadbackValidation.cpp"
@@ -175,8 +172,11 @@ target_link_libraries(
     oxygen::config
     oxygen::core
     oxygen::data
+    oxygen::profiling-cpu
     oxygen::platform
 )
+
+target_link_libraries(oxygen-profiling-gpu INTERFACE ${META_MODULE_TARGET})
 
 # ------------------------------------------------------------------------------
 # Tests

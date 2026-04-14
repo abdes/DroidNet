@@ -289,6 +289,12 @@ auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
 
+  {
+    auto& qm = GetComponent<QueueManager>();
+    qm.ForEachQueue(
+      [](const graphics::CommandQueue& q) { q.BeginProfilingFrame(); });
+  }
+
   // Flush all command queues to ensure GPU work is submitted before releasing
   // resources
   FlushCommandQueues();

@@ -33,7 +33,12 @@ set(CMAKE_DEBUG_POSTFIX "-d")
 # Get git revision
 include(GetGitRevisionDescription)
 get_git_head_revision(GIT_REFSPEC GIT_SHA1)
-string(SUBSTRING "${GIT_SHA1}" 0 12 GIT_REV)
+string(
+  SUBSTRING "${GIT_SHA1}"
+  0
+  12
+  GIT_REV
+)
 if(NOT GIT_SHA1)
   set(GIT_REV "0")
 endif()
@@ -196,6 +201,10 @@ foreach(index RANGE 0 ${OPTIONS_LIST_length} 3)
     message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - default")
   endif()
 endforeach()
+
+if(OXYGEN_WITH_TRACY)
+  add_compile_definitions(OXYGEN_WITH_TRACY=1)
+endif()
 
 # ------------------------------------------------------------------------------
 # Installation Setup
@@ -456,8 +465,7 @@ endif()
 if(MSVC)
   # Enable C++ latest features
   list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
+    APPEND OXYGEN_COMMON_CXX_FLAGS
     "/Zc:__cplusplus"
     "/Zc:preprocessor"
   )
@@ -472,8 +480,7 @@ else()
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fPIC")
   # Enable all warnings and treat them as errors
   list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
+    APPEND OXYGEN_COMMON_CXX_FLAGS
     "-Wall"
     "-Wextra"
     "-Werror"

@@ -48,6 +48,9 @@ public:
     std::span<std::shared_ptr<graphics::CommandList>> command_lists)
     -> void override;
 
+  OXGN_D3D12_API auto BeginProfilingFrame() const -> void override;
+  OXGN_D3D12_API auto Flush() const -> void override;
+
   OXGN_D3D12_API auto SetName(std::string_view name) noexcept -> void override;
 
   OXGN_D3D12_NDAPI auto GetCommandQueue() const -> dx::ICommandQueue*
@@ -56,6 +59,10 @@ public:
   }
 
   OXGN_D3D12_NDAPI auto GetFence() const -> dx::IFence* { return fence_; }
+  OXGN_D3D12_NDAPI auto GetTracyContextOpaque() const -> void*
+  {
+    return tracy_context_;
+  }
 
 private:
   auto SignalImmediate(uint64_t value) const -> void override;
@@ -76,6 +83,7 @@ private:
   mutable uint64_t current_value_ { 0 };
   mutable uint64_t last_signaled_value_ { 0 };
   HANDLE fence_event_ { nullptr };
+  void* tracy_context_ { nullptr };
 };
 
 } // namespace oxygen::graphics::d3d12

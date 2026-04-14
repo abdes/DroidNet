@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
 #include <stdexcept>
 #include <variant>
 
@@ -19,6 +20,7 @@
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
@@ -29,6 +31,7 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/common/Framebuffer.h>
+#include <Oxygen/Tracy/D3D12.h>
 
 #if __has_include(<pix3.h>)
 #  include <pix3.h>
@@ -43,6 +46,58 @@ using oxygen::graphics::detail::MemoryBarrierDesc;
 using oxygen::graphics::detail::TextureBarrierDesc;
 
 namespace {
+
+#if defined(OXYGEN_WITH_TRACY)
+
+constexpr uint8_t kTracyCollectorStateFlagActive = 1U << 0U;
+
+class TracyGpuCollector final : public oxygen::graphics::IGpuProfileCollector {
+public:
+  explicit TracyGpuCollector(void* ctx)
+    : ctx_(ctx)
+  {
+  }
+
+  auto BeginScope(oxygen::graphics::CommandRecorder& recorder,
+    const oxygen::graphics::GpuProfileScopeInfo& info,
+    oxygen::graphics::GpuProfileCollectorState& state) -> void override
+  {
+    if (ctx_ == nullptr) {
+      state.flags = 0U;
+      return;
+    }
+
+    auto& d3d12_recorder
+      = static_cast<oxygen::graphics::d3d12::CommandRecorder&>(recorder);
+    auto* command_list = d3d12_recorder.GetD3D12CommandList();
+    if (command_list == nullptr) {
+      state.flags = 0U;
+      return;
+    }
+
+    if (!oxygen::tracy::d3d12::BeginZone(std::span { state.storage }, ctx_,
+          command_list, info.callsite, info.formatted_name)) {
+      state.flags = 0U;
+      return;
+    }
+    state.flags = kTracyCollectorStateFlagActive;
+  }
+
+  auto EndScope(oxygen::graphics::CommandRecorder&,
+    oxygen::graphics::GpuProfileCollectorState& state) -> void override
+  {
+    if ((state.flags & kTracyCollectorStateFlagActive) == 0U) {
+      return;
+    }
+    oxygen::tracy::d3d12::EndZone(std::span { state.storage });
+    state.flags = 0U;
+  }
+
+private:
+  void* ctx_ { nullptr };
+};
+
+#endif
 
 // Helper function to convert common ResourceStates to D3D12_RESOURCE_STATES
 auto ConvertResourceStates(oxygen::graphics::ResourceStates common_states)
@@ -239,6 +294,16 @@ CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
   , graphics_weak_(std::move(graphics_weak))
 {
   DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
+#if defined(OXYGEN_WITH_TRACY)
+  if (target_queue != nullptr) {
+    auto* d3d12_queue
+      = static_cast<oxygen::graphics::d3d12::CommandQueue*>(target_queue.get());
+    tracy_gpu_collector_ = std::make_unique<TracyGpuCollector>(
+      d3d12_queue->GetTracyContextOpaque());
+    SetTraceCollector(
+      observer_ptr<graphics::IGpuProfileCollector>(tracy_gpu_collector_.get()));
+  }
+#endif
 }
 
 auto CommandRecorder::Begin() -> void
@@ -1168,23 +1233,12 @@ auto CommandRecorder::BeginEvent(const std::string_view name) -> void
     return;
   }
 
-  std::wstring name_w;
-  oxygen::string_utils::Utf8ToWide(name, name_w);
-
   DebugLayer::PushAftermathMarker(command_list, name);
 
-#if __has_include(<pix3.h>)
-  if (DebugLayer::IsPixEnabled()) {
-    PIXBeginEvent(command_list, 0, L"%s", name_w.c_str());
-  } else {
-    const auto size_bytes
-      = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
-    command_list->BeginEvent(0, name_w.c_str(), size_bytes);
-  }
-#else
-  const auto size_bytes
-    = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
-  command_list->BeginEvent(0, name_w.c_str(), size_bytes);
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+  std::wstring name_w;
+  oxygen::string_utils::Utf8ToWide(name, name_w);
+  PIXBeginEvent(command_list, 0, L"%s", name_w.c_str());
 #endif
 }
 
@@ -1197,14 +1251,8 @@ auto CommandRecorder::EndEvent() -> void
 
   DebugLayer::PopAftermathMarker(command_list);
 
-#if __has_include(<pix3.h>)
-  if (DebugLayer::IsPixEnabled()) {
-    PIXEndEvent(command_list);
-  } else {
-    command_list->EndEvent();
-  }
-#else
-  command_list->EndEvent();
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+  PIXEndEvent(command_list);
 #endif
 }
 
@@ -1215,22 +1263,11 @@ auto CommandRecorder::SetMarker(const std::string_view name) -> void
     return;
   }
 
-  std::wstring name_w;
-  oxygen::string_utils::Utf8ToWide(name, name_w);
-
   DebugLayer::SetAftermathMarker(command_list, name);
 
-#if __has_include(<pix3.h>)
-  if (DebugLayer::IsPixEnabled()) {
-    PIXSetMarker(command_list, 0, L"%s", name_w.c_str());
-  } else {
-    const auto size_bytes
-      = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
-    command_list->SetMarker(0, name_w.c_str(), size_bytes);
-  }
-#else
-  const auto size_bytes
-    = static_cast<UINT>((name_w.size() + 1) * sizeof(wchar_t));
-  command_list->SetMarker(0, name_w.c_str(), size_bytes);
+#if defined(USE_PIX) && __has_include(<pix3.h>)
+  std::wstring name_w;
+  oxygen::string_utils::Utf8ToWide(name, name_w);
+  PIXSetMarker(command_list, 0, L"%s", name_w.c_str());
 #endif
 }

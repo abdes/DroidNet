@@ -49,7 +49,6 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -60,6 +59,8 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Renderer/ImGui/GpuTimelinePanel.h>
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
@@ -1561,6 +1562,10 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
 auto Renderer::BeginFrameServices(const frame::Slot frame_slot,
   const frame::SequenceNumber frame_sequence) -> void
 {
+  profiling::CpuProfileScope frame_scope("Renderer.BeginFrameServices",
+    profiling::ProfileCategory::kPass,
+    profiling::Vars(profiling::Var("frame", frame_sequence.get())));
+
   CHECK_F(frame_slot != frame::kInvalidSlot,
     "Renderer::BeginFrameServices requires a valid frame slot");
 
@@ -1799,7 +1804,8 @@ auto Renderer::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
       internal::PerViewStructuredPublisher<VsmFrameBindings>>(
       observer_ptr { gfx.get() }, *inline_staging_provider_,
       observer_ptr { inline_transfers_.get() }, "VsmFrameBindings");
-    if (HasCapability(renderer::RendererCapabilityFamily::kEnvironmentLighting)) {
+    if (HasCapability(
+          renderer::RendererCapabilityFamily::kEnvironmentLighting)) {
       env_lighting_service_ = std::make_unique<EnvironmentLightingService>(
         observer_ptr { gfx.get() }, config_, observer_ptr { uploader_.get() },
         observer_ptr { upload_staging_provider_.get() },
@@ -2311,15 +2317,6 @@ auto Renderer::DumpEstimatedTextureMemory(const std::size_t top_n) const -> void
   texture_binder_->DumpEstimatedTextureMemory(top_n);
 }
 
-auto Renderer::MakeGpuEventScopeOptions() const
-  -> graphics::GpuEventScopeOptions
-{
-  if (!gpu_timeline_profiler_) {
-    return {};
-  }
-  return gpu_timeline_profiler_->MakeScopeOptions();
-}
-
 //=== Debug Overrides ===-----------------------------------------------------//
 
 auto Renderer::RequestIblRegeneration() noexcept -> void
@@ -2789,13 +2786,11 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
         continue;
       }
       auto recorder = recorder_ptr.get();
-      const auto scope_options = MakeGpuEventScopeOptions();
-      const auto view_scope_name = view_ctx.metadata.name.empty()
-        ? fmt::format("View {}", view_id.get())
-        : fmt::format("View: {}", view_ctx.metadata.name);
-
-      graphics::GpuEventScope view_scope(
-        *recorder, view_scope_name, scope_options);
+      graphics::GpuEventScope view_scope(*recorder, "Renderer.View",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("id", view_id.get()),
+          profiling::Var("name", view_ctx.metadata.name)));
 
       auto update_view_state = [&](ViewId view_id, bool success) -> void {
         std::unique_lock state_lock(view_state_mutex_);
@@ -2864,8 +2859,10 @@ auto Renderer::OnRender(observer_ptr<FrameContext> context) -> co::Co<>
 
       // --- STEP 4: Execute RenderGraph ---
       const auto render_graph_begin = std::chrono::steady_clock::now();
-      graphics::GpuEventScope graph_scope(
-        *recorder, "RenderGraph", scope_options);
+      graphics::GpuEventScope graph_scope(*recorder, "Renderer.RenderGraph",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("view", view_id.get())));
       const bool rv = co_await ExecuteRenderGraphForView(
         view_id, factory, *render_context_, *recorder);
       const auto render_graph_end = std::chrono::steady_clock::now();
@@ -2973,8 +2970,8 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     CHECK_F(static_cast<bool>(recorder_ptr),
       "Compositing recorder acquisition failed");
     if (gpu_timeline_profiler_) {
-      recorder_ptr->SetProfileScopeHandler(
-        observer_ptr<graphics::IGpuProfileScopeHandler>(
+      recorder_ptr->SetTelemetryCollector(
+        observer_ptr<graphics::IGpuProfileCollector>(
           gpu_timeline_profiler_.get()));
     }
     auto& recorder = *recorder_ptr;
@@ -3002,10 +2999,11 @@ auto Renderer::OnCompositing(observer_ptr<FrameContext> context) -> co::Co<>
     comp_context.frame_sequence = frame_seq_num;
 
     for (const auto& task : payload.tasks) {
-      const auto scope_options = MakeGpuEventScopeOptions();
-      const auto task_scope_label = FormatCompositingTaskScopeLabel(task);
-      graphics::GpuEventScope task_scope(
-        recorder, task_scope_label, scope_options);
+      graphics::GpuEventScope task_scope(recorder, "Renderer.CompositingTask",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(
+          profiling::Var("label", FormatCompositingTaskScopeLabel(task))));
 
       switch (task.type) {
       case CompositingTaskType::kCopy: {
@@ -3236,8 +3234,8 @@ auto Renderer::AcquireRecorderForView(ViewId view_id, Graphics& gfx)
   auto recorder = gfx.AcquireCommandRecorder(
     queue_key, std::string("View_") + std::to_string(view_id.get()));
   if (recorder && gpu_timeline_profiler_) {
-    recorder->SetProfileScopeHandler(
-      observer_ptr<graphics::IGpuProfileScopeHandler>(
+    recorder->SetTelemetryCollector(
+      observer_ptr<graphics::IGpuProfileCollector>(
         gpu_timeline_profiler_.get()));
   }
   return std::shared_ptr<oxygen::graphics::CommandRecorder>(

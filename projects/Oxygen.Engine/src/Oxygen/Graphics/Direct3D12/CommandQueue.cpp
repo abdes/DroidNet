@@ -19,6 +19,8 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
+#include <Oxygen/Tracy/D3D12.h>
+
 using oxygen::graphics::d3d12::CommandQueue;
 using oxygen::windows::ThrowOnFailed;
 
@@ -42,6 +44,14 @@ CommandQueue::CommandQueue(
   const auto fence_name = fmt::format("Fence ({})", name);
   CreateFence(fence_name, 0ULL);
   LOG_F(INFO, "D3D12 Fence [name=`{}`] created", fence_name);
+
+#if defined(OXYGEN_WITH_TRACY)
+  tracy_context_
+    = oxygen::tracy::d3d12::CreateContext(CurrentDevice(), command_queue_);
+  if (tracy_context_ != nullptr) {
+    oxygen::tracy::d3d12::NameContext(tracy_context_, name);
+  }
+#endif
 }
 
 CommandQueue::~CommandQueue() noexcept
@@ -54,6 +64,15 @@ CommandQueue::~CommandQueue() noexcept
   // Flush the command queue to ensure all commands are completed before
   // destruction.
   Wait(GetCurrentValue());
+
+#if defined(OXYGEN_WITH_TRACY)
+  if (tracy_context_ != nullptr) {
+    oxygen::tracy::d3d12::AdvanceContextFrame(tracy_context_);
+    oxygen::tracy::d3d12::CollectContext(tracy_context_);
+    oxygen::tracy::d3d12::DestroyContext(tracy_context_);
+    tracy_context_ = nullptr;
+  }
+#endif
 
   // Get the command queue debug name (from the previously set private data)
   // for logging.
@@ -254,6 +273,25 @@ auto CommandQueue::TryGetTimestampFrequency(uint64_t& out_hz) const -> bool
 
   out_hz = frequency_hz;
   return true;
+}
+
+auto CommandQueue::Flush() const -> void
+{
+  Base::Flush();
+#if defined(OXYGEN_WITH_TRACY)
+  if (tracy_context_ != nullptr) {
+    oxygen::tracy::d3d12::CollectContext(tracy_context_);
+  }
+#endif
+}
+
+auto CommandQueue::BeginProfilingFrame() const -> void
+{
+#if defined(OXYGEN_WITH_TRACY)
+  if (tracy_context_ != nullptr) {
+    oxygen::tracy::d3d12::AdvanceContextFrame(tracy_context_);
+  }
+#endif
 }
 
 void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)

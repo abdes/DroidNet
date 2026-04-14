@@ -17,12 +17,12 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowCasterCullingPass.h>
 #include <Oxygen/Renderer/Passes/ConventionalShadowRasterPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -226,9 +226,10 @@ auto ConventionalShadowRasterPass::DoExecute(
 
   auto& depth_texture = GetDepthTextureMutable();
   SetupViewPortAndScissors(recorder);
-  const graphics::GpuEventScopeOptions scope_options {};
-  graphics::GpuEventScope shadow_depth_work_scope(
-    recorder, "ConventionalShadowRasterPass.ShadowDepthWork", scope_options);
+  graphics::GpuEventScope shadow_depth_work_scope(recorder,
+    "ConventionalShadowRasterPass.ShadowDepthWork",
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kRaster);
   // Track the last public descriptor we bound so partition traversal only
   // reissues SetPipelineState when the selected variant actually changes.
   auto current_pso = LastBuiltPsoDesc();
@@ -260,10 +261,12 @@ auto ConventionalShadowRasterPass::DoExecute(
   for (std::uint32_t job_index = 0U; job_index < job_count; ++job_index) {
     const auto& job = raster_plan->jobs[job_index];
     const auto dsv = PrepareJobDepthStencilView(depth_texture, job);
-    const auto job_scope_name
-      = fmt::format("ConventionalShadowRasterPass.Job[{}].Slice[{}]", job_index,
-        job.target_array_slice);
-    graphics::GpuEventScope job_scope(recorder, job_scope_name, scope_options);
+    graphics::GpuEventScope job_scope(recorder,
+      "ConventionalShadowRasterPass.JobSlice",
+      profiling::ProfileGranularity::kDiagnostic,
+      profiling::ProfileCategory::kRaster,
+      profiling::Vars(profiling::Var("job", job_index),
+        profiling::Var("slice", job.target_array_slice)));
 
     recorder.SetRenderTargets({}, dsv);
     ClearDepthStencilView(recorder, dsv);

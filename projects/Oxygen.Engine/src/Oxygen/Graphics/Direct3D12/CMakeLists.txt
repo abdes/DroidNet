@@ -735,6 +735,10 @@ target_link_libraries(
     dxguid
 )
 
+if(TARGET oxygen::tracy)
+  target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen::tracy)
+endif()
+
 if(WIN32)
   if(OXYGEN_D3D12_PIX_MARKERS_ENABLED)
     target_include_directories(

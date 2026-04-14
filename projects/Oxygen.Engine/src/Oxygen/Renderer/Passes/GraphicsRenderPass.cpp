@@ -14,7 +14,7 @@ using oxygen::engine::GraphicsRenderPass;
 using oxygen::graphics::CommandRecorder;
 
 GraphicsRenderPass::GraphicsRenderPass(
-  const std::string_view name, bool require_view_constants)
+  const std::string_view name, const bool require_view_constants)
   : RenderPass(name)
   , require_view_constants_(require_view_constants)
 {

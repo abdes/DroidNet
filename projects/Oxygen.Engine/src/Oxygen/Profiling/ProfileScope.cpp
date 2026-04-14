@@ -4,8 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/ProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
-using oxygen::graphics::IGpuProfileScopeHandler;
+#include <Oxygen/Profiling/Internal/ScopeNameFormatter.h>
 
-IGpuProfileScopeHandler::~IGpuProfileScopeHandler() = default;
+namespace oxygen::profiling {
+
+auto FormatScopeName(const ProfileScopeDesc& desc) -> std::string
+{
+  return internal::FormatScopeNameImpl(desc);
+}
+
+} // namespace oxygen::profiling

@@ -6,9 +6,13 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -24,13 +28,13 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
-#include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/TrackableResource.h>
 #include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::graphics {
 
@@ -39,6 +43,7 @@ namespace detail {
   class Barrier;
 } // namespace detail
 
+class CommandRecorder;
 class CommandList;
 class CommandQueue;
 class IShaderByteCode;
@@ -46,6 +51,40 @@ class Buffer;
 class Texture;
 class Framebuffer;
 class NativeView;
+
+struct GpuProfileScopeToken {
+  uint32_t scope_id { 0 };
+  uint16_t stream_id { 0 };
+  uint8_t flags { 0 };
+};
+
+inline constexpr uint32_t kInvalidGpuProfileScopeId = 0xFFFFFFFFU;
+inline constexpr uint8_t kGpuScopeTokenFlagActive = 1U << 0U;
+
+struct GpuProfileCollectorState {
+  alignas(std::max_align_t) std::array<std::byte, 64> storage {};
+  uint8_t flags { 0 };
+};
+
+struct GpuProfileScopeInfo {
+  const profiling::GpuProfileScopeDesc& desc;
+  std::string_view base_label {};
+  std::string_view formatted_name {};
+  std::source_location callsite {};
+};
+
+class IGpuProfileCollector {
+public:
+  virtual ~IGpuProfileCollector() = default;
+
+  virtual auto BeginScope(CommandRecorder& recorder,
+    const GpuProfileScopeInfo& info, GpuProfileCollectorState& state) -> void
+    = 0;
+
+  virtual auto EndScope(
+    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void
+    = 0;
+};
 
 class CommandRecorder {
 public:
@@ -127,22 +166,23 @@ public:
 
   //=== Unified Profile Scopes ===-----------------------------------------//
 
-  OXGN_GFX_API virtual auto BeginProfileScope(std::string_view name,
-    const GpuEventScopeOptions& options) -> GpuEventScopeToken;
+  OXGN_GFX_API virtual auto BeginProfileScope(
+    const profiling::GpuProfileScopeDesc& desc,
+    std::source_location callsite = std::source_location::current())
+    -> GpuProfileScopeToken;
 
-  OXGN_GFX_API virtual auto EndProfileScope(const GpuEventScopeToken& token)
+  OXGN_GFX_API virtual auto EndProfileScope(const GpuProfileScopeToken& token)
     -> void;
 
-  auto SetProfileScopeHandler(observer_ptr<IGpuProfileScopeHandler> handler)
+  auto SetTelemetryCollector(observer_ptr<IGpuProfileCollector> collector)
     -> void
   {
-    profile_scope_handler_ = handler;
+    telemetry_collector_ = collector;
   }
 
-  [[nodiscard]] auto GetProfileScopeHandler() const
-    -> observer_ptr<IGpuProfileScopeHandler>
+  auto SetTraceCollector(observer_ptr<IGpuProfileCollector> collector) -> void
   {
-    return profile_scope_handler_;
+    trace_collector_ = collector;
   }
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
@@ -518,6 +558,15 @@ protected:
     = 0;
 
 private:
+  struct ScopeRecord {
+    std::string base_label {};
+    std::string formatted_name {};
+    GpuProfileCollectorState native_label_state {};
+    GpuProfileCollectorState telemetry_state {};
+    GpuProfileCollectorState trace_state {};
+    bool active { false };
+  };
+
   //! @{
   //! Private non-template dispatch methods for resource state tracking and
   //! barrier management.
@@ -551,9 +600,12 @@ private:
 
   std::shared_ptr<CommandList> command_list_;
   observer_ptr<CommandQueue> target_queue_;
-  observer_ptr<IGpuProfileScopeHandler> profile_scope_handler_ { nullptr };
+  observer_ptr<IGpuProfileCollector> telemetry_collector_ { nullptr };
+  observer_ptr<IGpuProfileCollector> trace_collector_ { nullptr };
 
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
+  std::vector<ScopeRecord> scope_records_ {};
+  std::vector<uint32_t> scope_stack_ {};
 };
 
 } // namespace oxygen::graphics

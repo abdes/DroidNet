@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/ImGui/ImGuiPass.h>
 
 namespace oxygen::renderer::imgui {
@@ -24,10 +24,9 @@ auto ImGuiPass::Render(graphics::CommandRecorder& recorder) const -> co::Co<>
     co_return;
   }
 
-  const graphics::GpuEventScopeOptions scope_options {
-    .timestamp_enabled = recorder.GetProfileScopeHandler() != nullptr,
-  };
-  graphics::GpuEventScope scope(recorder, "ImGuiPass", scope_options);
+  graphics::GpuEventScope scope(recorder, "ImGuiPass",
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kPass);
 
   backend_->Render(recorder);
   co_return;

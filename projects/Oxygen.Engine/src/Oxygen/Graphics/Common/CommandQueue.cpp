@@ -63,6 +63,8 @@ auto CommandQueue::TryGetTimestampFrequency(uint64_t& /*out_hz*/) const -> bool
   return false;
 }
 
+auto CommandQueue::BeginProfilingFrame() const -> void { }
+
 void CommandQueue::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetadata>().SetName(name);

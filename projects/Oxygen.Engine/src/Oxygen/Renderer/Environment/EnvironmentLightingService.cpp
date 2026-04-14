@@ -16,8 +16,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/Internal/BrdfLutManager.h>
 #include <Oxygen/Renderer/Internal/EnvironmentStaticDataManager.h>
 #include <Oxygen/Renderer/Internal/IblManager.h>
@@ -93,7 +93,8 @@ EnvironmentLightingService::EnvironmentLightingService(
   const observer_ptr<upload::StagingProvider> upload_staging_provider,
   const observer_ptr<upload::InlineTransfersCoordinator> inline_transfers,
   const observer_ptr<upload::StagingProvider> inline_staging_provider,
-  const observer_ptr<renderer::resources::TextureBinder> texture_binder) noexcept
+  const observer_ptr<renderer::resources::TextureBinder>
+    texture_binder) noexcept
   : gfx_(gfx)
   , uploader_(uploader)
   , upload_staging_provider_(upload_staging_provider)
@@ -117,30 +118,29 @@ auto EnvironmentLightingService::Initialize() -> void
     internal::PerViewStructuredPublisher<EnvironmentViewData>>(
     gfx_, *inline_staging_provider_, inline_transfers_, "EnvironmentViewData");
   environment_frame_bindings_publisher_ = std::make_unique<
-    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>(
-    gfx_, *inline_staging_provider_, inline_transfers_,
-    "EnvironmentFrameBindings");
+    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>(gfx_,
+    *inline_staging_provider_, inline_transfers_, "EnvironmentFrameBindings");
 
   brdf_lut_manager_ = std::make_unique<internal::BrdfLutManager>(
     gfx_, uploader_, upload_staging_provider_);
 
   sky_capture_pass_config_ = std::make_shared<SkyCapturePassConfig>();
   sky_capture_pass_config_->resolution = 128u;
-  sky_capture_pass_ = std::make_unique<SkyCapturePass>(gfx_,
-    sky_capture_pass_config_);
+  sky_capture_pass_
+    = std::make_unique<SkyCapturePass>(gfx_, sky_capture_pass_config_);
 
   sky_atmo_lut_compute_pass_config_
     = std::make_shared<SkyAtmosphereLutComputePassConfig>();
-  sky_atmo_lut_compute_pass_
-    = std::make_unique<SkyAtmosphereLutComputePass>(gfx_,
-      sky_atmo_lut_compute_pass_config_);
+  sky_atmo_lut_compute_pass_ = std::make_unique<SkyAtmosphereLutComputePass>(
+    gfx_, sky_atmo_lut_compute_pass_config_);
 
   ibl_manager_ = std::make_unique<internal::IblManager>(gfx_);
 
-  env_static_manager_ = std::make_unique<internal::EnvironmentStaticDataManager>(
-    gfx_, texture_binder_, observer_ptr { brdf_lut_manager_.get() },
-    observer_ptr { ibl_manager_.get() },
-    observer_ptr { sky_capture_pass_.get() });
+  env_static_manager_
+    = std::make_unique<internal::EnvironmentStaticDataManager>(gfx_,
+      texture_binder_, observer_ptr { brdf_lut_manager_.get() },
+      observer_ptr { ibl_manager_.get() },
+      observer_ptr { sky_capture_pass_.get() });
 
   ibl_compute_pass_ = std::make_unique<IblComputePass>("IblComputePass");
 }
@@ -191,8 +191,7 @@ auto EnvironmentLightingService::UpdatePreparedViewState(const ViewId view_id,
       const auto camera_pos = view.CameraPosition();
       camera_altitude_m = glm::max(
         glm::length(camera_pos - planet_center_ws) - planet_radius_m, 0.0F);
-      planet_to_sun_cos_zenith
-        = (sun.enabled != 0U) ? sun.cos_zenith : 0.0F;
+      planet_to_sun_cos_zenith = (sun.enabled != 0U) ? sun.cos_zenith : 0.0F;
     }
   }
 
@@ -208,7 +207,8 @@ auto EnvironmentLightingService::UpdatePreparedViewState(const ViewId view_id,
   };
 
   bool atmo_enabled = false;
-  if (const auto scene_env = scene.GetEnvironment(); allow_atmosphere && scene_env) {
+  if (const auto scene_env = scene.GetEnvironment();
+    allow_atmosphere && scene_env) {
     if (const auto atmo = scene_env->TryGetSystem<env::SkyAtmosphere>();
       atmo && atmo->IsEnabled()) {
       atmo_enabled = true;
@@ -230,9 +230,8 @@ auto EnvironmentLightingService::UpdatePreparedViewState(const ViewId view_id,
   }
 }
 
-auto EnvironmentLightingService::PrepareCurrentView(
-  const ViewId view_id, RenderContext& render_context,
-  const bool allow_atmosphere) -> void
+auto EnvironmentLightingService::PrepareCurrentView(const ViewId view_id,
+  RenderContext& render_context, const bool allow_atmosphere) -> void
 {
   bool atmo_enabled = false;
   if (const auto scene = render_context.scene; allow_atmosphere && scene) {
@@ -275,8 +274,10 @@ auto EnvironmentLightingService::ExecutePerViewPasses(const ViewId view_id,
     const auto swap_count_before = atmo_lut_manager->GetSwapCount();
     if (atmo_lut_manager->IsDirty() || !atmo_lut_manager->HasBeenGenerated()) {
       try {
-        graphics::GpuEventScope lut_scope(
-          recorder, "Atmosphere LUT Compute", {});
+        graphics::GpuEventScope lut_scope(recorder,
+          "Environment.AtmosphereLutCompute",
+          profiling::ProfileGranularity::kDiagnostic,
+          profiling::ProfileCategory::kCompute);
         co_await sky_atmo_lut_compute_pass_->PrepareResources(
           render_context, recorder);
         co_await sky_atmo_lut_compute_pass_->Execute(render_context, recorder);
@@ -326,13 +327,16 @@ auto EnvironmentLightingService::ExecutePerViewPasses(const ViewId view_id,
         sky_capture_pass_->MarkDirty(view_id);
       }
       try {
-        graphics::GpuEventScope capture_scope(recorder, "Sky Capture", {});
+        graphics::GpuEventScope capture_scope(recorder,
+          "Environment.SkyCapture", profiling::ProfileGranularity::kDiagnostic,
+          profiling::ProfileCategory::kPass);
         co_await sky_capture_pass_->PrepareResources(render_context, recorder);
         co_await sky_capture_pass_->Execute(render_context, recorder);
         const auto capture_gen_after
           = sky_capture_pass_->GetCaptureGeneration(view_id);
         if (env_static_manager_ && capture_gen_after != capture_gen_before) {
-          const auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
+          const auto tag
+            = oxygen::renderer::internal::RendererTagFactory::Get();
           env_static_manager_->UpdateIfNeeded(tag, render_context, view_id);
           env_static_manager_->RequestIblRegeneration(view_id);
         }
@@ -352,7 +356,9 @@ auto EnvironmentLightingService::ExecutePerViewPasses(const ViewId view_id,
       env_static_manager_->MarkIblRegenerationClean(view_id);
     }
     try {
-      graphics::GpuEventScope ibl_scope(recorder, "IBL Compute", {});
+      graphics::GpuEventScope ibl_scope(recorder, "Environment.IblCompute",
+        profiling::ProfileGranularity::kDiagnostic,
+        profiling::ProfileCategory::kCompute);
       co_await ibl_compute_pass_->PrepareResources(render_context, recorder);
       co_await ibl_compute_pass_->Execute(render_context, recorder);
     } catch (const std::exception& ex) {
@@ -367,7 +373,8 @@ auto EnvironmentLightingService::PublishForView(const ViewId view_id,
   const bool can_reuse_cached_view_bindings, ViewFrameBindings& view_bindings)
   -> void
 {
-  if (can_reuse_cached_view_bindings || !environment_frame_bindings_publisher_) {
+  if (can_reuse_cached_view_bindings
+    || !environment_frame_bindings_publisher_) {
     return;
   }
 
@@ -397,8 +404,7 @@ auto EnvironmentLightingService::OnFrameComplete() noexcept -> void
   sky_capture_requested_ = false;
 }
 
-auto EnvironmentLightingService::EvictViewProducts(const ViewId view_id)
-  -> void
+auto EnvironmentLightingService::EvictViewProducts(const ViewId view_id) -> void
 {
   per_view_atmo_luts_.erase(view_id);
   last_atmo_generation_.erase(view_id);
@@ -483,8 +489,8 @@ auto EnvironmentLightingService::GetOrCreateSkyAtmosphereLutManagerForView(
   return observer_ptr { lut_ptr };
 }
 
-auto EnvironmentLightingService::GetEnvironmentStaticDataManager() const noexcept
-  -> observer_ptr<internal::EnvironmentStaticDataManager>
+auto EnvironmentLightingService::GetEnvironmentStaticDataManager()
+  const noexcept -> observer_ptr<internal::EnvironmentStaticDataManager>
 {
   return observer_ptr { env_static_manager_.get() };
 }

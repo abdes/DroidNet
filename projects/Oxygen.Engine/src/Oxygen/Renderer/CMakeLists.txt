@@ -356,6 +356,7 @@ target_link_libraries(
     oxygen::imgui
     oxygen::graphics-common
     oxygen::nexus
+    oxygen::profiling-gpu
 )
 
 # ------------------------------------------------------------------------------

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <condition_variable>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <thread>
@@ -22,6 +23,15 @@
 #include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
 
 namespace {
+
+constexpr uint8_t kCollectorStateFlagActive = 1U << 0U;
+
+struct TimelineCollectorScopeState {
+  uint32_t scope_id { 0U };
+};
+
+static_assert(sizeof(TimelineCollectorScopeState)
+  <= sizeof(oxygen::graphics::GpuProfileCollectorState::storage));
 
 auto HashName(std::string_view value) -> uint64_t
 {
@@ -248,14 +258,6 @@ auto GpuTimelineProfiler::SetRetainLatestFrame(const bool retain_latest_frame)
   }
 }
 
-auto GpuTimelineProfiler::MakeScopeOptions() const
-  -> graphics::GpuEventScopeOptions
-{
-  return graphics::GpuEventScopeOptions {
-    .timestamp_enabled = enabled_ && frame_capture_.profiling_enabled,
-  };
-}
-
 auto GpuTimelineProfiler::OnFrameStart(
   const frame::SequenceNumber frame_sequence) -> void
 {
@@ -311,16 +313,19 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
 }
 
 auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
-  const std::string_view name, const graphics::GpuEventScopeOptions& options)
-  -> graphics::GpuEventScopeToken
+  const graphics::GpuProfileScopeInfo& info,
+  graphics::GpuProfileCollectorState& state) -> void
 {
-  if (!options.timestamp_enabled || !frame_capture_.profiling_enabled) {
-    return {};
+  if (!frame_capture_.profiling_enabled
+    || info.desc.granularity != profiling::ProfileGranularity::kTelemetry) {
+    state.flags = 0U;
+    return;
   }
 
   auto provider = ResolveTimestampProvider();
   if (provider == nullptr) {
-    return {};
+    state.flags = 0U;
+    return;
   }
 
   const auto max_query_slots = max_scopes_per_frame_ * 2U;
@@ -333,22 +338,19 @@ auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
         fmt::format("scope budget exhausted at {} / {} query slots",
           frame_capture_.used_query_slots, max_query_slots));
     }
-    return graphics::GpuEventScopeToken {
-      .scope_id = kInvalidScopeId,
-      .stream_id = 0U,
-      .flags = graphics::kGpuScopeTokenFlagOverflowAtCreation,
-    };
+    state.flags = 0U;
+    return;
   }
 
   const auto scope_id = static_cast<uint32_t>(frame_capture_.scopes.size());
   const auto begin_slot = frame_capture_.used_query_slots++;
   const auto end_slot = frame_capture_.used_query_slots++;
-  const auto* display_name = InternName(name);
+  const auto* display_name = InternName(info.base_label);
   const auto parent_scope_id
     = scope_stack_.empty() ? kInvalidScopeId : scope_stack_.back();
 
   frame_capture_.scopes.push_back(GpuScopeRecord {
-    .scope_name_hash = HashName(name),
+    .scope_name_hash = HashName(info.base_label),
     .display_name = display_name,
     .parent_scope_id = parent_scope_id,
     .begin_query_slot = begin_slot,
@@ -362,29 +364,30 @@ auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
 
   if (!provider->WriteTimestamp(recorder, begin_slot)) {
     AddDiagnostic("gpu.timestamp.write_failed",
-      fmt::format("failed to write begin timestamp for '{}'", name));
+      fmt::format("failed to write begin timestamp for '{}'",
+        info.base_label.empty() ? "<unnamed>" : std::string(info.base_label)));
     frame_capture_.profiling_enabled = false;
     scope_stack_.pop_back();
-    return {};
+    state.flags = 0U;
+    return;
   }
 
-  return graphics::GpuEventScopeToken {
+  const TimelineCollectorScopeState collector_state {
     .scope_id = scope_id,
-    .stream_id = 0U,
-    .flags = graphics::kGpuScopeTokenFlagTimestampEnabled,
   };
+  std::memcpy(state.storage.data(), &collector_state, sizeof(collector_state));
+  state.flags = kCollectorStateFlagActive;
 }
 
 auto GpuTimelineProfiler::EndScope(graphics::CommandRecorder& recorder,
-  const graphics::GpuEventScopeToken& token) -> void
+  graphics::GpuProfileCollectorState& state) -> void
 {
-  if ((token.flags & graphics::kGpuScopeTokenFlagTimestampEnabled) == 0U) {
+  if ((state.flags & kCollectorStateFlagActive) == 0U) {
     return;
   }
-  if ((token.flags & graphics::kGpuScopeTokenFlagOverflowAtCreation) != 0U) {
-    return;
-  }
-  if (token.scope_id >= frame_capture_.scopes.size()) {
+  TimelineCollectorScopeState collector_state {};
+  std::memcpy(&collector_state, state.storage.data(), sizeof(collector_state));
+  if (collector_state.scope_id >= frame_capture_.scopes.size()) {
     return;
   }
 
@@ -393,7 +396,7 @@ auto GpuTimelineProfiler::EndScope(graphics::CommandRecorder& recorder,
     return;
   }
 
-  auto& scope = frame_capture_.scopes[token.scope_id];
+  auto& scope = frame_capture_.scopes[collector_state.scope_id];
   if (!provider->WriteTimestamp(recorder, scope.end_query_slot)) {
     AddDiagnostic("gpu.timestamp.write_failed",
       fmt::format("failed to write end timestamp for '{}'",
@@ -405,16 +408,17 @@ auto GpuTimelineProfiler::EndScope(graphics::CommandRecorder& recorder,
   scope.flags |= kGpuScopeFlagComplete;
 
   if (!scope_stack_.empty()) {
-    if (scope_stack_.back() == token.scope_id) {
+    if (scope_stack_.back() == collector_state.scope_id) {
       scope_stack_.pop_back();
     } else {
-      const auto it
-        = std::find(scope_stack_.begin(), scope_stack_.end(), token.scope_id);
+      const auto it = std::find(
+        scope_stack_.begin(), scope_stack_.end(), collector_state.scope_id);
       if (it != scope_stack_.end()) {
         scope_stack_.erase(it);
       }
     }
   }
+  state.flags = 0U;
 }
 
 auto GpuTimelineProfiler::AddSink(std::shared_ptr<GpuTimelineSink> sink) -> void
