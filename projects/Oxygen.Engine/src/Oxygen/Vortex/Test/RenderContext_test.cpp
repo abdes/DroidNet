@@ -6,6 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <limits>
+
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Vortex/RenderContext.h>
 
@@ -19,6 +21,13 @@ TEST(RenderContextTest, ResetClearsPhase1PerViewAndFrameState)
   context.pass_enable_flags.emplace(1U, true);
   context.current_view.view_id = oxygen::ViewId { 7U };
   context.current_view.exposure_view_id = oxygen::ViewId { 9U };
+  context.frame_views.push_back({ .view_id = oxygen::ViewId { 5U },
+    .is_scene_view = true,
+    .composition_view = {},
+    .shading_mode_override = {},
+    .resolved_view = {},
+    .primary_target = {} });
+  context.active_view_index = 0U;
   context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
   context.delta_time = 0.5F;
@@ -29,6 +38,8 @@ TEST(RenderContextTest, ResetClearsPhase1PerViewAndFrameState)
   EXPECT_TRUE(context.pass_enable_flags.empty());
   EXPECT_EQ(context.current_view.view_id, oxygen::ViewId {});
   EXPECT_EQ(context.current_view.exposure_view_id, oxygen::ViewId {});
+  EXPECT_TRUE(context.frame_views.empty());
+  EXPECT_EQ(context.active_view_index, std::numeric_limits<std::size_t>::max());
   EXPECT_EQ(context.frame_slot, oxygen::frame::kInvalidSlot);
   EXPECT_EQ(context.frame_sequence, oxygen::frame::SequenceNumber {});
   EXPECT_TRUE(context.view_outputs.empty());

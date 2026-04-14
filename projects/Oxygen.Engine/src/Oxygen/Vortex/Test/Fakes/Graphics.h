@@ -502,11 +502,12 @@ public:
             + handle.GetLocalSlot() }
         : oxygen::kInvalidShaderVisibleIndex;
     }
-    const auto raw_base
-      = handle.GetViewType() == graphics::ResourceViewType::kSampler
+    constexpr uint32_t kRawHeapStride = 4096U;
+    const auto raw_base = handle.GetViewType() == graphics::ResourceViewType::kSampler
       ? bindless::generated::kSamplersCapacity
       : (bindless::generated::kTexturesShaderIndexBase
-          + bindless::generated::kTexturesCapacity);
+          + bindless::generated::kTexturesCapacity
+          + (static_cast<uint32_t>(handle.GetViewType()) * kRawHeapStride));
     return bindless::ShaderVisibleIndex { raw_base
       + handle.GetBindlessHandle().get() };
   }
@@ -616,31 +617,46 @@ public:
             .texture = this,
           });
         }
-        // Use the texture object's address as a stable unique view handle.
-        return { this, Texture::ClassTypeId() };
+        const auto raw_view_id
+          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
+              << 32U)
+          | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
+        return { raw_view_id, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
-        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        const graphics::DescriptorAllocationHandle& view_handle,
         Format /*format*/, TextureType /*dimension*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
-        return { this, Texture::ClassTypeId() };
+        const auto raw_view_id
+          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
+              << 32U)
+          | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
+        return { raw_view_id, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateRenderTargetView(
-        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        const graphics::DescriptorAllocationHandle& view_handle,
         Format /*format*/,
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
-        return { this, Texture::ClassTypeId() };
+        const auto raw_view_id
+          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
+              << 32U)
+          | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
+        return { raw_view_id, Texture::ClassTypeId() };
       }
       [[nodiscard]] auto CreateDepthStencilView(
-        const graphics::DescriptorAllocationHandle& /*view_handle*/,
+        const graphics::DescriptorAllocationHandle& view_handle,
         Format /*format*/, graphics::TextureSubResourceSet /*sub_resources*/,
         bool /*is_read_only*/) const -> graphics::NativeView override
       {
-        return { this, Texture::ClassTypeId() };
+        const auto raw_view_id
+          = (static_cast<uint64_t>(static_cast<uint32_t>(view_handle.GetViewType()))
+              << 32U)
+          | static_cast<uint64_t>(view_handle.GetBindlessHandle().get() + 1U);
+        return { raw_view_id, Texture::ClassTypeId() };
       }
 
     private:

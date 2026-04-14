@@ -61,7 +61,7 @@ public:
   /// Phase 2 always constructs the desktop SceneRenderer shell for the Vortex
   /// runtime path. Capabilities control mode defaults and future service/module
   /// presence; they do not remove the SceneRenderer layer itself.
-  [[nodiscard]] OXGN_VRTX_NDAPI static auto Build(
+  OXGN_VRTX_NDAPI static auto Build(
     Renderer& renderer,
     graphics::IGraphics& gfx,
     const CapabilitySet& capabilities,
@@ -134,11 +134,11 @@ public:
 
   // --- Query ---
 
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetSceneTextures() const
+  OXGN_VRTX_NDAPI auto GetSceneTextures() const
     -> const SceneTextures&;
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetSceneTextures()
+  OXGN_VRTX_NDAPI auto GetSceneTextures()
     -> SceneTextures&;
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const
+  OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const
     -> ShadingMode;
 
 private:

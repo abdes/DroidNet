@@ -25,6 +25,7 @@ struct alignas(16) ViewFrameBindings {
   ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex environment_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex view_color_frame_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex scene_texture_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex scene_depth_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex shadow_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex virtual_shadow_frame_slot { kInvalidShaderVisibleIndex };
@@ -32,7 +33,6 @@ struct alignas(16) ViewFrameBindings {
   ShaderVisibleIndex debug_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex history_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex ray_tracing_frame_slot { kInvalidShaderVisibleIndex };
-  std::array<std::uint32_t, 1> _pad_to_16 {};
 };
 
 static_assert(sizeof(ViewFrameBindings) == 48);

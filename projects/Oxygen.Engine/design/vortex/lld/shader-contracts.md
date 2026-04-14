@@ -96,12 +96,13 @@ Cross-language numeric/layout constants shared between C++ and HLSL.
 #ifndef VORTEX_SCENE_DEFINITIONS_HLSLI
 #define VORTEX_SCENE_DEFINITIONS_HLSLI
 
-// Active GBuffer indices for Phase 3. These match the active shader-visible
-// subset of the C++ GBuffer vocabulary (A-D active, E/F reserved).
-#define GBUFFER_A 0  // World normal (encoded)
-#define GBUFFER_B 1  // Metallic, specular, roughness
-#define GBUFFER_C 2  // Base color, AO
-#define GBUFFER_D 3  // Custom data only (shading model is packed into GBUFFER_B.a)
+// Active GBuffer indices for Phase 3. These match the semantic C++ GBuffer
+// vocabulary (Normal/Material/BaseColor/CustomData active; later families
+// remain reserved).
+#define GBUFFER_NORMAL 0      // World normal (encoded)
+#define GBUFFER_MATERIAL 1    // Metallic, specular, roughness
+#define GBUFFER_BASE_COLOR 2  // Base color, AO
+#define GBUFFER_CUSTOM_DATA 3 // Custom data only (shading model is packed into GBUFFER_MATERIAL.a)
 #define GBUFFER_COUNT 4
 
 // SceneTextureBindings valid_flags — must match SetupMode::Flag
@@ -233,12 +234,12 @@ GBuffer format definitions and packing conventions.
 
 // MRT output structure for the base pass (deferred mode)
 struct GBufferOutput {
-  float4 GBufferA : SV_Target0;  // R10G10B10A2_UNORM: encoded normal
-  float4 GBufferB : SV_Target1;  // R8G8B8A8_UNORM: metallic, specular,
-                                  //   roughness, shading model ID
-  float4 GBufferC : SV_Target2;  // R8G8B8A8_SRGB: base color RGB, AO
-  float4 GBufferD : SV_Target3;  // R8G8B8A8_UNORM: custom data
-  float4 Emissive : SV_Target4;  // R16G16B16A16_FLOAT: emissive → SceneColor
+  float4 GBufferNormal   : SV_Target0;  // R10G10B10A2_UNORM: encoded normal
+  float4 GBufferMaterial : SV_Target1;  // R8G8B8A8_UNORM: metallic, specular,
+                                        //   roughness, shading model ID
+  float4 GBufferBaseColor : SV_Target2; // R8G8B8A8_SRGB: base color RGB, AO
+  float4 GBufferCustomData : SV_Target3; // R8G8B8A8_UNORM: custom data
+  float4 Emissive : SV_Target4;         // R16G16B16A16_FLOAT: emissive → SceneColor
 };
 
 #endif // VORTEX_GBUFFER_LAYOUT_HLSLI
@@ -315,10 +316,10 @@ struct GBufferData {
 
 GBufferData ReadGBuffer(float2 uv, SceneTextureBindingData bindings) {
   GBufferData data;
-  float4 a = SampleGBuffer(GBUFFER_A, uv, bindings);
-  float4 b = SampleGBuffer(GBUFFER_B, uv, bindings);
-  float4 c = SampleGBuffer(GBUFFER_C, uv, bindings);
-  float4 d = SampleGBuffer(GBUFFER_D, uv, bindings);
+  float4 a = SampleGBuffer(GBUFFER_NORMAL, uv, bindings);
+  float4 b = SampleGBuffer(GBUFFER_MATERIAL, uv, bindings);
+  float4 c = SampleGBuffer(GBUFFER_BASE_COLOR, uv, bindings);
+  float4 d = SampleGBuffer(GBUFFER_CUSTOM_DATA, uv, bindings);
 
   data.worldNormal = DecodeGBufferNormal(a);
   DecodeGBufferMaterial(b, data.metallic, data.specular,
@@ -636,12 +637,12 @@ struct MaterialSurface {
 
 GBufferOutput PackGBufferOutput(MaterialSurface surface) {
   GBufferOutput output;
-  output.GBufferA = EncodeGBufferNormal(surface.worldNormal);
-  output.GBufferB = EncodeGBufferMaterial(
+  output.GBufferNormal = EncodeGBufferNormal(surface.worldNormal);
+  output.GBufferMaterial = EncodeGBufferMaterial(
     surface.metallic, surface.specular,
     surface.roughness, surface.shadingModel);
-  output.GBufferC = EncodeGBufferBaseColor(surface.baseColor, surface.ao);
-  output.GBufferD = surface.customData;
+  output.GBufferBaseColor = EncodeGBufferBaseColor(surface.baseColor, surface.ao);
+  output.GBufferCustomData = surface.customData;
   output.Emissive = float4(surface.emissive, 0);
   return output;
 }
