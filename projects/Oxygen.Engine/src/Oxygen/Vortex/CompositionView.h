@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
 namespace oxygen::graphics {
 class CommandRecorder;
@@ -111,9 +112,19 @@ struct CompositionView {
   //! Override to force wireframe rendering for this specific view.
   bool force_wireframe { false };
 
+  //! Optional per-view shading override for the future SceneRenderer shell.
+  //! When unset, the shell falls back to its capability-driven default.
+  std::optional<ShadingMode> shading_mode;
+
   //! Callback for recording view-specific SDR commands (HUD, Gizmos, ImGui).
   //! Executed in the correct hardware phase (Post-Tonemap for HDR views).
   std::function<void(graphics::CommandRecorder&)> on_overlay;
+
+  [[nodiscard]] auto GetShadingMode() const noexcept
+    -> const std::optional<ShadingMode>&
+  {
+    return shading_mode;
+  }
 
   /*
     FUTURE EXTENSIONS:

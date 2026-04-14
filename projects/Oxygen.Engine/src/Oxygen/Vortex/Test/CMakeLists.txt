@@ -54,6 +54,42 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  SceneRendererShell
+  SOURCES
+    "SceneRendererShell_test.cpp"
+)
+
+m_gtest_program(
+  SceneTextures
+  SOURCES
+    "SceneTextures_test.cpp"
+)
+
+m_gtest_program(
+  SceneRendererPublication
+  SOURCES
+    "SceneRendererPublication_test.cpp"
+)
+
+add_custom_target(
+  Oxygen.Vortex.SceneRendererShell
+  DEPENDS
+    Oxygen.Vortex.SceneRendererShell.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.SceneTextures
+  DEPENDS
+    Oxygen.Vortex.SceneTextures.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.SceneRendererPublication
+  DEPENDS
+    Oxygen.Vortex.SceneRendererPublication.Tests
+)
+
+m_gtest_program(
   SceneCameraViewResolver
   SOURCES
     "SceneCameraViewResolver_test.cpp"

@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `done — Phase 1 substrate migration was re-closed by 01-14 after restoring renderer-core composition execution, repairing the capability/default and boundary contracts, and passing the strengthened proof suite; Phase 2 may resume from the repaired substrate baseline`
+Status: `in_progress — Phases 1 and 2 are complete, with Phase 2 closed after remediation, full Oxygen.Vortex proof pass, scoped oxytidy clean result, and explicit human approval; the next active step is Phase 3 planning`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -33,7 +33,7 @@ Related:
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
-| 2 | SceneTextures + SceneRenderer Shell | `not_started` | Execution not started |
+| 2 | SceneTextures + SceneRenderer Shell | `done` | — |
 | 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
@@ -69,6 +69,68 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-14 — Phase 2 remediation landed; full Vortex proof is green, human review rerun still required
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/SceneRenderer/SceneTextures.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneTextures.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/PostRenderCleanup.cpp`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/RenderContext.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/*/.gitkeep`
+  - `src/Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h`
+  - `src/Oxygen/Vortex/Test/Fakes/Graphics.h`
+  - `src/Oxygen/Vortex/Test/RenderContext_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneTextures_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererShell_test.cpp`
+  - `design/vortex/lld/shader-contracts.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.SceneRendererPublication Oxygen.Vortex.SceneTextures Oxygen.Vortex.SceneRendererShell Oxygen.Vortex.RenderContext.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R '^Oxygen\.Vortex\.'`
+  - `tools/cli/oxytidy.ps1 src/Oxygen/Vortex/Renderer.cpp src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp src/Oxygen/Vortex/SceneRenderer/SceneTextures.cpp src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp src/Oxygen/Vortex/Test/SceneRendererShell_test.cpp src/Oxygen/Vortex/Test/SceneTextures_test.cpp src/Oxygen/Vortex/Test/RenderContext_test.cpp -IncludeTests -Configuration Debug`
+  - Phase-06 acceptance grep bundle
+  - Phase-07 acceptance grep bundle
+  - Phase-08 acceptance grep bundle
+- Result:
+  - `SceneTextures` is back to being a pure product-family owner while `SceneRenderer` owns setup progression, binding refresh, and extract state.
+  - Scene-texture routing is descriptor-backed, `scene_color_uav` no longer aliases `scene_color_srv`, and Stage 21 / Stage 23 publish explicit artifact/history textures instead of live attachment aliases.
+  - `RenderContext` now materializes every eligible frame view into `frame_views` with an explicit `active_view_index`, and the shell bootstrap extent uses the max scene-view envelope instead of first-view selection.
+  - Publication tests are hack-free via `RendererPublicationProbe.h`, the required `SceneRenderer/Stages/` directory tree is committed, and the changed-file oxytidy sweep reports `0 warnings, 0 errors`.
+  - The full `Oxygen.Vortex.*` suite passed (`28/28`).
+- Code / validation delta:
+  - Phase 2 implementation work is now materially present and proof-backed.
+  - Automated verification is green at both the targeted-remediation and full-Vortex-suite level.
+  - Phase 2 is still **not** ready to close because the human `PHASE2-REVIEW.md` approval gate has not yet been rerun on the remediated branch.
+- Remaining blocker:
+  - rerun the human Phase 2 review/approval gate (`02-05`) against the remediated tree and either approve close-out or capture any new human findings explicitly
+
+### 2026-04-14 — Phase 2 closed after explicit human review pass
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/phases/02-scenetextures-and-scenerenderer-shell/02-REVIEW.md`
+  - `.planning/workstreams/vortex/phases/02-scenetextures-and-scenerenderer-shell/02-VERIFICATION.md`
+  - `.planning/workstreams/vortex/phases/02-scenetextures-and-scenerenderer-shell/02-05-SUMMARY.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - human review verdict recorded as `PASS`
+  - `ctest --test-dir out/build-ninja -C Debug --output-on-failure -R '^Oxygen\.Vortex\.'`
+  - `tools/cli/oxytidy.ps1 src/Oxygen/Vortex/Renderer.cpp src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp src/Oxygen/Vortex/SceneRenderer/SceneTextures.cpp src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp src/Oxygen/Vortex/Test/SceneRendererShell_test.cpp src/Oxygen/Vortex/Test/SceneTextures_test.cpp src/Oxygen/Vortex/Test/RenderContext_test.cpp -IncludeTests -Configuration Debug`
+- Result:
+  - the remediated Phase 02 tree was explicitly approved by human review
+  - the full `Oxygen.Vortex.*` suite remains green (`28/28`)
+  - the changed-file scoped `oxytidy` run remains clean (`0 warnings, 0 errors`)
+  - Phase 02 is now closed and Phase 03 is the next valid work item
+- Code / validation delta:
+  - no new implementation code changed in this close-out step
+  - the remaining non-automated approval gate is now satisfied
+- Remaining blocker:
+  - none for Phase 2; resume with Phase 3 planning
 
 ### 2026-04-13 — Phase 1 re-closed after 01-14 remediation and strengthened proof
 
@@ -919,33 +981,33 @@ repaired substrate baseline.
 
 ## Phase 2 — SceneTextures + SceneRenderer Shell
 
-**Status:** `not_started`
+**Status:** `done`
 
 ### Design Prerequisites
 
 | Deliverable | Status |
 | ----------- | ------ |
-| D.1 SceneTextures four-part contract | `not_started` |
-| D.2 SceneRenderBuilder bootstrap | `not_started` |
-| D.3 SceneRenderer shell dispatch | `not_started` |
+| D.1 SceneTextures four-part contract | `done` |
+| D.2 SceneRenderBuilder bootstrap | `done` |
+| D.3 SceneRenderer shell dispatch | `done` |
 
 ### Work Items (from PLAN.md §4)
 
 | ID | Task | Status | Evidence |
 | -- | ---- | ------ | -------- |
-| 2.1–2.4 | SceneTextures four-part contract | `not_started` | — |
-| 2.5 | ShadingMode enum | `not_started` | — |
-| 2.6 | SceneRenderBuilder | `not_started` | — |
-| 2.7 | SceneRenderer shell (23-stage skeleton) | `not_started` | — |
-| 2.8 | Wire SceneRenderer into Renderer | `not_started` | — |
-| 2.9 | PostRenderCleanup | `not_started` | — |
-| 2.10 | ResolveSceneColor | `not_started` | — |
-| 2.11 | Stages directory structure | `not_started` | — |
-| 2.12 | Validate first active `SceneTextures` subset (`SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`, `Velocity`, `CustomDepth`) | `not_started` | — |
+| 2.1–2.4 | SceneTextures four-part contract | `done` | `02-06` restored the four-part split, semantic GBuffer naming, and stage-owned setup progression |
+| 2.5 | ShadingMode enum | `done` | `02-03` bootstrap/shell proof remains green |
+| 2.6 | SceneRenderBuilder | `done` | `02-03` built the shell via `SceneRenderBuilder`, and Phase 2 later closed with explicit human approval |
+| 2.7 | SceneRenderer shell (23-stage skeleton) | `done` | `02-03` and `02-08` now prove stage ordering plus multi-view-safe extent policy |
+| 2.8 | Wire SceneRenderer into Renderer | `done` | `Renderer.cpp` delegates through the shell while preserving renderer-owned publication/composition seams |
+| 2.9 | PostRenderCleanup | `done` | `02-07` now publishes explicit history artifacts instead of live attachment aliases |
+| 2.10 | ResolveSceneColor | `done` | `02-07` now publishes explicit resolved artifacts instead of live attachment aliases |
+| 2.11 | Stages directory structure | `done` | `02-08` committed `InitViews`, `DepthPrepass`, `Occlusion`, `BasePass`, `Translucency`, `Distortion`, and `LightShaftBloom` stage directories |
+| 2.12 | Validate first active `SceneTextures` subset (`SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`, `Velocity`, `CustomDepth`) | `done` | Full `Oxygen.Vortex.*` suite passed, scoped `oxytidy` is clean, and the human review rerun passed |
 
 ### Resume Point
 
-Phase 1 + design deliverables D.1–D.3 must be completed first.
+Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ---
 

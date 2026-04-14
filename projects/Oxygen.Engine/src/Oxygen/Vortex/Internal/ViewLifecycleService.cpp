@@ -25,6 +25,11 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
+  constexpr auto kDefaultNearPlane = 0.1F;
+  constexpr auto kDefaultFarPlane = 1000.0F;
+  constexpr std::size_t kOrthographicNearPlaneIndex = 4;
+  constexpr std::size_t kOrthographicFarPlaneIndex = 5;
+
   auto ResolveViewForCameraNode(scene::SceneNode& camera_node,
     std::optional<oxygen::ViewPort> viewport_override) -> ResolvedView
   {
@@ -34,8 +39,8 @@ namespace {
       params.view_matrix = Mat4(1.0F);
       params.proj_matrix = Mat4(1.0F);
       params.depth_range = NdcDepthRange::ZeroToOne;
-      params.near_plane = 0.1F;
-      params.far_plane = 1000.0F;
+      params.near_plane = kDefaultNearPlane;
+      params.far_plane = kDefaultFarPlane;
       return ResolvedView(params);
     }
 
@@ -59,8 +64,8 @@ namespace {
     }(cam_pos, cam_rot);
 
     Mat4 proj_m { 1.0F };
-    float near_plane = 0.1F;
-    float far_plane = 1000.0F;
+    float near_plane = kDefaultNearPlane;
+    float far_plane = kDefaultFarPlane;
     std::optional<float> camera_ev {};
     NdcDepthRange src_range = NdcDepthRange::ZeroToOne;
     if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
@@ -72,8 +77,8 @@ namespace {
       = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
       proj_m = camo->get().ProjectionMatrix();
       const auto ext = camo->get().GetExtents();
-      near_plane = ext[4];
-      far_plane = ext[5];
+      near_plane = ext[kOrthographicNearPlaneIndex];
+      far_plane = ext[kOrthographicFarPlaneIndex];
       camera_ev = camo->get().Exposure().GetEv();
     }
 
@@ -249,7 +254,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
     const auto previous_published_view_id
       = resolve_published_view_(view->GetDescriptor().id);
     const auto published_view_id = upsert_published_view_(
-      context, view->GetDescriptor().id, std::move(view_ctx));
+      context, view->GetDescriptor().id, std::move(view_ctx),
+      view->GetDescriptor().shading_mode);
     if (previous_published_view_id == kInvalidViewId) {
       LOG_F(INFO,
         "Registered View '{}' (IntentID: {}) with Engine "
@@ -305,7 +311,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
     auto resolved_view_ctx
       = build_view_context(*view, resolved_exposure_view_id);
     upsert_published_view_(
-      context, view->GetDescriptor().id, std::move(resolved_view_ctx));
+      context, view->GetDescriptor().id, std::move(resolved_view_ctx),
+      view->GetDescriptor().shading_mode);
   }
 }
 

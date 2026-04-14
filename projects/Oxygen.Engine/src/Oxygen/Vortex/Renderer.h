@@ -71,6 +71,13 @@ template <typename RendererT> class BasicRenderContextMaterializer;
 
 namespace oxygen::vortex {
 
+namespace testing {
+struct RendererPublicationProbe;
+}
+
+class SceneRenderer;
+struct RendererPublicationState;
+
 class Renderer : public engine::EngineModule {
   OXYGEN_TYPED(Renderer)
 
@@ -438,8 +445,9 @@ public:
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
   OXGN_VRTX_API auto UpsertPublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id,
-    engine::ViewContext view) -> ViewId;
-  [[nodiscard]] OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
+    engine::ViewContext view,
+    std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
+  OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id) -> void;
@@ -453,7 +461,7 @@ public:
   OXGN_VRTX_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
   OXGN_VRTX_API auto ForOffscreenScene() -> OffscreenSceneFacade;
 
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetStats() const noexcept -> Stats;
+  OXGN_VRTX_NDAPI auto GetStats() const noexcept -> Stats;
   OXGN_VRTX_API auto ResetStats() noexcept -> void;
 
   [[nodiscard]] auto GetCapabilityFamilies() const noexcept -> CapabilitySet
@@ -484,9 +492,12 @@ public:
     -> upload::InlineTransfersCoordinator&;
 
 private:
+  friend struct testing::RendererPublicationProbe;
+
   struct PublishedRuntimeViewState {
     ViewId published_view_id { kInvalidViewId };
     frame::SequenceNumber last_seen_frame { 0U };
+    std::optional<ShadingMode> shading_mode_override;
   };
 
   static constexpr frame::SequenceNumber kPublishedRuntimeViewMaxIdleFrames {
@@ -494,7 +505,19 @@ private:
   };
 
   auto EnsureViewConstantsManager(Graphics& gfx) -> void;
+  OXGN_VRTX_API auto PopulateRenderContextViewState(RenderContext& render_context,
+    engine::FrameContext& context, bool prefer_composite_source) const -> void;
+  [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
+    ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
+  auto EnsureSceneRenderer(const CompositionView* composition_view = nullptr)
+    -> SceneRenderer&;
+  auto EnsureSceneRendererFrameStarted(engine::FrameContext& context) -> void;
+  auto EnsurePublicationState(Graphics& gfx) -> RendererPublicationState&;
+  auto BeginPublicationFrame(
+    Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  auto ResetPublicationState() -> void;
+  auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
   auto BeginStandaloneFrameExecution(const FrameSessionInput& session) -> void;
@@ -504,11 +527,12 @@ private:
     const ResolvedView& resolved_view, const PreparedSceneFrame& prepared_frame,
     const std::optional<ViewConstants>& view_constants_override) -> void;
   auto EndOffscreenFrame() noexcept -> void;
-  auto DispatchSceneRendererPreRender(engine::FrameContext& context)
+  auto DispatchSceneRendererPreRender(
+    observer_ptr<engine::FrameContext> context) -> co::Co<>;
+  auto DispatchSceneRendererRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<>;
-  auto DispatchSceneRendererRender(engine::FrameContext& context) -> co::Co<>;
-  auto DispatchSceneRendererCompositing(engine::FrameContext& context)
-    -> co::Co<>;
+  auto DispatchSceneRendererCompositing(
+    observer_ptr<engine::FrameContext> context) -> co::Co<>;
 
   std::weak_ptr<Graphics> gfx_weak_;
   observer_ptr<IAsyncEngine> engine_ { nullptr };
@@ -527,6 +551,8 @@ private:
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
+  std::unique_ptr<SceneRenderer> scene_renderer_;
+  frame::SequenceNumber scene_renderer_started_frame_ { 0U };
 
   mutable std::shared_mutex view_registration_mutex_;
   std::unordered_map<ViewId, RenderGraphFactory> render_graphs_;
@@ -536,6 +562,7 @@ private:
   std::unordered_map<ViewId, bool> view_ready_states_;
   std::unordered_map<ViewId, PublishedRuntimeViewState>
     published_runtime_views_by_intent_;
+  std::unique_ptr<RendererPublicationState> publication_state_;
 
   struct PendingComposition {
     CompositionSubmission submission {};

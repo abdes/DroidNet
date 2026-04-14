@@ -8,14 +8,17 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
 namespace oxygen {
 class Graphics;
@@ -32,6 +35,7 @@ class Scene;
 
 namespace oxygen::vortex {
 
+struct CompositionView;
 class Renderer;
 class RenderPass;
 
@@ -58,6 +62,15 @@ using KnownPassTypes = PassTypeList<>;
 static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
 
 struct RenderContext {
+  struct ViewExecutionEntry {
+    oxygen::ViewId view_id {};
+    bool is_scene_view { false };
+    observer_ptr<const CompositionView> composition_view;
+    std::optional<ShadingMode> shading_mode_override;
+    observer_ptr<const oxygen::ResolvedView> resolved_view;
+    observer_ptr<graphics::Framebuffer> primary_target;
+  };
+
   std::unordered_map<size_t, bool> pass_enable_flags;
   observer_ptr<const graphics::Framebuffer> pass_target;
   std::shared_ptr<const graphics::Buffer> view_constants;
@@ -66,6 +79,8 @@ struct RenderContext {
   struct ViewSpecific {
     oxygen::ViewId view_id {};
     oxygen::ViewId exposure_view_id {};
+    observer_ptr<const CompositionView> composition_view;
+    std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
     observer_ptr<const struct PreparedSceneFrame> prepared_frame;
     mutable DepthPrePassMode depth_prepass_mode {
@@ -87,6 +102,8 @@ struct RenderContext {
   };
 
   ViewSpecific current_view {};
+  std::vector<ViewExecutionEntry> frame_views {};
+  std::size_t active_view_index { std::numeric_limits<std::size_t>::max() };
   frame::Slot frame_slot { frame::kInvalidSlot };
   frame::SequenceNumber frame_sequence { 0 };
   std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
@@ -110,6 +127,19 @@ struct RenderContext {
     -> observer_ptr<const oxygen::scene::Scene>
   {
     return scene;
+  }
+
+  [[nodiscard]] auto GetCurrentCompositionView() const noexcept
+    -> const CompositionView*
+  {
+    return current_view.composition_view.get();
+  }
+
+  [[nodiscard]] auto GetActiveViewEntry() const noexcept
+    -> const ViewExecutionEntry*
+  {
+    return active_view_index < frame_views.size() ? &frame_views[active_view_index]
+                                                  : nullptr;
   }
 
   auto GetRenderer() const -> auto& { return *renderer_; }
@@ -145,6 +175,8 @@ struct RenderContext {
     material_constants.reset();
     pass_target.reset(nullptr);
     current_view = ViewSpecific {};
+    frame_views.clear();
+    active_view_index = std::numeric_limits<std::size_t>::max();
     view_outputs.clear();
     scene.reset(nullptr);
     frame_slot = frame::kInvalidSlot;

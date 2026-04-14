@@ -150,7 +150,7 @@ public:
   OXGN_VRTX_API auto Allocate(std::uint32_t element_count)
     -> std::expected<TransientAllocation, std::error_code>;
 
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetActiveBuffer() const noexcept
+  OXGN_VRTX_NDAPI auto GetActiveBuffer() const noexcept
     -> const graphics::Buffer*;
 
 private:
