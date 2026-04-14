@@ -41,8 +41,6 @@ routes each view's output to the correct surface.
 
 ```cpp
 void SceneRenderer::OnRender(RenderContext& ctx) {
-  auto& views = renderer_.GetPublishedViews();
-
   // Stage 2 remains a per-frame stage that publishes one prepared-scene payload per view
   if (init_views_) init_views_->Execute(ctx, scene_textures_);          // 2
 
@@ -51,15 +49,25 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   if (shadows_) shadows_->RenderShadowDepths(ctx);      // stage 8
 
   // Per-view stages
-  for (const auto& view : views) {
-    ctx.SetCurrentView(view);
+  for (std::size_t view_index = 0; view_index < ctx.frame_views.size(); ++view_index) {
+    ctx.active_view_index = view_index;
+    const auto& view_entry = ctx.frame_views[view_index];
+    ctx.current_view.view_id = view_entry.view_id;
+    ctx.current_view.composition_view = view_entry.composition_view;
+    ctx.current_view.shading_mode_override = view_entry.shading_mode_override;
+    ctx.current_view.resolved_view = view_entry.resolved_view;
+    ctx.pass_target = view_entry.primary_target;
+    ctx.current_view.prepared_frame = init_views_
+      ? observer_ptr<const PreparedSceneFrame> {
+          init_views_->GetPreparedSceneFrame(view_entry.view_id) }
+      : observer_ptr<const PreparedSceneFrame> {};
 
     if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_); // 3
     if (occlusion_) occlusion_->Execute(ctx, scene_textures_);       // 5
     if (base_pass_) base_pass_->Execute(ctx, scene_textures_);       // 9
 
     scene_textures_.RebuildWithGBuffers();                             // 10
-    RefreshSceneTextureBindings(ctx);
+    RefreshSceneTextureBindings();
 
     if (lighting_) lighting_->RenderDeferredLighting(ctx, scene_textures_); // 12
     if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);  // 15

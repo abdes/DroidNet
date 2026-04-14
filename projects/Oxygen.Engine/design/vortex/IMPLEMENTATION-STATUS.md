@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `not_started` | Phase 2 + 5 LLD documents |
+| 3 | Deferred Core | `not_started` | LLD review/plan handoff pending |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -1019,15 +1019,16 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 | Deliverable | Status |
 | ----------- | ------ |
-| D.4 Depth prepass LLD | `not_started` |
-| D.5 Base pass LLD | `not_started` |
-| D.6 Deferred lighting LLD | `not_started` |
-| D.7 Shader contracts LLD | `not_started` |
-| D.8 InitViews LLD | `not_started` |
+| D.4 Depth prepass LLD | `done` |
+| D.5 Base pass LLD | `done` |
+| D.6 Deferred lighting LLD | `done` |
+| D.7 Shader contracts LLD | `done` |
+| D.8 InitViews LLD | `done` |
 
 ### Resume Point
 
-Phase 2 + design deliverables D.4–D.8 must be completed first.
+Phase 2 is complete and design deliverables D.4–D.8 are written. Resume with
+Phase 3 planning/execution once the LLD review findings are accepted.
 
 ---
 

@@ -243,7 +243,7 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   // === Stage 10: Rebuild scene textures with GBuffers ===
   // scene_textures_.RebuildWithGBuffers();
   // setup_mode_.Set(SceneTextureSetupMode::Flag::kGBuffers);
-  // RefreshSceneTextureBindings(ctx);
+  // RefreshSceneTextureBindings();
 
   // === Stage 11: reserved — MaterialCompositionService::PostBasePass ===
 
@@ -301,9 +301,19 @@ Per-frame stages:     Per-view stages:
 // Per-frame stage
 if (shadows_) shadows_->RenderShadowDepths(ctx);
 
-// Per-view iteration
-for (auto& view : active_views) {
-  ctx.SetCurrentView(view);
+// Per-view iteration over the views materialized by Renderer Core.
+for (std::size_t view_index = 0; view_index < ctx.frame_views.size(); ++view_index) {
+  ctx.active_view_index = view_index;
+  const auto& view_entry = ctx.frame_views[view_index];
+  ctx.current_view.view_id = view_entry.view_id;
+  ctx.current_view.composition_view = view_entry.composition_view;
+  ctx.current_view.shading_mode_override = view_entry.shading_mode_override;
+  ctx.current_view.resolved_view = view_entry.resolved_view;
+  ctx.pass_target = view_entry.primary_target;
+  ctx.current_view.prepared_frame = init_views_
+    ? observer_ptr<const PreparedSceneFrame> {
+        init_views_->GetPreparedSceneFrame(view_entry.view_id) }
+    : observer_ptr<const PreparedSceneFrame> {};
   if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_);
   if (base_pass_) base_pass_->Execute(ctx, scene_textures_);
   // ... etc

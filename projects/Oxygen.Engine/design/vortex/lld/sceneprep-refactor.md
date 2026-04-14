@@ -221,18 +221,22 @@ The desktop runtime path must follow this sequence:
 ```cpp
 void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures) {
   auto& state = scene_prep_state_;
-  const auto& scene = renderer_.GetActiveScene();
-  const auto frame_id = ctx.frame_id();
+  const auto* scene = ctx.GetScene().get();
+  const auto frame_id = ctx.frame_sequence;
 
-  scene_prep_->BeginFrameCollection(scene, frame_id, state);
+  CHECK_NOTNULL_F(scene, "InitViewsModule requires an active scene");
 
-  for (const auto& view : renderer_.GetPublishedViews()) {
-    auto& storage = AcquirePreparedSceneViewStorage(view.GetViewId());
+  scene_prep_->BeginFrameCollection(*scene, frame_id, state);
 
-    scene_prep_->PrepareView(scene, view, frame_id, state, storage);
+  for (const auto& view_entry : ctx.frame_views) {
+    if (!view_entry.is_scene_view || view_entry.resolved_view == nullptr) {
+      continue;
+    }
+    auto& storage = AcquirePreparedSceneViewStorage(view_entry.view_id);
+
+    scene_prep_->PrepareView(
+      *scene, *view_entry.resolved_view, frame_id, state, storage);
     scene_prep_->FinalizeView(state, storage);
-
-    renderer_.PublishPreparedSceneFrame(view.GetViewId(), storage.published_view);
   }
 }
 ```
@@ -337,9 +341,12 @@ The stage-2 published product is a per-view `PreparedSceneFrame`.
 
 Publication rule:
 
-- stage 2 publishes one prepared-scene payload per published view
-- downstream stages consume the payload for the current view selected in
-  `RenderContext`
+- stage 2 publishes one prepared-scene payload per published scene view in
+  `RenderContext::frame_views`
+- `InitViewsModule` retains the per-view backing storage and exposes
+  `GetPreparedSceneFrame(ViewId)` as the stage-local publication surface
+- `SceneRenderer` binds the selected payload into
+  `RenderContext.current_view.prepared_frame` before downstream per-view stages
 - the normal runtime path must not publish raw `ScenePrepState`
 
 If helper visibility lists are published, they are auxiliary products only and

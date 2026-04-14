@@ -347,6 +347,8 @@ requires its own LLD section or document.
 - SceneTextureSetupMode correctly tracks product availability through stages
 - ShaderBake compiles all Vortex entrypoints without error
 - Non-runtime facade `ForSinglePassHarness()` works against Vortex substrate
+- Full `Oxygen.Vortex.*` suite passes
+- `oxytidy` on the changed Phase 3 file scope reports no introduced warnings
 - RenderDoc capture at frame 10 shows expected pass ordering and GBuffer contents
 
 ---
@@ -911,9 +913,11 @@ final target — including future-phase items per PRD §8.13.
 Every phase must pass:
 
 1. Full build succeeds (CMake + compile + link)
-2. Existing tests do not regress
-3. Phase-specific exit gate met
-4. `IMPLEMENTATION-STATUS.md` updated with evidence
+2. Full `Oxygen.Vortex.*` suite passes unless a narrower scope is explicitly justified and documented
+3. `oxytidy` on the changed-file scope is clean, or every remaining warning is explicitly documented as pre-existing / deferred
+4. Existing tests do not regress
+5. Phase-specific exit gate met
+6. `IMPLEMENTATION-STATUS.md` updated with evidence
 
 ### 13.2 Visual Verification Checkpoints
 
