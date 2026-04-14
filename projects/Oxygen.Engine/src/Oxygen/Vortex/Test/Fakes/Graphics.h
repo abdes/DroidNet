@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <optional>
 #include <unordered_map>
 
@@ -40,6 +41,7 @@ using graphics::QueueRole;
 using graphics::Texture;
 using graphics::TextureDesc;
 using graphics::TextureUploadRegion;
+using graphics::TimestampQueryProvider;
 
 //! Logs buffer copy commands captured by the fake command recorder.
 struct BufferCommandLog {
@@ -162,6 +164,11 @@ public:
   {
     return current_;
   }
+  auto TryGetTimestampFrequency(uint64_t& out_hz) const -> bool override
+  {
+    out_hz = timestamp_frequency_hz_;
+    return true;
+  }
   auto Submit(std::shared_ptr<CommandList> /*command_list*/) -> void override {
   }
   auto Submit(std::span<std::shared_ptr<CommandList>> /*command_lists*/)
@@ -183,6 +190,71 @@ private:
   QueueRole role_ { QueueRole::kGraphics };
   mutable uint64_t current_ { 0 };
   mutable uint64_t completed_ { 0 };
+  uint64_t timestamp_frequency_hz_ { 1'000'000U };
+};
+
+class FakeTimestampQueryProvider final : public TimestampQueryProvider {
+public:
+  auto SetNextTick(const uint64_t next_tick) -> void { next_tick_ = next_tick; }
+
+  auto EnsureCapacity(const uint32_t required_query_count) -> bool override
+  {
+    ticks_.resize(required_query_count, 0U);
+    return true;
+  }
+
+  [[nodiscard]] auto GetCapacity() const noexcept -> uint32_t override
+  {
+    return static_cast<uint32_t>(ticks_.size());
+  }
+
+  auto WriteTimestamp(CommandRecorder&, const uint32_t query_slot)
+    -> bool override
+  {
+    if (query_slot >= ticks_.size()) {
+      return false;
+    }
+    ++write_count_;
+    ticks_[query_slot] = next_tick_;
+    next_tick_ += 100U;
+    return true;
+  }
+
+  auto RecordResolve(CommandRecorder&, const uint32_t used_query_slots)
+    -> bool override
+  {
+    ++resolve_count_;
+    last_resolved_query_count_ = used_query_slots;
+    return true;
+  }
+
+  [[nodiscard]] auto GetResolvedTicks() const
+    -> std::span<const uint64_t> override
+  {
+    return ticks_;
+  }
+
+  [[nodiscard]] auto WriteCount() const noexcept -> uint32_t
+  {
+    return write_count_;
+  }
+
+  [[nodiscard]] auto ResolveCount() const noexcept -> uint32_t
+  {
+    return resolve_count_;
+  }
+
+  [[nodiscard]] auto LastResolvedQueryCount() const noexcept -> uint32_t
+  {
+    return last_resolved_query_count_;
+  }
+
+private:
+  std::vector<uint64_t> ticks_ {};
+  uint64_t next_tick_ { 1000U };
+  uint32_t write_count_ { 0U };
+  uint32_t resolve_count_ { 0U };
+  uint32_t last_resolved_query_count_ { 0U };
 };
 
 //! CommandRecorder that records buffer and texture copy operations for
@@ -555,6 +627,16 @@ public:
   {
     return *descriptor_allocator_;
   }
+  [[nodiscard]] auto GetTimestampQueryProvider() const
+    -> observer_ptr<TimestampQueryProvider> override
+  {
+    return observer_ptr<TimestampQueryProvider>(
+      const_cast<FakeTimestampQueryProvider*>(&timestamp_query_provider_));
+  }
+  [[nodiscard]] auto GetTimestampQueryProvider() -> FakeTimestampQueryProvider&
+  {
+    return timestamp_query_provider_;
+  }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window> /*window_weak*/,
     observer_ptr<CommandQueue> /*command_queue*/) const
@@ -836,7 +918,13 @@ public:
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
     auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
       &graphics_pipeline_log_, &root_cbv_log_, &draw_log_, &indirect_log_);
-    return { raw, [](CommandRecorder* p) -> void { delete p; } };
+    raw->Begin();
+    return { raw, [](CommandRecorder* p) -> void {
+              if (p != nullptr) {
+                static_cast<void>(p->End());
+                delete p;
+              }
+            } };
   }
 
   BufferCommandLog buffer_log_ {};
@@ -851,6 +939,7 @@ public:
   mutable std::unique_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
     std::make_unique<MiniDescriptorAllocator>()
   };
+  mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
   // Test injection flags (mutable to allow const CreateBuffer)
   mutable bool fail_map_ { false };
   mutable bool throw_on_create_buffer_ { false };

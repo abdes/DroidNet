@@ -48,6 +48,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  GpuTimelineProfiler
+  SOURCES
+    "GpuTimelineProfiler_test.cpp"
+)
+
+m_gtest_program(
   RenderContext
   SOURCES
     "RenderContext_test.cpp"

@@ -8,7 +8,7 @@
 
 #include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/Internal/RenderScope.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
@@ -111,17 +111,20 @@ RenderPass::RenderPass(const std::string_view name)
   AddComponent<ObjectMetadata>(name);
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto RenderPass::PrepareResources(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
   detail::RenderScope context_scope(context_, context);
 
-  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
-  auto marker_scope_options = scope_options;
-  marker_scope_options.timestamp_enabled = false;
-  graphics::GpuEventScope pass_scope(recorder, GetName(), marker_scope_options);
-  graphics::GpuEventScope phase_scope(
-    recorder, "PrepareResources", marker_scope_options);
+  graphics::GpuEventScope pass_scope(recorder, GetName(),
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
+  graphics::GpuEventScope phase_scope(recorder,
+    "Vortex.RenderPass.PrepareResources",
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kPass,
+    profiling::Vars(profiling::Var("pass", GetName())));
 
   DLOG_SCOPE_F(2, "RenderPass PrepareResources");
   DLOG_F(2, "pass: {}", GetName());
@@ -139,17 +142,19 @@ auto RenderPass::PrepareResources(
   co_return;
 }
 
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto RenderPass::Execute(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
   detail::RenderScope context_scope(context_, context);
 
-  const auto scope_options = Context().GetRenderer().MakeGpuEventScopeOptions();
-  graphics::GpuEventScope pass_scope(recorder, GetName(), scope_options);
-  auto marker_scope_options = scope_options;
-  marker_scope_options.timestamp_enabled = false;
-  graphics::GpuEventScope phase_scope(
-    recorder, "Execute", marker_scope_options);
+  graphics::GpuEventScope pass_scope(recorder, GetName(),
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass);
+  graphics::GpuEventScope phase_scope(recorder, "Vortex.RenderPass.Execute",
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kPass,
+    profiling::Vars(profiling::Var("pass", GetName())));
 
   DLOG_SCOPE_F(2, "RenderPass Execute");
   DLOG_F(2, "pass: {}", GetName());
@@ -201,6 +206,7 @@ auto RenderPass::IssueDrawCallsOverPass(
       return;
     }
 
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     const auto* records = reinterpret_cast<const oxygen::vortex::DrawMetadata*>(
       prepared->draw_metadata_bytes.data());
 
@@ -212,6 +218,7 @@ auto RenderPass::IssueDrawCallsOverPass(
       const auto count = prepared->draw_metadata_bytes.size()
         / sizeof(oxygen::vortex::DrawMetadata);
       for (uint32_t i = 0; i < count; ++i) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         if (!records[i].flags.IsSet(pass_bit)) {
           continue;
         }
@@ -236,12 +243,14 @@ auto RenderPass::IssueDrawCallsOverPass(
   }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
   const DrawMetadata* records, const uint32_t begin, const uint32_t end,
   uint32_t& emitted_count, uint32_t& skipped_invalid,
   uint32_t& draw_errors) const noexcept -> void
 {
   for (uint32_t draw_index = begin; draw_index < end; ++draw_index) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     const auto& metadata = records[draw_index];
     if (((metadata.is_indexed != 0U) && metadata.index_count == 0)
       || ((metadata.is_indexed == 0U) && metadata.vertex_count == 0)) {

@@ -12,6 +12,7 @@
 #include <optional>
 #include <utility>
 
+#include <fmt/format.h>
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -26,6 +27,9 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
@@ -72,7 +76,8 @@ namespace {
   auto ResolveBootstrapExtent(const CompositionView* composition_view)
     -> glm::uvec2
   {
-    if (composition_view != nullptr && composition_view->view.viewport.IsValid()) {
+    if (composition_view != nullptr
+      && composition_view->view.viewport.IsValid()) {
       return {
         ClampViewportDimension(composition_view->view.viewport.width),
         ClampViewportDimension(composition_view->view.viewport.height),
@@ -224,6 +229,35 @@ namespace {
       source, src_slice, subresources, backbuffer, dst_slice, subresources);
   }
 
+  auto FormatCompositingTaskScopeLabel(const CompositingTask& task)
+    -> std::string
+  {
+    switch (task.type) {
+    case CompositingTaskType::kCopy:
+      return fmt::format(
+        "Composite Copy View {}", task.copy.source_view_id.get());
+    case CompositingTaskType::kBlend:
+      return fmt::format("Composite Blend View {} (alpha {:.2f})",
+        task.blend.source_view_id.get(), task.blend.alpha);
+    case CompositingTaskType::kBlendTexture:
+      if (task.texture_blend.source_texture) {
+        const auto& name
+          = task.texture_blend.source_texture->GetDescriptor().debug_name;
+        if (!name.empty()) {
+          return fmt::format("Composite Blend Texture {} (alpha {:.2f})", name,
+            task.texture_blend.alpha);
+        }
+      }
+      return fmt::format(
+        "Composite Blend Texture (alpha {:.2f})", task.texture_blend.alpha);
+    case CompositingTaskType::kTaa:
+      return fmt::format(
+        "Composite TAA (jitter {:.2f})", task.taa.jitter_scale);
+    default:
+      return "Composite Task";
+    }
+  }
+
 } // namespace
 
 Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
@@ -254,6 +288,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
+  gpu_timeline_profiler_
+    = std::make_unique<internal::GpuTimelineProfiler>(observer_ptr { gfx.get() });
   render_context_pool_
     = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
 }
@@ -302,6 +338,7 @@ auto Renderer::OnShutdown() noexcept -> void
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
+  gpu_timeline_profiler_.reset();
   compositing_pass_.reset();
   compositing_pass_config_.reset();
   render_graphs_.clear();
@@ -312,7 +349,8 @@ auto Renderer::OnShutdown() noexcept -> void
   engine_.reset();
 }
 
-auto Renderer::EnsurePublicationState(Graphics& gfx) -> RendererPublicationState&
+auto Renderer::EnsurePublicationState(Graphics& gfx)
+  -> RendererPublicationState&
 {
   if (!publication_state_) {
     publication_state_ = std::make_unique<RendererPublicationState>();
@@ -327,11 +365,10 @@ auto Renderer::EnsurePublicationState(Graphics& gfx) -> RendererPublicationState
       "SceneTextureBindings");
   }
   if (!state.view_frame_bindings_publisher) {
-    state.view_frame_bindings_publisher
-      = std::make_unique<internal::PerViewStructuredPublisher<ViewFrameBindings>>(
-        observer_ptr { &gfx }, GetStagingProvider(),
-        observer_ptr { &GetInlineTransfersCoordinator() },
-        "ViewFrameBindings");
+    state.view_frame_bindings_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<ViewFrameBindings>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() }, "ViewFrameBindings");
   }
   return state;
 }
@@ -351,13 +388,13 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   state.prepared_frame_slot = slot;
 }
 
-auto Renderer::ResetPublicationState() -> void
-{
-  publication_state_.reset();
-}
+auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
 
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 {
+  profiling::CpuProfileScope frame_scope(
+    "Vortex.OnFrameStart", profiling::ProfileCategory::kPass);
+
   resolved_views_.clear();
   {
     std::scoped_lock lock(composition_mutex_);
@@ -381,6 +418,9 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
         .count();
   CHECK_GT_F(dt_seconds, 0.0F, "Frame delta time must be positive");
   last_frame_dt_seconds_ = dt_seconds;
+  if (gpu_timeline_profiler_) {
+    gpu_timeline_profiler_->OnFrameStart(context->GetFrameSequenceNumber());
+  }
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
@@ -430,6 +470,14 @@ auto Renderer::OnRender(observer_ptr<engine::FrameContext> context) -> co::Co<>
 auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
+  const auto finalize_gpu_timestamps = oxygen::ScopeGuard {
+    [this]() noexcept -> void {
+      if (gpu_timeline_profiler_) {
+        gpu_timeline_profiler_->OnFrameRecordTailResolve();
+      }
+    }
+  };
+
   if (context != nullptr) {
     co_await DispatchSceneRendererCompositing(context);
   }
@@ -490,6 +538,11 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       = gfx->AcquireCommandRecorder(queue_key, "Vortex Renderer Compositing");
     CHECK_F(static_cast<bool>(recorder_ptr),
       "Compositing recorder acquisition failed");
+    if (gpu_timeline_profiler_) {
+      recorder_ptr->SetTelemetryCollector(
+        observer_ptr<graphics::IGpuProfileCollector>(
+          gpu_timeline_profiler_.get()));
+    }
 
     auto& recorder = *recorder_ptr;
     auto& target_fb = *payload.composite_target;
@@ -509,8 +562,11 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     comp_context.frame_sequence = frame::SequenceNumber { frame_seq_num_ };
 
     for (const auto& task : payload.tasks) {
-      graphics::GpuEventScope task_scope(
-        recorder, "CompositingTask", MakeGpuEventScopeOptions());
+      graphics::GpuEventScope task_scope(recorder, "Vortex.CompositingTask",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(
+          profiling::Var("label", FormatCompositingTaskScopeLabel(task))));
 
       switch (task.type) {
       case CompositingTaskType::kCopy: {
@@ -591,8 +647,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context)
-  -> void
+auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   if (context != nullptr && scene_renderer_ != nullptr
     && scene_renderer_started_frame_ == context->GetFrameSequenceNumber()) {
@@ -770,12 +825,6 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return gfx_weak_.lock();
 }
 
-auto Renderer::MakeGpuEventScopeOptions() const
-  -> graphics::GpuEventScopeOptions
-{
-  return {};
-}
-
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&
 {
   CHECK_NOTNULL_F(
@@ -817,8 +866,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
     if (view.render_target != nullptr) {
       render_context.view_outputs.insert_or_assign(view.id, view.render_target);
     } else if (view.composite_source != nullptr) {
-      render_context.view_outputs.insert_or_assign(
-        view.id, observer_ptr<graphics::Framebuffer> { view.composite_source.get() });
+      render_context.view_outputs.insert_or_assign(view.id,
+        observer_ptr<graphics::Framebuffer> { view.composite_source.get() });
     }
 
     auto primary_target = observer_ptr<graphics::Framebuffer> {};
@@ -842,7 +891,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .resolved_view = {},
       .primary_target = primary_target,
     };
-    if (const auto it = resolved_views_.find(view.id); it != resolved_views_.end()) {
+    if (const auto it = resolved_views_.find(view.id);
+      it != resolved_views_.end()) {
       entry.resolved_view = observer_ptr<const ResolvedView> { &it->second };
     }
 
@@ -899,8 +949,8 @@ auto Renderer::EnsureSceneRenderer(const CompositionView* composition_view)
   if (scene_renderer_ == nullptr) {
     auto gfx = GetGraphics();
     CHECK_F(gfx != nullptr, "Renderer requires a live Graphics backend");
-    scene_renderer_ = SceneRenderBuilder::Build(
-      *this, *gfx, capability_families_, ResolveBootstrapExtent(composition_view));
+    scene_renderer_ = SceneRenderBuilder::Build(*this, *gfx,
+      capability_families_, ResolveBootstrapExtent(composition_view));
   }
 
   return *scene_renderer_;
@@ -927,8 +977,8 @@ auto Renderer::ReleasePooledRenderContext(const frame::Slot slot) noexcept
       render_context_pool_->Release(slot);
     }
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "Renderer failed to release pooled render context: {}",
-      ex.what());
+    LOG_F(
+      ERROR, "Renderer failed to release pooled render context: {}", ex.what());
   }
 }
 
@@ -1013,8 +1063,7 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
 auto Renderer::EndOffscreenFrame() noexcept -> void { }
 
 auto Renderer::DispatchSceneRendererPreRender(
-  const observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+  const observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
   CHECK_NOTNULL_F(context.get());
   auto& scene_renderer = EnsureSceneRenderer();
@@ -1024,18 +1073,21 @@ auto Renderer::DispatchSceneRendererPreRender(
 }
 
 auto Renderer::DispatchSceneRendererRender(
-  const observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+  const observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
+  profiling::CpuProfileScope render_scope(
+    "Vortex.DispatchSceneRendererRender", profiling::ProfileCategory::kPass);
+
   CHECK_NOTNULL_F(context.get());
   auto& scene_renderer = EnsureSceneRenderer();
   EnsureSceneRendererFrameStarted(*context);
 
   auto& render_context = render_context_pool_->Acquire(context->GetFrameSlot());
-  const auto release_guard = oxygen::ScopeGuard { [this,
-                                                   slot = context->GetFrameSlot()]() noexcept -> void {
-    ReleasePooledRenderContext(slot);
-  } };
+  const auto release_guard = oxygen::ScopeGuard {
+    [this, slot = context->GetFrameSlot()]() noexcept -> void {
+      ReleasePooledRenderContext(slot);
+    }
+  };
 
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
@@ -1061,9 +1113,8 @@ auto Renderer::DispatchSceneRendererRender(
     const auto view_frame_bindings_slot
       = publication_state.view_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, view_bindings);
-    scene_renderer.PublishViewFrameBindings(
-      render_context.current_view.view_id, view_bindings,
-      view_frame_bindings_slot);
+    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+      view_bindings, view_frame_bindings_slot);
 
     EnsureViewConstantsManager(*gfx);
     view_const_manager_->OnFrameStart(frame_slot_);
@@ -1091,15 +1142,20 @@ auto Renderer::DispatchSceneRendererRender(
 auto Renderer::DispatchSceneRendererCompositing(
   const observer_ptr<engine::FrameContext> context) -> co::Co<>
 {
+  profiling::CpuProfileScope compositing_scope(
+    "Vortex.DispatchSceneRendererCompositing",
+    profiling::ProfileCategory::kPass);
+
   CHECK_NOTNULL_F(context.get());
   auto& scene_renderer = EnsureSceneRenderer();
   EnsureSceneRendererFrameStarted(*context);
 
   auto& render_context = render_context_pool_->Acquire(context->GetFrameSlot());
-  const auto release_guard = oxygen::ScopeGuard { [this,
-                                                   slot = context->GetFrameSlot()]() noexcept -> void {
-    ReleasePooledRenderContext(slot);
-  } };
+  const auto release_guard = oxygen::ScopeGuard {
+    [this, slot = context->GetFrameSlot()]() noexcept -> void {
+      ReleasePooledRenderContext(slot);
+    }
+  };
 
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
@@ -1448,8 +1504,7 @@ auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<void>
     "ValidatedOffscreenSceneSession requires a live scene");
   CHECK_NOTNULL_F(output_target_.framebuffer.get(),
     "ValidatedOffscreenSceneSession requires an output target");
-  static_cast<void>(
-    renderer_->EnsureSceneRenderer(&view_intent_.ViewIntent()));
+  static_cast<void>(renderer_->EnsureSceneRenderer(&view_intent_.ViewIntent()));
   co_return;
 }
 

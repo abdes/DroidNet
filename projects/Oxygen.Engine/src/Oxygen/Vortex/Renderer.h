@@ -26,7 +26,6 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -65,6 +64,7 @@ namespace oxygen::vortex::internal {
 template <typename RenderContextT> class BasicRenderContextPool;
 class CompositingPass;
 struct CompositingPassConfig;
+class GpuTimelineProfiler;
 class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
@@ -485,8 +485,6 @@ public:
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
-  [[nodiscard]] OXGN_VRTX_API auto MakeGpuEventScopeOptions() const
-    -> graphics::GpuEventScopeOptions;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
@@ -549,6 +547,7 @@ private:
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
   std::shared_ptr<internal::CompositingPass> compositing_pass_;
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
+  std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
