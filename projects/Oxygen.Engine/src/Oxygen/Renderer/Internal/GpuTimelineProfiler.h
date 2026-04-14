@@ -19,7 +19,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/ProfileScope.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -73,12 +73,11 @@ class GpuTimelineSink {
 public:
   OXGN_RNDR_API virtual ~GpuTimelineSink() = default;
 
-  [[nodiscard]] virtual auto ConsumeFrame(const GpuTimelineFrame& frame)
-    -> bool
+  [[nodiscard]] virtual auto ConsumeFrame(const GpuTimelineFrame& frame) -> bool
     = 0;
 };
 
-class GpuTimelineProfiler final : public graphics::IGpuProfileScopeHandler {
+class GpuTimelineProfiler final : public graphics::IGpuProfileCollector {
 public:
   OXGN_RNDR_API explicit GpuTimelineProfiler(observer_ptr<Graphics> graphics);
   OXGN_RNDR_API ~GpuTimelineProfiler() override;
@@ -89,23 +88,20 @@ public:
   OXGN_RNDR_API auto SetEnabled(bool enabled) -> void;
   OXGN_RNDR_API auto SetMaxScopesPerFrame(uint32_t max_scopes) -> void;
   OXGN_RNDR_API auto SetRetainLatestFrame(bool retain_latest_frame) -> void;
-  [[nodiscard]] OXGN_RNDR_API auto MakeScopeOptions() const
-    -> graphics::GpuEventScopeOptions;
 
-  OXGN_RNDR_API auto OnFrameStart(frame::SequenceNumber frame_sequence)
-    -> void;
+  OXGN_RNDR_API auto OnFrameStart(frame::SequenceNumber frame_sequence) -> void;
   OXGN_RNDR_API auto OnFrameRecordTailResolve() -> void;
 
-  [[nodiscard]] OXGN_RNDR_API auto BeginScope(graphics::CommandRecorder& recorder,
-    std::string_view name, const graphics::GpuEventScopeOptions& options)
-    -> graphics::GpuEventScopeToken override;
+  OXGN_RNDR_API auto BeginScope(graphics::CommandRecorder& recorder,
+    const graphics::GpuProfileScopeInfo& info,
+    graphics::GpuProfileCollectorState& state) -> void override;
 
   OXGN_RNDR_API auto EndScope(graphics::CommandRecorder& recorder,
-    const graphics::GpuEventScopeToken& token) -> void override;
+    graphics::GpuProfileCollectorState& state) -> void override;
 
   OXGN_RNDR_API auto AddSink(std::shared_ptr<GpuTimelineSink> sink) -> void;
-  OXGN_RNDR_API auto RequestOneShotExport(
-    const std::filesystem::path& path) -> void;
+  OXGN_RNDR_API auto RequestOneShotExport(const std::filesystem::path& path)
+    -> void;
 
   [[nodiscard]] OXGN_RNDR_API auto GetLastPublishedFrame() const
     -> std::optional<GpuTimelineFrame>;

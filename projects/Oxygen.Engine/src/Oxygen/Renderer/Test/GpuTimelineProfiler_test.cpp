@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -31,6 +30,7 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -465,11 +465,14 @@ public:
 
 auto WaitForFile(const std::filesystem::path& path) -> bool
 {
-  for (int i = 0; i < 50; ++i) {
-    if (std::filesystem::exists(path)) {
+  for (int i = 0; i < 250; ++i) {
+    std::error_code error {};
+    if (std::filesystem::exists(path, error) && !error
+      && std::filesystem::is_regular_file(path, error) && !error
+      && std::filesystem::file_size(path, error) > 0U) {
       return true;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   return false;
 }
@@ -484,12 +487,12 @@ NOLINT_TEST(GpuTimelineProfilerTest, DisabledFastPathProducesNoWritesOrResolve)
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "DisabledFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
-    oxygen::graphics::GpuEventScope scope(
-      *recorder, "DisabledScope", profiler.MakeScopeOptions());
+    oxygen::graphics::GpuEventScope scope(*recorder, "DisabledScope",
+      oxygen::profiling::ProfileGranularity::kTelemetry);
   }
 
   profiler.OnFrameRecordTailResolve();
@@ -511,15 +514,15 @@ NOLINT_TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "FrameOne", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
     oxygen::graphics::GpuEventScope outer(
-      *recorder, "Outer", profiler.MakeScopeOptions());
+      *recorder, "Outer", oxygen::profiling::ProfileGranularity::kTelemetry);
     {
       oxygen::graphics::GpuEventScope inner(
-        *recorder, "Inner", profiler.MakeScopeOptions());
+        *recorder, "Inner", oxygen::profiling::ProfileGranularity::kTelemetry);
     }
   }
 
@@ -554,12 +557,12 @@ NOLINT_TEST(
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "RetainedFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
     oxygen::graphics::GpuEventScope scope(
-      *recorder, "Retained", profiler.MakeScopeOptions());
+      *recorder, "Retained", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
 
   profiler.OnFrameRecordTailResolve();
@@ -588,15 +591,15 @@ NOLINT_TEST(
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "LargeAbsoluteTicks", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
     oxygen::graphics::GpuEventScope outer(
-      *recorder, "Outer", profiler.MakeScopeOptions());
+      *recorder, "Outer", oxygen::profiling::ProfileGranularity::kTelemetry);
     {
       oxygen::graphics::GpuEventScope inner(
-        *recorder, "Inner", profiler.MakeScopeOptions());
+        *recorder, "Inner", oxygen::profiling::ProfileGranularity::kTelemetry);
     }
   }
 
@@ -626,14 +629,14 @@ NOLINT_TEST(GpuTimelineProfilerTest, DeeplyNestedScopesPreserveParentChain)
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "NestedFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   std::vector<std::unique_ptr<oxygen::graphics::GpuEventScope>> scopes;
   scopes.reserve(8U);
   for (int i = 0; i < 8; ++i) {
     scopes.push_back(std::make_unique<oxygen::graphics::GpuEventScope>(
-      *recorder, "Nested", profiler.MakeScopeOptions()));
+      *recorder, "Nested", oxygen::profiling::ProfileGranularity::kTelemetry));
   }
   scopes.clear();
 
@@ -669,16 +672,16 @@ NOLINT_TEST(
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "OverflowFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
     oxygen::graphics::GpuEventScope first(
-      *recorder, "First", profiler.MakeScopeOptions());
+      *recorder, "First", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
   {
     oxygen::graphics::GpuEventScope second(
-      *recorder, "Second", profiler.MakeScopeOptions());
+      *recorder, "Second", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
 
   profiler.OnFrameRecordTailResolve();
@@ -706,13 +709,14 @@ NOLINT_TEST(GpuTimelineProfilerTest, IncompleteScopeIsMarkedInvalid)
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "IncompleteFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
-  const auto token
-    = profiler.BeginScope(*recorder, "Leaked", profiler.MakeScopeOptions());
-  EXPECT_NE(
-    token.flags & oxygen::graphics::kGpuScopeTokenFlagTimestampEnabled, 0U);
+  const auto token = recorder->BeginProfileScope({
+    .label = "Leaked",
+    .granularity = oxygen::profiling::ProfileGranularity::kTelemetry,
+  });
+  EXPECT_NE(token.flags & oxygen::graphics::kGpuScopeTokenFlagActive, 0U);
 
   profiler.OnFrameRecordTailResolve();
   profiler.OnFrameStart(oxygen::frame::SequenceNumber { 13U });
@@ -731,8 +735,10 @@ NOLINT_TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
 {
   TestGraphics graphics;
   GpuTimelineProfiler profiler(observer_ptr<Graphics> { &graphics });
-  const auto export_path
-    = std::filesystem::temp_directory_path() / "oxygen_gpu_timeline_test.json";
+  const auto unique_suffix = std::to_string(
+    std::chrono::steady_clock::now().time_since_epoch().count());
+  const auto export_path = std::filesystem::temp_directory_path()
+    / ("oxygen_gpu_timeline_test_" + unique_suffix + ".json");
   std::filesystem::remove(export_path);
 
   profiler.SetEnabled(true);
@@ -740,12 +746,12 @@ NOLINT_TEST(GpuTimelineProfilerTest, OneShotExportWritesJsonFrame)
 
   auto recorder = graphics.AcquireCommandRecorder(
     graphics.QueueKeyFor(QueueRole::kGraphics), "ExportFrame", true);
-  recorder->SetProfileScopeHandler(
-    observer_ptr<oxygen::graphics::IGpuProfileScopeHandler>(&profiler));
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector>(&profiler));
 
   {
     oxygen::graphics::GpuEventScope scope(
-      *recorder, "Exported", profiler.MakeScopeOptions());
+      *recorder, "Exported", oxygen::profiling::ProfileGranularity::kTelemetry);
   }
 
   profiler.OnFrameRecordTailResolve();

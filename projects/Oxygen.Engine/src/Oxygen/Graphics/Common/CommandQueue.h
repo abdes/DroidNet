@@ -80,6 +80,13 @@ public:
     -> void
     = 0;
 
+  //! Advance backend-owned profiling frame state before a new engine frame.
+  /*!
+   Backends with queue-scoped profiler state can override this to roll
+   per-frame query batches or similar bookkeeping. The default implementation
+   is a no-op.
+  */
+  OXGN_GFX_API virtual auto BeginProfilingFrame() const -> void;
   virtual OXGN_GFX_API auto Flush() const -> void;
 
   [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;

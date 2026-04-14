@@ -29,13 +29,15 @@ find_package(Tracy CONFIG REQUIRED)
 # Main module target
 # ------------------------------------------------------------------------------
 
-# We create an INTERFACE library to expose Tracy correctly across the engine.
-# This ensures that Oxygen Engine targets can unconditionally link Oxygen::Tracy.
-add_library(${META_MODULE_TARGET} INTERFACE)
+add_library(${META_MODULE_TARGET})
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
+    DEFINE_SYMBOL
+      "OXGN_TRACY_EXPORTS"
+    OUTPUT_NAME
+      $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
     VERSION
       ${META_VERSION}
     SOVERSION
@@ -44,12 +46,51 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-# Link the Conan provided tracy library which carries TRACY_ENABLE, TRACY_IMPORTS, etc.
-target_link_libraries(${META_MODULE_TARGET} INTERFACE Tracy::TracyClient)
+set(
+  OXYGEN_TRACY_HEADERS
+  "api_export.h"
+  "Cpu.h"
+  "D3D12.h"
+)
+set(
+  OXYGEN_TRACY_PRIVATE_SOURCES
+  "Cpu.cpp"
+  "D3D12.cpp"
+)
+
+target_sources(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_TRACY_PRIVATE_SOURCES}
+    ${OXYGEN_TRACY_HEADERS}
+  PUBLIC
+    FILE_SET HEADERS
+      BASE_DIRS
+        "${OXYGEN_SOURCE_DIR}"
+      FILES
+        ${OXYGEN_TRACY_HEADERS}
+)
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
-target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_23)
+target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
+target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_definitions(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_TRACY_STATIC>
+)
+
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PUBLIC
+    oxygen::base
+  PRIVATE
+    Tracy::TracyClient
+)
 
 # ------------------------------------------------------------------------------
 # API Documentation

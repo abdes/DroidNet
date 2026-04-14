@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <span>
 
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -180,6 +181,7 @@ private:
 
   size_t graphics_pipeline_hash_ = 0;
   size_t compute_pipeline_hash_ = 0;
+  std::unique_ptr<graphics::IGpuProfileCollector> tracy_gpu_collector_ {};
 };
 
 } // namespace oxygen::graphics::d3d12

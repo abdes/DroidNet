@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -16,6 +18,34 @@
 using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;
 using oxygen::graphics::Texture;
+
+namespace {
+
+constexpr uint8_t kCollectorStateFlagActive = 1U << 0U;
+
+class NativeLabelCollector final
+  : public oxygen::graphics::IGpuProfileCollector {
+public:
+  auto BeginScope(oxygen::graphics::CommandRecorder& recorder,
+    const oxygen::graphics::GpuProfileScopeInfo& info,
+    oxygen::graphics::GpuProfileCollectorState& state) -> void override
+  {
+    recorder.BeginEvent(info.formatted_name);
+    state.flags = kCollectorStateFlagActive;
+  }
+
+  auto EndScope(oxygen::graphics::CommandRecorder& recorder,
+    oxygen::graphics::GpuProfileCollectorState& state) -> void override
+  {
+    if ((state.flags & kCollectorStateFlagActive) == 0U) {
+      return;
+    }
+    recorder.EndEvent();
+    state.flags = 0U;
+  }
+};
+
+} // namespace
 
 auto CommandRecorder::ClearDepthStencilView(const Texture& texture,
   const NativeView& dsv, const ClearFlags clear_flags, const float depth,
@@ -33,6 +63,8 @@ CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
 {
   CHECK_NOTNULL_F(command_list_);
   CHECK_NOTNULL_F(target_queue_);
+  scope_records_.reserve(32U);
+  scope_stack_.reserve(32U);
 }
 
 // Destructor implementation is crucial here because ResourceStateTracker is
@@ -44,6 +76,8 @@ void CommandRecorder::Begin()
   DCHECK_NOTNULL_F(command_list_);
   DLOG_F(2, "CommandRecorder::Begin() for: {}", command_list_->GetName());
   DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
+  scope_records_.clear();
+  scope_stack_.clear();
   command_list_->OnBeginRecording();
 }
 
@@ -132,26 +166,85 @@ auto CommandRecorder::EndEvent() -> void { }
 */
 auto CommandRecorder::SetMarker(std::string_view /*name*/) -> void { }
 
-auto CommandRecorder::BeginProfileScope(const std::string_view name,
-  const GpuEventScopeOptions& options) -> GpuEventScopeToken
+auto CommandRecorder::BeginProfileScope(
+  const oxygen::profiling::GpuProfileScopeDesc& desc,
+  const std::source_location callsite) -> GpuProfileScopeToken
 {
-  BeginEvent(name);
-
-  if (profile_scope_handler_ != nullptr && options.timestamp_enabled) {
-    return profile_scope_handler_->BeginScope(*this, name, options);
+  if (desc.label.empty()) {
+    return {};
   }
 
-  return {};
+  ScopeRecord record {};
+  record.base_label = desc.label;
+  record.formatted_name = oxygen::profiling::FormatScopeName(desc);
+  record.active = true;
+
+  const GpuProfileScopeInfo info {
+    .desc = desc,
+    .base_label = record.base_label,
+    .formatted_name = record.formatted_name,
+    .callsite = callsite,
+  };
+
+  NativeLabelCollector native_labels {};
+  native_labels.BeginScope(*this, info, record.native_label_state);
+
+  if (telemetry_collector_ != nullptr
+    && desc.granularity == oxygen::profiling::ProfileGranularity::kTelemetry) {
+    telemetry_collector_->BeginScope(*this, info, record.telemetry_state);
+  }
+
+  if (trace_collector_ != nullptr) {
+    trace_collector_->BeginScope(*this, info, record.trace_state);
+  }
+
+  const auto scope_id = static_cast<uint32_t>(scope_records_.size());
+  scope_records_.push_back(std::move(record));
+  scope_stack_.push_back(scope_id);
+
+  return GpuProfileScopeToken {
+    .scope_id = scope_id,
+    .stream_id = 0U,
+    .flags = kGpuScopeTokenFlagActive,
+  };
 }
 
-auto CommandRecorder::EndProfileScope(const GpuEventScopeToken& token) -> void
+auto CommandRecorder::EndProfileScope(const GpuProfileScopeToken& token) -> void
 {
-  if (profile_scope_handler_ != nullptr
-    && (token.flags & kGpuScopeTokenFlagTimestampEnabled) != 0U) {
-    profile_scope_handler_->EndScope(*this, token);
+  if ((token.flags & kGpuScopeTokenFlagActive) == 0U) {
+    return;
+  }
+  if (token.scope_id >= scope_records_.size()) {
+    return;
   }
 
-  EndEvent();
+  auto& record = scope_records_[token.scope_id];
+  if (!record.active) {
+    return;
+  }
+
+  if (trace_collector_ != nullptr) {
+    trace_collector_->EndScope(*this, record.trace_state);
+  }
+
+  if (telemetry_collector_ != nullptr) {
+    telemetry_collector_->EndScope(*this, record.telemetry_state);
+  }
+
+  NativeLabelCollector native_labels {};
+  native_labels.EndScope(*this, record.native_label_state);
+
+  record.active = false;
+
+  if (!scope_stack_.empty()) {
+    if (scope_stack_.back() == token.scope_id) {
+      scope_stack_.pop_back();
+    } else if (const auto it
+      = std::find(scope_stack_.begin(), scope_stack_.end(), token.scope_id);
+      it != scope_stack_.end()) {
+      scope_stack_.erase(it);
+    }
+  }
 }
 
 // -- Private non-template dispatch method implementations for Buffer

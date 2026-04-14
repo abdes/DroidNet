@@ -33,8 +33,8 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Graphics/Common/ProfileScope.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Renderer/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Pipeline/RendererCapability.h>
@@ -648,9 +648,6 @@ public:
    */
   OXGN_RNDR_API auto DumpEstimatedTextureMemory(std::size_t top_n) const
     -> void;
-
-  [[nodiscard]] OXGN_RNDR_API auto MakeGpuEventScopeOptions() const
-    -> graphics::GpuEventScopeOptions;
 
   //=== Upload Services ===---------------------------------------------------//
 

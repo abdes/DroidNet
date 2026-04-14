@@ -21,12 +21,12 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/GpuEventScope.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -579,9 +579,9 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
   DCHECK_F(dsv->IsValid(), "DepthStencilView must be valid after preparation");
 
   SetupViewPortAndScissors(recorder);
-  const graphics::GpuEventScopeOptions scope_options {};
-  graphics::GpuEventScope scene_depth_work_scope(
-    recorder, "DepthPrePass.SceneDepthWork", scope_options);
+  graphics::GpuEventScope scene_depth_work_scope(recorder,
+    "DepthPrePass.SceneDepthWork", profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kRaster);
   ClearDepthStencilView(recorder, dsv);
   SetupRenderTargets(recorder, dsv);
 
