@@ -157,15 +157,15 @@ traceable.
 - Unmapped: 0 ✓
 - v2 requirements: 11 tracked for Phase 7
 
-**Progress note:** Phases `03-01` through `03-04` now cover the shared
+**Progress note:** Phases `03-01` through `03-05` now cover the shared
 shader-contract layer, the first registered Vortex depth/base entrypoints with
-ShaderBake proof, the real Stage 2 `InitViewsModule` shell integration, and the
-dedicated proof surface that locks InitViews publication plus active-view
-prepared-frame rebinding. `SHDR-01` stays pending until later Phase 03 plans
+ShaderBake proof, the real Stage 2 `InitViewsModule` shell integration, the
+dedicated InitViews publication proof surface, and the first real Stage 3
+`DepthPrepassModule` shell. `SHDR-01` stays pending until later Phase 03 plans
 add the remaining Vortex shader families, and `DEFR-01` stays pending until the
-deferred-core stage flow advances from Stage 2 proof into real depth/base-pass
-publication and GBuffer output.
+depth-prepass/base-pass flow advances from shell integration into real draw
+processing, publication proof, and GBuffer output.
 
 ---
 *Requirements defined: 2026-04-13*
-*Last updated: 2026-04-15 after Phase 03 plan 03-04 completion review*
+*Last updated: 2026-04-15 after Phase 03 plan 03-05 completion review*
