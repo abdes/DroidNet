@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `in_progress — Phases 1 and 2 are complete, with Phase 2 closed after remediation, full Oxygen.Vortex proof pass, scoped oxytidy clean result, and explicit human approval; the next active step is Phase 3 planning`
+Status: `in_progress — Phases 1 and 2 are complete, and Phase 3 execution is now in progress through 03-05; the next active step is 03-06 depth-prepass draw processing and publication proof`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `not_started` | LLD review/plan handoff pending |
+| 3 | Deferred Core | `in_progress` | `03-06` depth-prepass draw processing + Stage 3 publication proof |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -69,6 +69,137 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-15 — Phase 3 execution advanced through 03-05 and the ledger now resumes at 03-06
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.cpp`
+  - `src/Oxygen/Vortex/Test/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-03-SUMMARY.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-04-SUMMARY.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-05-SUMMARY.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/REQUIREMENTS.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.SceneRendererShell.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R SceneRendererShell`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "Oxygen\.Vortex\.(SceneRendererDeferredCore|SceneRendererPublication)" --output-on-failure`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.SceneRendererShell.Tests Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "Oxygen\.Vortex\.(SceneRendererShell|SceneRendererDeferredCore|SceneRendererPublication)" --output-on-failure`
+- Result:
+  - `03-03` turned Stage 2 into a real `InitViewsModule` with persistent ScenePrep state and per-view prepared-scene storage.
+  - `03-04` added a dedicated deferred-core proof surface and forced the missing Stage 2 active-view prepared-frame rebinding fix in `SceneRenderer.cpp`.
+  - `03-05` turned Stage 3 into a real `DepthPrepassModule` shell and propagated `depth_prepass_completeness` through `RenderContext.current_view`.
+  - the focused shell/publication/deferred-core verification set is green, and the vortex workstream ledger now resumes at `03-06`.
+- Code / validation delta:
+  - implementation code changed materially in the renderer shell, Stage 2, Stage 3, and the deferred-core proof surface
+  - validation evidence exists for shell/publication/deferred-core test coverage, but there is still no proof yet for real depth-prepass draw processing, Stage 3 publication products, base-pass output, or deferred lighting
+  - Phase 3 is therefore `in_progress`, not `done`
+- Remaining blocker:
+  - execute `03-06` to land real depth-prepass mesh processing and Stage 3 publication proof before the base pass depends on those outputs
+
+### 2026-04-15 — Phase 3 replanned into 15 smaller execute-ready steps after replacing the coarse plan set
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-01-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-02-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-03-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-04-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-05-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-06-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-07-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-08-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-09-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-10-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-11-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-12-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-13-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-14-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-15-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-RESEARCH.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" phase-plan-index 3 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure <each 03-0X-PLAN.md>`
+  - repeated checker passes against the rebuilt Phase 03 plan set until no blockers remained
+- Result:
+  - the earlier coarse 5-plan Phase 03 set was discarded as too broad to execute safely
+  - Phase 03 is now split into 15 smaller sequential plans covering:
+    shared shader contracts, initial depth/base shader seeding, InitViews implementation and proof, depth-prepass implementation and proof, base-pass implementation and proof, velocity completion, GBuffer debug visualization, deferred-light shader family, Stage 12 CPU deferred lighting, automated proof sweep, and automated RenderDoc/ledger closeout
+  - the final checker pass cleared blocking issues and warnings, and the plan set is now execution-ready
+- Code / validation delta:
+  - no implementation code changed in this replanning session
+  - no build/tests/ShaderBake/RenderDoc execution evidence was collected yet because this session only rebuilt the planning surface
+  - Phase 03 remains `not_started` from an implementation standpoint, but planning is complete and execution can start at `03-01`
+- Remaining blocker:
+  - none at the planning boundary; execute the Phase 03 plans in order starting with `03-01`
+
+### 2026-04-14 — Phase 3 deferred-core planning artifacts created for the vortex workstream
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/ROADMAP.md` (local ignored workflow state restored)
+  - `.planning/workstreams/vortex/STATE.md` (local ignored workflow state restored and advanced)
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-RESEARCH.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-01-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-02-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-03-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-04-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-05-PLAN.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" init plan-phase 3 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" roadmap get-phase 3 --ws vortex --raw`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" phase-plan-index 3 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" verify plan-structure <each 03-0X-PLAN.md>`
+  - requirement-coverage grep over `SHDR-01`, `DEFR-01`, and `DEFR-02`
+- Result:
+  - the local `vortex` workstream planning surface was restored so GSD could route Phase 3 again
+  - Phase 03 now has a research artifact, validation strategy, and five executable plan files aligned to the deferred-core dependency chain:
+    shader foundation -> InitViews -> depth prepass -> base pass -> deferred lighting
+  - structural validation passed for all five plan files, and the Phase 3 requirement IDs are fully covered by the plan set
+  - proper plan-checker verification is still pending; execution must not start from this ledger entry alone
+- Code / validation delta:
+  - no implementation code changed
+  - no build, tests, `ShaderBake`, or RenderDoc validation were run in this planning session because Phase 03 execution has not started yet
+  - Phase 03 remains `not_started` from an implementation standpoint, and the plan-checker gate must pass before this planning set is treated as ready to execute
+- Remaining blocker:
+  - execute `.planning/workstreams/vortex/phases/03-deferred-core/03-01-PLAN.md` through `03-05-PLAN.md` and collect the proof pack defined in those plans
+
+### 2026-04-14 — Phase 3 execute-phase preflight blocked at the planning boundary
+
+- Changed files this session:
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" init execute-phase 3 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" phase-plan-index 3 --ws vortex`
+  - `node "$HOME/.codex/get-shit-done/bin/gsd-tools.cjs" workstream status vortex --raw`
+  - `Get-ChildItem .planning/workstreams/vortex/phases`
+  - `rg -n "Phase 3 planning|Phase 3 deferred-core planning|03-PLAN|03-VERIFICATION" design/vortex .planning/workstreams/vortex`
+- Result:
+  - `gsd-tools` resolves the `vortex` workstream, but Phase `3` still reports `phase_found: false`, `plan_count: 0`, and `Phase not found` in the phase index.
+  - The workstream only contains planned phase directories `00`, `01`, and `02`; there is no `.planning/workstreams/vortex/phases/03-*` directory or `03-*-PLAN.md` set to execute.
+  - The Vortex ledger and Phase 02 close-out artifacts both point to Phase 03 planning as the next valid step, so execute-phase must not claim Phase 03 work has started.
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run because execution stopped during preflight before a trustworthy Phase 03 task boundary existed
+  - Phase 03 remains `not_started`; this session records a blocker only
+- Remaining blocker:
+  - create the Phase 03 `.planning/workstreams/vortex/phases/03-*` plan set, then rerun `/gsd-execute-phase 3 --ws vortex`
 
 ### 2026-04-14 — Phase 2 remediation landed; full Vortex proof is green, human review rerun still required
 
@@ -1013,7 +1144,7 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ## Phase 3 — Deferred Core
 
-**Status:** `not_started`
+**Status:** `in_progress`
 
 ### Design Prerequisites
 
@@ -1025,10 +1156,38 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 | D.7 Shader contracts LLD | `done` |
 | D.8 InitViews LLD | `done` |
 
+### What Exists
+
+- `03-01` is complete: the shared Vortex shader-contract layer exists under
+  `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/` and
+  `.../Shared/`.
+- `03-02` is complete: the first depth/base Vortex shader entrypoints are
+  registered in `EngineShaderCatalog.h` and compile through `ShaderBake`.
+- `03-03` is complete: Stage 2 now dispatches through
+  `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.*`.
+- `03-04` is complete: deferred-core tests now prove InitViews publication and
+  active-view prepared-frame rebinding.
+- `03-05` is complete: Stage 3 now dispatches through
+  `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.*`
+  and publishes `depth_prepass_completeness` onto the active view.
+
+### What Is Missing
+
+- `03-06` still needs to land real depth-prepass draw processing plus Stage 3
+  publication proof.
+- `03-07` through `03-15` still need to land the base-pass shell, base-pass
+  processing/proof, velocity completion, debug visualization, deferred-light
+  shader family, Stage 12 CPU deferred lighting, proof sweep, and RenderDoc
+  closeout.
+- `DEFR-01` and `DEFR-02` remain unmitigated at the phase level until those
+  downstream plans land and are proven.
+
 ### Resume Point
 
-Phase 2 is complete and design deliverables D.4–D.8 are written. Resume with
-Phase 3 planning/execution once the LLD review findings are accepted.
+Phase 3 execution is in progress. Resume with
+`.planning/workstreams/vortex/phases/03-deferred-core/03-06-PLAN.md`, which
+owns the first real depth-prepass mesh-processing and Stage 3 publication
+proof boundary.
 
 ---
 
