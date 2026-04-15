@@ -6,7 +6,11 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include <glm/mat4x4.hpp>
 
@@ -47,6 +51,31 @@ using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
+
+auto ReadTextFile(const std::filesystem::path& path) -> std::string
+{
+  auto input = std::ifstream(path);
+  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
+  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+}
+
+auto SourceRoot() -> std::filesystem::path
+{
+  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
+    .parent_path();
+}
+
+auto ContainsAll(
+  std::string_view haystack, std::initializer_list<std::string_view> needles)
+  -> bool
+{
+  for (const auto needle : needles) {
+    if (!haystack.contains(needle)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -418,6 +447,44 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_FALSE(base_pass.HasPublishedBasePassProducts());
   EXPECT_FALSE(base_pass.HasCompletedVelocityForDynamicGeometry());
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
+{
+  const auto context = RenderForView(first_view_id_, first_resolved_view_);
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kComplete);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_NE(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+
+  const auto source_root = SourceRoot();
+  const auto shader_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassDebugView.hlsl";
+  const auto catalog_path
+    = source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h";
+
+  EXPECT_TRUE(std::filesystem::exists(shader_path))
+    << shader_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(catalog_path))
+    << catalog_path.generic_string();
+
+  const auto shader_source = ReadTextFile(shader_path);
+  EXPECT_TRUE(ContainsAll(shader_source,
+    { "DEBUG_BASE_COLOR",
+      "DEBUG_WORLD_NORMALS",
+      "DEBUG_ROUGHNESS",
+      "DEBUG_METALNESS" }));
+
+  const auto catalog_source = ReadTextFile(catalog_path);
+  EXPECT_TRUE(ContainsAll(catalog_source,
+    { "Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+      "DEBUG_BASE_COLOR",
+      "DEBUG_WORLD_NORMALS",
+      "DEBUG_ROUGHNESS",
+      "DEBUG_METALNESS" }));
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
