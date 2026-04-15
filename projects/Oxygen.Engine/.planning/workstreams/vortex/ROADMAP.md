@@ -128,7 +128,7 @@ Plans:
 - [x] 03-01: Seed shared scene/view shader contracts
 - [x] 03-02: Seed depth/base shader files and initial ShaderBake registrations
 - [x] 03-03: Implement InitViews module shell integration
-- [ ] 03-04: Prove InitViews publication and active-view rebinding
+- [x] 03-04: Prove InitViews publication and active-view rebinding
 - [ ] 03-05: Implement depth-prepass stage shell integration
 - [ ] 03-06: Finish depth-prepass draw processing and publication proof
 - [ ] 03-07: Implement base-pass stage shell integration
@@ -230,7 +230,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 0. Scaffold and Build Integration | 2/2 | Complete | 2026-04-13 |
 | 1. Substrate Migration | 14/14 | Complete | 2026-04-13 |
 | 2. SceneTextures and SceneRenderer Shell | 8/8 | Complete | 2026-04-14 |
-| 3. Deferred Core | 3/15 | In Progress | - |
+| 3. Deferred Core | 4/15 | In Progress | - |
 | 4. Migration-Critical Services and First Migration | 0/6 | Not started | - |
 | 5. Remaining Services and Runtime Scenarios | 0/6 | Not started | - |
 | 6. Legacy Deprecation | 0/2 | Not started | - |
