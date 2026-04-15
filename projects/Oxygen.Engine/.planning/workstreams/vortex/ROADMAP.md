@@ -130,16 +130,22 @@ Plans:
 - [x] 03-03: Implement InitViews module shell integration
 - [x] 03-04: Prove InitViews publication and active-view rebinding
 - [x] 03-05: Implement depth-prepass stage shell integration
-- [ ] 03-06: Finish depth-prepass draw processing and publication proof
-- [ ] 03-07: Implement base-pass stage shell integration
-- [ ] 03-08: Implement base-pass shader and mesh-processing surface
-- [ ] 03-09: Prove Stage 10 promotion and GBuffer publication timing
-- [ ] 03-10: Complete velocity production and proof for dynamic geometry
-- [ ] 03-11: Add GBuffer debug visualization and debug-shader proof
-- [ ] 03-12: Add deferred-light shader family and final lighting registrations
-- [ ] 03-13: Implement Stage 12 CPU deferred-light path and stencil-local-light proof
-- [ ] 03-14: Tighten the automated Phase 3 proof sweep
-- [ ] 03-15: Add automated RenderDoc capture analysis and Phase 3 ledger closeout
+- [x] 03-06: Finish depth-prepass draw processing and publication proof
+- [x] 03-07: Implement base-pass stage shell integration
+- [x] 03-08: Implement base-pass shader and mesh-processing surface
+- [x] 03-09: Prove Stage 10 promotion and GBuffer publication timing
+- [x] 03-10: Complete velocity production and proof for dynamic geometry
+- [x] 03-11: Add GBuffer debug visualization and debug-shader proof
+- [x] 03-12: Add deferred-light shader family and final lighting registrations
+- [x] 03-13: Implement Stage 12 CPU deferred-light path and stencil-local-light proof
+- [x] 03-14: Tighten the automated Phase 3 proof sweep
+- [x] 03-15: Add automated RenderDoc capture analysis and Phase 3 ledger closeout
+
+Execution note:
+All 15 Phase 03 plans were executed, but phase completion is currently blocked
+by post-execution review findings against the truthfulness of the Stage 10/12/15
+claims. Phase 04 must not start until the Phase 03 remediation work is planned
+and landed.
 
 ### Phase 4: Migration-Critical Services and First Migration
 **Goal**: Activate the minimum service set required for real runtime migration,
@@ -230,7 +236,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 0. Scaffold and Build Integration | 2/2 | Complete | 2026-04-13 |
 | 1. Substrate Migration | 14/14 | Complete | 2026-04-13 |
 | 2. SceneTextures and SceneRenderer Shell | 8/8 | Complete | 2026-04-14 |
-| 3. Deferred Core | 5/15 | In Progress | - |
+| 3. Deferred Core | 15/15 | Blocked | - |
 | 4. Migration-Critical Services and First Migration | 0/6 | Not started | - |
 | 5. Remaining Services and Runtime Scenarios | 0/6 | Not started | - |
 | 6. Legacy Deprecation | 0/2 | Not started | - |

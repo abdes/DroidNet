@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `done — Phases 1, 2, and 3 are complete under the source/test/log-backed closeout contract; the next active step is Phase 4 migration-critical services plus Async/DemoShell Vortex migration`
+Status: `in_progress — Phase 03 executed through 03-15, but blocking review findings invalidate the current closeout claims; Phase 04 must not start until Phase 03 remediation lands`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `done` | — |
+| 3 | Deferred Core | `blocked` | Review findings invalidate the current Stage 10/12/15 truth claims |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -69,6 +69,33 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-15 — Phase 3 completion claim invalidated by post-execution review
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-15-SUMMARY.md`
+  - `tools/vortex/Run-DeferredCoreFrame10Capture.ps1`
+- Commands used for verification:
+  - advisory review over the final Phase 03 range
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererDeferredCore.Tests.exe`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe`
+  - `powershell -ExecutionPolicy Bypass -File tools\cli\oxytidy.ps1 src\Oxygen\Vortex\SceneRenderer\SceneRenderer.cpp -Configuration Debug -IncludeTests -SummaryOnly`
+- Result:
+  - all 15 Phase 03 plans were executed, but the phase must not be treated as complete
+  - review found that Stage 12 still proves telemetry rather than truthful SceneColor accumulation / stencil-bounded local-light behavior
+  - review found that the current closeout analyzer overstates key claims through token/name checks instead of artifact/state-level proof
+  - review found that the current velocity-completion claim is still a shell seam, not a proven skinned/WPO path
+  - the closeout runner now rebuilds the Vortex test executables before `ctest`, but that does not remove the larger Phase 03 blockers
+- Code / validation delta:
+  - Phase 03 is now explicitly `blocked` again
+  - Phase 04 remains locked until review remediation is planned and landed
+  - `STATE.md` and `ROADMAP.md` are now brought under managed repo state and reflect the real branch status
+- Remaining blocker:
+  - plan and implement the Phase 03 remediation work that closes the blocking review findings truthfully
 
 ### 2026-04-15 — Phase 3 deferred-core proof pack
 
@@ -1177,7 +1204,7 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ## Phase 3 — Deferred Core
 
-**Status:** `done`
+**Status:** `blocked`
 
 ### Design Prerequisites
 
@@ -1213,30 +1240,38 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
   geometry.
 - `03-11` is complete: Phase 3 carries a registered GBuffer debug-view shader
   path and automated proof surface.
-- `03-12` and `03-13` are complete: deferred-light shaders compile through the
-  catalog, and Stage 12 CPU orchestration proves published GBuffer
-  consumption, SceneColor accumulation, and stencil-bounded local-light
-  routing.
+- `03-12` is complete: deferred-light shaders compile through the catalog and
+  the local-light shader path now avoids the redundant second depth/world
+  reconstruction noted in review.
+- `03-13` landed Stage 12 CPU deferred-light orchestration telemetry and proof
+  seams, but post-execution review found that it still does not mutate
+  `SceneColor` or execute a real stencil-bounded local-light path.
 - `03-14` is complete: the automated proof sweep locks the validation
   contract to the current deferred-core C++ tree and publication vocabulary.
-- `03-15` is complete: the phase closes through `tools/vortex/Verify-DeferredCoreCloseout.ps1`,
-  which gathers source/test/log proof, proves the negative assert path, and
-  records the proof pack in this ledger.
-- RenderDoc runtime validation for deferred-core is explicitly deferred to
-  Phase 4, when Async and DemoShell migrate to Vortex and can produce a
-  truthful runtime frame-10 capture.
+- `03-15` landed a repo-owned closeout runner under `tools/vortex/`, and
+  runtime RenderDoc validation is explicitly deferred to Phase 4, when Async
+  and DemoShell migrate to Vortex and can produce a truthful runtime frame-10
+  capture.
+- Post-execution review invalidated the current closeout claim because the
+  analyzer still proves key Phase 03 outcomes through token/name checks rather
+  than artifact/state validation, and because the underlying Stage 12/velocity
+  behavior is still incomplete.
 
 ### What Is Missing
 
-None for the Phase 3 exit gate. Runtime RenderDoc validation is intentionally
-deferred to Phase 4 migration work rather than claimed from a non-Vortex
-runtime surface.
+- Truthful Stage 12 behavior: `RenderDeferredLighting(...)` still needs to do
+  more than record telemetry counters/booleans before SceneColor accumulation
+  and stencil-bounded local-light routing can be claimed.
+- Truthful velocity completion: the Phase 03 dynamic/skinned/WPO velocity
+  contract still needs real data-path evidence instead of a texture-availability
+  seam.
+- Truthful closeout proof: the current analyzer needs artifact/state-backed
+  checks for the Phase 03 behavioral claims it reports as `pass`.
 
 ### Resume Point
 
-Phase 3 is complete. Resume with Phase 4 migration-critical services and the
-Async/DemoShell Vortex migration work that will unlock the first truthful
-runtime RenderDoc capture.
+Phase 3 is blocked. Resume by planning and landing the Phase 03 remediation
+work that closes the blocking review findings; Phase 4 must not start yet.
 
 ---
 
@@ -1317,3 +1352,5 @@ When implementation resumes, keep these baseline facts explicit:
   package supersedes them.
 - The active production path is `Oxygen.Renderer` + `ForwardPipeline`.
 - Use frame 10 as the RenderDoc baseline capture point.
+
+

@@ -120,6 +120,8 @@ $buildResult = Invoke-LoggedCommand `
     '--target',
     'oxygen-vortex',
     'oxygen-graphics-direct3d12',
+    'Oxygen.Vortex.SceneRendererDeferredCore.Tests',
+    'Oxygen.Vortex.SceneRendererPublication.Tests',
     '--parallel',
     '4'
   ) `
