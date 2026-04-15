@@ -77,6 +77,12 @@ m_gtest_program(
     "SceneRendererPublication_test.cpp"
 )
 
+m_gtest_program(
+  SceneRendererDeferredCore
+  SOURCES
+    "SceneRendererDeferredCore_test.cpp"
+)
+
 add_custom_target(
   Oxygen.Vortex.SceneRendererShell
   DEPENDS
@@ -93,6 +99,12 @@ add_custom_target(
   Oxygen.Vortex.SceneRendererPublication
   DEPENDS
     Oxygen.Vortex.SceneRendererPublication.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.SceneRendererDeferredCore
+  DEPENDS
+    Oxygen.Vortex.SceneRendererDeferredCore.Tests
 )
 
 m_gtest_program(

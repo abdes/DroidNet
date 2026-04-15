@@ -349,6 +349,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   ASSERT_EQ(render_context.frame_views.size(), 3U);
   ASSERT_NE(render_context.GetActiveViewEntry(), nullptr);
   EXPECT_EQ(render_context.current_view.view_id, first_scene_id);
+  EXPECT_EQ(render_context.current_view.prepared_frame.get(), nullptr);
   EXPECT_EQ(render_context.GetActiveViewEntry()->view_id, first_scene_id);
   EXPECT_TRUE(render_context.GetActiveViewEntry()->is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
