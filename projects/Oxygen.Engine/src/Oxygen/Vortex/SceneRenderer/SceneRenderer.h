@@ -31,6 +31,7 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class InitViewsModule;
+class DepthPrepassModule;
 
 class SceneRenderer {
 public:
@@ -116,6 +117,7 @@ private:
   };
   ViewId published_view_id_ { kInvalidViewId };
   std::unique_ptr<InitViewsModule> init_views_;
+  std::unique_ptr<DepthPrepassModule> depth_prepass_;
 };
 
 } // namespace oxygen::vortex

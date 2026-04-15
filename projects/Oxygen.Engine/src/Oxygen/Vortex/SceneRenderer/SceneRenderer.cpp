@@ -15,6 +15,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
 
 namespace oxygen::vortex {
@@ -160,6 +161,7 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
 {
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
     init_views_ = std::make_unique<InitViewsModule>(renderer_);
+    depth_prepass_ = std::make_unique<DepthPrepassModule>(renderer_);
   }
 }
 
@@ -198,6 +200,18 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
 
   // Stage 3: Depth prepass + early velocity
+  if (depth_prepass_ != nullptr) {
+    depth_prepass_->SetConfig(DepthPrepassConfig {
+      .mode = ctx.current_view.depth_prepass_mode,
+      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+    });
+    depth_prepass_->Execute(ctx, scene_textures_);
+    ctx.current_view.depth_prepass_completeness
+      = depth_prepass_->GetCompleteness();
+  } else {
+    ctx.current_view.depth_prepass_completeness
+      = DepthPrePassCompleteness::kDisabled;
+  }
   ApplyStage3DepthPrepassState();
 
   // Stage 4: reserved - GeometryVirtualizationService
@@ -257,6 +271,11 @@ void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
 void SceneRenderer::ApplyStage3DepthPrepassState()
 {
+  if (depth_prepass_ == nullptr
+    || depth_prepass_->GetCompleteness() == DepthPrePassCompleteness::kDisabled) {
+    return;
+  }
+
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kPartialDepth;
   if (scene_textures_.GetVelocity() != nullptr) {
