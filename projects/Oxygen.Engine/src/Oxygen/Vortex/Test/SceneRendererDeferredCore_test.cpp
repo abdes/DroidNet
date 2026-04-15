@@ -267,6 +267,90 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
 }
 
+NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassPromotesGBuffersAtStage10)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = true,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  scene_renderer.ApplyStage3DepthPrepassState();
+  scene_renderer.ApplyStage9BasePassState();
+
+  auto bindings = scene_renderer.GetSceneTextureBindings();
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_NE(bindings.scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.partial_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.velocity_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+
+  scene_renderer.ApplyStage10RebuildState();
+
+  bindings = scene_renderer.GetSceneTextureBindings();
+  EXPECT_NE(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_NE(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_NE(bindings.stencil_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  BasePassRejectsForwardModeDuringPhase3)
+{
+  scene_renderer_->OnFrameStart(frame_context_);
+
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.active_view_index = std::size_t { 0U };
+  context.frame_views.push_back({
+    .view_id = first_view_id_,
+    .is_scene_view = true,
+    .composition_view = {},
+    .shading_mode_override = {},
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
+    .primary_target = {},
+  });
+  context.current_view.view_id = first_view_id_;
+  context.current_view.exposure_view_id = first_view_id_;
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  context.current_view.shading_mode_override = ShadingMode::kForward;
+
+  scene_renderer_->OnRender(context);
+
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+  EXPECT_EQ(scene_renderer_->GetEffectiveShadingMode(context), ShadingMode::kForward);
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
+  EXPECT_NE(bindings.scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.partial_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   DepthPrepassStaysDisabledWithoutDeferredShadingCapability)
 {
