@@ -18,6 +18,7 @@
 #include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/Registry.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Console/api_export.h>
 
 namespace oxygen {
@@ -35,9 +36,12 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Console)
   OXYGEN_MAKE_NON_MOVABLE(Console)
 
-  OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition) -> CVarHandle;
+  OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition,
+    const CVarRegistrationOptions& options = {}) -> CVarHandle;
   OXGN_CONS_NDAPI auto SetCVarFromText(const Registry::SetCVarRequest& request,
     const CommandContext& context = {}) -> ExecutionResult;
+  OXGN_CONS_API auto ApplyStartupPlan(const ConsoleStartupPlan& startup_plan)
+    -> void;
   OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
     -> CommandHandle;
   OXGN_CONS_NDAPI auto Execute(std::string_view line,
@@ -53,8 +57,8 @@ public:
   OXGN_CONS_NDAPI auto CurrentCompletion() const
     -> observer_ptr<const CompletionCandidate>;
   OXGN_CONS_NDAPI auto ApplyLatchedCVars() -> size_t;
-  OXGN_CONS_NDAPI auto SaveArchiveCVars(
-    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveArchiveCVars(const oxygen::PathFinder& path_finder,
+    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic) -> ExecutionResult;
   OXGN_CONS_NDAPI auto LoadArchiveCVars(const oxygen::PathFinder& path_finder,
     const CommandContext& context = CommandContext {
       .source = CommandSource::kConfigFile,

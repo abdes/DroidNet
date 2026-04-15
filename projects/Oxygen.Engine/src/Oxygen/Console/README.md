@@ -19,11 +19,12 @@ Primary entry point: `oxygen::console::Console` in `src/Oxygen/Console/Console.h
 Key operations:
 
 - `RegisterCVar(...)`
+- `ApplyStartupPlan(...)`
 - `RegisterCommand(...)`
 - `Execute(line, context)`
 - `Complete(prefix)` and completion cycling helpers
 - `ApplyLatchedCVars()`
-- `SaveArchiveCVars(path_finder)` / `LoadArchiveCVars(path_finder, context)`
+- `SaveArchiveCVars(path_finder, mode)` / `LoadArchiveCVars(path_finder, context)`
 - `SaveHistory(path_finder)` / `LoadHistory(path_finder)`
 - `ApplyCommandLineOverrides(args, context)`
 - `SetSourcePolicy(...)`, `SetRemoteAllowlist(...)`, `SetAuditHook(...)`
@@ -52,8 +53,32 @@ Each CVar is represented as a `CVarSnapshot`:
 
 - definition metadata
 - current value
+- current value origin
 - optional latched value
 - optional restart value
+
+Value provenance is tracked internally with this precedence ladder:
+
+1. `AppForced`
+2. `RuntimeExplicit`
+3. `StartupExplicit`
+4. `PersistedPreference`
+5. `AppDefault`
+
+Terms:
+
+- `AppDefault`: the app/module baseline default or startup-effective value when it is not an explicit override.
+- `StartupExplicit`: explicit startup intent for this session, typically from CLI/options/bootstrap code.
+- `RuntimeExplicit`: interactive or programmatic runtime mutation after startup.
+- `PersistedPreference`: a cached archive preference loaded from disk.
+- `AppForced`: a host-owned value that must not be overridden or promoted into the archive.
+
+Registration keeps the default path simple:
+
+- `RegisterCVar(definition)` for normal CVars.
+- `RegisterCVar(definition, options)` when a module needs to supply a startup-effective app default or forced value.
+
+Startup-only overrides should be passed through `ConsoleStartupPlan`, not by calling `SetCVarFromText()` during bootstrap.
 
 Handle type:
 
@@ -121,6 +146,21 @@ Formats:
 - CVars: JSON with versioned schema and typed value payloads.
 - History: JSON with versioned schema and command string entries.
 
+Archive load is passive:
+
+- loading records persisted preferences in the registry
+- a persisted value only becomes live if no higher-precedence source already owns the CVar
+- late-registered archived CVars still receive cached startup and persisted values in precedence order
+
+Archive save modes:
+
+- `ArchiveSaveMode::kAutomatic`
+  - persists live values only for `PersistedPreference` and `RuntimeExplicit`
+  - does not promote `StartupExplicit`, `AppDefault`, or `AppForced`
+- `ArchiveSaveMode::kExplicit`
+  - persists the current live value for all origins except `AppForced`
+  - `AppForced` values remain non-promotable
+
 Runtime logging:
 
 - `INFO` on successful save/load.
@@ -152,9 +192,11 @@ Remote hardening:
 
 Recommended orchestration (already used by `AsyncEngine`):
 
-1. Register engine/service/module console bindings at startup.
-2. Load persisted archive/history.
-3. At deterministic frame boundary (FrameStart):
+1. Register engine-owned CVars/commands.
+2. Apply `ConsoleStartupPlan`.
+3. Load persisted archive preferences.
+4. Register service/module console bindings.
+5. At deterministic frame boundary (FrameStart):
    `ApplyLatchedCVars()` then apply module-owned runtime CVars.
 
 Inversion-of-control pattern for modules:
@@ -185,11 +227,20 @@ Console console {};
 (void)console.RegisterCVar(CVarDefinition {
   .name = "ngin.target_fps",
   .help = "Target FPS (0 = uncapped)",
-  .default_value = int64_t { 120 },
+  .default_value = int64_t { 0 },
   .flags = CVarFlags::kArchive,
   .min_value = 0.0,
   .max_value = 1000.0,
+}, CVarRegistrationOptions {
+  .initial = StampedCVarValue {
+    .value = int64_t { 120 },
+    .origin = CVarValueOrigin::kAppDefault,
+  },
 });
+
+ConsoleStartupPlan startup_plan {};
+startup_plan.Set("ngin.target_fps", int64_t { 30 });
+console.ApplyStartupPlan(startup_plan);
 
 (void)console.RegisterCommand(CommandDefinition {
   .name = "ngin.ping",

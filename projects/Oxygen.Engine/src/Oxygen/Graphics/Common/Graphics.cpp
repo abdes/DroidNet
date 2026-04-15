@@ -343,6 +343,8 @@ auto Graphics::PresentSurfaces(
 
 auto Graphics::SetVSyncEnabled([[maybe_unused]] const bool enabled) -> void { }
 
+auto Graphics::IsVSyncEnabled() const noexcept -> bool { return true; }
+
 auto Graphics::RegisterConsoleBindings(
   const observer_ptr<console::Console> console) noexcept -> void
 {
@@ -355,6 +357,11 @@ auto Graphics::RegisterConsoleBindings(
     .help = "Enable graphics VSync",
     .default_value = true,
     .flags = console::CVarFlags::kArchive,
+  }, console::CVarRegistrationOptions {
+    .initial = console::StampedCVarValue {
+      .value = IsVSyncEnabled(),
+      .origin = console::CVarValueOrigin::kAppDefault,
+    },
   });
 
   (void)console->RegisterCommand(console::CommandDefinition {

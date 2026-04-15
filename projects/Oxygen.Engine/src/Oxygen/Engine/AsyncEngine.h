@@ -5,8 +5,6 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
-#include <algorithm>
-#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -62,7 +60,8 @@ class AsyncEngine final : public co::LiveObject,
   OXYGEN_TYPED(AsyncEngine)
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
-    std::weak_ptr<Graphics> graphics, EngineConfig config = {}) noexcept;
+    std::weak_ptr<Graphics> graphics, EngineConfig config = {},
+    console::ConsoleStartupPlan startup_plan = {}) noexcept;
 
   OXGN_NGIN_API ~AsyncEngine() override;
 
@@ -255,11 +254,12 @@ private:
 
   // Detached services (Category D)
   auto InitializeDetachedServices() -> void;
-  auto InitializeConsoleRuntime() -> void;
+  auto InitializeConsoleRuntime(const console::ConsoleStartupPlan& startup_plan)
+    -> void;
   auto RegisterEngineConsoleBindings() -> void;
   auto RegisterServiceConsoleBindings() -> void;
   auto LoadPersistedConsoleCVars() -> void;
-  auto SavePersistedConsoleCVars() const -> void;
+  auto SavePersistedConsoleCVars() -> void;
   auto LoadPersistedConsoleHistory() -> void;
   auto SavePersistedConsoleHistory() const -> void;
   auto ApplyEngineOwnedConsoleCVars() -> void;

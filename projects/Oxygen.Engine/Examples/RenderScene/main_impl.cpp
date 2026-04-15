@@ -358,6 +358,16 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       !app.gfx_weak.expired()); // Expect a valid graphics backend, or abort
     app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
 
+    oxygen::console::ConsoleStartupPlan startup_cvars {};
+    oxygen::examples::cli::SeedCommonRuntimeStartupCVars(
+      context, target_fps, enable_vsync, startup_cvars);
+    if (context.ovm.HasOption("hot-reload")) {
+      startup_cvars.Set("ngin.scripting.hot_reload", hot_reload);
+    }
+    if (context.ovm.HasOption("verify-hashes")) {
+      startup_cvars.Set("cntt.verify_content_hashes", verify_hashes);
+    }
+
     app.engine = std::make_shared<AsyncEngine>(
       app.platform,
       app.gfx_weak,
@@ -375,30 +385,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .timing = {
           .pacing_safety_margin = 250us,
         }
-      }
+      },
+      startup_cvars
     );
-
-    if (context.ovm.HasOption("fps")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "ngin.target_fps",
-        .text = std::to_string(target_fps),
-      });
-    }
-    if (context.ovm.HasOption("hot-reload")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "ngin.scripting.hot_reload",
-        .text = hot_reload ? "true" : "false",
-      });
-    }
-    if (context.ovm.HasOption("vsync")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "gfx.vsync",
-        .text = enable_vsync ? "true" : "false",
-      });
-      if (const auto gfx = app.gfx_weak.lock()) {
-        gfx->SetVSyncEnabled(enable_vsync);
-      }
-    }
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 

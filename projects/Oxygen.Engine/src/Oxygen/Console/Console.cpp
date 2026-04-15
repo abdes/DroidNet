@@ -15,15 +15,21 @@ Console::Console(const size_t history_capacity)
 {
 }
 
-auto Console::RegisterCVar(CVarDefinition definition) -> CVarHandle
+auto Console::RegisterCVar(CVarDefinition definition,
+  const CVarRegistrationOptions& options) -> CVarHandle
 {
-  return registry_.RegisterCVar(std::move(definition));
+  return registry_.RegisterCVar(std::move(definition), options);
 }
 
 auto Console::SetCVarFromText(const Registry::SetCVarRequest& request,
   const CommandContext& context) -> ExecutionResult
 {
   return registry_.SetCVarFromText(request, context);
+}
+
+auto Console::ApplyStartupPlan(const ConsoleStartupPlan& startup_plan) -> void
+{
+  registry_.ApplyStartupPlan(startup_plan);
 }
 
 auto Console::RegisterCommand(CommandDefinition definition) -> CommandHandle
@@ -70,10 +76,10 @@ auto Console::ApplyLatchedCVars() -> size_t
   return registry_.ApplyLatchedCVars();
 }
 
-auto Console::SaveArchiveCVars(const oxygen::PathFinder& path_finder) const
-  -> ExecutionResult
+auto Console::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
+  const ArchiveSaveMode mode) -> ExecutionResult
 {
-  return registry_.SaveArchiveCVars(path_finder);
+  return registry_.SaveArchiveCVars(path_finder, mode);
 }
 
 auto Console::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
