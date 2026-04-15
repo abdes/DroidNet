@@ -37,11 +37,14 @@ public:
   OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
   OXGN_VRTX_API void SetConfig(const BasePassConfig& config);
   [[nodiscard]] OXGN_VRTX_API auto HasPublishedBasePassProducts() const -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto HasCompletedVelocityForDynamicGeometry() const
+    -> bool;
 
 private:
   Renderer& renderer_;
   BasePassConfig config_ {};
   bool has_published_base_pass_products_ { false };
+  bool has_completed_velocity_for_dynamic_geometry_ { false };
   std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
 };
 

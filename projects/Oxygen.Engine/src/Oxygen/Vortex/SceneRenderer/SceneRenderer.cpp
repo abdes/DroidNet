@@ -242,7 +242,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .shading_mode = shading_mode,
     });
     base_pass_->Execute(ctx, scene_textures_);
-    if (base_pass_->HasPublishedBasePassProducts()) {
+    if (base_pass_->HasPublishedBasePassProducts()
+      && base_pass_->HasCompletedVelocityForDynamicGeometry()) {
       ApplyStage9BasePassState();
     }
   }
@@ -306,6 +307,12 @@ void SceneRenderer::ApplyStage9BasePassState()
 {
   // Stage 9 writes deferred attachments, but Stage 10 remains the first
   // bindless publication boundary for SceneColor and the active GBuffers.
+  if (scene_textures_.GetVelocity() == nullptr) {
+    return;
+  }
+
+  setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
+  RefreshSceneTextureBindings();
 }
 
 void SceneRenderer::ApplyStage10RebuildState()
