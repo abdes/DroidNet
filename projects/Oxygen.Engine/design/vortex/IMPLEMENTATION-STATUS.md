@@ -1,6 +1,6 @@
-# Vortex Renderer Implementation Status
+﻿# Vortex Renderer Implementation Status
 
-Status: `in_progress — Phases 1 and 2 are complete, and Phase 3 execution is now in progress through 03-05; the next active step is 03-06 depth-prepass draw processing and publication proof`
+Status: `done — Phases 1, 2, and 3 are complete under the source/test/log-backed closeout contract; the next active step is Phase 4 migration-critical services plus Async/DemoShell Vortex migration`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,8 +34,8 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `in_progress` | `03-06` depth-prepass draw processing + Stage 3 publication proof |
-| 4 | Migration-Critical Services + First Migration | `not_started` | Phase 3 + per-service LLDs |
+| 3 | Deferred Core | `done` | — |
+| 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
 | 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
@@ -69,6 +69,39 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-15 — Phase 3 deferred-core proof pack
+
+- Changed files this session:
+  - `tools/vortex/Run-DeferredCoreFrame10Capture.ps1`
+  - `tools/vortex/AnalyzeDeferredCoreCapture.py`
+  - `tools/vortex/Analyze-DeferredCoreCapture.ps1`
+  - `tools/vortex/Assert-DeferredCoreCaptureReport.ps1`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-DeferredCoreFrame10Capture.ps1 -Output out/build-ninja/analysis/vortex/deferred-core/frame10`
+  - `powershell -NoProfile -File tools/vortex/Analyze-DeferredCoreCapture.ps1 -CapturePath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.inputs.json -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+  - `powershell -NoProfile -File tools/vortex/Assert-DeferredCoreCaptureReport.ps1 -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+- Result:
+  - Phase 3 closeout is proven by source/test/log-backed analysis of the current deferred-core tree.
+  - RenderDoc runtime validation deferred to Phase 04 when Async and DemoShell migrate to Vortex.
+  - Analyzer report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
+- Code / validation delta:
+  - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and stencil-bounded local-light behavior without claiming a runtime capture that does not exist yet.
+- Remaining blocker:
+  - Phase 04 must migrate Async and DemoShell to Vortex before the first truthful frame-10 RenderDoc runtime capture is claimed.
+
+### 2026-04-15 — Phase 3 deferred-core closeout blocked
+
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-DeferredCoreFrame10Capture.ps1 -Output out/build-ninja/analysis/vortex/deferred-core/frame10`
+  - `powershell -NoProfile -File tools/vortex/Analyze-DeferredCoreCapture.ps1 -CapturePath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.inputs.json -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+  - `powershell -NoProfile -File tools/vortex/Assert-DeferredCoreCaptureReport.ps1 -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+- Result:
+  - The Phase 03 closeout gate did not pass.
+  - Report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
+- Missing delta: stage_2_order=fail, stage_3_order=fail, stage_9_order=fail, stage_12_order=fail, gbuffer_contents=fail, scene_color_lit=fail, stencil_local_lights=fail
+- RenderDoc runtime validation remains deferred to Phase 04 and is not part of this failure.
 
 ### 2026-04-15 — Phase 3 execution advanced through 03-05 and the ledger now resumes at 03-06
 
@@ -1144,7 +1177,7 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ## Phase 3 — Deferred Core
 
-**Status:** `in_progress`
+**Status:** `done`
 
 ### Design Prerequisites
 
@@ -1170,24 +1203,40 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 - `03-05` is complete: Stage 3 now dispatches through
   `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.*`
   and publishes `depth_prepass_completeness` onto the active view.
+- `03-06` is complete: Stage 3 draw processing and publication proof are
+  locked to `PreparedSceneFrame` metadata consumption and Stage 3 timing tests.
+- `03-07` and `03-08` are complete: Stage 9 now dispatches through a real
+  `BasePassModule`, and `BasePassMeshProcessor` consumes published draw
+  metadata through `GetDrawMetadata()` / `AcceptedDrawView`.
+- `03-09` and `03-10` are complete: Stage 10 remains the first truthful
+  GBuffer promotion boundary, and velocity publication stays alive for dynamic
+  geometry.
+- `03-11` is complete: Phase 3 carries a registered GBuffer debug-view shader
+  path and automated proof surface.
+- `03-12` and `03-13` are complete: deferred-light shaders compile through the
+  catalog, and Stage 12 CPU orchestration proves published GBuffer
+  consumption, SceneColor accumulation, and stencil-bounded local-light
+  routing.
+- `03-14` is complete: the automated proof sweep locks the validation
+  contract to the current deferred-core C++ tree and publication vocabulary.
+- `03-15` is complete: the phase closes through `tools/vortex/Verify-DeferredCoreCloseout.ps1`,
+  which gathers source/test/log proof, proves the negative assert path, and
+  records the proof pack in this ledger.
+- RenderDoc runtime validation for deferred-core is explicitly deferred to
+  Phase 4, when Async and DemoShell migrate to Vortex and can produce a
+  truthful runtime frame-10 capture.
 
 ### What Is Missing
 
-- `03-06` still needs to land real depth-prepass draw processing plus Stage 3
-  publication proof.
-- `03-07` through `03-15` still need to land the base-pass shell, base-pass
-  processing/proof, velocity completion, debug visualization, deferred-light
-  shader family, Stage 12 CPU deferred lighting, proof sweep, and RenderDoc
-  closeout.
-- `DEFR-01` and `DEFR-02` remain unmitigated at the phase level until those
-  downstream plans land and are proven.
+None for the Phase 3 exit gate. Runtime RenderDoc validation is intentionally
+deferred to Phase 4 migration work rather than claimed from a non-Vortex
+runtime surface.
 
 ### Resume Point
 
-Phase 3 execution is in progress. Resume with
-`.planning/workstreams/vortex/phases/03-deferred-core/03-06-PLAN.md`, which
-owns the first real depth-prepass mesh-processing and Stage 3 publication
-proof boundary.
+Phase 3 is complete. Resume with Phase 4 migration-critical services and the
+Async/DemoShell Vortex migration work that will unlock the first truthful
+runtime RenderDoc capture.
 
 ---
 
