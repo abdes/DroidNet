@@ -215,7 +215,10 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     ctx.current_view.depth_prepass_completeness
       = DepthPrePassCompleteness::kDisabled;
   }
-  ApplyStage3DepthPrepassState();
+  if (ctx.current_view.depth_prepass_completeness
+    == DepthPrePassCompleteness::kComplete) {
+    ApplyStage3DepthPrepassState();
+  }
 
   // Stage 4: reserved - GeometryVirtualizationService
 
@@ -274,10 +277,6 @@ void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
 void SceneRenderer::ApplyStage3DepthPrepassState()
 {
-  if (depth_prepass_ == nullptr || !depth_prepass_->HasPublishedDepthProducts()) {
-    return;
-  }
-
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kPartialDepth;
   if (scene_textures_.GetVelocity() != nullptr) {

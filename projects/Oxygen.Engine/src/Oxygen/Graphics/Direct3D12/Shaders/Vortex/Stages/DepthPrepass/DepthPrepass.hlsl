@@ -24,6 +24,13 @@ struct DepthPrepassVSOutput
     float2 uv : TEXCOORD0;
 };
 
+float2 EncodeStaticVelocity(float4 clip_position)
+{
+    const float safe_w = max(abs(clip_position.w), 1.0e-5f);
+    const float2 ndc_position = clip_position.xy / safe_w;
+    return ndc_position - ndc_position;
+}
+
 [shader("vertex")]
 DepthPrepassVSOutput DepthPrepassVS(
     uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
@@ -71,7 +78,7 @@ DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 #endif
 
     DepthPrepassPSOutput output;
-    output.velocity = 0.0f.xx;
+    output.velocity = EncodeStaticVelocity(input.position);
     return output;
 }
 #else

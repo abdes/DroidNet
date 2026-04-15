@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -14,6 +16,7 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+class DepthPrepassMeshProcessor;
 
 struct DepthPrepassConfig {
   DepthPrePassMode mode { DepthPrePassMode::kOpaqueAndMasked };
@@ -42,6 +45,7 @@ private:
   DepthPrepassConfig config_ {};
   DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
   bool has_published_depth_products_ { false };
+  std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
 };
 
 } // namespace oxygen::vortex
