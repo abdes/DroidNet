@@ -9,28 +9,12 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/AcceptedDrawView.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
 
 namespace {
-
-auto ShouldIncludePass(const PassMask mask) noexcept -> bool
-{
-  return mask.IsSet(PassMaskBit::kOpaque) || mask.IsSet(PassMaskBit::kMasked);
-}
-
-auto ResolveDrawCount(const PreparedSceneFrame& prepared_scene) noexcept
-  -> std::uint32_t
-{
-  if (!prepared_scene.draw_metadata_bytes.empty()) {
-    return static_cast<std::uint32_t>(
-      prepared_scene.draw_metadata_bytes.size() / sizeof(DrawMetadata));
-  }
-
-  return static_cast<std::uint32_t>(prepared_scene.render_items.size());
-}
 
 auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
   const PreparedSceneFrame& prepared_scene, const DrawMetadata& metadata,
@@ -128,49 +112,23 @@ void BasePassMeshProcessor::BuildDrawCommands(
     return;
   }
 
-  const auto draw_count = ResolveDrawCount(prepared_scene);
-  if (draw_count == 0U) {
-    return;
-  }
-
-  if (!prepared_scene.draw_metadata_bytes.empty()) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    const auto* draw_records_ptr = reinterpret_cast<const DrawMetadata*>(
-      prepared_scene.draw_metadata_bytes.data());
-    const auto draw_records
-      = std::span<const DrawMetadata>(draw_records_ptr, draw_count);
-
-    if (!prepared_scene.partitions.empty()) {
-      for (const auto& partition : prepared_scene.partitions) {
-        if (!ShouldIncludePass(partition.pass_mask)) {
-          continue;
-        }
-
-        const auto begin
-          = (std::min)(partition.begin, static_cast<std::uint32_t>(draw_count));
-        const auto end
-          = (std::min)(partition.end, static_cast<std::uint32_t>(draw_count));
-        for (auto draw_index = begin; draw_index < end; ++draw_index) {
-          AppendMetadataCommand(draw_commands_, prepared_scene,
-            draw_records[draw_index], draw_index, write_velocity);
-        }
-      }
-    } else {
-      for (std::uint32_t draw_index = 0U; draw_index < draw_count; ++draw_index) {
-        const auto& metadata = draw_records[draw_index];
-        if (!ShouldIncludePass(metadata.flags)) {
-          continue;
-        }
-        AppendMetadataCommand(
-          draw_commands_, prepared_scene, metadata, draw_index, write_velocity);
-      }
+  const auto draw_metadata = prepared_scene.GetDrawMetadata();
+  if (!draw_metadata.empty()) {
+    const auto accept_mask = PassMask {
+      PassMaskBit::kOpaque,
+      PassMaskBit::kMasked,
+    };
+    for (const auto [metadata, draw_index] :
+      AcceptedDrawView(prepared_scene, accept_mask)) {
+      AppendMetadataCommand(
+        draw_commands_, prepared_scene, *metadata, draw_index, write_velocity);
     }
-
     SortDrawCommands(draw_commands_);
     return;
   }
 
-  for (std::uint32_t draw_index = 0U; draw_index < draw_count; ++draw_index) {
+  for (std::uint32_t draw_index = 0U;
+    draw_index < prepared_scene.render_items.size(); ++draw_index) {
     AppendRenderItemCommand(
       draw_commands_, prepared_scene, draw_index, write_velocity);
   }

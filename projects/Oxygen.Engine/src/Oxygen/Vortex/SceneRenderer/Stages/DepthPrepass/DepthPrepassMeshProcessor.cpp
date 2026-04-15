@@ -9,19 +9,12 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/AcceptedDrawView.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
 
 namespace {
-
-auto ShouldIncludePass(
-  const PassMask mask, const bool include_masked) noexcept -> bool
-{
-  return mask.IsSet(PassMaskBit::kOpaque)
-    || (include_masked && mask.IsSet(PassMaskBit::kMasked));
-}
 
 auto AppendDrawCommand(std::vector<DrawCommand>& draw_commands,
   const DrawMetadata& metadata, const std::uint32_t draw_index) -> void
@@ -57,39 +50,16 @@ void DepthPrepassMeshProcessor::BuildDrawCommands(
     return;
   }
 
-  const auto draw_count
-    = prepared_scene.draw_metadata_bytes.size() / sizeof(DrawMetadata);
-  if (draw_count == 0U) {
+  const auto accept_mask = include_masked
+    ? PassMask { PassMaskBit::kOpaque, PassMaskBit::kMasked }
+    : PassMask { PassMaskBit::kOpaque };
+  const auto accepted_draws = AcceptedDrawView(prepared_scene, accept_mask);
+  if (accepted_draws.empty()) {
     return;
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  const auto* draw_records = reinterpret_cast<const DrawMetadata*>(
-    prepared_scene.draw_metadata_bytes.data());
-
-  if (!prepared_scene.partitions.empty()) {
-    for (const auto& partition : prepared_scene.partitions) {
-      if (!ShouldIncludePass(partition.pass_mask, include_masked)) {
-        continue;
-      }
-
-      const auto begin = (std::min)(partition.begin, static_cast<std::uint32_t>(draw_count));
-      const auto end = (std::min)(partition.end, static_cast<std::uint32_t>(draw_count));
-      for (auto draw_index = begin; draw_index < end; ++draw_index) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-        AppendDrawCommand(draw_commands_, draw_records[draw_index], draw_index);
-      }
-    }
-    return;
-  }
-
-  for (std::uint32_t draw_index = 0U; draw_index < draw_count; ++draw_index) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-    const auto& metadata = draw_records[draw_index];
-    if (!ShouldIncludePass(metadata.flags, include_masked)) {
-      continue;
-    }
-    AppendDrawCommand(draw_commands_, metadata, draw_index);
+  for (const auto [metadata, draw_index] : accepted_draws) {
+    AppendDrawCommand(draw_commands_, *metadata, draw_index);
   }
 }
 

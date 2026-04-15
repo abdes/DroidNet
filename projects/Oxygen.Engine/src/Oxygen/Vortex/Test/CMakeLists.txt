@@ -60,6 +60,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  AcceptedDrawView
+  SOURCES
+    "Types/AcceptedDrawView_test.cpp"
+)
+
+m_gtest_program(
   SceneRendererShell
   SOURCES
     "SceneRendererShell_test.cpp"
