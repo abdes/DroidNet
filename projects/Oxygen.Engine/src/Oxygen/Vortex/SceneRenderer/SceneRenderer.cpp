@@ -13,7 +13,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
 
 namespace oxygen::vortex {
 
@@ -156,7 +158,12 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   , scene_textures_(gfx, config)
   , default_shading_mode_(default_shading_mode)
 {
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
+    init_views_ = std::make_unique<InitViewsModule>(renderer_);
+  }
 }
+
+SceneRenderer::~SceneRenderer() = default;
 
 void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
 {
@@ -179,6 +186,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     = ResolveShadingModeForCurrentView(ctx);
 
   // Stage 2: InitViews
+  if (init_views_ != nullptr) {
+    init_views_->Execute(ctx, scene_textures_);
+  }
 
   // Stage 3: Depth prepass + early velocity
   ApplyStage3DepthPrepassState();

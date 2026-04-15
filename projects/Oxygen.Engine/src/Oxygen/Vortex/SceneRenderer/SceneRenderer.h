@@ -30,6 +30,7 @@ namespace oxygen::vortex {
 
 struct RenderContext;
 class Renderer;
+class InitViewsModule;
 
 class SceneRenderer {
 public:
@@ -37,7 +38,7 @@ public:
 
   OXGN_VRTX_API explicit SceneRenderer(Renderer& renderer, Graphics& gfx,
     SceneTexturesConfig config, ShadingMode default_shading_mode);
-  OXGN_VRTX_API ~SceneRenderer() = default;
+  OXGN_VRTX_API ~SceneRenderer();
 
   SceneRenderer(const SceneRenderer&) = delete;
   auto operator=(const SceneRenderer&) -> SceneRenderer& = delete;
@@ -114,6 +115,7 @@ private:
     kInvalidShaderVisibleIndex
   };
   ViewId published_view_id_ { kInvalidViewId };
+  std::unique_ptr<InitViewsModule> init_views_;
 };
 
 } // namespace oxygen::vortex
