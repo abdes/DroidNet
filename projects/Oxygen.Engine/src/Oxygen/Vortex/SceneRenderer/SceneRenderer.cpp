@@ -242,11 +242,13 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .shading_mode = shading_mode,
     });
     base_pass_->Execute(ctx, scene_textures_);
-    ApplyStage9BasePassState();
+    if (base_pass_->HasPublishedBasePassProducts()) {
+      ApplyStage9BasePassState();
+    }
   }
 
   // Stage 10: Rebuild scene textures with GBuffers
-  if (base_pass_ != nullptr) {
+  if (base_pass_ != nullptr && base_pass_->HasPublishedBasePassProducts()) {
     ApplyStage10RebuildState();
   }
 
