@@ -662,9 +662,8 @@ void SceneRenderer::RenderDeferredLighting(
 
   const auto visitor = [this](const scene::ConstVisitedNode& visited,
                          const bool dry_run) -> scene::VisitResult {
-    if (dry_run) {
-      return scene::VisitResult::kContinue;
-    }
+    // SceneVisitorT requires the dry_run parameter; kPreOrder never sets it.
+    static_cast<void>(dry_run);
 
     const auto& node = *visited.node_impl;
     if (node.HasComponent<scene::DirectionalLight>()) {
@@ -673,9 +672,7 @@ void SceneRenderer::RenderDeferredLighting(
         ++deferred_lighting_state_.directional_light_count;
         deferred_lighting_state_.accumulated_into_scene_color = true;
       }
-    }
-
-    if (node.HasComponent<scene::PointLight>()) {
+    } else if (node.HasComponent<scene::PointLight>()) {
       const auto& light = node.GetComponent<scene::PointLight>();
       if (light.Common().affects_world) {
         ++deferred_lighting_state_.point_light_count;
@@ -685,9 +682,7 @@ void SceneRenderer::RenderDeferredLighting(
         deferred_lighting_state_.used_stencil_bounded_local_lights = true;
         deferred_lighting_state_.accumulated_into_scene_color = true;
       }
-    }
-
-    if (node.HasComponent<scene::SpotLight>()) {
+    } else if (node.HasComponent<scene::SpotLight>()) {
       const auto& light = node.GetComponent<scene::SpotLight>();
       if (light.Common().affects_world) {
         ++deferred_lighting_state_.spot_light_count;
