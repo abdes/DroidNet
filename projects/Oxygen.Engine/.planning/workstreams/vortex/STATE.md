@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Vortex Initial Release
 current_phase: 03
 current_phase_name: deferred-core
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-04-15T12:07:23.7084214+04:00"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-04-15T12:12:26.0264216+04:00"
 last_activity: 2026-04-15
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 59
-  completed_plans: 28
-  percent: 47
+  completed_plans: 29
+  percent: 49
 ---
 
 # Project State
@@ -33,13 +33,13 @@ through real runtime migration and verified rendering behavior.
 **Current Phase Name:** deferred-core
 Phase: 03 (deferred-core) — EXECUTING
 **Total Plans in Phase:** 15
-**Current Plan:** 5
-Plan: 5 of 15
+**Current Plan:** 6
+Plan: 6 of 15
 **Status:** Executing Phase 03
 **Last Activity:** 2026-04-15
-**Last Activity Description:** Completed plan 03-04 and advanced execution to 03-05
+**Last Activity Description:** Completed plan 03-05 and advanced execution to 03-06
 
-Progress: [█████░░░░░] 47%
+Progress: [█████░░░░░] 49%
 
 ## Accumulated Context
 
@@ -90,6 +90,13 @@ Progress: [█████░░░░░] 47%
   InitViews output at Stage 2, which is the handoff later deferred-core stages
   are expected to consume.
 
+- Phase 03-05 turns Stage 3 into a real `DepthPrepassModule` shell with
+  explicit config and completeness tracking instead of a fake flag-only helper.
+
+- Depth-prepass completeness now propagates through
+  `ctx.current_view.depth_prepass_completeness`, while real Stage 3 draw
+  processing remains deferred to the next plan.
+
 ### Pending Todos
 
 None yet.
@@ -112,5 +119,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Completed 03-04-PLAN.md
-Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-05-PLAN.md
+Stopped at: Completed 03-05-PLAN.md
+Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-06-PLAN.md
