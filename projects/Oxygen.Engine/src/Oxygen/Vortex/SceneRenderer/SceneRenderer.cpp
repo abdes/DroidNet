@@ -186,8 +186,15 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     = ResolveShadingModeForCurrentView(ctx);
 
   // Stage 2: InitViews
+  ctx.current_view.prepared_frame.reset(nullptr);
   if (init_views_ != nullptr) {
     init_views_->Execute(ctx, scene_textures_);
+    if (ctx.current_view.view_id != kInvalidViewId) {
+      ctx.current_view.prepared_frame
+        = observer_ptr<const PreparedSceneFrame> {
+          init_views_->GetPreparedSceneFrame(ctx.current_view.view_id)
+        };
+    }
   }
 
   // Stage 3: Depth prepass + early velocity
