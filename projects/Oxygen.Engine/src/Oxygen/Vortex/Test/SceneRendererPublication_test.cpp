@@ -345,7 +345,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  StageMilestonesRefreshBindingsProgressivelyInsteadOfAllAtOnce)
+  Stage3PublicationKeepsSceneColorAndGBuffersInvalidUntilStage10)
 {
   auto config = SceneTexturesConfig {
     .extent = { 96U, 54U },
@@ -395,7 +395,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
-  FinalVelocityBindingStaysValidAfterStage9AndStage10)
+  Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive)
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {

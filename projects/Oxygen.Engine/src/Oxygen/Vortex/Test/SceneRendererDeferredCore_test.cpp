@@ -607,7 +607,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto depth_prepass_mesh_processor_source
     = ReadTextFile(depth_prepass_mesh_processor_path);
   EXPECT_TRUE(ContainsAll(depth_prepass_mesh_processor_source,
-    { "AcceptedDrawView", "GetDrawMetadata" }));
+    { "AcceptedDrawView", "draw_metadata_bytes" }));
 
   const auto base_pass_mesh_processor_source
     = ReadTextFile(base_pass_mesh_processor_path);
