@@ -73,6 +73,11 @@ auto SourceRoot() -> std::filesystem::path
     .parent_path();
 }
 
+auto WorkspaceRoot() -> std::filesystem::path
+{
+  return SourceRoot().parent_path().parent_path();
+}
+
 auto ContainsAll(
   std::string_view haystack, std::initializer_list<std::string_view> needles)
   -> bool
@@ -529,6 +534,85 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
       "DEBUG_WORLD_NORMALS",
       "DEBUG_ROUGHNESS",
       "DEBUG_METALNESS" }));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  AutomatedProofSweepMatchesCurrentPhase3CppSurface)
+{
+  const auto workspace_root = WorkspaceRoot();
+  const auto validation_path = workspace_root
+    / ".planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md";
+  const auto source_root = SourceRoot();
+  const auto publication_test_path
+    = source_root / "Vortex/Test/SceneRendererPublication_test.cpp";
+  const auto scene_renderer_path
+    = source_root / "Vortex/SceneRenderer/SceneRenderer.cpp";
+  const auto init_views_path
+    = source_root / "Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp";
+  const auto depth_prepass_mesh_processor_path = source_root
+    / "Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.cpp";
+  const auto base_pass_mesh_processor_path
+    = source_root / "Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.cpp";
+
+  EXPECT_TRUE(std::filesystem::exists(validation_path))
+    << validation_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(publication_test_path))
+    << publication_test_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(scene_renderer_path))
+    << scene_renderer_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(init_views_path))
+    << init_views_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(depth_prepass_mesh_processor_path))
+    << depth_prepass_mesh_processor_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(base_pass_mesh_processor_path))
+    << base_pass_mesh_processor_path.generic_string();
+
+  const auto validation_source = ReadTextFile(validation_path);
+  EXPECT_TRUE(ContainsAll(validation_source,
+    { "03-14-01",
+      "ctest --test-dir out/build-ninja -C Debug --output-on-failure -R",
+      "^Oxygen\\\\.Vortex\\\\.",
+      "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+      "tools/cli/oxytidy.ps1",
+      "src/Oxygen/Vortex/RenderContext.h",
+      "src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h",
+      "src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp",
+      "src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp",
+      "src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.cpp",
+      "src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.cpp",
+      "src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp",
+      "src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp" }));
+
+  const auto publication_source = ReadTextFile(publication_test_path);
+  EXPECT_TRUE(ContainsAll(publication_source,
+    { "Stage3PublicationKeepsSceneColorAndGBuffersInvalidUntilStage10",
+      "Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",
+      "ApplyStage3DepthPrepassState",
+      "ApplyStage10RebuildState",
+      "scene_color_srv",
+      "gbuffer_srvs[0]",
+      "velocity_srv" }));
+
+  const auto scene_renderer_source = ReadTextFile(scene_renderer_path);
+  EXPECT_TRUE(ContainsAll(scene_renderer_source,
+    { "init_views_->Execute(ctx, scene_textures_)",
+      "depth_prepass_->Execute(ctx, scene_textures_)",
+      "base_pass_->Execute(ctx, scene_textures_)",
+      "RenderDeferredLighting(ctx, scene_textures_)" }));
+
+  const auto init_views_source = ReadTextFile(init_views_path);
+  EXPECT_TRUE(ContainsAll(
+    init_views_source, { "BeginFrameCollection", "PrepareView", "FinalizeView" }));
+
+  const auto depth_prepass_mesh_processor_source
+    = ReadTextFile(depth_prepass_mesh_processor_path);
+  EXPECT_TRUE(ContainsAll(depth_prepass_mesh_processor_source,
+    { "AcceptedDrawView", "GetDrawMetadata" }));
+
+  const auto base_pass_mesh_processor_source
+    = ReadTextFile(base_pass_mesh_processor_path);
+  EXPECT_TRUE(
+    ContainsAll(base_pass_mesh_processor_source, { "AcceptedDrawView", "GetDrawMetadata" }));
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
