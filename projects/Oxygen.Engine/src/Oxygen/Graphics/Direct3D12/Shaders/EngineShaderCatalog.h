@@ -286,11 +286,12 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/DepthPrepass/DepthPrepass.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DepthPrepassPS" }, EntryPoint { .type=kVertex, .name="DepthPrepassVS" } },
-    .permutations=std::array<std::string_view, 1> { "HAS_VELOCITY" }
+    .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
   },
   ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } }
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
@@ -500,8 +501,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardDebug_PS DEBUG_*: 4 each (required debug define x ALPHA_TEST x
 //   OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
-// - VortexDepthPrepass: 4 (2 entries x HAS_VELOCITY on/off)
-// - VortexBasePassGBuffer: 2
+// - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
+// - VortexBasePassGBuffer: 4 (2 entries x ALPHA_TEST)
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry

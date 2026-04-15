@@ -254,6 +254,7 @@ protected:
       // Current contracts:
       // - SamplerDescriptorHeap[0] = default linear wrap sampler
       // - SamplerDescriptorHeap[1] = shadow comparison sampler
+      // - SamplerDescriptorHeap[2] = point clamp sampler for depth/GBuffer reads
       if (!default_sampler_.IsValid()) {
         default_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
@@ -311,6 +312,33 @@ protected:
             shadow_comparison_sampler_.GetBindlessHandle().get());
         }
       }
+
+      if (!point_clamp_sampler_.IsValid()) {
+        point_clamp_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
+        if (point_clamp_sampler_.IsValid()) {
+          D3D12_SAMPLER_DESC sampler_desc {};
+          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.MipLODBias = 0.0f;
+          sampler_desc.MaxAnisotropy = 1;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+          sampler_desc.BorderColor[0] = 0.0f;
+          sampler_desc.BorderColor[1] = 0.0f;
+          sampler_desc.BorderColor[2] = 0.0f;
+          sampler_desc.BorderColor[3] = 0.0f;
+          sampler_desc.MinLOD = 0.0f;
+          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+
+          device->CreateSampler(
+            &sampler_desc, allocator_->GetCpuHandle(point_clamp_sampler_));
+          DLOG_F(2, "Point clamp sampler created at bindless index {}",
+            point_clamp_sampler_.GetBindlessHandle().get());
+        }
+      }
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
         ex.what());
@@ -321,6 +349,7 @@ private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
   oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
   oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_ {};
 };
 
 } // namespace

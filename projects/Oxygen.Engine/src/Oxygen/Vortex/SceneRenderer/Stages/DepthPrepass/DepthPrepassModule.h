@@ -35,11 +35,13 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetCompleteness() const
     -> DepthPrePassCompleteness;
+  [[nodiscard]] OXGN_VRTX_API auto HasPublishedDepthProducts() const -> bool;
 
 private:
   Renderer& renderer_;
   DepthPrepassConfig config_ {};
   DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
+  bool has_published_depth_products_ { false };
 };
 
 } // namespace oxygen::vortex

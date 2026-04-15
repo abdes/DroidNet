@@ -24,6 +24,7 @@ void DepthPrepassModule::Execute(
   (void)renderer_;
   if (config_.mode == DepthPrePassMode::kDisabled) {
     completeness_ = DepthPrePassCompleteness::kDisabled;
+    has_published_depth_products_ = false;
     return;
   }
 
@@ -37,6 +38,7 @@ void DepthPrepassModule::Execute(
   // processing and proof land in 03-06, so completeness remains intentionally
   // incomplete while the stage is enabled.
   completeness_ = DepthPrePassCompleteness::kIncomplete;
+  has_published_depth_products_ = false;
 }
 
 void DepthPrepassModule::SetConfig(const DepthPrepassConfig& config)
@@ -47,6 +49,11 @@ void DepthPrepassModule::SetConfig(const DepthPrepassConfig& config)
 auto DepthPrepassModule::GetCompleteness() const -> DepthPrePassCompleteness
 {
   return completeness_;
+}
+
+auto DepthPrepassModule::HasPublishedDepthProducts() const -> bool
+{
+  return has_published_depth_products_;
 }
 
 } // namespace oxygen::vortex
