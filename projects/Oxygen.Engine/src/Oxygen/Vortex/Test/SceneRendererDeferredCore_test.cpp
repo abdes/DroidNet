@@ -57,6 +57,7 @@ using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::ShadingMode;
+using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto ReadTextFile(const std::filesystem::path& path) -> std::string
@@ -172,6 +173,11 @@ protected:
     const ViewId active_view_id, const ResolvedView& active_view) -> RenderContext
   {
     scene_renderer_->OnFrameStart(frame_context_);
+
+    auto published_bindings = ViewFrameBindings {};
+    published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex { 9001U };
+    scene_renderer_->PublishViewFrameBindings(
+      active_view_id, published_bindings, oxygen::ShaderVisibleIndex { 9002U });
 
     auto context = RenderContext {};
     context.scene = oxygen::observer_ptr<Scene> { scene_.get() };

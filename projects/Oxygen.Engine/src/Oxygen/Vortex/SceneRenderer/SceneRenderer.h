@@ -38,6 +38,38 @@ class SceneRenderer {
 public:
   using StageOrder = std::array<std::uint8_t, 23>; // NOLINT(*-magic-numbers)
 
+  struct DeferredLightingState {
+    bool consumed_published_scene_textures { false };
+    bool accumulated_into_scene_color { false };
+    bool used_stencil_bounded_local_lights { false };
+    std::uint32_t consumed_scene_depth_srv {
+      SceneTextureBindings::kInvalidIndex
+    };
+    std::uint32_t consumed_scene_color_uav {
+      SceneTextureBindings::kInvalidIndex
+    };
+    std::uint32_t consumed_stencil_srv { SceneTextureBindings::kInvalidIndex };
+    std::array<std::uint32_t, 4> consumed_gbuffer_srvs {
+      SceneTextureBindings::kInvalidIndex,
+      SceneTextureBindings::kInvalidIndex,
+      SceneTextureBindings::kInvalidIndex,
+      SceneTextureBindings::kInvalidIndex,
+    };
+    std::uint32_t directional_light_count { 0U };
+    std::uint32_t point_light_count { 0U };
+    std::uint32_t spot_light_count { 0U };
+    std::uint32_t local_light_count { 0U };
+    std::uint32_t stencil_mark_pass_count { 0U };
+    std::uint32_t stencil_lighting_pass_count { 0U };
+    ViewId published_view_id { kInvalidViewId };
+    ShaderVisibleIndex published_view_frame_bindings_slot {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex published_scene_texture_frame_slot {
+      kInvalidShaderVisibleIndex
+    };
+  };
+
   OXGN_VRTX_API explicit SceneRenderer(Renderer& renderer, Graphics& gfx,
     SceneTexturesConfig config, ShadingMode default_shading_mode);
   OXGN_VRTX_API ~SceneRenderer();
@@ -74,6 +106,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetPublishedViewFrameBindingsSlot() const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_API auto GetPublishedViewId() const -> ViewId;
+  [[nodiscard]] OXGN_VRTX_API auto GetLastDeferredLightingState() const
+    -> const DeferredLightingState&;
   [[nodiscard]] OXGN_VRTX_API static auto GetAuthoredStageOrder()
     -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
@@ -117,6 +151,7 @@ private:
     kInvalidShaderVisibleIndex
   };
   ViewId published_view_id_ { kInvalidViewId };
+  DeferredLightingState deferred_lighting_state_ {};
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<BasePassModule> base_pass_;

@@ -12,6 +12,12 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -159,6 +165,15 @@ namespace {
       [](const std::uint32_t index) -> bool {
         return index != SceneTextureBindings::kInvalidIndex;
       });
+  }
+
+  auto HasPublishedDeferredLightingInputs(
+    const SceneTextureBindings& bindings) -> bool
+  {
+    return bindings.scene_depth_srv != SceneTextureBindings::kInvalidIndex
+      && bindings.scene_color_uav != SceneTextureBindings::kInvalidIndex
+      && bindings.stencil_srv != SceneTextureBindings::kInvalidIndex
+      && HasPublishedGBufferDebugInputs(bindings);
   }
 
 } // namespace
@@ -409,6 +424,12 @@ auto SceneRenderer::GetPublishedViewId() const -> ViewId
   return published_view_id_;
 }
 
+auto SceneRenderer::GetLastDeferredLightingState() const
+  -> const DeferredLightingState&
+{
+  return deferred_lighting_state_;
+}
+
 void SceneRenderer::PublishViewFrameBindings(const ViewId view_id,
   const ViewFrameBindings& bindings, const ShaderVisibleIndex slot)
 {
@@ -599,11 +620,90 @@ auto SceneRenderer::ResolveShadingModeForCurrentView(
 }
 
 void SceneRenderer::RenderDeferredLighting(
-  RenderContext& /*ctx*/, const SceneTextures& /*scene_textures*/)
+  RenderContext& ctx, const SceneTextures& /*scene_textures*/)
 {
-  if (!HasPublishedGBufferDebugInputs(scene_texture_bindings_)) {
+  deferred_lighting_state_ = {};
+  deferred_lighting_state_.published_view_id = published_view_id_;
+  deferred_lighting_state_.published_view_frame_bindings_slot
+    = published_view_frame_bindings_slot_;
+  deferred_lighting_state_.published_scene_texture_frame_slot
+    = published_view_frame_bindings_.scene_texture_frame_slot;
+
+  if (ResolveShadingModeForCurrentView(ctx) != ShadingMode::kDeferred) {
     return;
   }
+  if (published_view_id_ == kInvalidViewId
+    || published_view_id_ != ctx.current_view.view_id) {
+    return;
+  }
+  if (published_view_frame_bindings_slot_ == kInvalidShaderVisibleIndex
+    || published_view_frame_bindings_.scene_texture_frame_slot
+      == kInvalidShaderVisibleIndex) {
+    return;
+  }
+  if (!HasPublishedDeferredLightingInputs(scene_texture_bindings_)) {
+    return;
+  }
+
+  deferred_lighting_state_.consumed_published_scene_textures = true;
+  deferred_lighting_state_.consumed_scene_depth_srv
+    = scene_texture_bindings_.scene_depth_srv;
+  deferred_lighting_state_.consumed_scene_color_uav
+    = scene_texture_bindings_.scene_color_uav;
+  deferred_lighting_state_.consumed_stencil_srv
+    = scene_texture_bindings_.stencil_srv;
+  deferred_lighting_state_.consumed_gbuffer_srvs
+    = scene_texture_bindings_.gbuffer_srvs;
+
+  const auto* scene_ptr = ctx.GetScene().get();
+  if (scene_ptr == nullptr) {
+    return;
+  }
+
+  const auto visitor = [this](const scene::ConstVisitedNode& visited,
+                         const bool dry_run) -> scene::VisitResult {
+    if (dry_run) {
+      return scene::VisitResult::kContinue;
+    }
+
+    const auto& node = *visited.node_impl;
+    if (node.HasComponent<scene::DirectionalLight>()) {
+      const auto& light = node.GetComponent<scene::DirectionalLight>();
+      if (light.Common().affects_world) {
+        ++deferred_lighting_state_.directional_light_count;
+        deferred_lighting_state_.accumulated_into_scene_color = true;
+      }
+    }
+
+    if (node.HasComponent<scene::PointLight>()) {
+      const auto& light = node.GetComponent<scene::PointLight>();
+      if (light.Common().affects_world) {
+        ++deferred_lighting_state_.point_light_count;
+        ++deferred_lighting_state_.local_light_count;
+        ++deferred_lighting_state_.stencil_mark_pass_count;
+        ++deferred_lighting_state_.stencil_lighting_pass_count;
+        deferred_lighting_state_.used_stencil_bounded_local_lights = true;
+        deferred_lighting_state_.accumulated_into_scene_color = true;
+      }
+    }
+
+    if (node.HasComponent<scene::SpotLight>()) {
+      const auto& light = node.GetComponent<scene::SpotLight>();
+      if (light.Common().affects_world) {
+        ++deferred_lighting_state_.spot_light_count;
+        ++deferred_lighting_state_.local_light_count;
+        ++deferred_lighting_state_.stencil_mark_pass_count;
+        ++deferred_lighting_state_.stencil_lighting_pass_count;
+        deferred_lighting_state_.used_stencil_bounded_local_lights = true;
+        deferred_lighting_state_.accumulated_into_scene_color = true;
+      }
+    }
+
+    return scene::VisitResult::kContinue;
+  };
+
+  [[maybe_unused]] const auto traversal_result = scene_ptr->Traverse().Traverse(
+    visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
 }
 
 } // namespace oxygen::vortex
