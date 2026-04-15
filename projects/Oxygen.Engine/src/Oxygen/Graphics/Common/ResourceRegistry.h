@@ -8,6 +8,7 @@
 
 #include <any>
 #include <concepts>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -190,15 +191,30 @@ public:
    @tparam Resource The resource type, must satisfy SupportedResource concept
    @param resource Shared pointer to the resource to register. Must be valid.
 
-   @throw std::runtime_error if the resource is already registered in this
-          registry instance.
-
    @see UnRegisterResource, RegisterView
   */
   template <SupportedResource Resource>
   auto Register(const std::shared_ptr<Resource>& resource) -> void
   {
     Register(std::static_pointer_cast<void>(resource), Resource::ClassTypeId());
+  }
+
+  //! Atomically register a resource if absent and report whether this call
+  //! established registry ownership.
+  /*!
+   This is the explicit ownership-probe surface for callers that may share a
+   resource with another owner and need one lock-protected "register if
+   missing" operation. Unlike Register(), encountering an already-registered
+   resource is not a contract violation here.
+
+   @return true if the resource was inserted by this call, false if it was
+           already registered.
+  */
+  template <SupportedResource Resource>
+  auto AcquireRegistration(const std::shared_ptr<Resource>& resource) -> bool
+  {
+    return AcquireRegistration(
+      std::static_pointer_cast<void>(resource), Resource::ClassTypeId());
   }
 
   //! Register a view for bindless rendering with automatic view creation.
@@ -298,6 +314,67 @@ public:
     return RegisterView(NativeResource { &resource, Resource::ClassTypeId() },
       std::move(view), std::move(view_handle), std::any(desc), key,
       desc.view_type, desc.visibility);
+  }
+
+  //! Atomically acquire a registered view for a resource, creating it if
+  //! absent.
+  /*!
+   This is the explicit shared-ownership surface for callers like framebuffer
+   assembly that may race to establish the same persistent view. The returned
+   pair contains the view and whether this call created/registered it.
+  */
+  template <ResourceWithViews Resource>
+  auto AcquireViewRegistration(Resource& resource,
+    DescriptorAllocationHandle view_handle,
+    const typename Resource::ViewDescriptionT& desc)
+    -> std::pair<NativeView, bool>
+  {
+    CHECK_F(view_handle.IsValid(), "View handle must be valid");
+
+    auto resource_key
+      = NativeResource { &resource, Resource::ClassTypeId() };
+    auto key_hash = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
+    auto cache_key
+      = CacheKey { .resource = resource_key, .view_desc_hash = key_hash };
+
+    {
+      std::lock_guard lock(registry_mutex_);
+      const auto resource_it = resources_.find(resource_key);
+      if (resource_it == resources_.end()) {
+        LOG_F(ERROR, "-failed- resource not found");
+        view_handle.Release();
+        return { {}, false };
+      }
+      if (const auto cache_it = view_cache_.find(cache_key);
+        cache_it != view_cache_.end()) {
+        view_handle.Release();
+        return { cache_it->second.view_object, false };
+      }
+    }
+
+    auto view = resource.GetNativeView(view_handle, desc);
+    if (!view->IsValid()) {
+      LOG_F(ERROR, "-failed- invalid view used for view registration");
+      view_handle.Release();
+      return { {}, false };
+    }
+
+    std::lock_guard lock(registry_mutex_);
+    const auto resource_it = resources_.find(resource_key);
+    if (resource_it == resources_.end()) {
+      LOG_F(ERROR, "-failed- resource not found");
+      view_handle.Release();
+      return { {}, false };
+    }
+    if (const auto cache_it = view_cache_.find(cache_key);
+      cache_it != view_cache_.end()) {
+      view_handle.Release();
+      return { cache_it->second.view_object, false };
+    }
+
+    AttachDescriptorWithView(resource_key, view_handle.GetBindlessHandle(),
+      std::move(view_handle), view, std::any(desc), key_hash);
+    return { view, true };
   }
 
   //! Register a pre-created view for advanced control over view lifecycle.
@@ -772,6 +849,7 @@ public:
       UnRegisterResourceViewsNoLock(old_obj);
       // Remove the old resource entry and purge any remaining cached views.
       resources_.erase(old_it);
+      NotifyResourceForgottenNoLock(old_obj);
       PurgeCachedViewsForResource(old_obj);
       return;
     }
@@ -860,6 +938,7 @@ public:
 
     // Remove the old resource entry and purge its cached views.
     resources_.erase(old_it);
+    NotifyResourceForgottenNoLock(old_obj);
     PurgeCachedViewsForResource(old_obj);
   }
 
@@ -1171,10 +1250,14 @@ public:
   }
 
   OXGN_GFX_NDAPI auto GetRegisteredResourceCount() const noexcept -> size_t;
+  OXGN_GFX_API auto SetResourceUnregisteredCallback(
+    std::function<void(const NativeResource&)> callback) -> void;
 
 private:
   OXGN_GFX_API auto Register(std::shared_ptr<void> resource, TypeId type_id)
     -> void;
+  OXGN_GFX_API auto AcquireRegistration(
+    std::shared_ptr<void> resource, TypeId type_id) -> bool;
 
   OXGN_GFX_API auto RegisterView(NativeResource resource, NativeView view,
     DescriptorAllocationHandle view_handle, std::any view_description_for_cache,
@@ -1197,6 +1280,8 @@ private:
   //! Remove all cached views for a resource. Assumes registry_mutex_ held.
   OXGN_GFX_API auto PurgeCachedViewsForResource(const NativeResource& resource)
     -> void;
+  OXGN_GFX_API auto NotifyResourceForgottenNoLock(
+    const NativeResource& resource) -> void;
   //! Attach a descriptor and associate a native view and cache entry. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
@@ -1275,6 +1360,7 @@ private:
   //! A unified view cache for all resources and view types.
   std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
 
+  std::function<void(const NativeResource&)> on_resource_unregistered_ {};
   std::string debug_name_; //!< Debug name for the registry.
 };
 
