@@ -304,15 +304,16 @@ void SceneRenderer::ApplyStage3DepthPrepassState()
 
 void SceneRenderer::ApplyStage9BasePassState()
 {
-  setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
-    | SceneTextureSetupMode::Flag::kSceneColor);
-  RefreshSceneTextureBindings();
+  // Stage 9 writes deferred attachments, but Stage 10 remains the first
+  // bindless publication boundary for SceneColor and the active GBuffers.
 }
 
 void SceneRenderer::ApplyStage10RebuildState()
 {
   scene_textures_.RebuildWithGBuffers();
-  setup_mode_.Set(SceneTextureSetupMode::Flag::kStencil);
+  setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
+    | SceneTextureSetupMode::Flag::kSceneColor
+    | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
 }
 
