@@ -16,12 +16,15 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 
 #include "Fakes/Graphics.h"
 
@@ -349,6 +352,44 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.partial_depth_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  BasePassCompletesVelocityForDynamicGeometry)
+{
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_);
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+
+  auto render_items = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
+  render_items.front().main_view_visible = true;
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.render_items
+    = std::span<const oxygen::vortex::sceneprep::RenderItemData>(
+      render_items.data(), render_items.size());
+
+  auto context = RenderContext {};
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+      &prepared_frame,
+    };
+
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = true,
+    .early_z_pass_done = false,
+    .shading_mode = ShadingMode::kDeferred,
+  });
+
+  base_pass.Execute(context, scene_textures);
+
+  EXPECT_TRUE(base_pass.HasCompletedVelocityForDynamicGeometry());
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
