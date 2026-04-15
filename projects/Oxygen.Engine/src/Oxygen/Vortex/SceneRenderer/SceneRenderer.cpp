@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <ranges>
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -149,6 +150,15 @@ namespace {
       .dimension = texture.GetDescriptor().texture_type,
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
     };
+  }
+
+  auto HasPublishedGBufferDebugInputs(
+    const SceneTextureBindings& bindings) -> bool
+  {
+    return std::ranges::all_of(bindings.gbuffer_srvs,
+      [](const std::uint32_t index) -> bool {
+        return index != SceneTextureBindings::kInvalidIndex;
+      });
   }
 
 } // namespace
@@ -325,6 +335,9 @@ void SceneRenderer::ApplyStage10RebuildState()
     | SceneTextureSetupMode::Flag::kSceneColor
     | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
+  CHECK_F(HasPublishedGBufferDebugInputs(scene_texture_bindings_),
+    "SceneRenderer: Stage 10 must publish GBuffer bindings before deferred "
+    "lighting or GBuffer debug inspection");
 }
 
 void SceneRenderer::ApplyStage22PostProcessState()
@@ -588,6 +601,9 @@ auto SceneRenderer::ResolveShadingModeForCurrentView(
 void SceneRenderer::RenderDeferredLighting(
   RenderContext& /*ctx*/, const SceneTextures& /*scene_textures*/)
 {
+  if (!HasPublishedGBufferDebugInputs(scene_texture_bindings_)) {
+    return;
+  }
 }
 
 } // namespace oxygen::vortex
