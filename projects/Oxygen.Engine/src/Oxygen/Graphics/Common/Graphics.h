@@ -139,6 +139,8 @@ public:
    VSync toggling.
   */
   OXGN_GFX_API virtual auto SetVSyncEnabled(bool enabled) -> void;
+  [[nodiscard]] OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept
+    -> bool;
   OXGN_GFX_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void;
   OXGN_GFX_API auto ApplyConsoleCVars(const console::Console& console) -> void;

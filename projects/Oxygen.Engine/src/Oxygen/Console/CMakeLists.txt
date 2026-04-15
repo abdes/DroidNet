@@ -58,6 +58,7 @@ set(
   "History.h"
   "Parser.h"
   "Registry.h"
+  "StartupPlan.h"
 )
 set(
   OXYGEN_CONSOLE_PRIVATE_SOURCES

@@ -16,36 +16,32 @@ namespace oxygen::examples::internal {
 
 namespace {
 
-  constexpr std::string_view kCVarRendererGpuTimestamps
-    = "rndr.gpu_timestamps";
+  constexpr std::string_view kCVarRendererGpuTimestamps = "rndr.gpu_timestamps";
   constexpr std::string_view kCVarRendererGpuTimestampViewer
     = "rndr.gpu_timestamps.viewer";
 
-  auto TrySetBoolDefault(console::Console& console,
-    const std::string_view cvar_name, const bool value) -> void
+  auto TryAddBoolDefault(console::Console& console,
+    console::ConsoleStartupPlan& startup_plan, const std::string_view cvar_name,
+    const bool value) -> void
   {
     if (console.FindCVar(cvar_name) == nullptr) {
-      LOG_F(WARNING,
-        "DemoShell: '{}' is unavailable; default skipped", cvar_name);
+      LOG_F(
+        WARNING, "DemoShell: '{}' is unavailable; default skipped", cvar_name);
       return;
     }
-
-    const auto result = console.SetCVarFromText({
-      .name = cvar_name,
-      .text = value ? "true" : "false",
-    });
-    if (result.status != console::ExecutionStatus::kOk) {
-      LOG_F(WARNING, "DemoShell: failed to set '{}' default: {} ({})",
-        cvar_name, result.error, console::to_string(result.status));
-    }
+    startup_plan.Set(
+      std::string(cvar_name), value, console::CVarValueOrigin::kAppDefault);
   }
 
 } // namespace
 
 auto ApplyDemoShellConsoleDefaults(console::Console& console) -> void
 {
-  TrySetBoolDefault(console, kCVarRendererGpuTimestamps, true);
-  TrySetBoolDefault(console, kCVarRendererGpuTimestampViewer, true);
+  auto startup_plan = console::ConsoleStartupPlan {};
+  TryAddBoolDefault(console, startup_plan, kCVarRendererGpuTimestamps, true);
+  TryAddBoolDefault(
+    console, startup_plan, kCVarRendererGpuTimestampViewer, true);
+  console.ApplyStartupPlan(startup_plan);
 }
 
 } // namespace oxygen::examples::internal

@@ -19,6 +19,7 @@
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Console/StartupPlan.h>
 
 namespace oxygen::examples::cli {
 
@@ -102,6 +103,19 @@ inline auto MakeRuntimeOptions(const RuntimeOptionBindings& bindings)
   }
 
   return options;
+}
+
+inline auto SeedCommonRuntimeStartupCVars(
+  const clap::CommandLineContext& context, const uint32_t target_fps,
+  const bool enable_vsync, console::ConsoleStartupPlan& startup_plan) -> void
+{
+  if (context.ovm.HasOption("fps")) {
+    startup_plan.Set(
+      "ngin.target_fps", int64_t { static_cast<int64_t>(target_fps) });
+  }
+  if (context.ovm.HasOption("vsync")) {
+    startup_plan.Set("gfx.vsync", enable_vsync);
+  }
 }
 
 inline auto MakeAdvancedHelpCommand() -> clap::Command::Ptr

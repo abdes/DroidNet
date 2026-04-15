@@ -17,6 +17,7 @@ using oxygen::console::CommandSource;
 using oxygen::console::Console;
 using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
+using oxygen::console::CVarValueOrigin;
 using oxygen::console::ExecutionResult;
 using oxygen::console::ExecutionStatus;
 using oxygen::console::Registry;
@@ -210,6 +211,7 @@ NOLINT_TEST(ConsolePolicy, SupportsRequiresRestart)
   const auto snapshot = console.FindCVar("gfx.backend");
   ASSERT_NE(snapshot, nullptr);
   EXPECT_EQ(std::get<std::string>(snapshot->current_value), "d3d12");
+  EXPECT_EQ(snapshot->current_origin, CVarValueOrigin::kAppDefault);
   ASSERT_TRUE(snapshot->restart_value.has_value());
   EXPECT_EQ(std::get<std::string>(*snapshot->restart_value), "vulkan");
 }

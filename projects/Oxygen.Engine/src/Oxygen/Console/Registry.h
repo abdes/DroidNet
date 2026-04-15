@@ -24,6 +24,7 @@
 #include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/History.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Console/api_export.h>
 
 namespace oxygen {
@@ -68,7 +69,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Registry)
   OXYGEN_MAKE_NON_MOVABLE(Registry)
 
-  OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition) -> CVarHandle;
+  OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition,
+    const CVarRegistrationOptions& options = {}) -> CVarHandle;
   OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
     -> CommandHandle;
 
@@ -79,9 +81,11 @@ public:
 
   OXGN_CONS_NDAPI auto SetCVarFromText(const SetCVarRequest& request,
     const CommandContext& context = {}) -> ExecutionResult;
+  OXGN_CONS_API auto ApplyStartupPlan(const ConsoleStartupPlan& startup_plan)
+    -> void;
   OXGN_CONS_NDAPI auto ApplyLatchedCVars() -> size_t;
-  OXGN_CONS_NDAPI auto SaveArchiveCVars(
-    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveArchiveCVars(const oxygen::PathFinder& path_finder,
+    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic) -> ExecutionResult;
   OXGN_CONS_NDAPI auto LoadArchiveCVars(const oxygen::PathFinder& path_finder,
     const CommandContext& context = CommandContext {
       .source = CommandSource::kConfigFile,
@@ -93,10 +97,10 @@ public:
       .source = CommandSource::kAutomation,
       .shipping_build = false,
     }) -> ExecutionResult;
-  OXGN_CONS_NDAPI auto SaveHistory(
-    const oxygen::PathFinder& path_finder) const -> ExecutionResult;
-  OXGN_CONS_NDAPI auto LoadHistory(
-    const oxygen::PathFinder& path_finder) -> ExecutionResult;
+  OXGN_CONS_NDAPI auto SaveHistory(const oxygen::PathFinder& path_finder) const
+    -> ExecutionResult;
+  OXGN_CONS_NDAPI auto LoadHistory(const oxygen::PathFinder& path_finder)
+    -> ExecutionResult;
   OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
     -> std::vector<ConsoleSymbol>;
 
@@ -134,6 +138,19 @@ private:
   struct CVarEntry {
     CVarSnapshot snapshot;
     uint32_t id { 0 };
+    std::optional<CVarValueOrigin> latched_origin {};
+    std::optional<CVarValueOrigin> restart_origin {};
+    std::optional<CVarValue> persisted_value {};
+  };
+
+  enum class ApplyValueDisposition : uint8_t {
+    kSilent,
+    kReport,
+  };
+
+  struct ApplyValueResult {
+    ExecutionResult result;
+    bool applied { false };
   };
 
   void RegisterBuiltinCommands();
@@ -155,7 +172,12 @@ private:
     -> void;
   [[nodiscard]] static auto ValueToString(const CVarValue& value)
     -> std::string;
-  auto ApplyCachedArchiveOverride(CVarEntry& cvar) -> bool;
+  [[nodiscard]] static auto OriginRank(CVarValueOrigin origin) noexcept -> int;
+  [[nodiscard]] auto ApplyStampedValue(CVarEntry& cvar,
+    const StampedCVarValue& stamped_value, ApplyValueDisposition disposition)
+    -> ApplyValueResult;
+  auto ApplyCachedStartupValue(CVarEntry& cvar) -> bool;
+  auto ApplyCachedPersistedValue(CVarEntry& cvar) -> bool;
   void RecordCompletionUsage(std::string_view token);
 
   History history_;
@@ -188,8 +210,8 @@ private:
   };
 
   std::unordered_map<std::string, CVarEntry> cvars_;
-  std::unordered_map<std::string, std::string> archived_cvar_text_values_;
-  std::optional<CommandContext> archived_cvar_context_;
+  std::unordered_map<std::string, StampedCVarValue> startup_cvar_values_;
+  std::unordered_map<std::string, CVarValue> persisted_cvar_values_;
   std::unordered_map<std::string, CommandDefinition> commands_;
   size_t execution_record_capacity_ { kDefaultExecutionRecordCapacity };
   std::vector<ExecutionRecord> execution_records_;

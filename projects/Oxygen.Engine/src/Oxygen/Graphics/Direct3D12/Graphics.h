@@ -115,7 +115,7 @@ public:
     -> observer_ptr<graphics::FrameCaptureController> override;
 
   //! Get the V-Sync setting.
-  [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool
+  [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool override
   {
     return enable_vsync_;
   }

@@ -46,12 +46,15 @@ using namespace oxygen::engine;
 using TimingConfig = TimingConfig;
 
 namespace {
+  using oxygen::console::ArchiveSaveMode;
   using oxygen::console::CommandContext;
   using oxygen::console::CommandDefinition;
   using oxygen::console::CommandFlags;
   using oxygen::console::CommandSource;
   using oxygen::console::CVarDefinition;
   using oxygen::console::CVarFlags;
+  using oxygen::console::CVarRegistrationOptions;
+  using oxygen::console::CVarValueOrigin;
   using oxygen::console::ExecutionResult;
   using oxygen::console::ExecutionStatus;
 
@@ -97,7 +100,8 @@ namespace {
 } // namespace
 
 AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
-  std::weak_ptr<Graphics> graphics, EngineConfig config) noexcept
+  std::weak_ptr<Graphics> graphics, EngineConfig config,
+  console::ConsoleStartupPlan startup_plan) noexcept
   : config_(std::move(config))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
@@ -123,9 +127,11 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
     time_manager_ = &AddComponent<TimeManager>(GetPhysicalClock(), tm_cfg);
   }
 
-  // Initialize detached services (Category D)
+  InitializeConsoleRuntime(startup_plan);
   InitializeDetachedServices();
-  InitializeConsoleRuntime();
+  RegisterServiceConsoleBindings();
+  LoadPersistedConsoleHistory();
+  ApplyAllConsoleCVars();
 
   LOG_F(INFO, "AsyncEngine created");
 }
@@ -672,13 +678,13 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   LOG_F(2, "Frame {} start (epoch advance)", frame_number_);
 }
 
-auto AsyncEngine::InitializeConsoleRuntime() -> void
+auto AsyncEngine::InitializeConsoleRuntime(
+  const console::ConsoleStartupPlan& startup_plan) -> void
 {
   RegisterEngineConsoleBindings();
-  RegisterServiceConsoleBindings();
+  console_.ApplyStartupPlan(startup_plan);
   LoadPersistedConsoleCVars();
-  LoadPersistedConsoleHistory();
-  ApplyAllConsoleCVars();
+  ApplyEngineOwnedConsoleCVars();
 }
 
 auto AsyncEngine::RegisterEngineConsoleBindings() -> void
@@ -686,38 +692,56 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
   (void)console_.RegisterCVar(CVarDefinition {
     .name = std::string(kCVarEngineScriptingHotReloadEnabled),
     .help = "Enable/disable engine-owned scripting hot-reload file watcher",
-    .default_value = config_.scripting.enable_hot_reload,
+    .default_value = true,
     .flags = CVarFlags::kArchive,
     .min_value = {},
     .max_value = {},
+  }, CVarRegistrationOptions {
+    .initial = console::StampedCVarValue {
+      .value = config_.scripting.enable_hot_reload,
+      .origin = CVarValueOrigin::kAppDefault,
+    },
   });
 
   (void)console_.RegisterCVar(CVarDefinition {
     .name = std::string(kCVarEngineScriptingHotReloadPollIntervalMs),
     .help
     = "Engine-owned scripting hot-reload polling interval in milliseconds",
-    .default_value
-    = static_cast<int64_t>(config_.scripting.hot_reload_poll_interval.count()),
+    .default_value = int64_t { 100 },
     .flags = CVarFlags::kArchive,
     .min_value = 1.0,
     .max_value = {},
+  }, CVarRegistrationOptions {
+    .initial = console::StampedCVarValue {
+      .value = int64_t { static_cast<int64_t>(
+        config_.scripting.hot_reload_poll_interval.count()) },
+      .origin = CVarValueOrigin::kAppDefault,
+    },
   });
 
   (void)console_.RegisterCVar(CVarDefinition {
     .name = std::string(kCVarEngineTargetFps),
     .help = "Target frames per second (0 = uncapped)",
-    .default_value = int64_t { static_cast<int64_t>(config_.target_fps) },
+    .default_value = int64_t { 0 },
     .flags = CVarFlags::kArchive,
     .min_value = 0.0,
     .max_value = static_cast<double>(EngineConfig::kMaxTargetFps),
+  }, CVarRegistrationOptions {
+    .initial = console::StampedCVarValue {
+      .value = int64_t { static_cast<int64_t>(config_.target_fps) },
+      .origin = CVarValueOrigin::kAppDefault,
+    },
   });
 
   (void)console_.RegisterCommand(CommandDefinition {
     .name = "ngin.cvars.save",
     .help = "Save archived CVars to the configured cvars archive path",
     .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&, const CommandContext&)
-      -> ExecutionResult { return console_.SaveArchiveCVars(path_finder_); },
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      return console_.SaveArchiveCVars(
+        path_finder_, ArchiveSaveMode::kExplicit);
+    },
   });
 
   (void)console_.RegisterCommand(CommandDefinition {
@@ -777,9 +801,10 @@ auto AsyncEngine::LoadPersistedConsoleCVars() -> void
   }
 }
 
-auto AsyncEngine::SavePersistedConsoleCVars() const -> void
+auto AsyncEngine::SavePersistedConsoleCVars() -> void
 {
-  const auto result = console_.SaveArchiveCVars(path_finder_);
+  const auto result
+    = console_.SaveArchiveCVars(path_finder_, ArchiveSaveMode::kAutomatic);
   if (result.status == ExecutionStatus::kOk) {
     LOG_F(INFO, "{}", result.output);
   } else {

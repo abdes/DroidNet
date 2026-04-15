@@ -23,6 +23,23 @@ auto to_string(const CVarType value) -> const char*
   return "__NotSupported__";
 }
 
+auto to_string(const CVarValueOrigin value) -> const char*
+{
+  switch (value) {
+  case CVarValueOrigin::kAppDefault:
+    return "AppDefault";
+  case CVarValueOrigin::kPersistedPreference:
+    return "PersistedPreference";
+  case CVarValueOrigin::kStartupExplicit:
+    return "StartupExplicit";
+  case CVarValueOrigin::kRuntimeExplicit:
+    return "RuntimeExplicit";
+  case CVarValueOrigin::kAppForced:
+    return "AppForced";
+  }
+  return "__NotSupported__";
+}
+
 auto to_string(const CVarFlags value) -> std::string
 {
   if (value == CVarFlags::kNone) {

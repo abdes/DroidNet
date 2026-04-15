@@ -1199,8 +1199,13 @@ auto AssetLoader::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVerifyContentHashes),
     .help = "Enable content hash verification for AssetLoader mounts",
-    .default_value = verify_content_hashes_,
+    .default_value = false,
     .flags = console::CVarFlags::kArchive,
+  }, console::CVarRegistrationOptions {
+    .initial = console::StampedCVarValue {
+      .value = verify_content_hashes_,
+      .origin = console::CVarValueOrigin::kAppDefault,
+    },
   });
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarTelemetryEnabled),

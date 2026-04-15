@@ -309,6 +309,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     CHECK_F(!app.gfx_weak.expired());
     app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
 
+    o::console::ConsoleStartupPlan startup_cvars {};
+    oxygen::examples::cli::SeedCommonRuntimeStartupCVars(
+      context, target_fps, enable_vsync, startup_cvars);
+
     app.engine = std::make_shared<o::AsyncEngine>(
       app.platform,
       app.gfx_weak,
@@ -321,24 +325,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .timing = {
           .pacing_safety_margin = 250us,
         }
-      }
+      },
+      startup_cvars
     );
-
-    if (context.ovm.HasOption("fps")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "ngin.target_fps",
-        .text = std::to_string(target_fps),
-      });
-    }
-    if (context.ovm.HasOption("vsync")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "gfx.vsync",
-        .text = enable_vsync ? "true" : "false",
-      });
-      if (const auto gfx = app.gfx_weak.lock()) {
-        gfx->SetVSyncEnabled(enable_vsync);
-      }
-    }
 
     const auto rc = co::Run(app, AsyncMain(app, frames, main_module_config));
 

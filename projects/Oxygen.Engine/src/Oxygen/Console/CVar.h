@@ -24,6 +24,14 @@ enum class CVarType : uint8_t {
   kString,
 };
 
+enum class CVarValueOrigin : uint8_t {
+  kAppDefault,
+  kPersistedPreference,
+  kStartupExplicit,
+  kRuntimeExplicit,
+  kAppForced,
+};
+
 enum class CVarFlags : uint8_t { // NOLINT(*-enum-size)
   kNone = 0,
   kArchive = OXYGEN_FLAG(0),
@@ -39,6 +47,11 @@ OXYGEN_DEFINE_FLAGS_OPERATORS(CVarFlags)
 
 using CVarValue = std::variant<bool, int64_t, double, std::string>;
 
+struct StampedCVarValue {
+  CVarValue value;
+  CVarValueOrigin origin { CVarValueOrigin::kAppDefault };
+};
+
 struct CVarDefinition {
   std::string name;
   std::string help;
@@ -48,9 +61,19 @@ struct CVarDefinition {
   std::optional<double> max_value {}; // NOLINT(*-member-init)
 };
 
+struct CVarRegistrationOptions {
+  std::optional<StampedCVarValue> initial {};
+};
+
+enum class ArchiveSaveMode : uint8_t {
+  kAutomatic,
+  kExplicit,
+};
+
 struct CVarSnapshot {
   CVarDefinition definition;
   CVarValue current_value;
+  CVarValueOrigin current_origin { CVarValueOrigin::kAppDefault };
   std::optional<CVarValue> latched_value;
   std::optional<CVarValue> restart_value;
 };
@@ -84,6 +107,7 @@ OXGN_CONS_NDAPI constexpr auto HasFlag(
 }
 
 OXGN_CONS_NDAPI auto to_string(CVarType value) -> const char*;
+OXGN_CONS_NDAPI auto to_string(CVarValueOrigin value) -> const char*;
 OXGN_CONS_NDAPI auto to_string(CVarFlags value) -> std::string;
 
 } // namespace oxygen::console

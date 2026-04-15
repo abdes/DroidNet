@@ -276,3 +276,20 @@ Notes:
 
 - The package uses lazy imports for submodules (no import-time side-effects), so `python -m bindless_codegen.cli` is the recommended invocation for development. Installing a console_scripts entrypoint (via setup/pyproject) is also a convenient option for CI and developer workflows.
 - If you see a RuntimeWarning from runpy about modules found in sys.modules, it means the interpreter already had the package imported; running the CLI in a fresh process will avoid that.
+
+## Console CVar precedence
+
+Archived CVars are provenance-aware. Live values follow this precedence ladder:
+
+1. `AppForced`
+2. `RuntimeExplicit`
+3. `StartupExplicit`
+4. `PersistedPreference`
+5. `AppDefault`
+
+Important rules:
+
+- Archive load is passive. It records persisted preferences and only applies them when no higher-precedence source already owns the live value.
+- App and module config objects carry operational values, not parallel provenance metadata.
+- Explicit startup intent should be passed through `oxygen::console::ConsoleStartupPlan`, not by calling `SetCVarFromText()` during startup.
+- Automatic archive save does not promote startup-only overrides; explicit save does, except for `AppForced` values.

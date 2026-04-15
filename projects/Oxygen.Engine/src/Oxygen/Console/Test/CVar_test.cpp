@@ -6,14 +6,18 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace {
 
 using oxygen::console::Console;
 using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
+using oxygen::console::CVarValueOrigin;
 using oxygen::console::ExecutionStatus;
+using oxygen::testing::ScopedLogCapture;
 
 NOLINT_TEST(ConsoleCVar, HandlesAllSupportedTypes)
 {
@@ -168,12 +172,49 @@ NOLINT_TEST(ConsoleCVar, LatchedCVarsUpdateOnApply)
 
   EXPECT_EQ(console.Execute("r.latched 1").status, ExecutionStatus::kOk);
   EXPECT_EQ(std::get<int64_t>(console.FindCVar("r.latched")->current_value), 0);
+  EXPECT_EQ(console.FindCVar("r.latched")->current_origin,
+    CVarValueOrigin::kAppDefault);
   ASSERT_TRUE(console.FindCVar("r.latched")->latched_value.has_value());
   EXPECT_EQ(
     std::get<int64_t>(*console.FindCVar("r.latched")->latched_value), 1);
 
   EXPECT_EQ(console.ApplyLatchedCVars(), 1U);
   EXPECT_EQ(std::get<int64_t>(console.FindCVar("r.latched")->current_value), 1);
+  EXPECT_EQ(console.FindCVar("r.latched")->current_origin,
+    CVarValueOrigin::kRuntimeExplicit);
+}
+
+NOLINT_TEST(ConsoleCVar, LogsAppliedAndIgnoredChangesAtInfo)
+{
+  const auto saved_verbosity = loguru::g_global_verbosity;
+  const auto restore_verbosity = oxygen::Finally(
+    [saved_verbosity] { loguru::g_global_verbosity = saved_verbosity; });
+  loguru::g_global_verbosity = loguru::Verbosity_INFO;
+
+  ScopedLogCapture capture("console_cvar_info_logs", loguru::Verbosity_INFO);
+  Console console {};
+  ASSERT_TRUE(console
+      .RegisterCVar({
+        .name = "r.trace",
+        .help = "Trace logging test",
+        .default_value = int64_t { 1 },
+        .flags = CVarFlags::kNone,
+        .min_value = std::nullopt,
+        .max_value = std::nullopt,
+      })
+      .IsValid());
+
+  ASSERT_EQ(console.Execute("r.trace 2").status, ExecutionStatus::kOk);
+  EXPECT_TRUE(capture.Contains("CVar applied: name='r.trace'"));
+  EXPECT_TRUE(capture.Contains("origin=RuntimeExplicit"));
+
+  capture.Clear();
+  auto startup_plan = oxygen::console::ConsoleStartupPlan {};
+  startup_plan.Set("r.trace", int64_t { 3 });
+  console.ApplyStartupPlan(startup_plan);
+
+  EXPECT_TRUE(capture.Contains("CVar ignored: name='r.trace'"));
+  EXPECT_TRUE(capture.Contains("incoming_origin=StartupExplicit"));
 }
 
 } // namespace
