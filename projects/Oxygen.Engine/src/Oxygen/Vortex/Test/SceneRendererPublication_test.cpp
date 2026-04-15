@@ -307,7 +307,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     .msaa_sample_count = 1U,
   };
   auto scene_renderer = SceneRenderer(
-    *renderer_, *graphics_, config, ShadingMode::kForward);
+    *renderer_, *graphics_, config, ShadingMode::kDeferred);
 
   scene_renderer.ApplyStage3DepthPrepassState();
   auto bindings = scene_renderer.GetSceneTextureBindings();
@@ -319,15 +319,24 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   scene_renderer.ApplyStage9BasePassState();
   bindings = scene_renderer.GetSceneTextureBindings();
-  EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
 
   scene_renderer.ApplyStage10RebuildState();
   bindings = scene_renderer.GetSceneTextureBindings();
+  EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.stencil_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, bindings.scene_color_srv);
 
