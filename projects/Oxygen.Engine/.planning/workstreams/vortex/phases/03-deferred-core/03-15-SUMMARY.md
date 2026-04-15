@@ -34,14 +34,15 @@ key-decisions:
 patterns-established:
   - "Phase closeout scripts can own positive and negative-path proof internally, then expose a single documented command."
   - "Implementation-status proof packs can close a phase with source/test/log evidence while explicitly carrying a deferred runtime-capture requirement forward."
-requirements-completed: [DEFR-02]
+requirements-completed: []
+requirements-advanced: [DEFR-02]
 duration: 33 min
 completed: 2026-04-15
 ---
 
 # Phase 03 Plan 15: Deferred-Core Closeout Summary
 
-**Phase 3 now closes through a single repo-owned deferred-core proof runner, while the first truthful runtime RenderDoc capture is explicitly deferred to Phase 4 Async and DemoShell migration**
+**Wave 15 added the repo-owned deferred-core proof runner, but post-execution review invalidated the claim that Phase 3 is now truthfully closed**
 
 ## Performance
 
@@ -55,7 +56,7 @@ completed: 2026-04-15
 
 - Added `tools/vortex/Verify-DeferredCoreCloseout.ps1` as the one-line Phase 3 closeout entrypoint that runs the proof collector, analyzer, positive assert, synthetic negative assert, and ledger checks.
 - Added source/test/log-backed deferred-core analysis scripts that emit the required `stage_2_order`, `stage_3_order`, `stage_9_order`, `stage_12_order`, `gbuffer_contents`, `scene_color_lit`, and `stencil_local_lights` keys.
-- Updated the Vortex ledger and plan docs so Phase 3 closes honestly, while runtime RenderDoc validation moves to Phase 4 when Async and DemoShell actually run on Vortex.
+- Updated the Vortex ledger and plan docs to defer runtime RenderDoc validation to Phase 4 when Async and DemoShell actually run on Vortex.
 
 ## Task Commits
 
@@ -82,7 +83,7 @@ completed: 2026-04-15
 ## Deviations from Plan
 
 - User-directed scope correction: runtime RenderDoc validation was deferred to Phase 4 migration, and the Phase 3 closeout gate was rebuilt around source/test/log proof.
-- Impact on plan: Phase 3 still closes `DEFR-02` honestly, but the first runtime capture now belongs to the Phase 4 migration milestone instead of Phase 3.
+- Post-execution review correction: the current closeout proof still overstates the underlying Stage 12 / velocity behavior, so this plan should be treated as an attempted closeout, not a truthful phase completion.
 
 ## Issues Encountered
 
@@ -105,10 +106,17 @@ None - no external service configuration required.
   `deferred-core-frame10.report.txt` reported all seven required keys as `pass`.
   The synthetic failing report was rejected as expected by `Assert-DeferredCoreCaptureReport.ps1`.
 
+## Post-Execution Review Correction
+
+- Blocking review found that `RenderDeferredLighting(...)` still proves Stage 12 behavior through telemetry counters/booleans rather than truthful `SceneColor` mutation and stencil-bounded local-light execution.
+- Blocking review found that the closeout analyzer still reports key Phase 03 claims through token/name checks instead of artifact/state-backed proof.
+- Blocking review found that the current velocity-completion claim remains a shell seam rather than a proven skinned/WPO path.
+- The collector now rebuilds `Oxygen.Vortex.SceneRendererDeferredCore.Tests` and `Oxygen.Vortex.SceneRendererPublication.Tests` before `ctest`, but Phase 03 remains blocked overall until the larger review findings are fixed.
+
 ## Next Phase Readiness
 
-- Phase 3 is closed under the revised validation contract.
-- Phase 4 now owns the first truthful runtime RenderDoc capture, because Async and DemoShell migration is the point where Vortex has a real runtime surface to capture.
+- Phase 3 is not closed yet.
+- Phase 4 still owns the first truthful runtime RenderDoc capture, but Phase 03 remediation must land before Phase 4 can start.
 
 ## Self-Check
 
