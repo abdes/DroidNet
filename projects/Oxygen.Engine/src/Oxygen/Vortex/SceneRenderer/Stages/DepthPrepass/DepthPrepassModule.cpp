@@ -12,10 +12,12 @@
 
 namespace oxygen::vortex {
 
-DepthPrepassModule::DepthPrepassModule(Renderer& renderer)
+DepthPrepassModule::DepthPrepassModule(
+  Renderer& renderer, const SceneTexturesConfig& scene_textures_config)
   : renderer_(renderer)
   , mesh_processor_(std::make_unique<DepthPrepassMeshProcessor>(renderer))
 {
+  static_cast<void>(scene_textures_config);
 }
 
 DepthPrepassModule::~DepthPrepassModule() = default;

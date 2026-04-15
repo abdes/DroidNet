@@ -11,6 +11,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -19,6 +20,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
@@ -40,6 +42,7 @@ namespace {
 using oxygen::Format;
 using oxygen::Graphics;
 using oxygen::RendererConfig;
+using oxygen::ResolvedView;
 using oxygen::TextureType;
 using oxygen::ViewId;
 using oxygen::ViewPort;
@@ -49,6 +52,7 @@ using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
+using oxygen::scene::Scene;
 using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
@@ -75,6 +79,24 @@ auto RunRenderAsync(std::shared_ptr<Renderer> renderer, FrameContext* frame_cont
 {
   co_await renderer->OnRender(
     oxygen::observer_ptr<FrameContext> { frame_context });
+}
+
+auto MakeResolvedView(const float width, const float height) -> ResolvedView
+{
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = width,
+    .height = height,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  params.view_matrix = glm::mat4(1.0F);
+  params.proj_matrix = glm::mat4(1.0F);
+  params.near_plane = 0.1F;
+  params.far_plane = 1000.0F;
+  return ResolvedView(params);
 }
 
 class SceneRendererPublicationTest : public ::testing::Test {
@@ -171,6 +193,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(
     frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.PublishedBindings", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
 
   auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.SceneColor");
   static_cast<void>(frame_context.RegisterView(
@@ -195,19 +220,17 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     published_bindings.view_color_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
   EXPECT_NE(scene_renderer->GetPublishedViewId(), oxygen::kInvalidViewId);
-  EXPECT_NE(scene_texture_bindings.scene_color_srv,
+  EXPECT_EQ(scene_texture_bindings.scene_color_srv,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(scene_texture_bindings.scene_color_uav,
+  EXPECT_EQ(scene_texture_bindings.scene_color_uav,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(scene_texture_bindings.scene_color_uav,
-    scene_texture_bindings.scene_color_srv);
   EXPECT_EQ(scene_texture_bindings.scene_depth_srv,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.partial_depth_srv,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.velocity_srv,
     SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(scene_texture_bindings.gbuffer_srvs[0],
+  EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[0],
     SceneTextureBindings::kInvalidIndex);
 }
 
@@ -217,6 +240,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto frame_context = FrameContext {};
   PrepareFrameContext(
     frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Resize", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
 
   auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.Resize");
   const auto view_id = frame_context.RegisterView(
@@ -267,10 +293,32 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto scene_renderer = SceneRenderer(
     *renderer_, *graphics_, config, ShadingMode::kDeferred);
   auto frame_context = FrameContext {};
-  auto render_context = RenderContext {};
-
   PrepareFrameContext(
     frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.ResolveAndCleanup", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.ResolveAndCleanup");
+  const auto view_id = frame_context.RegisterView(
+    MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+
+  auto render_context = RenderContext {};
+  render_context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+  render_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  render_context.active_view_index = std::size_t { 0U };
+  render_context.frame_views.push_back({
+    .view_id = view_id,
+    .is_scene_view = true,
+    .composition_view = {},
+    .shading_mode_override = {},
+    .resolved_view = oxygen::observer_ptr<const ResolvedView> { &resolved_view },
+    .primary_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
+  });
+  render_context.current_view.view_id = view_id;
+  render_context.current_view.exposure_view_id = view_id;
+  render_context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
 
   scene_renderer.OnFrameStart(frame_context);
   scene_renderer.OnRender(render_context);
@@ -284,14 +332,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, bindings.scene_color_srv);
-  EXPECT_EQ(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_TRUE(extracts.resolved_scene_color.valid);
   EXPECT_NE(extracts.resolved_scene_color.texture,
     &scene_renderer.GetSceneTextures().GetSceneColor());
-  EXPECT_FALSE(extracts.resolved_scene_depth.valid);
-  EXPECT_EQ(extracts.resolved_scene_depth.texture, nullptr);
-  EXPECT_FALSE(extracts.prev_scene_depth.valid);
-  EXPECT_EQ(extracts.prev_scene_depth.texture, nullptr);
+  EXPECT_TRUE(extracts.resolved_scene_depth.valid);
+  EXPECT_NE(extracts.resolved_scene_depth.texture, nullptr);
+  EXPECT_TRUE(extracts.prev_scene_depth.valid);
+  EXPECT_NE(extracts.prev_scene_depth.texture, nullptr);
   EXPECT_FALSE(extracts.prev_velocity.valid);
   EXPECT_EQ(extracts.prev_velocity.texture, nullptr);
 }

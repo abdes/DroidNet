@@ -24,6 +24,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 
 #include "Fakes/Graphics.h"
@@ -357,15 +358,16 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   BasePassCompletesVelocityForDynamicGeometry)
 {
-  auto base_pass = oxygen::vortex::BasePassModule(*renderer_);
+  auto scene_config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_,
-    SceneTexturesConfig {
-      .extent = { 64U, 64U },
-      .enable_velocity = true,
-      .enable_custom_depth = false,
-      .gbuffer_count = 4U,
-      .msaa_sample_count = 1U,
-    });
+    scene_config);
 
   auto render_items = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
   render_items.front().main_view_visible = true;
@@ -390,6 +392,62 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   base_pass.Execute(context, scene_textures);
 
   EXPECT_TRUE(base_pass.HasCompletedVelocityForDynamicGeometry());
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  BasePassRequiresPreparedFrameBeforePublishingProducts)
+{
+  auto scene_config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
+  auto context = RenderContext {};
+
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = true,
+    .early_z_pass_done = false,
+    .shading_mode = ShadingMode::kDeferred,
+  });
+
+  base_pass.Execute(context, scene_textures);
+
+  EXPECT_FALSE(base_pass.HasPublishedBasePassProducts());
+  EXPECT_FALSE(base_pass.HasCompletedVelocityForDynamicGeometry());
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  BasePassMeshProcessorHonorsVelocityPolicy)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::BasePassMeshProcessor(*renderer);
+
+  auto render_items = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
+  render_items.front().main_view_visible = true;
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.render_items
+    = std::span<const oxygen::vortex::sceneprep::RenderItemData>(
+      render_items.data(), render_items.size());
+
+  mesh_processor.BuildDrawCommands(
+    prepared_frame, ShadingMode::kDeferred, false);
+  auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 1U);
+  EXPECT_FALSE(draw_commands.front().writes_velocity);
+
+  mesh_processor.BuildDrawCommands(
+    prepared_frame, ShadingMode::kDeferred, true);
+  draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 1U);
+  EXPECT_TRUE(draw_commands.front().writes_velocity);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
@@ -439,6 +497,14 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
 
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
+  const auto& bindings = scene_renderer->GetSceneTextureBindings();
+  EXPECT_EQ(bindings.scene_color_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
+    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  }
 }
 
 } // namespace

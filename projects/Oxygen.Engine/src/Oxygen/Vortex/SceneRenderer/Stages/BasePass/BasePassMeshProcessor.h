@@ -45,7 +45,8 @@ public:
   auto operator=(BasePassMeshProcessor&&) -> BasePassMeshProcessor& = delete;
 
   OXGN_VRTX_API void BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene, ShadingMode mode);
+    const PreparedSceneFrame& prepared_scene, ShadingMode mode,
+    bool write_velocity);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const BasePassDrawCommand>;
