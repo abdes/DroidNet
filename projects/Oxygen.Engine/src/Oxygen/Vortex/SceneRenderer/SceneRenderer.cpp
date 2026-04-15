@@ -165,10 +165,13 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
-    depth_prepass_ = std::make_unique<DepthPrepassModule>(renderer_);
+    depth_prepass_
+      = std::make_unique<DepthPrepassModule>(renderer_, scene_textures_.GetConfig());
   }
-  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
-    base_pass_ = std::make_unique<BasePassModule>(renderer_);
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
+    base_pass_
+      = std::make_unique<BasePassModule>(renderer_, scene_textures_.GetConfig());
   }
 }
 

@@ -14,6 +14,7 @@
 namespace oxygen::vortex {
 
 struct RenderContext;
+struct SceneTexturesConfig;
 class Renderer;
 class SceneTextures;
 class BasePassMeshProcessor;
@@ -26,7 +27,8 @@ struct BasePassConfig {
 
 class BasePassModule {
 public:
-  OXGN_VRTX_API explicit BasePassModule(Renderer& renderer);
+  OXGN_VRTX_API explicit BasePassModule(
+    Renderer& renderer, const SceneTexturesConfig& scene_textures_config);
   OXGN_VRTX_API ~BasePassModule();
 
   BasePassModule(const BasePassModule&) = delete;

@@ -34,7 +34,7 @@ auto ResolveDrawCount(const PreparedSceneFrame& prepared_scene) noexcept
 
 auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
   const PreparedSceneFrame& prepared_scene, const DrawMetadata& metadata,
-  const std::uint32_t draw_index) -> void
+  const std::uint32_t draw_index, const bool write_velocity) -> void
 {
   auto material_handle = metadata.material_handle;
   auto geometry_lod_index = metadata.submesh_index;
@@ -61,12 +61,13 @@ auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
     .base_vertex = metadata.base_vertex,
     .start_instance = 0U,
     .is_indexed = metadata.is_indexed != 0U,
-    .writes_velocity = true,
+    .writes_velocity = write_velocity,
   });
 }
 
 auto AppendRenderItemCommand(std::vector<BasePassDrawCommand>& draw_commands,
-  const PreparedSceneFrame& prepared_scene, const std::uint32_t draw_index)
+  const PreparedSceneFrame& prepared_scene, const std::uint32_t draw_index,
+  const bool write_velocity)
   -> void
 {
   const auto& render_item = prepared_scene.render_items[draw_index];
@@ -85,7 +86,7 @@ auto AppendRenderItemCommand(std::vector<BasePassDrawCommand>& draw_commands,
     .submesh_index = render_item.submesh_index,
     .instance_count = 1U,
     .is_indexed = render_item.geometry.IsValid(),
-    .writes_velocity = true,
+    .writes_velocity = write_velocity,
   });
 }
 
@@ -117,7 +118,8 @@ BasePassMeshProcessor::BasePassMeshProcessor(Renderer& renderer)
 BasePassMeshProcessor::~BasePassMeshProcessor() = default;
 
 void BasePassMeshProcessor::BuildDrawCommands(
-  const PreparedSceneFrame& prepared_scene, const ShadingMode mode)
+  const PreparedSceneFrame& prepared_scene, const ShadingMode mode,
+  const bool write_velocity)
 {
   (void)renderer_;
   draw_commands_.clear();
@@ -149,8 +151,8 @@ void BasePassMeshProcessor::BuildDrawCommands(
         const auto end
           = (std::min)(partition.end, static_cast<std::uint32_t>(draw_count));
         for (auto draw_index = begin; draw_index < end; ++draw_index) {
-          AppendMetadataCommand(
-            draw_commands_, prepared_scene, draw_records[draw_index], draw_index);
+          AppendMetadataCommand(draw_commands_, prepared_scene,
+            draw_records[draw_index], draw_index, write_velocity);
         }
       }
     } else {
@@ -160,7 +162,7 @@ void BasePassMeshProcessor::BuildDrawCommands(
           continue;
         }
         AppendMetadataCommand(
-          draw_commands_, prepared_scene, metadata, draw_index);
+          draw_commands_, prepared_scene, metadata, draw_index, write_velocity);
       }
     }
 
@@ -169,7 +171,8 @@ void BasePassMeshProcessor::BuildDrawCommands(
   }
 
   for (std::uint32_t draw_index = 0U; draw_index < draw_count; ++draw_index) {
-    AppendRenderItemCommand(draw_commands_, prepared_scene, draw_index);
+    AppendRenderItemCommand(
+      draw_commands_, prepared_scene, draw_index, write_velocity);
   }
 
   SortDrawCommands(draw_commands_);

@@ -14,6 +14,7 @@
 namespace oxygen::vortex {
 
 struct RenderContext;
+struct SceneTexturesConfig;
 class Renderer;
 class SceneTextures;
 class DepthPrepassMeshProcessor;
@@ -25,7 +26,8 @@ struct DepthPrepassConfig {
 
 class DepthPrepassModule {
 public:
-  OXGN_VRTX_API explicit DepthPrepassModule(Renderer& renderer);
+  OXGN_VRTX_API explicit DepthPrepassModule(
+    Renderer& renderer, const SceneTexturesConfig& scene_textures_config);
   OXGN_VRTX_API ~DepthPrepassModule();
 
   DepthPrepassModule(const DepthPrepassModule&) = delete;
