@@ -282,6 +282,16 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="PS" }, EntryPoint { .type=kVertex, .name="VS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
+  // Vortex deferred-core seed shaders: initial depth/base requests only.
+  ShaderFileSpec {
+    .path="Vortex/Stages/DepthPrepass/DepthPrepass.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DepthPrepassPS" }, EntryPoint { .type=kVertex, .name="DepthPrepassVS" } },
+    .permutations=std::array<std::string_view, 1> { "HAS_VELOCITY" }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } }
+  },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
@@ -490,6 +500,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ForwardDebug_PS DEBUG_*: 4 each (required debug define x ALPHA_TEST x
 //   OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
+// - VortexDepthPrepass: 4 (2 entries x HAS_VELOCITY on/off)
+// - VortexBasePassGBuffer: 2
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
@@ -507,6 +519,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 137
+// Total: 143
 
 } // namespace oxygen::graphics::d3d12
