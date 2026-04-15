@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/ConventionalShadowDrawRecord.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
@@ -96,6 +97,20 @@ struct PreparedSceneFrame {
   {
     // For now validity is trivial; will evolve as fields are populated.
     return true;
+  }
+
+  [[nodiscard]] auto GetDrawMetadata() const noexcept
+    -> std::span<const DrawMetadata>
+  {
+    if (draw_metadata_bytes.empty()) {
+      return {};
+    }
+
+    const auto count = draw_metadata_bytes.size() / sizeof(DrawMetadata);
+    const auto* metadata
+      // NOLINTNEXTLINE(*-reinterpret-cast)
+      = reinterpret_cast<const DrawMetadata*>(draw_metadata_bytes.data());
+    return { metadata, count };
   }
 };
 

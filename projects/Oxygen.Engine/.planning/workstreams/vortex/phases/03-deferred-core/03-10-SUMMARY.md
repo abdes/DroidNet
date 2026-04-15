@@ -118,7 +118,9 @@ None - no external service configuration required.
 - Addressed the follow-on review after `03-10`: Stage 9 now refuses to publish base-pass products when the current view lacks a prepared-scene payload, and `SceneRenderer` only instantiates `BasePassModule` when `kDeferredShading` is available.
 - Aligned the stage-module constructor signatures with the LLDs by threading `SceneTexturesConfig` through both `BasePassModule` and `DepthPrepassModule`, even though the current Phase 3 implementations still treat the config as contract-only input.
 - Propagated the velocity policy into `BasePassMeshProcessor` so `writes_velocity` mirrors the active Stage 9 config instead of being hardcoded true.
+- Resolved F-06 by moving typed draw-metadata access into `PreparedSceneFrame`, adding `AcceptedDrawView` as the shared partition-aware filtering surface, and migrating both mesh processors to that non-owning view instead of open-coding `reinterpret_cast` plus partition/range plumbing.
 - Added review-specific regression coverage: `BasePassRequiresPreparedFrameBeforePublishingProducts`, `BasePassMeshProcessorHonorsVelocityPolicy`, and extra no-deferred-capability assertions in `DepthPrepassStaysDisabledWithoutDeferredShadingCapability`.
+- Added unit coverage for the shared draw view itself: `PreparedSceneFrameExposesTypedDrawMetadata`, `PartitionedIterationSkipsRejectedPartitions`, `FlatIterationFiltersByDrawFlags`, and `EmptyMetadataYieldsNoAcceptedDraws`.
 - Re-ran the live test executables directly after the fix because `ctest` discovery briefly surfaced stale expectation output:
   `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe` and
   `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererDeferredCore.Tests.exe`
