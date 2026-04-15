@@ -39,8 +39,7 @@ static inline float3 DecodeGBufferNormal(float4 gbuffer_normal)
 static inline float4 EncodeGBufferMaterial(
     float metallic, float specular, float roughness, uint shading_model)
 {
-    return float4(
-        metallic, specular, roughness, (float(shading_model) + 0.5f) / 255.0f);
+    return float4(metallic, specular, roughness, float(shading_model) / 255.0f);
 }
 
 static inline void DecodeGBufferMaterial(float4 gbuffer_material,
@@ -50,7 +49,7 @@ static inline void DecodeGBufferMaterial(float4 gbuffer_material,
     metallic = gbuffer_material.x;
     specular = gbuffer_material.y;
     roughness = gbuffer_material.z;
-    shading_model = uint(gbuffer_material.w * 255.0f);
+    shading_model = uint(gbuffer_material.w * 255.0f + 0.5f);
 }
 
 static inline float4 EncodeGBufferBaseColor(float3 base_color, float ambient_occlusion)

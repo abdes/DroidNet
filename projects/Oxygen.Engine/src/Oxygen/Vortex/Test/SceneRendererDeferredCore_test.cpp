@@ -53,7 +53,8 @@ auto DestroyRenderer(Renderer* renderer) -> void
 }
 
 auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics,
-  const CapabilitySet capabilities = RendererCapabilityFamily::kScenePreparation)
+  const CapabilitySet capabilities = RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading)
   -> std::shared_ptr<Renderer>
 {
   auto config = RendererConfig {};
@@ -204,6 +205,104 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   const auto rebound_context = RenderForView(first_view_id_, first_resolved_view_);
   EXPECT_EQ(rebound_context.current_view.prepared_frame.get(), first_prepared);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthPrepassDisabledModeLeavesCompletenessDisabled)
+{
+  scene_renderer_->OnFrameStart(frame_context_);
+
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.active_view_index = std::size_t { 0U };
+  context.frame_views.push_back({
+    .view_id = first_view_id_,
+    .is_scene_view = true,
+    .composition_view = {},
+    .shading_mode_override = {},
+    .resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ },
+    .primary_target = {},
+  });
+  context.current_view.view_id = first_view_id_;
+  context.current_view.exposure_view_id = first_view_id_;
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  context.current_view.depth_prepass_mode = oxygen::vortex::DepthPrePassMode::kDisabled;
+
+  scene_renderer_->OnRender(context);
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kDisabled);
+  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthPrepassShellStaysIncompleteWithoutPublishingDepthProducts)
+{
+  const auto context = RenderForView(first_view_id_, first_resolved_view_);
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kIncomplete);
+  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().velocity_srv,
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
+  DepthPrepassStaysDisabledWithoutDeferredShadingCapability)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(
+    graphics, RendererCapabilityFamily::kScenePreparation);
+  auto scene_renderer = std::make_unique<SceneRenderer>(*renderer, *graphics,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = true,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererDeferredCoreCapabilityTest", 16U);
+  auto frame_context = FrameContext {};
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  static_cast<void>(
+    frame_context.RegisterView(MakeSceneView(ViewId { 11U }, 64.0F, 64.0F)));
+
+  scene_renderer->OnFrameStart(frame_context);
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.active_view_index = std::size_t { 0U };
+  context.frame_views.push_back({
+    .view_id = ViewId { 11U },
+    .is_scene_view = true,
+    .composition_view = {},
+    .shading_mode_override = {},
+    .resolved_view = oxygen::observer_ptr<const ResolvedView> { &resolved_view },
+    .primary_target = {},
+  });
+  context.current_view.view_id = ViewId { 11U };
+  context.current_view.exposure_view_id = ViewId { 11U };
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+
+  scene_renderer->OnRender(context);
+
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kDisabled);
 }
 
 } // namespace

@@ -193,7 +193,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(scene_texture_bindings.scene_color_uav,
     scene_texture_bindings.scene_color_srv);
-  EXPECT_NE(scene_texture_bindings.scene_depth_srv,
+  EXPECT_EQ(scene_texture_bindings.scene_depth_srv,
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_texture_bindings.partial_depth_srv,
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_texture_bindings.velocity_srv,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(scene_texture_bindings.gbuffer_srvs[0],
     SceneTextureBindings::kInvalidIndex);
@@ -272,16 +276,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, bindings.scene_color_srv);
-  EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_TRUE(extracts.resolved_scene_color.valid);
   EXPECT_NE(extracts.resolved_scene_color.texture,
     &scene_renderer.GetSceneTextures().GetSceneColor());
-  EXPECT_TRUE(extracts.resolved_scene_depth.valid);
-  EXPECT_NE(extracts.resolved_scene_depth.texture,
-    &scene_renderer.GetSceneTextures().GetSceneDepth());
-  EXPECT_TRUE(extracts.prev_scene_depth.valid);
-  EXPECT_NE(extracts.prev_scene_depth.texture,
-    &scene_renderer.GetSceneTextures().GetSceneDepth());
+  EXPECT_FALSE(extracts.resolved_scene_depth.valid);
+  EXPECT_EQ(extracts.resolved_scene_depth.texture, nullptr);
+  EXPECT_FALSE(extracts.prev_scene_depth.valid);
+  EXPECT_EQ(extracts.prev_scene_depth.texture, nullptr);
   EXPECT_FALSE(extracts.prev_velocity.valid);
   EXPECT_EQ(extracts.prev_velocity.texture, nullptr);
 }
@@ -301,9 +303,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   scene_renderer.ApplyStage3DepthPrepassState();
   auto bindings = scene_renderer.GetSceneTextureBindings();
-  EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
 
@@ -311,6 +313,9 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
 
   scene_renderer.ApplyStage10RebuildState();
   bindings = scene_renderer.GetSceneTextureBindings();

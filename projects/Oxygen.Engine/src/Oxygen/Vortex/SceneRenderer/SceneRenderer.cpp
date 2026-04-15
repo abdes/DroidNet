@@ -161,6 +161,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
 {
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
     init_views_ = std::make_unique<InitViewsModule>(renderer_);
+  }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     depth_prepass_ = std::make_unique<DepthPrepassModule>(renderer_);
   }
 }
@@ -271,8 +274,7 @@ void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
 void SceneRenderer::ApplyStage3DepthPrepassState()
 {
-  if (depth_prepass_ == nullptr
-    || depth_prepass_->GetCompleteness() == DepthPrePassCompleteness::kDisabled) {
+  if (depth_prepass_ == nullptr || !depth_prepass_->HasPublishedDepthProducts()) {
     return;
   }
 

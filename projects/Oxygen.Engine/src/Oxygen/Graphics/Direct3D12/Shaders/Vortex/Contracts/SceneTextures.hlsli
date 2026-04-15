@@ -7,6 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_SCENETEXTURES_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_SCENETEXTURES_HLSLI
 
+#include "Definitions/SceneDefinitions.hlsli"
 #include "SceneTextureBindings.hlsli"
 
 static inline float SampleSceneDepth(float2 uv, SceneTextureBindingData bindings)
@@ -16,8 +17,9 @@ static inline float SampleSceneDepth(float2 uv, SceneTextureBindingData bindings
     }
 
     Texture2D<float> depth_texture = ResourceDescriptorHeap[bindings.scene_depth_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return depth_texture.SampleLevel(linear_sampler, uv, 0.0f);
+    SamplerState point_clamp_sampler
+        = SamplerDescriptorHeap[VORTEX_SAMPLER_POINT_CLAMP];
+    return depth_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
 }
 
 static inline float4 SampleSceneColor(float2 uv, SceneTextureBindingData bindings)
@@ -54,8 +56,9 @@ static inline float4 SampleGBuffer(
     }
 
     Texture2D<float4> gbuffer_texture = ResourceDescriptorHeap[slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return gbuffer_texture.SampleLevel(linear_sampler, uv, 0.0f);
+    SamplerState point_clamp_sampler
+        = SamplerDescriptorHeap[VORTEX_SAMPLER_POINT_CLAMP];
+    return gbuffer_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_SCENETEXTURES_HLSLI
