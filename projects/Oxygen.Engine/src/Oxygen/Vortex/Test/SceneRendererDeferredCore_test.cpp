@@ -242,18 +242,29 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DepthPrepassShellStaysIncompleteWithoutPublishingDepthProducts)
+  DepthPrepassPublishesSceneDepthAndPartialDepth)
 {
   const auto context = RenderForView(first_view_id_, first_resolved_view_);
 
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
-    oxygen::vortex::DepthPrePassCompleteness::kIncomplete);
-  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
+    oxygen::vortex::DepthPrePassCompleteness::kComplete);
+  EXPECT_NE(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
+  EXPECT_NE(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().velocity_srv,
+  EXPECT_NE(scene_renderer_->GetSceneTextureBindings().velocity_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthPrepassCompletenessControlsEarlyDepthContract)
+{
+  const auto context = RenderForView(first_view_id_, first_resolved_view_);
+
+  EXPECT_TRUE(context.current_view.HasPlannedDepthPrePass());
+  EXPECT_TRUE(context.current_view.IsEarlyDepthComplete());
+  EXPECT_EQ(context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kComplete);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
