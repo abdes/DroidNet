@@ -158,7 +158,7 @@ namespace {
     };
   }
 
-  auto HasPublishedGBufferDebugInputs(
+  auto HasPublishedGBufferBindings(
     const SceneTextureBindings& bindings) -> bool
   {
     return std::ranges::all_of(bindings.gbuffer_srvs,
@@ -173,7 +173,7 @@ namespace {
     return bindings.scene_depth_srv != SceneTextureBindings::kInvalidIndex
       && bindings.scene_color_uav != SceneTextureBindings::kInvalidIndex
       && bindings.stencil_srv != SceneTextureBindings::kInvalidIndex
-      && HasPublishedGBufferDebugInputs(bindings);
+      && HasPublishedGBufferBindings(bindings);
   }
 
 } // namespace
@@ -350,7 +350,7 @@ void SceneRenderer::ApplyStage10RebuildState()
     | SceneTextureSetupMode::Flag::kSceneColor
     | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
-  CHECK_F(HasPublishedGBufferDebugInputs(scene_texture_bindings_),
+  CHECK_F(HasPublishedGBufferBindings(scene_texture_bindings_),
     "SceneRenderer: Stage 10 must publish GBuffer bindings before deferred "
     "lighting or GBuffer debug inspection");
 }

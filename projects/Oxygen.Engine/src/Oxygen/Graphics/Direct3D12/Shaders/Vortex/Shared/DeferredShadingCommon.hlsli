@@ -90,17 +90,12 @@ static inline float GeometrySmith(float NoV, float NoL, float roughness)
 
 static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
     float2 uv,
-    float4x4 world_to_view_matrix,
-    float4x4 view_to_clip_matrix,
+    float3 world_position,
     float3 camera_position_ws,
     SceneTextureBindingData bindings)
 {
     DeferredLightingSurfaceData surface = (DeferredLightingSurfaceData)0;
-
-    const float scene_depth = SampleSceneDepth(uv, bindings);
-    surface.world_position = ReconstructWorldPositionFromViewMatrices(
-        uv, scene_depth, world_to_view_matrix, view_to_clip_matrix,
-        camera_position_ws);
+    surface.world_position = world_position;
 
     const GBufferData gbuffer = ReadGBuffer(uv, bindings);
     surface.world_normal = VortexSafeNormalize(gbuffer.world_normal);
@@ -150,6 +145,31 @@ static inline float3 EvaluateCookTorranceLighting(
         * surface.ambient_occlusion;
 }
 
+static inline float3 EvaluateDeferredLightAtWorldPosition(
+    float2 uv,
+    float scene_depth,
+    float3 world_position,
+    float3 light_direction_to_source,
+    float3 light_radiance,
+    float light_attenuation,
+    float3 camera_position_ws,
+    SceneTextureBindingData bindings)
+{
+    if (!HasDeferredLightingInputs(bindings) || light_attenuation <= 0.0f) {
+        return 0.0f.xxx;
+    }
+
+    if (scene_depth >= 1.0f) {
+        return 0.0f.xxx;
+    }
+
+    const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
+        uv, world_position, camera_position_ws, bindings);
+    return EvaluateCookTorranceLighting(
+               surface, light_direction_to_source, light_radiance)
+        * light_attenuation;
+}
+
 static inline float3 EvaluateDeferredLight(
     float2 uv,
     float3 light_direction_to_source,
@@ -165,16 +185,12 @@ static inline float3 EvaluateDeferredLight(
     }
 
     const float scene_depth = SampleSceneDepth(uv, bindings);
-    if (scene_depth >= 1.0f) {
-        return 0.0f.xxx;
-    }
-
-    const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
-        uv, world_to_view_matrix, view_to_clip_matrix, camera_position_ws,
-        bindings);
-    return EvaluateCookTorranceLighting(
-               surface, light_direction_to_source, light_radiance)
-        * light_attenuation;
+    const float3 world_position = ReconstructWorldPositionFromViewMatrices(
+        uv, scene_depth, world_to_view_matrix, view_to_clip_matrix,
+        camera_position_ws);
+    return EvaluateDeferredLightAtWorldPosition(uv, scene_depth, world_position,
+        light_direction_to_source, light_radiance, light_attenuation,
+        camera_position_ws, bindings);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SHARED_DEFERREDSHADINGCOMMON_HLSLI
