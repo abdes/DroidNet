@@ -41,20 +41,21 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         return 0.0f.xxxx;
     }
 
+    const float scene_depth = SampleSceneDepth(input.screen_uv, bindings);
     const float3 world_position = ReconstructWorldPositionFromViewMatrices(
-        input.screen_uv, SampleSceneDepth(input.screen_uv, bindings),
+        input.screen_uv, scene_depth,
         view_matrix, projection_matrix, camera_position);
     const float3 light_vector
         = light_constants.light_position_and_radius.xyz - world_position;
     const float attenuation = ComputeLocalLightDistanceAttenuation(
         light_vector, light_constants.light_position_and_radius.w);
-    const float3 lighting = EvaluateDeferredLight(
+    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
         input.screen_uv,
+        scene_depth,
+        world_position,
         VortexSafeNormalize(light_vector),
         LoadDeferredLightColor(light_constants.light_color_and_intensity),
         attenuation,
-        view_matrix,
-        projection_matrix,
         camera_position,
         bindings);
     return float4(lighting, 0.0f);

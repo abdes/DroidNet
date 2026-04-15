@@ -106,6 +106,17 @@ None - no external service configuration required.
 - `cmake --build --preset windows-debug --target oxygen-graphics-direct3d12 --parallel 4` passed; ShaderBake expanded `194` requests, compiled the six new deferred-light requests, and repacked `bin/Oxygen/Debug/dev/shaders.bin`.
 - `powershell -ExecutionPolicy Bypass -File tools\cli\oxytidy.ps1 src\Oxygen\Graphics\Direct3D12\Shaders\EngineShaders.cpp -Configuration Debug -SummaryOnly` passed with `0 warnings, 0 errors`.
 
+## Post-Review Remediation
+
+- The incremental review on Waves 10-12 was correct about the local-light shader cost: point and spot lights were reconstructing world position from depth to build `light_vector`, then calling back into a shared helper that sampled depth and reconstructed world position again.
+- `DeferredShadingCommon.hlsli` now exposes `EvaluateDeferredLightAtWorldPosition(...)`, so the point/spot shaders reuse the already-sampled `scene_depth` and reconstructed `world_position` instead of paying the duplicate per-pixel fetch/reconstruction cost.
+- `SceneRenderer.cpp` renamed `HasPublishedGBufferDebugInputs(...)` to `HasPublishedGBufferBindings(...)` so the helper name matches its actual role as the structural GBuffer-readiness gate for both debug views and deferred-light consumption.
+- Re-ran the affected build and proof slice after the fix:
+  `cmake --build --preset windows-debug --target oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`,
+  `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererDeferredCore.Tests.exe`, and
+  `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe`
+  all passed.
+
 ## Next Phase Readiness
 
 - Ready for `03-13-PLAN.md`.
