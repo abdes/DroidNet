@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Vortex Initial Release
 current_phase: 03
 current_phase_name: deferred-core
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-04-15T07:29:32.7176801Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-04-15T07:41:58.9165696Z"
 last_activity: 2026-04-15
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 59
-  completed_plans: 25
-  percent: 42
+  completed_plans: 26
+  percent: 44
 ---
 
 # Project State
@@ -33,13 +33,13 @@ through real runtime migration and verified rendering behavior.
 **Current Phase Name:** deferred-core
 Phase: 03 (deferred-core) — EXECUTING
 **Total Plans in Phase:** 15
-**Current Plan:** 2
-Plan: 2 of 15
+**Current Plan:** 3
+Plan: 3 of 15
 **Status:** Executing Phase 03
 **Last Activity:** 2026-04-15
-**Last Activity Description:** Completed plan 03-01 and advanced execution to 03-02
+**Last Activity Description:** Completed plan 03-02 and advanced execution to 03-03
 
-Progress: [████░░░░░░] 42%
+Progress: [████░░░░░░] 44%
 
 ## Accumulated Context
 
@@ -68,6 +68,14 @@ Progress: [████░░░░░░] 42%
 - SceneTextureBindings and ViewFrameBindings now have shader-side mirrors that
   preserve the CPU field vocabulary and invalid-slot sentinel semantics.
 
+- Phase 03-02 registers only the Vortex depth/base seed requests in
+  `EngineShaderCatalog.h`; deferred-light registrations remain deferred to the
+  later Phase 03 shader-family plan.
+
+- The first Vortex depth/base entrypoints now compile through ShaderBake, and
+  the depth-prepass family already carries the `HAS_VELOCITY` permutation for
+  later stage wiring.
+
 ### Pending Todos
 
 None yet.
@@ -90,5 +98,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Completed 03-01-PLAN.md
-Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-02-PLAN.md
+Stopped at: Completed 03-02-PLAN.md
+Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-03-PLAN.md
