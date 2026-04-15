@@ -83,6 +83,7 @@ auto MakeTextureResourceDesc(const TextureDesc& desc) -> D3D12_RESOURCE_DESC
   const FormatInfo& format_info = GetFormatInfo(desc.format);
 
   D3D12_RESOURCE_DESC resource_desc {};
+  resource_desc.Alignment = 0;
   resource_desc.Width = desc.width;
   resource_desc.Height = desc.height;
   resource_desc.MipLevels = static_cast<UINT16>(desc.mip_levels);
@@ -129,6 +130,13 @@ auto MakeTextureResourceDesc(const TextureDesc& desc) -> D3D12_RESOURCE_DESC
   }
   if (desc.is_uav) {
     resource_desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+
+  // Stencil-bearing DXGI textures are multi-plane resources. D3D12MA will try
+  // 4KB small-resource placement when Alignment stays at 0, but D3D12 rejects
+  // that alignment for planar formats such as D32_FLOAT_S8X24_UINT.
+  if (format_info.has_stencil) {
+    resource_desc.Alignment = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
   }
 
   return resource_desc;
