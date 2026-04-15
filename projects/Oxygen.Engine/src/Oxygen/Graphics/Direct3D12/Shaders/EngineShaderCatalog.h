@@ -317,6 +317,21 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_METALNESS" }
   },
+  // VortexDeferredLightDirectionalVS / VortexDeferredLightDirectionalPS
+  ShaderFileSpec {
+    .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" }, EntryPoint { .type=kVertex, .name="DeferredLightDirectionalVS" } }
+  },
+  // VortexDeferredLightPointVS / VortexDeferredLightPointPS
+  ShaderFileSpec {
+    .path="Vortex/Services/Lighting/DeferredLightPoint.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightPointPS" }, EntryPoint { .type=kVertex, .name="DeferredLightPointVS" } }
+  },
+  // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS
+  ShaderFileSpec {
+    .path="Vortex/Services/Lighting/DeferredLightSpot.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightSpotPS" }, EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
+  },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
@@ -528,6 +543,9 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassGBuffer: 4 (2 entries x ALPHA_TEST)
 // - VortexBasePassDebugView: 5 (VS + 4 required debug PS variants)
+// - VortexDeferredLightDirectional: 2 entries
+// - VortexDeferredLightPoint: 2 entries
+// - VortexDeferredLightSpot: 2 entries
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
@@ -545,6 +563,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 148
+// Total: 154
 
 } // namespace oxygen::graphics::d3d12
