@@ -15,6 +15,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
 
@@ -166,6 +167,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     depth_prepass_ = std::make_unique<DepthPrepassModule>(renderer_);
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)) {
+    base_pass_ = std::make_unique<BasePassModule>(renderer_);
+  }
 }
 
 SceneRenderer::~SceneRenderer() = default;
@@ -231,10 +235,20 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 8: Shadow depth
 
   // Stage 9: Base pass
-  ApplyStage9BasePassState();
+  if (base_pass_ != nullptr) {
+    base_pass_->SetConfig(BasePassConfig {
+      .write_velocity = scene_textures_.GetVelocity() != nullptr,
+      .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
+      .shading_mode = shading_mode,
+    });
+    base_pass_->Execute(ctx, scene_textures_);
+    ApplyStage9BasePassState();
+  }
 
   // Stage 10: Rebuild scene textures with GBuffers
-  ApplyStage10RebuildState();
+  if (base_pass_ != nullptr) {
+    ApplyStage10RebuildState();
+  }
 
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
 
