@@ -20,6 +20,9 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -43,7 +46,10 @@ using oxygen::ViewId;
 using oxygen::ViewPort;
 using oxygen::engine::FrameContext;
 using oxygen::graphics::QueueRole;
+using oxygen::scene::DirectionalLight;
+using oxygen::scene::PointLight;
 using oxygen::scene::Scene;
+using oxygen::scene::SpotLight;
 using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
@@ -197,6 +203,40 @@ protected:
 
     scene_renderer_->OnRender(context);
     return context;
+  }
+
+  auto AddDirectionalLight(std::string_view name) -> oxygen::scene::SceneNode
+  {
+    auto node = scene_->CreateNode(std::string(name));
+    auto light = std::make_unique<DirectionalLight>();
+    light->Common().color_rgb = { 1.0F, 0.95F, 0.8F };
+    light->SetIntensityLux(1500.0F);
+    EXPECT_TRUE(node.AttachLight(std::move(light)));
+    return node;
+  }
+
+  auto AddPointLight(std::string_view name) -> oxygen::scene::SceneNode
+  {
+    auto node = scene_->CreateNode(std::string(name));
+    auto light = std::make_unique<PointLight>();
+    light->Common().color_rgb = { 0.4F, 0.7F, 1.0F };
+    light->SetRange(6.0F);
+    light->SetLuminousFluxLm(1200.0F);
+    EXPECT_TRUE(node.AttachLight(std::move(light)));
+    return node;
+  }
+
+  auto AddSpotLight(std::string_view name) -> oxygen::scene::SceneNode
+  {
+    auto node = scene_->CreateNode(std::string(name));
+    auto light = std::make_unique<SpotLight>();
+    light->Common().color_rgb = { 1.0F, 0.6F, 0.3F };
+    light->SetRange(8.0F);
+    light->SetLuminousFluxLm(900.0F);
+    light->SetInnerConeAngleRadians(0.35F);
+    light->SetOuterConeAngleRadians(0.65F);
+    EXPECT_TRUE(node.AttachLight(std::move(light)));
+    return node;
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -483,6 +523,61 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
       "DEBUG_WORLD_NORMALS",
       "DEBUG_ROUGHNESS",
       "DEBUG_METALNESS" }));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingConsumesPublishedGBuffers)
+{
+  static_cast<void>(AddDirectionalLight("KeyLight"));
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+
+  EXPECT_TRUE(state.consumed_published_scene_textures);
+  EXPECT_EQ(state.published_view_id, first_view_id_);
+  EXPECT_EQ(state.published_view_frame_bindings_slot,
+    scene_renderer_->GetPublishedViewFrameBindingsSlot());
+  EXPECT_EQ(state.published_scene_texture_frame_slot,
+    scene_renderer_->GetPublishedViewFrameBindings().scene_texture_frame_slot);
+  EXPECT_EQ(state.consumed_scene_depth_srv, bindings.scene_depth_srv);
+  EXPECT_EQ(state.consumed_gbuffer_srvs, bindings.gbuffer_srvs);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingAccumulatesIntoSceneColor)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+
+  EXPECT_TRUE(state.accumulated_into_scene_color);
+  EXPECT_EQ(state.consumed_scene_color_uav, bindings.scene_color_uav);
+  EXPECT_EQ(state.directional_light_count, 1U);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingUsesStencilBoundedLocalLights)
+{
+  static_cast<void>(AddPointLight("PointFill"));
+  static_cast<void>(AddSpotLight("SpotRim"));
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
+
+  EXPECT_TRUE(state.used_stencil_bounded_local_lights);
+  EXPECT_EQ(state.consumed_stencil_srv, bindings.stencil_srv);
+  EXPECT_EQ(state.point_light_count, 1U);
+  EXPECT_EQ(state.spot_light_count, 1U);
+  EXPECT_EQ(state.local_light_count, 2U);
+  EXPECT_EQ(state.stencil_mark_pass_count, state.local_light_count);
+  EXPECT_EQ(state.stencil_lighting_pass_count, state.local_light_count);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
