@@ -349,7 +349,10 @@ requires its own LLD section or document.
 - Non-runtime facade `ForSinglePassHarness()` works against Vortex substrate
 - Full `Oxygen.Vortex.*` suite passes
 - `oxytidy` on the changed Phase 3 file scope reports no introduced warnings
-- RenderDoc capture at frame 10 shows expected pass ordering and GBuffer contents
+- Automated source/test/log closeout proves expected stage ordering, GBuffer
+  contents, SceneColor accumulation, and stencil-bounded local-light behavior
+- RenderDoc runtime validation is deferred to Phase 4, when `Examples/Async`
+  and DemoShell migrate to Vortex and can produce a truthful frame-10 capture
 
 ---
 
@@ -957,6 +960,9 @@ Per ARCHITECTURE.md §11.3.1:
 - Capture-driven validation required for: shadows, depth prepass, base pass,
   deferred lighting, GBuffer debug, scene-texture rebuild boundary, and
   **migration visual parity**
+- Phase 3 defers runtime capture validation until Phase 4 migrates
+  `Examples/Async` and DemoShell to Vortex; until then, Phase 3 closes with
+  automated source/test/log proof rather than a legacy-runtime RenderDoc claim
 
 ## 14. Risk Areas
 
