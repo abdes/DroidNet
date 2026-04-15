@@ -293,6 +293,30 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
   },
+  ShaderFileSpec {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kVertex, .name="BasePassDebugViewVS" } }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_BASE_COLOR" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_WORLD_NORMALS" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_ROUGHNESS" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_METALNESS" }
+  },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
@@ -503,6 +527,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassGBuffer: 4 (2 entries x ALPHA_TEST)
+// - VortexBasePassDebugView: 5 (VS + 4 required debug PS variants)
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
@@ -520,6 +545,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 143
+// Total: 148
 
 } // namespace oxygen::graphics::d3d12

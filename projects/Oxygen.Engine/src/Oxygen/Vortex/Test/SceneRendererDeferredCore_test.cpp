@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <string_view>
 
@@ -69,12 +70,9 @@ auto ContainsAll(
   std::string_view haystack, std::initializer_list<std::string_view> needles)
   -> bool
 {
-  for (const auto needle : needles) {
-    if (!haystack.contains(needle)) {
-      return false;
-    }
-  }
-  return true;
+  return std::ranges::all_of(needles, [&haystack](const auto needle) -> bool {
+    return haystack.contains(needle);
+  });
 }
 
 auto DestroyRenderer(Renderer* renderer) -> void
