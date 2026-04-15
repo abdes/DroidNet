@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Vortex Initial Release
 current_phase: 03
 current_phase_name: deferred-core
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-04-15T07:41:58.9165696Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-04-15T11:54:28.5868212+04:00"
 last_activity: 2026-04-15
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 59
-  completed_plans: 26
-  percent: 44
+  completed_plans: 27
+  percent: 46
 ---
 
 # Project State
@@ -33,13 +33,13 @@ through real runtime migration and verified rendering behavior.
 **Current Phase Name:** deferred-core
 Phase: 03 (deferred-core) — EXECUTING
 **Total Plans in Phase:** 15
-**Current Plan:** 3
-Plan: 3 of 15
+**Current Plan:** 4
+Plan: 4 of 15
 **Status:** Executing Phase 03
 **Last Activity:** 2026-04-15
-**Last Activity Description:** Completed plan 03-02 and advanced execution to 03-03
+**Last Activity Description:** Completed plan 03-03 and advanced execution to 03-04
 
-Progress: [████░░░░░░] 44%
+Progress: [█████░░░░░] 46%
 
 ## Accumulated Context
 
@@ -76,6 +76,13 @@ Progress: [████░░░░░░] 44%
   the depth-prepass family already carries the `HAS_VELOCITY` permutation for
   later stage wiring.
 
+- Phase 03-03 turns Stage 2 into a real `InitViewsModule` that owns persistent
+  ScenePrep state instead of leaving SceneRenderer with a placeholder seam.
+
+- InitViews now performs one frame collection plus per-view refinement/finalize
+  passes and retains prepared-scene backing storage for the later publication
+  proof plan.
+
 ### Pending Todos
 
 None yet.
@@ -98,5 +105,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Completed 03-02-PLAN.md
-Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-03-PLAN.md
+Stopped at: Completed 03-03-PLAN.md
+Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-04-PLAN.md
