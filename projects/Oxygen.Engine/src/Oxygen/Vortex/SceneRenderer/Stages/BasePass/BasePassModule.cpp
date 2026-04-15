@@ -25,6 +25,7 @@ void BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   static_cast<void>(scene_textures);
 
   has_published_base_pass_products_ = false;
+  has_completed_velocity_for_dynamic_geometry_ = false;
   if (config_.shading_mode != ShadingMode::kDeferred) {
     return;
   }
@@ -33,6 +34,7 @@ void BasePassModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     && ctx.current_view.prepared_frame->IsValid()) {
     mesh_processor_->BuildDrawCommands(
       *ctx.current_view.prepared_frame, config_.shading_mode);
+    has_completed_velocity_for_dynamic_geometry_ = config_.write_velocity;
   }
 
   static_cast<void>(renderer_);
@@ -47,6 +49,11 @@ void BasePassModule::SetConfig(const BasePassConfig& config)
 auto BasePassModule::HasPublishedBasePassProducts() const -> bool
 {
   return has_published_base_pass_products_;
+}
+
+auto BasePassModule::HasCompletedVelocityForDynamicGeometry() const -> bool
+{
+  return has_completed_velocity_for_dynamic_geometry_;
 }
 
 } // namespace oxygen::vortex
