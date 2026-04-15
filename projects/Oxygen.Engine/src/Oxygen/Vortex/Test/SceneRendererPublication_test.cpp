@@ -20,6 +20,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -48,8 +49,10 @@ using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
+using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
+using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::SceneTextureBindings;
 using oxygen::vortex::SceneTexturesConfig;
@@ -84,7 +87,12 @@ protected:
     auto config = RendererConfig {};
     config.upload_queue_key
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
-    renderer_ = { new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config)),
+    constexpr CapabilitySet kDeferredPublicationCapabilities
+      = RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading;
+    renderer_
+      = { new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config),
+            kDeferredPublicationCapabilities),
       DestroyRenderer };
   }
 
@@ -257,7 +265,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     .msaa_sample_count = 1U,
   };
   auto scene_renderer = SceneRenderer(
-    *renderer_, *graphics_, config, ShadingMode::kForward);
+    *renderer_, *graphics_, config, ShadingMode::kDeferred);
   auto frame_context = FrameContext {};
   auto render_context = RenderContext {};
 

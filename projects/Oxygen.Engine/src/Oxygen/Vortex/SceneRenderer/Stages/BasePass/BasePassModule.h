@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -14,6 +16,7 @@ namespace oxygen::vortex {
 struct RenderContext;
 class Renderer;
 class SceneTextures;
+class BasePassMeshProcessor;
 
 struct BasePassConfig {
   bool write_velocity { true };
@@ -33,10 +36,13 @@ public:
 
   OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
   OXGN_VRTX_API void SetConfig(const BasePassConfig& config);
+  [[nodiscard]] OXGN_VRTX_API auto HasPublishedBasePassProducts() const -> bool;
 
 private:
   Renderer& renderer_;
   BasePassConfig config_ {};
+  bool has_published_base_pass_products_ { false };
+  std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
 };
 
 } // namespace oxygen::vortex

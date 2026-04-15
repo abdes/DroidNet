@@ -8,7 +8,7 @@
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/Vertex.hlsli"
 
-#include "Vortex/Materials/GBufferMaterialOutput.hlsli"
+#include "Vortex/Materials/MaterialTemplateAdapter.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -106,13 +106,13 @@ BasePassGBufferVSOutput BasePassGBufferVS(
 GBufferOutput BasePassGBufferPS(
     BasePassGBufferVSOutput input, bool is_front_face : SV_IsFrontFace)
 {
-#if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
-#endif
-
-    return EvaluateGBufferMaterialOutput(input.world_pos, input.world_normal,
-        input.world_tangent, input.world_bitangent, input.uv, g_DrawIndex,
-        is_front_face);
+    BasePassMaterialTemplateInput material_input;
+    material_input.world_pos = input.world_pos;
+    material_input.world_normal = input.world_normal;
+    material_input.world_tangent = input.world_tangent;
+    material_input.world_bitangent = input.world_bitangent;
+    material_input.uv0 = input.uv;
+    material_input.draw_index = g_DrawIndex;
+    material_input.is_front_face = is_front_face ? 1u : 0u;
+    return EvaluateBasePassMaterialOutput(material_input);
 }

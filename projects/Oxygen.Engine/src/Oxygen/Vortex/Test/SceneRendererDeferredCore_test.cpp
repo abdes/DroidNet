@@ -172,7 +172,7 @@ protected:
   std::shared_ptr<Renderer> renderer_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
   std::shared_ptr<Scene> scene_;
-  FrameContext frame_context_ {};
+  FrameContext frame_context_;
   ResolvedView first_resolved_view_ = MakeResolvedView(64.0F, 64.0F);
   ResolvedView second_resolved_view_ = MakeResolvedView(96.0F, 54.0F);
   const ViewId first_view_id_ { 101U };
