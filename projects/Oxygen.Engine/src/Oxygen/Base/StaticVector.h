@@ -123,7 +123,7 @@ public:
     for (size_type i = 0; i < current_size_; ++i) {
       new (storage_ + i * sizeof(T)) T(std::move(other[i]));
     }
-    other.current_size_ = 0;
+    other.clear();
   }
 
   constexpr auto operator=(const StaticVector& other) -> StaticVector&
@@ -147,7 +147,7 @@ public:
       for (size_type i = 0; i < current_size_; ++i) {
         new (storage_ + i * sizeof(T)) T(std::move(other[i]));
       }
-      other.current_size_ = 0;
+      other.clear();
     }
     return *this;
   }
