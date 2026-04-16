@@ -28,12 +28,6 @@ DeferredLightVolumeVSOutput DeferredLightSpotVS(uint vertex_id : SV_VertexID)
 }
 
 [shader("pixel")]
-float4 DeferredLightSpotStencilMarkPS(DeferredLightVolumeVSOutput /*input*/) : SV_Target0
-{
-    return 0.0f.xxxx;
-}
-
-[shader("pixel")]
 float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
 {
     if (g_PassConstantsIndex == INVALID_BINDLESS_INDEX) {

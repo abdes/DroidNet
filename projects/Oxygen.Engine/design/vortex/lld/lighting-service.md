@@ -178,7 +178,7 @@ SceneRenderer::OnRender(ctx)
   │              └─ Prepares internal deferred-light draw data
   ├─ ...stages 7-11...
   └─ Stage 12: lighting_->RenderDeferredLighting(ctx, scene_textures)
-                 └─ For each light: canonical fullscreen/stencil-bounded draw
+                 └─ For each light: canonical fullscreen or bounded-volume deferred draw
                  └─ Accumulates into SceneColor
 ```
 
@@ -189,7 +189,7 @@ SceneRenderer::OnRender(ctx)
 | Forward-local-light structured buffer | Per frame | Upload ring buffer |
 | Light-grid metadata / indirection buffers | Per frame | Per-view clustered access data |
 | Deferred-light draw payloads | Per frame | Internal direct-light parameters |
-| Light volume geometry (sphere, cone) | Persistent | Shared with Phase 3 |
+| Light volume geometry (sphere, cone) | Persistent | Canonical permanent owner; replaces the temporary Phase 03 procedural `SV_VertexID` local-light proxy generation |
 | Deferred lighting PSOs | Persistent | Cached by renderer |
 
 ## 5. Shader Contracts
@@ -234,6 +234,20 @@ cbuffer DeferredLightConstants : register(b1) {
 
 Phase 3 deferred-light entrypoints remain canonical for stage 12 in Phase 4A.
 
+### 5.4 Phase 4A Geometry Ownership Cutover
+
+Phase 4A is required to remove the temporary Phase 03 procedural point/spot
+proxy-generation path. The permanent `LightingService` implementation owns:
+
+- persistent sphere proxy geometry for point lights
+- persistent cone proxy geometry for spot lights
+- the buffer lifetime, initialization/upload path, and cache identity for
+  those proxies
+
+Phase 4A completion is not truthful until the retained `SV_VertexID`
+procedural proxy-generation shortcut from Phase 03 is gone from the canonical
+Stage 12 runtime path.
+
 ## 6. Stage Integration
 
 ### 6.1 Dispatch Contract
@@ -254,13 +268,15 @@ Requires `kLightingData` + `kDeferredShading`.
 
 1. Move `SceneRenderer::RenderDeferredLighting()` body into
    `LightingService::RenderDeferredLighting()`.
-2. Add `BuildLightGrid()` (new, stage 6) and publish the forward-light family
+2. Replace the temporary Phase 03 procedural point/spot proxy generation with
+   persistent `LightingService`-owned sphere/cone geometry.
+3. Add `BuildLightGrid()` (new, stage 6) and publish the forward-light family
    through `LightingFrameBindings` / `ViewFrameBindings`.
-3. Keep the deferred-light draw contract separate from the published
+4. Keep the deferred-light draw contract separate from the published
    forward-light package so stage 12 stays canonically per-light.
-4. If Phase 4 enables the temporary ambient bridge, document it explicitly as
+5. If Phase 4 enables the temporary ambient bridge, document it explicitly as
    environment-probe sampling from already-published persistent state.
-5. Wire SceneRenderer dispatch: `lighting_->BuildLightGrid(ctx)` at stage 6,
+6. Wire SceneRenderer dispatch: `lighting_->BuildLightGrid(ctx)` at stage 6,
    `lighting_->RenderDeferredLighting(ctx, scene_textures)` at stage 12.
 
 ## 8. Testability Approach

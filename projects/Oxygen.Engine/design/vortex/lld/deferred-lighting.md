@@ -103,8 +103,8 @@ does not replace the canonical per-light deferred direct-lighting contract.
 | Light Type | Geometry | Draw Policy | Notes |
 | ---------- | -------- | ----------- | ----- |
 | Directional | Fullscreen triangle | Fullscreen | One fullscreen draw per directional light |
-| Point | Sphere bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective fallback |
-| Spot | Cone bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective fallback |
+| Point | Sphere bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Spot | Cone bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective bounded-volume mode |
 
 ### 3.2 Local-Light Volume Modes (Point + Spot)
 
@@ -115,8 +115,9 @@ renderer chooses the raster/depth policy per light:
   compare `LESS_EQUAL` / `GREATER_EQUAL` depending on the active Z convention.
 - **Camera inside light volume:** render back faces with depth compare
   `ALWAYS`.
-- **Non-perspective view fallback:** use the same direct one-pass path as the
-  inside-volume mode until a dedicated orthographic local-light policy exists.
+- **Non-perspective view mode:** use the same one-pass bounded-volume state as
+  the inside-volume mode until a dedicated orthographic local-light policy
+  exists.
 
 There is no separate stencil-mark pass in the final Phase 03 contract. Local
 lights are bounded by volume rasterization and per-pixel scene-depth sampling.
@@ -191,12 +192,12 @@ SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
   ├─ for each point light:
   │     ├─ Upload DeferredLightConstants (type=POINT)
   │     └─ One bounded-volume lighting draw
-  │           (outside-volume, inside-volume, or non-perspective fallback policy)
+  │           (outside-volume, inside-volume, or non-perspective bounded-volume policy)
   │
   └─ for each spot light:
         ├─ Upload DeferredLightConstants (type=SPOT)
         └─ One bounded-volume lighting draw
-              (outside-volume, inside-volume, or non-perspective fallback policy)
+              (outside-volume, inside-volume, or non-perspective bounded-volume policy)
 ```
 
 ## 5. Shader Contracts
@@ -372,14 +373,27 @@ float3 ReconstructDeferredWorldPosition(float2 uv, float deviceDepth) {
 
 ### 6.1 Unit Sphere (Point Lights)
 
-Low-poly unit sphere mesh (≈ 240 triangles). Scaled by light radius and
-translated to light position via `LightWorldMatrix`. Stored in a persistent
-geometry buffer allocated during renderer initialization.
+Phase 03 currently generates the point-light proxy sphere procedurally from
+`SV_VertexID` in shader code. The sphere is still treated as a unit bounded
+volume scaled and translated by `LightWorldMatrix`, but there is no persistent
+VB/IB allocation in the retained runtime branch.
+
+This is **temporary Phase 03 scaffolding only**. The permanent architecture is
+Phase 4A `LightingService` ownership of persistent sphere proxy geometry.
+Phase 4A must remove the procedural point-light proxy-generation path from the
+canonical Stage 12 runtime path.
 
 ### 6.2 Unit Cone (Spot Lights)
 
-Low-poly unit cone mesh (≈ 48 triangles). Scaled and oriented by spot light
-parameters (range, outer angle) via `LightWorldMatrix`.
+Phase 03 currently generates the spot-light proxy cone procedurally from
+`SV_VertexID` in shader code. The cone is still treated as a bounded volume
+scaled and oriented by `LightWorldMatrix`, but there is no persistent VB/IB
+allocation in the retained runtime branch.
+
+This is **temporary Phase 03 scaffolding only**. The permanent architecture is
+Phase 4A `LightingService` ownership of persistent cone proxy geometry. Phase
+4A must remove the procedural spot-light proxy-generation path from the
+canonical Stage 12 runtime path.
 
 ### 6.3 Fullscreen Triangle (Directional)
 
@@ -423,7 +437,7 @@ RTV:              SceneColor (R16G16B16A16_FLOAT)
 DSV:              SceneDepth (depth read)
 ```
 
-### 7.4 Non-Perspective Fallback PSO (Point/Spot)
+### 7.4 Non-Perspective Bounded-Volume PSO (Point/Spot)
 
 ```text
 RasterizerState:  CullFront (render back faces)
@@ -435,7 +449,7 @@ RTV:              SceneColor (R16G16B16A16_FLOAT)
 DSV:              SceneDepth (depth read)
 ```
 
-The non-perspective fallback is an explicit temporary Phase 03 policy, not a
+The non-perspective bounded-volume mode is an explicit temporary Phase 03 policy, not a
 claim that the camera is geometrically “inside” the light volume.
 
 ## 8. Stage Integration
@@ -462,9 +476,9 @@ stage 12 is skipped.
 
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
-| Light volume VB/IB (sphere, cone) | Persistent | Allocated once at init |
+| Procedural light-volume geometry (sphere, cone) | Shader-generated | Temporary Phase 03-only implementation shortcut; scheduled for removal in Phase 4A |
 | Per-light CBV (DeferredLightConstants) | Per draw | Upload ring buffer |
-| PSOs (directional + point/spot outside/inside/fallback variants) | Persistent | Cached by renderer |
+| PSOs (directional + point/spot outside/inside/non-perspective variants) | Persistent | Cached by renderer |
 
 ### 9.2 Performance Considerations
 
@@ -473,6 +487,13 @@ stage 12 is skipped.
   mode-specific cull/depth policy. Cost still scales linearly with light count.
 - **Future optimization (Phase 4A):** Tiled/clustered deferred using compute
   shaders. Not in Phase 3 scope.
+- **Temporary Phase 03 deviation only:** UE 5.7 commonly uses persistent
+  bounded-volume proxy ownership for point/spot lights. The retained Vortex
+  Phase 03 branch keeps the same bounded-volume contract but generates the
+  sphere/cone procedurally in shader code as short-lived delivery scaffolding.
+  This is not accepted as the permanent solution. The scheduled replacement is
+  Phase 4A `LightingService` ownership of persistent sphere/cone proxy
+  geometry.
 
 ## 10. Testability Approach
 

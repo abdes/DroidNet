@@ -53,7 +53,7 @@ reviewed.
 | [init-views.md](init-views.md) | D.8 | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication |
 | [depth-prepass.md](depth-prepass.md) | D.4 | DepthPrepassModule, depth-only pass, mesh processor, partial velocity writes, DepthPrePassPolicy |
 | [base-pass.md](base-pass.md) | D.5 | BasePassModule, GBuffer MRT output, base-pass mesh processor, material shader contract, velocity completion, forward-mode branch |
-| [deferred-lighting.md](deferred-lighting.md) | D.6 | Fullscreen pass-per-light, deferred light pixel shader, stencil-bounded geometry, SceneColor accumulation |
+| [deferred-lighting.md](deferred-lighting.md) | D.6 | Directional fullscreen deferred lighting, bounded-volume point/spot lighting, SceneColor accumulation |
 
 ### Phase 4 — Migration-Critical Services
 

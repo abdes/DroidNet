@@ -81,7 +81,7 @@ $requiredKeys = @(
   'stage_12_order',
   'gbuffer_contents',
   'scene_color_lit',
-  'stencil_local_lights'
+  'bounded_volume_local_lights'
 )
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -141,7 +141,7 @@ if (-not $isSyntheticReport) {
         '  - RenderDoc runtime validation deferred to Phase 04 when Async and DemoShell migrate to Vortex.',
         "  - Analyzer report: $reportFullPath",
         '- Code / validation delta:',
-        '  - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and stencil-bounded local-light behavior without claiming a runtime capture that does not exist yet.',
+        '  - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and bounded-volume local-light behavior without claiming a runtime capture that does not exist yet.',
         '- Remaining blocker:',
         '  - Phase 04 must migrate Async and DemoShell to Vortex before the first truthful frame-10 RenderDoc runtime capture is claimed.'
       )

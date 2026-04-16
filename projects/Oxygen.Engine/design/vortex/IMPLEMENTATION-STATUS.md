@@ -201,7 +201,7 @@ implementation cannot begin until its design prerequisites are met.
 - Result:
   - Stage 3 now records a real depth/partial-velocity pass and copies SceneDepth into PartialDepth.
   - Stage 9 now records a real base pass and keeps depth testing aligned with the active reverse-Z convention.
-  - Stage 12 now records actual fullscreen and stencil-bounded deferred-light draws, publishes per-light constants, and uses dedicated stencil-mark pixel entrypoints plus procedural local-light volume generation.
+  - Stage 12 now records actual directional fullscreen deferred draws plus one-pass bounded-volume point/spot light draws, publishes per-light constants, and uses procedural local-light volume generation.
   - The deferred-core/publication suites pass, and the repo-owned closeout runner produces a passing report again with the revised render-path checks.
 - Code / validation delta:
   - `DEFR-01` is now satisfied in code and proof.
@@ -227,7 +227,7 @@ implementation cannot begin until its design prerequisites are met.
   - RenderDoc runtime validation deferred to Phase 04 when Async and DemoShell migrate to Vortex.
   - Analyzer report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
 - Code / validation delta:
-  - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and stencil-bounded local-light behavior without claiming a runtime capture that does not exist yet.
+  - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and bounded-volume local-light behavior without claiming a runtime capture that does not exist yet.
 - Remaining blocker:
   - Phase 04 must migrate Async and DemoShell to Vortex before the first truthful frame-10 RenderDoc runtime capture is claimed.
 
@@ -259,7 +259,7 @@ implementation cannot begin until its design prerequisites are met.
   - `powershell -ExecutionPolicy Bypass -File tools\cli\oxytidy.ps1 src\Oxygen\Vortex\SceneRenderer\SceneRenderer.cpp -Configuration Debug -IncludeTests -SummaryOnly`
 - Result:
   - all 15 Phase 03 plans were executed, but the phase must not be treated as complete
-  - review found that Stage 12 still proves telemetry rather than truthful SceneColor accumulation / stencil-bounded local-light behavior
+  - review found that Stage 12 still proves telemetry rather than truthful SceneColor accumulation / bounded-volume local-light behavior
   - review found that the current closeout analyzer overstates key claims through token/name checks instead of artifact/state-level proof
   - review found that the current velocity-completion claim is still a shell seam, not a proven skinned/WPO path
   - the closeout runner now rebuilds the Vortex test executables before `ctest`, but that does not remove the larger Phase 03 blockers
@@ -1391,7 +1391,7 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 - `03-16` and `03-17` landed the deferred-core remediation that put
   real Stage 3, Stage 9, and Stage 12 render paths, added reverse-Z-safe
   depth/stencil handling for the new passes, upgraded the deferred-light family
-  with dedicated stencil-mark pixel entrypoints plus procedural local-light
+  around the retained bounded-volume local-light path plus procedural local-light
   volume generation, and reran the repo-owned closeout proof successfully.
 - `03-18` through `03-20` now exist on the retained runtime branch:
   graphics-layer state continuity is restored, registration/view ownership is

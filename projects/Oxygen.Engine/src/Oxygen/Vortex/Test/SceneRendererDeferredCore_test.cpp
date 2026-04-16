@@ -731,14 +731,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_TRUE(state.used_outside_volume_local_lights);
   EXPECT_FALSE(state.used_camera_inside_local_lights);
-  EXPECT_FALSE(state.used_direct_local_light_fallbacks);
+  EXPECT_FALSE(state.used_non_perspective_local_lights);
   EXPECT_EQ(state.point_light_count, 1U);
   EXPECT_EQ(state.spot_light_count, 1U);
   EXPECT_EQ(state.local_light_count, 2U);
   EXPECT_EQ(state.outside_volume_local_light_count, state.local_light_count);
   EXPECT_EQ(state.camera_inside_local_light_count, 0U);
   EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
-  EXPECT_EQ(state.direct_local_light_fallback_count, 0U);
+  EXPECT_EQ(state.non_perspective_local_light_count, 0U);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
   EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
               [](const auto& bind) -> bool {
@@ -769,14 +769,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_FALSE(state.used_outside_volume_local_lights);
   EXPECT_TRUE(state.used_camera_inside_local_lights);
-  EXPECT_FALSE(state.used_direct_local_light_fallbacks);
+  EXPECT_FALSE(state.used_non_perspective_local_lights);
   EXPECT_EQ(state.point_light_count, 1U);
   EXPECT_EQ(state.spot_light_count, 1U);
   EXPECT_EQ(state.local_light_count, 2U);
   EXPECT_EQ(state.outside_volume_local_light_count, 0U);
   EXPECT_EQ(state.camera_inside_local_light_count, state.local_light_count);
   EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
-  EXPECT_EQ(state.direct_local_light_fallback_count, 0U);
+  EXPECT_EQ(state.non_perspective_local_light_count, 0U);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
   EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
               [](const auto& bind) -> bool {
@@ -793,7 +793,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DeferredLightingUsesDirectFallbackForNonPerspectiveViews)
+  DeferredLightingUsesNonPerspectiveLocalLightModeForNonPerspectiveViews)
 {
   static_cast<void>(AddPointLight("PointFill"));
   static_cast<void>(AddSpotLight("SpotRim"));
@@ -806,25 +806,25 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_FALSE(state.used_outside_volume_local_lights);
   EXPECT_FALSE(state.used_camera_inside_local_lights);
-  EXPECT_TRUE(state.used_direct_local_light_fallbacks);
+  EXPECT_TRUE(state.used_non_perspective_local_lights);
   EXPECT_EQ(state.point_light_count, 1U);
   EXPECT_EQ(state.spot_light_count, 1U);
   EXPECT_EQ(state.local_light_count, 2U);
   EXPECT_EQ(state.outside_volume_local_light_count, 0U);
   EXPECT_EQ(state.camera_inside_local_light_count, 0U);
   EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
-  EXPECT_EQ(state.direct_local_light_fallback_count, state.local_light_count);
+  EXPECT_EQ(state.non_perspective_local_light_count, state.local_light_count);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
   EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
               [](const auto& bind) -> bool {
                 return bind.desc.GetName()
-                  == "Vortex.DeferredLight.Point.DirectFallbackLighting";
+                  == "Vortex.DeferredLight.Point.NonPerspectiveLighting";
               }),
     1);
   EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
               [](const auto& bind) -> bool {
                 return bind.desc.GetName()
-                  == "Vortex.DeferredLight.Spot.DirectFallbackLighting";
+                  == "Vortex.DeferredLight.Spot.NonPerspectiveLighting";
               }),
     1);
 }

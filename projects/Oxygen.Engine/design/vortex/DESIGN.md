@@ -206,7 +206,7 @@ See [`lld/base-pass.md`](lld/base-pass.md) for the MRT write contract,
 material shader interface, and velocity completion sub-pass.
 
 See [`lld/deferred-lighting.md`](lld/deferred-lighting.md) for the
-pass-per-light approach, stencil volume strategy, and shader contracts.
+pass-per-light approach, bounded-volume local-light strategy, and shader contracts.
 
 ## 8. Inherited Substrate Adaptation
 
@@ -309,7 +309,7 @@ EngineShaderCatalog registration table.
 
 ### 12.1 Fullscreen Deferred Lighting (Phase 1)
 
-Decision: use pass-per-light fullscreen/stencil deferred for initial phase.
+Decision: use directional fullscreen deferred lighting plus one-pass bounded-volume local-light deferred lighting for the initial phase.
 
 Rationale:
 

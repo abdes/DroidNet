@@ -36,6 +36,9 @@ static const uint DEFERRED_LIGHT_SPHERE_STACKS = 8u;
 static const uint DEFERRED_LIGHT_CONE_SLICES = 24u;
 static const float DEFERRED_LIGHT_TWO_PI = 6.28318530718f;
 
+// Phase 03 keeps UE's bounded-volume local-light contract but generates the
+// point/spot proxy geometry procedurally from SV_VertexID instead of binding
+// persistent sphere/cone vertex buffers.
 static inline float3 DeferredLightSphereRingVertex(uint ring, uint slice)
 {
     const float phi = PI * ring / DEFERRED_LIGHT_SPHERE_STACKS;
