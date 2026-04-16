@@ -259,3 +259,19 @@ auto ResourceStateTracker::OnCommandListClosed() -> void
       tracking);
   }
 }
+
+auto ResourceStateTracker::SnapshotTrackedStates() const
+  -> std::vector<TrackedResourceState>
+{
+  auto tracked_states = std::vector<TrackedResourceState> {};
+  tracked_states.reserve(tracking_.size());
+  for (const auto& [resource, tracking] : tracking_) {
+    std::visit(
+      [&](const auto& info) {
+        tracked_states.push_back(
+          { .resource = resource, .state = info.current_state });
+      },
+      tracking);
+  }
+  return tracked_states;
+}

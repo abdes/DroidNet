@@ -381,13 +381,45 @@ NOLINT_TEST_F(ResourceRegistryErrorTest, RegisterView_InvalidHandle_Death)
 }
 
 /*!
- Registering the same resource twice must throw.
+ Re-registering the same resource instance is a contract violation and aborts.
 */
 NOLINT_TEST_F(ResourceRegistryErrorTest, Register_DoubleRegister_Death)
 {
-  // Registering the same resource twice should throw
   EXPECT_TRUE(registry_->Contains(*resource1_));
-  NOLINT_EXPECT_DEATH(registry_->Register(resource1_), ".*");
+  NOLINT_EXPECT_DEATH(registry_->Register(resource1_), ".*already registered.*");
+}
+
+NOLINT_TEST_F(ResourceRegistryBasicTest, AcquireRegistration_ReportsOwnership)
+{
+  const auto extra_resource = std::make_shared<FakeResource>();
+  EXPECT_TRUE(registry_->AcquireRegistration(extra_resource));
+  EXPECT_FALSE(registry_->AcquireRegistration(extra_resource));
+  EXPECT_TRUE(registry_->Contains(*extra_resource));
+  registry_->UnRegisterResource(*extra_resource);
+}
+
+NOLINT_TEST_F(ResourceRegistryBasicTest, AcquireViewRegistration_ReportsOwnership)
+{
+  constexpr TestViewDesc desc {
+    .view_type = ResourceViewType::kConstantBuffer,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .id = 501,
+  };
+  auto handle = allocator_->AllocateRaw(desc.view_type, desc.visibility);
+  ASSERT_TRUE(handle.IsValid());
+
+  const auto acquired
+    = registry_->AcquireViewRegistration(*resource1_, std::move(handle), desc);
+  EXPECT_TRUE(acquired.first->IsValid());
+  EXPECT_TRUE(acquired.second);
+
+  auto second_handle = allocator_->AllocateRaw(desc.view_type, desc.visibility);
+  ASSERT_TRUE(second_handle.IsValid());
+  const auto acquired_again = registry_->AcquireViewRegistration(
+    *resource1_, std::move(second_handle), desc);
+  EXPECT_TRUE(acquired_again.first->IsValid());
+  EXPECT_FALSE(acquired_again.second);
+  EXPECT_EQ(acquired_again.first, acquired.first);
 }
 
 /*!
@@ -710,6 +742,88 @@ NOLINT_TEST_F(
   for (auto& th : threads) {
     th.join();
   }
+}
+
+NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
+  AcquireRegistration_IsAtomicAcrossThreads)
+{
+  constexpr int num_threads = 8;
+  auto shared_resource = std::make_shared<FakeResource>();
+  std::atomic start_flag { false };
+  std::atomic owning_calls { 0 };
+  std::vector<std::thread> threads;
+  threads.reserve(num_threads);
+
+  for (int thread_index = 0; thread_index < num_threads; ++thread_index) {
+    threads.emplace_back([&]() {
+      while (!start_flag.load()) {
+        std::this_thread::yield();
+      }
+      if (registry_->AcquireRegistration(shared_resource)) {
+        owning_calls.fetch_add(1);
+      }
+    });
+  }
+
+  start_flag = true;
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  EXPECT_EQ(owning_calls.load(), 1);
+  EXPECT_TRUE(registry_->Contains(*shared_resource));
+  registry_->UnRegisterResource(*shared_resource);
+}
+
+NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
+  AcquireViewRegistration_IsAtomicAcrossThreads)
+{
+  constexpr int num_threads = 8;
+  constexpr TestViewDesc desc {
+    .view_type = ResourceViewType::kConstantBuffer,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .id = 777,
+  };
+  std::atomic start_flag { false };
+  std::atomic owning_calls { 0 };
+  std::vector<std::thread> threads;
+  threads.reserve(num_threads);
+
+  std::vector<std::shared_ptr<MockDescriptorAllocator>> allocators(num_threads);
+  for (int index = 0; index < num_threads; ++index) {
+    allocators[index]
+      = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
+    allocators[index]->ext_segment_factory_
+      = [](auto capacity, auto base_index, auto view_type, auto visibility) {
+          return std::make_unique<FixedDescriptorSegment>(
+            capacity, base_index, view_type, visibility);
+        };
+  }
+
+  for (int index = 0; index < num_threads; ++index) {
+    threads.emplace_back([&, index]() {
+      while (!start_flag.load()) {
+        std::this_thread::yield();
+      }
+      auto handle = allocators[index]->AllocateRaw(desc.view_type, desc.visibility);
+      ASSERT_TRUE(handle.IsValid());
+      auto acquired = registry_->AcquireViewRegistration(
+        *resource1_, std::move(handle), desc);
+      EXPECT_TRUE(acquired.first->IsValid());
+      if (acquired.second) {
+        owning_calls.fetch_add(1);
+      }
+    });
+  }
+
+  start_flag = true;
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  EXPECT_EQ(owning_calls.load(), 1);
+  EXPECT_TRUE(registry_->Contains(*resource1_, desc));
+  registry_->UnRegisterViews(*resource1_);
 }
 
 } // namespace

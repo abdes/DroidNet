@@ -15,6 +15,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -103,7 +104,7 @@ public:
   OXGN_GFX_API ~Graphics() override;
 
   OXYGEN_MAKE_NON_COPYABLE(Graphics)
-  OXYGEN_DEFAULT_MOVABLE(Graphics)
+  OXYGEN_MAKE_NON_MOVABLE(Graphics)
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view
   {
@@ -224,6 +225,24 @@ public:
   //! inside the engine's render/frame timeline via DeferredReclaimer.
   OXGN_GFX_NDAPI auto RegisterDeferredRelease(
     std::shared_ptr<graphics::Surface> surface) -> void;
+
+  template <typename T>
+  auto RegisterDeferredRelease(std::shared_ptr<T> resource) -> void
+  {
+    if (!resource) {
+      return;
+    }
+    GetDeferredReclaimer().RegisterDeferredRelease(std::move(resource));
+  }
+
+  OXGN_GFX_API auto ForgetKnownResourceState(
+    const graphics::NativeResource& resource) -> void;
+
+  template <typename T>
+  auto ForgetKnownResourceState(const T& resource) -> void
+  {
+    ForgetKnownResourceState(resource.GetNativeResource());
+  }
 
   //=== Rendering Resources factories ===-----------------------------------//
 

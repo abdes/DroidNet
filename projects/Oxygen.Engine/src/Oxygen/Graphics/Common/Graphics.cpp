@@ -218,6 +218,10 @@ Graphics::Graphics(const std::string_view name)
 {
   AddComponent<ObjectMetadata>(name);
   AddComponent<ResourceRegistryComponent>(name);
+  GetResourceRegistry().SetResourceUnregisteredCallback(
+    [this](const graphics::NativeResource& resource) {
+      this->ForgetKnownResourceState(resource);
+    });
   AddComponent<QueueManager>();
   // CommandListPool before DeferredReclaimer
   AddComponent<CommandListPool>(
@@ -638,6 +642,18 @@ auto Graphics::RegisterDeferredRelease(
   auto& reclaimer
     = GetComponent<graphics::internal::DeferredReclaimerComponent>();
   reclaimer.RegisterDeferredRelease(std::move(surface));
+}
+
+auto Graphics::ForgetKnownResourceState(
+  const graphics::NativeResource& resource) -> void
+{
+  if (!resource->IsValid()) {
+    return;
+  }
+
+  auto& qm = GetComponent<QueueManager>();
+  qm.ForEachQueue(
+    [&](graphics::CommandQueue& queue) { queue.ForgetKnownResourceState(resource); });
 }
 
 auto Graphics::GetTimestampQueryProvider() const

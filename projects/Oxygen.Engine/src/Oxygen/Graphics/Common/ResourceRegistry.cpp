@@ -81,8 +81,10 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   if (const auto cache_it = resources_.find(key);
     cache_it != resources_.end()) {
     DLOG_F(2, "cache hit ({})", fmt::ptr(resource.get()));
-    // This is a programming error, abort.
-    ABORT_F("-failed- use Replace() to replace registered resources");
+    ABORT_F(
+      "resource `{}` is already registered; use Replace() or explicit "
+      "Contains()/ownership discipline instead",
+      fmt::ptr(resource.get()));
   }
 
   ResourceEntry entry {
@@ -91,6 +93,27 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
   };
   resources_.emplace(key, std::move(entry));
   DLOG_F(3, "{} resources in registry", resources_.size());
+}
+
+auto ResourceRegistry::AcquireRegistration(
+  std::shared_ptr<void> resource, TypeId type_id) -> bool
+{
+  CHECK_NOTNULL_F(resource, "Resource must not be null");
+
+  std::lock_guard lock(registry_mutex_);
+
+  const NativeResource key { resource.get(), type_id };
+  if (resources_.contains(key)) {
+    return false;
+  }
+
+  ResourceEntry entry {
+    .resource = std::move(resource),
+    .descriptors = {},
+  };
+  resources_.emplace(key, std::move(entry));
+  DLOG_F(3, "{} resources in registry", resources_.size());
+  return true;
 }
 
 auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
@@ -224,6 +247,13 @@ auto ResourceRegistry::GetRegisteredResourceCount() const noexcept -> size_t
   return resources_.size();
 }
 
+auto ResourceRegistry::SetResourceUnregisteredCallback(
+  std::function<void(const NativeResource&)> callback) -> void
+{
+  std::lock_guard lock(registry_mutex_);
+  on_resource_unregistered_ = std::move(callback);
+}
+
 auto ResourceRegistry::FindShaderVisibleIndex(const NativeResource& resource,
   size_t key_hash) const -> std::optional<bindless::ShaderVisibleIndex>
 {
@@ -326,6 +356,7 @@ auto ResourceRegistry::UnRegisterResource(const NativeResource& resource)
     2, "UnRegisterResource: removing resource {} and all its views", resource);
   UnRegisterResourceViewsNoLock(resource);
   resources_.erase(it);
+  NotifyResourceForgottenNoLock(resource);
   DLOG_F(3, "UnRegisterResource: resource {} removed", resource);
 }
 
@@ -392,6 +423,14 @@ auto ResourceRegistry::PurgeCachedViewsForResource(
   std::erase_if(view_cache_, [&resource](const auto& cache_entry) {
     return cache_entry.first.resource == resource;
   });
+}
+
+auto ResourceRegistry::NotifyResourceForgottenNoLock(
+  const NativeResource& resource) -> void
+{
+  if (on_resource_unregistered_) {
+    on_resource_unregistered_(resource);
+  }
 }
 
 auto ResourceRegistry::AttachDescriptorWithView(

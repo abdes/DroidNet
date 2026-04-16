@@ -13,13 +13,20 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
 
 class CommandList : public Composition, public Named {
 public:
+  struct RecordedResourceState {
+    NativeResource resource {};
+    ResourceStates state { ResourceStates::kUnknown };
+  };
+
   enum class SubmitQueueActionKind : uint8_t {
     kWait,
     kSignal,
@@ -73,6 +80,10 @@ public:
   [[nodiscard]] OXGN_GFX_API auto HasSubmitQueueActions() const noexcept
     -> bool;
   OXGN_GFX_API auto TakeSubmitQueueActions() -> std::vector<SubmitQueueAction>;
+  OXGN_GFX_API auto SetRecordedResourceStates(
+    std::vector<RecordedResourceState> states) -> void;
+  OXGN_GFX_API auto TakeRecordedResourceStates()
+    -> std::vector<RecordedResourceState>;
 
   enum class State : int8_t {
     kInvalid = -1, //<! Invalid state
@@ -88,6 +99,7 @@ private:
   QueueRole type_;
   State state_ { State::kInvalid };
   std::vector<SubmitQueueAction> submit_queue_actions_ {};
+  std::vector<RecordedResourceState> recorded_resource_states_ {};
 };
 
 } // namespace oxygen::graphics

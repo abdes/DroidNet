@@ -8,13 +8,18 @@
 
 #include <chrono>
 #include <cstdint>
+#include <mutex>
+#include <optional>
 #include <span>
 #include <string_view>
+#include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -23,6 +28,11 @@ class CommandList;
 
 class CommandQueue : public Composition, public Named {
 public:
+  struct KnownResourceState {
+    NativeResource resource {};
+    ResourceStates state { ResourceStates::kUnknown };
+  };
+
   OXGN_GFX_API explicit CommandQueue(std::string_view name);
 
   OXGN_GFX_API ~CommandQueue() override;
@@ -89,6 +99,13 @@ public:
   OXGN_GFX_API virtual auto BeginProfilingFrame() const -> void;
   virtual OXGN_GFX_API auto Flush() const -> void;
 
+  OXGN_GFX_NDAPI auto TryGetKnownResourceState(
+    const NativeResource& resource) const -> std::optional<ResourceStates>;
+  OXGN_GFX_API auto AdoptKnownResourceStates(
+    std::span<const KnownResourceState> states) -> void;
+  OXGN_GFX_API auto ForgetKnownResourceState(const NativeResource& resource)
+    -> void;
+
   [[nodiscard]] virtual auto GetQueueRole() const -> QueueRole = 0;
 
   OXGN_GFX_NDAPI auto GetName() const noexcept -> std::string_view override;
@@ -105,6 +122,10 @@ protected:
    * recorded work.
   */
   virtual auto SignalImmediate(uint64_t value) const -> void = 0;
+
+private:
+  mutable std::mutex known_resource_states_mutex_ {};
+  std::unordered_map<NativeResource, ResourceStates> known_resource_states_ {};
 };
 
 } // namespace oxygen::graphics
