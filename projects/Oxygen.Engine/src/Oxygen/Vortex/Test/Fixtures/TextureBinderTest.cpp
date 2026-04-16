@@ -59,4 +59,18 @@ auto TextureBinderTest::AllocatedSrvCount() const -> uint32_t
     .get();
 }
 
+auto TextureBinderTest::TearDown() -> void
+{
+  texture_binder_.reset();
+  texture_loader_.reset();
+  staging_provider_.reset();
+  uploader_.reset();
+  if (gfx_) {
+    gfx_->Flush();
+  }
+  gfx_.reset();
+}
+
+auto TextureBinderTest::DestroyBinder() -> void { texture_binder_.reset(); }
+
 } // namespace oxygen::vortex::testing

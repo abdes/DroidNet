@@ -47,6 +47,7 @@ protected:
   }
 
   auto SetUp() -> void override;
+  auto TearDown() -> void override;
 
   [[nodiscard]] auto Gfx() const -> FakeGraphics& { return *gfx_; }
   [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>
@@ -75,6 +76,7 @@ protected:
   }
 
   [[nodiscard]] auto AllocatedSrvCount() const -> uint32_t;
+  auto DestroyBinder() -> void;
 
 private:
   std::shared_ptr<FakeGraphics> gfx_;
