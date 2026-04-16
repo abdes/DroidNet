@@ -35,6 +35,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -49,6 +50,37 @@ using namespace oxygen::graphics;
 using namespace std::chrono_literals;
 
 namespace {
+
+auto ParseVortexShaderDebugMode(std::string_view text)
+  -> oxygen::vortex::ShaderDebugMode
+{
+  using oxygen::vortex::ShaderDebugMode;
+
+  if (text.empty() || text == "disabled") {
+    return ShaderDebugMode::kDisabled;
+  }
+  if (text == "base-color") {
+    return ShaderDebugMode::kBaseColor;
+  }
+  if (text == "world-normals") {
+    return ShaderDebugMode::kWorldNormals;
+  }
+  if (text == "roughness") {
+    return ShaderDebugMode::kRoughness;
+  }
+  if (text == "metalness") {
+    return ShaderDebugMode::kMetalness;
+  }
+  if (text == "scene-depth-raw") {
+    return ShaderDebugMode::kSceneDepthRaw;
+  }
+  if (text == "scene-depth-linear") {
+    return ShaderDebugMode::kSceneDepthLinear;
+  }
+
+  throw std::runtime_error(
+    "Unsupported Vortex shader debug mode: " + std::string(text));
+}
 
 auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
 {
@@ -87,7 +119,8 @@ template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
+auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
+  const oxygen::vortex::ShaderDebugMode shader_debug_mode) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -110,8 +143,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     };
 
     // Register MainModule before the renderer so it runs first in each phase.
-    register_module(
-      std::make_unique<oxygen::examples::vortex_basic::MainModule>(app));
+    register_module(std::make_unique<oxygen::examples::vortex_basic::MainModule>(
+      app, shader_debug_mode));
     register_module(
       std::make_unique<oxygen::scenesync::RuntimeMotionProducerModule>());
 
@@ -138,7 +171,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
+auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+  const oxygen::vortex::ShaderDebugMode shader_debug_mode)
   -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
@@ -156,7 +190,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app);
+    RegisterEngineModules(app, shader_debug_mode);
 
     n.Start([&app, &n]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
@@ -182,11 +216,24 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   uint32_t target_fps = 100U;
   bool headless = false;
   bool enable_vsync = true;
+  std::string shader_debug_mode_name;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
 
   try {
+    auto vortex_options = std::make_shared<clap::Options>("Vortex options");
+    vortex_options->Add(clap::Option::WithKey("shader-debug-mode")
+        .About("Deferred debug visualization mode: disabled, base-color, "
+               "world-normals, roughness, metalness, scene-depth-raw, or "
+               "scene-depth-linear")
+        .Long("shader-debug-mode")
+        .WithValue<std::string>()
+        .DefaultValue(std::string("disabled"))
+        .UserFriendlyName("mode")
+        .StoreTo(&shader_debug_mode_name)
+        .Build());
+
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
           .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
@@ -196,6 +243,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
             .fullscreen = &app.fullscreen,
             .vsync = &enable_vsync,
           }))
+          .WithOptions(vortex_options)
           .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
             graphics_tooling_cli))
           .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
@@ -218,6 +266,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    const auto shader_debug_mode
+      = ParseVortexShaderDebugMode(shader_debug_mode_name);
+    LOG_F(INFO, "Parsed Vortex shader debug mode = {}",
+      oxygen::vortex::to_string(shader_debug_mode));
     oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
     oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Starting vortex-basic for {} frames (target {} fps)", frames,
@@ -285,7 +337,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       }
     }
 
-    const auto rc = co::Run(app, AsyncMain(app, frames));
+    const auto rc = co::Run(app, AsyncMain(app, frames, shader_debug_mode));
 
     app.platform->Stop();
     app.engine.reset();

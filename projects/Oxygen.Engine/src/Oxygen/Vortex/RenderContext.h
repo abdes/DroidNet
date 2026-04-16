@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
@@ -75,6 +76,7 @@ struct RenderContext {
   observer_ptr<const graphics::Framebuffer> pass_target;
   std::shared_ptr<const graphics::Buffer> view_constants;
   std::shared_ptr<const graphics::Buffer> material_constants;
+  ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
 
   struct ViewSpecific {
     oxygen::ViewId view_id {};
@@ -173,6 +175,7 @@ struct RenderContext {
     graphics_.reset(nullptr);
     view_constants.reset();
     material_constants.reset();
+    shader_debug_mode = ShaderDebugMode::kDisabled;
     pass_target.reset(nullptr);
     current_view = ViewSpecific {};
     frame_views.clear();

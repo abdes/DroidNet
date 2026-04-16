@@ -15,6 +15,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -100,26 +101,26 @@ public:
   OXGN_VRTX_API void ApplyStage22PostProcessState();
   OXGN_VRTX_API void ApplyStage23ExtractionState();
 
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneTextures() const
+  OXGN_VRTX_NDAPI auto GetSceneTextures() const
     -> const SceneTextures&;
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneTextures() -> SceneTextures&;
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneTextureBindings() const
+  OXGN_VRTX_NDAPI auto GetSceneTextures() -> SceneTextures&;
+  OXGN_VRTX_NDAPI auto GetSceneTextureBindings() const
     -> const SceneTextureBindings&;
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneTextureExtracts() const
+  OXGN_VRTX_NDAPI auto GetSceneTextureExtracts() const
     -> const SceneTextureExtracts&;
-  [[nodiscard]] OXGN_VRTX_API auto GetResolvedSceneColorTexture() const
+  OXGN_VRTX_NDAPI auto GetResolvedSceneColorTexture() const
     -> std::shared_ptr<graphics::Texture>;
-  [[nodiscard]] OXGN_VRTX_API auto GetDefaultShadingMode() const -> ShadingMode;
-  [[nodiscard]] OXGN_VRTX_API auto GetEffectiveShadingMode(
+  OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const -> ShadingMode;
+  OXGN_VRTX_NDAPI auto GetEffectiveShadingMode(
     const RenderContext& ctx) const -> ShadingMode;
-  [[nodiscard]] OXGN_VRTX_API auto GetPublishedViewFrameBindings() const
+  OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindings() const
     -> const ViewFrameBindings&;
-  [[nodiscard]] OXGN_VRTX_API auto GetPublishedViewFrameBindingsSlot() const
+  OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindingsSlot() const
     -> ShaderVisibleIndex;
-  [[nodiscard]] OXGN_VRTX_API auto GetPublishedViewId() const -> ViewId;
-  [[nodiscard]] OXGN_VRTX_API auto GetLastDeferredLightingState() const
+  OXGN_VRTX_NDAPI auto GetPublishedViewId() const -> ViewId;
+  OXGN_VRTX_NDAPI auto GetLastDeferredLightingState() const
     -> const DeferredLightingState&;
-  [[nodiscard]] OXGN_VRTX_API static auto GetAuthoredStageOrder()
+  OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder()
     -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
     ViewId view_id, const ViewFrameBindings& bindings, ShaderVisibleIndex slot);
@@ -135,12 +136,14 @@ private:
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
     std::string_view debug_name, const graphics::Texture& source)
     -> graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto ResolveVelocitySourceTexture() const
+  OXGN_VRTX_NDAPI auto ResolveVelocitySourceTexture() const
     -> const graphics::Texture*;
   OXGN_VRTX_API auto RegisterSceneTextureView(graphics::Texture& texture,
     const graphics::TextureViewDescription& desc) -> std::uint32_t;
-  [[nodiscard]] OXGN_VRTX_API auto ResolveShadingModeForCurrentView(
+  OXGN_VRTX_NDAPI auto ResolveShadingModeForCurrentView(
     const RenderContext& ctx) const -> ShadingMode;
+  OXGN_VRTX_API auto RenderDebugVisualization(
+    RenderContext& ctx, const SceneTextures& scene_textures) -> bool;
   OXGN_VRTX_API void RenderDeferredLighting(
     RenderContext& ctx, const SceneTextures& scene_textures);
   OXGN_VRTX_API void ResolveSceneColor(RenderContext& ctx);
@@ -160,6 +163,7 @@ private:
   void* deferred_light_constants_mapped_ptr_ { nullptr };
   std::vector<ShaderVisibleIndex> deferred_light_constants_indices_ {};
   std::uint32_t deferred_light_constants_slot_count_ { 0U };
+  std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
   std::shared_ptr<graphics::Framebuffer>
     deferred_light_directional_framebuffer_ {};
   std::shared_ptr<graphics::Framebuffer> deferred_light_local_framebuffer_ {};

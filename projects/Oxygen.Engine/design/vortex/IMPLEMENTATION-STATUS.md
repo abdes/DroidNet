@@ -70,6 +70,60 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-16 — Phase 03 deferred debug visualization runtime route landed
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/ShaderDebugMode.h`
+  - `src/Oxygen/Vortex/RenderContext.h`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassDebugView.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `Examples/VortexBasic/MainModule.h`
+  - `Examples/VortexBasic/MainModule.cpp`
+  - `Examples/VortexBasic/main_impl.cpp`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicDebugCapture.py`
+  - `tools/vortex/Assert-VortexBasicDebugViewProof.ps1`
+  - `tools/vortex/Verify-VortexBasicDebugViewProof.ps1`
+  - `tools/vortex/Run-VortexBasicDebugViewValidation.ps1`
+  - `design/vortex/PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/PHASE3-CLOSURE-GAPS.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  - `cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.CompositionPlanner.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\.Vortex\.(SceneRendererDeferredCore|CompositionPlanner)\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-debug-remediation-baseline`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicDebugViewValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-debug-view-validation`
+- Result:
+  - Vortex now exposes a public `ShaderDebugMode` contract and threads the
+    selected mode from `Renderer` into `RenderContext`.
+  - `SceneRenderer` now owns an actual deferred debug-visualization route fed
+    by Stage 10 scene products and writing into `SceneColor`.
+  - Supported live deferred debug views are:
+    - base color
+    - world normals
+    - roughness
+    - metalness
+    - scene-depth-raw
+    - scene-depth-linear
+  - `BasePassDebugView.hlsl` now uses the standard `ViewConstants ->
+    ViewFrameBindings` path instead of a debug-only root-constant slot.
+  - `VortexBasic` now exposes `--shader-debug-mode` and the validation scene
+    carries nonzero metallic content so the metallic view is truthfully
+    inspectable.
+- Evidence retained:
+  - baseline runtime proof:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-debug-remediation-baseline.validation.txt`
+  - deferred debug-view proof suite:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-debug-view-validation.validation.txt`
+- Remaining runtime log noise:
+  - `TextureBinder initialized with error texture`
+  - first-frame compositing fallback to `VortexBasic.SceneColor`
+  - `ScriptCompilationService ... compile failed : 0`
+
 ### 2026-04-16 — Phase 03 closure accepted for the current engine feature envelope
 
 - Scope decision:
@@ -1774,7 +1828,7 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ## Phase 3 — Deferred Core
 
-**Status:** `blocked`
+**Status:** `done`
 
 ### Design Prerequisites
 
@@ -1808,8 +1862,10 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 - `03-09` and `03-10` are complete: Stage 10 remains the first truthful
   GBuffer promotion boundary, and velocity publication stays alive for dynamic
   geometry.
-- `03-11` is complete: Phase 3 carries a registered GBuffer debug-view shader
-  path and automated proof surface.
+- `03-11` is complete: Phase 3 now carries a runtime-facing deferred
+  debug-visualization route through `SceneRenderer`, registered debug shader
+  variants for base-color/world-normal/roughness/metalness/scene-depth views,
+  and dedicated D3D12 `VortexBasic` capture proof.
 - `03-12` is complete: deferred-light shaders compile through the catalog and
   the local-light shader path now avoids the redundant second depth/world
   reconstruction noted in review.
@@ -1838,16 +1894,15 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ### What Is Missing
 
-- Final multi-subagent architectural/LLD/code-quality review over the cleaned
-  Phase 03 branch, plus remediation of every finding before any closure claim.
-- Remediate the remaining open closure-gap items beyond the now-aligned
-  point/spot local-light product gate before any closure claim.
+- No remaining Phase 03 blockers within the current engine feature envelope.
+- Deferred skinned / morph engine-enablement stays explicit TODO carry-forward
+  work for later phases; it is no longer tracked as an open Phase 03 blocker.
 
 ### Resume Point
 
-Phase 3 is blocked. Resume with the remaining `03-21` cleanup-lane work and
-the required final multi-subagent review/remediation loop. Do not unlock Phase
-4 until that gate is complete.
+Phase 3 is closed for the current engine scope. Resume with Phase 4 work or
+with later closure-gap cleanup items (`10+`) if additional documentation /
+architecture alignment is desired before moving on.
 
 ---
 

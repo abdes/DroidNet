@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -35,6 +36,7 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
@@ -193,7 +195,7 @@ public:
     OXGN_VRTX_API auto SetCoreShaderInputs(CoreShaderInputsInput inputs)
       -> SinglePassHarnessFacade&;
 
-    [[nodiscard]] OXGN_VRTX_API auto CanFinalize() const -> bool;
+    OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
       -> std::expected<ValidatedSinglePassHarnessContext, ValidationReport>;
@@ -272,7 +274,7 @@ public:
     OXGN_VRTX_API auto SetRenderGraph(RenderGraphHarnessInput graph)
       -> RenderGraphHarnessFacade&;
 
-    [[nodiscard]] OXGN_VRTX_API auto CanFinalize() const -> bool;
+    OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
       -> std::expected<ValidatedRenderGraphHarness, ValidationReport>;
@@ -295,7 +297,7 @@ public:
   public:
     OXGN_VRTX_API OffscreenSceneViewInput();
 
-    [[nodiscard]] OXGN_VRTX_API static auto FromCamera(std::string name,
+    OXGN_VRTX_NDAPI static auto FromCamera(std::string name,
       ViewId view_id, const View& view, const scene::SceneNode& camera)
       -> OffscreenSceneViewInput;
 
@@ -368,7 +370,7 @@ public:
     OXGN_VRTX_API auto SetPipeline(OffscreenPipelineInput pipeline)
       -> OffscreenSceneFacade&;
 
-    [[nodiscard]] OXGN_VRTX_API auto CanFinalize() const -> bool;
+    OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
       -> std::expected<ValidatedOffscreenSceneSession, ValidationReport>;
@@ -473,7 +475,7 @@ public:
   {
     return deformation_history_cache_;
   }
-  [[nodiscard]] OXGN_VRTX_API auto GetRuntimeMotionProducerModule() const noexcept
+  OXGN_VRTX_NDAPI auto GetRuntimeMotionProducerModule() const noexcept
     -> observer_ptr<scenesync::RuntimeMotionProducerModule>;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(ViewId intent_view_id) -> void;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
@@ -509,6 +511,9 @@ public:
     return vortex::ValidateCapabilityRequirements(
       capability_families_, requirements);
   }
+
+  OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
+  OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
@@ -616,6 +621,9 @@ private:
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
   float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };
+  std::atomic<std::uint8_t> shader_debug_mode_ {
+    static_cast<std::uint8_t>(ShaderDebugMode::kDisabled)
+  };
   bool shutdown_called_ { false };
   observer_ptr<console::Console> console_ { nullptr };
 };
