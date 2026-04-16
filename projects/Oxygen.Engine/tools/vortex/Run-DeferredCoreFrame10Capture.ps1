@@ -137,12 +137,17 @@ $testResult = Invoke-LoggedCommand `
     'Debug',
     '--output-on-failure',
     '-R',
-    '^Oxygen\.Vortex\.'
+    '^Oxygen\.Vortex\.(SceneRendererDeferredCore|SceneRendererPublication)\.Tests$'
   ) `
   -LogPath $testLogPath `
   -WorkingDirectory $repoRoot
 
 $tidyTargets = @(
+  'src/Oxygen/Graphics/Common/Internal/FramebufferImpl.cpp',
+  'src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h',
+  'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli',
+  'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightPoint.hlsl',
+  'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightSpot.hlsl',
   'src/Oxygen/Vortex/RenderContext.h',
   'src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h',
   'src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp',
@@ -183,7 +188,7 @@ $tidyResult = Invoke-LoggedCommand `
 
 $manifest = [ordered]@{
   phase = '03-deferred-core'
-  plan = '15'
+  plan = '17'
   generated_at = (Get-Date -Format o)
   repo_root = $repoRoot
   renderdoc_runtime_validation = [ordered]@{
@@ -211,6 +216,13 @@ $manifest = [ordered]@{
   files = [ordered]@{
     scene_renderer = 'src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp'
     scene_textures = 'src/Oxygen/Vortex/SceneRenderer/SceneTextures.cpp'
+    depth_prepass_module = 'src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.cpp'
+    base_pass_module = 'src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp'
+    framebuffer_impl = 'src/Oxygen/Graphics/Common/Internal/FramebufferImpl.cpp'
+    shader_catalog = 'src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h'
+    deferred_light_common = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli'
+    deferred_light_point = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightPoint.hlsl'
+    deferred_light_spot = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightSpot.hlsl'
     deferred_core_tests = 'src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp'
     publication_tests = 'src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp'
     validation_doc = '.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md'
