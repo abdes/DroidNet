@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `blocked — Phase 03 now has a working retained runtime branch with green live VortexBasic proof, but the cleanup lane is still open for final review/remediation and the local-light product gap remains unresolved; Phase 04 stays locked until those remaining Phase 03 blockers are closed truthfully`
+Status: `blocked — Phase 03 now has a working retained runtime branch with green live VortexBasic proof, but the closure/docs remediation lane is still open and Phase 04 stays locked until the remaining Phase 03 blockers are closed truthfully`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `blocked` | final multi-review/remediation gate plus the unresolved local-light product coverage gap |
+| 3 | Deferred Core | `blocked` | final multi-review/remediation gate plus remaining Phase 3 doc/code contract cleanup |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -79,8 +79,23 @@ implementation cannot begin until its design prerequisites are met.
 - Result:
   - The Phase 03 closeout gate did not pass.
   - Report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
-- Missing delta: stage_2_order=fail, stage_3_order=fail, stage_9_order=fail, stage_12_order=fail, gbuffer_contents=fail, scene_color_lit=fail, stencil_local_lights=fail
+- Missing delta: stage_2_order=fail, stage_12_order=fail, stencil_local_lights=fail
 - RenderDoc runtime validation remains deferred to Phase 04 and is not part of this failure.
+
+### 2026-04-16 — Historical 03-15 frame-10 closeout pack failed and is now superseded
+
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-DeferredCoreFrame10Capture.ps1 -Output out/build-ninja/analysis/vortex/deferred-core/frame10`
+  - `powershell -NoProfile -File tools/vortex/Analyze-DeferredCoreCapture.ps1 -CapturePath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.inputs.json -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+  - `powershell -NoProfile -File tools/vortex/Assert-DeferredCoreCaptureReport.ps1 -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+- Result:
+  - The historical 03-15 frame-10 closeout gate did not pass.
+  - Report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
+- Missing delta: stage_2_order=fail, stage_3_order=fail, stage_9_order=fail, stage_12_order=fail, gbuffer_contents=fail, scene_color_lit=fail, stencil_local_lights=fail
+- Status of this evidence:
+  - This frame-10 closeout pack is no longer the authoritative Phase 03 closure surface.
+  - The current authoritative runtime proof path is the live `VortexBasic` validation flow (`tools/vortex/Run-VortexBasicRuntimeValidation.ps1`).
+  - Do not use this historical frame-10 result as the current Phase 03 closure verdict.
 
 ### 2026-04-16 — Phase 03 cleanup lane docs synced to the retained runtime branch
 
@@ -97,7 +112,7 @@ implementation cannot begin until its design prerequisites are met.
     - `out/build-ninja/analysis/vortex/vortexbasic/runtime/task21-04-logcleanup-proof.validation.txt`
 - Result:
   - the LLDs now describe the retained Stage 10 republish boundary, the early-Z color-only clear rule, and the explicit Stage 21 resolved-artifact handoff used by composition
-  - the Phase 03 validation docs now describe the current VortexBasic wrapper truthfully: structural + product analyzers together, with point/spot product fields emitted diagnostically rather than overclaimed
+  - the Phase 03 validation docs now describe the current VortexBasic wrapper truthfully: structural + product analyzers together, with point/spot product checks treated as part of the durable runtime gate
   - the implementation ledger now matches the cleanup-lane reality instead of the earlier blocked-state assumptions alone
 - Code / validation delta:
   - no new implementation code changed in this documentation-sync session
@@ -1395,8 +1410,8 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 - Final multi-subagent architectural/LLD/code-quality review over the cleaned
   Phase 03 branch, plus remediation of every finding before any closure claim.
-- Finalize whether point/spot local-light RGB results remain diagnostic-only in
-  the durable wrapper or graduate into a stable per-light product gate.
+- Align the remaining docs and status surfaces to the current durable point/spot
+  local-light product gate already enforced by the runtime validator.
 
 ### Resume Point
 

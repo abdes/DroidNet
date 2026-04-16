@@ -69,3 +69,14 @@ Use `Run-VortexBasicRuntimeValidation.ps1` for the normal end-to-end validation
 flow. Use `Verify-VortexBasicRuntimeProof.ps1` only when you already have a
 capture and runtime log that need replay. Use the probes when a bug needs
 focused inspection that the durable analyzers do not already explain.
+
+## Historical Frame-10 Closeout Pack
+
+These scripts are preserved only for historical comparison with the older
+03-15 non-runtime closeout flow. They are not the active Phase 03 closure
+surface:
+
+- `Run-DeferredCoreFrame10Capture.ps1`
+- `Analyze-DeferredCoreCapture.ps1`
+- `Assert-DeferredCoreCaptureReport.ps1`
+- `Verify-DeferredCoreCloseout.ps1`
