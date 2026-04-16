@@ -51,6 +51,6 @@ float4 PS(CompositingVSOutput input) : SV_TARGET
         = ResourceDescriptorHeap[pass.source_texture_index];
     SamplerState samp = SamplerDescriptorHeap[sampler_index];
     float4 color = src_tex.Sample(samp, input.uv);
-    color.a *= pass.alpha;
+    color.a = pass.alpha;
     return color;
 }
