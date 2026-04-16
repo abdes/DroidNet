@@ -6,10 +6,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <memory>
-#include <optional>
-
 #include <glm/glm.hpp>
+#include <memory>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
@@ -85,11 +83,14 @@ protected:
 
   // Accessors for convenience
   [[nodiscard]] auto SceneRef() const -> const Scene& { return *scene_; }
-  auto ViewRef()
-    -> std::optional<oxygen::observer_ptr<const oxygen::ResolvedView>>
+  [[nodiscard]] auto ResolvedViewRef() const -> const oxygen::ResolvedView&
   {
-    return std::make_optional(
-      oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get()));
+    return *view_;
+  }
+  [[nodiscard]] auto ViewObserver() const
+    -> oxygen::observer_ptr<const oxygen::ResolvedView>
+  {
+    return oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get());
   }
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto StateRef() -> sceneprep::ScenePrepState& { return *state_; }
@@ -107,9 +108,78 @@ private:
   std::unique_ptr<sceneprep::ScenePrepState> state_ {};
 };
 
-//! Verifies pipeline is testable by injecting custom stages and calling
-//! Collect across a 3-node scene.
-NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
+auto MakeContractTestPipeline() -> std::unique_ptr<sceneprep::ScenePrepPipeline>
+{
+  auto pre
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        it.SetVisible();
+        it.SetGeometry(it.Renderable().GetGeometry());
+        it.SetWorldTransform(it.Transform().GetWorldMatrix());
+      };
+  auto resolve
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (const auto g = it.Geometry()) {
+          it.ResolveMesh(g->MeshAt(0), 0);
+        } else {
+          it.MarkDropped();
+        }
+      };
+  auto vis
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (!it.ResolvedMesh()) {
+          it.MarkDropped();
+          return;
+        }
+        it.SetVisibleSubmeshes({ 0u });
+      };
+  auto prod = [](const sceneprep::ScenePrepContext& /*ctx*/,
+                sceneprep::ScenePrepState& st, sceneprep::RenderItemProto& it) {
+    for (const auto sm : it.VisibleSubmeshes()) {
+      const auto default_material = MaterialAsset::CreateDefault();
+      const auto default_material_key = default_material != nullptr
+        ? default_material->GetAssetKey()
+        : oxygen::data::AssetKey {};
+
+      st.CollectItem(sceneprep::RenderItemData {
+        .submesh_index = static_cast<std::uint32_t>(sm),
+        .geometry = sceneprep::GeometryRef {
+          .asset_key = it.Geometry()->GetAssetKey(),
+          .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+          .mesh = it.ResolvedMesh(),
+        },
+        .material = sceneprep::MaterialRef {
+          .source_asset_key = default_material_key,
+          .resolved_asset_key = default_material_key,
+          .resolved_asset = default_material,
+        },
+        .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
+        .cast_shadows = it.CastsShadows(),
+        .receive_shadows = it.ReceivesShadows(),
+      });
+    }
+  };
+
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
+  ConfigT cfg {
+    .pre_filter = pre,
+    .mesh_resolver = resolve,
+    .visibility_filter = vis,
+    .producer = prod,
+  };
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  return std::make_unique<
+    sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+    cfg, final_cfg);
+}
+
+//! Verifies the phase-explicit runtime contract still produces one item per
+//! visible test node.
+NOLINT_TEST_F(
+  ScenePrepPipelineTest, PhaseExplicitCollection_CustomStages_ProducesPerNode)
 {
   auto pre
     = [](const sceneprep::ScenePrepContext& /*ctx*/,
@@ -180,10 +250,11 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
   // Run frame-phase first (no view) to populate cached filtered node list,
   // then run per-view phase with a real ResolvedView so per-view stages
   // execute.
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->FinalizeView(StateRef());
 
   ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
   for (const auto& item : StateRef().CollectedItems()) {
@@ -194,7 +265,7 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
 }
 
 NOLINT_TEST_F(
-  ScenePrepPipelineTest, Collect_ViewResetDoesNotAppendPreviousViewItems)
+  ScenePrepPipelineTest, PrepareView_ResetDoesNotAppendPreviousViewItems)
 {
   auto pre
     = [](const sceneprep::ScenePrepContext& /*ctx*/,
@@ -260,19 +331,21 @@ NOLINT_TEST_F(
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
   ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
+  pipeline->FinalizeView(StateRef());
 
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
   EXPECT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
+  pipeline->FinalizeView(StateRef());
 }
 
 NOLINT_TEST_F(ScenePrepPipelineTest,
-  Collect_ViewResetPreservesFrameCachesAndFrameResetRebuildsThem)
+  PhaseExplicitCollection_ViewResetPreservesFrameCachesAndFrameResetRebuildsThem)
 {
   int pre_called = 0;
   auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
@@ -337,8 +410,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
 
   ASSERT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   ASSERT_EQ(StateRef().GetFilteredSceneNodes().size(),
@@ -348,20 +421,22 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
     StateRef().TryGetNodeBasics(StateRef().GetFilteredSceneNodes().front()),
     nullptr);
 
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(StateRef().GetFilteredSceneNodes().size(),
     ScenePrepPipelineTest::kNodeCount);
+  pipeline->FinalizeView(StateRef());
 
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
   EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(StateRef().GetFilteredSceneNodes().size(),
     ScenePrepPipelineTest::kNodeCount);
+  pipeline->FinalizeView(StateRef());
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 2 }, StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 2 }, StateRef());
 
   EXPECT_EQ(
     pre_called, 2 * static_cast<int>(ScenePrepPipelineTest::kNodeCount));
@@ -373,7 +448,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
 }
 
 //! Drop at pre-filter: downstream stages must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
+NOLINT_TEST_F(ScenePrepPipelineTest,
+  PhaseExplicitCollection_DropAtPreFilter_SkipsDownstream)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
@@ -403,10 +479,10 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
 
   EXPECT_EQ(StateRef().CollectedCount(), 0);
   // pre_filter runs in frame-phase and view-phase reuses cached basics.
@@ -417,7 +493,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
 }
 
 //! Drop at resolver: visibility and producer must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
+NOLINT_TEST_F(
+  ScenePrepPipelineTest, PhaseExplicitCollection_DropAtResolver_SkipsDownstream)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
@@ -451,10 +528,10 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
   // pre_filter runs in frame-phase and view-phase reuses cached basics.
@@ -465,7 +542,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
 }
 
 //! Drop at visibility filter: producer must not run; no items produced.
-NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
+NOLINT_TEST_F(
+  ScenePrepPipelineTest, PhaseExplicitCollection_DropAtVisibility_SkipsProducer)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
   auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
@@ -502,10 +580,10 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  pipeline->Collect(SceneRef(), std::nullopt,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
-    StateRef(), true);
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
   // pre_filter runs in frame-phase and view-phase reuses cached basics.
@@ -516,13 +594,39 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
 }
 
 NOLINT_TEST_F(
-  ScenePrepPipelineTest, Collect_RecordsStageFailuresAndSuppressesDuplicateLogs)
+  ScenePrepPipelineTest, PrepareView_RequiresBeginFrameCollectionForSameFrame)
 {
-  auto pre = [](const sceneprep::ScenePrepContext& /*ctx*/,
-               sceneprep::ScenePrepState& /*st*/,
-               sceneprep::RenderItemProto& /*it*/) {
-    throw std::runtime_error("pre filter exploded");
-  };
+  const auto pipeline = MakeContractTestPipeline();
+
+  EXPECT_DEATH_IF_SUPPORTED(
+    (void)pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+      oxygen::frame::SequenceNumber { 1 }, StateRef()),
+    "BeginFrameCollection");
+}
+
+NOLINT_TEST_F(ScenePrepPipelineTest,
+  FinalizeView_RequiresTheSameStateThatPreparedTheCurrentView)
+{
+  const auto pipeline = MakeContractTestPipeline();
+  sceneprep::ScenePrepState other_state(nullptr, nullptr, nullptr);
+
+  pipeline->BeginFrameCollection(
+    SceneRef(), oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->PrepareView(SceneRef(), ResolvedViewRef(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
+
+  EXPECT_DEATH_IF_SUPPORTED(
+    (void)pipeline->FinalizeView(other_state), "same ScenePrepState");
+}
+
+NOLINT_TEST_F(ScenePrepPipelineTest,
+  CollectSingleView_RecordsStageFailuresAndSuppressesDuplicateLogs)
+{
+  auto pre
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& /*it*/) {
+        throw std::runtime_error("pre filter exploded");
+      };
 
   using ConfigT
     = sceneprep::CollectionConfig<decltype(pre), void, void, void, void>;
@@ -533,20 +637,19 @@ NOLINT_TEST_F(
       sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
-  const auto view = ViewRef();
-  ASSERT_TRUE(view.has_value());
-
-  oxygen::testing::ScopedLogCapture capture(
-    "ScenePrepFailureCapture", loguru::Verbosity_ERROR,
-    [](const loguru::Message& message) {
-      return std::string_view(message.message).find("ScenePrep view-phase stage")
+  oxygen::testing::ScopedLogCapture capture("ScenePrepFailureCapture",
+    loguru::Verbosity_ERROR, [](const loguru::Message& message) {
+      return std::string_view(message.message)
+               .find("ScenePrep view-phase stage")
         != std::string_view::npos;
     });
 
-  pipeline->CollectSingleView(SceneRef(), *view,
-    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
-  pipeline->CollectSingleView(SceneRef(), *view,
-    oxygen::frame::SequenceNumber { 2 }, StateRef(), true);
+  pipeline->CollectSingleView(SceneRef(), ViewObserver(),
+    oxygen::frame::SequenceNumber { 1 }, StateRef());
+  pipeline->FinalizeView(StateRef());
+  pipeline->CollectSingleView(SceneRef(), ViewObserver(),
+    oxygen::frame::SequenceNumber { 2 }, StateRef());
+  pipeline->FinalizeView(StateRef());
 
   const auto stats = pipeline->GetFailureStats();
   EXPECT_EQ(stats.total_failures, 6U);

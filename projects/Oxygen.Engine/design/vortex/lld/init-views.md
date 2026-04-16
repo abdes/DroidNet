@@ -137,9 +137,9 @@ SceneRenderer::OnRender(ctx)
   │     │     └─ one full scene traversal for the scene + one frame-global motion-history resolution pass
   │     │
   │     ├─ for each published view:
-  │     │     ├─ ScenePrepPipeline::PrepareView(scene, view, frame_id, persistent_state, storage)
+  │     │     ├─ ScenePrepPipeline::PrepareView(scene, view, frame_id, persistent_state)
   │     │     ├─ per-view frustum / LOD refinement over cached candidates only
-  │     │     ├─ ScenePrepPipeline::FinalizeView(persistent_state, storage)
+  │     │     ├─ ScenePrepPipeline::FinalizeView(persistent_state)
   │     │     └─ Publish PreparedSceneFrame for the view
   │     │
   │     └─ Publish optional per-view auxiliary motion / velocity products
@@ -225,9 +225,9 @@ void InitViewsModule::Execute(RenderContext& ctx,
     }
     auto& storage = AcquirePreparedSceneViewStorage(view_entry.view_id);
 
-    scene_prep_->PrepareView(
-      *scene, *view_entry.resolved_view, frame_id, state, storage);
-    scene_prep_->FinalizeView(state, storage);
+    scene_prep_->PrepareView(*scene, *view_entry.resolved_view, frame_id, state);
+    scene_prep_->FinalizeView(state);
+    PublishPreparedSceneFrame(state, storage.render_items, storage.prepared_frame);
   }
 }
 ```

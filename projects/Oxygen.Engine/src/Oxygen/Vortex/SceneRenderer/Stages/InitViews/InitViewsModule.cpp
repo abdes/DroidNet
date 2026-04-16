@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <optional>
 #include <limits>
 #include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -36,28 +35,6 @@ namespace {
 
   constexpr std::size_t kMatrixFloatCount = 16U;
 
-  auto BeginFrameCollection(sceneprep::ScenePrepPipeline& scene_prep,
-    const scene::Scene& scene, const frame::SequenceNumber frame_id,
-    sceneprep::ScenePrepState& state) -> void
-  {
-    scene_prep.Collect(scene, std::nullopt, frame_id, state, true);
-  }
-
-  auto PrepareView(sceneprep::ScenePrepPipeline& scene_prep,
-    const scene::Scene& scene, const ResolvedView& resolved_view,
-    const frame::SequenceNumber frame_id, sceneprep::ScenePrepState& state)
-    -> void
-  {
-    scene_prep.Collect(scene,
-      std::optional(observer_ptr<const ResolvedView> { &resolved_view }),
-      frame_id, state, true);
-  }
-
-  auto FinalizeView(sceneprep::ScenePrepPipeline& scene_prep) -> void
-  {
-    scene_prep.Finalize();
-  }
-
   auto BeginResourceManagerFrame(resources::TextureBinder* const texture_binder,
     upload::TransientStructuredBuffer* const current_skinned_pose_buffer,
     upload::TransientStructuredBuffer* const previous_skinned_pose_buffer,
@@ -65,8 +42,10 @@ namespace {
     upload::TransientStructuredBuffer* const previous_morph_buffer,
     upload::TransientStructuredBuffer* const current_material_wpo_buffer,
     upload::TransientStructuredBuffer* const previous_material_wpo_buffer,
-    upload::TransientStructuredBuffer* const current_motion_vector_status_buffer,
-    upload::TransientStructuredBuffer* const previous_motion_vector_status_buffer,
+    upload::TransientStructuredBuffer* const
+      current_motion_vector_status_buffer,
+    upload::TransientStructuredBuffer* const
+      previous_motion_vector_status_buffer,
     upload::TransientStructuredBuffer* const velocity_draw_metadata_buffer,
     sceneprep::ScenePrepState& state, const RenderContext& ctx) -> void
   {
@@ -91,7 +70,8 @@ namespace {
       draw_emitter->OnFrameStart(tag, ctx.frame_sequence, ctx.frame_slot);
     }
     if (current_skinned_pose_buffer != nullptr) {
-      current_skinned_pose_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+      current_skinned_pose_buffer->OnFrameStart(
+        ctx.frame_sequence, ctx.frame_slot);
     }
     if (previous_skinned_pose_buffer != nullptr) {
       previous_skinned_pose_buffer->OnFrameStart(
@@ -134,16 +114,15 @@ namespace {
       return kInvalidShaderVisibleIndex;
     }
 
-    auto allocation = buffer->Allocate(
-      static_cast<std::uint32_t>(publications.size()));
+    auto allocation
+      = buffer->Allocate(static_cast<std::uint32_t>(publications.size()));
     if (!allocation) {
       LOG_F(ERROR, "InitViewsModule failed to allocate {} payload: {}", label,
         allocation.error().message());
       return kInvalidShaderVisibleIndex;
     }
     if (!allocation->TryWriteRange(publications)) {
-      LOG_F(
-        ERROR, "InitViewsModule failed to write {} payload", label);
+      LOG_F(ERROR, "InitViewsModule failed to write {} payload", label);
       return kInvalidShaderVisibleIndex;
     }
     return allocation->srv;
@@ -208,8 +187,10 @@ namespace {
     const observer_ptr<resources::DrawMetadataEmitter> draw_emitter,
     upload::TransientStructuredBuffer* const current_material_wpo_buffer,
     upload::TransientStructuredBuffer* const previous_material_wpo_buffer,
-    upload::TransientStructuredBuffer* const current_motion_vector_status_buffer,
-    upload::TransientStructuredBuffer* const previous_motion_vector_status_buffer,
+    upload::TransientStructuredBuffer* const
+      current_motion_vector_status_buffer,
+    upload::TransientStructuredBuffer* const
+      previous_motion_vector_status_buffer,
     upload::TransientStructuredBuffer* const velocity_draw_metadata_buffer,
     InitViewsModule::PreparedSceneViewStorage& storage) -> void
   {
@@ -236,12 +217,16 @@ namespace {
     prepared_frame.current_motion_vector_status_publications = {};
     prepared_frame.previous_motion_vector_status_publications = {};
     prepared_frame.velocity_draw_metadata = {};
-    prepared_frame.bindless_current_skinned_pose_slot = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_previous_skinned_pose_slot = kInvalidShaderVisibleIndex;
+    prepared_frame.bindless_current_skinned_pose_slot
+      = kInvalidShaderVisibleIndex;
+    prepared_frame.bindless_previous_skinned_pose_slot
+      = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_current_morph_slot = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_previous_morph_slot = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_current_material_wpo_slot = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_previous_material_wpo_slot = kInvalidShaderVisibleIndex;
+    prepared_frame.bindless_current_material_wpo_slot
+      = kInvalidShaderVisibleIndex;
+    prepared_frame.bindless_previous_material_wpo_slot
+      = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_current_motion_vector_status_slot
       = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_previous_motion_vector_status_slot
@@ -291,16 +276,17 @@ namespace {
       const auto current_motion_vector_status
         = BuildMotionVectorStatusPublication(*current_state);
 
-      const auto material_wpo_history = deformation_history.TouchCurrentMaterialWpo(
-        internal::RenderMotionIdentityKey {
-          .node_handle = source.node_handle,
-          .geometry_asset_key = source.geometry_asset_key,
-          .lod_index = source.lod_index,
-          .submesh_index = source.submesh_index,
-          .producer_family = VelocityProducerFamily::kMaterialWpo,
-          .contract_hash = current_material_wpo.contract_hash,
-        },
-        current_material_wpo);
+      const auto material_wpo_history
+        = deformation_history.TouchCurrentMaterialWpo(
+          internal::RenderMotionIdentityKey {
+            .node_handle = source.node_handle,
+            .geometry_asset_key = source.geometry_asset_key,
+            .lod_index = source.lod_index,
+            .submesh_index = source.submesh_index,
+            .producer_family = VelocityProducerFamily::kMaterialWpo,
+            .contract_hash = current_material_wpo.contract_hash,
+          },
+          current_material_wpo);
       const auto motion_vector_status_history
         = deformation_history.TouchCurrentMotionVectorStatus(
           internal::RenderMotionIdentityKey {
@@ -358,38 +344,36 @@ namespace {
       = storage.previous_motion_vector_status_publications;
     prepared_frame.velocity_draw_metadata = storage.velocity_draw_metadata;
 
-    prepared_frame.bindless_current_material_wpo_slot = PublishTransientPayload(
-      current_material_wpo_buffer,
-      std::span<const MaterialWpoPublication>(
-        storage.current_material_wpo_publications.data(),
-        storage.current_material_wpo_publications.size()),
-      "current material WPO");
-    prepared_frame.bindless_previous_material_wpo_slot = PublishTransientPayload(
-      previous_material_wpo_buffer,
-      std::span<const MaterialWpoPublication>(
-        storage.previous_material_wpo_publications.data(),
-        storage.previous_material_wpo_publications.size()),
-      "previous material WPO");
+    prepared_frame.bindless_current_material_wpo_slot
+      = PublishTransientPayload(current_material_wpo_buffer,
+        std::span<const MaterialWpoPublication>(
+          storage.current_material_wpo_publications.data(),
+          storage.current_material_wpo_publications.size()),
+        "current material WPO");
+    prepared_frame.bindless_previous_material_wpo_slot
+      = PublishTransientPayload(previous_material_wpo_buffer,
+        std::span<const MaterialWpoPublication>(
+          storage.previous_material_wpo_publications.data(),
+          storage.previous_material_wpo_publications.size()),
+        "previous material WPO");
     prepared_frame.bindless_current_motion_vector_status_slot
-      = PublishTransientPayload(
-        current_motion_vector_status_buffer,
+      = PublishTransientPayload(current_motion_vector_status_buffer,
         std::span<const MotionVectorStatusPublication>(
           storage.current_motion_vector_status_publications.data(),
           storage.current_motion_vector_status_publications.size()),
         "current motion-vector status");
     prepared_frame.bindless_previous_motion_vector_status_slot
-      = PublishTransientPayload(
-        previous_motion_vector_status_buffer,
+      = PublishTransientPayload(previous_motion_vector_status_buffer,
         std::span<const MotionVectorStatusPublication>(
           storage.previous_motion_vector_status_publications.data(),
           storage.previous_motion_vector_status_publications.size()),
         "previous motion-vector status");
-    prepared_frame.bindless_velocity_draw_metadata_slot = PublishTransientPayload(
-      velocity_draw_metadata_buffer,
-      std::span<const VelocityDrawMetadata>(
-        storage.velocity_draw_metadata.data(),
-        storage.velocity_draw_metadata.size()),
-      "velocity draw metadata");
+    prepared_frame.bindless_velocity_draw_metadata_slot
+      = PublishTransientPayload(velocity_draw_metadata_buffer,
+        std::span<const VelocityDrawMetadata>(
+          storage.velocity_draw_metadata.data(),
+          storage.velocity_draw_metadata.size()),
+        "velocity draw metadata");
   }
 
   auto PublishPreparedSceneFrame(const sceneprep::ScenePrepState& state,
@@ -400,9 +384,8 @@ namespace {
     render_items.assign(collected_items.begin(), collected_items.end());
 
     prepared_frame = {};
-    prepared_frame.render_items
-      = std::span<const sceneprep::RenderItemData>(
-        render_items.data(), render_items.size());
+    prepared_frame.render_items = std::span<const sceneprep::RenderItemData>(
+      render_items.data(), render_items.size());
 
     if (const auto draw_emitter = state.GetDrawMetadataEmitter();
       draw_emitter != nullptr) {
@@ -423,7 +406,8 @@ namespace {
       const auto world_matrices = transform_uploader->GetWorldMatrices();
       if (!world_matrices.empty()) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        const auto* world_data = reinterpret_cast<const float*>(world_matrices.data());
+        const auto* world_data
+          = reinterpret_cast<const float*>(world_matrices.data());
         prepared_frame.world_matrices = {
           world_data,
           world_matrices.size() * kMatrixFloatCount,
@@ -432,7 +416,8 @@ namespace {
       const auto normal_matrices = transform_uploader->GetNormalMatrices();
       if (!normal_matrices.empty()) {
         // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-        const auto* normal_data = reinterpret_cast<const float*>(normal_matrices.data());
+        const auto* normal_data
+          = reinterpret_cast<const float*>(normal_matrices.data());
         prepared_frame.normal_matrices = {
           normal_data,
           normal_matrices.size() * kMatrixFloatCount,
@@ -486,14 +471,16 @@ InitViewsModule::InitViewsModule(Renderer& renderer)
     auto transform_uploader = std::make_unique<resources::TransformUploader>(
       observer_ptr { gfx.get() }, observer_ptr { &staging_provider },
       observer_ptr { &inline_transfers });
-    auto material_binder = std::make_unique<resources::MaterialBinder>(
-      observer_ptr { gfx.get() }, observer_ptr { &uploader },
-      observer_ptr { &staging_provider }, observer_ptr { texture_binder_.get() },
-      asset_loader);
-    auto draw_metadata_emitter = std::make_unique<resources::DrawMetadataEmitter>(
-      observer_ptr { gfx.get() }, observer_ptr { &staging_provider },
-      observer_ptr { geometry_uploader.get() },
-      observer_ptr { material_binder.get() }, observer_ptr { &inline_transfers });
+    auto material_binder
+      = std::make_unique<resources::MaterialBinder>(observer_ptr { gfx.get() },
+        observer_ptr { &uploader }, observer_ptr { &staging_provider },
+        observer_ptr { texture_binder_.get() }, asset_loader);
+    auto draw_metadata_emitter
+      = std::make_unique<resources::DrawMetadataEmitter>(
+        observer_ptr { gfx.get() }, observer_ptr { &staging_provider },
+        observer_ptr { geometry_uploader.get() },
+        observer_ptr { material_binder.get() },
+        observer_ptr { &inline_transfers });
     current_skinned_pose_buffer_
       = std::make_unique<upload::TransientStructuredBuffer>(
         observer_ptr { gfx.get() }, staging_provider,
@@ -550,16 +537,14 @@ InitViewsModule::InitViewsModule(Renderer& renderer)
 
   auto collection_cfg = sceneprep::CreateBasicCollectionConfig();
   auto finalization_cfg = sceneprep::CreateStandardFinalizationConfig();
-  scene_prep_ = std::make_unique<
-    sceneprep::ScenePrepPipelineImpl<decltype(collection_cfg),
-      decltype(finalization_cfg)>>(
+  scene_prep_ = std::make_unique<sceneprep::ScenePrepPipelineImpl<
+    decltype(collection_cfg), decltype(finalization_cfg)>>(
     collection_cfg, finalization_cfg);
 }
 
 InitViewsModule::~InitViewsModule() = default;
 
-void InitViewsModule::Execute(
-  RenderContext& ctx, SceneTextures& scene_textures)
+void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 {
   (void)scene_textures;
   (void)renderer_;
@@ -582,11 +567,13 @@ void InitViewsModule::Execute(
     current_motion_vector_status_buffer_.get(),
     previous_motion_vector_status_buffer_.get(),
     velocity_draw_metadata_buffer_.get(), scene_prep_state_, ctx);
-  BeginFrameCollection(*scene_prep_, *scene, ctx.frame_sequence,
-    scene_prep_state_);
-  const auto runtime_motion_producer = renderer_.GetRuntimeMotionProducerModule();
+  scene_prep_->BeginFrameCollection(
+    *scene, ctx.frame_sequence, scene_prep_state_);
+  const auto runtime_motion_producer
+    = renderer_.GetRuntimeMotionProducerModule();
   const auto* runtime_motion_snapshot = runtime_motion_producer != nullptr
-    ? runtime_motion_producer->GetPublishedSnapshot(observer_ptr { scene.get() })
+    ? runtime_motion_producer->GetPublishedSnapshot(
+        observer_ptr { scene.get() })
     : nullptr;
 
   for (const auto& view_entry : ctx.frame_views) {
@@ -597,14 +584,14 @@ void InitViewsModule::Execute(
     auto [it, _] = prepared_views_.try_emplace(view_entry.view_id);
     auto& storage = it->second;
 
-    PrepareView(*scene_prep_, *scene, *view_entry.resolved_view,
-      ctx.frame_sequence, scene_prep_state_);
-    FinalizeView(*scene_prep_);
+    scene_prep_->PrepareView(
+      *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
+    scene_prep_->FinalizeView(scene_prep_state_);
     PublishPreparedSceneFrame(
       scene_prep_state_, storage.render_items, storage.prepared_frame);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,
-      scene_prep_state_.GetDrawMetadataEmitter(), current_material_wpo_buffer_.get(),
-      previous_material_wpo_buffer_.get(),
+      scene_prep_state_.GetDrawMetadataEmitter(),
+      current_material_wpo_buffer_.get(), previous_material_wpo_buffer_.get(),
       current_motion_vector_status_buffer_.get(),
       previous_motion_vector_status_buffer_.get(),
       velocity_draw_metadata_buffer_.get(), storage);
