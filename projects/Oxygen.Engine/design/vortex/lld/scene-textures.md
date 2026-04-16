@@ -291,11 +291,13 @@ struct SceneTextureExtracts {
 };
 ```
 
-**Ownership:** `SceneRenderer` produces this during `PostRenderCleanup`
-(stage 23). Renderer Core helper surfaces may consume extracted artifacts for
-composition handoff or history management. The extract refs are non-owning
-descriptors for explicit handoff artifacts; they are not permission to treat
-live `SceneTextures` attachments as extracted outputs.
+**Ownership:** `SceneRenderer` produces the resolved artifacts at stage 21 and
+finalizes the handoff/history set during `PostRenderCleanup` (stage 23).
+Renderer Core helper surfaces may consume extracted artifacts for composition
+handoff or history management. The extract refs are non-owning descriptors for
+explicit copied handoff artifacts; they are not permission to treat live
+`SceneTextures` attachments as extracted outputs. `resolved_scene_color` is the
+artifact that Renderer Core composition consumes for the published scene view.
 
 **File:** `SceneRenderer/SceneTextures.h`
 
@@ -327,11 +329,16 @@ Stage 12 (Deferred Lighting)
   └─ Reads: GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, IBL
   └─ Writes: SceneColor (accumulated lighting)
 
+Stage 21 (Resolve scene color)
+  └─ Copies: SceneColor -> resolved_scene_color artifact
+  └─ Copies: SceneDepth -> resolved_scene_depth artifact
+  └─ Resolved artifacts now become the explicit handoff source for composition/tools
+
 Stage 22 (Post-Process)
   └─ Reads: SceneColor, SceneDepth, Velocity
 
 Stage 23 (Cleanup)
-  └─ SceneTextureExtracts produced
+  └─ SceneTextureExtracts finalized
   └─ History textures handed off for next frame
 ```
 
@@ -342,7 +349,7 @@ Stage 23 (Cleanup)
 | SceneTextures | Graphics layer (IGraphics, Texture) | SceneRenderer, all stage modules, all services |
 | SceneTextureSetupMode | None | SceneTextureBindings generation, stage/service consumers |
 | SceneTextureBindings | SceneTextures + SetupMode + Graphics (descriptor alloc) | Renderer Core publication helpers → RenderContext/ViewFrameBindings → passes |
-| SceneTextureExtracts | SceneTextures | Renderer Core handoff surfaces |
+| SceneTextureExtracts | SceneTextures + explicit resolve/copy artifacts | Renderer Core handoff surfaces |
 
 ## 5. Resource Management
 

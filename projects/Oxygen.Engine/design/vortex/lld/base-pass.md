@@ -137,6 +137,9 @@ must not silently degrade at execution time.
   **disabled** (reads prepass depth, does not overwrite).
 - If `early_z_pass_done == false`: depth test and write both enabled.
   BasePass writes depth directly (fallback when prepass is disabled).
+- When `early_z_pass_done == true`, BasePass still clears the color MRT set
+  through a color-only framebuffer before issuing GBuffer draws so the
+  prepass depth survives while frame-to-frame color accumulation is prevented.
 
 ### 3.3 GBufferIndex Enum
 
@@ -350,11 +353,15 @@ SceneTextures rebuild boundary:
 ```cpp
 scene_textures_.RebuildWithGBuffers();
 RefreshSceneTextureBindings();
+renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
 ```
 
 This is the canonical product-setup transition for deferred lighting. It is not
 just a resource-state flip; it is the point where GBuffers become readable and
-the shared scene-texture routing metadata is refreshed.
+the shared scene-texture routing metadata is refreshed. On the active scene
+view, Renderer Core immediately republishes the updated `SceneTextureBindings`
+and `ViewFrameBindings` after stage 10 so stage 12 consumes rebuilt routing
+instead of stale pre-base-pass slots.
 
 ### 7.2 Null-Safe Behavior
 

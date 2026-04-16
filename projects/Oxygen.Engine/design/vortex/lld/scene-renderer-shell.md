@@ -12,9 +12,10 @@ The SceneRenderer is the thin desktop frame dispatcher that owns stage ordering,
 `SceneTextures`, and shading-mode selection. `SceneRenderBuilder` is the
 bootstrap helper that constructs a SceneRenderer from a `CapabilitySet`.
 
-In Phase 2, the SceneRenderer is a **shell**: the 23-stage dispatch skeleton
-exists with all stages as no-ops. Stage modules and subsystem services are
-added in later phases.
+This document started as the Phase 2 shell contract. On the current retained
+Phase 03 branch, the shell has progressed into a real deferred-core runtime:
+Stage 2/3/9/10/12 execute for the active scene view, while the later reserved
+stage/service slots remain future-facing.
 
 ### 1.2 What It Replaces
 
@@ -132,7 +133,7 @@ public:
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const FrameContext& frame);
 
-  // --- Query ---
+  // --- Query / publication ---
 
   OXGN_VRTX_NDAPI auto GetSceneTextures() const
     -> const SceneTextures&;
@@ -140,6 +141,7 @@ public:
     -> SceneTextures&;
   OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const
     -> ShadingMode;
+  OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
 
 private:
   Renderer& renderer_;
@@ -244,6 +246,7 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   // scene_textures_.RebuildWithGBuffers();
   // setup_mode_.Set(SceneTextureSetupMode::Flag::kGBuffers);
   // RefreshSceneTextureBindings();
+  // renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
 
   // === Stage 11: reserved — MaterialCompositionService::PostBasePass ===
 
@@ -368,13 +371,13 @@ ARCHITECTURE.md §6.2.
 
 ### 3.5 ResolveSceneColor (Stage 21)
 
-File-separated method (~180 lines). In Phase 2, this is a thin scene-stage
-stub that prepares the resolved scene-color handoff artifact for downstream
-Renderer Core composition/extraction work. It does **not** take ownership of
-composition target resolution, composition queueing, or presentation. When
-post-processing is active (Phase 4+), this becomes the SceneRenderer-owned MSAA
-resolve / HDR merge point before Renderer Core consumes the resolved product
-for composition.
+File-separated method (~180 lines). In the current Phase 03 runtime branch,
+this stage copies live `SceneColor` and `SceneDepth` into explicit resolved
+artifacts for downstream Renderer Core composition/extraction work. It does
+**not** take ownership of composition target resolution, composition queueing,
+or presentation. When post-processing is active (Phase 4+), this remains the
+SceneRenderer-owned resolve / HDR merge point before Renderer Core consumes the
+resolved product for composition.
 
 **File:** `SceneRenderer/ResolveSceneColor.cpp`
 
@@ -412,6 +415,7 @@ void Renderer::OnPreRender(const FrameContext& frame) {
 
 void Renderer::OnRender(RenderContext& ctx) {
   // ... substrate work ...
+  if (scene_renderer_) scene_renderer_->PrimePreparedView(ctx);
   if (scene_renderer_) scene_renderer_->OnRender(ctx);
 }
 
@@ -433,6 +437,7 @@ void Renderer::OnFrameEnd(const FrameContext& frame) {
 | `SceneRenderer` lifetime | Renderer (via `unique_ptr`) |
 | `SceneTextures` lifetime | SceneRenderer |
 | Frame-phase delegation | Renderer → SceneRenderer |
+| Prepared-frame priming before initial publication | Renderer (via `PrimePreparedView`) |
 | Composition planning + execution | Renderer (not SceneRenderer) |
 | View registration | Renderer (not SceneRenderer) |
 | Upload/staging coordination | Renderer (not SceneRenderer) |
@@ -462,10 +467,11 @@ Renderer::OnFrameStart(frame)
        └─ Reset setup mode
 
 Renderer::OnRender(ctx)
+  └─ SceneRenderer::PrimePreparedView(ctx)
   └─ SceneRenderer::OnRender(ctx)
-       └─ 23 no-op stage slots
-       └─ ResolveSceneColor (stub)
-       └─ PostRenderCleanup (stub)
+       └─ real Stage 2 / 3 / 9 / 10 / 12 execution on the current Phase 03 branch
+       └─ ResolveSceneColor (explicit resolved-artifact copy)
+       └─ PostRenderCleanup (extraction/handoff finalization)
 
 Renderer::OnCompositing(ctx)
   └─ SceneRenderer::OnCompositing(ctx)

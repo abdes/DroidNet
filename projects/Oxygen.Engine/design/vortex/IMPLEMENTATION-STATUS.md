@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 03 executed through 03-15, but blocking review findings invalidate the current closeout claims; Phase 04 must not start until Phase 03 remediation lands`
+Status: `blocked — Phase 03 now has a working retained runtime branch with green live VortexBasic proof, but the cleanup lane is still open for final review/remediation and the local-light product gap remains unresolved; Phase 04 stays locked until those remaining Phase 03 blockers are closed truthfully`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `blocked` | Review findings invalidate the current Stage 10/12/15 truth claims |
+| 3 | Deferred Core | `blocked` | final multi-review/remediation gate plus the unresolved local-light product coverage gap |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -70,32 +70,130 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
-### 2026-04-15 — Phase 3 completion claim invalidated by post-execution review
+### 2026-04-16 — Phase 3 deferred-core closeout blocked
+
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-DeferredCoreFrame10Capture.ps1 -Output out/build-ninja/analysis/vortex/deferred-core/frame10`
+  - `powershell -NoProfile -File tools/vortex/Analyze-DeferredCoreCapture.ps1 -CapturePath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.inputs.json -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+  - `powershell -NoProfile -File tools/vortex/Assert-DeferredCoreCaptureReport.ps1 -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
+- Result:
+  - The Phase 03 closeout gate did not pass.
+  - Report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
+- Missing delta: stage_2_order=fail, stage_3_order=fail, stage_9_order=fail, stage_12_order=fail, gbuffer_contents=fail, scene_color_lit=fail, stencil_local_lights=fail
+- RenderDoc runtime validation remains deferred to Phase 04 and is not part of this failure.
+
+### 2026-04-16 — Phase 03 cleanup lane docs synced to the retained runtime branch
+
+- Changed files this session:
+  - `design/vortex/lld/scene-renderer-shell.md`
+  - `design/vortex/lld/base-pass.md`
+  - `design/vortex/lld/scene-textures.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VERIFICATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - repo-grounded doc/code comparison against the retained `03-21` runtime branch
+  - latest cleanup-lane proof artifact review:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/task21-04-logcleanup-proof.validation.txt`
+- Result:
+  - the LLDs now describe the retained Stage 10 republish boundary, the early-Z color-only clear rule, and the explicit Stage 21 resolved-artifact handoff used by composition
+  - the Phase 03 validation docs now describe the current VortexBasic wrapper truthfully: structural + product analyzers together, with point/spot product fields emitted diagnostically rather than overclaimed
+  - the implementation ledger now matches the cleanup-lane reality instead of the earlier blocked-state assumptions alone
+- Code / validation delta:
+  - no new implementation code changed in this documentation-sync session
+  - the latest cleanup-lane runtime proof remains green on the current build, but Phase 03 is still open pending the remaining cleanup-lane task(s) and the final multi-review gate
+- Remaining blocker:
+  - finish the remaining `03-21` work, then run the required final multi-subagent Phase 03 review/remediation loop before any closure claim
+
+### 2026-04-16 — Phase 03 cleanup lane added after the live-runtime remediation checkpoint
 
 - Changed files this session:
   - `.planning/workstreams/vortex/STATE.md`
   - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-21-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VERIFICATION.md`
   - `design/vortex/IMPLEMENTATION-STATUS.md`
-  - `.planning/workstreams/vortex/phases/03-deferred-core/03-15-SUMMARY.md`
-  - `tools/vortex/Run-DeferredCoreFrame10Capture.ps1`
 - Commands used for verification:
-  - advisory review over the final Phase 03 range
-  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
-  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererDeferredCore.Tests.exe`
-  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe`
-  - `powershell -ExecutionPolicy Bypass -File tools\cli\oxytidy.ps1 src\Oxygen\Vortex\SceneRenderer\SceneRenderer.cpp -Configuration Debug -IncludeTests -SummaryOnly`
+  - `git commit -m "chore: preserve the current Phase 03 live-runtime remediation snapshot" ...`
+  - repo-grounded staged-tree review against the current `03-18` through `03-20` remediation branch
 - Result:
-  - all 15 Phase 03 plans were executed, but the phase must not be treated as complete
-  - review found that Stage 12 still proves telemetry rather than truthful SceneColor accumulation / stencil-bounded local-light behavior
-  - review found that the current closeout analyzer overstates key claims through token/name checks instead of artifact/state-level proof
-  - review found that the current velocity-completion claim is still a shell seam, not a proven skinned/WPO path
-  - the closeout runner now rebuilds the Vortex test executables before `ctest`, but that does not remove the larger Phase 03 blockers
+  - The full live-runtime remediation branch is preserved in temporary checkpoint commit `5a3926cd3`.
+  - Phase 03 now carries an explicit `03-21` cleanup lane so the retained fixes can be cleaned without sacrificing the working `VortexBasic` scene or the RenderDoc proof surface.
+  - The RenderDoc analyzers are preserved by design; the cleanup lane treats them as durable proof assets that need consolidation and hardening rather than deletion.
 - Code / validation delta:
-  - Phase 03 is now explicitly `blocked` again
-  - Phase 04 remains locked until review remediation is planned and landed
-  - `STATE.md` and `ROADMAP.md` are now brought under managed repo state and reflect the real branch status
+  - no new runtime or build verification was claimed from this planning-only update
+  - `03-21` now defines the required per-remediation proof gate: scene still renders, VortexBasic RenderDoc proof stays green, and code review approves before commit
 - Remaining blocker:
-  - plan and implement the Phase 03 remediation work that closes the blocking review findings truthfully
+  - execute `03-18` through `03-21` truthfully before Phase 03 can be treated as clean or closed
+
+### 2026-04-15 — Phase 03 returned to blocked gap-closure status after live runtime validation
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-18-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-19-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-20-PLAN.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VERIFICATION.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - debugger-assisted `VortexBasic` runtime validation with D3D12 debug-layer error/call-stack capture
+  - review intake from the `Lagrange` audit lane over resource-state / registration / lifetime management
+- Result:
+  - Phase 03 can no longer be claimed complete.
+  - Live `VortexBasic` validation exposed barrier mismatches on persistent scene textures, proving that deferred-core stages are still guessing incoming resource states instead of consuming an authoritative graphics-layer state contract.
+  - The Phase 03 roadmap now carries a three-plan gap-closure track:
+    - `03-18` tracker-centered persistent state continuity
+    - `03-19` deterministic registration / framebuffer-view ownership / GPU-safe retirement
+    - `03-20` live runtime D3D12 + capture-backed proof closure
+  - Runtime proof is no longer deferred to Phase 04 because `VortexBasic` now exists as the live Phase 03 validation surface.
+- Code / validation delta:
+  - no implementation code was claimed complete from this planning correction
+  - non-runtime deferred-core tests remain green, but runtime deferred-core proof is still blocked
+- Remaining blocker:
+  - execute `03-18` through `03-20` and do not reopen Phase 04 until the live runtime proof is clean
+
+### 2026-04-15 — Phase 3 remediation closed with real Stage 3/9/12 rendering and proof rerun
+
+- Changed files this session:
+  - `src/Oxygen/Graphics/Common/Internal/FramebufferImpl.cpp`
+  - `src/Oxygen/Graphics/Common/Internal/ToStringConverters.cpp`
+  - `src/Oxygen/Graphics/Common/PipelineState.cpp`
+  - `src/Oxygen/Graphics/Common/PipelineState.h`
+  - `src/Oxygen/Graphics/Direct3D12/Detail/Converters.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightPoint.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightSpot.hlsl`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `tools/vortex/AnalyzeDeferredCoreCapture.py`
+  - `tools/vortex/Run-DeferredCoreFrame10Capture.ps1`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VERIFICATION.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-17-SUMMARY.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.Vortex\\.(SceneRendererDeferredCore|SceneRendererPublication)\\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Verify-DeferredCoreCloseout.ps1 -Output out/build-ninja/analysis/vortex/deferred-core/frame10`
+- Result:
+  - Stage 3 now records a real depth/partial-velocity pass and copies SceneDepth into PartialDepth.
+  - Stage 9 now records a real base pass and keeps depth testing aligned with the active reverse-Z convention.
+  - Stage 12 now records actual fullscreen and stencil-bounded deferred-light draws, publishes per-light constants, and uses dedicated stencil-mark pixel entrypoints plus procedural local-light volume generation.
+  - The deferred-core/publication suites pass, and the repo-owned closeout runner produces a passing report again with the revised render-path checks.
+- Code / validation delta:
+  - `DEFR-01` is now satisfied in code and proof.
+  - `DEFR-02` is now satisfied in code and proof.
+  - Runtime RenderDoc capture remains intentionally deferred to Phase 04, but it is no longer a Phase 03 blocker.
+- Remaining blocker:
+  - None for Phase 03 exit. Resume with Phase 04 planning and the first migrated runtime surface.
 
 ### 2026-04-15 — Phase 3 deferred-core proof pack
 
@@ -129,6 +227,33 @@ implementation cannot begin until its design prerequisites are met.
   - Report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
 - Missing delta: stage_2_order=fail, stage_3_order=fail, stage_9_order=fail, stage_12_order=fail, gbuffer_contents=fail, scene_color_lit=fail, stencil_local_lights=fail
 - RenderDoc runtime validation remains deferred to Phase 04 and is not part of this failure.
+
+### 2026-04-15 — Phase 3 completion claim invalidated by post-execution review
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-15-SUMMARY.md`
+  - `tools/vortex/Run-DeferredCoreFrame10Capture.ps1`
+- Commands used for verification:
+  - advisory review over the final Phase 03 range
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererDeferredCore.Tests.exe`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe`
+  - `powershell -ExecutionPolicy Bypass -File tools\cli\oxytidy.ps1 src\Oxygen\Vortex\SceneRenderer\SceneRenderer.cpp -Configuration Debug -IncludeTests -SummaryOnly`
+- Result:
+  - all 15 Phase 03 plans were executed, but the phase must not be treated as complete
+  - review found that Stage 12 still proves telemetry rather than truthful SceneColor accumulation / stencil-bounded local-light behavior
+  - review found that the current closeout analyzer overstates key claims through token/name checks instead of artifact/state-level proof
+  - review found that the current velocity-completion claim is still a shell seam, not a proven skinned/WPO path
+  - the closeout runner now rebuilds the Vortex test executables before `ctest`, but that does not remove the larger Phase 03 blockers
+- Code / validation delta:
+  - Phase 03 is now explicitly `blocked` again
+  - Phase 04 remains locked until review remediation is planned and landed
+  - `STATE.md` and `ROADMAP.md` are now brought under managed repo state and reflect the real branch status
+- Remaining blocker:
+  - plan and implement the Phase 03 remediation work that closes the blocking review findings truthfully
 
 ### 2026-04-15 — Phase 3 execution advanced through 03-05 and the ledger now resumes at 03-06
 
@@ -1243,35 +1368,41 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 - `03-12` is complete: deferred-light shaders compile through the catalog and
   the local-light shader path now avoids the redundant second depth/world
   reconstruction noted in review.
-- `03-13` landed Stage 12 CPU deferred-light orchestration telemetry and proof
-  seams, but post-execution review found that it still does not mutate
-  `SceneColor` or execute a real stencil-bounded local-light path.
+- `03-13` originally landed Stage 12 telemetry/proof seams only; the later
+  remediation replaced that shell with actual deferred-light recording.
 - `03-14` is complete: the automated proof sweep locks the validation
   contract to the current deferred-core C++ tree and publication vocabulary.
-- `03-15` landed a repo-owned closeout runner under `tools/vortex/`, and
-  runtime RenderDoc validation is explicitly deferred to Phase 4, when Async
-  and DemoShell migrate to Vortex and can produce a truthful runtime frame-10
-  capture.
-- Post-execution review invalidated the current closeout claim because the
-  analyzer still proves key Phase 03 outcomes through token/name checks rather
-  than artifact/state validation, and because the underlying Stage 12/velocity
-  behavior is still incomplete.
+- `03-15` landed a repo-owned closeout runner under `tools/vortex/`.
+- `03-16` and `03-17` landed the deferred-core remediation that put
+  real Stage 3, Stage 9, and Stage 12 render paths, added reverse-Z-safe
+  depth/stencil handling for the new passes, upgraded the deferred-light family
+  with dedicated stencil-mark pixel entrypoints plus procedural local-light
+  volume generation, and reran the repo-owned closeout proof successfully.
+- `03-18` through `03-20` now exist on the retained runtime branch:
+  graphics-layer state continuity is restored, registration/view ownership is
+  explicit again, and live `VortexBasic` runtime proof is green on the current
+  cleanup-lane build.
+- `03-21` is the current open control point. The cleanup lane has already
+  landed:
+  - hard registry ownership with atomic shared resource/view acquisition
+  - explicit Stage 21 resolved scene-color/depth artifacts consumed by
+    composition
+  - a unified durable VortexBasic RenderDoc wrapper that preserves the probe
+    scripts
+  - removal of diagnosis-only runtime log spam
 
 ### What Is Missing
 
-- Truthful Stage 12 behavior: `RenderDeferredLighting(...)` still needs to do
-  more than record telemetry counters/booleans before SceneColor accumulation
-  and stencil-bounded local-light routing can be claimed.
-- Truthful velocity completion: the Phase 03 dynamic/skinned/WPO velocity
-  contract still needs real data-path evidence instead of a texture-availability
-  seam.
-- Truthful closeout proof: the current analyzer needs artifact/state-backed
-  checks for the Phase 03 behavioral claims it reports as `pass`.
+- Final multi-subagent architectural/LLD/code-quality review over the cleaned
+  Phase 03 branch, plus remediation of every finding before any closure claim.
+- Finalize whether point/spot local-light RGB results remain diagnostic-only in
+  the durable wrapper or graduate into a stable per-light product gate.
 
 ### Resume Point
 
-Phase 3 is blocked. Resume by planning and landing the Phase 03 remediation
-work that closes the blocking review findings; Phase 4 must not start yet.
+Phase 3 is blocked. Resume with the remaining `03-21` cleanup-lane work and
+the required final multi-subagent review/remediation loop. Do not unlock Phase
+4 until that gate is complete.
 
 ---
 
@@ -1352,5 +1483,3 @@ When implementation resumes, keep these baseline facts explicit:
   package supersedes them.
 - The active production path is `Oxygen.Renderer` + `ForwardPipeline`.
 - Use frame 10 as the RenderDoc baseline capture point.
-
-
