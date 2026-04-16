@@ -1,12 +1,14 @@
-"""Phase 03 deferred-core closeout analyzer.
+"""Historical Phase 03 deferred-core frame-10 closeout analyzer.
 
-This is intentionally source/test/log-backed. RenderDoc runtime validation is
-deferred until Phase 04 migrates Async and DemoShell to Vortex.
+This analyzer exists to preserve the old 03-15 source/test/log closeout pack.
+It is no longer the authoritative Phase 03 runtime closure surface; the active
+runtime gate now lives in the VortexBasic validation flow.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 from pathlib import Path
 
@@ -34,22 +36,238 @@ REPORT_KEY_PREFIXES = (
 )
 
 
+@dataclass(frozen=True)
+class ManifestStep:
+    exit_code: int
+
+
+@dataclass(frozen=True)
+class ManifestSteps:
+    build: ManifestStep
+    tests: ManifestStep
+    tidy: ManifestStep
+
+
+@dataclass(frozen=True)
+class RenderDocRuntimeValidation:
+    deferred: bool
+
+
+@dataclass(frozen=True)
+class ManifestFiles:
+    scene_renderer: Path
+    scene_textures: Path
+    depth_prepass_module: Path
+    base_pass_module: Path
+    framebuffer_impl: Path
+    shader_catalog: Path
+    deferred_light_common: Path
+    deferred_light_point: Path
+    deferred_light_spot: Path
+    deferred_core_tests: Path
+    publication_tests: Path
+    validation_doc: Path
+    phase_plan: Path
+
+
+@dataclass(frozen=True)
+class CaptureManifest:
+    repo_root: Path
+    steps: ManifestSteps
+    files: ManifestFiles
+    renderdoc_runtime_validation: RenderDocRuntimeValidation
+
+
 def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def normalize(path_value: str | None, repo_root: Path) -> Path | None:
-    if not path_value:
-        return None
+def require_mapping(value: object, field_name: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise TypeError(f"{field_name} must be an object")
+    return value
+
+
+def require_field(mapping: dict[str, object], key: str, field_name: str) -> object:
+    if key not in mapping:
+        raise KeyError(f"missing required field: {field_name}.{key}")
+    return mapping[key]
+
+
+def require_string(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{field_name} must be a string")
+    return value
+
+
+def require_int(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field_name} must be an integer")
+    return value
+
+
+def require_bool(value: object, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{field_name} must be a boolean")
+    return value
+
+
+def require_directory_path(value: object, field_name: str) -> Path:
+    path_value = require_string(value, field_name)
+    if not path_value.strip():
+        raise ValueError(f"{field_name} must be a non-empty path")
+    path = Path(path_value).resolve()
+    if not path.is_dir():
+        raise NotADirectoryError(f"{field_name} does not exist: {path}")
+    return path
+
+
+def require_file_path(value: object, repo_root: Path, field_name: str) -> Path:
+    path_value = require_string(value, field_name)
+    if not path_value.strip():
+        raise ValueError(f"{field_name} must be a non-empty path")
+
     path = Path(path_value)
     if not path.is_absolute():
         path = repo_root / path
-    return path.resolve()
+
+    resolved_path = path.resolve()
+    if not resolved_path.is_file():
+        raise FileNotFoundError(f"{field_name} does not exist: {resolved_path}")
+    return resolved_path
 
 
-def step_passed(manifest: dict, step_name: str) -> tuple[bool, str]:
-    step = manifest["steps"].get(step_name, {})
-    exit_code = int(step.get("exit_code", 1))
+def parse_step(value: object, field_name: str) -> ManifestStep:
+    step = require_mapping(value, field_name)
+    return ManifestStep(
+        exit_code=require_int(
+            require_field(step, "exit_code", field_name),
+            f"{field_name}.exit_code",
+        )
+    )
+
+
+def parse_steps(value: object) -> ManifestSteps:
+    steps = require_mapping(value, "manifest.steps")
+    return ManifestSteps(
+        build=parse_step(
+            require_field(steps, "build", "manifest.steps"),
+            "manifest.steps.build",
+        ),
+        tests=parse_step(
+            require_field(steps, "tests", "manifest.steps"),
+            "manifest.steps.tests",
+        ),
+        tidy=parse_step(
+            require_field(steps, "tidy", "manifest.steps"),
+            "manifest.steps.tidy",
+        ),
+    )
+
+
+def parse_files(value: object, repo_root: Path) -> ManifestFiles:
+    files = require_mapping(value, "manifest.files")
+    return ManifestFiles(
+        scene_renderer=require_file_path(
+            require_field(files, "scene_renderer", "manifest.files"),
+            repo_root,
+            "manifest.files.scene_renderer",
+        ),
+        scene_textures=require_file_path(
+            require_field(files, "scene_textures", "manifest.files"),
+            repo_root,
+            "manifest.files.scene_textures",
+        ),
+        depth_prepass_module=require_file_path(
+            require_field(files, "depth_prepass_module", "manifest.files"),
+            repo_root,
+            "manifest.files.depth_prepass_module",
+        ),
+        base_pass_module=require_file_path(
+            require_field(files, "base_pass_module", "manifest.files"),
+            repo_root,
+            "manifest.files.base_pass_module",
+        ),
+        framebuffer_impl=require_file_path(
+            require_field(files, "framebuffer_impl", "manifest.files"),
+            repo_root,
+            "manifest.files.framebuffer_impl",
+        ),
+        shader_catalog=require_file_path(
+            require_field(files, "shader_catalog", "manifest.files"),
+            repo_root,
+            "manifest.files.shader_catalog",
+        ),
+        deferred_light_common=require_file_path(
+            require_field(files, "deferred_light_common", "manifest.files"),
+            repo_root,
+            "manifest.files.deferred_light_common",
+        ),
+        deferred_light_point=require_file_path(
+            require_field(files, "deferred_light_point", "manifest.files"),
+            repo_root,
+            "manifest.files.deferred_light_point",
+        ),
+        deferred_light_spot=require_file_path(
+            require_field(files, "deferred_light_spot", "manifest.files"),
+            repo_root,
+            "manifest.files.deferred_light_spot",
+        ),
+        deferred_core_tests=require_file_path(
+            require_field(files, "deferred_core_tests", "manifest.files"),
+            repo_root,
+            "manifest.files.deferred_core_tests",
+        ),
+        publication_tests=require_file_path(
+            require_field(files, "publication_tests", "manifest.files"),
+            repo_root,
+            "manifest.files.publication_tests",
+        ),
+        validation_doc=require_file_path(
+            require_field(files, "validation_doc", "manifest.files"),
+            repo_root,
+            "manifest.files.validation_doc",
+        ),
+        phase_plan=require_file_path(
+            require_field(files, "phase_plan", "manifest.files"),
+            repo_root,
+            "manifest.files.phase_plan",
+        ),
+    )
+
+
+def parse_renderdoc_runtime_validation(value: object) -> RenderDocRuntimeValidation:
+    validation = require_mapping(value, "manifest.renderdoc_runtime_validation")
+    return RenderDocRuntimeValidation(
+        deferred=require_bool(
+            require_field(
+                validation,
+                "deferred",
+                "manifest.renderdoc_runtime_validation",
+            ),
+            "manifest.renderdoc_runtime_validation.deferred",
+        )
+    )
+
+
+def parse_manifest(value: object) -> CaptureManifest:
+    manifest = require_mapping(value, "manifest")
+    repo_root = require_directory_path(
+        require_field(manifest, "repo_root", "manifest"),
+        "manifest.repo_root",
+    )
+    return CaptureManifest(
+        repo_root=repo_root,
+        steps=parse_steps(require_field(manifest, "steps", "manifest")),
+        files=parse_files(require_field(manifest, "files", "manifest"), repo_root),
+        renderdoc_runtime_validation=parse_renderdoc_runtime_validation(
+            require_field(manifest, "renderdoc_runtime_validation", "manifest")
+        ),
+    )
+
+
+def step_passed(step: ManifestStep, step_name: str) -> tuple[bool, str]:
+    exit_code = step.exit_code
     if exit_code == 0:
         return True, f"{step_name} exit_code=0"
     return False, f"{step_name} exit_code={exit_code}"
@@ -88,33 +306,26 @@ def write_report(report_path: Path, lines: list[str]) -> None:
     report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def analyze(manifest: dict) -> list[str]:
-    repo_root = Path(manifest["repo_root"]).resolve()
-    files = manifest["files"]
+def analyze(manifest: CaptureManifest) -> list[str]:
+    files = manifest.files
 
-    scene_renderer = read_text(normalize(files["scene_renderer"], repo_root))
-    scene_textures = read_text(normalize(files["scene_textures"], repo_root))
-    depth_prepass_module = read_text(
-        normalize(files["depth_prepass_module"], repo_root)
-    )
-    base_pass_module = read_text(normalize(files["base_pass_module"], repo_root))
-    framebuffer_impl = read_text(normalize(files["framebuffer_impl"], repo_root))
-    shader_catalog = read_text(normalize(files["shader_catalog"], repo_root))
-    deferred_light_common = read_text(
-        normalize(files["deferred_light_common"], repo_root)
-    )
-    deferred_light_point = read_text(
-        normalize(files["deferred_light_point"], repo_root)
-    )
-    deferred_light_spot = read_text(normalize(files["deferred_light_spot"], repo_root))
-    deferred_core_tests = read_text(normalize(files["deferred_core_tests"], repo_root))
-    publication_tests = read_text(normalize(files["publication_tests"], repo_root))
-    validation_doc = read_text(normalize(files["validation_doc"], repo_root))
-    phase_plan = read_text(normalize(files["phase_plan"], repo_root))
+    scene_renderer = read_text(files.scene_renderer)
+    scene_textures = read_text(files.scene_textures)
+    depth_prepass_module = read_text(files.depth_prepass_module)
+    base_pass_module = read_text(files.base_pass_module)
+    framebuffer_impl = read_text(files.framebuffer_impl)
+    shader_catalog = read_text(files.shader_catalog)
+    deferred_light_common = read_text(files.deferred_light_common)
+    deferred_light_point = read_text(files.deferred_light_point)
+    deferred_light_spot = read_text(files.deferred_light_spot)
+    deferred_core_tests = read_text(files.deferred_core_tests)
+    publication_tests = read_text(files.publication_tests)
+    validation_doc = read_text(files.validation_doc)
+    phase_plan = read_text(files.phase_plan)
 
-    build_ok = step_passed(manifest, "build")
-    tests_ok = step_passed(manifest, "tests")
-    tidy_ok = step_passed(manifest, "tidy")
+    build_ok = step_passed(manifest.steps.build, "build")
+    tests_ok = step_passed(manifest.steps.tests, "tests")
+    tidy_ok = step_passed(manifest.steps.tidy, "tidy")
 
     stage_2 = result_from_checks(
         (
@@ -359,12 +570,12 @@ def analyze(manifest: dict) -> list[str]:
     lines = [
         "analysis_result=success",
         "analysis_profile=phase3_closeout",
-        f"input_path={manifest['repo_root']}",
-        f"renderdoc_runtime_validation={'deferred_phase_04' if manifest['renderdoc_runtime_validation']['deferred'] else 'active'}",
+        f"input_path={manifest.repo_root}",
+        f"renderdoc_runtime_validation={'deferred_phase_04' if manifest.renderdoc_runtime_validation.deferred else 'active'}",
         "renderdoc_runtime_reason=RenderDoc runtime validation is deferred until Async and DemoShell migrate to Vortex.",
-        f"build_exit_code={manifest['steps']['build']['exit_code']}",
-        f"tests_exit_code={manifest['steps']['tests']['exit_code']}",
-        f"tidy_exit_code={manifest['steps']['tidy']['exit_code']}",
+        f"build_exit_code={manifest.steps.build.exit_code}",
+        f"tests_exit_code={manifest.steps.tests.exit_code}",
+        f"tidy_exit_code={manifest.steps.tidy.exit_code}",
         f"validation_doc_mentions_phase4_deferral={'true' if 'Phase 04' in validation_doc else 'false'}",
         f"phase_plan_mentions_phase4_deferral={'true' if 'Phase 4' in phase_plan or 'Phase 04' in phase_plan else 'false'}",
     ]
@@ -396,7 +607,7 @@ def main() -> int:
     report_path = Path(args.report).resolve()
 
     try:
-        manifest = json.loads(input_path.read_text(encoding="utf-8-sig"))
+        manifest = parse_manifest(json.loads(input_path.read_text(encoding="utf-8-sig")))
         lines = analyze(manifest)
         lines.insert(2, f"manifest_path={input_path}")
         lines.insert(3, f"report_path={report_path}")

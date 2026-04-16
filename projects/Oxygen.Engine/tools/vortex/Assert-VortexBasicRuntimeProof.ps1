@@ -6,12 +6,11 @@ Asserts Phase 03 VortexBasic runtime-proof expectations from the app log and Ren
 Validates two evidence sources:
 - the runtime stderr log contains the expected draw-metadata count for the validation scene
 - the structural RenderDoc analyzer report contains the expected Stage 3 / 9 / 12 / compositing shape
-- the product RenderDoc analyzer report proves Stage 3, Stage 9, the directional-light SceneColor accumulation, and final present are non-broken
+- the product RenderDoc analyzer report proves Stage 3, Stage 9, point/spot/directional Stage 12 SceneColor accumulation, and final present are non-broken
 
-Point/spot local-light product fields are preserved as diagnostics in the
-validation report, but the current durable gate treats their execution-path
-structure as authoritative until a scene-stable per-light product contract is
-finalized.
+Point/spot local-light product fields are part of the current durable runtime
+gate. The wrapper requires nonzero Stage 12 point/spot `SceneColor`
+accumulation for the validation scene in addition to the structural checks.
 
 This script is read-only over existing artifacts. It does not launch the app.
 #>

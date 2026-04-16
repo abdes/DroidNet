@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-Collects the Phase 03 deferred-core closeout proof inputs.
+Collects the historical 03-15 deferred-core frame-10 closeout inputs.
 
 .DESCRIPTION
-Phase 03 now closes with source/test/log-backed proof. RenderDoc runtime
-validation is deferred until Phase 04 migrates Async and DemoShell to Vortex.
-This script gathers the current closeout inputs and writes a manifest consumed
-by Analyze-DeferredCoreCapture.ps1.
+This script preserves the older non-runtime frame-10 closeout pack for
+historical comparison only. It is not the current Phase 03 closure path.
+Use tools/vortex/Run-VortexBasicRuntimeValidation.ps1 for the active live
+build + capture + analysis validation flow.
 #>
 [CmdletBinding()]
 param(

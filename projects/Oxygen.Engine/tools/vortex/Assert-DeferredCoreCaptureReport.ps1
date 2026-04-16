@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-Asserts the final Phase 03 deferred-core closeout report.
+Asserts the historical 03-15 deferred-core frame-10 closeout report.
 
 .DESCRIPTION
-Validates the required proof keys, then records either a proof-pack success
-entry or an explicit missing delta in design/vortex/IMPLEMENTATION-STATUS.md.
-RenderDoc runtime validation remains explicitly deferred to Phase 04.
+Validates the required proof keys for the historical non-runtime frame-10
+closeout pack. This is not the current Phase 03 runtime closure gate.
+Use tools/vortex/Run-VortexBasicRuntimeValidation.ps1 for the active live
+validation flow.
 #>
 [CmdletBinding()]
 param(

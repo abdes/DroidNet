@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-Runs the full Phase 03 deferred-core closeout gate.
+Runs the historical 03-15 deferred-core frame-10 closeout pack.
 
 .DESCRIPTION
-This is the one-line operator surface for plan 03-15. It collects the proof
-inputs, analyzes them, validates the positive report, proves the negative
-assert path with a synthetic failing report, and confirms the ledger entry.
+This preserves the older non-runtime Phase 03 closeout flow for historical
+reference. It is no longer the primary Phase 03 runtime validation surface.
+Use tools/vortex/Run-VortexBasicRuntimeValidation.ps1 for the current live
+build + capture + analysis gate.
 #>
 [CmdletBinding()]
 param(
