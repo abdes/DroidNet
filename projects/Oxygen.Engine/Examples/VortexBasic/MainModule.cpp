@@ -101,8 +101,8 @@ auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target)
     oxygen::space::look::Forward, oxygen::space::look::Up, target - position);
 }
 
-auto MakeSolidColorMaterial(
-  const char* name, const glm::vec4& rgba, const float roughness = 0.9F)
+auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
+  const float roughness = 0.9F, const float metalness = 0.0F)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   // NOLINTBEGIN(*-magic-numbers)
@@ -125,7 +125,7 @@ auto MakeSolidColorMaterial(
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = d::Unorm16 { 0.0F };
+  desc.metalness = d::Unorm16 { metalness };
   desc.roughness = d::Unorm16 { roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
   const auto key = d::AssetKey::FromVirtualPath(
@@ -136,7 +136,8 @@ auto MakeSolidColorMaterial(
 }
 
 auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
-  const glm::vec4& rgba, const float roughness = 0.9F)
+  const glm::vec4& rgba, const float roughness = 0.9F,
+  const float metalness = 0.0F)
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   namespace d = oxygen::data;
@@ -145,7 +146,8 @@ auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
   auto cube_data = d::MakeCubeMeshAsset();
   CHECK_F(cube_data.has_value());
 
-  const auto material = MakeSolidColorMaterial(material_name, rgba, roughness);
+  const auto material
+    = MakeSolidColorMaterial(material_name, rgba, roughness, metalness);
 
   auto mesh
     = d::MeshBuilder(0, geometry_name)
@@ -187,8 +189,10 @@ namespace oxygen::examples::vortex_basic {
 // Construction / destruction
 // ---------------------------------------------------------------------------
 
-MainModule::MainModule(const DemoAppContext& app) noexcept
+MainModule::MainModule(const DemoAppContext& app,
+  const vortex::ShaderDebugMode shader_debug_mode) noexcept
   : app_(app)
+  , shader_debug_mode_(shader_debug_mode)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
@@ -266,7 +270,12 @@ auto MainModule::ReleasePublishedRuntimeView(
   const observer_ptr<engine::FrameContext> context) -> void
 {
   auto renderer = ResolveVortexRenderer();
-  if (!renderer || main_view_id_ == kInvalidViewId) {
+  if (!renderer) {
+    return;
+  }
+
+  renderer->SetShaderDebugMode(vortex::ShaderDebugMode::kDisabled);
+  if (main_view_id_ == kInvalidViewId) {
     return;
   }
 
@@ -409,6 +418,8 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
+  renderer->SetShaderDebugMode(shader_debug_mode_);
+
   // Build the ViewContext for the Vortex Renderer.
   engine::ViewContext view_ctx {};
   view_ctx.view.viewport = ViewPort {
@@ -500,7 +511,8 @@ auto MainModule::EnsureScene() -> void
   scene_ = std::make_shared<scene::Scene>("VortexBasicScene", kCapacity);
 
   auto cube_geo = BuildCubeGeometry(
-    "ValidationCube", "ValidationCube", { 0.68F, 0.70F, 0.76F, 1.0F }, 0.35F);
+    "ValidationCube", "ValidationCube", { 0.68F, 0.70F, 0.76F, 1.0F }, 0.35F,
+    0.65F);
   auto floor_geo = BuildCubeGeometry(
     "ValidationFloor", "ValidationFloor", { 0.22F, 0.23F, 0.25F, 1.0F }, 0.85F);
 

@@ -340,11 +340,12 @@ requires its own LLD section or document.
 | -- | ---- | ----- |
 | 3F.1 | Implement GBuffer debug views | Normal, base color, roughness, metallic, depth debug visualization |
 | 3F.2 | Register debug shader variants in catalog | |
+| 3F.3 | Route deferred debug visualization through `SceneRenderer` | Public runtime mode selection, Stage-10-fed fullscreen debug pass, and capture-backed `VortexBasic` proof |
 
 ### Exit Gate
 
 - Lit deferred scene visible: at least 1 directional + 1 point light
-- GBuffer debug views show correct normals, base color, roughness, metallic
+- GBuffer debug views show correct normals, base color, roughness, metallic, and depth through the live deferred debug-view route
 - SceneColor contains correct diffuse + specular response
 - Velocity buffer has valid data for masked, deformed, skinned, and
   WPO-capable opaque geometry, including camera motion and object/deformation
@@ -358,6 +359,9 @@ requires its own LLD section or document.
 - `oxytidy` on the changed Phase 3 file scope reports no introduced warnings
 - Automated source/test/log closeout proves expected stage ordering, GBuffer
   contents, SceneColor accumulation, and bounded-volume local-light behavior
+- `tools/vortex/Run-VortexBasicDebugViewValidation.ps1` passes and proves the
+  deferred debug-view path for base color, world normals, roughness,
+  metalness, scene-depth-raw, and scene-depth-linear
 - Live `VortexBasic` runtime validation is part of the Phase 3 gate:
   build the required Vortex targets, capture a fresh RenderDoc frame from
   an expanded `VortexBasic` validation scene that exercises rigid opaque,
@@ -886,7 +890,7 @@ final target — including future-phase items per PRD §8.13.
 | **DepthPrepassModule** | Phase 3 | not started | Depth-only under the active desktop deferred opaque-velocity policy | Stage 3 |
 | **BasePassModule** | Phase 3 | not started | GBuffer MRT + masked alpha-clip + active opaque velocity production | Stage 9 |
 | **Deferred lighting** | Phase 3 → 4A | not started | Directional fullscreen + bounded-volume point/spot deferred lighting; transfers to LightingService in 4A | Stage 12 |
-| **GBuffer debug viz** | Phase 3 | not started | Normal, base color, roughness debug views | |
+| **GBuffer debug viz** | Phase 3 | done | Runtime-facing deferred debug views for base color, world normals, roughness, metalness, and scene depth | `tools/vortex/Run-VortexBasicDebugViewValidation.ps1` |
 | **Shader contracts** | Phase 3 | not started | Contracts/, Shared/, Materials/ per ARCH §10 | |
 | **LightingService** | Phase 4A | not started | Light grid + deferred lighting + forward data | Stages 6, 12 |
 | **PostProcessService** | Phase 4B | not started | Tonemap, exposure, bloom | Stage 22 |
@@ -940,7 +944,7 @@ Every phase must pass:
 
 | Checkpoint | Phase | What to verify | Method |
 | ---------- | ----- | -------------- | ------ |
-| GBuffer debug views | 3 (after 3D) | Normals, base color, roughness, metallic, depth | Debug shader variants |
+| GBuffer debug views | 3 (after 3D) | Normals, base color, roughness, metallic, depth | Debug shader variants + `Run-VortexBasicDebugViewValidation.ps1` |
 | Lit deferred scene | 3 (after 3E) | Correct diffuse + specular from deferred lighting | Visual + RenderDoc |
 | Shadow terms | 4C | Directional shadow on ground plane | Visual + RenderDoc |
 | Sky + ambient | 4D | Atmosphere renders, IBL ambient visible | Visual |

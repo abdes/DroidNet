@@ -495,6 +495,18 @@ auto Renderer::RefreshCurrentViewFrameBindings(
 
 auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
 
+auto Renderer::SetShaderDebugMode(const ShaderDebugMode mode) noexcept -> void
+{
+  shader_debug_mode_.store(
+    static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
+}
+
+auto Renderer::GetShaderDebugMode() const noexcept -> ShaderDebugMode
+{
+  return static_cast<ShaderDebugMode>(
+    shader_debug_mode_.load(std::memory_order_relaxed));
+}
+
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 {
   profiling::CpuProfileScope frame_scope(
@@ -1240,6 +1252,7 @@ auto Renderer::WireContext(RenderContext& context,
   context.frame_sequence = frame::SequenceNumber { frame_seq_num_ };
   context.delta_time = last_frame_dt_seconds_;
   context.view_constants = view_constants;
+  context.shader_debug_mode = GetShaderDebugMode();
 }
 
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)

@@ -59,6 +59,7 @@ set(
   "Renderer.h"
   "RendererTag.h"
   "RenderMode.h"
+  "ShaderDebugMode.h"
   "SceneCameraViewResolver.h"
   "SceneRenderer/SceneRenderBuilder.h"
   "SceneRenderer/SceneRenderer.h"

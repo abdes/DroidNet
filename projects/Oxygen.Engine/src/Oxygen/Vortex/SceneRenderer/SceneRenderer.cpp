@@ -446,6 +446,68 @@ namespace {
       || !desc.depth_attachment.is_read_only;
   }
 
+  auto IsDeferredDebugVisualizationMode(const ShaderDebugMode mode) -> bool
+  {
+    switch (mode) {
+    case ShaderDebugMode::kBaseColor:
+    case ShaderDebugMode::kWorldNormals:
+    case ShaderDebugMode::kRoughness:
+    case ShaderDebugMode::kMetalness:
+    case ShaderDebugMode::kSceneDepthRaw:
+    case ShaderDebugMode::kSceneDepthLinear:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  auto GetDeferredDebugVisualizationName(const ShaderDebugMode mode)
+    -> std::string_view
+  {
+    switch (mode) {
+    case ShaderDebugMode::kBaseColor:
+      return "BaseColor";
+    case ShaderDebugMode::kWorldNormals:
+      return "WorldNormals";
+    case ShaderDebugMode::kRoughness:
+      return "Roughness";
+    case ShaderDebugMode::kMetalness:
+      return "Metalness";
+    case ShaderDebugMode::kSceneDepthRaw:
+      return "SceneDepthRaw";
+    case ShaderDebugMode::kSceneDepthLinear:
+      return "SceneDepthLinear";
+    default:
+      return "Disabled";
+    }
+  }
+
+  auto BuildDebugVisualizationFramebuffer(const SceneTextures& scene_textures)
+    -> graphics::FramebufferDesc
+  {
+    auto desc = graphics::FramebufferDesc {};
+    desc.AddColorAttachment({
+      .texture = scene_textures.GetSceneColorResource(),
+      .format = scene_textures.GetSceneColor().GetDescriptor().format,
+    });
+    return desc;
+  }
+
+  auto NeedsDebugVisualizationFramebufferRebuild(
+    const std::shared_ptr<graphics::Framebuffer>& framebuffer,
+    const SceneTextures& scene_textures) -> bool
+  {
+    if (!framebuffer) {
+      return true;
+    }
+
+    const auto& desc = framebuffer->GetDescriptor();
+    return desc.color_attachments.size() != 1U
+      || desc.color_attachments[0].texture.get()
+        != scene_textures.GetSceneColorResource().get()
+      || desc.depth_attachment.texture != nullptr;
+  }
+
   auto MakeAdditiveBlendTarget() -> graphics::BlendTargetDesc
   {
     return {
@@ -466,6 +528,50 @@ namespace {
       .blend_enable = false,
       .write_mask = graphics::ColorWriteMask::kNone,
     };
+  }
+
+  auto BuildDebugVisualizationPipelineDesc(const SceneTextures& scene_textures,
+    const ShaderDebugMode mode) -> graphics::GraphicsPipelineDesc
+  {
+    CHECK_F(IsDeferredDebugVisualizationMode(mode),
+      "SceneRenderer: unsupported deferred debug visualization mode '{}'",
+      to_string(mode));
+
+    auto root_bindings = BuildVortexRootBindings();
+    auto pixel_defines = std::vector<graphics::ShaderDefine> {};
+    AddBooleanDefine(
+      true, GetShaderDebugDefineName(mode), pixel_defines);
+
+    return graphics::GraphicsPipelineDesc::Builder {}
+      .SetVertexShader(graphics::ShaderRequest {
+        .stage = ShaderType::kVertex,
+        .source_path = "Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+        .entry_point = "BasePassDebugViewVS",
+        .defines = {},
+      })
+      .SetPixelShader(graphics::ShaderRequest {
+        .stage = ShaderType::kPixel,
+        .source_path = "Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+        .entry_point = "BasePassDebugViewPS",
+        .defines = std::move(pixel_defines),
+      })
+      .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
+      .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
+      .SetDepthStencilState(graphics::DepthStencilStateDesc::Disabled())
+      .SetBlendState({})
+      .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
+        .color_target_formats = {
+          scene_textures.GetSceneColor().GetDescriptor().format,
+        },
+        .sample_count = scene_textures.GetSceneColor().GetDescriptor().sample_count,
+        .sample_quality
+        = scene_textures.GetSceneColor().GetDescriptor().sample_quality,
+      })
+      .SetRootBindings(std::span<const graphics::RootBindingItem>(
+        root_bindings.data(), root_bindings.size()))
+      .SetDebugName(fmt::format("Vortex.DebugVisualization.{}",
+        GetDeferredDebugVisualizationName(mode)))
+      .Build();
   }
 
   auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures)
@@ -745,6 +851,7 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
   InvalidatePublishedViewFrameBindings();
+  deferred_lighting_state_ = {};
 }
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
@@ -764,6 +871,7 @@ void SceneRenderer::PrimePreparedView(RenderContext& ctx)
 
 void SceneRenderer::OnRender(RenderContext& ctx)
 {
+  deferred_lighting_state_ = {};
   [[maybe_unused]] const auto shading_mode
     = ResolveShadingModeForCurrentView(ctx);
 
@@ -821,7 +929,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
 
   // Stage 12: Deferred direct lighting
-  RenderDeferredLighting(ctx, scene_textures_);
+  if (!RenderDebugVisualization(ctx, scene_textures_)) {
+    RenderDeferredLighting(ctx, scene_textures_);
+  }
 
   // Stage 13: reserved - IndirectLightingService
 
@@ -1190,6 +1300,119 @@ auto SceneRenderer::ResolveShadingModeForCurrentView(
     return ctx.current_view.shading_mode_override.value();
   }
   return default_shading_mode_;
+}
+
+auto SceneRenderer::RenderDebugVisualization(
+  RenderContext& ctx, const SceneTextures& scene_textures) -> bool
+{
+  const auto mode = ctx.shader_debug_mode;
+  if (!IsDeferredDebugVisualizationMode(mode)) {
+    return false;
+  }
+  if (ResolveShadingModeForCurrentView(ctx) != ShadingMode::kDeferred) {
+    return false;
+  }
+  if (ctx.view_constants == nullptr) {
+    return false;
+  }
+  if (published_view_id_ == kInvalidViewId
+    || published_view_id_ != ctx.current_view.view_id) {
+    return false;
+  }
+  if (published_view_frame_bindings_slot_ == kInvalidShaderVisibleIndex) {
+    return false;
+  }
+
+  const auto requires_gbuffer = mode == ShaderDebugMode::kBaseColor
+    || mode == ShaderDebugMode::kWorldNormals
+    || mode == ShaderDebugMode::kRoughness
+    || mode == ShaderDebugMode::kMetalness;
+  const auto requires_scene_depth = mode == ShaderDebugMode::kSceneDepthRaw
+    || mode == ShaderDebugMode::kSceneDepthLinear;
+
+  if (requires_gbuffer && !HasPublishedGBufferBindings(scene_texture_bindings_)) {
+    return false;
+  }
+  if (requires_scene_depth
+    && scene_texture_bindings_.scene_depth_srv
+      == SceneTextureBindings::kInvalidIndex) {
+    return false;
+  }
+
+  if (NeedsDebugVisualizationFramebufferRebuild(
+        debug_visualization_framebuffer_, scene_textures)) {
+    debug_visualization_framebuffer_
+      = gfx_.CreateFramebuffer(BuildDebugVisualizationFramebuffer(scene_textures));
+  }
+
+  const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
+  auto recorder = gfx_.AcquireCommandRecorder(
+    queue_key, "Vortex DebugVisualization");
+  if (!recorder) {
+    return false;
+  }
+
+  graphics::GpuEventScope debug_scope(*recorder,
+    fmt::format("Vortex.DebugVisualization.{}",
+      GetDeferredDebugVisualizationName(mode)),
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kPass);
+
+  RequireKnownPersistentState(*recorder, scene_textures.GetSceneColor());
+  if (requires_scene_depth) {
+    RequireKnownPersistentState(*recorder, scene_textures.GetSceneDepth());
+  }
+  if (requires_gbuffer) {
+    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferNormal());
+    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
+    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
+    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
+  }
+
+  recorder->RequireResourceState(
+    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+  if (requires_scene_depth) {
+    recorder->RequireResourceState(
+      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  }
+  if (requires_gbuffer) {
+    recorder->RequireResourceState(scene_textures.GetGBufferNormal(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceState(scene_textures.GetGBufferMaterial(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceState(scene_textures.GetGBufferBaseColor(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceState(scene_textures.GetGBufferCustomData(),
+      graphics::ResourceStates::kShaderResource);
+  }
+  recorder->FlushBarriers();
+  recorder->BindFrameBuffer(*debug_visualization_framebuffer_);
+  SetViewportAndScissor(*recorder, ctx, scene_textures);
+  recorder->SetPipelineState(
+    BuildDebugVisualizationPipelineDesc(scene_textures, mode));
+  recorder->SetGraphicsRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants->GetGPUVirtualAddress());
+  recorder->Draw(3U, 1U, 0U, 0U);
+
+  recorder->RequireResourceStateFinal(
+    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
+  if (requires_scene_depth) {
+    recorder->RequireResourceStateFinal(
+      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  }
+  if (requires_gbuffer) {
+    recorder->RequireResourceStateFinal(scene_textures.GetGBufferNormal(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceStateFinal(scene_textures.GetGBufferMaterial(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceStateFinal(scene_textures.GetGBufferBaseColor(),
+      graphics::ResourceStates::kShaderResource);
+    recorder->RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
+      graphics::ResourceStates::kShaderResource);
+  }
+
+  return true;
 }
 
 void SceneRenderer::RenderDeferredLighting(

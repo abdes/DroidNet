@@ -23,6 +23,7 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen {
 class Graphics;
@@ -60,7 +61,9 @@ class MainModule final : public engine::EngineModule, public Composition {
   OXYGEN_TYPED(MainModule)
 
 public:
-  explicit MainModule(const DemoAppContext& app) noexcept;
+  explicit MainModule(const DemoAppContext& app,
+    vortex::ShaderDebugMode shader_debug_mode
+    = vortex::ShaderDebugMode::kDisabled) noexcept;
   ~MainModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
@@ -139,6 +142,7 @@ private:
   uint32_t scene_fb_width_ { 0 };
   uint32_t scene_fb_height_ { 0 };
   float animation_time_seconds_ { 0.0F };
+  vortex::ShaderDebugMode shader_debug_mode_ { vortex::ShaderDebugMode::kDisabled };
 };
 
 } // namespace oxygen::examples::vortex_basic

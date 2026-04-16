@@ -65,6 +65,7 @@ using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::ShadingMode;
+using oxygen::vortex::ShaderDebugMode;
 using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -210,8 +211,9 @@ protected:
     static_cast<void>(scene_->Traverse().UpdateTransforms());
   }
 
-  auto RenderForView(
-    const ViewId active_view_id, const ResolvedView& active_view) -> RenderContext
+  auto RenderForView(const ViewId active_view_id, const ResolvedView& active_view,
+    const ShaderDebugMode debug_mode = ShaderDebugMode::kDisabled)
+    -> RenderContext
   {
     scene_renderer_->OnFrameStart(frame_context_);
     UpdateSceneTransforms();
@@ -250,6 +252,8 @@ protected:
     context.current_view.resolved_view
       = oxygen::observer_ptr<const ResolvedView> { &active_view };
     context.view_constants = view_constants_buffer_;
+    renderer_->SetShaderDebugMode(debug_mode);
+    context.shader_debug_mode = renderer_->GetShaderDebugMode();
 
     scene_renderer_->OnRender(context);
     return context;
@@ -780,7 +784,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
     { "DEBUG_BASE_COLOR",
       "DEBUG_WORLD_NORMALS",
       "DEBUG_ROUGHNESS",
-      "DEBUG_METALNESS" }));
+      "DEBUG_METALNESS",
+      "DEBUG_SCENE_DEPTH_RAW",
+      "DEBUG_SCENE_DEPTH_LINEAR",
+      "bindless_view_frame_bindings_slot" }));
+  EXPECT_FALSE(shader_source.contains("g_ViewFrameBindingsSlot"));
 
   const auto catalog_source = ReadTextFile(catalog_path);
   EXPECT_TRUE(ContainsAll(catalog_source,
@@ -788,7 +796,68 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
       "DEBUG_BASE_COLOR",
       "DEBUG_WORLD_NORMALS",
       "DEBUG_ROUGHNESS",
-      "DEBUG_METALNESS" }));
+      "DEBUG_METALNESS",
+      "DEBUG_SCENE_DEPTH_RAW",
+      "DEBUG_SCENE_DEPTH_LINEAR" }));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredDebugVisualizationRoutesSupportedModesThroughSceneRenderer)
+{
+  static_cast<void>(AddDirectionalLight("DebugKeyLight"));
+
+  struct DebugCase {
+    ShaderDebugMode mode { ShaderDebugMode::kDisabled };
+    const char* pipeline_name { nullptr };
+  };
+
+  const auto cases = std::array<DebugCase, 6U> {
+    DebugCase {
+      .mode = ShaderDebugMode::kBaseColor,
+      .pipeline_name = "Vortex.DebugVisualization.BaseColor",
+    },
+    DebugCase {
+      .mode = ShaderDebugMode::kWorldNormals,
+      .pipeline_name = "Vortex.DebugVisualization.WorldNormals",
+    },
+    DebugCase {
+      .mode = ShaderDebugMode::kRoughness,
+      .pipeline_name = "Vortex.DebugVisualization.Roughness",
+    },
+    DebugCase {
+      .mode = ShaderDebugMode::kMetalness,
+      .pipeline_name = "Vortex.DebugVisualization.Metalness",
+    },
+    DebugCase {
+      .mode = ShaderDebugMode::kSceneDepthRaw,
+      .pipeline_name = "Vortex.DebugVisualization.SceneDepthRaw",
+    },
+    DebugCase {
+      .mode = ShaderDebugMode::kSceneDepthLinear,
+      .pipeline_name = "Vortex.DebugVisualization.SceneDepthLinear",
+    },
+  };
+
+  for (const auto& debug_case : cases) {
+    SCOPED_TRACE(std::string(to_string(debug_case.mode)));
+    graphics_->draw_log_.draws.clear();
+    graphics_->graphics_pipeline_log_.binds.clear();
+
+    static_cast<void>(
+      RenderForView(first_view_id_, first_resolved_view_, debug_case.mode));
+
+    EXPECT_FALSE(
+      scene_renderer_->GetLastDeferredLightingState().consumed_published_scene_textures);
+    EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+    EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
+      [&debug_case](const auto& bind) -> bool {
+        return bind.desc.GetName() == debug_case.pipeline_name;
+      }));
+    EXPECT_FALSE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
+      [](const auto& bind) -> bool {
+        return bind.desc.GetName().starts_with("Vortex.DeferredLight.");
+      }));
+  }
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
