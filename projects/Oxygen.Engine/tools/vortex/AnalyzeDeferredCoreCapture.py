@@ -94,6 +94,19 @@ def analyze(manifest: dict) -> list[str]:
 
     scene_renderer = read_text(normalize(files["scene_renderer"], repo_root))
     scene_textures = read_text(normalize(files["scene_textures"], repo_root))
+    depth_prepass_module = read_text(
+        normalize(files["depth_prepass_module"], repo_root)
+    )
+    base_pass_module = read_text(normalize(files["base_pass_module"], repo_root))
+    framebuffer_impl = read_text(normalize(files["framebuffer_impl"], repo_root))
+    shader_catalog = read_text(normalize(files["shader_catalog"], repo_root))
+    deferred_light_common = read_text(
+        normalize(files["deferred_light_common"], repo_root)
+    )
+    deferred_light_point = read_text(
+        normalize(files["deferred_light_point"], repo_root)
+    )
+    deferred_light_spot = read_text(normalize(files["deferred_light_spot"], repo_root))
     deferred_core_tests = read_text(normalize(files["deferred_core_tests"], repo_root))
     publication_tests = read_text(normalize(files["publication_tests"], repo_root))
     validation_doc = read_text(normalize(files["validation_doc"], repo_root))
@@ -137,8 +150,19 @@ def analyze(manifest: dict) -> list[str]:
                 ),
             ),
             contains_all(
+                depth_prepass_module,
+                (
+                    'AcquireCommandRecorder(queue_key, "Vortex DepthPrepass")',
+                    "BuildDepthPrepassFramebuffer(",
+                    "BuildDepthPrepassPipelineDesc(",
+                    "CopySceneDepthToPartialDepth(",
+                    "recorder->Draw(",
+                ),
+            ),
+            contains_all(
                 deferred_core_tests,
                 (
+                    "DepthPrepassRecordsRealDrawWorkFromPreparedMetadata",
                     "DepthPrepassPublishesSceneDepthAndPartialDepth",
                     "DepthPrepassCompletenessControlsEarlyDepthContract",
                 ),
@@ -161,6 +185,15 @@ def analyze(manifest: dict) -> list[str]:
                     "ApplyStage9BasePassState();",
                     "// Stage 10: Rebuild scene textures with GBuffers",
                     "ApplyStage10RebuildState();",
+                ),
+            ),
+            contains_all(
+                base_pass_module,
+                (
+                    'AcquireCommandRecorder(queue_key, "Vortex BasePass")',
+                    "BuildBasePassFramebuffer(",
+                    "BuildBasePassPipelineDesc(",
+                    "recorder->Draw(",
                 ),
             ),
             contains_all(
@@ -189,11 +222,48 @@ def analyze(manifest: dict) -> list[str]:
                 ),
             ),
             contains_all(
+                scene_renderer,
+                (
+                    'AcquireCommandRecorder(\n    queue_key, "Vortex DeferredLighting")',
+                    "BuildDeferredDirectionalPipelineDesc(",
+                    "BuildDeferredLocalPipelineDesc(",
+                    "deferred_light_constants_buffer_",
+                    "draw_local_light(",
+                ),
+            ),
+            contains_all(
+                deferred_light_point,
+                (
+                    "GenerateDeferredLightSphereVertex(vertex_id)",
+                    "DeferredLightPointStencilMarkPS",
+                ),
+            ),
+            contains_all(
+                deferred_light_spot,
+                (
+                    "GenerateDeferredLightConeVertex(vertex_id)",
+                    "DeferredLightSpotStencilMarkPS",
+                ),
+            ),
+            contains_all(
+                shader_catalog,
+                (
+                    "DeferredLightPointStencilMarkPS",
+                    "DeferredLightSpotStencilMarkPS",
+                ),
+            ),
+            contains_all(
                 deferred_core_tests,
                 (
                     "DeferredLightingConsumesPublishedGBuffers",
                     "DeferredLightingAccumulatesIntoSceneColor",
                     "DeferredLightingUsesStencilBoundedLocalLights",
+                    "Vortex.DeferredLight.Directional",
+                    "Vortex.DeferredLight.Point.StencilMark",
+                    "Vortex.DeferredLight.Point.Lighting",
+                    "Vortex.DeferredLight.Spot.StencilMark",
+                    "Vortex.DeferredLight.Spot.Lighting",
+                    "graphics_->draw_log_.draws.size(), 4U",
                 ),
             ),
         )
@@ -203,13 +273,13 @@ def analyze(manifest: dict) -> list[str]:
             build_ok,
             tests_ok,
             contains_all(
-                scene_textures,
+                base_pass_module,
                 (
-                    'CreateTexture("SceneColor"',
-                    'return "GBufferNormal";',
-                    'return "GBufferMaterial";',
-                    'return "GBufferBaseColor";',
-                    'return "GBufferCustomData";',
+                    "GetGBufferResource(GBufferIndex::kNormal)",
+                    "GetGBufferResource(GBufferIndex::kMaterial)",
+                    "GetGBufferResource(GBufferIndex::kBaseColor)",
+                    "GetGBufferResource(GBufferIndex::kCustomData)",
+                    "GetSceneColorResource()",
                 ),
             ),
             contains_all(
@@ -229,14 +299,18 @@ def analyze(manifest: dict) -> list[str]:
             contains_all(
                 scene_renderer,
                 (
-                    "consumed_scene_color_uav",
-                    "accumulated_into_scene_color = true;",
-                    "directional_light_count",
+                    "BuildDeferredDirectionalPipelineDesc(",
+                    "BuildDeferredLocalPipelineDesc(",
+                    "deferred_lighting_state_.accumulated_into_scene_color = true;",
                 ),
             ),
             contains_all(
                 deferred_core_tests,
-                ("DeferredLightingAccumulatesIntoSceneColor",),
+                (
+                    "DeferredLightingAccumulatesIntoSceneColor",
+                    "graphics_->draw_log_.draws.size(), 1U",
+                    "Vortex.DeferredLight.Directional",
+                ),
             ),
         )
     )
@@ -247,14 +321,37 @@ def analyze(manifest: dict) -> list[str]:
             contains_all(
                 scene_renderer,
                 (
+                    "ClearDepthStencilView(",
+                    "DeferredLightPointStencilMarkPS",
+                    "DeferredLightSpotStencilMarkPS",
                     "used_stencil_bounded_local_lights = true;",
                     "stencil_mark_pass_count",
                     "stencil_lighting_pass_count",
                 ),
             ),
             contains_all(
+                framebuffer_impl,
+                (
+                    "resource_registry.Find(*texture, view_desc)",
+                    "is_read_only_dsv = depth_attachment.is_read_only",
+                ),
+            ),
+            contains_all(
+                deferred_light_common,
+                (
+                    "GenerateDeferredLightSphereVertex",
+                    "GenerateDeferredLightConeVertex",
+                ),
+            ),
+            contains_all(
                 deferred_core_tests,
-                ("DeferredLightingUsesStencilBoundedLocalLights",),
+                (
+                    "DeferredLightingUsesStencilBoundedLocalLights",
+                    "Vortex.DeferredLight.Point.StencilMark",
+                    "Vortex.DeferredLight.Point.Lighting",
+                    "Vortex.DeferredLight.Spot.StencilMark",
+                    "Vortex.DeferredLight.Spot.Lighting",
+                ),
             ),
         )
     )
