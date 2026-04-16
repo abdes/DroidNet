@@ -1049,6 +1049,33 @@ TextureBinder::Impl::~Impl()
     callback_gate_->alive = false;
   }
 
+  if (gfx_ != nullptr) {
+    auto& registry = gfx_->GetResourceRegistry();
+    auto& reclaimer = gfx_->GetDeferredReclaimer();
+
+    auto release_shared_texture
+      = [&](std::shared_ptr<graphics::Texture>& texture) -> void {
+      if (!texture) {
+        return;
+      }
+      if (registry.Contains(*texture)) {
+        registry.UnRegisterResource(*texture);
+      }
+      reclaimer.RegisterDeferredRelease(std::move(texture));
+    };
+
+    if (placeholder_texture_ == error_texture_) {
+      release_shared_texture(error_texture_);
+      placeholder_texture_.reset();
+    } else {
+      release_shared_texture(placeholder_texture_);
+      release_shared_texture(error_texture_);
+    }
+  } else {
+    placeholder_texture_.reset();
+    error_texture_.reset();
+  }
+
   LOG_SCOPE_F(INFO, "TextureBinder Statistics");
   LOG_F(INFO, "lifecycle.generation_bumps : {}", lifecycle_generation_bumps_);
   LOG_F(

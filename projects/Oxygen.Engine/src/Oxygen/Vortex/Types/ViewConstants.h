@@ -110,6 +110,7 @@ public:
     // Aligned at 16 bytes here
     glm::mat4 view_matrix { 1.0F };
     glm::mat4 projection_matrix { 1.0F };
+    glm::mat4 inverse_view_projection_matrix { 1.0F };
 
     // Aligned at 16 bytes here
     glm::vec3 camera_position { 0.0F, 0.0F, 0.0F };
@@ -123,15 +124,12 @@ public:
 
     // padding to 256-byte alignment
     glm::vec4 _pad_to_256_1 { 0.0F };
-    glm::vec4 _pad_to_256_2 { 0.0F };
-    glm::vec4 _pad_to_256_3 { 0.0F };
-    glm::vec4 _pad_to_256_4 { 0.0F };
-    glm::vec4 _pad_to_256_5 { 0.0F };
   };
   // clang-format off
   static_assert(sizeof(GpuData) <= packing::kRootConstantsMaxSize);
   static_assert(offsetof(GpuData, view_matrix) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, projection_matrix) % packing::kShaderDataFieldAlignment == 0);
+  static_assert(offsetof(GpuData, inverse_view_projection_matrix) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, camera_position) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, view_frame_bindings_bslot) % packing::kShaderDataFieldAlignment == 0);
   // clang-format on
@@ -211,6 +209,8 @@ private:
       .time_seconds = time_seconds_,
       .view_matrix = view_matrix_,
       .projection_matrix = projection_matrix_,
+      .inverse_view_projection_matrix
+      = glm::inverse(projection_matrix_ * view_matrix_),
       .camera_position = camera_position_,
       .view_frame_bindings_bslot = view_frame_bindings_bslot_,
     };

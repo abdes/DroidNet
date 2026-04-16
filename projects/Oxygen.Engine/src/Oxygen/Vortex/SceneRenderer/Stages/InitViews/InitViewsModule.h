@@ -26,6 +26,10 @@ namespace sceneprep {
 class ScenePrepPipeline;
 } // namespace sceneprep
 
+namespace resources {
+class TextureBinder;
+} // namespace resources
+
 class InitViewsModule {
 public:
   OXGN_VRTX_API explicit InitViewsModule(Renderer& renderer);
@@ -49,6 +53,7 @@ private:
   };
 
   Renderer& renderer_;
+  std::unique_ptr<resources::TextureBinder> texture_binder_ {};
   std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
   sceneprep::ScenePrepState scene_prep_state_ {};
   std::unordered_map<ViewId, PreparedSceneViewStorage> prepared_views_;

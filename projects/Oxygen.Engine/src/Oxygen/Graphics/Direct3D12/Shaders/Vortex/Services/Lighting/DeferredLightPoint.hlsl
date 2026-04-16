@@ -13,7 +13,7 @@ cbuffer RootConstants : register(b2, space0)
 }
 
 [shader("vertex")]
-DeferredLightVolumeVSOutput DeferredLightPointVS(float3 local_position : POSITION)
+DeferredLightVolumeVSOutput DeferredLightPointVS(uint vertex_id : SV_VertexID)
 {
     DeferredLightVolumeVSOutput output = (DeferredLightVolumeVSOutput)0;
     if (g_PassConstantsIndex == INVALID_BINDLESS_INDEX) {
@@ -23,7 +23,14 @@ DeferredLightVolumeVSOutput DeferredLightPointVS(float3 local_position : POSITIO
     ConstantBuffer<DeferredLightConstants> light_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     return GenerateDeferredLightVolume(
-        local_position, light_constants.light_world_matrix);
+        GenerateDeferredLightSphereVertex(vertex_id),
+        light_constants.light_world_matrix);
+}
+
+[shader("pixel")]
+float4 DeferredLightPointStencilMarkPS(DeferredLightVolumeVSOutput /*input*/) : SV_Target0
+{
+    return 0.0f.xxxx;
 }
 
 [shader("pixel")]
@@ -41,16 +48,16 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
         return 0.0f.xxxx;
     }
 
-    const float scene_depth = SampleSceneDepth(input.screen_uv, bindings);
-    const float3 world_position = ReconstructWorldPositionFromViewMatrices(
-        input.screen_uv, scene_depth,
-        view_matrix, projection_matrix, camera_position);
+    const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
+    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
+    const float3 world_position
+        = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
     const float3 light_vector
         = light_constants.light_position_and_radius.xyz - world_position;
     const float attenuation = ComputeLocalLightDistanceAttenuation(
         light_vector, light_constants.light_position_and_radius.w);
     const float3 lighting = EvaluateDeferredLightAtWorldPosition(
-        input.screen_uv,
+        screen_uv,
         scene_depth,
         world_position,
         VortexSafeNormalize(light_vector),

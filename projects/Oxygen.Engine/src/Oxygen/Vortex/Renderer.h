@@ -47,6 +47,10 @@ class Framebuffer;
 class Surface;
 } // namespace oxygen::graphics
 
+namespace oxygen::content {
+class IAssetLoader;
+} // namespace oxygen::content
+
 namespace oxygen::scene {
 class Scene;
 class SceneNode;
@@ -72,7 +76,7 @@ template <typename RendererT> class BasicRenderContextMaterializer;
 namespace oxygen::vortex {
 
 namespace testing {
-struct RendererPublicationProbe;
+  struct RendererPublicationProbe;
 }
 
 class SceneRenderer;
@@ -443,12 +447,15 @@ public:
 
   OXGN_VRTX_API auto RegisterViewRenderGraph(
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
+  OXGN_VRTX_API auto RegisterResolvedView(ViewId view_id, ResolvedView view)
+    -> void;
   OXGN_VRTX_API auto UpsertPublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id,
     engine::ViewContext view,
     std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
+  OXGN_VRTX_API auto RemovePublishedRuntimeView(ViewId intent_view_id) -> void;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id) -> void;
   OXGN_VRTX_API auto PruneStalePublishedRuntimeViews(
@@ -488,8 +495,12 @@ public:
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
+  OXGN_VRTX_NDAPI auto GetUploadCoordinator() -> upload::UploadCoordinator&;
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetAssetLoader() const noexcept
+    -> observer_ptr<content::IAssetLoader>;
 
 private:
+  friend class SceneRenderer;
   friend struct testing::RendererPublicationProbe;
 
   struct PublishedRuntimeViewState {
@@ -503,8 +514,9 @@ private:
   };
 
   auto EnsureViewConstantsManager(Graphics& gfx) -> void;
-  OXGN_VRTX_API auto PopulateRenderContextViewState(RenderContext& render_context,
-    engine::FrameContext& context, bool prefer_composite_source) const -> void;
+  OXGN_VRTX_API auto PopulateRenderContextViewState(
+    RenderContext& render_context, engine::FrameContext& context,
+    bool prefer_composite_source) const -> void;
   [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
@@ -514,7 +526,10 @@ private:
   auto EnsurePublicationState(Graphics& gfx) -> RendererPublicationState&;
   auto BeginPublicationFrame(
     Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  auto RefreshCurrentViewFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto ResetPublicationState() -> void;
+  auto DetachPublishedRuntimeViewState(ViewId intent_view_id) -> ViewId;
   auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& view_constants) -> void;

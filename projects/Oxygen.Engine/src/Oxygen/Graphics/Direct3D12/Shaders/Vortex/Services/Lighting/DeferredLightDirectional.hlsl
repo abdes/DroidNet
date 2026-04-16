@@ -35,8 +35,6 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz),
         LoadDeferredLightColor(light_constants.light_color_and_intensity),
         1.0f,
-        view_matrix,
-        projection_matrix,
         camera_position,
         bindings);
     return float4(lighting, 0.0f);

@@ -11,6 +11,10 @@
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class Framebuffer;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -48,6 +52,8 @@ private:
   DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
   bool has_published_depth_products_ { false };
   std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
+  std::shared_ptr<graphics::Framebuffer> depth_framebuffer_ {};
+  std::shared_ptr<graphics::Framebuffer> depth_velocity_framebuffer_ {};
 };
 
 } // namespace oxygen::vortex

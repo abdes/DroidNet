@@ -35,29 +35,11 @@ static inline bool HasDeferredLightingInputs(SceneTextureBindingData bindings)
         && IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_GBUFFERS);
 }
 
-static inline float3 ReconstructWorldPositionFromViewMatrices(
-    float2 screen_uv,
-    float device_depth,
-    float4x4 world_to_view_matrix,
-    float4x4 view_to_clip_matrix,
-    float3 camera_position_ws)
+static inline float3 ReconstructDeferredWorldPosition(
+    float2 screen_uv, float device_depth)
 {
-    const float2 ndc_xy = float2(
-        mad(screen_uv.x, 2.0f, -1.0f),
-        mad(1.0f - screen_uv.y, 2.0f, -1.0f));
-    const float view_depth = max(device_depth, 1.0e-4f);
-    const float proj_x = abs(view_to_clip_matrix[0][0]) > 1.0e-6f
-        ? view_to_clip_matrix[0][0]
-        : 1.0f;
-    const float proj_y = abs(view_to_clip_matrix[1][1]) > 1.0e-6f
-        ? view_to_clip_matrix[1][1]
-        : 1.0f;
-    const float3 view_position = float3(
-        ndc_xy.x * view_depth / proj_x,
-        ndc_xy.y * view_depth / proj_y,
-        -view_depth);
-    const float3x3 view_rotation = (float3x3)world_to_view_matrix;
-    return mul(transpose(view_rotation), view_position) + camera_position_ws;
+    return ReconstructWorldPosition(
+        screen_uv, device_depth, inverse_view_projection_matrix);
 }
 
 static inline float3 FresnelSchlick(float cos_theta, float3 f0)
@@ -175,8 +157,6 @@ static inline float3 EvaluateDeferredLight(
     float3 light_direction_to_source,
     float3 light_radiance,
     float light_attenuation,
-    float4x4 world_to_view_matrix,
-    float4x4 view_to_clip_matrix,
     float3 camera_position_ws,
     SceneTextureBindingData bindings)
 {
@@ -185,9 +165,7 @@ static inline float3 EvaluateDeferredLight(
     }
 
     const float scene_depth = SampleSceneDepth(uv, bindings);
-    const float3 world_position = ReconstructWorldPositionFromViewMatrices(
-        uv, scene_depth, world_to_view_matrix, view_to_clip_matrix,
-        camera_position_ws);
+    const float3 world_position = ReconstructDeferredWorldPosition(uv, scene_depth);
     return EvaluateDeferredLightAtWorldPosition(uv, scene_depth, world_position,
         light_direction_to_source, light_radiance, light_attenuation,
         camera_position_ws, bindings);
