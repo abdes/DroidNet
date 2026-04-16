@@ -514,31 +514,31 @@ Classification values are preserved exactly as requested:
     - Exact remediation:
       - Either restore per-view ownership to `SceneRenderer`, or
       - rewrite shell/init-views/multi-view docs so `Renderer` is the authoritative selector / iterator.
-   - Remediation status:
-     - Resolved in favor of **Renderer-owned current-view selection / iteration**
-       with `SceneRenderer` consuming the selected current view only.
-     - Decision rationale:
-       - UE5.7's scene renderer iterates its `Views` array internally because
-         UE does not split an outer Renderer-Core layer from the scene-renderer
-         family.
-       - Oxygen does split those layers, and `Renderer` already owns:
-         - canonical published runtime views
-         - `RenderContext` materialization
-         - per-view publication helpers
-         - composition planning / target resolution
-       - In Oxygen's layered architecture, keeping the outer current-view
-         selection loop in `Renderer` is the cleaner and more future-proof
-         ownership boundary; pushing that loop down into `SceneRenderer` starts
-         coupling it to view-registration/publication/extraction responsibilities
-         that belong to `Renderer Core`.
-     - Code already matched this ownership boundary.
-     - The remediation was to align the architecture and LLD package so they
-       explicitly state:
-       - `Renderer` materializes the eligible frame-view set
-       - `Renderer` selects the current scene-view cursor
-       - `SceneRenderer` owns the stage chain for that current view
+    - Remediation status:
+      - Resolved in favor of **Renderer-owned current-view selection / iteration**
+        with `SceneRenderer` consuming the selected current view only.
+      - Decision rationale:
+        - UE5.7's scene renderer iterates its `Views` array internally because
+          UE does not split an outer Renderer-Core layer from the scene-renderer
+          family.
+        - Oxygen does split those layers, and `Renderer` already owns:
+          - canonical published runtime views
+          - `RenderContext` materialization
+          - per-view publication helpers
+          - composition planning / target resolution
+        - In Oxygen's layered architecture, keeping the outer current-view
+          selection loop in `Renderer` is the cleaner and more future-proof
+          ownership boundary; pushing that loop down into `SceneRenderer` starts
+          coupling it to view-registration/publication/extraction responsibilities
+          that belong to `Renderer Core`.
+      - Code already matched this ownership boundary.
+      - The remediation was to align the architecture and LLD package so they
+        explicitly state:
+        - `Renderer` materializes the eligible frame-view set
+        - `Renderer` selects the current scene-view cursor
+        - `SceneRenderer` owns the stage chain for that current view
 
-12. [ ] **`InitViewsModule` still uses the old ScenePrep shim instead of the explicit API the LLD requires**
+12. [x] **`InitViewsModule` still uses the old ScenePrep shim instead of the explicit API the LLD requires**
 
     - Severity: `Medium`
     - Direction: `docs->code`
@@ -556,6 +556,22 @@ Classification values are preserved exactly as requested:
       - Promote the explicit API into `ScenePrepPipeline`.
       - Convert `InitViewsModule` to use it directly.
       - Remove the old boolean-reset shim once no callers depend on it.
+    - Remediation status:
+      - `ScenePrepPipeline` now exposes `BeginFrameCollection(...)`,
+        `PrepareView(...)`, and `FinalizeView(...)` as the live Vortex runtime
+        API.
+      - `InitViewsModule` now calls the explicit pipeline API directly; the
+        local adapter helpers that forwarded to `Collect(..., reset_state)` /
+        `Finalize()` were removed.
+      - The old boolean-reset shim was removed from the Vortex ScenePrep API.
+        The remaining `CollectSingleView(...)` entrypoint is an explicit fused
+        harness/test path rather than a runtime compatibility layer.
+      - The explicit API now fails closed on misuse:
+        `PrepareView(...)` requires the matching frame-phase context, and
+        `FinalizeView(...)` requires the same `ScenePrepState` that prepared the
+        active view.
+      - `ScenePrepPipeline_collection_test.cpp` now exercises the
+        phase-explicit flow directly, including `FinalizeView(...)`.
 
 13. [ ] **`PreparedSceneFrame` exposes shadow payload fields that Stage 2 never publishes**
 

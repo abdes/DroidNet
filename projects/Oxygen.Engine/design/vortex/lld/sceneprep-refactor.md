@@ -277,15 +277,14 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     }
     auto& storage = AcquirePreparedSceneViewStorage(view_entry.view_id);
 
-    scene_prep_->PrepareView(
-      *scene, *view_entry.resolved_view, frame_id, state, storage);
-    scene_prep_->FinalizeView(state, storage);
+    scene_prep_->PrepareView(*scene, *view_entry.resolved_view, frame_id, state);
+    scene_prep_->FinalizeView(state);
+    PublishPreparedSceneFrame(state, storage.render_items, storage.prepared_frame);
   }
 }
 ```
 
-Method names may differ in the final code, but the phase split above is
-binding:
+The phase split above is binding:
 
 - one frame-shared collection phase
 - one frame-shared motion-history / transform-resolution phase
@@ -349,20 +348,23 @@ class ScenePrepPipeline {
       const scene::Scene& scene,
       const ResolvedView& view,
       frame::SequenceNumber frame_id,
-      ScenePrepState& state,
-      PreparedSceneViewStorage& storage);
+      ScenePrepState& state);
 
-  void FinalizeView(
-      ScenePrepState& state,
-      PreparedSceneViewStorage& storage);
+  void FinalizeView(ScenePrepState& state);
 };
 ```
 
 Migration note:
 
-- the current `Collect(...)` / `Finalize()` surface may remain as an internal
-  compatibility layer during refactoring
-- new runtime call sites must follow the phase-explicit contract above
+- the legacy `Collect(..., reset_state)` / `Finalize()` shim is retired from
+  the Vortex runtime-facing API
+- prepared-scene backing storage remains `InitViewsModule` ownership;
+  `ScenePrepPipeline` finalizes state, then stage-2 publication copies it into
+  per-view storage
+- `PrepareView()` / `FinalizeView()` are phase-continuation calls against the
+  same scene, frame sequence, and `ScenePrepState` established by
+  `BeginFrameCollection()`; swapping or skipping those phases is a contract
+  violation
 
 ### 5.2 `InitViewsModule` Ownership Contract
 
@@ -428,11 +430,11 @@ ScenePrep finalization has two logical halves:
    - finalize retained render items for the current view
    - emit draw metadata
    - sort and partition once
-   - assemble per-view prepared payload backing storage
+   - leave `ScenePrepState` ready for stage-owned publication
 2. **GPU materialization**
    - ensure view-dependent GPU buffers for the current view are allocated
    - upload draw metadata and related view-local arrays
-   - capture bindless SRV indices into the published `PreparedSceneFrame`
+   - expose bindless SRV indices for the later `PreparedSceneFrame` publish step
 
 ### 6.3 Timing Rules
 
@@ -440,8 +442,10 @@ ScenePrep finalization has two logical halves:
 2. `PrepareView()` is CPU-only.
 3. `FinalizeView()` may perform view-dependent uploads through the core-owned
    upload helpers.
-4. Downstream stages must not "repair" missing ScenePrep uploads.
-5. No stage after InitViews may call ScenePrep finalization for the current
+4. `InitViewsModule` publishes `PreparedSceneFrame` immediately after
+   `FinalizeView()`.
+5. Downstream stages must not "repair" missing ScenePrep uploads.
+6. No stage after InitViews may call ScenePrep finalization for the current
    view.
 
 ## 7. Downstream Consumption Contract

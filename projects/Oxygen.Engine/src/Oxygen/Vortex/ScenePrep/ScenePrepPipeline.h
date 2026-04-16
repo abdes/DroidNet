@@ -45,18 +45,23 @@ public:
 
   virtual ~ScenePrepPipeline() = default;
 
-  OXGN_VRTX_API auto Collect(const scene::Scene& scene,
-    std::optional<::oxygen::observer_ptr<const ResolvedView>> view,
-    frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state)
+  //! Runs the frame-shared scene traversal and rebuilds per-frame caches.
+  OXGN_VRTX_API auto BeginFrameCollection(const scene::Scene& scene,
+    frame::SequenceNumber fseq, ScenePrepState& state) -> void;
+
+  //! Reuses frame-shared caches to build the current view's transient items.
+  OXGN_VRTX_API auto PrepareView(const scene::Scene& scene,
+    const ResolvedView& view, frame::SequenceNumber fseq, ScenePrepState& state)
     -> void;
 
-  //! Single-view fused collection path.
+  //! Finalizes the current view after PrepareView() populated transient state.
+  OXGN_VRTX_API auto FinalizeView(ScenePrepState& state) -> void;
+
+  //! Explicit fused harness/test path for one isolated scene-view traversal.
   //! Traverses the full scene node table once with an active view.
   OXGN_VRTX_API auto CollectSingleView(const scene::Scene& scene,
     ::oxygen::observer_ptr<const ResolvedView> view, frame::SequenceNumber fseq,
-    ScenePrepState& state, bool reset_state) -> void;
-
-  OXGN_VRTX_API auto Finalize() -> void;
+    ScenePrepState& state) -> void;
 
   [[nodiscard]] auto GetFailureStats() const noexcept -> FailureStats
   {
@@ -79,8 +84,18 @@ protected:
     const scene::SceneNodeImpl* node, const std::exception& ex) -> void;
 
 private:
+  enum class PreparedViewSource {
+    kNone,
+    kFrameCollection,
+    kSingleView,
+  };
+
   std::optional<ScenePrepContext> ctx_;
   observer_ptr<ScenePrepState> prep_state_;
+  const scene::Scene* active_scene_ { nullptr };
+  std::optional<frame::SequenceNumber> active_frame_sequence_ {};
+  bool frame_collection_ready_ { false };
+  PreparedViewSource prepared_view_source_ { PreparedViewSource::kNone };
   FailureStats failure_stats_ {};
   std::unordered_map<std::string, std::uint64_t> failure_occurrences_;
 };
