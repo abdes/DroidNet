@@ -68,6 +68,14 @@ struct TextureCommandLog {
   std::vector<TextureUploadRegion> regions;
 };
 
+struct TextureToTextureCopyLog {
+  struct Event {
+    const Texture* src { nullptr };
+    Texture* dst { nullptr };
+  };
+  std::vector<Event> copies;
+};
+
 //! Logs graphics PSO descriptor binds captured by the fake command recorder.
 struct GraphicsPipelineCommandLog {
   struct Event {
@@ -169,11 +177,20 @@ public:
     out_hz = timestamp_frequency_hz_;
     return true;
   }
-  auto Submit(std::shared_ptr<CommandList> /*command_list*/) -> void override {
+  auto Submit(std::shared_ptr<CommandList> command_list) -> void override
+  {
+    auto known_states = std::vector<KnownResourceState> {};
+    for (const auto& state : command_list->TakeRecordedResourceStates()) {
+      known_states.push_back({ .resource = state.resource, .state = state.state });
+    }
+    AdoptKnownResourceStates(known_states);
   }
-  auto Submit(std::span<std::shared_ptr<CommandList>> /*command_lists*/)
+  auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
     -> void override
   {
+    for (const auto& command_list : command_lists) {
+      Submit(command_list);
+    }
   }
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
@@ -264,12 +281,14 @@ public:
   FakeCommandRecorder(std::shared_ptr<CommandList> command_list,
     const observer_ptr<CommandQueue> target_queue, BufferCommandLog* buffer_log,
     TextureCommandLog* texture_log, GraphicsPipelineCommandLog* pipeline_log,
+    TextureToTextureCopyLog* texture_copy_log,
     RootConstantBufferViewLog* root_cbv_log, DrawCommandLog* draw_log,
     IndirectCommandLog* indirect_log)
     : CommandRecorder(std::move(command_list), target_queue)
     , buffer_log_(buffer_log)
     , texture_log_(texture_log)
     , pipeline_log_(pipeline_log)
+    , texture_copy_log_(texture_copy_log)
     , root_cbv_log_(root_cbv_log)
     , draw_log_(draw_log)
     , indirect_log_(indirect_log)
@@ -428,13 +447,17 @@ public:
   }
 
   // No-op copy texture for tests (satisfies abstract interface)
-  auto CopyTexture(const Texture& /*src*/,
+  auto CopyTexture(const Texture& src,
     const graphics::TextureSlice& /*src_slice*/,
-    const graphics::TextureSubResourceSet& /*src_subresources*/,
-    Texture& /*dst*/, const graphics::TextureSlice& /*dst_slice*/,
+    const graphics::TextureSubResourceSet& /*src_subresources*/, Texture& dst,
+    const graphics::TextureSlice& /*dst_slice*/,
     const graphics::TextureSubResourceSet& /*dst_subresources*/)
     -> void override
   {
+    if (texture_copy_log_ != nullptr) {
+      texture_copy_log_->copies.push_back(
+        TextureToTextureCopyLog::Event { .src = &src, .dst = &dst });
+    }
   }
 
 protected:
@@ -447,6 +470,7 @@ private:
   BufferCommandLog* buffer_log_ { nullptr };
   TextureCommandLog* texture_log_ { nullptr };
   GraphicsPipelineCommandLog* pipeline_log_ { nullptr };
+  TextureToTextureCopyLog* texture_copy_log_ { nullptr };
   RootConstantBufferViewLog* root_cbv_log_ { nullptr };
   DrawCommandLog* draw_log_ { nullptr };
   IndirectCommandLog* indirect_log_ { nullptr };
@@ -610,6 +634,7 @@ public:
   }
   ~FakeGraphics() override
   {
+    GetDeferredReclaimer().ProcessAllDeferredReleases();
     // ResourceRegistry lives in the Graphics base and may still release view
     // handles during base destruction. Leak the tiny test allocator so those
     // handles never observe a dangling allocator pointer.
@@ -917,11 +942,17 @@ public:
     auto cl = std::make_shared<FakeCommandList>(
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
     auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
-      &graphics_pipeline_log_, &root_cbv_log_, &draw_log_, &indirect_log_);
+      &graphics_pipeline_log_, &texture_copy_log_, &root_cbv_log_, &draw_log_,
+      &indirect_log_);
     raw->Begin();
-    return { raw, [](CommandRecorder* p) -> void {
+    return { raw, [q](CommandRecorder* p) -> void {
               if (p != nullptr) {
-                static_cast<void>(p->End());
+                auto completed = p->End();
+                if (completed != nullptr && q != nullptr) {
+                  q->Submit(completed);
+                  completed->OnSubmitted();
+                  completed->OnExecuted();
+                }
                 delete p;
               }
             } };
@@ -930,6 +961,7 @@ public:
   BufferCommandLog buffer_log_ {};
   TextureCommandLog texture_log_ {};
   GraphicsPipelineCommandLog graphics_pipeline_log_ {};
+  TextureToTextureCopyLog texture_copy_log_ {};
   RootConstantBufferViewLog root_cbv_log_ {};
   DrawCommandLog draw_log_ {};
   IndirectCommandLog indirect_log_ {};

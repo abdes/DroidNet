@@ -10,20 +10,24 @@
 #include <fstream>
 #include <memory>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -32,8 +36,11 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 
 #include "Fakes/Graphics.h"
 
@@ -73,11 +80,6 @@ auto SourceRoot() -> std::filesystem::path
     .parent_path();
 }
 
-auto WorkspaceRoot() -> std::filesystem::path
-{
-  return SourceRoot().parent_path().parent_path();
-}
-
 auto ContainsAll(
   std::string_view haystack, std::initializer_list<std::string_view> needles)
   -> bool
@@ -97,7 +99,8 @@ auto DestroyRenderer(Renderer* renderer) -> void
 
 auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics,
   const CapabilitySet capabilities = RendererCapabilityFamily::kScenePreparation
-    | RendererCapabilityFamily::kDeferredShading)
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData)
   -> std::shared_ptr<Renderer>
 {
   auto config = RendererConfig {};
@@ -145,6 +148,27 @@ auto MakeResolvedView(const float width, const float height) -> ResolvedView
   return ResolvedView(params);
 }
 
+auto MakePerspectiveResolvedView(const float width, const float height)
+  -> ResolvedView
+{
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = width,
+    .height = height,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  params.view_matrix = glm::mat4(1.0F);
+  params.proj_matrix = glm::perspective(
+    glm::radians(60.0F), width / height, 0.1F, 1000.0F);
+  params.camera_position = glm::vec3(0.0F, 0.0F, 0.0F);
+  params.near_plane = 0.1F;
+  params.far_plane = 1000.0F;
+  return ResolvedView(params);
+}
+
 class SceneRendererDeferredCoreTest : public ::testing::Test {
 protected:
   void SetUp() override
@@ -162,6 +186,12 @@ protected:
     };
     scene_renderer_ = std::make_unique<SceneRenderer>(
       *renderer_, *graphics_, scene_config, ShadingMode::kDeferred);
+    view_constants_buffer_ = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.ViewConstants",
+    });
 
     scene_ = std::make_shared<Scene>("SceneRendererDeferredCoreTest", 16U);
     frame_context_.SetScene(oxygen::observer_ptr<Scene> { scene_.get() });
@@ -174,10 +204,16 @@ protected:
     second_resolved_view_ = MakeResolvedView(96.0F, 54.0F);
   }
 
+  void UpdateSceneTransforms()
+  {
+    static_cast<void>(scene_->Traverse().UpdateTransforms());
+  }
+
   auto RenderForView(
     const ViewId active_view_id, const ResolvedView& active_view) -> RenderContext
   {
     scene_renderer_->OnFrameStart(frame_context_);
+    UpdateSceneTransforms();
 
     auto published_bindings = ViewFrameBindings {};
     published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex { 9001U };
@@ -186,6 +222,7 @@ protected:
 
     auto context = RenderContext {};
     context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+    context.frame_slot = oxygen::frame::Slot { 1U };
     context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
     context.active_view_index
       = active_view_id == first_view_id_ ? std::size_t { 0U } : std::size_t { 1U };
@@ -211,6 +248,7 @@ protected:
     context.current_view.exposure_view_id = active_view_id;
     context.current_view.resolved_view
       = oxygen::observer_ptr<const ResolvedView> { &active_view };
+    context.view_constants = view_constants_buffer_;
 
     scene_renderer_->OnRender(context);
     return context;
@@ -223,6 +261,7 @@ protected:
     light->Common().color_rgb = { 1.0F, 0.95F, 0.8F };
     light->SetIntensityLux(1500.0F);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
+    UpdateSceneTransforms();
     return node;
   }
 
@@ -234,6 +273,7 @@ protected:
     light->SetRange(6.0F);
     light->SetLuminousFluxLm(1200.0F);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
+    UpdateSceneTransforms();
     return node;
   }
 
@@ -247,12 +287,14 @@ protected:
     light->SetInnerConeAngleRadians(0.35F);
     light->SetOuterConeAngleRadians(0.65F);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
+    UpdateSceneTransforms();
     return node;
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
   std::shared_ptr<Renderer> renderer_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
+  std::shared_ptr<oxygen::graphics::Buffer> view_constants_buffer_;
   std::shared_ptr<Scene> scene_;
   FrameContext frame_context_;
   ResolvedView first_resolved_view_ = MakeResolvedView(64.0F, 64.0F);
@@ -296,6 +338,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
   context.active_view_index = std::size_t { 0U };
   context.frame_views.push_back({
@@ -349,6 +392,64 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
 }
 
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DepthPrepassRecordsRealDrawWorkFromPreparedMetadata)
+{
+  auto scene_config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto depth_prepass = oxygen::vortex::DepthPrepassModule(*renderer_, scene_config);
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
+  draw_metadata.front().is_indexed = 0U;
+  draw_metadata.front().instance_count = 1U;
+  draw_metadata.front().vertex_count = 3U;
+  draw_metadata.front().flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes
+    = std::as_bytes(std::span(draw_metadata));
+
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+      &prepared_frame,
+    };
+  context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.DepthPrepassViewConstants",
+  });
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+
+  depth_prepass.SetConfig(oxygen::vortex::DepthPrepassConfig {
+    .mode = oxygen::vortex::DepthPrePassMode::kOpaqueAndMasked,
+    .write_velocity = true,
+  });
+  depth_prepass.Execute(context, scene_textures);
+
+  ASSERT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_EQ(graphics_->draw_log_.draws.front().vertex_num, 3U);
+  ASSERT_FALSE(graphics_->graphics_pipeline_log_.binds.empty());
+  EXPECT_EQ(graphics_->graphics_pipeline_log_.binds.back().desc.GetName(),
+    "Vortex.DepthPrepass.OpaqueVelocity");
+  EXPECT_TRUE(depth_prepass.HasPublishedDepthProducts());
+  EXPECT_EQ(depth_prepass.GetCompleteness(),
+    oxygen::vortex::DepthPrePassCompleteness::kComplete);
+}
+
 NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassPromotesGBuffersAtStage10)
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
@@ -399,6 +500,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
   context.active_view_index = std::size_t { 0U };
   context.frame_views.push_back({
@@ -415,6 +517,16 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.current_view.resolved_view
     = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
   context.current_view.shading_mode_override = ShadingMode::kForward;
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.ForwardModeViewConstants",
+  });
+  auto published_bindings = ViewFrameBindings {};
+  published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex { 9001U };
+  scene_renderer_->PublishViewFrameBindings(
+    first_view_id_, published_bindings, oxygen::ShaderVisibleIndex { 9002U });
 
   scene_renderer_->OnRender(context);
 
@@ -456,10 +568,17 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
       render_items.data(), render_items.size());
 
   auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.current_view.prepared_frame
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
       &prepared_frame,
     };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.BasePassViewConstants",
+  });
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
@@ -485,6 +604,13 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
   auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.BasePassGuardViewConstants",
+  });
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
@@ -537,89 +663,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  AutomatedProofSweepMatchesCurrentPhase3CppSurface)
-{
-  const auto workspace_root = WorkspaceRoot();
-  const auto validation_path = workspace_root
-    / ".planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md";
-  const auto source_root = SourceRoot();
-  const auto publication_test_path
-    = source_root / "Vortex/Test/SceneRendererPublication_test.cpp";
-  const auto scene_renderer_path
-    = source_root / "Vortex/SceneRenderer/SceneRenderer.cpp";
-  const auto init_views_path
-    = source_root / "Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp";
-  const auto depth_prepass_mesh_processor_path = source_root
-    / "Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.cpp";
-  const auto base_pass_mesh_processor_path
-    = source_root / "Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.cpp";
-
-  EXPECT_TRUE(std::filesystem::exists(validation_path))
-    << validation_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(publication_test_path))
-    << publication_test_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(scene_renderer_path))
-    << scene_renderer_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(init_views_path))
-    << init_views_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(depth_prepass_mesh_processor_path))
-    << depth_prepass_mesh_processor_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(base_pass_mesh_processor_path))
-    << base_pass_mesh_processor_path.generic_string();
-
-  const auto validation_source = ReadTextFile(validation_path);
-  EXPECT_TRUE(ContainsAll(validation_source,
-    { "03-14-01",
-      "ctest --test-dir out/build-ninja -C Debug --output-on-failure -R",
-      "^Oxygen\\\\.Vortex\\\\.",
-      "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
-      "tools/cli/oxytidy.ps1",
-      "src/Oxygen/Vortex/RenderContext.h",
-      "src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h",
-      "src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp",
-      "src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp",
-      "src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.cpp",
-      "src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.cpp",
-      "src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp",
-      "src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp" }));
-
-  const auto publication_source = ReadTextFile(publication_test_path);
-  EXPECT_TRUE(ContainsAll(publication_source,
-    { "Stage3PublicationKeepsSceneColorAndGBuffersInvalidUntilStage10",
-      "Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",
-      "ApplyStage3DepthPrepassState",
-      "ApplyStage10RebuildState",
-      "scene_color_srv",
-      "gbuffer_srvs[0]",
-      "velocity_srv" }));
-
-  const auto scene_renderer_source = ReadTextFile(scene_renderer_path);
-  EXPECT_TRUE(ContainsAll(scene_renderer_source,
-    { "init_views_->Execute(ctx, scene_textures_)",
-      "depth_prepass_->Execute(ctx, scene_textures_)",
-      "base_pass_->Execute(ctx, scene_textures_)",
-      "RenderDeferredLighting(ctx, scene_textures_)" }));
-
-  const auto init_views_source = ReadTextFile(init_views_path);
-  EXPECT_TRUE(ContainsAll(
-    init_views_source, { "BeginFrameCollection", "PrepareView", "FinalizeView" }));
-
-  const auto depth_prepass_mesh_processor_source
-    = ReadTextFile(depth_prepass_mesh_processor_path);
-  EXPECT_TRUE(ContainsAll(depth_prepass_mesh_processor_source,
-    { "AcceptedDrawView", "draw_metadata_bytes" }));
-
-  const auto base_pass_mesh_processor_source
-    = ReadTextFile(base_pass_mesh_processor_path);
-  EXPECT_TRUE(
-    ContainsAll(base_pass_mesh_processor_source, { "AcceptedDrawView", "GetDrawMetadata" }));
-}
-
-NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingConsumesPublishedGBuffers)
 {
   static_cast<void>(AddDirectionalLight("KeyLight"));
 
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
   static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
@@ -633,6 +682,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     scene_renderer_->GetPublishedViewFrameBindings().scene_texture_frame_slot);
   EXPECT_EQ(state.consumed_scene_depth_srv, bindings.scene_depth_srv);
   EXPECT_EQ(state.consumed_gbuffer_srvs, bindings.gbuffer_srvs);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.DeferredLight.Directional";
+    }));
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -640,6 +694,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 {
   static_cast<void>(AddDirectionalLight("Sun"));
 
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
   static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
@@ -648,26 +704,129 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_TRUE(state.accumulated_into_scene_color);
   EXPECT_EQ(state.consumed_scene_color_uav, bindings.scene_color_uav);
   EXPECT_EQ(state.directional_light_count, 1U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Directional";
+              }),
+    1);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DeferredLightingUsesStencilBoundedLocalLights)
+  DeferredLightingUsesOutsideVolumeLocalLights)
+{
+  const auto outside_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  auto point = AddPointLight("PointFill");
+  auto spot = AddSpotLight("SpotRim");
+  point.GetTransform().SetLocalPosition({ 0.0F, 20.0F, 0.0F });
+  spot.GetTransform().SetLocalPosition({ 0.0F, 20.0F, 0.0F });
+  UpdateSceneTransforms();
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+  static_cast<void>(RenderForView(first_view_id_, outside_view));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_TRUE(state.used_outside_volume_local_lights);
+  EXPECT_FALSE(state.used_camera_inside_local_lights);
+  EXPECT_FALSE(state.used_direct_local_light_fallbacks);
+  EXPECT_EQ(state.point_light_count, 1U);
+  EXPECT_EQ(state.spot_light_count, 1U);
+  EXPECT_EQ(state.local_light_count, 2U);
+  EXPECT_EQ(state.outside_volume_local_light_count, state.local_light_count);
+  EXPECT_EQ(state.camera_inside_local_light_count, 0U);
+  EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
+  EXPECT_EQ(state.direct_local_light_fallback_count, 0U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Point.Lighting";
+              }),
+    1);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Spot.Lighting";
+              }),
+    1);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingUsesInsideVolumePathWhenCameraStartsInsideLocalLights)
+{
+  const auto inside_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  static_cast<void>(AddPointLight("PointFill"));
+  static_cast<void>(AddSpotLight("SpotRim"));
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+  static_cast<void>(RenderForView(first_view_id_, inside_view));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_FALSE(state.used_outside_volume_local_lights);
+  EXPECT_TRUE(state.used_camera_inside_local_lights);
+  EXPECT_FALSE(state.used_direct_local_light_fallbacks);
+  EXPECT_EQ(state.point_light_count, 1U);
+  EXPECT_EQ(state.spot_light_count, 1U);
+  EXPECT_EQ(state.local_light_count, 2U);
+  EXPECT_EQ(state.outside_volume_local_light_count, 0U);
+  EXPECT_EQ(state.camera_inside_local_light_count, state.local_light_count);
+  EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
+  EXPECT_EQ(state.direct_local_light_fallback_count, 0U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Point.InsideVolumeLighting";
+              }),
+    1);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Spot.InsideVolumeLighting";
+              }),
+    1);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingUsesDirectFallbackForNonPerspectiveViews)
 {
   static_cast<void>(AddPointLight("PointFill"));
   static_cast<void>(AddSpotLight("SpotRim"));
 
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
   static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
 
   const auto& state = scene_renderer_->GetLastDeferredLightingState();
-  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
 
-  EXPECT_TRUE(state.used_stencil_bounded_local_lights);
-  EXPECT_EQ(state.consumed_stencil_srv, bindings.stencil_srv);
+  EXPECT_FALSE(state.used_outside_volume_local_lights);
+  EXPECT_FALSE(state.used_camera_inside_local_lights);
+  EXPECT_TRUE(state.used_direct_local_light_fallbacks);
   EXPECT_EQ(state.point_light_count, 1U);
   EXPECT_EQ(state.spot_light_count, 1U);
   EXPECT_EQ(state.local_light_count, 2U);
-  EXPECT_EQ(state.stencil_mark_pass_count, state.local_light_count);
-  EXPECT_EQ(state.stencil_lighting_pass_count, state.local_light_count);
+  EXPECT_EQ(state.outside_volume_local_light_count, 0U);
+  EXPECT_EQ(state.camera_inside_local_light_count, 0U);
+  EXPECT_EQ(state.direct_local_light_pass_count, state.local_light_count);
+  EXPECT_EQ(state.direct_local_light_fallback_count, state.local_light_count);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 2U);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Point.DirectFallbackLighting";
+              }),
+    1);
+  EXPECT_EQ(std::ranges::count_if(graphics_->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName()
+                  == "Vortex.DeferredLight.Spot.DirectFallbackLighting";
+              }),
+    1);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
@@ -728,6 +887,7 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   auto resolved_view = MakeResolvedView(64.0F, 64.0F);
   auto context = RenderContext {};
   context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
   context.active_view_index = std::size_t { 0U };
   context.frame_views.push_back({

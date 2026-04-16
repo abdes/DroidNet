@@ -61,6 +61,7 @@ TEST(SceneTexturesContractTest, AllocatesTheExactPhase2Subset)
     scene_textures.GetSceneColor(), Format::kRGBA16Float, config.extent, "SceneColor");
   ExpectTexture(
     scene_textures.GetSceneDepth(), Format::kDepth32Stencil8, config.extent, "SceneDepth");
+  EXPECT_TRUE(scene_textures.GetSceneDepth().GetDescriptor().is_render_target);
   ExpectTexture(scene_textures.GetPartialDepth(), Format::kR32Float,
     config.extent, "PartialDepth");
   ExpectTexture(scene_textures.GetGBufferNormal(), Format::kR10G10B10A2UNorm,
@@ -146,6 +147,7 @@ TEST(SceneTexturesContractTest,
 
   EXPECT_EQ(scene_textures.GetVelocity(), nullptr);
   ASSERT_NE(scene_textures.GetCustomDepth(), nullptr);
+  EXPECT_TRUE(scene_textures.GetCustomDepth()->GetDescriptor().is_render_target);
 
   const auto custom_stencil = scene_textures.GetCustomStencil();
   EXPECT_TRUE(custom_stencil.IsValid());

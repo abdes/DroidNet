@@ -7,15 +7,18 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <memory>
+#include <ranges>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
@@ -319,8 +322,15 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   render_context.current_view.exposure_view_id = view_id;
   render_context.current_view.resolved_view
     = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+  render_context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererPublicationTest.ViewConstants",
+  });
 
   scene_renderer.OnFrameStart(frame_context);
+  graphics_->texture_copy_log_.copies.clear();
   scene_renderer.OnRender(render_context);
 
   const auto& bindings = scene_renderer.GetSceneTextureBindings();
@@ -338,10 +348,101 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     &scene_renderer.GetSceneTextures().GetSceneColor());
   EXPECT_TRUE(extracts.resolved_scene_depth.valid);
   EXPECT_NE(extracts.resolved_scene_depth.texture, nullptr);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
+    [&scene_renderer, &extracts](const auto& copy) -> bool {
+      return copy.src == scene_renderer.GetSceneTextures().GetSceneColorResource().get()
+        && copy.dst == extracts.resolved_scene_color.texture;
+    }));
+  EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
+    [&scene_renderer, &extracts](const auto& copy) -> bool {
+      return copy.src == scene_renderer.GetSceneTextures().GetSceneDepthResource().get()
+        && copy.dst == extracts.resolved_scene_depth.texture;
+    }));
   EXPECT_TRUE(extracts.prev_scene_depth.valid);
   EXPECT_NE(extracts.prev_scene_depth.texture, nullptr);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
+    [&extracts](const auto& copy) -> bool {
+      return copy.src == extracts.resolved_scene_depth.texture
+        && copy.dst == extracts.prev_scene_depth.texture;
+    }));
   EXPECT_FALSE(extracts.prev_velocity.valid);
   EXPECT_EQ(extracts.prev_velocity.texture, nullptr);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  DestructorReleasesExtractArtifactsWithoutAnotherFrameStart)
+{
+  auto& registry = graphics_->GetResourceRegistry();
+  const auto baseline_registered = registry.GetRegisteredResourceCount();
+
+  {
+    auto config = SceneTexturesConfig {
+      .extent = { 96U, 54U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    };
+    auto scene_renderer = SceneRenderer(
+      *renderer_, *graphics_, config, ShadingMode::kDeferred);
+    auto frame_context = FrameContext {};
+    PrepareFrameContext(frame_context, oxygen::frame::SequenceNumber { 1U },
+      oxygen::frame::Slot { 0U });
+    auto scene = std::make_shared<Scene>(
+      "SceneRendererPublicationTest.DestructorCleanup", 16U);
+    frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+    auto framebuffer
+      = MakeFramebuffer("SceneRendererPublicationTest.DestructorCleanup");
+    const auto view_id = frame_context.RegisterView(
+      MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
+    auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+
+    auto render_context = RenderContext {};
+    render_context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+    render_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+    render_context.active_view_index = std::size_t { 0U };
+    render_context.frame_views.push_back({
+      .view_id = view_id,
+      .is_scene_view = true,
+      .composition_view = {},
+      .shading_mode_override = {},
+      .resolved_view = oxygen::observer_ptr<const ResolvedView> { &resolved_view },
+      .primary_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
+    });
+    render_context.current_view.view_id = view_id;
+    render_context.current_view.exposure_view_id = view_id;
+    render_context.current_view.resolved_view
+      = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+    render_context.view_constants = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererPublicationTest.DestructorCleanup.ViewConstants",
+    });
+
+    scene_renderer.OnFrameStart(frame_context);
+    graphics_->texture_copy_log_.copies.clear();
+    scene_renderer.OnRender(render_context);
+
+    const auto& extracts = scene_renderer.GetSceneTextureExtracts();
+    EXPECT_TRUE(extracts.resolved_scene_color.valid);
+    EXPECT_TRUE(extracts.resolved_scene_depth.valid);
+    EXPECT_TRUE(extracts.prev_scene_depth.valid);
+    EXPECT_TRUE(extracts.prev_velocity.valid);
+    EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
+      [&extracts](const auto& copy) -> bool {
+        return copy.src == extracts.resolved_scene_depth.texture
+          && copy.dst == extracts.prev_scene_depth.texture;
+      }));
+    EXPECT_TRUE(std::ranges::any_of(graphics_->texture_copy_log_.copies,
+      [&scene_renderer, &extracts](const auto& copy) -> bool {
+        return copy.src == scene_renderer.GetSceneTextures().GetVelocity()
+          && copy.dst == extracts.prev_velocity.texture;
+      }));
+    EXPECT_GT(registry.GetRegisteredResourceCount(), baseline_registered);
+  }
+
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_registered);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

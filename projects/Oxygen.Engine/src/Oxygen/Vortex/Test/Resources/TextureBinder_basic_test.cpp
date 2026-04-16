@@ -200,4 +200,17 @@ NOLINT_TEST_F(TextureBinderBasicTest, CacheHit_DoesNotRecreateView)
     CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_first);
 }
 
+//! Shared fallback textures must unregister their SRV descriptors on teardown.
+/*! TextureBinder owns global error/placeholder textures. Their registry entries
+    must be released before Graphics teardown, otherwise ResourceRegistry keeps
+    lingering resources alive at process exit. */
+NOLINT_TEST_F(TextureBinderBasicTest, Teardown_ReleasesSharedFallbackDescriptors)
+{
+  ASSERT_EQ(AllocatedSrvCount(), 2U);
+
+  DestroyBinder();
+
+  EXPECT_EQ(AllocatedSrvCount(), 0U);
+}
+
 } // namespace

@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
 namespace oxygen::engine::internal {
@@ -40,6 +41,7 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::testing::FakeGraphics;
+using oxygen::vortex::testing::RendererPublicationProbe;
 
 class RuntimeViewPublicationTest : public ::testing::Test {
 protected:
@@ -242,6 +244,29 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
+  RemovePublishedRuntimeViewWithoutFrameContextReleasesTrackedViewConstants)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+
+  const auto intent_view_id = ViewId { 16U };
+  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
+    frame_context, intent_view_id, MakeViewContext("shutdown-removable"));
+  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
+
+  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(first_buffer, nullptr);
+
+  renderer_->RemovePublishedRuntimeView(intent_view_id);
+
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
+    oxygen::kInvalidViewId);
+  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
+  ASSERT_NE(second_buffer, nullptr);
+  EXPECT_NE(second_buffer.get(), first_buffer.get());
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
   PruneStalePublishedRuntimeViewsReleasesTrackedViewConstantsForPublishedView)
 {
   auto frame_context = FrameContext {};
@@ -265,6 +290,26 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
   ASSERT_NE(second_buffer, nullptr);
   EXPECT_NE(second_buffer.get(), first_buffer.get());
+}
+
+NOLINT_TEST_F(RuntimeViewPublicationTest,
+  OnShutdownResetsViewConstantsManagerAfterRuntimeViewCleanup)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(frame_context, 1U);
+
+  const auto intent_view_id = ViewId { 17U };
+  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
+    frame_context, intent_view_id, MakeViewContext("shutdown-cleanup"));
+  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
+  ASSERT_NE(MaterializeViewConstantsBuffer(published_view_id), nullptr);
+
+  renderer_->OnShutdown();
+
+  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
+    oxygen::kInvalidViewId);
+  EXPECT_EQ(RendererPublicationProbe::GetViewConstantsManager(*renderer_),
+    nullptr);
 }
 
 } // namespace
