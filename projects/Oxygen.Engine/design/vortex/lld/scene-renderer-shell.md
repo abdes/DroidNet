@@ -14,8 +14,10 @@ bootstrap helper that constructs a SceneRenderer from a `CapabilitySet`.
 
 This document started as the Phase 2 shell contract. On the current retained
 Phase 03 branch, the shell has progressed into a real deferred-core runtime:
-Stage 2/3/9/10/12 execute for the active scene view, while the later reserved
-stage/service slots remain future-facing.
+Renderer Core materializes the eligible frame views and selects the current
+scene-view cursor in `RenderContext`, while `SceneRenderer` owns the stage
+chain for that selected current view (currently Stage 2/3/9/10/12 plus
+resolve/cleanup). The later reserved stage/service slots remain future-facing.
 
 ### 1.2 What It Replaces
 
@@ -129,6 +131,8 @@ public:
 
   OXGN_VRTX_API void OnFrameStart(const FrameContext& frame);
   OXGN_VRTX_API void OnPreRender(const FrameContext& frame);
+  /// Executes the scene-view stage chain for the current view selected by
+  /// Renderer Core in `RenderContext`.
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const FrameContext& frame);
@@ -284,8 +288,10 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
 
 ### 3.3 Per-View vs Per-Frame Iteration
 
-Per ARCHITECTURE.md §6.2, some stages execute per-frame and others per-view.
-The SceneRenderer manages this iteration:
+Per ARCHITECTURE.md §6.2, some stages execute per-frame and others against the
+current scene-view cursor. Renderer Core materializes `ctx.frame_views` and
+selects the current view in `ctx.current_view`; `SceneRenderer` consumes that
+selected current view for the scene-view render stages:
 
 ```text
 Per-frame stages:     Per-view stages:
@@ -301,31 +307,26 @@ Per-frame stages:     Per-view stages:
 **Iteration pattern:**
 
 ```cpp
-// Per-frame stage
-if (shadows_) shadows_->RenderShadowDepths(ctx);
+// Renderer Core materializes the eligible views and selects the current scene
+// view before SceneRenderer runs.
+renderer_.PopulateRenderContextViewState(ctx, frame_context, false);
 
-// Per-view iteration over the views materialized by Renderer Core.
-for (std::size_t view_index = 0; view_index < ctx.frame_views.size(); ++view_index) {
-  ctx.active_view_index = view_index;
-  const auto& view_entry = ctx.frame_views[view_index];
-  ctx.current_view.view_id = view_entry.view_id;
-  ctx.current_view.composition_view = view_entry.composition_view;
-  ctx.current_view.shading_mode_override = view_entry.shading_mode_override;
-  ctx.current_view.resolved_view = view_entry.resolved_view;
-  ctx.pass_target = view_entry.primary_target;
-  ctx.current_view.prepared_frame = init_views_
-    ? observer_ptr<const PreparedSceneFrame> {
-        init_views_->GetPreparedSceneFrame(view_entry.view_id) }
-    : observer_ptr<const PreparedSceneFrame> {};
-  if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_);
-  if (base_pass_) base_pass_->Execute(ctx, scene_textures_);
-  // ... etc
+// Stage 2 publishes per-view prepared-scene payloads but binds only the
+// current view's payload into RenderContext.
+if (ctx.current_view.prepared_frame == nullptr) {
+  PrimePreparedView(ctx);
 }
+
+// Later scene-view stages consume the selected current view only.
+if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_);
+if (base_pass_) base_pass_->Execute(ctx, scene_textures_);
+renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
 ```
 
-In Phase 2, view iteration is not yet implemented — the shell runs the
-stage slots sequentially without view iteration. View iteration is added
-when InitViewsModule is implemented (Phase 3).
+Future heterogeneous multi-view scene execution may still call the scene-view
+stage chain multiple times in one frame, but the outer selection / iteration
+loop remains a Renderer-Core concern because it owns canonical runtime views,
+render-context materialization, publication helpers, and composition planning.
 
 ### 3.3.1 Preserving the Per-View Shading-Mode Seam
 

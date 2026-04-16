@@ -1067,6 +1067,9 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
   engine::FrameContext& context, const bool prefer_composite_source) const
   -> void
 {
+  // Renderer Core owns the canonical published-view set and the current
+  // scene-view cursor selection. SceneRenderer consumes the selected current
+  // view; it does not own the outer view-selection loop.
   render_context.current_view = {};
   render_context.frame_views.clear();
   render_context.active_view_index = std::numeric_limits<std::size_t>::max();

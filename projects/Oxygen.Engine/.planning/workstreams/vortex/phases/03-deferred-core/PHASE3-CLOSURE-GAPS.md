@@ -496,7 +496,7 @@ Classification values are preserved exactly as requested:
         code comment/guard so Stage 9 cannot silently start publishing those
         bindings in the future.
 
-11. [ ] **SceneRenderer shell ownership drifted from `SceneRenderer` to `Renderer`**
+11. [x] **SceneRenderer shell ownership drifted from `SceneRenderer` to `Renderer`**
 
     - Severity: `High`
     - Direction: `docs->code`
@@ -514,6 +514,29 @@ Classification values are preserved exactly as requested:
     - Exact remediation:
       - Either restore per-view ownership to `SceneRenderer`, or
       - rewrite shell/init-views/multi-view docs so `Renderer` is the authoritative selector / iterator.
+   - Remediation status:
+     - Resolved in favor of **Renderer-owned current-view selection / iteration**
+       with `SceneRenderer` consuming the selected current view only.
+     - Decision rationale:
+       - UE5.7's scene renderer iterates its `Views` array internally because
+         UE does not split an outer Renderer-Core layer from the scene-renderer
+         family.
+       - Oxygen does split those layers, and `Renderer` already owns:
+         - canonical published runtime views
+         - `RenderContext` materialization
+         - per-view publication helpers
+         - composition planning / target resolution
+       - In Oxygen's layered architecture, keeping the outer current-view
+         selection loop in `Renderer` is the cleaner and more future-proof
+         ownership boundary; pushing that loop down into `SceneRenderer` starts
+         coupling it to view-registration/publication/extraction responsibilities
+         that belong to `Renderer Core`.
+     - Code already matched this ownership boundary.
+     - The remediation was to align the architecture and LLD package so they
+       explicitly state:
+       - `Renderer` materializes the eligible frame-view set
+       - `Renderer` selects the current scene-view cursor
+       - `SceneRenderer` owns the stage chain for that current view
 
 12. [ ] **`InitViewsModule` still uses the old ScenePrep shim instead of the explicit API the LLD requires**
 

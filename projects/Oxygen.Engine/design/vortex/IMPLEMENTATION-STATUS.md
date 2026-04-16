@@ -70,6 +70,45 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-16 — SceneRenderer shell ownership aligned to Renderer-selected current-view execution
+
+- Scope decision:
+  - `Renderer Core` remains the authoritative owner of published runtime-view
+    materialization and current-view selection / iteration.
+  - `SceneRenderer` remains the owner of the scene-view stage chain for the
+    current view selected in `RenderContext`.
+  - UE5.7 iterates its `Views` array inside the scene renderer because it does
+    not have a separate Renderer-Core layer; in Oxygen, keeping selection in
+    `Renderer` is the cleaner boundary because `Renderer` already owns
+    view registration, render-context materialization, per-view publication,
+    and composition planning.
+- Changed files this session:
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `design/vortex/ARCHITECTURE.md`
+  - `design/vortex/lld/scene-renderer-shell.md`
+  - `design/vortex/lld/init-views.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/PHASE3-CLOSURE-GAPS.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\.Vortex\.(SceneRendererDeferredCore|SceneRendererPublication)\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-item11-runtime-validation`
+- Result:
+  - architecture and LLD surfaces now agree with the stable current layering:
+    - `Renderer` materializes eligible frame views and selects the current
+      scene-view cursor
+    - `SceneRenderer` consumes that current view and executes the stage chain
+  - code comments at the ownership seam now state the same contract directly in:
+    - `Renderer::PopulateRenderContextViewState(...)`
+    - `SceneRenderer::OnRender(...)`
+- Evidence retained:
+  - focused proof:
+    - `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+    - `Oxygen.Vortex.SceneRendererPublication.Tests`
+  - live D3D12 proof:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-item11-runtime-validation.validation.txt`
+
 ### 2026-04-16 — Stage 9/10 scene-texture validity boundary aligned to Stage 10
 
 - Scope decision:
