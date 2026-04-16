@@ -48,6 +48,8 @@ private:
   bool has_published_base_pass_products_ { false };
   bool has_completed_velocity_for_dynamic_geometry_ { false };
   std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
+  std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_ {};
+  std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_ {};
 };
 
 } // namespace oxygen::vortex

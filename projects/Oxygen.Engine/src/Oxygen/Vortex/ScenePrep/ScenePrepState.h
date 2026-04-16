@@ -173,6 +173,18 @@ public:
     return observer_ptr(draw_emitter_.get());
   }
 
+  auto AttachResourceManagers(
+    std::unique_ptr<resources::GeometryUploader> geometry,
+    std::unique_ptr<resources::TransformUploader> transform,
+    std::unique_ptr<resources::MaterialBinder> material,
+    std::unique_ptr<resources::DrawMetadataEmitter> draw_emitter) -> void
+  {
+    geometry_uploader_ = std::move(geometry);
+    transform_mgr_ = std::move(transform);
+    material_binder_ = std::move(material);
+    draw_emitter_ = std::move(draw_emitter);
+  }
+
   //! Reset per-frame data while preserving persistent caches.
   auto ResetFrameData() -> void
   {

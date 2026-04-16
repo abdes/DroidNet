@@ -217,10 +217,16 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto GetSceneDepth() const -> graphics::Texture&;
   [[nodiscard]] OXGN_VRTX_API auto GetPartialDepth() const
     -> graphics::Texture&;
+  [[nodiscard]] OXGN_VRTX_API auto GetSceneColorResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
+  [[nodiscard]] OXGN_VRTX_API auto GetSceneDepthResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
   [[nodiscard]] OXGN_VRTX_API auto GetStencil() const -> SceneTextureAspectView;
 
   [[nodiscard]] OXGN_VRTX_API auto GetGBuffer(GBufferIndex index) const
     -> graphics::Texture&;
+  [[nodiscard]] OXGN_VRTX_API auto GetGBufferResource(GBufferIndex index) const
+    -> const std::shared_ptr<graphics::Texture>&;
   [[nodiscard]] OXGN_VRTX_API auto GetGBufferNormal() const
     -> graphics::Texture&;
   [[nodiscard]] OXGN_VRTX_API auto GetGBufferMaterial() const
@@ -233,6 +239,8 @@ public:
     -> std::uint32_t;
 
   [[nodiscard]] OXGN_VRTX_API auto GetVelocity() const -> graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto GetVelocityResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
   [[nodiscard]] OXGN_VRTX_API auto GetCustomDepth() const -> graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto GetCustomStencil() const
     -> SceneTextureAspectView;

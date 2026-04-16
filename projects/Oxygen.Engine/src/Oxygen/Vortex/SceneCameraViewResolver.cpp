@@ -22,6 +22,16 @@ constexpr float kDefaultNearPlane = 0.1F;
 constexpr float kDefaultFarPlane = 1000.0F;
 constexpr std::size_t kOrthographicFarExtentIndex = 5U;
 
+auto ResolveDefaultScissor(const ViewPort& viewport) -> Scissors
+{
+  return {
+    .left = static_cast<int32_t>(viewport.top_left_x),
+    .top = static_cast<int32_t>(viewport.top_left_y),
+    .right = static_cast<int32_t>(viewport.top_left_x + viewport.width),
+    .bottom = static_cast<int32_t>(viewport.top_left_y + viewport.height),
+  };
+}
+
 } // namespace
 
 auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
@@ -84,6 +94,10 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
   }
   if (viewport_override.has_value() && viewport_override->IsValid()) {
     cfg.viewport = *viewport_override;
+  }
+  if (cfg.scissor.right <= cfg.scissor.left
+    || cfg.scissor.bottom <= cfg.scissor.top) {
+    cfg.scissor = ResolveDefaultScissor(cfg.viewport);
   }
 
   const auto stable_proj_m

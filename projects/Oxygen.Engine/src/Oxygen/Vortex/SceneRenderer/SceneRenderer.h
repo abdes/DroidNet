@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/View.h>
@@ -24,6 +25,10 @@ class Graphics;
 namespace engine {
   class FrameContext;
 } // namespace engine
+namespace graphics {
+  class Buffer;
+  class Framebuffer;
+} // namespace graphics
 } // namespace oxygen
 
 namespace oxygen::vortex {
@@ -41,14 +46,15 @@ public:
   struct DeferredLightingState {
     bool consumed_published_scene_textures { false };
     bool accumulated_into_scene_color { false };
-    bool used_stencil_bounded_local_lights { false };
+    bool used_outside_volume_local_lights { false };
+    bool used_camera_inside_local_lights { false };
+    bool used_direct_local_light_fallbacks { false };
     std::uint32_t consumed_scene_depth_srv {
       SceneTextureBindings::kInvalidIndex
     };
     std::uint32_t consumed_scene_color_uav {
       SceneTextureBindings::kInvalidIndex
     };
-    std::uint32_t consumed_stencil_srv { SceneTextureBindings::kInvalidIndex };
     std::array<std::uint32_t, 4> consumed_gbuffer_srvs {
       SceneTextureBindings::kInvalidIndex,
       SceneTextureBindings::kInvalidIndex,
@@ -59,8 +65,10 @@ public:
     std::uint32_t point_light_count { 0U };
     std::uint32_t spot_light_count { 0U };
     std::uint32_t local_light_count { 0U };
-    std::uint32_t stencil_mark_pass_count { 0U };
-    std::uint32_t stencil_lighting_pass_count { 0U };
+    std::uint32_t outside_volume_local_light_count { 0U };
+    std::uint32_t camera_inside_local_light_count { 0U };
+    std::uint32_t direct_local_light_pass_count { 0U };
+    std::uint32_t direct_local_light_fallback_count { 0U };
     ViewId published_view_id { kInvalidViewId };
     ShaderVisibleIndex published_view_frame_bindings_slot {
       kInvalidShaderVisibleIndex
@@ -81,6 +89,7 @@ public:
 
   OXGN_VRTX_API void OnFrameStart(const engine::FrameContext& frame);
   OXGN_VRTX_API void OnPreRender(const engine::FrameContext& frame);
+  OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
   OXGN_VRTX_API void OnRender(RenderContext& ctx);
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
@@ -98,6 +107,8 @@ public:
     -> const SceneTextureBindings&;
   [[nodiscard]] OXGN_VRTX_API auto GetSceneTextureExtracts() const
     -> const SceneTextureExtracts&;
+  [[nodiscard]] OXGN_VRTX_API auto GetResolvedSceneColorTexture() const
+    -> std::shared_ptr<graphics::Texture>;
   [[nodiscard]] OXGN_VRTX_API auto GetDefaultShadingMode() const -> ShadingMode;
   [[nodiscard]] OXGN_VRTX_API auto GetEffectiveShadingMode(
     const RenderContext& ctx) const -> ShadingMode;
@@ -145,6 +156,13 @@ private:
   ExtractArtifact resolved_scene_depth_artifact_ {};
   ExtractArtifact prev_scene_depth_artifact_ {};
   ExtractArtifact prev_velocity_artifact_ {};
+  std::shared_ptr<graphics::Buffer> deferred_light_constants_buffer_ {};
+  void* deferred_light_constants_mapped_ptr_ { nullptr };
+  std::vector<ShaderVisibleIndex> deferred_light_constants_indices_ {};
+  std::uint32_t deferred_light_constants_slot_count_ { 0U };
+  std::shared_ptr<graphics::Framebuffer>
+    deferred_light_directional_framebuffer_ {};
+  std::shared_ptr<graphics::Framebuffer> deferred_light_local_framebuffer_ {};
   ShadingMode default_shading_mode_ { ShadingMode::kForward };
   ViewFrameBindings published_view_frame_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {

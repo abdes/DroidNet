@@ -7,6 +7,7 @@
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -108,6 +109,18 @@ auto SceneTextures::GetPartialDepth() const -> graphics::Texture&
   return RequireTexture(partial_depth_, "PartialDepth");
 }
 
+auto SceneTextures::GetSceneColorResource() const
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  return scene_color_.resource;
+}
+
+auto SceneTextures::GetSceneDepthResource() const
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  return scene_depth_.resource;
+}
+
 auto SceneTextures::GetStencil() const -> SceneTextureAspectView
 {
   return {
@@ -127,6 +140,19 @@ auto SceneTextures::GetGBuffer(const GBufferIndex index) const
     "SceneTextures: {} is not allocated in the current Vortex contract",
     GBufferName(index));
   return *gbuffers_.at(raw_index).resource;
+}
+
+auto SceneTextures::GetGBufferResource(const GBufferIndex index) const
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  const auto raw_index = static_cast<std::size_t>(index);
+  CHECK_F(raw_index < gbuffers_.size(),
+    "SceneTextures: {} is outside the supported Vortex GBuffer range",
+    GBufferName(index));
+  CHECK_F(gbuffers_.at(raw_index).resource != nullptr,
+    "SceneTextures: {} is not allocated in the current Vortex contract",
+    GBufferName(index));
+  return gbuffers_.at(raw_index).resource;
 }
 
 auto SceneTextures::GetGBufferNormal() const -> graphics::Texture&
@@ -157,6 +183,12 @@ auto SceneTextures::GetGBufferCount() const noexcept -> std::uint32_t
 auto SceneTextures::GetVelocity() const -> graphics::Texture*
 {
   return velocity_.resource.get();
+}
+
+auto SceneTextures::GetVelocityResource() const
+  -> const std::shared_ptr<graphics::Texture>&
+{
+  return velocity_.resource;
 }
 
 auto SceneTextures::GetCustomDepth() const -> graphics::Texture*
@@ -227,7 +259,7 @@ void SceneTextures::AllocateTextures()
     = CreateTexture("SceneColor", Format::kRGBA16Float, true, true, true);
   RegisterTexture(scene_color_);
   scene_depth_.resource
-    = CreateTexture("SceneDepth", Format::kDepth32Stencil8, true);
+    = CreateTexture("SceneDepth", Format::kDepth32Stencil8, true, true);
   RegisterTexture(scene_depth_);
   partial_depth_.resource
     = CreateTexture("PartialDepth", Format::kR32Float, true, true);
@@ -249,7 +281,7 @@ void SceneTextures::AllocateTextures()
   }
 
   custom_depth_.resource = config_.enable_custom_depth
-    ? CreateTexture("CustomDepth", Format::kDepth32Stencil8, true)
+    ? CreateTexture("CustomDepth", Format::kDepth32Stencil8, true, true)
     : nullptr;
   if (custom_depth_.resource != nullptr) {
     RegisterTexture(custom_depth_);
@@ -278,21 +310,25 @@ void SceneTextures::RegisterTexture(RegisteredTexture& texture)
 
 void SceneTextures::UnregisterTexture(RegisteredTexture& texture) noexcept
 {
-  if (texture.resource == nullptr) {
+  auto resource = std::move(texture.resource);
+  if (resource == nullptr) {
     return;
   }
 
   auto& registry = gfx_.GetResourceRegistry();
-  if (registry.Contains(*texture.resource)) {
-    registry.UnRegisterResource(*texture.resource);
+  gfx_.ForgetKnownResourceState(*resource);
+  if (registry.Contains(*resource)) {
+    registry.UnRegisterResource(*resource);
   }
-  texture.resource.reset();
+  gfx_.RegisterDeferredRelease(std::move(resource));
 }
 
 auto SceneTextures::CreateTexture(std::string_view debug_name,
   const Format format, const bool shader_resource, const bool render_target,
   const bool uav) const -> std::shared_ptr<graphics::Texture>
 {
+  const auto& format_info = graphics::detail::GetFormatInfo(format);
+
   graphics::TextureDesc desc {};
   desc.width = config_.extent.x;
   desc.height = config_.extent.y;
@@ -307,6 +343,19 @@ auto SceneTextures::CreateTexture(std::string_view debug_name,
   desc.is_shader_resource = shader_resource;
   desc.is_render_target = render_target;
   desc.is_uav = uav;
+  desc.is_typeless
+    = shader_resource && (format_info.has_depth || format_info.has_stencil);
+  if (render_target) {
+    desc.initial_state = format_info.has_depth || format_info.has_stencil
+      ? graphics::ResourceStates::kDepthWrite
+      : graphics::ResourceStates::kRenderTarget;
+    desc.use_clear_value = true;
+    desc.clear_value = (format_info.has_depth || format_info.has_stencil)
+      ? graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F }
+      : graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  } else if (shader_resource) {
+    desc.initial_state = graphics::ResourceStates::kShaderResource;
+  }
   return gfx_.CreateTexture(desc);
 }
 

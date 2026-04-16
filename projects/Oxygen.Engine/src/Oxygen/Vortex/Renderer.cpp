@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -41,6 +42,7 @@
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/Types/DrawFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::internal {
@@ -55,6 +57,8 @@ auto RendererTagFactory::Get() noexcept -> RendererTag
 namespace oxygen::vortex {
 
 struct RendererPublicationState {
+  std::unique_ptr<internal::PerViewStructuredPublisher<DrawFrameBindings>>
+    draw_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
@@ -152,14 +156,22 @@ namespace {
     if (recorder.IsResourceTracked(texture)) {
       return;
     }
+    if (recorder.AdoptKnownResourceState(texture)) {
+      return;
+    }
 
     auto initial = texture.GetDescriptor().initial_state;
+    if ((initial == graphics::ResourceStates::kUnknown
+          || initial == graphics::ResourceStates::kUndefined)
+      && texture.GetDescriptor().is_render_target) {
+      initial = graphics::ResourceStates::kRenderTarget;
+    }
     CHECK_F(initial != graphics::ResourceStates::kUnknown
         && initial != graphics::ResourceStates::kUndefined,
       "Vortex: composition source texture '{}' must either already have "
       "resource-state tracking or declare a valid initial_state",
       texture.GetDescriptor().debug_name);
-    recorder.BeginTrackingResourceState(texture, initial, true);
+    recorder.BeginTrackingResourceState(texture, initial);
   }
 
   auto CopyTextureToRegion(graphics::CommandRecorder& recorder,
@@ -333,14 +345,32 @@ auto Renderer::OnShutdown() noexcept -> void
   }
   shutdown_called_ = true;
 
+  auto published_intent_ids = std::vector<ViewId> {};
+  {
+    std::shared_lock state_lock(view_state_mutex_);
+    published_intent_ids.reserve(published_runtime_views_by_intent_.size());
+    for (const auto& [intent_view_id, _] : published_runtime_views_by_intent_) {
+      published_intent_ids.push_back(intent_view_id);
+    }
+  }
+  for (const auto intent_view_id : published_intent_ids) {
+    RemovePublishedRuntimeView(intent_view_id);
+  }
+
   ResetPublicationState();
   scene_renderer_.reset();
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
+  view_const_manager_.reset();
+  render_context_pool_.reset();
   gpu_timeline_profiler_.reset();
   compositing_pass_.reset();
   compositing_pass_config_.reset();
+  inline_transfers_.reset();
+  inline_staging_provider_.reset();
+  upload_staging_provider_.reset();
+  uploader_.reset();
   render_graphs_.clear();
   resolved_views_.clear();
   view_ready_states_.clear();
@@ -364,6 +394,12 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       observer_ptr { &GetInlineTransfersCoordinator() },
       "SceneTextureBindings");
   }
+  if (!state.draw_frame_bindings_publisher) {
+    state.draw_frame_bindings_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<DrawFrameBindings>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() }, "DrawFrameBindings");
+  }
   if (!state.view_frame_bindings_publisher) {
     state.view_frame_bindings_publisher = std::make_unique<
       internal::PerViewStructuredPublisher<ViewFrameBindings>>(
@@ -383,9 +419,58 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   }
 
   state.scene_texture_bindings_publisher->OnFrameStart(sequence, slot);
+  state.draw_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.prepared_frame_sequence = sequence;
   state.prepared_frame_slot = slot;
+}
+
+auto Renderer::RefreshCurrentViewFrameBindings(
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+{
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    return;
+  }
+  auto gfx = GetGraphics();
+  if (gfx == nullptr) {
+    return;
+  }
+
+  BeginPublicationFrame(
+    *gfx, render_context.frame_sequence, render_context.frame_slot);
+  auto& publication_state = EnsurePublicationState(*gfx);
+
+  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
+  const auto scene_texture_frame_slot
+    = publication_state.scene_texture_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetSceneTextureBindings());
+  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+
+  const auto view_frame_bindings_slot
+    = publication_state.view_frame_bindings_publisher->Publish(
+      render_context.current_view.view_id, view_bindings);
+  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+    view_bindings, view_frame_bindings_slot);
+
+  EnsureViewConstantsManager(*gfx);
+  view_const_manager_->OnFrameStart(render_context.frame_slot);
+  if (render_context.current_view.resolved_view != nullptr) {
+    UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
+  }
+  view_const_cpu_
+    .SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
+    .SetFrameSlot(render_context.frame_slot, ViewConstants::kRenderer)
+    .SetFrameSequenceNumber(
+      render_context.frame_sequence, ViewConstants::kRenderer)
+    .SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot { view_frame_bindings_slot },
+      ViewConstants::kRenderer);
+
+  const auto snapshot = view_const_cpu_.GetSnapshot();
+  const auto buffer_info = view_const_manager_->WriteViewConstants(
+    render_context.current_view.view_id, &snapshot, sizeof(snapshot));
+  render_context.view_constants = buffer_info.buffer;
 }
 
 auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
@@ -515,6 +600,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
   auto gfx = GetGraphics();
   CHECK_F(static_cast<bool>(gfx), "Graphics required for compositing");
+  auto& scene_renderer = EnsureSceneRenderer();
 
   if (!compositing_pass_) {
     compositing_pass_config_
@@ -561,6 +647,34 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     comp_context.frame_slot = frame_slot_;
     comp_context.frame_sequence = frame::SequenceNumber { frame_seq_num_ };
 
+    const auto resolve_composition_source
+      = [&](const ViewId view_id) -> std::shared_ptr<graphics::Texture> {
+      if (view_id == scene_renderer.GetPublishedViewId()) {
+        const auto& resolved_scene_color
+          = scene_renderer.GetResolvedSceneColorTexture();
+        if (resolved_scene_color) {
+          DLOG_F(1,
+            "Vortex compositing source for view {}: '{}' (resolved scene-color "
+            "artifact)",
+            view_id.get(), resolved_scene_color->GetDescriptor().debug_name);
+          return resolved_scene_color;
+        }
+        LOG_F(ERROR,
+          "Vortex compositing source for published view {} is missing the "
+          "resolved scene-color artifact",
+          view_id.get());
+        return {};
+      }
+      auto source = ResolveViewOutputTexture(*context, view_id);
+      if (source) {
+        DLOG_F(1,
+          "Vortex compositing source for view {}: '{}' (published composite "
+          "source)",
+          view_id.get(), source->GetDescriptor().debug_name);
+      }
+      return source;
+    };
+
     for (const auto& task : payload.tasks) {
       graphics::GpuEventScope task_scope(recorder, "Vortex.CompositingTask",
         profiling::ProfileGranularity::kTelemetry,
@@ -570,8 +684,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
       switch (task.type) {
       case CompositingTaskType::kCopy: {
-        auto source
-          = ResolveViewOutputTexture(*context, task.copy.source_view_id);
+        auto source = resolve_composition_source(task.copy.source_view_id);
         if (!source) {
           continue;
         }
@@ -592,8 +705,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         break;
       }
       case CompositingTaskType::kBlend: {
-        auto source
-          = ResolveViewOutputTexture(*context, task.blend.source_view_id);
+        auto source = resolve_composition_source(task.blend.source_view_id);
         if (!source) {
           continue;
         }
@@ -665,6 +777,12 @@ auto Renderer::RegisterViewRenderGraph(
   resolved_views_.insert_or_assign(view_id, view);
 }
 
+auto Renderer::RegisterResolvedView(ViewId view_id, ResolvedView view) -> void
+{
+  std::unique_lock lock(view_registration_mutex_);
+  resolved_views_.insert_or_assign(view_id, std::move(view));
+}
+
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
   const std::optional<ShadingMode> shading_mode_override) -> ViewId
@@ -706,22 +824,41 @@ auto Renderer::ResolvePublishedRuntimeViewId(
   return kInvalidViewId;
 }
 
-auto Renderer::RemovePublishedRuntimeView(
-  engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
+auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
+  -> ViewId
 {
   if (intent_view_id == kInvalidViewId) {
+    return kInvalidViewId;
+  }
+
+  std::unique_lock state_lock(view_state_mutex_);
+  if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
+    it != published_runtime_views_by_intent_.end()) {
+    const auto published_view_id = it->second.published_view_id;
+    published_runtime_views_by_intent_.erase(it);
+    return published_view_id;
+  }
+
+  return kInvalidViewId;
+}
+
+auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
+{
+  const auto published_view_id = DetachPublishedRuntimeViewState(intent_view_id);
+  if (published_view_id == kInvalidViewId) {
     return;
   }
 
-  ViewId published_view_id { kInvalidViewId };
-  {
-    std::unique_lock state_lock(view_state_mutex_);
-    if (const auto it = published_runtime_views_by_intent_.find(intent_view_id);
-      it != published_runtime_views_by_intent_.end()) {
-      published_view_id = it->second.published_view_id;
-      published_runtime_views_by_intent_.erase(it);
-    }
+  UnregisterViewRenderGraph(published_view_id);
+  if (view_const_manager_) {
+    view_const_manager_->RemoveView(published_view_id);
   }
+}
+
+auto Renderer::RemovePublishedRuntimeView(
+  engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
+{
+  const auto published_view_id = DetachPublishedRuntimeViewState(intent_view_id);
 
   if (published_view_id == kInvalidViewId) {
     return;
@@ -838,6 +975,18 @@ auto Renderer::GetInlineTransfersCoordinator()
   CHECK_NOTNULL_F(inline_transfers_.get(),
     "Renderer inline transfers coordinator is unavailable");
   return *inline_transfers_;
+}
+
+auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
+{
+  CHECK_NOTNULL_F(uploader_.get(), "Renderer upload coordinator is unavailable");
+  return *uploader_;
+}
+
+auto Renderer::GetAssetLoader() const noexcept
+  -> observer_ptr<content::IAssetLoader>
+{
+  return engine_ != nullptr ? engine_->GetAssetLoader() : nullptr;
 }
 
 auto Renderer::EnsureViewConstantsManager(Graphics& gfx) -> void
@@ -1092,8 +1241,9 @@ auto Renderer::DispatchSceneRendererRender(
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, false);
-  scene_renderer.OnRender(render_context);
+  scene_renderer.PrimePreparedView(render_context);
 
+  auto view_bindings = ViewFrameBindings {};
   if (render_context.current_view.view_id == kInvalidViewId) {
     scene_renderer.InvalidatePublishedViewFrameBindings();
     view_const_cpu_.SetBindlessViewFrameBindingsSlot(
@@ -1103,11 +1253,64 @@ auto Renderer::DispatchSceneRendererRender(
       *gfx, context->GetFrameSequenceNumber(), context->GetFrameSlot());
     auto& publication_state = EnsurePublicationState(*gfx);
 
+    if (const auto prepared_frame = render_context.current_view.prepared_frame;
+      prepared_frame != nullptr) {
+      auto draw_bindings = DrawFrameBindings {
+        .draw_metadata_slot = BindlessDrawMetadataSlot {
+          prepared_frame->bindless_draw_metadata_slot },
+        .transforms_slot = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
+        .normal_matrices_slot = BindlessNormalsSlot {
+          prepared_frame->bindless_normals_slot },
+        .material_shading_constants_slot
+        = BindlessMaterialShadingConstantsSlot {
+            prepared_frame->bindless_material_shading_slot },
+        .instance_data_slot = BindlessInstanceDataSlot {
+          prepared_frame->bindless_instance_data_slot },
+      };
+      view_bindings.draw_frame_slot
+        = publication_state.draw_frame_bindings_publisher->Publish(
+          render_context.current_view.view_id, draw_bindings);
+    }
+
+    const auto view_frame_bindings_slot
+      = publication_state.view_frame_bindings_publisher->Publish(
+        render_context.current_view.view_id, view_bindings);
+    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+      view_bindings, view_frame_bindings_slot);
+
+    EnsureViewConstantsManager(*gfx);
+    view_const_manager_->OnFrameStart(frame_slot_);
+    if (render_context.current_view.resolved_view != nullptr) {
+      UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
+    }
+    view_const_cpu_
+      .SetTimeSeconds(last_frame_dt_seconds_, ViewConstants::kRenderer)
+      .SetFrameSlot(frame_slot_, ViewConstants::kRenderer)
+      .SetFrameSequenceNumber(
+        frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer)
+      .SetBindlessViewFrameBindingsSlot(
+        BindlessViewFrameBindingsSlot { view_frame_bindings_slot },
+        ViewConstants::kRenderer);
+
+    const auto snapshot = view_const_cpu_.GetSnapshot();
+    const auto buffer_info = view_const_manager_->WriteViewConstants(
+      render_context.current_view.view_id, &snapshot, sizeof(snapshot));
+    render_context.view_constants = buffer_info.buffer;
+  }
+
+  scene_renderer.OnRender(render_context);
+
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    scene_renderer.InvalidatePublishedViewFrameBindings();
+    view_const_cpu_.SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
+  } else if (auto gfx = GetGraphics(); gfx != nullptr) {
+    auto& publication_state = EnsurePublicationState(*gfx);
+
     const auto scene_texture_frame_slot
       = publication_state.scene_texture_bindings_publisher->Publish(
         render_context.current_view.view_id,
         scene_renderer.GetSceneTextureBindings());
-    auto view_bindings = ViewFrameBindings {};
     view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
 
     const auto view_frame_bindings_slot
