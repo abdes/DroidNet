@@ -58,12 +58,27 @@ auto CommandList::TakeSubmitQueueActions() -> std::vector<SubmitQueueAction>
   return actions;
 }
 
+auto CommandList::SetRecordedResourceStates(
+  std::vector<RecordedResourceState> states) -> void
+{
+  recorded_resource_states_ = std::move(states);
+}
+
+auto CommandList::TakeRecordedResourceStates()
+  -> std::vector<RecordedResourceState>
+{
+  auto states = std::move(recorded_resource_states_);
+  recorded_resource_states_.clear();
+  return states;
+}
+
 void CommandList::OnBeginRecording()
 {
   if (state_ != State::kFree) {
     throw std::runtime_error("CommandList is not in a Free state");
   }
   submit_queue_actions_.clear();
+  recorded_resource_states_.clear();
   state_ = State::kRecording;
 }
 
@@ -95,6 +110,7 @@ void CommandList::OnExecuted()
 void CommandList::OnFailed() noexcept
 {
   submit_queue_actions_.clear();
+  recorded_resource_states_.clear();
   state_ = State::kFree;
   DLOG_F(WARNING, "'{}' errored, and its state will be force reset to 'Free'",
     GetName());

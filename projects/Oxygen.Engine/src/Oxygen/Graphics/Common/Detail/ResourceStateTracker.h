@@ -58,6 +58,11 @@ namespace oxygen::graphics::detail {
 */
 class ResourceStateTracker {
 public:
+  struct TrackedResourceState {
+    NativeResource resource {};
+    ResourceStates state { ResourceStates::kUnknown };
+  };
+
   ResourceStateTracker() = default;
   ~ResourceStateTracker() = default;
 
@@ -76,35 +81,16 @@ public:
     const ResourceStates initial_state, const bool keep_initial_state = false)
     -> void
   {
-    NativeResource native_object = resource.GetNativeResource();
-    auto it = tracking_.find(native_object);
-    if (it != tracking_.end()) {
-      // Resource is already being tracked. Check for incompatibility.
-      auto& existing_info = it->second;
-      std::visit(
-        [&](const auto& info) {
-          if (info.initial_state != initial_state
-            || info.keep_initial_state != keep_initial_state) {
-            throw std::runtime_error(
-              "Cannot begin tracking resource with incompatible parameters: "
-              "already tracked with different initial_state or "
-              "keep_initial_state");
-          }
-        },
-        existing_info);
-      // Parameters match; this is idempotent, so just return
-      return;
-    }
+    TrackResourceState(
+      resource, initial_state, initial_state, keep_initial_state, false);
+  }
 
-    if constexpr (IsBuffer<T>) {
-      tracking_.emplace(
-        native_object, BufferTrackingInfo(initial_state, keep_initial_state));
-    } else if constexpr (IsTexture<T>) {
-      tracking_.emplace(
-        native_object, TextureTrackingInfo(initial_state, keep_initial_state));
-    } else {
-      throw std::runtime_error("Unsupported resource type");
-    }
+  template <Trackable T>
+  auto AdoptResourceState(const T& resource, const ResourceStates known_state,
+    const bool keep_initial_state = false) -> void
+  {
+    TrackResourceState(
+      resource, known_state, known_state, keep_initial_state, true);
   }
 
   template <Trackable T>
@@ -170,6 +156,9 @@ public:
 
   OXGN_GFX_API auto OnCommandListClosed() -> void;
 
+  OXGN_GFX_NDAPI auto SnapshotTrackedStates() const
+    -> std::vector<TrackedResourceState>;
+
 private:
   struct BasicTrackingInfo {
     ResourceStates initial_state { ResourceStates::kUnknown };
@@ -228,6 +217,45 @@ private:
   // The barrier descriptor - a variant that can hold any type of barrier
   // description
   using TrackingInfo = std::variant<BufferTrackingInfo, TextureTrackingInfo>;
+
+  template <Trackable T>
+  auto TrackResourceState(const T& resource, const ResourceStates initial_state,
+    const ResourceStates current_state, const bool keep_initial_state,
+    const bool adopted) -> void
+  {
+    const NativeResource native_object = resource.GetNativeResource();
+    if (const auto it = tracking_.find(native_object); it != tracking_.end()) {
+      auto& existing_info = it->second;
+      std::visit(
+        [&](const auto& info) {
+          const auto expected_state
+            = adopted ? info.current_state : info.initial_state;
+          if (expected_state != current_state
+            || info.keep_initial_state != keep_initial_state) {
+            throw std::runtime_error(adopted
+                ? "Cannot adopt tracked resource state with incompatible "
+                  "parameters"
+                : "Cannot begin tracking resource with incompatible "
+                  "parameters: already tracked with different initial_state or "
+                  "keep_initial_state");
+          }
+        },
+        existing_info);
+      return;
+    }
+
+    if constexpr (IsBuffer<T>) {
+      auto info = BufferTrackingInfo(initial_state, keep_initial_state);
+      info.current_state = current_state;
+      tracking_.emplace(native_object, std::move(info));
+    } else if constexpr (IsTexture<T>) {
+      auto info = TextureTrackingInfo(initial_state, keep_initial_state);
+      info.current_state = current_state;
+      tracking_.emplace(native_object, std::move(info));
+    } else {
+      throw std::runtime_error("Unsupported resource type");
+    }
+  }
 
   OXGN_GFX_API auto GetTrackingInfo(const NativeResource& resource)
     -> TrackingInfo&;

@@ -49,9 +49,13 @@ public:
 
 private:
   FramebufferDesc desc_;
+  FramebufferInfo framebuffer_info_;
   std::weak_ptr<Graphics> gfx_weak_;
 
-  StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets> textures_ {};
+  StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets + 1> textures_ {};
+  StaticVector<bool, kMaxRenderTargets + 1> owns_resource_registration_ {};
+  StaticVector<bool, kMaxRenderTargets + 1> owns_view_registration_ {};
+  StaticVector<NativeView, kMaxRenderTargets + 1> registered_views_ {};
   StaticVector<NativeView, kMaxRenderTargets> rtvs_ {};
   NativeView dsv_ {};
 

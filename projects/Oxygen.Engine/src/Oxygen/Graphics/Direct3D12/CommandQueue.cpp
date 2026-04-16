@@ -27,6 +27,20 @@ using oxygen::windows::ThrowOnFailed;
 namespace {
 
 using oxygen::graphics::d3d12::CommandList;
+using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
+
+auto ToKnownStates(
+  std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
+  -> std::vector<QueueStateEntry>
+{
+  auto known_states = std::vector<QueueStateEntry> {};
+  known_states.reserve(states.size());
+  for (const auto& state : states) {
+    known_states.push_back(
+      { .resource = state.resource, .state = state.state });
+  }
+  return known_states;
+}
 } // namespace
 
 CommandQueue::CommandQueue(
@@ -313,13 +327,19 @@ void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
       SignalImmediate(action.value);
     }
   }
+
+  const auto known_states
+    = ToKnownStates(command_list->TakeRecordedResourceStates());
+  AdoptKnownResourceStates(known_states);
 }
 
 void CommandQueue::Submit(
   const std::span<std::shared_ptr<graphics::CommandList>> command_lists)
 {
   std::vector<ID3D12CommandList*> d3d12_lists;
+  std::vector<std::shared_ptr<graphics::CommandList>> pending_lists;
   d3d12_lists.reserve(command_lists.size());
+  pending_lists.reserve(command_lists.size());
   for (const auto& cl : command_lists) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* d3d12_command_list = static_cast<CommandList*>(cl.get());
@@ -327,7 +347,13 @@ void CommandQueue::Submit(
       if (!d3d12_lists.empty()) {
         command_queue_->ExecuteCommandLists(
           static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
+        for (auto& pending : pending_lists) {
+          const auto known_states
+            = ToKnownStates(pending->TakeRecordedResourceStates());
+          AdoptKnownResourceStates(known_states);
+        }
         d3d12_lists.clear();
+        pending_lists.clear();
       }
       const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
       for (const auto& action : submit_actions) {
@@ -347,13 +373,21 @@ void CommandQueue::Submit(
           SignalImmediate(action.value);
         }
       }
+      const auto known_states = ToKnownStates(cl->TakeRecordedResourceStates());
+      AdoptKnownResourceStates(known_states);
       continue;
     }
     d3d12_lists.push_back(d3d12_command_list->GetCommandList());
+    pending_lists.push_back(cl);
   }
   if (!d3d12_lists.empty()) {
     command_queue_->ExecuteCommandLists(
       static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
+    for (auto& pending : pending_lists) {
+      const auto known_states
+        = ToKnownStates(pending->TakeRecordedResourceStates());
+      AdoptKnownResourceStates(known_states);
+    }
   }
 }
 
