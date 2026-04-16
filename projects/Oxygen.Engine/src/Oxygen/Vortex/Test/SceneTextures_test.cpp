@@ -76,6 +76,7 @@ TEST(SceneTexturesContractTest, AllocatesTheExactPhase2Subset)
   ASSERT_NE(scene_textures.GetVelocity(), nullptr);
   ExpectTexture(*scene_textures.GetVelocity(), Format::kRG16Float, config.extent,
     "Velocity");
+  EXPECT_TRUE(scene_textures.GetVelocity()->GetDescriptor().is_uav);
   EXPECT_EQ(scene_textures.GetCustomDepth(), nullptr);
 
   const auto stencil = scene_textures.GetStencil();

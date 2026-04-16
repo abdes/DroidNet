@@ -8,44 +8,72 @@
 
 ### 1.1 What This Covers
 
-`BasePassModule` — the stage-9 owner responsible for GBuffer MRT writes,
-emissive accumulation into SceneColor, velocity completion for skinned/WPO
-geometry, and the material shader contract that all Vortex material shaders
-must satisfy. Phase 3 implements deferred mode only; forward mode is a
-future extension.
+`BasePassModule` is the stage-9 owner responsible for:
+
+- masked/opaque deferred base-pass drawing
+- GBuffer MRT writes
+- emissive accumulation into `SceneColor`
+- the active desktop deferred opaque-velocity policy
+- truthful masked/deformed/skinned/WPO-capable velocity production
+
+Phase 3 implements deferred mode only. Forward mode remains a future extension.
 
 ### 1.2 Stage Position
 
 | Position | Stage | Notes |
 | -------- | ----- | ----- |
-| Predecessor | Stage 3 (DepthPrepass) — depth + partial velocity written | |
+| Predecessor | Stage 3 (DepthPrepass) — depth-only under the active opaque-velocity policy | |
 | Predecessors (reserved) | Stages 4-8 (occlusion, light grid, shadows — stubs) | |
-| **This** | **Stage 9 — BasePass** | GBuffer MRT + velocity completion |
+| **This** | **Stage 9 — BasePass** | GBuffer MRT + opaque velocity production |
 | Successor | Stage 10 (RebuildSceneTextures) — state transition | |
 
 ### 1.3 Architectural Authority
 
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage table, row 9
+- [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — UE family mapping
+- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — runtime stage table
 - [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
-- [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — velocity distribution (stages 3, 9, 19)
-- [DESIGN.md §6](../DESIGN.md) — BasePass design (GBuffer layout, config)
-- UE5 reference: `RenderBasePass` family (~3.35 k lines)
+- [ARCHITECTURE.md §7.3.3](../ARCHITECTURE.md) — setup milestones
+- [PLAN.md §5](../PLAN.md) — Phase 3 work items and exit gate
+- [sceneprep-refactor.md](sceneprep-refactor.md) — prepared-scene publication contract
+- UE5 reference: `RenderBasePass`, `BasePassVertexShader.usf`, `BasePassPixelShader.usf`
 
-### 1.4 Required Invariants For This Module
+### 1.4 Physics Boundary
+
+This LLD is about renderer-owned motion vectors, not simulation-owned physics
+velocity.
+
+| Concern | Owner | Meaning |
+| ------- | ----- | ------- |
+| `SceneVelocity` | Vortex renderer | Screen-space motion-vector texture used by temporal rendering, post processing, and capture validation |
+| linear/angular body velocity | `src/Oxygen/Physics` + `src/Oxygen/PhysicsModule` | Simulation-space rigid/character state and solver inputs/outputs |
+
+Rules:
+
+1. `BasePassModule` must never call Physics-domain APIs directly.
+2. Physics authority reaches Vortex only through scene/animation/deformation
+   state that has already been reconciled before rendering.
+3. Vortex history caches store render-consumable transforms/deformation inputs,
+   not physics handles or backend-native physics state.
+4. `SceneVelocity` must never be described as a physics product in docs or
+   code comments.
+
+### 1.5 Required Invariants
 
 This module must preserve the following invariants from
 [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
 
 - `SceneRenderer` owns per-view iteration; `BasePassModule::Execute(...)`
   consumes the current view only
-- masked opaque materials remain part of the deferred opaque contract and write
-  GBuffers in this stage
+- masked opaque materials remain part of the deferred opaque contract and must
+  alpha-clip truthfully before GBuffer/velocity writes
 - stage 10 remains the canonical `RebuildWithGBuffers()` plus routing-refresh
-  boundary; BasePass must not invent a narrower alternate API
-- velocity completion here is the stage-9 contribution within the distributed
-  3/9/19 ownership model
+  boundary
+- the active desktop deferred opaque-velocity policy is stage-9 base-pass
+  velocity
+- no bool-only completion claim is allowed; velocity publication must be
+  output-backed
 
-## 2. Interface Contracts
+## 2. Ownership Model
 
 ### 2.1 File Placement
 
@@ -62,293 +90,360 @@ src/Oxygen/Vortex/
             └── BasePassMeshProcessor.cpp
 ```
 
-### 2.2 Public API
+### 2.2 Cross-Frame Owners
+
+| State | Owner | Why |
+| ----- | ----- | --- |
+| previous rigid transform history | renderer-owned motion-history cache keyed by `scene::NodeHandle` | identity-stable across frames; not allocation-order coupled |
+| previous deformation history | renderer-owned deformation-history cache using instance identity for current producer state and LOD-aware render identity for publications/history | authoritative previous skinned/morph/WPO-capable deformation state with explicit invalidation, LOD-aware publication, and stale trimming |
+| previous view / projection / stable projection / jitter | `Renderer` per published runtime view identity | same lifetime as published runtime views |
+| current/previous transform GPU arrays | `TransformUploader`-class publication helpers | upload layer only, not authority owner |
+| current/previous deformation GPU arrays | deformation-history publication helpers fed by the renderer-owned deformation cache | upload layer only; not the lifetime owner |
+| stage-local PSO/framebuffer state | `BasePassModule` | stage-local cached runtime state |
+
+### 2.4 History Lifetime Rules
+
+Required ownership rules:
+
+1. `PrimitiveRigidMotionHistoryCache`
+   - key: `NodeHandle`
+   - stores current/previous rigid transforms plus frame-seen/update stamps
+2. `PrimitiveDeformationHistoryCache`
+   - current-state source identity:
+     - `NodeHandle`
+     - producer family
+     - deformation contract hash
+   - renderer publication/history identity:
+     - `NodeHandle`
+     - geometry asset key
+     - LOD index
+     - submesh index
+     - producer family
+     - deformation contract hash
+   - stores current/previous deformation payload publications plus frame-seen
+     and frame-updated stamps
+
+Required invalidation rules:
+
+- rigid history invalidates on node destruction or scene change
+- deformation history invalidates on:
+  - geometry identity change
+  - skeleton topology / skinning stream layout change
+  - morph/deformation layout change
+  - material deformation contract change (including WPO contract changes)
+
+Required roll/trim rules:
+
+- current -> previous rolls once per successful frame
+- stale entries trim by seen-frame age
+- history must not be updated per view
+- one frame may legitimately materialize multiple renderer publication/history
+  identities for the same current-state source identity when active views pick
+  different LODs
+
+### 2.3 Public API Shape
+
+The runtime contract should move away from boolean seams.
 
 ```cpp
 namespace oxygen::vortex {
 
+enum class OpaqueVelocityPolicy : std::uint8_t {
+  kDisabled,
+  kBasePass,     // active Phase-3 desktop deferred policy
+  kDepthPass,    // future policy option
+  kSeparatePass, // future policy option
+};
+
+enum class OpaqueVelocityCoverage : std::uint8_t {
+  kNone,
+  kOpaqueFullParity,
+};
+
 struct BasePassConfig {
-  bool write_velocity{true};        // Complete velocity for skinned/WPO
-  bool early_z_pass_done{true};     // Skip depth writes if prepass ran
+  OpaqueVelocityPolicy velocity_policy{OpaqueVelocityPolicy::kBasePass};
+  bool early_z_pass_done{true};
   ShadingMode shading_mode{ShadingMode::kDeferred};
+};
+
+struct BasePassExecutionResult {
+  bool published_base_pass_products{false};
+  bool bound_velocity_target{false};
+  uint32_t eligible_velocity_draw_count{0};
+  uint32_t emitted_velocity_draw_count{0};
+  OpaqueVelocityCoverage velocity_coverage{OpaqueVelocityCoverage::kNone};
 };
 
 class BasePassModule {
  public:
-  explicit BasePassModule(Renderer& renderer,
-                          const SceneTexturesConfig& config);
-  ~BasePassModule();
-
-  BasePassModule(const BasePassModule&) = delete;
-  auto operator=(const BasePassModule&) -> BasePassModule& = delete;
-
-  /// Stage 9 entry point. Per-view execution.
   void Execute(RenderContext& ctx, SceneTextures& scene_textures);
-
   void SetConfig(const BasePassConfig& config);
-
- private:
-  Renderer& renderer_;
-  BasePassConfig config_;
-
-  std::unique_ptr<BasePassMeshProcessor> mesh_processor_;
+  [[nodiscard]] auto GetLastResult() const -> const BasePassExecutionResult&;
 };
 
 }  // namespace oxygen::vortex
 ```
 
-### 2.3 ShadingMode Branching
+`HasCompletedVelocityForDynamicGeometry()` is not an acceptable final contract.
+
+## 3. Publication Seams Required Before Stage 9
+
+### 3.1 Prepared-Scene Inputs
+
+`PreparedSceneFrame` must publish explicit current/previous motion inputs.
+
+Required publication families:
+
+- current world transforms
+- previous world transforms
+- current normal matrices
+- current deformation data
+- previous deformation data
+- draw-metadata / partitions
+- per-draw velocity eligibility metadata
+
+Illustrative shape:
 
 ```cpp
-enum class ShadingMode : std::uint8_t {
-  kDeferred,   // GBuffer base pass (Phase 3 default and only mode)
-  kForward,    // Forward shading — future extension, not implemented
+struct PreparedSceneFrame {
+  // Existing prepared-scene arrays...
+
+  std::span<const float> current_world_matrices;
+  std::span<const float> previous_world_matrices;
+  std::span<const float> current_normal_matrices;
+
+  std::span<const std::byte> current_deformation_bytes;
+  std::span<const std::byte> previous_deformation_bytes;
+
+  ShaderVisibleIndex bindless_current_worlds_slot;
+  ShaderVisibleIndex bindless_previous_worlds_slot;
+  ShaderVisibleIndex bindless_current_normals_slot;
+  ShaderVisibleIndex bindless_current_deformation_slot;
+  ShaderVisibleIndex bindless_previous_deformation_slot;
 };
 ```
 
-Phase 3 implements the deferred path only. The forward branch remains a
-declared seam for later phases, but it is not a valid Phase 3 runtime mode and
-must not silently degrade at execution time.
+### 3.2 Draw-Binding Inputs
 
-### 2.4 Ownership and Lifetime
+`DrawFrameBindings` must carry explicit current/previous slots rather than one
+overloaded `transforms_slot`.
 
-| Owner | Owned By | Lifetime |
-| ----- | -------- | -------- |
-| `BasePassModule` | `SceneRenderer` (unique_ptr) | Same as SceneRenderer |
-| `BasePassMeshProcessor` | `BasePassModule` (unique_ptr) | Same as module |
-| PSOs (deferred GBuffer) | Renderer PSO cache | Persistent |
+Illustrative shape:
 
-## 3. GBuffer MRT Layout
+```cpp
+struct DrawFrameBindings {
+  uint draw_metadata_slot;
+  uint current_worlds_slot;
+  uint previous_worlds_slot;
+  uint current_normals_slot;
+  uint current_deformation_slot;
+  uint previous_deformation_slot;
+  uint material_shading_constants_slot;
+  uint instance_data_slot;
+};
+```
 
-### 3.1 Render Target Configuration
+### 3.3 Per-Draw Velocity Flags
+
+Velocity classification must live in draw metadata or a keyed auxiliary payload,
+not be reconstructed from `render_items[draw_index]`.
+
+Required per-draw truth:
+
+- `kOutputVelocity`
+- `kIsMasked`
+- `kHasPreviousTransform`
+- `kHasPreviousDeformation`
+- `kUsesWorldPositionOffset`
+- `kUsesPreviousWorldPositionOffset`
+- `kHasPixelAnimation`
+- `kUsesTemporalResponsiveness`
+- `kUsesMotionVectorWorldOffset`
+
+If a draw lacks the required previous-frame input for a declared producer class,
+the implementation is incomplete and must not claim parity.
+
+### 3.4 View Constants
+
+`ViewConstants` must provide current and previous view data for the whole frame.
+
+Required fields:
+
+- current view matrix
+- current projection matrix
+- current stable projection matrix
+- current inverse view-projection
+- previous view matrix
+- previous projection matrix
+- previous stable projection matrix
+- previous inverse view-projection
+- current and previous pixel jitter
+
+Required lifetime rules:
+
+- key: published runtime view identity
+- roll point: end of successful frame after scene rendering completes
+- invalidate on:
+  - first frame for the logical view
+  - logical-view recreation / republishing under a new identity
+  - resize / view-rect change
+  - camera cut
+  - projection or stable-projection discontinuity beyond the configured epsilon
+  - scene switch for the view
+- invalid previous-view history seeds previous = current and requires zero /
+  fallback camera-motion velocity for that frame
+
+## 4. GBuffer + Velocity MRT Layout
+
+### 4.1 Render Target Configuration
 
 | RT Slot | Target | Content | Format |
 | ------- | ------ | ------- | ------ |
-| SV_Target0 | GBufferNormal | Encoded world normal (octahedral) | R10G10B10A2_UNORM |
+| SV_Target0 | GBufferNormal | Encoded world normal | R10G10B10A2_UNORM |
 | SV_Target1 | GBufferMaterial | Metallic, specular, roughness, shading model ID | R8G8B8A8_UNORM |
 | SV_Target2 | GBufferBaseColor | Base color RGB, AO | R8G8B8A8_SRGB |
-| SV_Target3 | GBufferCustomData | Custom data (subsurface, cloth, etc.) | R8G8B8A8_UNORM |
+| SV_Target3 | GBufferCustomData | Custom data | R8G8B8A8_UNORM |
 | SV_Target4 | SceneColor | Emissive accumulation | R16G16B16A16_FLOAT |
+| **SV_Target5** | **Velocity** | **Encoded screen-space motion vectors** | **R16G16_FLOAT (or final engine velocity encoding target)** |
 | DS | SceneDepth | Depth/stencil | D32_FLOAT_S8X24_UINT |
 
-### 3.2 Depth Write Behavior
+Under `OpaqueVelocityPolicy::kBasePass`, stage 9 binds the velocity target as a
+real MRT. No fake “completion” path is allowed.
 
-- If `early_z_pass_done == true`: depth test enabled, depth write
-  **disabled** (reads prepass depth, does not overwrite).
-- If `early_z_pass_done == false`: depth test and write both enabled.
-  BasePass writes depth directly (fallback when prepass is disabled).
-- When `early_z_pass_done == true`, BasePass still clears the color MRT set
-  through a color-only framebuffer before issuing GBuffer draws so the
-  prepass depth survives while frame-to-frame color accumulation is prevented.
+### 4.2 Clear / State Rules
 
-### 3.3 GBufferIndex Enum
+- If `early_z_pass_done == true`: depth test enabled, depth write disabled.
+- If `early_z_pass_done == false`: depth test and depth write both enabled.
+- Stage 9 owns the velocity clear under the active base-pass velocity policy.
+- `SceneVelocity` must be `RENDER_TARGET` during stage 9 and
+  `SHADER_RESOURCE` after the pass.
 
-```cpp
-enum class GBufferIndex : std::uint8_t {
-  kNormal = 0,        // World normal (encoded)
-  kMaterial = 1,      // Metallic, specular, roughness
-  kBaseColor = 2,     // Base color
-  kCustomData = 3,    // Custom data / shading model
-  kShadowFactors = 4, // Precomputed shadow factors (reserved, Phase 7+)
-  kWorldTangent = 5,  // World tangent (reserved, Phase 7+)
-};
-```
+### 4.3 Motion-Vector-World-Offset Auxiliary Path
 
-Phase 3 uses `kNormal` through `kCustomData` (4 GBuffers).
-`kShadowFactors` and `kWorldTangent` are reserved slots.
+UE-grade parity requires an explicit auxiliary path for materials that declare
+motion-vector world offset semantics.
 
-## 4. Data Flow and Dependencies
+Contract:
 
-### 4.1 Inputs
+- owner: `BasePassModule` as part of the stage-9 opaque velocity family
+- transient resource owner: stage-local transient texture
+  `VelocityMotionVectorWorldOffset`
+- shader family owner: stage-9 base-pass velocity family
+- publication point: only after the auxiliary merge/update step completes
 
-| Source | Data | Purpose |
-| ------ | ---- | ------- |
-| InitViewsModule (stage 2) | Current-view `PreparedSceneFrame` payload | Determines what to draw without scene re-traversal |
-| DepthPrepassModule (stage 3) | SceneDepth (read), completeness state | Early-Z optimization |
-| SceneTextures | GBuffer RTVs, SceneColor RTV, SceneDepth DSV | Render targets |
-| GeometryUploader | Vertex/index buffer bindings | Mesh data |
-| Material system | Per-material bindless resource indices | Texture/parameter bindings |
+Stage-9 internal order:
 
-### 4.2 Outputs
+1. primary GBuffer + velocity MRT pass
+2. optional motion-vector-world-offset auxiliary pass for the flagged subset
+3. merge/update step producing final `SceneVelocity`
+4. only then may stage 9 report velocity publication complete
 
-| Product | Target | Notes |
-| ------- | ------ | ----- |
-| GBufferNormal/Material/BaseColor/CustomData | SceneTextures GBuffer textures | Full opaque scene material data |
-| SceneColor | SceneTextures SceneColor | Emissive accumulation (additive) |
-| Velocity (completed) | SceneTextures Velocity | Skinned/WPO geometry contributions added |
+## 5. Execution Contract
 
-### 4.3 SceneTextures State Transitions
+### 5.1 BasePassMeshProcessor
 
-```text
-Before stage 9:
-  SceneDepth   = valid (from stage 3)
-  GBufferNormal/Material/BaseColor/CustomData = allocated, cleared
-  SceneColor   = allocated, cleared
-  Velocity     = partially written (static only, from stage 3)
+`BasePassMeshProcessor` consumes published draw metadata and emits stage-9 draw
+commands without re-traversing the scene.
 
-After stage 9:
-  SceneDepth   = unchanged (read-only, or written if no prepass)
-  GBufferNormal/Material/BaseColor/CustomData = written (full opaque scene)
-  SceneColor   = written (emissive contribution)
-  Velocity     = complete (static + skinned/WPO)
+Required grouping dimensions:
 
-After stage 10 (inline):
-  SetupMode flags updated: GBUFFERS, SCENE_COLOR set
-  GBuffers now bindable for downstream reads (deferred lighting)
-```
+- material / shader family
+- geometry / LOD
+- masked vs opaque permutation
+- velocity-capable vs non-velocity-capable draw classification
 
-### 4.4 Execution Flow
+### 5.2 Stage Execution Flow
 
 ```text
 BasePassModule::Execute(ctx, scene_textures)
-  │
-  ├─ Read current view prepared-scene payload from ctx
-  │     │
-  │     ├─ Set render targets:
-  │     │     RTV[0] = GBufferNormal
-  │     │     RTV[1] = GBufferMaterial
-  │     │     RTV[2] = GBufferBaseColor
-  │     │     RTV[3] = GBufferCustomData
-  │     │     RTV[4] = SceneColor
-  │     │     DSV    = SceneDepth (DEPTH_READ if early_z, DEPTH_WRITE otherwise)
-  │     │
-  │     ├─ mesh_processor_->BuildDrawCommands(
-  │     │     current_view_prepared_scene)
-  │     │     Consume published prepared-scene partitions / items
-  │     │     Filter/refine: opaque + masked deferred participants only
-  │     │     Group: by material / mesh without rebuilding coarse routing
-  │     │
-  │     ├─ for each draw command:
-  │     │     ├─ Bind GBuffer PSO (material-specific variant)
-  │     │     ├─ Bind material resources (textures, constants)
-  │     │     ├─ Bind vertex/index buffers from GeometryUploader
-  │     │     └─ DrawIndexedInstanced(...)
-  │     │
-  │     └─ if config_.write_velocity:
-  │           └─ Velocity completion pass for skinned/WPO geometry
-  │              (writes to Velocity UAV for dynamic primitives)
-  │
-  └─ [stage 10 follows immediately in SceneRenderer]
+  ├─ validate deferred mode + current-view prepared-scene payload
+  ├─ build draw commands from PreparedSceneFrame + draw metadata
+  ├─ bind framebuffer with GBufferNormal/Material/BaseColor/CustomData
+  │  + SceneColor + Velocity + SceneDepth
+  ├─ clear color MRTs and Velocity (depth preserved if early-Z complete)
+  ├─ for each draw:
+  │    ├─ choose opaque or ALPHA_TEST permutation
+  │    ├─ bind material resources + current/previous draw bindings
+  │    ├─ vertex shader computes:
+  │    │    - current position
+  │    │    - previous position from previous rigid/deformation inputs
+  │    │    - current/previous WPO when material requires it
+  │    ├─ pixel shader:
+  │    │    - alpha-clips first for masked materials
+  │    │    - writes GBuffer + SceneColor
+  │    │    - writes encoded velocity when draw flags require it
+  │    └─ draw
+  ├─ if any draw/material requires motion-vector world offset:
+  │    ├─ run stage-9 auxiliary offset pass for the flagged subset
+  │    └─ merge/update the auxiliary result into final SceneVelocity
+  ├─ transition outputs to final states
+  └─ publish BasePassExecutionResult
 ```
 
-## 5. Material Shader Contract
+### 5.3 Previous-Frame Producer Rules
 
-### 5.1 HLSL Output Structure
+To claim UE5.7-grade parity for opaque velocity, stage 9 must support:
 
-All Vortex material shaders in deferred mode **must** output `GBufferOutput`:
+1. rigid transform delta
+2. skinned deformation delta
+3. morph/deformation delta
+4. current and previous WPO
+5. masked alpha-clip before velocity write
+6. material temporal-responsiveness / pixel-animation velocity encoding if the
+   material contract exposes those semantics
+
+If any of these producer classes are missing, docs/tests must keep the item
+open. This LLD does not authorize scope-narrowing by omission.
+
+## 6. Shader Contract
+
+### 6.1 Vertex Shader Responsibilities
+
+The stage-9 vertex shader family must be able to compute both current and
+previous clip-space positions.
+
+Required inputs:
+
+- current rigid transform
+- previous rigid transform
+- current deformation payload
+- previous deformation payload
+- current and previous view/projection data
+- material WPO evaluation hooks for current and previous positions
+
+### 6.2 Pixel Shader Responsibilities
+
+The pixel shader must:
+
+1. perform masked alpha-clip before writing any MRT output
+2. write the canonical `GBufferOutput`
+3. write encoded velocity for eligible draws
+4. preserve material-side velocity metadata such as temporal responsiveness /
+   pixel-animation flags when the material contract exposes them
+5. participate in the motion-vector-world-offset auxiliary path when the
+   material contract requires it
+
+Illustrative output shape:
 
 ```hlsl
-struct GBufferOutput {
-  float4 GBufferNormal : SV_Target0;  // encoded normal
-  float4 GBufferMaterial : SV_Target1;  // metallic, specular, roughness, shading model
-  float4 GBufferBaseColor : SV_Target2;  // base color, AO
-  float4 GBufferCustomData : SV_Target3;  // custom data
-  float4 Emissive : SV_Target4;  // emissive → SceneColor
+struct BasePassOutput {
+  float4 gbuffer_normal      : SV_Target0;
+  float4 gbuffer_material    : SV_Target1;
+  float4 gbuffer_base_color  : SV_Target2;
+  float4 gbuffer_custom_data : SV_Target3;
+  float4 emissive_scene_color: SV_Target4;
+  float2 velocity            : SV_Target5;
 };
 ```
-
-### 5.2 Material Pixel Shader Template
-
-```hlsl
-// Stages/BasePass/BasePassGBuffer.hlsl
-
-#include "../../Materials/GBufferMaterialOutput.hlsli"
-#include "../../Contracts/ViewFrameBindings.hlsli"
-
-struct BasePassVSOutput {
-  float4 position     : SV_Position;
-  float3 worldNormal  : NORMAL;
-  float2 uv           : TEXCOORD0;
-  float3 worldPos     : TEXCOORD1;
-  uint   instanceId   : INSTANCE_ID;
-};
-
-GBufferOutput BasePassGBufferPS(BasePassVSOutput input) {
-  // Sample material textures via bindless handles
-  MaterialSurface surface;
-  surface.worldNormal = normalize(input.worldNormal);
-  surface.baseColor   = SampleBaseColor(input.uv, input.instanceId);
-  surface.metallic    = SampleMetallic(input.uv, input.instanceId);
-  surface.specular    = 0.5;  // default specular
-  surface.roughness   = SampleRoughness(input.uv, input.instanceId);
-  surface.ao          = SampleAO(input.uv, input.instanceId);
-  surface.emissive    = SampleEmissive(input.uv, input.instanceId);
-  surface.shadingModel = SHADING_MODEL_DEFAULT_LIT;
-  surface.customData  = float4(0, 0, 0, 0);
-
-  return PackGBufferOutput(surface);
-}
-```
-
-### 5.3 Vertex Shader
-
-```hlsl
-BasePassVSOutput BasePassGBufferVS(BasePassVSInput input) {
-  BasePassVSOutput output;
-  float4x4 worldMatrix = LoadInstanceTransform(input.instanceId);
-  float4 worldPos = mul(worldMatrix, float4(input.position, 1.0));
-  output.position = mul(ViewProjection, worldPos);
-  output.worldNormal = mul((float3x3)worldMatrix, input.normal);
-  output.uv = input.uv;
-  output.worldPos = worldPos.xyz;
-  output.instanceId = input.instanceId;
-  return output;
-}
-```
-
-### 5.4 Catalog Registration
-
-| Entrypoint | Profile | Permutations |
-| ---------- | ------- | ------------ |
-| `VortexBasePassVS` | vs_6_0 | None (Phase 3) |
-| `VortexBasePassPS` | ps_6_0 | `SHADING_MODE_FORWARD` (future) |
-
-## 6. Mesh Processor
-
-### 6.1 BasePassMeshProcessor
-
-```cpp
-namespace oxygen::vortex {
-
-class BasePassMeshProcessor {
- public:
-  explicit BasePassMeshProcessor(Renderer& renderer);
-
-  /// Build GBuffer draw commands from the current view's prepared-scene
-  /// payload. Groups by material to minimize PSO/binding state changes.
-  void BuildDrawCommands(
-      const PreparedSceneFrame& prepared_scene,
-      ShadingMode mode);
-
-  [[nodiscard]] auto GetDrawCommands() const
-      -> std::span<const DrawCommand>;
-
- private:
-  Renderer& renderer_;
-  std::vector<DrawCommand> draw_commands_;
-};
-
-}  // namespace oxygen::vortex
-```
-
-### 6.2 Material Grouping Strategy
-
-1. Start from the published prepared-scene routing for the current view.
-2. Refine / group by material index (primary) then by mesh (secondary, for
-   instancing).
-3. Within each material group, emit one PSO bind + material resource bind,
-   then N draw calls for N meshes using that material.
-4. Instanced draws where mesh + material match across multiple instances.
 
 ## 7. Stage Integration
 
 ### 7.1 Dispatch Contract
 
-SceneRenderer calls `BasePassModule::Execute(ctx, scene_textures)` at
-stage 9.
+SceneRenderer calls `BasePassModule::Execute(ctx, scene_textures)` at stage 9.
 
-Immediately after stage 9, SceneRenderer executes the inline stage 10
-SceneTextures rebuild boundary:
+Immediately after stage 9, `SceneRenderer` performs the inline stage-10 rebuild
+boundary:
 
 ```cpp
 scene_textures_.RebuildWithGBuffers();
@@ -356,96 +451,65 @@ RefreshSceneTextureBindings();
 renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
 ```
 
-This is the canonical product-setup transition for deferred lighting. It is not
-just a resource-state flip; it is the point where GBuffers become readable and
-the shared scene-texture routing metadata is refreshed. On the active scene
-view, Renderer Core immediately republishes the updated `SceneTextureBindings`
-and `ViewFrameBindings` after stage 10 so stage 12 consumes rebuilt routing
-instead of stale pre-base-pass slots.
+`SceneVelocity` may be published only from the output-backed stage-9 result.
+That result becomes authoritative only after the optional
+motion-vector-world-offset auxiliary merge/update step completes.
 
 ### 7.2 Null-Safe Behavior
 
-When `base_pass_` is null: no GBuffer writes occur, SceneColor has no
-emissive accumulation, deferred lighting has nothing to shade. This
-effectively disables the entire deferred path.
+When `base_pass_` is null: no GBuffer writes, no SceneColor emissive
+accumulation, and no `SceneVelocity` publication occur.
 
-### 7.3 Capability Gate
+## 8. Testability and Validation
 
-Requires `kDeferredShading`. Only instantiated when deferred mode is the
-active shading path.
+Required proof surfaces:
 
-## 8. Velocity Completion
+1. **Unit tests**
+   - draw metadata carries truthful velocity flags
+   - BasePassMeshProcessor selects masked vs opaque permutations correctly
+   - stage-9 result reports actual MRT binding / eligible draws / emitted draws
+2. **History-cache tests**
+   - previous rigid transforms roll forward once per frame
+   - stale entries trim safely
+   - current/previous view history rolls forward once per published runtime
+     view identity
+3. **Shader / pipeline tests**
+   - velocity MRT is part of the framebuffer layout under base-pass policy
+   - masked permutation drives `ALPHA_TEST`
+4. **Runtime capture proof**
+   - `VortexBasic` must be expanded into the authoritative opaque-velocity
+     validation scene. The current scene is not sufficient because it exercises
+     only rigid opaque motion.
+   - Required `VortexBasic` expansion plan:
+     - animated rigid opaque geometry
+     - masked cutout geometry
+     - skinned/deforming geometry
+     - WPO material animation
+     - deterministic screen-space placement for each producer so capture
+       analyzers can sample producer-specific velocity regions
+     - stable material/mesh labels in the capture/debug names for each producer
+   - RenderDoc proof must show nonzero velocity for each supported producer
+   - The runtime validator and product analyzer must be widened accordingly:
+     - one producer-specific check for rigid opaque
+     - one producer-specific check for masked alpha-tested geometry
+     - one producer-specific check for skinned/deforming geometry
+     - one producer-specific check for WPO-driven motion
+5. **Truthfulness tests**
+   - no test may pass purely because a bool says velocity is complete
 
-### 8.1 Distributed Velocity Model
+## 9. Resolved Design Decisions
 
-Per ARCHITECTURE.md §5.1.3, velocity is written across stages:
-
-| Stage | Contributor | Geometry |
-| ----- | ----------- | -------- |
-| 3 (DepthPrepass) | Partial velocity | Static geometry |
-| **9 (BasePass)** | **Velocity completion** | **Skinned + WPO geometry** |
-| 19 (reserved) | Late velocity | Particles, cloth (future) |
-
-### 8.2 BasePass Velocity Sub-Pass
-
-After GBuffer MRT draws, a velocity completion pass runs:
-
-1. Refine the current view's prepared-scene payload to dynamic geometry only.
-   In the canonical design this is a local refinement over published prepared
-   data, not a second scene traversal.
-2. For each: bind previous-frame transform, current-frame transform.
-3. Compute screen-space velocity = current clip position − previous clip
-   position.
-4. Write to Velocity UAV/RTV.
-
-This uses the same geometry (already processed by BasePass VS) but with
-a velocity-specific PS that outputs to the Velocity target instead of
-GBuffers. Implementation detail: either a second sub-pass with different
-PSO, or MRT slot 5 (but Phase 3 uses a separate sub-pass to keep GBuffer
-PSO compact at 5 MRT).
-
-## 9. Resource Management
-
-### 9.1 GPU Resources
-
-| Resource | Type | Lifetime | Notes |
-| -------- | ---- | -------- | ----- |
-| GBufferNormal/Material/BaseColor/CustomData textures | Owned by SceneTextures | Per frame | BasePass writes, does not allocate |
-| SceneColor texture | Owned by SceneTextures | Per frame | Emissive additive write |
-| Velocity texture | Owned by SceneTextures | Per frame | Completion write |
-| GBuffer PSO variants | Renderer PSO cache | Persistent | Per-material-family |
-
-### 9.2 State Transitions
-
-| Texture | Before Stage 9 | During Stage 9 | After Stage 10 |
-| ------- | -------------- | -------------- | -------------- |
-| GBufferNormal/Material/BaseColor/CustomData | RENDER_TARGET | RENDER_TARGET (writing) | SHADER_RESOURCE (reading) |
-| SceneColor | RENDER_TARGET | RENDER_TARGET (additive) | RENDER_TARGET (still writable) |
-| SceneDepth | DEPTH_READ | DEPTH_READ (or DEPTH_WRITE if no prepass) | DEPTH_READ |
-
-## 10. Testability Approach
-
-1. **Unit test:** BasePassMeshProcessor with mock primitives → verify
-   material grouping produces minimal PSO changes and correct draw counts.
-2. **GBuffer validation:** Render a known scene (colored sphere on gray
-   plane). Read back GBuffer textures:
-   - GBufferNormal: normals match expected directions (up for floor, radial for
-     sphere)
-   - GBufferMaterial: metallic/roughness match material parameters
-   - GBufferBaseColor: base color matches material albedo
-3. **RenderDoc validation:** At frame 10, inspect GBuffer MRT after stage 9.
-   Verify all 4 GBuffers + SceneColor contain expected data.
-4. **Velocity validation:** Animate an object, verify Velocity texture shows
-   non-zero values at the animated object's pixels after stage 9.
-
-## 11. Open Questions
-
-1. **Forward mode detail:** The `kForward` shading mode branch needs full
-   design when Phase 5+ addresses forward-rendered special materials. Phase
-   3 is deferred-only.
-2. **Masked-material sort policy:** Masked materials participate in the
-   deferred opaque contract in Phase 3 and therefore write GBuffers in the base
-   pass after any participating depth-prepass work. The remaining open point is
-   whether the mesh-processor sort key should mirror UE-style prepass-dependent
-   masked ordering exactly in Phase 3 or use a simpler stable material-first
-   rule until profiling justifies further specialization.
+1. **Temporal responsiveness / pixel animation:** These are part of the first
+   parity implementation. UE5.7 base-pass velocity encodes them directly in the
+   primary velocity output via `EncodeVelocityToTexture(...)`, so Vortex must do
+   the same in the initial opaque-velocity parity wave.
+2. **Motion-vector world offset:** This is also part of the parity target and
+   is not deferred. UE5.7 handles it through an explicit auxiliary
+   motion-vector-world-offset path (`VelocityShader.usf` +
+   `VelocityUpdate.usf`) rather than pretending the plain base-pass velocity
+   write is sufficient. Vortex must therefore provide an explicit auxiliary
+   offset path and merge/update step for materials that declare motion-vector
+   world offset semantics; it must not leave this as a hidden later expansion.
+3. **Validation surface:** `VortexBasic` remains the Phase-3 runtime validation
+   surface, but it must be expanded as described in §8. It is not currently
+   sufficient in its present form.

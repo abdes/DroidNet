@@ -17,9 +17,11 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
@@ -145,6 +147,16 @@ public:
   OXGN_VRTX_NDAPI auto GetInstanceDataSrvIndex() const noexcept
     -> ShaderVisibleIndex;
 
+  struct VelocityPublicationSource {
+    scene::NodeHandle node_handle {};
+    data::AssetKey geometry_asset_key {};
+    std::uint32_t lod_index { 0U };
+    std::uint32_t submesh_index { 0U };
+  };
+
+  OXGN_VRTX_NDAPI auto GetVelocityPublicationSources() const noexcept
+    -> std::span<const VelocityPublicationSource>;
+
 private:
   //! Batching key for grouping identical draws for GPU instancing.
   /*!
@@ -161,6 +173,7 @@ private:
     std::uint32_t vertex_count { 0 };
     std::uint32_t is_indexed { 0 };
     oxygen::vortex::PassMask flags;
+    scene::NodeHandle node_handle {};
 
     [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept
       -> bool
@@ -182,6 +195,7 @@ private:
     std::uint32_t material_index { 0 };
     ShaderVisibleIndex vb_srv {};
     ShaderVisibleIndex ib_srv {};
+    scene::NodeHandle node_handle {};
   };
 
   auto Cpu() noexcept -> std::vector<vortex::DrawMetadata>& { return cpu_; }
@@ -219,6 +233,7 @@ private:
   std::vector<SortingKey> keys_;
   std::vector<oxygen::vortex::PreparedSceneFrame::PartitionRange> partitions_;
   std::vector<glm::vec4> draw_bounding_spheres_;
+  std::vector<VelocityPublicationSource> velocity_publication_sources_;
   vortex::upload::TransientStructuredBuffer draw_bounds_buffer_;
   ShaderVisibleIndex draw_bounds_srv_index_ { kInvalidShaderVisibleIndex };
 

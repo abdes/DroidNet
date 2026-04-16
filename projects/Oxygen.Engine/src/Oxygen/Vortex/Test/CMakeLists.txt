@@ -174,6 +174,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DeformationHistoryCache
+  SOURCES
+    "Internal/DeformationHistoryCache_test.cpp"
+)
+
+m_gtest_program(
   RendererFacadePresets
   SOURCES
     "Fakes/Graphics.h"

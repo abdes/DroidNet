@@ -73,6 +73,7 @@ void SceneTextureBindings::Invalidate() noexcept
   custom_stencil_srv = kInvalidIndex;
   gbuffer_srvs.fill(kInvalidIndex);
   scene_color_uav = kInvalidIndex;
+  velocity_uav = kInvalidIndex;
   valid_flags = 0;
 }
 
@@ -274,7 +275,7 @@ void SceneTextures::AllocateTextures()
   }
 
   velocity_.resource = config_.enable_velocity
-    ? CreateTexture("Velocity", Format::kRG16Float, true, true)
+    ? CreateTexture("Velocity", Format::kRG16Float, true, true, true)
     : nullptr;
   if (velocity_.resource != nullptr) {
     RegisterTexture(velocity_);

@@ -7,7 +7,11 @@
 #ifndef OXYGEN_RENDERER_VERTEX_HLSLI
 #define OXYGEN_RENDERER_VERTEX_HLSLI
 
-// Define vertex structure to match the CPU-side Vertex struct
+// Define vertex structure to match the CPU-side Vertex struct.
+// TODO(vortex/skinned-morph): extend this shader ABI in lockstep with
+// Data/Vertex.h once real engine skinned/morph streams are live. Stage 3/9
+// closure is scoped to the current rigid-vertex engine feature set; future
+// joint-weight / morph fetch belongs here, not in detached side metadata.
 struct Vertex {
     float3 position;
     float3 normal;

@@ -38,6 +38,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
@@ -568,6 +569,48 @@ auto MainModule::UpdateValidationScene(
   if (cube_node_.IsAlive()) {
     cube_node_.GetTransform().SetLocalRotation(
       glm::quat(glm::vec3(0.0F, animation_time_seconds_ * 0.75F, 0.0F)));
+    if (scene_ && app_.engine) {
+      if (auto motion_module
+          = app_.engine->GetModule<scenesync::RuntimeMotionProducerModule>()) {
+        if (const auto geometry = cube_node_.GetRenderable().GetGeometry();
+          geometry) {
+          const auto wpo_offset = glm::vec3 {
+            0.0F,
+            0.06F * std::sin(animation_time_seconds_ * 1.7F),
+            0.0F,
+          };
+          const auto mvwo_offset = glm::vec3 {
+            0.04F * std::cos(animation_time_seconds_ * 2.1F),
+            0.0F,
+            0.0F,
+          };
+          motion_module->get().UpsertMaterialMotionInput(
+            observer_ptr<const scene::Scene> { scene_.get() },
+            scenesync::RuntimeMaterialMotionInputState {
+              .key =
+                scenesync::RuntimeMaterialMotionKey {
+                  .node_handle = cube_node_.GetHandle(),
+                  .geometry_asset_key = geometry->GetAssetKey(),
+                  .lod_index = 0U,
+                  .submesh_index = 0U,
+                },
+              .has_runtime_wpo_input = true,
+              .has_runtime_motion_vector_input = true,
+              .capabilities =
+                {
+                  .uses_world_position_offset = true,
+                  .uses_motion_vector_world_offset = true,
+                  .uses_temporal_responsiveness = false,
+                  .has_pixel_animation = false,
+                },
+              .wpo_parameter_block0
+                = { wpo_offset.x, wpo_offset.y, wpo_offset.z, 0.0F },
+              .motion_vector_parameter_block0
+                = { mvwo_offset.x, mvwo_offset.y, mvwo_offset.z, 0.0F },
+            });
+        }
+      }
+    }
   }
 
   if (point_light_node_.IsAlive()) {

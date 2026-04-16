@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -84,6 +85,13 @@ struct GraphicsPipelineCommandLog {
   std::vector<Event> binds;
 };
 
+struct ComputePipelineCommandLog {
+  struct Event {
+    graphics::ComputePipelineDesc desc;
+  };
+  std::vector<Event> binds;
+};
+
 //! Logs graphics root CBV bindings captured by the fake command recorder.
 struct RootConstantBufferViewLog {
   struct Event {
@@ -101,6 +109,25 @@ struct DrawCommandLog {
     uint32_t instance_offset { 0U };
   };
   std::vector<Event> draws;
+};
+
+struct DispatchCommandLog {
+  struct Event {
+    uint32_t thread_group_count_x { 0U };
+    uint32_t thread_group_count_y { 0U };
+    uint32_t thread_group_count_z { 0U };
+  };
+  std::vector<Event> dispatches;
+};
+
+struct ClearFramebufferLog {
+  struct Event {
+    std::size_t color_attachment_count { 0U };
+    bool has_depth_attachment { false };
+    bool depth_clear_requested { false };
+    bool stencil_clear_requested { false };
+  };
+  std::vector<Event> clears;
 };
 
 struct IndirectCommandLog {
@@ -281,16 +308,21 @@ public:
   FakeCommandRecorder(std::shared_ptr<CommandList> command_list,
     const observer_ptr<CommandQueue> target_queue, BufferCommandLog* buffer_log,
     TextureCommandLog* texture_log, GraphicsPipelineCommandLog* pipeline_log,
+    ComputePipelineCommandLog* compute_pipeline_log,
     TextureToTextureCopyLog* texture_copy_log,
     RootConstantBufferViewLog* root_cbv_log, DrawCommandLog* draw_log,
-    IndirectCommandLog* indirect_log)
+    DispatchCommandLog* dispatch_log,
+    ClearFramebufferLog* clear_framebuffer_log, IndirectCommandLog* indirect_log)
     : CommandRecorder(std::move(command_list), target_queue)
     , buffer_log_(buffer_log)
     , texture_log_(texture_log)
     , pipeline_log_(pipeline_log)
+    , compute_pipeline_log_(compute_pipeline_log)
     , texture_copy_log_(texture_copy_log)
     , root_cbv_log_(root_cbv_log)
     , draw_log_(draw_log)
+    , dispatch_log_(dispatch_log)
+    , clear_framebuffer_log_(clear_framebuffer_log)
     , indirect_log_(indirect_log)
   {
   }
@@ -307,8 +339,12 @@ public:
         GraphicsPipelineCommandLog::Event { .desc = std::move(desc) });
     }
   }
-  auto SetPipelineState(graphics::ComputePipelineDesc /*desc*/) -> void override
+  auto SetPipelineState(graphics::ComputePipelineDesc desc) -> void override
   {
+    if (compute_pipeline_log_ != nullptr) {
+      compute_pipeline_log_->binds.push_back(
+        ComputePipelineCommandLog::Event { .desc = std::move(desc) });
+    }
   }
   auto SetGraphicsRootConstantBufferView(const uint32_t root_parameter_index,
     const uint64_t buffer_gpu_address) -> void override
@@ -352,10 +388,17 @@ public:
       });
     }
   }
-  auto Dispatch(uint32_t /*thread_group_count_x*/,
-    uint32_t /*thread_group_count_y*/, uint32_t /*thread_group_count_z*/)
+  auto Dispatch(uint32_t thread_group_count_x,
+    uint32_t thread_group_count_y, uint32_t thread_group_count_z)
     -> void override
   {
+    if (dispatch_log_ != nullptr) {
+      dispatch_log_->dispatches.push_back(DispatchCommandLog::Event {
+        .thread_group_count_x = thread_group_count_x,
+        .thread_group_count_y = thread_group_count_y,
+        .thread_group_count_z = thread_group_count_z,
+      });
+    }
   }
   auto ExecuteIndirect(const Buffer& argument_buffer,
     const IndirectCommandDesc& command_desc,
@@ -393,12 +436,21 @@ public:
     std::span<const oxygen::Scissors> /*rects*/) -> void override
   {
   }
-  auto ClearFramebuffer(const graphics::Framebuffer& /*framebuffer*/,
+  auto ClearFramebuffer(const graphics::Framebuffer& framebuffer,
     std::optional<std::vector<std::optional<graphics::Color>>>
     /*color_clear_values*/,
-    std::optional<float> /*depth_clear_value*/,
-    std::optional<uint8_t> /*stencil_clear_value*/) -> void override
+    std::optional<float> depth_clear_value,
+    std::optional<uint8_t> stencil_clear_value) -> void override
   {
+    if (clear_framebuffer_log_ != nullptr) {
+      const auto& desc = framebuffer.GetDescriptor();
+      clear_framebuffer_log_->clears.push_back(ClearFramebufferLog::Event {
+        .color_attachment_count = desc.color_attachments.size(),
+        .has_depth_attachment = desc.depth_attachment.IsValid(),
+        .depth_clear_requested = depth_clear_value.has_value(),
+        .stencil_clear_requested = stencil_clear_value.has_value(),
+      });
+    }
   }
 
   auto CopyBuffer(Buffer& dst, const size_t dst_offset, const Buffer& src,
@@ -470,9 +522,12 @@ private:
   BufferCommandLog* buffer_log_ { nullptr };
   TextureCommandLog* texture_log_ { nullptr };
   GraphicsPipelineCommandLog* pipeline_log_ { nullptr };
+  ComputePipelineCommandLog* compute_pipeline_log_ { nullptr };
   TextureToTextureCopyLog* texture_copy_log_ { nullptr };
   RootConstantBufferViewLog* root_cbv_log_ { nullptr };
   DrawCommandLog* draw_log_ { nullptr };
+  DispatchCommandLog* dispatch_log_ { nullptr };
+  ClearFramebufferLog* clear_framebuffer_log_ { nullptr };
   IndirectCommandLog* indirect_log_ { nullptr };
 };
 
@@ -942,7 +997,8 @@ public:
     auto cl = std::make_shared<FakeCommandList>(
       command_list_name, q ? q->GetQueueRole() : QueueRole::kGraphics);
     auto* raw = new FakeCommandRecorder(cl, q, &buffer_log_, &texture_log_,
-      &graphics_pipeline_log_, &texture_copy_log_, &root_cbv_log_, &draw_log_,
+      &graphics_pipeline_log_, &compute_pipeline_log_, &texture_copy_log_,
+      &root_cbv_log_, &draw_log_, &dispatch_log_, &clear_framebuffer_log_,
       &indirect_log_);
     raw->Begin();
     return { raw, [q](CommandRecorder* p) -> void {
@@ -961,9 +1017,12 @@ public:
   BufferCommandLog buffer_log_ {};
   TextureCommandLog texture_log_ {};
   GraphicsPipelineCommandLog graphics_pipeline_log_ {};
+  ComputePipelineCommandLog compute_pipeline_log_ {};
   TextureToTextureCopyLog texture_copy_log_ {};
   RootConstantBufferViewLog root_cbv_log_ {};
   DrawCommandLog draw_log_ {};
+  DispatchCommandLog dispatch_log_ {};
+  ClearFramebufferLog clear_framebuffer_log_ {};
   IndirectCommandLog indirect_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;

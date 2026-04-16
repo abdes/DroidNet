@@ -807,17 +807,15 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .early_z_pass_done = ctx.current_view.IsEarlyDepthComplete(),
       .shading_mode = shading_mode,
     });
-    base_pass_->Execute(ctx, scene_textures_);
-    if (base_pass_->HasPublishedBasePassProducts()
-      && base_pass_->HasCompletedVelocityForDynamicGeometry()) {
+    const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
+    if (base_pass_result.published_base_pass_products
+      && base_pass_result.completed_velocity_for_dynamic_geometry) {
       ApplyStage9BasePassState();
     }
-  }
-
-  // Stage 10: Rebuild scene textures with GBuffers
-  if (base_pass_ != nullptr && base_pass_->HasPublishedBasePassProducts()) {
-    ApplyStage10RebuildState();
-    renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+    if (base_pass_result.published_base_pass_products) {
+      ApplyStage10RebuildState();
+      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+    }
   }
 
   // Stage 11: reserved - MaterialCompositionService::PostBasePass
@@ -1019,6 +1017,10 @@ void SceneRenderer::RefreshSceneTextureBindings()
     scene_texture_bindings_.velocity_srv
       = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
         MakeSrvDesc(*scene_textures_.GetVelocity(),
+          scene_textures_.GetVelocity()->GetDescriptor().format));
+    scene_texture_bindings_.velocity_uav
+      = RegisterSceneTextureView(*scene_textures_.GetVelocity(),
+        MakeUavDesc(*scene_textures_.GetVelocity(),
           scene_textures_.GetVelocity()->GetDescriptor().format));
   }
 

@@ -33,6 +33,7 @@
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
@@ -59,6 +60,8 @@ namespace oxygen::vortex {
 struct RendererPublicationState {
   std::unique_ptr<internal::PerViewStructuredPublisher<DrawFrameBindings>>
     draw_frame_bindings_publisher;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>
+    view_history_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
@@ -400,6 +403,13 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       observer_ptr { &gfx }, GetStagingProvider(),
       observer_ptr { &GetInlineTransfersCoordinator() }, "DrawFrameBindings");
   }
+  if (!state.view_history_frame_bindings_publisher) {
+    state.view_history_frame_bindings_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() },
+      "ViewHistoryFrameBindings");
+  }
   if (!state.view_frame_bindings_publisher) {
     state.view_frame_bindings_publisher = std::make_unique<
       internal::PerViewStructuredPublisher<ViewFrameBindings>>(
@@ -420,6 +430,7 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
 
   state.scene_texture_bindings_publisher->OnFrameStart(sequence, slot);
   state.draw_frame_bindings_publisher->OnFrameStart(sequence, slot);
+  state.view_history_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.prepared_frame_sequence = sequence;
   state.prepared_frame_slot = slot;
@@ -441,6 +452,15 @@ auto Renderer::RefreshCurrentViewFrameBindings(
   auto& publication_state = EnsurePublicationState(*gfx);
 
   auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
+  if (render_context.current_view.resolved_view != nullptr) {
+    view_bindings.history_frame_slot
+      = EnsurePublicationState(*gfx)
+          .view_history_frame_bindings_publisher->Publish(
+            render_context.current_view.view_id,
+            BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+              *render_context.current_view.resolved_view,
+              observer_ptr<const scene::Scene> { render_context.scene.get() }));
+  }
   const auto scene_texture_frame_slot
     = publication_state.scene_texture_bindings_publisher->Publish(
       render_context.current_view.view_id,
@@ -497,6 +517,11 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 
   frame_slot_ = context->GetFrameSlot();
   frame_seq_num_ = context->GetFrameSequenceNumber().get();
+  rigid_transform_history_cache_.BeginFrame(frame_seq_num_);
+  deformation_history_cache_.BeginFrame(
+    frame_seq_num_, observer_ptr<const scene::Scene> { context->GetScene().get() });
+  previous_view_history_cache_.BeginFrame(
+    frame_seq_num_, observer_ptr<const scene::Scene> { context->GetScene().get() });
   const auto dt = context->GetModuleTimingData().game_delta_time;
   const auto dt_seconds
     = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get())
@@ -659,9 +684,19 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
             view_id.get(), resolved_scene_color->GetDescriptor().debug_name);
           return resolved_scene_color;
         }
+        auto fallback = ResolveViewOutputTexture(*context, view_id);
+        if (fallback) {
+          LOG_F(WARNING,
+            "Vortex compositing source for published view {} is missing the "
+            "resolved scene-color artifact; falling back to published "
+            "composite source '{}'",
+            view_id.get(), fallback->GetDescriptor().debug_name);
+          return fallback;
+        }
         LOG_F(ERROR,
-          "Vortex compositing source for published view {} is missing the "
-          "resolved scene-color artifact",
+          "Vortex compositing source for published view {} is missing both "
+          "the resolved scene-color artifact and the published composite "
+          "source",
           view_id.get());
         return {};
       }
@@ -766,7 +801,25 @@ auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
     scene_renderer_->OnFrameEnd(*context);
     scene_renderer_started_frame_ = frame::SequenceNumber {};
   }
+  rigid_transform_history_cache_.EndFrame();
+  deformation_history_cache_.EndFrame();
+  previous_view_history_cache_.EndFrame();
   resolved_views_.clear();
+}
+
+auto Renderer::GetRuntimeMotionProducerModule() const noexcept
+  -> observer_ptr<scenesync::RuntimeMotionProducerModule>
+{
+  if (engine_ == nullptr) {
+    return nullptr;
+  }
+  if (const auto module = engine_->GetModule<scenesync::RuntimeMotionProducerModule>();
+    module.has_value()) {
+    return observer_ptr<scenesync::RuntimeMotionProducerModule> {
+      &module->get()
+    };
+  }
+  return nullptr;
 }
 
 auto Renderer::RegisterViewRenderGraph(
@@ -1139,6 +1192,44 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
     .SetCameraPosition(view.CameraPosition());
 }
 
+auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,
+  const ResolvedView& view, const observer_ptr<const scene::Scene> scene)
+  -> ViewHistoryFrameBindings
+{
+  static_cast<void>(scene);
+  const auto snapshot = previous_view_history_cache_.TouchCurrent(view_id,
+    internal::PreviousViewHistoryCache::CurrentState {
+      .view_matrix = view.ViewMatrix(),
+      .projection_matrix = view.ProjectionMatrix(),
+      .stable_projection_matrix = view.StableProjectionMatrix(),
+      .inverse_view_projection_matrix = view.InverseViewProjection(),
+      .pixel_jitter = view.PixelJitter(),
+      .viewport = view.Viewport(),
+    });
+
+  auto history = ViewHistoryFrameBindings {
+    .current_view_matrix = snapshot.current.view_matrix,
+    .current_projection_matrix = snapshot.current.projection_matrix,
+    .current_stable_projection_matrix
+    = snapshot.current.stable_projection_matrix,
+    .current_inverse_view_projection_matrix
+    = snapshot.current.inverse_view_projection_matrix,
+    .previous_view_matrix = snapshot.previous.view_matrix,
+    .previous_projection_matrix = snapshot.previous.projection_matrix,
+    .previous_stable_projection_matrix
+    = snapshot.previous.stable_projection_matrix,
+    .previous_inverse_view_projection_matrix
+    = snapshot.previous.inverse_view_projection_matrix,
+    .current_pixel_jitter = snapshot.current.pixel_jitter,
+    .previous_pixel_jitter = snapshot.previous.pixel_jitter,
+  };
+  if (snapshot.previous_valid) {
+    history.validity_flags |= static_cast<std::uint32_t>(
+      ViewHistoryValidityFlagBits::kPreviousViewValid);
+  }
+  return history;
+}
+
 auto Renderer::WireContext(RenderContext& context,
   const std::shared_ptr<graphics::Buffer>& view_constants) -> void
 {
@@ -1158,6 +1249,8 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
   last_frame_dt_seconds_ = session.delta_time_seconds;
+  previous_view_history_cache_.BeginFrame(
+    frame_seq_num_, observer_ptr<const scene::Scene> { session.scene.get() });
 
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
@@ -1209,7 +1302,10 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
   render_context.view_constants = buffer_info.buffer;
 }
 
-auto Renderer::EndOffscreenFrame() noexcept -> void { }
+auto Renderer::EndOffscreenFrame() noexcept -> void
+{
+  previous_view_history_cache_.EndFrame();
+}
 
 auto Renderer::DispatchSceneRendererPreRender(
   const observer_ptr<engine::FrameContext> context) -> co::Co<>
@@ -1258,7 +1354,10 @@ auto Renderer::DispatchSceneRendererRender(
       auto draw_bindings = DrawFrameBindings {
         .draw_metadata_slot = BindlessDrawMetadataSlot {
           prepared_frame->bindless_draw_metadata_slot },
-        .transforms_slot = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
+        .current_worlds_slot = BindlessWorldsSlot {
+          prepared_frame->bindless_worlds_slot },
+        .previous_worlds_slot = BindlessWorldsSlot {
+          prepared_frame->bindless_previous_worlds_slot },
         .normal_matrices_slot = BindlessNormalsSlot {
           prepared_frame->bindless_normals_slot },
         .material_shading_constants_slot
@@ -1266,10 +1365,38 @@ auto Renderer::DispatchSceneRendererRender(
             prepared_frame->bindless_material_shading_slot },
         .instance_data_slot = BindlessInstanceDataSlot {
           prepared_frame->bindless_instance_data_slot },
+        .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+          prepared_frame->bindless_current_skinned_pose_slot },
+        .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+          prepared_frame->bindless_previous_skinned_pose_slot },
+        .current_morph_slot = BindlessMorphPublicationsSlot {
+          prepared_frame->bindless_current_morph_slot },
+        .previous_morph_slot = BindlessMorphPublicationsSlot {
+          prepared_frame->bindless_previous_morph_slot },
+        .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+          prepared_frame->bindless_current_material_wpo_slot },
+        .previous_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+          prepared_frame->bindless_previous_material_wpo_slot },
+        .current_motion_vector_status_slot
+        = BindlessMotionVectorStatusPublicationsSlot {
+            prepared_frame->bindless_current_motion_vector_status_slot },
+        .previous_motion_vector_status_slot
+        = BindlessMotionVectorStatusPublicationsSlot {
+            prepared_frame->bindless_previous_motion_vector_status_slot },
+        .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
+          prepared_frame->bindless_velocity_draw_metadata_slot },
       };
       view_bindings.draw_frame_slot
         = publication_state.draw_frame_bindings_publisher->Publish(
           render_context.current_view.view_id, draw_bindings);
+    }
+    if (render_context.current_view.resolved_view != nullptr) {
+      view_bindings.history_frame_slot
+        = publication_state.view_history_frame_bindings_publisher->Publish(
+          render_context.current_view.view_id,
+          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+            *render_context.current_view.resolved_view,
+            observer_ptr<const scene::Scene> { render_context.scene.get() }));
     }
 
     const auto view_frame_bindings_slot
@@ -1312,6 +1439,14 @@ auto Renderer::DispatchSceneRendererRender(
         render_context.current_view.view_id,
         scene_renderer.GetSceneTextureBindings());
     view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+    if (render_context.current_view.resolved_view != nullptr) {
+      view_bindings.history_frame_slot
+        = publication_state.view_history_frame_bindings_publisher->Publish(
+          render_context.current_view.view_id,
+          BuildViewHistoryFrameBindings(render_context.current_view.view_id,
+            *render_context.current_view.resolved_view,
+            observer_ptr<const scene::Scene> { render_context.scene.get() }));
+    }
 
     const auto view_frame_bindings_slot
       = publication_state.view_frame_bindings_publisher->Publish(

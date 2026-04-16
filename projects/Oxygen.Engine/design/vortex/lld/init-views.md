@@ -120,7 +120,7 @@ class InitViewsModule {
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
 | Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later per-view stages | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` during downstream per-view iteration |
-| Dynamic primitive classification | BasePassModule (velocity completion), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices |
+| Motion-history / velocity auxiliary products | BasePassModule (opaque velocity), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices / draw order and referencing explicit current/previous transform or deformation publication slots |
 | Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
 
 ### 3.3 Sequence Diagram
@@ -131,7 +131,7 @@ SceneRenderer::OnRender(ctx)
   ├─ InitViewsModule::Execute(ctx, scene_textures)
   │     │
   │     ├─ ScenePrepPipeline::BeginFrameCollection(scene, frame_id, persistent_state)
-  │     │     └─ one full scene traversal for the scene
+  │     │     └─ one full scene traversal for the scene + one frame-global motion-history resolution pass
   │     │
   │     ├─ for each published view:
   │     │     ├─ ScenePrepPipeline::PrepareView(scene, view, frame_id, persistent_state, storage)
@@ -139,7 +139,7 @@ SceneRenderer::OnRender(ctx)
   │     │     ├─ ScenePrepPipeline::FinalizeView(persistent_state, storage)
   │     │     └─ Publish PreparedSceneFrame for the view
   │     │
-  │     └─ Publish optional per-view auxiliary classification products
+  │     └─ Publish optional per-view auxiliary motion / velocity products
   │
   ├─ DepthPrepassModule::Execute(ctx, ...)   // consumes current-view PreparedSceneFrame
   └─ BasePassModule::Execute(ctx, ...)       // consumes current-view PreparedSceneFrame
@@ -212,7 +212,8 @@ void InitViewsModule::Execute(RenderContext& ctx,
 
   CHECK_NOTNULL_F(scene, "InitViewsModule requires an active scene");
 
-  // Exactly one full scene traversal for the scene in this frame.
+  // Exactly one full scene traversal for the scene in this frame, including
+  // frame-global motion-history / transform-resolution work.
   scene_prep_->BeginFrameCollection(*scene, frame_id, state);
 
   for (const auto& view_entry : ctx.frame_views) {
@@ -233,11 +234,13 @@ void InitViewsModule::Execute(RenderContext& ctx,
 Phase 3 implements CPU view refinement with this required cost model:
 
 1. perform one full scene traversal to build frame-shared candidate caches
-2. for each published view, iterate cached candidates only
-3. perform per-view frustum culling, LOD selection, and dynamic classification
+2. in the frame-shared phase, resolve current/previous transform and
+   deformation publication handles once per node
+3. for each published view, iterate cached candidates only
+4. perform per-view frustum culling, LOD selection, and dynamic classification
    during that cached-candidate scan
-4. finalize one published `PreparedSceneFrame` for the view
-5. never re-traverse the scene graph in stage 3, stage 9, or later stages
+5. finalize one published `PreparedSceneFrame` for the view
+6. never re-traverse the scene graph in stage 3, stage 9, or later stages
 
 GPU-driven culling (compute shader, HZB feedback) is deferred to Phase 5
 (OcclusionModule integration).
@@ -253,7 +256,9 @@ later per-view dispatch.
 
 If `InitViewsModule` keeps any lightweight "visible primitive" helper for local
 CPU hot paths, it is an internal helper only and must be keyed to indices in
-the current view's `PreparedSceneFrame`.
+the current view's `PreparedSceneFrame` or to explicit motion-history
+publications. It must not reconstruct previous-frame identity from traversal
+order.
 
 ## 9. Testability Approach
 
@@ -267,8 +272,8 @@ the current view's `PreparedSceneFrame`.
    DepthPrepass and BasePass match the published prepared-scene payload from
    InitViews without hidden scene re-traversal in the downstream stages.
 
-## 10. Open Questions
+## 10. Closure
 
-None for the baseline contract. Any future GPU-driven culling or compact
-helper-list optimization must preserve the traversal budget and publication
-model defined in [sceneprep-refactor.md](sceneprep-refactor.md).
+Any future GPU-driven culling or compact helper-list optimization must preserve
+the traversal budget and publication model defined in
+[sceneprep-refactor.md](sceneprep-refactor.md).

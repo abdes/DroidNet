@@ -212,6 +212,7 @@ auto DrawMetadataEmitter::OnFrameStart(vortex::RendererTag /*tag*/,
   keys_.clear();
   partitions_.clear();
   draw_bounding_spheres_.clear();
+  velocity_publication_sources_.clear();
   instance_transform_indices_.clear();
   draw_metadata_buffer_.OnFrameStart(sequence, slot);
   draw_bounds_buffer_.OnFrameStart(sequence, slot);
@@ -229,6 +230,7 @@ auto DrawMetadataEmitter::ResetViewData() -> void
   keys_.clear();
   partitions_.clear();
   draw_bounding_spheres_.clear();
+  velocity_publication_sources_.clear();
   instance_transform_indices_.clear();
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
   draw_bounds_srv_index_ = kInvalidShaderVisibleIndex;
@@ -336,6 +338,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       Cpu().resize(static_cast<size_t>(index) + 1U);
       keys_.resize(static_cast<size_t>(index) + 1U);
       draw_bounding_spheres_.resize(static_cast<size_t>(index) + 1U);
+      velocity_publication_sources_.resize(static_cast<size_t>(index) + 1U);
     }
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     Cpu()[index] = dm;
@@ -347,9 +350,17 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       .material_index = dm.material_handle,
       .vb_srv = dm.vertex_buffer_index,
       .ib_srv = dm.index_buffer_index,
+      .node_handle = item.node_handle,
     };
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     draw_bounding_spheres_[index] = item.world_bounding_sphere;
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    velocity_publication_sources_[index] = DrawMetadataEmitter::VelocityPublicationSource {
+      .node_handle = item.node_handle,
+      .geometry_asset_key = item.geometry.asset_key,
+      .lod_index = item.geometry.lod_index,
+      .submesh_index = item.submesh_index,
+    };
     ++frame_write_count_;
   }
 }
@@ -428,14 +439,18 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   reordered_keys.reserve(n);
   std::vector<glm::vec4> reordered_bounds;
   reordered_bounds.reserve(n);
+  std::vector<DrawMetadataEmitter::VelocityPublicationSource> reordered_sources;
+  reordered_sources.reserve(n);
   for (auto idx : perm) {
     reordered.push_back(Cpu()[idx]);
     reordered_keys.push_back(keys_[idx]);
     reordered_bounds.push_back(draw_bounding_spheres_[idx]);
+    reordered_sources.push_back(velocity_publication_sources_[idx]);
   }
   Cpu().swap(reordered);
   keys_.swap(reordered_keys);
   draw_bounding_spheres_.swap(reordered_bounds);
+  velocity_publication_sources_.swap(reordered_sources);
 
   last_order_hash_
     = oxygen::ComputeFNV1a64(keys_.data(), keys_.size() * sizeof(SortingKey));
@@ -589,6 +604,13 @@ auto DrawMetadataEmitter::GetInstanceDataSrvIndex() const noexcept
   return instance_data_srv_index_;
 }
 
+auto DrawMetadataEmitter::GetVelocityPublicationSources() const noexcept
+  -> std::span<const DrawMetadataEmitter::VelocityPublicationSource>
+{
+  return { velocity_publication_sources_.data(),
+    velocity_publication_sources_.size() };
+}
+
 auto DrawMetadataEmitter::BatchingKeyHash::operator()(
   const BatchingKey& key) const noexcept -> std::size_t
 {
@@ -602,6 +624,7 @@ auto DrawMetadataEmitter::BatchingKeyHash::operator()(
   oxygen::HashCombine(hash, key.vertex_count);
   oxygen::HashCombine(hash, key.is_indexed);
   oxygen::HashCombine(hash, key.flags.get());
+  oxygen::HashCombine(hash, key.node_handle);
   return hash;
 }
 
@@ -634,6 +657,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       .vertex_count = dm.vertex_count,
       .is_indexed = dm.is_indexed,
       .flags = dm.flags,
+      .node_handle = keys_[i].node_handle,
     };
     if (const auto it = key_to_group_index.find(key);
       it != key_to_group_index.end()) {
@@ -664,9 +688,11 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
   std::vector<oxygen::vortex::DrawMetadata> batched_cpu;
   std::vector<SortingKey> batched_keys;
   std::vector<glm::vec4> batched_bounds;
+  std::vector<DrawMetadataEmitter::VelocityPublicationSource> batched_sources;
   batched_cpu.reserve(initial_draw_count);
   batched_keys.reserve(initial_draw_count);
   batched_bounds.reserve(initial_draw_count);
+  batched_sources.reserve(initial_draw_count);
   instance_transform_indices_.clear();
   instance_transform_indices_.reserve(Cpu().size());
 
@@ -712,6 +738,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       .material_index = dm.material_handle,
       .vb_srv = dm.vertex_buffer_index,
       .ib_srv = dm.index_buffer_index,
+      .node_handle = keys_[indices[0]].node_handle,
     });
 
     glm::vec4 merged_bound { 0.0F, 0.0F, 0.0F, 0.0F };
@@ -754,11 +781,18 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       }
     }
     batched_bounds.push_back(merged_bound);
+    if (!indices.empty() && indices[0] < velocity_publication_sources_.size()) {
+      batched_sources.push_back(velocity_publication_sources_[indices[0]]);
+    } else {
+      batched_sources.push_back(
+        DrawMetadataEmitter::VelocityPublicationSource {});
+    }
   }
 
   Cpu().swap(batched_cpu);
   keys_.swap(batched_keys);
   draw_bounding_spheres_.swap(batched_bounds);
+  velocity_publication_sources_.swap(batched_sources);
 
   DLOG_F(1, "Batched {} draws into {} batches, {} instance indices",
     initial_draw_count, Cpu().size(), instance_transform_indices_.size());

@@ -46,6 +46,9 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
   , worlds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
       "TransformUploader.Worlds")
+  , previous_worlds_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
+      "TransformUploader.PreviousWorlds")
   , normals_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
       "TransformUploader.Normals")
@@ -87,11 +90,13 @@ auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
   frame_write_count_ = 0U;
 
   worlds_buffer_.OnFrameStart(sequence, slot);
+  previous_worlds_buffer_.OnFrameStart(sequence, slot);
   normals_buffer_.OnFrameStart(sequence, slot);
 
   // Clear cached SRV indices; they will be renewed during
   // EnsureFrameResources()
   worlds_srv_index_ = kInvalidShaderVisibleIndex;
+  previous_worlds_srv_index_ = kInvalidShaderVisibleIndex;
   normals_srv_index_ = kInvalidShaderVisibleIndex;
 
   uploaded_this_frame_ = false;
@@ -100,8 +105,17 @@ auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
 auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   -> vortex::sceneprep::TransformHandle
 {
+  return GetOrAllocate(transform, transform);
+}
+
+auto TransformUploader::GetOrAllocate(
+  const glm::mat4& transform, const glm::mat4& previous_transform)
+  -> vortex::sceneprep::TransformHandle
+{
   DCHECK_F(transforms::IsFinite(transform),
     "GetOrAllocate received non-finite matrix");
+  DCHECK_F(transforms::IsFinite(previous_transform),
+    "GetOrAllocate received non-finite previous matrix");
 
   // Strategy A remains deterministic here because allocation order is driven by
   // frame_write_count_ and reset at each OnFrameStart.
@@ -110,10 +124,13 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
 
   if (index >= transforms_.size()) {
     transforms_.push_back(transform);
+    previous_transforms_.push_back(previous_transform);
     normal_matrices_.push_back(ComputeNormalMatrix(transform));
   } else {
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     transforms_[index] = transform;
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    previous_transforms_[index] = previous_transform;
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     normal_matrices_[index] = ComputeNormalMatrix(transform);
   }
@@ -169,11 +186,24 @@ auto TransformUploader::EnsureFrameResources() -> void
   }
   const auto& n_alloc = *n_res;
 
+  auto pw_res = previous_worlds_buffer_.Allocate(count);
+  if (!pw_res) {
+    LOG_F(ERROR, "Failed to allocate previous worlds transient buffer: {}",
+      pw_res.error().message());
+    return;
+  }
+  const auto& pw_alloc = *pw_res;
+
   DLOG_F(1, "TransformUploader writing {} transforms to {}", count,
     fmt::ptr(w_alloc.mapped_ptr));
 
   if (!w_alloc.TryWriteRange(std::span { transforms_ })) {
     LOG_F(ERROR, "Failed to write world transforms into transient buffer");
+    return;
+  }
+  if (!pw_alloc.TryWriteRange(std::span { previous_transforms_ })) {
+    LOG_F(ERROR,
+      "Failed to write previous world transforms into transient buffer");
     return;
   }
   if (!n_alloc.TryWriteRange(std::span { normal_matrices_ })) {
@@ -183,6 +213,7 @@ auto TransformUploader::EnsureFrameResources() -> void
 
   // Cache SRV indices for GetWorldsSrvIndex() / GetNormalsSrvIndex()
   worlds_srv_index_ = w_alloc.srv;
+  previous_worlds_srv_index_ = pw_alloc.srv;
   normals_srv_index_ = n_alloc.srv;
 
   uploaded_this_frame_ = true;
@@ -208,6 +239,15 @@ auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
   return normals_srv_index_;
 }
 
+auto TransformUploader::GetPreviousWorldsSrvIndex() const -> ShaderVisibleIndex
+{
+  if (previous_worlds_srv_index_ == kInvalidShaderVisibleIndex) {
+    // NOLINTNEXTLINE(*-pro-type-const-cast) - EnsureFrameResources is not const
+    const_cast<TransformUploader*>(this)->EnsureFrameResources();
+  }
+  return previous_worlds_srv_index_;
+}
+
 auto TransformUploader::GetWorldMatrices() const noexcept
   -> std::span<const glm::mat4>
 {
@@ -218,6 +258,12 @@ auto TransformUploader::GetNormalMatrices() const noexcept
   -> std::span<const glm::mat4>
 {
   return normal_matrices_;
+}
+
+auto TransformUploader::GetPreviousWorldMatrices() const noexcept
+  -> std::span<const glm::mat4>
+{
+  return previous_transforms_;
 }
 
 auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept

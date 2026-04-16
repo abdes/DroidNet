@@ -23,7 +23,6 @@ cbuffer ViewConstants : register(b1, space0)
     uint _pad1;
     uint _pad2;
     uint _pad3;
-
     float4 _pad_to_256_1;
 };
 

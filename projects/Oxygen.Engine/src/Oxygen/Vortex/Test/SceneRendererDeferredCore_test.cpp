@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -586,9 +587,135 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, scene_textures);
 
-  EXPECT_TRUE(base_pass.HasCompletedVelocityForDynamicGeometry());
+  EXPECT_TRUE(result.published_base_pass_products);
+  EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
+  EXPECT_TRUE(result.wrote_velocity_target);
+  EXPECT_EQ(result.draw_count, 1U);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  BasePassRunsMotionVectorWorldOffsetAuxiliaryChainWithoutDepthClear)
+{
+  auto scene_config = SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  };
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
+
+  auto render_items = std::vector<oxygen::vortex::sceneprep::RenderItemData>(2U);
+  render_items.front().main_view_visible = true;
+  render_items.back().main_view_visible = true;
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2U> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.is_indexed = 0U;
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+    metadata.flags = oxygen::vortex::PassMask {
+      oxygen::vortex::PassMaskBit::kOpaque,
+    };
+  }
+
+  auto current_status
+    = std::array<oxygen::vortex::MotionVectorStatusPublication, 1U> {
+        oxygen::vortex::MotionVectorStatusPublication {
+          .contract_hash = 0x1234U,
+          .capability_flags
+            = static_cast<std::uint32_t>(
+                oxygen::vortex::MotionPublicationCapabilityBits::kUsesMotionVectorWorldOffset)
+            | static_cast<std::uint32_t>(
+              oxygen::vortex::MotionPublicationCapabilityBits::kHasRuntimePayload),
+          .parameter_block0 = { 0.1F, 0.0F, 0.0F, 0.0F },
+        },
+      };
+  auto previous_status = current_status;
+
+  auto velocity_metadata
+    = std::array<oxygen::vortex::VelocityDrawMetadata, 2U> {};
+  velocity_metadata.front().current_motion_vector_status_index = 0U;
+  velocity_metadata.front().previous_motion_vector_status_index = 0U;
+  velocity_metadata.front().publication_flags
+    = static_cast<std::uint32_t>(
+        oxygen::vortex::VelocityDrawPublicationFlagBits::kCurrentMotionVectorStatusValid)
+    | static_cast<std::uint32_t>(
+      oxygen::vortex::VelocityDrawPublicationFlagBits::kPreviousMotionVectorStatusValid);
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.render_items
+    = std::span<const oxygen::vortex::sceneprep::RenderItemData>(
+      render_items.data(), render_items.size());
+  prepared_frame.draw_metadata_bytes = std::as_bytes(
+    std::span<const oxygen::vortex::DrawMetadata>(
+      draw_metadata.data(), draw_metadata.size()));
+  prepared_frame.current_motion_vector_status_publications
+    = std::span<const oxygen::vortex::MotionVectorStatusPublication>(
+      current_status.data(), current_status.size());
+  prepared_frame.previous_motion_vector_status_publications
+    = std::span<const oxygen::vortex::MotionVectorStatusPublication>(
+      previous_status.data(), previous_status.size());
+  prepared_frame.velocity_draw_metadata
+    = std::span<const oxygen::vortex::VelocityDrawMetadata>(
+      velocity_metadata.data(), velocity_metadata.size());
+
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+      &prepared_frame,
+    };
+  context.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.MvwoAux.ViewConstants",
+  });
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->compute_pipeline_log_.binds.clear();
+  graphics_->dispatch_log_.dispatches.clear();
+  graphics_->clear_framebuffer_log_.clears.clear();
+
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = true,
+    .early_z_pass_done = true,
+    .shading_mode = ShadingMode::kDeferred,
+  });
+
+  const auto result = base_pass.Execute(context, scene_textures);
+
+  EXPECT_TRUE(result.published_base_pass_products);
+  EXPECT_TRUE(result.completed_velocity_for_dynamic_geometry);
+  EXPECT_TRUE(result.wrote_velocity_target);
+  EXPECT_EQ(result.draw_count, 2U);
+  ASSERT_EQ(graphics_->texture_copy_log_.copies.size(), 1U);
+  EXPECT_EQ(graphics_->texture_copy_log_.copies.front().src,
+    scene_textures.GetVelocity());
+  EXPECT_NE(graphics_->texture_copy_log_.copies.front().dst,
+    scene_textures.GetVelocity());
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 3U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.BasePass.VelocityMerge";
+    }));
+  EXPECT_TRUE(std::ranges::any_of(graphics_->clear_framebuffer_log_.clears,
+    [](const auto& clear) -> bool {
+      return clear.color_attachment_count == 1U
+        && !clear.has_depth_attachment
+        && !clear.depth_clear_requested
+        && !clear.stencil_clear_requested;
+    }));
+  EXPECT_FALSE(std::ranges::any_of(graphics_->clear_framebuffer_log_.clears,
+    [](const auto& clear) -> bool {
+      return clear.color_attachment_count == 1U && clear.has_depth_attachment;
+    }));
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -618,10 +745,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     .shading_mode = ShadingMode::kDeferred,
   });
 
-  base_pass.Execute(context, scene_textures);
+  const auto result = base_pass.Execute(context, scene_textures);
 
-  EXPECT_FALSE(base_pass.HasPublishedBasePassProducts());
-  EXPECT_FALSE(base_pass.HasCompletedVelocityForDynamicGeometry());
+  EXPECT_FALSE(result.published_base_pass_products);
+  EXPECT_FALSE(result.completed_velocity_for_dynamic_geometry);
+  EXPECT_FALSE(result.wrote_velocity_target);
+  EXPECT_EQ(result.draw_count, 0U);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
@@ -857,6 +986,79 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 1U);
   EXPECT_TRUE(draw_commands.front().writes_velocity);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  BasePassModuleSelectsMaskedPipelinePermutation)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+
+  auto base_pass = oxygen::vortex::BasePassModule(*renderer,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto scene_textures = oxygen::vortex::SceneTextures(*graphics,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+
+  auto render_items = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
+  render_items.front().main_view_visible = true;
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1U> {};
+  draw_metadata.front().is_indexed = 0U;
+  draw_metadata.front().vertex_count = 3U;
+  draw_metadata.front().instance_count = 1U;
+  draw_metadata.front().flags
+    = oxygen::vortex::PassMask {
+        oxygen::vortex::PassMaskBit::kOpaque,
+        oxygen::vortex::PassMaskBit::kMasked,
+      };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.render_items
+    = std::span<const oxygen::vortex::sceneprep::RenderItemData>(
+      render_items.data(), render_items.size());
+  prepared_frame.draw_metadata_bytes = std::as_bytes(
+    std::span<const oxygen::vortex::DrawMetadata>(
+      draw_metadata.data(), draw_metadata.size()));
+
+  auto context = RenderContext {};
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.current_view.prepared_frame
+    = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
+      &prepared_frame,
+    };
+  context.view_constants = graphics->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "SceneRendererDeferredCoreTest.BasePassMaskedViewConstants",
+  });
+
+  base_pass.SetConfig(oxygen::vortex::BasePassConfig {
+    .write_velocity = false,
+    .early_z_pass_done = false,
+    .shading_mode = ShadingMode::kDeferred,
+  });
+
+  base_pass.Execute(context, scene_textures);
+
+  EXPECT_EQ(std::ranges::count_if(graphics->graphics_pipeline_log_.binds,
+              [](const auto& bind) -> bool {
+                return bind.desc.GetName() == "Vortex.BasePass.GBuffer.Masked";
+              }),
+    1);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,

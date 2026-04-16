@@ -18,6 +18,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
@@ -159,6 +160,12 @@ public:
     return observer_ptr(transform_mgr_.get());
   }
 
+  constexpr auto GetRigidTransformHistory() const noexcept
+    -> observer_ptr<internal::RigidTransformHistoryCache>
+  {
+    return rigid_transform_history_;
+  }
+
   //! Get non-owning observer to material binder (maybe nullptr).
   constexpr auto GetMaterialBinder() const noexcept
     -> observer_ptr<resources::MaterialBinder>
@@ -183,6 +190,12 @@ public:
     transform_mgr_ = std::move(transform);
     material_binder_ = std::move(material);
     draw_emitter_ = std::move(draw_emitter);
+  }
+
+  auto SetRigidTransformHistory(
+    observer_ptr<internal::RigidTransformHistoryCache> history) noexcept -> void
+  {
+    rigid_transform_history_ = history;
   }
 
   //! Reset per-frame data while preserving persistent caches.
@@ -259,6 +272,11 @@ private:
 
   //! Persistent transform deduplication and GPU buffer management.
   std::unique_ptr<resources::TransformUploader> transform_mgr_;
+
+  //! Renderer-owned rigid transform history (non-owning observer).
+  observer_ptr<internal::RigidTransformHistoryCache> rigid_transform_history_ {
+    nullptr
+  };
 
   //! Persistent material deduplication and GPU buffer management.
   std::unique_ptr<resources::MaterialBinder> material_binder_;

@@ -184,6 +184,7 @@ protected:
 
     auto loop = TestEventLoop {};
     oxygen::co::Run(loop, RunRenderAsync(renderer_, &frame_context));
+    renderer_->OnFrameEnd(oxygen::observer_ptr<FrameContext> { &frame_context });
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -217,6 +218,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(published_bindings.scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(published_bindings.history_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(published_bindings.draw_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(

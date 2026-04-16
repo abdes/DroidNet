@@ -20,6 +20,9 @@ struct GBufferOutput
     float4 gbuffer_base_color : SV_Target2;
     float4 gbuffer_custom_data : SV_Target3;
     float4 emissive_scene_color : SV_Target4;
+#if defined(HAS_VELOCITY)
+    float2 velocity : SV_Target5;
+#endif
 };
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_GBUFFERLAYOUT_HLSLI

@@ -138,6 +138,8 @@ Authoritative content lives here:
 - pass partitions
 - draw bounding spheres
 - shadow-related per-draw records
+- explicit current / previous transform publication slots
+- explicit current / previous deformation publication slots
 - any other per-view prepared-scene arrays needed by downstream stages
 
 Authoritative rule:
@@ -145,6 +147,42 @@ Authoritative rule:
 - if a downstream stage needs prepared scene data, it must be reachable from
   `PreparedSceneFrame` or from an explicitly published auxiliary product keyed
   to it
+
+### 3.2.1 Frame-Shared Motion History Boundary
+
+ScenePrep does not own cross-frame motion history. The owning layer is the
+renderer.
+
+Required split:
+
+- renderer-owned rigid-transform history cache:
+  - keyed by stable scene identity (`NodeHandle`)
+  - rolls current -> previous once per frame
+  - retires stale entries independently of view preparation
+- renderer-owned deformation-history cache:
+  - current-state source identity:
+    - `NodeHandle`
+    - producer family
+    - deformation contract hash
+  - renderer publication/history identity:
+    - `NodeHandle`
+    - geometry asset key
+    - LOD index
+    - submesh index
+    - producer family
+    - deformation contract hash
+  - rolls current -> previous once per frame
+  - invalidates on geometry / skeleton / morph / material-deformation contract
+    change
+  - retires stale entries independently of view preparation
+- ScenePrep / InitViews:
+  - touches frame-global motion-history state during frame collection
+  - resolves stable handles / indices once per scene node per frame
+  - publishes frame-global current/previous transform and deformation buffers
+    for later per-view consumption
+
+ScenePrep must not use traversal order or view-local allocation order as the
+authoritative identity for previous-frame motion data.
 
 ### 3.3 Internal Backing Storage
 
@@ -205,12 +243,15 @@ of this kind. It must not mean a second authoritative scene-prep payload.
 The following auxiliary products may be published alongside
 `PreparedSceneFrame`:
 
-- dynamic-primitive classification for velocity completion
+- velocity / motion classification keyed to draw order
+- current / previous transform publication handles or slots
+- current / previous deformation publication handles or slots
 - culling statistics
 - optional compact draw-index lists for stage-local hot paths
 
-All auxiliary products must be keyed by prepared-frame indices or draw order,
-not by raw scene traversal order.
+All auxiliary products must be keyed by prepared-frame indices, draw order, or
+stable scene identity. They must never be keyed only by raw scene traversal
+order.
 
 ## 4. Runtime Sequence and Traversal Budget
 
@@ -226,6 +267,8 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
 
   CHECK_NOTNULL_F(scene, "InitViewsModule requires an active scene");
 
+  // Resolve frame-global motion history and transform/deformation publication
+  // once for the scene before any per-view refinement starts.
   scene_prep_->BeginFrameCollection(*scene, frame_id, state);
 
   for (const auto& view_entry : ctx.frame_views) {
@@ -245,6 +288,7 @@ Method names may differ in the final code, but the phase split above is
 binding:
 
 - one frame-shared collection phase
+- one frame-shared motion-history / transform-resolution phase
 - one per-view preparation phase
 - one per-view finalization/publication phase
 
@@ -265,6 +309,11 @@ Interpretation:
 - Vortex may pay `O(scene)` once per scene per frame
 - Vortex may then pay `O(candidates_for_view)` per view
 - Vortex must not degrade into `O(scene * number_of_views * number_of_passes)`
+- previous-frame motion identity must also be resolved in the `O(scene)` phase,
+  not once per view
+- current authoritative producer state is instance-keyed, while renderer
+  publications/history are LOD-aware render identities materialized for the
+  active views in the frame
 
 ### 4.3 Multiple Scenes
 
@@ -322,6 +371,10 @@ Migration note:
 - one persistent `ScenePrepPipeline`
 - one persistent `ScenePrepState`
 - per-view prepared-scene backing storage reused across frames
+
+`InitViewsModule` does **not** own the authoritative cross-frame motion-history
+cache. It consumes renderer-owned history and publishes the current frame's
+prepared-scene view over it.
 
 Target ownership shape:
 
@@ -500,9 +553,7 @@ The following are architectural defects, not design variations:
 6. moving upload infrastructure ownership from Renderer Core into ScenePrep
 7. treating ScenePrep as a hidden frame owner below `SceneRenderer`
 
-## 11. Open Questions
-
-None for the baseline contract.
+## 11. Closure
 
 Future GPU-driven culling, occlusion feedback, or visibility compaction work is
 allowed only if it preserves the ownership model and traversal budget defined

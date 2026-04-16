@@ -34,6 +34,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -111,6 +112,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     // Register MainModule before the renderer so it runs first in each phase.
     register_module(
       std::make_unique<oxygen::examples::vortex_basic::MainModule>(app));
+    register_module(
+      std::make_unique<oxygen::scenesync::RuntimeMotionProducerModule>());
 
     switch (app.engine->GetEngineConfig().renderer.implementation) {
       using enum oxygen::RendererImplementation;

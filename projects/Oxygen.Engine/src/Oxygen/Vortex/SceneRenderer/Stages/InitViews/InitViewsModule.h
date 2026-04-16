@@ -30,8 +30,29 @@ namespace resources {
 class TextureBinder;
 } // namespace resources
 
+namespace upload {
+class TransientStructuredBuffer;
+} // namespace upload
+
 class InitViewsModule {
 public:
+  struct PreparedSceneViewStorage {
+    bool published { false };
+    std::vector<sceneprep::RenderItemData> render_items;
+    std::vector<SkinnedPosePublication> current_skinned_pose_publications;
+    std::vector<SkinnedPosePublication> previous_skinned_pose_publications;
+    std::vector<MorphPublication> current_morph_publications;
+    std::vector<MorphPublication> previous_morph_publications;
+    std::vector<MaterialWpoPublication> current_material_wpo_publications;
+    std::vector<MaterialWpoPublication> previous_material_wpo_publications;
+    std::vector<MotionVectorStatusPublication>
+      current_motion_vector_status_publications;
+    std::vector<MotionVectorStatusPublication>
+      previous_motion_vector_status_publications;
+    std::vector<VelocityDrawMetadata> velocity_draw_metadata;
+    PreparedSceneFrame prepared_frame {};
+  };
+
   OXGN_VRTX_API explicit InitViewsModule(Renderer& renderer);
   OXGN_VRTX_API ~InitViewsModule();
 
@@ -46,14 +67,19 @@ public:
     -> const PreparedSceneFrame*;
 
 private:
-  struct PreparedSceneViewStorage {
-    bool published { false };
-    std::vector<sceneprep::RenderItemData> render_items;
-    PreparedSceneFrame prepared_frame {};
-  };
-
   Renderer& renderer_;
   std::unique_ptr<resources::TextureBinder> texture_binder_ {};
+  std::unique_ptr<upload::TransientStructuredBuffer> current_skinned_pose_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> previous_skinned_pose_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> current_morph_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> previous_morph_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> current_material_wpo_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> previous_material_wpo_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    current_motion_vector_status_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer>
+    previous_motion_vector_status_buffer_;
+  std::unique_ptr<upload::TransientStructuredBuffer> velocity_draw_metadata_buffer_;
   std::unique_ptr<sceneprep::ScenePrepPipeline> scene_prep_;
   sceneprep::ScenePrepState scene_prep_state_ {};
   std::unordered_map<ViewId, PreparedSceneViewStorage> prepared_views_;

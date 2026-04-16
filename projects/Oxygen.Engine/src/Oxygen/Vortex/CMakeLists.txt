@@ -87,9 +87,11 @@ set(
   "Types/ProceduralGridMaterialConstants.h"
   "Types/ShadowFrameBindings.h"
   "Types/SyntheticSunData.h"
+  "Types/VelocityPublications.h"
   "Types/ViewColorData.h"
   "Types/ViewConstants.h"
   "Types/ViewFrameBindings.h"
+  "Types/ViewHistoryFrameBindings.h"
   "Types/VsmFrameBindings.h"
   "ScenePrep/GeometryRef.h"
   "ScenePrep/Handles.h"
@@ -135,9 +137,15 @@ set(
   "Internal/CompositionPlanner.h"
   "Internal/CompositionViewImpl.cpp"
   "Internal/CompositionViewImpl.h"
+  "Internal/DeformationHistoryCache.cpp"
+  "Internal/DeformationHistoryCache.h"
   "Internal/FrameViewPacket.cpp"
   "Internal/FrameViewPacket.h"
   "Internal/PerViewStructuredPublisher.h"
+  "Internal/PreviousViewHistoryCache.cpp"
+  "Internal/PreviousViewHistoryCache.h"
+  "Internal/RigidTransformHistoryCache.cpp"
+  "Internal/RigidTransformHistoryCache.h"
   "Internal/RenderContextMaterializer.h"
   "Internal/RenderContextPool.h"
   "Internal/RenderScope.h"
@@ -230,6 +238,7 @@ target_link_libraries(
     oxygen::engine
     oxygen::graphics-common
     oxygen::nexus
+    oxygen::scenesync
   PRIVATE
     oxygen::profiling
 )

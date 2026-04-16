@@ -113,6 +113,9 @@ public:
   //! Get or allocate a handle for the given transform matrix
   OXGN_VRTX_API auto GetOrAllocate(const glm::mat4& transform)
     -> vortex::sceneprep::TransformHandle;
+  OXGN_VRTX_API auto GetOrAllocate(
+    const glm::mat4& transform, const glm::mat4& previous_transform)
+    -> vortex::sceneprep::TransformHandle;
 
   //! Check if a handle is valid
   OXGN_VRTX_NDAPI auto IsHandleValid(
@@ -135,6 +138,13 @@ public:
   OXGN_VRTX_NDAPI auto GetNormalMatrices() const noexcept
     -> std::span<const glm::mat4>;
 
+  //! Get the shader-visible index for previous world transforms buffer
+  OXGN_VRTX_NDAPI auto GetPreviousWorldsSrvIndex() const -> ShaderVisibleIndex;
+
+  //! Get read-only access to previous world matrices for debugging
+  OXGN_VRTX_NDAPI auto GetPreviousWorldMatrices() const noexcept
+    -> std::span<const glm::mat4>;
+
 private:
   //! Compute normal matrix (inverse transpose of upper 3x3)
   static auto ComputeNormalMatrix(const glm::mat4& world) noexcept -> glm::mat4;
@@ -149,14 +159,17 @@ private:
   // Transient per-frame GPU buffers for transforms (direct-write strategy)
   using StagingBufferT = vortex::upload::TransientStructuredBuffer;
   StagingBufferT worlds_buffer_;
+  StagingBufferT previous_worlds_buffer_;
   StagingBufferT normals_buffer_;
 
   // Cached SRV indices for fast access
   ShaderVisibleIndex worlds_srv_index_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex previous_worlds_srv_index_ { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex normals_srv_index_ { kInvalidShaderVisibleIndex };
 
   // Transform storage
   std::vector<glm::mat4> transforms_;
+  std::vector<glm::mat4> previous_transforms_;
   std::vector<glm::mat4> normal_matrices_;
 
   bool uploaded_this_frame_ { false };

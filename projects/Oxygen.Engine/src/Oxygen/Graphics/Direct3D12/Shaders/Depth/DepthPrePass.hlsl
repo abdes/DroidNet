@@ -68,7 +68,7 @@ struct VS_OUTPUT_DEPTH {
   output.uv = v.texcoord;
 
   const float4x4 world_matrix
-    = BX_LoadInstanceWorldMatrix(draw_bindings.transforms_slot,
+    = BX_LoadInstanceWorldMatrix(draw_bindings.current_worlds_slot,
       draw_bindings.instance_data_slot, meta, instanceID);
   const float4 world_pos = mul(world_matrix, float4(v.position, 1.0f));
   const float4 view_pos = mul(view_matrix, world_pos);

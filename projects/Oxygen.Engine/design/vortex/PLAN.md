@@ -261,9 +261,10 @@ Reference: ARCHITECTURE.md §7.3 (four-part contract), §5.1.3
 ## 5. Phase 3 — Deferred Core (Depth → GBuffer → Lighting)
 
 **Goal:** A minimal lit deferred scene: depth prepass writes SceneDepth, base
-pass writes GBufferA–D + SceneColor emissive, deferred lighting produces lit
-output, scene color resolves. This is the first visual proof of the Vortex
-deferred architecture.
+pass writes GBufferA–D + SceneColor emissive, the current desktop deferred
+opaque-velocity policy writes truthful Stage-9 motion vectors, deferred
+lighting produces lit output, and scene color resolves. This is the first
+visual proof of the Vortex deferred architecture.
 
 ### Design Prerequisites
 
@@ -272,8 +273,8 @@ requires its own LLD section or document.
 
 | Design Deliverable | Covers | Suggested Location |
 | ------------------ | ------ | ------------------ |
-| Depth prepass LLD | DepthPrepassModule, depth-only pass, mesh processor, partial velocity writes, DepthPrePassPolicy integration | `design/vortex/lld/depth-prepass.md` or DESIGN.md update |
-| Base pass LLD | BasePassModule, GBuffer MRT output, base-pass mesh processor, material shader contract (GBufferOutput), velocity completion for skinned/WPO geometry, forward-mode branch | `design/vortex/lld/base-pass.md` or DESIGN.md update |
+| Depth prepass LLD | DepthPrepassModule, depth-only pass, mesh processor, depth-policy integration, and the non-active depth-pass velocity option boundary | `design/vortex/lld/depth-prepass.md` or DESIGN.md update |
+| Base pass LLD | BasePassModule, GBuffer MRT output, masked/opaque permutations, material shader contract (GBufferOutput), renderer-owned rigid history consumption, Stage-9 opaque velocity production, forward-mode branch | `design/vortex/lld/base-pass.md` or DESIGN.md update |
 | Deferred lighting LLD | Directional fullscreen deferred lighting, one-pass bounded-volume point/spot lighting, SceneColor accumulation | `design/vortex/lld/deferred-lighting.md` or DESIGN.md update |
 | Shader contracts LLD | Vortex shader directory setup, `Contracts/` and `Shared/` initial files, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration | `design/vortex/lld/shader-contracts.md` |
 | InitViews LLD | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication | `design/vortex/lld/init-views.md` or DESIGN.md update |
@@ -306,7 +307,7 @@ requires its own LLD section or document.
 | 3C.1 | Implement `DepthPrepassModule` | `SceneRenderer/Stages/DepthPrepass/` — depth-only pass, mesh processor |
 | 3C.2 | Implement depth prepass shader entrypoints | `Shaders/Vortex/Stages/DepthPrepass/` |
 | 3C.3 | Write `SceneDepth` and `PartialDepth` to SceneTextures | |
-| 3C.4 | Write partial `SceneVelocity` for static geometry | Per ARCHITECTURE.md §5.1.3 |
+| 3C.4 | Keep stage 3 depth-only under the active opaque-velocity policy | Stage-3 opaque velocity remains a future policy option, not the current Phase-3 desktop deferred contract |
 | 3C.5 | Update `SceneTextureSetupMode` after depth prepass | |
 | 3C.6 | Wire into SceneRenderer stage 3 dispatch | |
 
@@ -317,10 +318,12 @@ requires its own LLD section or document.
 | 3D.1 | Implement `BasePassModule` | `SceneRenderer/Stages/BasePass/` — GBuffer MRT pass, base-pass mesh processor |
 | 3D.2 | Implement base pass shader entrypoints | `Shaders/Vortex/Stages/BasePass/` |
 | 3D.3 | Write GBufferA–D + SceneColor emissive | MRT output per DESIGN.md §6.1 |
-| 3D.4 | Complete `SceneVelocity` for skinned/WPO geometry | Per ARCHITECTURE.md §5.1.3 |
-| 3D.5 | Implement `SceneTextures::RebuildWithGBuffers()` | Stage 10 state transition |
-| 3D.6 | Update `SceneTextureSetupMode` after base pass | |
-| 3D.7 | Wire into SceneRenderer stage 9 dispatch | |
+| 3D.4 | Produce `SceneVelocity` in stage 9 for masked, deformed, skinned, and WPO-capable opaque geometry using current + previous transform/deformation data and previous view data | UE5.7-grade opaque velocity parity target |
+| 3D.5 | Select masked vs opaque base-pass PSOs and drive `ALPHA_TEST` permutations | Required for truthful masked deferred behavior and masked velocity |
+| 3D.6 | Implement the stage-9 motion-vector-world-offset auxiliary path and merge/update step before velocity publication | Required for UE5.7-grade parity when materials declare motion-vector world offset |
+| 3D.7 | Implement `SceneTextures::RebuildWithGBuffers()` | Stage 10 state transition |
+| 3D.8 | Update `SceneTextureSetupMode` and velocity publication after base pass from output-backed proof only | |
+| 3D.9 | Wire into SceneRenderer stage 9 dispatch | |
 
 #### 3E: Deferred Lighting
 
@@ -343,7 +346,11 @@ requires its own LLD section or document.
 - Lit deferred scene visible: at least 1 directional + 1 point light
 - GBuffer debug views show correct normals, base color, roughness, metallic
 - SceneColor contains correct diffuse + specular response
-- Velocity buffer has valid data for static and skinned geometry
+- Velocity buffer has valid data for masked, deformed, skinned, and
+  WPO-capable opaque geometry, including camera motion and object/deformation
+  motion, and no doc/test surface overclaims unsupported producers
+- Masked deferred materials alpha-clip truthfully in stage 9 and only
+  surviving pixels contribute to GBuffers, SceneColor, and velocity
 - SceneTextureSetupMode correctly tracks product availability through stages
 - ShaderBake compiles all Vortex entrypoints without error
 - Non-runtime facade `ForSinglePassHarness()` works against Vortex substrate
@@ -353,7 +360,9 @@ requires its own LLD section or document.
   contents, SceneColor accumulation, and bounded-volume local-light behavior
 - Live `VortexBasic` runtime validation is part of the Phase 3 gate:
   build the required Vortex targets, capture a fresh RenderDoc frame from
-  `VortexBasic`, and pass the one-command runtime validator
+  an expanded `VortexBasic` validation scene that exercises rigid opaque,
+  masked, skinned/deforming, and WPO-driven opaque velocity producers, and
+  pass the one-command runtime validator
   `tools/vortex/Run-VortexBasicRuntimeValidation.ps1`
 
 ---
@@ -819,7 +828,7 @@ Exit criteria:
 
 - Lit deferred scene with at least 1 directional + 1 point light
 - GBuffer debug visualization functional
-- Velocity buffer valid for static + skinned geometry
+- Velocity buffer valid for masked, deformed, skinned, and WPO-capable opaque geometry
 - ShaderBake compiles all Vortex shaders
 - RenderDoc capture validates pass ordering
 
@@ -874,8 +883,8 @@ final target — including future-phase items per PRD §8.13.
 | **SceneRenderBuilder** | Phase 2 | not started | Bootstrap helper per ARCH §5.1.3 | |
 | **SceneRenderer (shell)** | Phase 2 | not started | 23-stage dispatch skeleton | |
 | **InitViewsModule** | Phase 3 | not started | Visibility, culling, command gen | Stage 2 |
-| **DepthPrepassModule** | Phase 3 | not started | Depth-only + partial velocity | Stage 3 |
-| **BasePassModule** | Phase 3 | not started | GBuffer MRT + velocity completion | Stage 9 |
+| **DepthPrepassModule** | Phase 3 | not started | Depth-only under the active desktop deferred opaque-velocity policy | Stage 3 |
+| **BasePassModule** | Phase 3 | not started | GBuffer MRT + masked alpha-clip + active opaque velocity production | Stage 9 |
 | **Deferred lighting** | Phase 3 → 4A | not started | Directional fullscreen + bounded-volume point/spot deferred lighting; transfers to LightingService in 4A | Stage 12 |
 | **GBuffer debug viz** | Phase 3 | not started | Normal, base color, roughness debug views | |
 | **Shader contracts** | Phase 3 | not started | Contracts/, Shared/, Materials/ per ARCH §10 | |
