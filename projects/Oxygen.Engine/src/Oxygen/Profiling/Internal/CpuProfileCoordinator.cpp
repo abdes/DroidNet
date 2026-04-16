@@ -25,19 +25,19 @@ auto BeginCpuScope(const CpuProfileScopeDesc& desc,
   const std::source_location callsite) -> CpuScopeState
 {
   CpuScopeState state {};
-  const auto formatted_name = FormatScopeName(desc);
 
 #if defined(OXYGEN_WITH_TRACY)
   const auto effective_color = desc.color.IsSpecified()
     ? desc.color
     : DefaultProfileColor(desc.category);
   if (oxygen::tracy::cpu::BeginZone(std::span { state.tracy_zone_state },
-        callsite, formatted_name, effective_color.Rgb24())) {
+        callsite, desc.label, effective_color.Rgb24())) {
     state.flags |= kCpuScopeFlagTracyActive;
   }
 #endif
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
+  const auto formatted_name = FormatScopeName(desc);
   PIXBeginEvent(0U, "%s", formatted_name.c_str());
   state.flags |= kCpuScopeFlagPixActive;
 #endif

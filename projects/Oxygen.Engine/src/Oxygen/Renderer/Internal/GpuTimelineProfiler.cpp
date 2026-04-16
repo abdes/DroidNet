@@ -6,11 +6,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <condition_variable>
 #include <cstring>
 #include <fstream>
 #include <limits>
-#include <thread>
 
 #include <fmt/format.h>
 
@@ -77,150 +75,69 @@ auto EscapeJson(std::string_view input) -> std::string
   return escaped;
 }
 
-class FileExportSink final : public oxygen::engine::internal::GpuTimelineSink {
-public:
-  explicit FileExportSink(std::filesystem::path output_path)
-    : output_path_(std::move(output_path))
-    , worker_([this] { Run(); })
-  {
+auto WriteCsv(const std::filesystem::path& output_path,
+  const oxygen::engine::internal::GpuTimelineFrame& frame) -> void
+{
+  std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+  out << fmt::format("# timestamp_freq_hz={}\n", frame.timestamp_frequency_hz);
+  out << "frame_seq,scope_id,parent_scope_id,depth,stream_id,name_hash,name,"
+         "start_ms,end_ms,duration_ms,valid,flags\n";
+
+  for (const auto& scope : frame.scopes) {
+    out << fmt::format("{},{},{},{},{},{},\"{}\",{:.6f},{:.6f},{:.6f},{},{}\n",
+      frame.frame_sequence, scope.scope_id, scope.parent_scope_id, scope.depth,
+      scope.stream_id, scope.name_hash, EscapeJson(scope.display_name),
+      scope.start_ms, scope.end_ms, scope.duration_ms, scope.valid ? 1 : 0,
+      scope.flags);
   }
+}
 
-  ~FileExportSink() override
-  {
-    {
-      std::lock_guard lock(mutex_);
-      stop_ = true;
-    }
-    cv_.notify_one();
-    if (worker_.joinable()) {
-      worker_.join();
-    }
+auto WriteJson(const std::filesystem::path& output_path,
+  const oxygen::engine::internal::GpuTimelineFrame& frame) -> void
+{
+  std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+  out << "{\n";
+  out << fmt::format("  \"version\": 1,\n");
+  out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
+  out << fmt::format(
+    "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
+  out << fmt::format("  \"profiling_enabled\": {},\n",
+    frame.profiling_enabled ? "true" : "false");
+  out << fmt::format(
+    "  \"overflowed\": {},\n", frame.overflowed ? "true" : "false");
+  out << fmt::format("  \"used_query_slots\": {},\n", frame.used_query_slots);
+  out << "  \"scopes\": [\n";
+  for (std::size_t i = 0; i < frame.scopes.size(); ++i) {
+    const auto& scope = frame.scopes[i];
+    out << "    {\n";
+    out << fmt::format("      \"scope_id\": {},\n", scope.scope_id);
+    out << fmt::format("      \"parent_scope_id\": {},\n", scope.parent_scope_id);
+    out << fmt::format("      \"name_hash\": {},\n", scope.name_hash);
+    out << fmt::format("      \"name\": \"{}\",\n", EscapeJson(scope.display_name));
+    out << fmt::format("      \"depth\": {},\n", scope.depth);
+    out << fmt::format("      \"stream_id\": {},\n", scope.stream_id);
+    out << fmt::format("      \"begin_query_slot\": {},\n", scope.begin_query_slot);
+    out << fmt::format("      \"end_query_slot\": {},\n", scope.end_query_slot);
+    out << fmt::format("      \"start_ms\": {:.6f},\n", scope.start_ms);
+    out << fmt::format("      \"end_ms\": {:.6f},\n", scope.end_ms);
+    out << fmt::format("      \"duration_ms\": {:.6f},\n", scope.duration_ms);
+    out << fmt::format("      \"valid\": {},\n", scope.valid ? "true" : "false");
+    out << fmt::format("      \"flags\": {}\n", scope.flags);
+    out << (i + 1U == frame.scopes.size() ? "    }\n" : "    },\n");
   }
-
-  auto ConsumeFrame(const oxygen::engine::internal::GpuTimelineFrame& frame)
-    -> bool override
-  {
-    {
-      std::lock_guard lock(mutex_);
-      if (queued_ || completed_) {
-        return false;
-      }
-      frame_ = frame;
-      queued_ = true;
-    }
-    cv_.notify_one();
-    return true;
-  }
-
-private:
-  auto Run() -> void
-  {
-    std::unique_lock lock(mutex_);
-    cv_.wait(lock, [this] { return stop_ || queued_; });
-    if (stop_ || !frame_.has_value()) {
-      return;
-    }
-
-    const auto frame = *frame_;
-    lock.unlock();
-
-    try {
-      std::filesystem::create_directories(output_path_.parent_path());
-      if (output_path_.extension() == ".csv") {
-        WriteCsv(frame);
-      } else {
-        WriteJson(frame);
-      }
-      lock.lock();
-      completed_ = true;
-      lock.unlock();
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "GPU timeline export failed for '{}': {}",
-        output_path_.string(), ex.what());
-    }
-  }
-
-  auto WriteCsv(const oxygen::engine::internal::GpuTimelineFrame& frame) const
-    -> void
-  {
-    std::ofstream out(output_path_, std::ios::binary | std::ios::trunc);
+  out << "  ],\n";
+  out << "  \"diagnostics\": [\n";
+  for (std::size_t i = 0; i < frame.diagnostics.size(); ++i) {
+    const auto& diagnostic = frame.diagnostics[i];
+    out << "    {\n";
+    out << fmt::format("      \"code\": \"{}\",\n", EscapeJson(diagnostic.code));
     out << fmt::format(
-      "# timestamp_freq_hz={}\n", frame.timestamp_frequency_hz);
-    out << "frame_seq,scope_id,parent_scope_id,depth,stream_id,name_hash,name,"
-           "start_ms,end_ms,duration_ms,valid,flags\n";
-
-    for (const auto& scope : frame.scopes) {
-      out << fmt::format(
-        "{},{},{},{},{},{},\"{}\",{:.6f},{:.6f},{:.6f},{},{}\n",
-        frame.frame_sequence, scope.scope_id, scope.parent_scope_id,
-        scope.depth, scope.stream_id, scope.name_hash,
-        EscapeJson(scope.display_name), scope.start_ms, scope.end_ms,
-        scope.duration_ms, scope.valid ? 1 : 0, scope.flags);
-    }
+      "      \"message\": \"{}\"\n", EscapeJson(diagnostic.message));
+    out << (i + 1U == frame.diagnostics.size() ? "    }\n" : "    },\n");
   }
-
-  auto WriteJson(const oxygen::engine::internal::GpuTimelineFrame& frame) const
-    -> void
-  {
-    std::ofstream out(output_path_, std::ios::binary | std::ios::trunc);
-    out << "{\n";
-    out << fmt::format("  \"version\": 1,\n");
-    out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
-    out << fmt::format(
-      "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
-    out << fmt::format("  \"profiling_enabled\": {},\n",
-      frame.profiling_enabled ? "true" : "false");
-    out << fmt::format(
-      "  \"overflowed\": {},\n", frame.overflowed ? "true" : "false");
-    out << fmt::format("  \"used_query_slots\": {},\n", frame.used_query_slots);
-    out << "  \"scopes\": [\n";
-    for (std::size_t i = 0; i < frame.scopes.size(); ++i) {
-      const auto& scope = frame.scopes[i];
-      out << "    {\n";
-      out << fmt::format("      \"scope_id\": {},\n", scope.scope_id);
-      out << fmt::format(
-        "      \"parent_scope_id\": {},\n", scope.parent_scope_id);
-      out << fmt::format("      \"name_hash\": {},\n", scope.name_hash);
-      out << fmt::format(
-        "      \"name\": \"{}\",\n", EscapeJson(scope.display_name));
-      out << fmt::format("      \"depth\": {},\n", scope.depth);
-      out << fmt::format("      \"stream_id\": {},\n", scope.stream_id);
-      out << fmt::format(
-        "      \"begin_query_slot\": {},\n", scope.begin_query_slot);
-      out << fmt::format(
-        "      \"end_query_slot\": {},\n", scope.end_query_slot);
-      out << fmt::format("      \"start_ms\": {:.6f},\n", scope.start_ms);
-      out << fmt::format("      \"end_ms\": {:.6f},\n", scope.end_ms);
-      out << fmt::format("      \"duration_ms\": {:.6f},\n", scope.duration_ms);
-      out << fmt::format(
-        "      \"valid\": {},\n", scope.valid ? "true" : "false");
-      out << fmt::format("      \"flags\": {}\n", scope.flags);
-      out << (i + 1U == frame.scopes.size() ? "    }\n" : "    },\n");
-    }
-    out << "  ],\n";
-    out << "  \"diagnostics\": [\n";
-    for (std::size_t i = 0; i < frame.diagnostics.size(); ++i) {
-      const auto& diagnostic = frame.diagnostics[i];
-      out << "    {\n";
-      out << fmt::format(
-        "      \"code\": \"{}\",\n", EscapeJson(diagnostic.code));
-      out << fmt::format(
-        "      \"message\": \"{}\"\n", EscapeJson(diagnostic.message));
-      out << (i + 1U == frame.diagnostics.size() ? "    }\n" : "    },\n");
-    }
-    out << "  ]\n";
-    out << "}\n";
-  }
-
-  std::filesystem::path output_path_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
-  std::optional<oxygen::engine::internal::GpuTimelineFrame> frame_ {};
-  bool queued_ { false };
-  bool completed_ { false };
-  bool stop_ { false };
-  std::thread worker_;
-};
+  out << "  ]\n";
+  out << "}\n";
+}
 
 } // namespace
 
@@ -421,6 +338,42 @@ auto GpuTimelineProfiler::EndScope(graphics::CommandRecorder& recorder,
   state.flags = 0U;
 }
 
+auto GpuTimelineProfiler::AbortScope(graphics::CommandRecorder&,
+  graphics::GpuProfileCollectorState& state) -> void
+{
+  if ((state.flags & kCollectorStateFlagActive) == 0U) {
+    return;
+  }
+
+  TimelineCollectorScopeState collector_state {};
+  std::memcpy(&collector_state, state.storage.data(), sizeof(collector_state));
+  if (collector_state.scope_id >= frame_capture_.scopes.size()) {
+    state.flags = 0U;
+    return;
+  }
+
+  auto& scope = frame_capture_.scopes[collector_state.scope_id];
+  scope.flags &= static_cast<uint8_t>(~kGpuScopeFlagComplete);
+  scope.flags &= static_cast<uint8_t>(~kGpuScopeFlagValid);
+
+  if (!scope_stack_.empty()) {
+    if (scope_stack_.back() == collector_state.scope_id) {
+      scope_stack_.pop_back();
+    } else {
+      const auto it = std::find(
+        scope_stack_.begin(), scope_stack_.end(), collector_state.scope_id);
+      if (it != scope_stack_.end()) {
+        scope_stack_.erase(it);
+      }
+    }
+  }
+
+  AddDiagnostic("gpu.timestamp.incomplete_scope",
+    fmt::format("scope '{}' was abandoned before end timestamp",
+      scope.display_name != nullptr ? scope.display_name : "<unnamed>"));
+  state.flags = 0U;
+}
+
 auto GpuTimelineProfiler::AddSink(std::shared_ptr<GpuTimelineSink> sink) -> void
 {
   if (sink) {
@@ -434,7 +387,7 @@ auto GpuTimelineProfiler::RequestOneShotExport(
   if (path.empty()) {
     return;
   }
-  AddSink(std::make_shared<FileExportSink>(path));
+  pending_export_paths_.push_back(path);
 }
 
 auto GpuTimelineProfiler::GetLastPublishedFrame() const
@@ -467,7 +420,7 @@ auto GpuTimelineProfiler::ConsumePreviousFrame() -> void
     return;
   }
 
-  if (sinks_.empty() && !retain_latest_frame_) {
+  if (sinks_.empty() && pending_export_paths_.empty() && !retain_latest_frame_) {
     return;
   }
 
@@ -477,6 +430,9 @@ auto GpuTimelineProfiler::ConsumePreviousFrame() -> void
   }
 
   const auto frame = BuildTimelineFrame(ticks);
+  if (!pending_export_paths_.empty()) {
+    FlushPendingExports(frame);
+  }
   if (!sinks_.empty()) {
     PublishFrame(frame);
   }
@@ -636,6 +592,25 @@ auto GpuTimelineProfiler::PublishFrame(const GpuTimelineFrame& frame) -> void
                    return sink == nullptr || !sink->ConsumeFrame(frame);
                  }),
     sinks_.end());
+}
+
+auto GpuTimelineProfiler::FlushPendingExports(const GpuTimelineFrame& frame)
+  -> void
+{
+  for (const auto& path : pending_export_paths_) {
+    try {
+      std::filesystem::create_directories(path.parent_path());
+      if (path.extension() == ".csv") {
+        WriteCsv(path, frame);
+      } else {
+        WriteJson(path, frame);
+      }
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "GPU timeline export failed for '{}': {}", path.string(),
+        ex.what());
+    }
+  }
+  pending_export_paths_.clear();
 }
 
 auto GpuTimelineProfiler::InternName(const std::string_view name) -> const char*

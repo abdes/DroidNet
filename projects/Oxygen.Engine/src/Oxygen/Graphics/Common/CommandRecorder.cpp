@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <exception>
 
 #include <fmt/format.h>
 
@@ -69,13 +70,18 @@ CommandRecorder::CommandRecorder(std::shared_ptr<CommandList> command_list,
 
 // Destructor implementation is crucial here because ResourceStateTracker is
 // forward-declared in the header
-CommandRecorder::~CommandRecorder() { DLOG_F(2, "recorder destroyed"); }
+CommandRecorder::~CommandRecorder()
+{
+  DrainActiveProfileScopes(ScopeCloseKind::kAbort);
+  DLOG_F(2, "recorder destroyed");
+}
 
 void CommandRecorder::Begin()
 {
   DCHECK_NOTNULL_F(command_list_);
   DLOG_F(2, "CommandRecorder::Begin() for: {}", command_list_->GetName());
   DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
+  DrainActiveProfileScopes(ScopeCloseKind::kAbort);
   scope_records_.clear();
   scope_stack_.clear();
   command_list_->OnBeginRecording();
@@ -86,6 +92,7 @@ auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
   DCHECK_NOTNULL_F(command_list_);
   DLOG_F(2, "CommandRecorder::End() for: {}", command_list_->GetName());
   DCHECK_NOTNULL_F(command_list_);
+  DrainActiveProfileScopes(ScopeCloseKind::kAbort);
   try {
     // Give a chance to the resource state tracker to restore initial states
     // fore resources that requested to do so. Immediately flush barriers,
@@ -175,8 +182,17 @@ auto CommandRecorder::BeginProfileScope(
   }
 
   ScopeRecord record {};
+  scope_records_.reserve(scope_records_.size() + 1U);
+  scope_stack_.reserve(scope_stack_.size() + 1U);
   record.base_label = desc.label;
   record.formatted_name = oxygen::profiling::FormatScopeName(desc);
+  if (telemetry_collector_ != nullptr
+    && desc.granularity == oxygen::profiling::ProfileGranularity::kTelemetry) {
+    record.telemetry_collector = telemetry_collector_;
+  }
+  if (trace_collector_ != nullptr) {
+    record.trace_collector = trace_collector_;
+  }
   record.active = true;
 
   const GpuProfileScopeInfo info {
@@ -186,27 +202,41 @@ auto CommandRecorder::BeginProfileScope(
     .callsite = callsite,
   };
 
-  NativeLabelCollector native_labels {};
-  native_labels.BeginScope(*this, info, record.native_label_state);
+  try {
+    NativeLabelCollector native_labels {};
+    native_labels.BeginScope(*this, info, record.native_label_state);
 
-  if (telemetry_collector_ != nullptr
-    && desc.granularity == oxygen::profiling::ProfileGranularity::kTelemetry) {
-    telemetry_collector_->BeginScope(*this, info, record.telemetry_state);
+    if (record.telemetry_collector != nullptr) {
+      record.telemetry_collector->BeginScope(*this, info, record.telemetry_state);
+    }
+
+    if (record.trace_collector != nullptr) {
+      record.trace_collector->BeginScope(*this, info, record.trace_state);
+    }
+
+    const auto scope_id = static_cast<uint32_t>(scope_records_.size());
+    scope_records_.push_back(std::move(record));
+    scope_stack_.push_back(scope_id);
+
+    return GpuProfileScopeToken {
+      .scope_id = scope_id,
+      .stream_id = 0U,
+      .flags = kGpuScopeTokenFlagActive,
+    };
+  } catch (...) {
+    try {
+      CloseScopeRecord(record, ScopeCloseKind::kAbort);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Failed to abort partially opened GPU profile scope '{}': {}",
+        record.base_label, e.what());
+    } catch (...) {
+      LOG_F(ERROR,
+        "Failed to abort partially opened GPU profile scope '{}': unknown "
+        "exception",
+        record.base_label);
+    }
+    throw;
   }
-
-  if (trace_collector_ != nullptr) {
-    trace_collector_->BeginScope(*this, info, record.trace_state);
-  }
-
-  const auto scope_id = static_cast<uint32_t>(scope_records_.size());
-  scope_records_.push_back(std::move(record));
-  scope_stack_.push_back(scope_id);
-
-  return GpuProfileScopeToken {
-    .scope_id = scope_id,
-    .stream_id = 0U,
-    .flags = kGpuScopeTokenFlagActive,
-  };
 }
 
 auto CommandRecorder::EndProfileScope(const GpuProfileScopeToken& token) -> void
@@ -223,18 +253,7 @@ auto CommandRecorder::EndProfileScope(const GpuProfileScopeToken& token) -> void
     return;
   }
 
-  if (trace_collector_ != nullptr) {
-    trace_collector_->EndScope(*this, record.trace_state);
-  }
-
-  if (telemetry_collector_ != nullptr) {
-    telemetry_collector_->EndScope(*this, record.telemetry_state);
-  }
-
-  NativeLabelCollector native_labels {};
-  native_labels.EndScope(*this, record.native_label_state);
-
-  record.active = false;
+  CloseScopeRecord(record, ScopeCloseKind::kEnd);
 
   if (!scope_stack_.empty()) {
     if (scope_stack_.back() == token.scope_id) {
@@ -245,6 +264,83 @@ auto CommandRecorder::EndProfileScope(const GpuProfileScopeToken& token) -> void
       scope_stack_.erase(it);
     }
   }
+
+  if (scope_stack_.empty()) {
+    scope_records_.clear();
+  }
+}
+
+auto CommandRecorder::CloseScopeRecord(
+  ScopeRecord& record, const ScopeCloseKind close_kind) -> void
+{
+  if (!record.active) {
+    return;
+  }
+
+  std::exception_ptr first_failure {};
+  const auto close_collector = [&](const observer_ptr<IGpuProfileCollector> collector,
+                                 GpuProfileCollectorState& state) {
+    if (collector == nullptr) {
+      return;
+    }
+    try {
+      if (close_kind == ScopeCloseKind::kAbort) {
+        collector->AbortScope(*this, state);
+      } else {
+        collector->EndScope(*this, state);
+      }
+    } catch (...) {
+      if (first_failure == nullptr) {
+        first_failure = std::current_exception();
+      }
+    }
+  };
+
+  close_collector(record.trace_collector, record.trace_state);
+  close_collector(record.telemetry_collector, record.telemetry_state);
+
+  NativeLabelCollector native_labels {};
+  try {
+    if (close_kind == ScopeCloseKind::kAbort) {
+      native_labels.AbortScope(*this, record.native_label_state);
+    } else {
+      native_labels.EndScope(*this, record.native_label_state);
+    }
+  } catch (...) {
+    if (first_failure == nullptr) {
+      first_failure = std::current_exception();
+    }
+  }
+
+  record.active = false;
+
+  if (first_failure != nullptr) {
+    std::rethrow_exception(first_failure);
+  }
+}
+
+auto CommandRecorder::DrainActiveProfileScopes(
+  const ScopeCloseKind close_kind) noexcept -> void
+{
+  for (auto it = scope_stack_.rbegin(); it != scope_stack_.rend(); ++it) {
+    if (*it >= scope_records_.size()) {
+      continue;
+    }
+
+    auto& record = scope_records_[*it];
+    try {
+      CloseScopeRecord(record, close_kind);
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Failed to drain GPU profile scope '{}': {}", record.base_label,
+        e.what());
+    } catch (...) {
+      LOG_F(ERROR, "Failed to drain GPU profile scope '{}': unknown exception",
+        record.base_label);
+    }
+  }
+
+  scope_stack_.clear();
+  scope_records_.clear();
 }
 
 // -- Private non-template dispatch method implementations for Buffer

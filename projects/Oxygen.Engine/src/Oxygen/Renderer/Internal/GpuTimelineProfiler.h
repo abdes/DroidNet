@@ -99,6 +99,9 @@ public:
   OXGN_RNDR_API auto EndScope(graphics::CommandRecorder& recorder,
     graphics::GpuProfileCollectorState& state) -> void override;
 
+  OXGN_RNDR_API auto AbortScope(graphics::CommandRecorder& recorder,
+    graphics::GpuProfileCollectorState& state) -> void override;
+
   OXGN_RNDR_API auto AddSink(std::shared_ptr<GpuTimelineSink> sink) -> void;
   OXGN_RNDR_API auto RequestOneShotExport(const std::filesystem::path& path)
     -> void;
@@ -139,6 +142,7 @@ private:
   auto BuildTimelineFrame(const std::span<const uint64_t>& ticks) const
     -> GpuTimelineFrame;
   auto PublishFrame(const GpuTimelineFrame& frame) -> void;
+  auto FlushPendingExports(const GpuTimelineFrame& frame) -> void;
   auto InternName(std::string_view name) -> const char*;
   auto ResolveGraphicsQueue() const -> observer_ptr<graphics::CommandQueue>;
   auto ResolveTimestampProvider() const
@@ -154,6 +158,7 @@ private:
   GpuFrameCapture frame_capture_ {};
   std::unordered_map<std::string, uint64_t> interned_names_ {};
   std::vector<std::shared_ptr<GpuTimelineSink>> sinks_ {};
+  std::vector<std::filesystem::path> pending_export_paths_ {};
   mutable std::mutex published_frame_mutex_;
   std::optional<GpuTimelineFrame> last_published_frame_ {};
 };
