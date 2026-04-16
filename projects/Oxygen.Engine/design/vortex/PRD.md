@@ -297,7 +297,8 @@ The Vortex renderer must deliver these architectural outcomes:
     `LightingChannelsTexture`, and `GBufferE-F` remain part of the committed
     logical family but activate in later documented phases.
 18. **Staged deferred-lighting implementation.** The initial deferred-lighting
-    path uses fullscreen/stencil-bounded deferred techniques; tiled or
+    path uses a fullscreen deferred pass for directional lights and one-pass
+    bounded-volume deferred lighting for point and spot lights; tiled or
     clustered deferred remain explicitly later optimization paths.
 
 ## 8. Constraints and Assumptions
@@ -372,7 +373,7 @@ The Vortex renderer is successful when:
     `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`,
     `Velocity`, and `CustomDepth`.
 19. The first deferred-lighting implementation is a correctness-first
-    fullscreen/stencil-bounded path rather than a tiled or clustered deferred
+    fullscreen-plus-bounded-volume path rather than a tiled or clustered deferred
     optimization path.
 
 ## 10. Deferred to Later Phases

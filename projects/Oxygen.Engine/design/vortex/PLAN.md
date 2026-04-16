@@ -274,7 +274,7 @@ requires its own LLD section or document.
 | ------------------ | ------ | ------------------ |
 | Depth prepass LLD | DepthPrepassModule, depth-only pass, mesh processor, partial velocity writes, DepthPrePassPolicy integration | `design/vortex/lld/depth-prepass.md` or DESIGN.md update |
 | Base pass LLD | BasePassModule, GBuffer MRT output, base-pass mesh processor, material shader contract (GBufferOutput), velocity completion for skinned/WPO geometry, forward-mode branch | `design/vortex/lld/base-pass.md` or DESIGN.md update |
-| Deferred lighting LLD | Fullscreen pass-per-light approach, deferred light pixel shader, stencil-bounded sphere/cone geometry, SceneColor accumulation | `design/vortex/lld/deferred-lighting.md` or DESIGN.md update |
+| Deferred lighting LLD | Directional fullscreen deferred lighting, one-pass bounded-volume point/spot lighting, SceneColor accumulation | `design/vortex/lld/deferred-lighting.md` or DESIGN.md update |
 | Shader contracts LLD | Vortex shader directory setup, `Contracts/` and `Shared/` initial files, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration | `design/vortex/lld/shader-contracts.md` |
 | InitViews LLD | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication | `design/vortex/lld/init-views.md` or DESIGN.md update |
 | ScenePrep refactor LLD | Authoritative ScenePrep runtime contract, traversal budget, prepared-scene publication, multi-view-safe state ownership | `design/vortex/lld/sceneprep-refactor.md` |
@@ -326,7 +326,7 @@ requires its own LLD section or document.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 3E.1 | Implement deferred lighting passes | Directional fullscreen, point stencil-sphere, spot stencil-cone |
+| 3E.1 | Implement deferred lighting passes | Directional fullscreen, point bounded sphere volume, spot bounded cone volume |
 | 3E.2 | Implement deferred lighting shader entrypoints | `Shaders/Vortex/Services/Lighting/` |
 | 3E.3 | Accumulate into SceneColor | |
 | 3E.4 | Wire lighting into SceneRenderer stage 12 dispatch | Initially inlined, moves to LightingService in Phase 4 |
@@ -350,7 +350,7 @@ requires its own LLD section or document.
 - Full `Oxygen.Vortex.*` suite passes
 - `oxytidy` on the changed Phase 3 file scope reports no introduced warnings
 - Automated source/test/log closeout proves expected stage ordering, GBuffer
-  contents, SceneColor accumulation, and stencil-bounded local-light behavior
+  contents, SceneColor accumulation, and bounded-volume local-light behavior
 - Live `VortexBasic` runtime validation is part of the Phase 3 gate:
   build the required Vortex targets, capture a fresh RenderDoc frame from
   `VortexBasic`, and pass the one-command runtime validator
@@ -405,12 +405,15 @@ the migrated example presents correctly through Vortex's composition path.
 | 4A.1 | Implement `Lighting/LightingService.h/.cpp` | Service lifecycle, capability gating |
 | 4A.2 | Implement light grid build (stage 6) | Clustered light-grid and published forward-light package as shared supporting data |
 | 4A.3 | Transfer deferred lighting from Phase 3 inline → LightingService | Stage 12 now dispatched via service |
+| 4A.3a | Replace the temporary Phase 03 procedural point/spot proxy generation with persistent `LightingService`-owned sphere/cone geometry | Remove the retained `SV_VertexID` local-light geometry shortcut from the canonical Stage 12 runtime path |
 | 4A.4 | Implement forward light data publication | Per-view typed publication through `ViewFrameBindings` / `LightingFrameBindings` |
 | 4A.5 | Implement lighting shader families | `Shaders/Vortex/Services/Lighting/` — light grid, deferred light, forward common |
 
 **Exit gate:** Light grid produces valid clustered data. Deferred lighting is
 dispatched through the service without redefining the canonical per-light
-stage-12 path. Forward-light bindings are published per view.
+stage-12 path. The temporary Phase 03 procedural point/spot proxy generation
+is removed and replaced by persistent `LightingService`-owned sphere/cone
+geometry. Forward-light bindings are published per view.
 
 ### 4B: PostProcessService
 
@@ -873,7 +876,7 @@ final target — including future-phase items per PRD §8.13.
 | **InitViewsModule** | Phase 3 | not started | Visibility, culling, command gen | Stage 2 |
 | **DepthPrepassModule** | Phase 3 | not started | Depth-only + partial velocity | Stage 3 |
 | **BasePassModule** | Phase 3 | not started | GBuffer MRT + velocity completion | Stage 9 |
-| **Deferred lighting** | Phase 3 → 4A | not started | Pass-per-light fullscreen/stencil; transfers to LightingService in 4A | Stage 12 |
+| **Deferred lighting** | Phase 3 → 4A | not started | Directional fullscreen + bounded-volume point/spot deferred lighting; transfers to LightingService in 4A | Stage 12 |
 | **GBuffer debug viz** | Phase 3 | not started | Normal, base color, roughness debug views | |
 | **Shader contracts** | Phase 3 | not started | Contracts/, Shared/, Materials/ per ARCH §10 | |
 | **LightingService** | Phase 4A | not started | Light grid + deferred lighting + forward data | Stages 6, 12 |

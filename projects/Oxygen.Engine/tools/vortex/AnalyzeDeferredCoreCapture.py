@@ -446,21 +446,21 @@ def analyze(manifest: CaptureManifest) -> list[str]:
                 deferred_light_point,
                 (
                     "GenerateDeferredLightSphereVertex(vertex_id)",
-                    "DeferredLightPointStencilMarkPS",
+                    "DeferredLightPointPS",
                 ),
             ),
             contains_all(
                 deferred_light_spot,
                 (
                     "GenerateDeferredLightConeVertex(vertex_id)",
-                    "DeferredLightSpotStencilMarkPS",
+                    "DeferredLightSpotPS",
                 ),
             ),
             contains_all(
                 shader_catalog,
                 (
-                    "DeferredLightPointStencilMarkPS",
-                    "DeferredLightSpotStencilMarkPS",
+                    "DeferredLightPointPS",
+                    "DeferredLightSpotPS",
                 ),
             ),
             contains_all(
@@ -468,13 +468,17 @@ def analyze(manifest: CaptureManifest) -> list[str]:
                 (
                     "DeferredLightingConsumesPublishedGBuffers",
                     "DeferredLightingAccumulatesIntoSceneColor",
-                    "DeferredLightingUsesStencilBoundedLocalLights",
+                    "DeferredLightingUsesOutsideVolumeLocalLights",
+                    "DeferredLightingUsesInsideVolumePathWhenCameraStartsInsideLocalLights",
+                    "DeferredLightingUsesNonPerspectiveLocalLightModeForNonPerspectiveViews",
                     "Vortex.DeferredLight.Directional",
-                    "Vortex.DeferredLight.Point.StencilMark",
                     "Vortex.DeferredLight.Point.Lighting",
-                    "Vortex.DeferredLight.Spot.StencilMark",
                     "Vortex.DeferredLight.Spot.Lighting",
-                    "graphics_->draw_log_.draws.size(), 4U",
+                    "Vortex.DeferredLight.Point.InsideVolumeLighting",
+                    "Vortex.DeferredLight.Spot.InsideVolumeLighting",
+                    "Vortex.DeferredLight.Point.NonPerspectiveLighting",
+                    "Vortex.DeferredLight.Spot.NonPerspectiveLighting",
+                    "graphics_->draw_log_.draws.size(), 2U",
                 ),
             ),
         )
@@ -525,19 +529,17 @@ def analyze(manifest: CaptureManifest) -> list[str]:
             ),
         )
     )
-    stencil_local_lights = result_from_checks(
+    bounded_volume_local_lights = result_from_checks(
         (
             build_ok,
             tests_ok,
             contains_all(
                 scene_renderer,
                 (
-                    "ClearDepthStencilView(",
-                    "DeferredLightPointStencilMarkPS",
-                    "DeferredLightSpotStencilMarkPS",
-                    "used_stencil_bounded_local_lights = true;",
-                    "stencil_mark_pass_count",
-                    "stencil_lighting_pass_count",
+                    "BuildDeferredLocalPipelineDesc(",
+                    "used_outside_volume_local_lights = true;",
+                    "used_camera_inside_local_lights = true;",
+                    "used_non_perspective_local_lights = true;",
                 ),
             ),
             contains_all(
@@ -557,10 +559,14 @@ def analyze(manifest: CaptureManifest) -> list[str]:
             contains_all(
                 deferred_core_tests,
                 (
-                    "DeferredLightingUsesStencilBoundedLocalLights",
-                    "Vortex.DeferredLight.Point.StencilMark",
+                    "DeferredLightingUsesOutsideVolumeLocalLights",
                     "Vortex.DeferredLight.Point.Lighting",
-                    "Vortex.DeferredLight.Spot.StencilMark",
+                    "DeferredLightingUsesInsideVolumePathWhenCameraStartsInsideLocalLights",
+                    "Vortex.DeferredLight.Point.InsideVolumeLighting",
+                    "Vortex.DeferredLight.Spot.InsideVolumeLighting",
+                    "DeferredLightingUsesNonPerspectiveLocalLightModeForNonPerspectiveViews",
+                    "Vortex.DeferredLight.Point.NonPerspectiveLighting",
+                    "Vortex.DeferredLight.Spot.NonPerspectiveLighting",
                     "Vortex.DeferredLight.Spot.Lighting",
                 ),
             ),
@@ -587,7 +593,7 @@ def analyze(manifest: CaptureManifest) -> list[str]:
         "stage_12_order": stage_12,
         "gbuffer_contents": gbuffer_contents,
         "scene_color_lit": scene_color_lit,
-        "stencil_local_lights": stencil_local_lights,
+        "bounded_volume_local_lights": bounded_volume_local_lights,
     }
     for key in REQUIRED_KEYS:
         status, detail = results[key]

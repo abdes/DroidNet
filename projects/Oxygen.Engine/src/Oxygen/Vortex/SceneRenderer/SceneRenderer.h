@@ -48,7 +48,7 @@ public:
     bool accumulated_into_scene_color { false };
     bool used_outside_volume_local_lights { false };
     bool used_camera_inside_local_lights { false };
-    bool used_direct_local_light_fallbacks { false };
+    bool used_non_perspective_local_lights { false };
     std::uint32_t consumed_scene_depth_srv {
       SceneTextureBindings::kInvalidIndex
     };
@@ -68,7 +68,7 @@ public:
     std::uint32_t outside_volume_local_light_count { 0U };
     std::uint32_t camera_inside_local_light_count { 0U };
     std::uint32_t direct_local_light_pass_count { 0U };
-    std::uint32_t direct_local_light_fallback_count { 0U };
+    std::uint32_t non_perspective_local_light_count { 0U };
     ViewId published_view_id { kInvalidViewId };
     ShaderVisibleIndex published_view_frame_bindings_slot {
       kInvalidShaderVisibleIndex

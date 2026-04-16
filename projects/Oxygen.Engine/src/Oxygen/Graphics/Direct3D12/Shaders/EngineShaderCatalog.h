@@ -322,22 +322,18 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" }, EntryPoint { .type=kVertex, .name="DeferredLightDirectionalVS" } }
   },
-  // VortexDeferredLightPointVS / VortexDeferredLightPointPS /
-  // VortexDeferredLightPointStencilMarkPS
+  // VortexDeferredLightPointVS / VortexDeferredLightPointPS
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightPoint.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="DeferredLightPointPS" },
-      EntryPoint { .type=kPixel, .name="DeferredLightPointStencilMarkPS" },
       EntryPoint { .type=kVertex, .name="DeferredLightPointVS" } }
   },
-  // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS /
-  // VortexDeferredLightSpotStencilMarkPS
+  // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightSpot.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="DeferredLightSpotPS" },
-      EntryPoint { .type=kPixel, .name="DeferredLightSpotStencilMarkPS" },
       EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
   },
   // Light culling compute shader (final clustered analytic path)

@@ -97,7 +97,7 @@ namespace {
   enum class DeferredLocalLightDrawMode : std::uint8_t {
     kOutsideVolume = 0U,
     kCameraInsideVolume = 1U,
-    kDirectFallback = 2U,
+    kNonPerspective = 2U,
   };
 
   struct alignas(packing::kShaderDataFieldAlignment) DeferredLightConstants {
@@ -368,7 +368,7 @@ namespace {
   {
     const auto* resolved_view = ctx.current_view.resolved_view.get();
     if (resolved_view == nullptr || !IsPerspectiveProjection(*resolved_view)) {
-      return DeferredLocalLightDrawMode::kDirectFallback;
+      return DeferredLocalLightDrawMode::kNonPerspective;
     }
 
     const auto near_clip
@@ -564,13 +564,13 @@ namespace {
       .SetDebugName(light_kind == DeferredLightKind::kPoint
           ? (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume
                 ? "Vortex.DeferredLight.Point.InsideVolumeLighting"
-                : (draw_mode == DeferredLocalLightDrawMode::kDirectFallback
-                      ? "Vortex.DeferredLight.Point.DirectFallbackLighting"
+                : (draw_mode == DeferredLocalLightDrawMode::kNonPerspective
+                      ? "Vortex.DeferredLight.Point.NonPerspectiveLighting"
                       : "Vortex.DeferredLight.Point.Lighting"))
           : (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume
                 ? "Vortex.DeferredLight.Spot.InsideVolumeLighting"
-                : (draw_mode == DeferredLocalLightDrawMode::kDirectFallback
-                      ? "Vortex.DeferredLight.Spot.DirectFallbackLighting"
+                : (draw_mode == DeferredLocalLightDrawMode::kNonPerspective
+                      ? "Vortex.DeferredLight.Spot.NonPerspectiveLighting"
                       : "Vortex.DeferredLight.Spot.Lighting")))
       .Build();
   }
@@ -1481,9 +1481,9 @@ void SceneRenderer::RenderDeferredLighting(
     if (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume) {
       ++deferred_lighting_state_.camera_inside_local_light_count;
       deferred_lighting_state_.used_camera_inside_local_lights = true;
-    } else if (draw_mode == DeferredLocalLightDrawMode::kDirectFallback) {
-      ++deferred_lighting_state_.direct_local_light_fallback_count;
-      deferred_lighting_state_.used_direct_local_light_fallbacks = true;
+    } else if (draw_mode == DeferredLocalLightDrawMode::kNonPerspective) {
+      ++deferred_lighting_state_.non_perspective_local_light_count;
+      deferred_lighting_state_.used_non_perspective_local_lights = true;
     } else {
       ++deferred_lighting_state_.outside_volume_local_light_count;
       deferred_lighting_state_.used_outside_volume_local_lights = true;

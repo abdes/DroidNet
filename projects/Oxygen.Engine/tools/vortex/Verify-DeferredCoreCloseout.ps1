@@ -61,7 +61,7 @@ if ($LASTEXITCODE -ne 0) {
   'stage_12_order=pass'
   'gbuffer_contents=pass'
   'scene_color_lit=pass'
-  'stencil_local_lights=pass'
+  'bounded_volume_local_lights=pass'
 ) | Set-Content -LiteralPath $badReport -Encoding ascii
 
 $nativeCommandPreferenceAvailable = $null -ne (Get-Variable `
