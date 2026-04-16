@@ -240,6 +240,7 @@ struct GBufferOutput {
   float4 GBufferBaseColor : SV_Target2; // R8G8B8A8_SRGB: base color RGB, AO
   float4 GBufferCustomData : SV_Target3; // R8G8B8A8_UNORM: custom data
   float4 Emissive : SV_Target4;         // R16G16B16A16_FLOAT: emissive → SceneColor
+  float2 Velocity : SV_Target5;         // Opaque velocity under base-pass policy
 };
 
 #endif // VORTEX_GBUFFER_LAYOUT_HLSLI
@@ -344,8 +345,9 @@ typed domain products.
 
 #include "SceneTextureBindings.hlsli"
 
-// ViewConstants is the root CBV entry point (slot b0).
-// It carries indices to ViewFrameBindings and from there to domain payloads.
+// ViewConstants is the root CBV entry point.
+// It carries indices to ViewFrameBindings and also the current/previous
+// view-projection state required by stage-9 opaque velocity production.
 // The actual struct layout is defined by the C++ ViewConstants type.
 
 // Minimum view-routing payload required by the renderer contract.
@@ -370,6 +372,79 @@ SceneTextureBindingData LoadSceneTextureBindingsForCurrentView(
 
 #endif // VORTEX_VIEW_FRAME_BINDINGS_HLSLI
 ```
+
+### 4.6 DrawFrameBindings Contract
+
+Opaque velocity parity requires explicit current/previous publication slots.
+
+```hlsl
+// DrawFrameBindings.hlsli
+
+struct DrawFrameBindings {
+  uint draw_metadata_slot;
+  uint current_worlds_slot;
+  uint previous_worlds_slot;
+  uint current_normals_slot;
+  uint current_deformation_slot;
+  uint previous_deformation_slot;
+  uint material_shading_constants_slot;
+  uint instance_data_slot;
+};
+```
+
+Contract rules:
+
+- one overloaded `transforms_slot` is not sufficient for truthful opaque
+  velocity
+- current and previous transform/deformation publications must be explicit
+- stage-9 shaders must not reconstruct previous-frame identity from draw order
+
+### 4.7 ViewConstants Contract
+
+Opaque velocity parity requires current and previous per-view projection data.
+
+Minimum shader-visible fields:
+
+```hlsl
+cbuffer ViewConstants : register(b1, space0)
+{
+    // existing current-frame fields...
+    float4x4 view_matrix;
+    float4x4 projection_matrix;
+    float4x4 stable_projection_matrix;
+    float4x4 inverse_view_projection_matrix;
+
+    // required previous-frame fields for stage-9 velocity
+    float4x4 previous_view_matrix;
+    float4x4 previous_projection_matrix;
+    float4x4 previous_stable_projection_matrix;
+    float4x4 previous_inverse_view_projection_matrix;
+
+    float2 current_pixel_jitter;
+    float2 previous_pixel_jitter;
+};
+```
+
+The contract owner is the renderer. `ViewConstantsManager` is an upload helper,
+not the lifetime owner of previous-view history.
+
+### 4.8 BasePass Velocity Auxiliary Contract
+
+Full UE5.7-grade opaque velocity parity requires a stage-9 auxiliary path for
+materials that declare motion-vector world offset semantics.
+
+Required contract:
+
+- stage owner: `BasePassModule`
+- transient resource owner: stage-local transient texture
+  `VelocityMotionVectorWorldOffset`
+- shader family:
+  - `VortexBasePassVelocityAuxVS`
+  - `VortexBasePassVelocityAuxPS`
+  - `VortexBasePassVelocityMergeCS`
+- final publication rule:
+  - primary base-pass velocity output is not authoritative until the auxiliary
+    path, when active, completes its merge/update step
 
 ## 5. Shared — Renderer-Wide Utility Libraries
 
@@ -668,6 +743,9 @@ runtime cache.
 | `VortexDepthPrepassPS` | `Stages/DepthPrepass/DepthPrepass.hlsl` | ps_6_0 | Pixel |
 | `VortexBasePassVS` | `Stages/BasePass/BasePassGBuffer.hlsl` | vs_6_0 | Vertex |
 | `VortexBasePassPS` | `Stages/BasePass/BasePassGBuffer.hlsl` | ps_6_0 | Pixel |
+| `VortexBasePassVelocityAuxVS` | `Stages/BasePass/BasePassVelocityAux.hlsl` | vs_6_0 | Vertex |
+| `VortexBasePassVelocityAuxPS` | `Stages/BasePass/BasePassVelocityAux.hlsl` | ps_6_0 | Pixel |
+| `VortexBasePassVelocityMergeCS` | `Stages/BasePass/BasePassVelocityMerge.hlsl` | cs_6_0 | Compute |
 | `VortexDeferredLightDirectionalVS` | `Services/Lighting/DeferredLightDirectional.hlsl` | vs_6_0 | Fullscreen |
 | `VortexDeferredLightDirectionalPS` | `Services/Lighting/DeferredLightDirectional.hlsl` | ps_6_0 | Pixel |
 | `VortexDeferredLightPointVS` | `Services/Lighting/DeferredLightPoint.hlsl` | vs_6_0 | Stencil sphere |
@@ -701,8 +779,10 @@ Phase 3 uses minimal permutations:
 
 | Shader | Permutations | Purpose |
 | ------ | ------------ | ------- |
-| Depth prepass | `HAS_VELOCITY` | Catalog-managed permutation family for velocity-enabled vs non-velocity variants |
+| Depth prepass | `ALPHA_TEST` | Catalog-managed permutation family for masked depth participants |
+| Base pass | `ALPHA_TEST` | Catalog-managed permutation family for truthful masked deferred behavior |
 | Base pass | `SHADING_MODE_FORWARD` | Deferred (default) vs forward branch |
+| Base pass velocity auxiliary | `USES_MOTION_VECTOR_WORLD_OFFSET` | Catalog-managed family for the stage-9 auxiliary motion-vector-world-offset path |
 | Deferred lighting | None initially | One variant per light type |
 
 Permutations use `#ifdef` with catalog-managed define families. No runtime
@@ -739,9 +819,8 @@ Vortex catalog entries.
    expected encoded data (normals, materials, base color) via texture
    inspection.
 
-## 10. Open Questions
+## 10. Closure
 
-None — shader architecture is fully specified by ARCHITECTURE.md §10. Format
-decisions follow DESIGN.md §3.3. Normal encoding uses octahedral mapping
-(standard for deferred renderers). BRDF follows Cook-Torrance / GGX (industry
-standard).
+Shader architecture is fully specified by ARCHITECTURE.md §10. Format
+decisions follow DESIGN.md §3.3. Normal encoding uses octahedral mapping and
+BRDF follows Cook-Torrance / GGX.

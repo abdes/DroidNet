@@ -15,6 +15,12 @@ file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
 # Shared include files (HLSL headers)
 file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
 
+set(
+  SHADER_CATALOG_DEPENDENCIES
+  "${CMAKE_CURRENT_SOURCE_DIR}/EngineShaderCatalog.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/ShaderCatalogBuilder.h"
+)
+
 set(SHADERBAKE_BUILD_ROOT "${CMAKE_BINARY_DIR}/shaderbake")
 
 # The ShaderBake tool target name (executable)
@@ -75,6 +81,7 @@ add_custom_command(
   DEPENDS
     ${HLSL_FILES}
     ${HLSLI_FILES}
+    ${SHADER_CATALOG_DEPENDENCIES}
     ${OXYGEN_D3D12_SHADERBAKE_TARGET}
 )
 

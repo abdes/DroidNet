@@ -22,6 +22,8 @@ cbuffer RootConstants : register(b2, space0)
 struct BasePassGBufferVSOutput
 {
     float4 position : SV_POSITION;
+    float4 current_clip_position : TEXCOORD2;
+    float4 previous_clip_position : TEXCOORD3;
     float3 color : COLOR;
     float2 uv : TEXCOORD0;
     float3 world_pos : TEXCOORD1;
@@ -55,10 +57,18 @@ BasePassGBufferVSOutput BasePassGBufferVS(
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.transforms_slot, draw_bindings.instance_data_slot, metadata,
+        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
+        instance_id);
+    const float4x4 previous_world_matrix = BX_LoadInstanceWorldMatrix(
+        draw_bindings.previous_worlds_slot, draw_bindings.instance_data_slot, metadata,
         instance_id);
     const uint transform_index = BX_ResolveTransformIndex(
         metadata, draw_bindings.instance_data_slot, instance_id);
+    VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
+    LoadVelocityDrawMetadata(
+        draw_bindings.velocity_draw_metadata_slot, g_DrawIndex, velocity_metadata);
+    const ViewHistoryFrameBindings view_history
+        = LoadResolvedViewHistoryFrameBindings();
 
     float3x3 normal_matrix = (float3x3)world_matrix;
     if (draw_bindings.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
@@ -68,9 +78,19 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     }
 
     const float3x3 world_basis = (float3x3)world_matrix;
-    const float4 world_position
+    const float3 current_material_wpo_offset
+        = ResolveCurrentMaterialWpoOffset(draw_bindings, velocity_metadata);
+    const float3 previous_material_wpo_offset
+        = ResolvePreviousMaterialWpoOffset(draw_bindings, velocity_metadata);
+    float4 world_position
         = mul(world_matrix, float4(vertex.position, 1.0f));
+    world_position.xyz += current_material_wpo_offset;
+    float4 previous_world_position
+        = mul(previous_world_matrix, float4(vertex.position, 1.0f));
+    previous_world_position.xyz += previous_material_wpo_offset;
     const float4 view_position = mul(view_matrix, world_position);
+    float4 previous_view_position
+        = mul(view_history.previous_view_matrix, previous_world_position);
 
     float3 world_normal = SafeNormalize(mul(normal_matrix, vertex.normal));
     if (dot(world_normal, world_normal) < 0.5f) {
@@ -93,6 +113,12 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     }
 
     output.position = mul(projection_matrix, view_position);
+    output.current_clip_position = output.position;
+    output.previous_clip_position = mul(
+        view_history.previous_projection_matrix, previous_view_position);
+    if ((view_history.validity_flags & VIEW_HISTORY_FLAG_PREVIOUS_VIEW_VALID) == 0u) {
+        output.previous_clip_position = output.current_clip_position;
+    }
     output.color = vertex.color.rgb;
     output.uv = vertex.texcoord;
     output.world_pos = world_position.xyz;
@@ -114,5 +140,13 @@ GBufferOutput BasePassGBufferPS(
     material_input.uv0 = input.uv;
     material_input.draw_index = g_DrawIndex;
     material_input.is_front_face = is_front_face ? 1u : 0u;
-    return EvaluateBasePassMaterialOutput(material_input);
+    GBufferOutput output = EvaluateBasePassMaterialOutput(material_input);
+#if defined(HAS_VELOCITY)
+    const float current_w = max(abs(input.current_clip_position.w), 1.0e-5f);
+    const float previous_w = max(abs(input.previous_clip_position.w), 1.0e-5f);
+    const float2 current_ndc = input.current_clip_position.xy / current_w;
+    const float2 previous_ndc = input.previous_clip_position.xy / previous_w;
+    output.velocity = current_ndc - previous_ndc;
+#endif
+    return output;
 }

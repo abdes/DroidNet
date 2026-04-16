@@ -168,6 +168,7 @@ struct SceneTextureBindings {
     static_cast<std::size_t>(GBufferIndex::kActiveCount)>
     gbuffer_srvs { MakeInvalidGBufferSrvs() };
   std::uint32_t scene_color_uav { kInvalidIndex };
+  std::uint32_t velocity_uav { kInvalidIndex };
   std::uint32_t valid_flags { 0 };
 
   void Invalidate() noexcept;

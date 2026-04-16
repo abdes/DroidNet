@@ -29,6 +29,9 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
+#include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
+#include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -38,6 +41,7 @@
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -55,6 +59,10 @@ namespace oxygen::scene {
 class Scene;
 class SceneNode;
 } // namespace oxygen::scene
+
+namespace oxygen::scenesync {
+class RuntimeMotionProducerModule;
+} // namespace oxygen::scenesync
 
 namespace oxygen {
 class Graphics;
@@ -455,6 +463,18 @@ public:
     std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
   OXGN_VRTX_NDAPI auto ResolvePublishedRuntimeViewId(
     ViewId intent_view_id) const noexcept -> ViewId;
+  auto GetRigidTransformHistoryCache() noexcept
+    -> internal::RigidTransformHistoryCache&
+  {
+    return rigid_transform_history_cache_;
+  }
+  auto GetDeformationHistoryCache() noexcept
+    -> internal::DeformationHistoryCache&
+  {
+    return deformation_history_cache_;
+  }
+  [[nodiscard]] OXGN_VRTX_API auto GetRuntimeMotionProducerModule() const noexcept
+    -> observer_ptr<scenesync::RuntimeMotionProducerModule>;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(ViewId intent_view_id) -> void;
   OXGN_VRTX_API auto RemovePublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id) -> void;
@@ -520,6 +540,9 @@ private:
   [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
+  [[nodiscard]] auto BuildViewHistoryFrameBindings(
+    ViewId view_id, const ResolvedView& view, observer_ptr<const scene::Scene> scene)
+    -> ViewHistoryFrameBindings;
   auto EnsureSceneRenderer(const CompositionView* composition_view = nullptr)
     -> SceneRenderer&;
   auto EnsureSceneRendererFrameStarted(engine::FrameContext& context) -> void;
@@ -566,6 +589,9 @@ private:
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
+  internal::RigidTransformHistoryCache rigid_transform_history_cache_ {};
+  internal::DeformationHistoryCache deformation_history_cache_ {};
+  internal::PreviousViewHistoryCache previous_view_history_cache_ {};
   frame::SequenceNumber scene_renderer_started_frame_ { 0U };
 
   mutable std::shared_mutex view_registration_mutex_;

@@ -74,6 +74,7 @@ target_link_libraries(
     oxygen::engine
     oxygen::data
     oxygen::scene
+    oxygen::scenesync
 )
 add_custom_command(
   TARGET ${META_MODULE_TARGET}

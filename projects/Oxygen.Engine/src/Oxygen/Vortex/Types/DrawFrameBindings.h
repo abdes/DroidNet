@@ -42,22 +42,39 @@ OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialShadingConstantsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
   BindlessProceduralGridMaterialConstantsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessInstanceDataSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessSkinnedPosePublicationsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMorphPublicationsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialWpoPublicationsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
+  BindlessMotionVectorStatusPublicationsSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessVelocityDrawMetadataSlot);
 
 #undef OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE
 
 //! Bindless draw-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
   BindlessDrawMetadataSlot draw_metadata_slot {};
-  BindlessWorldsSlot transforms_slot {};
+  BindlessWorldsSlot current_worlds_slot {};
+  BindlessWorldsSlot previous_worlds_slot {};
   BindlessNormalsSlot normal_matrices_slot {};
   BindlessMaterialShadingConstantsSlot material_shading_constants_slot {};
   BindlessProceduralGridMaterialConstantsSlot
     procedural_grid_material_constants_slot {};
   BindlessInstanceDataSlot instance_data_slot {};
-  std::array<std::uint32_t, 2> _pad_to_16 {};
+  BindlessSkinnedPosePublicationsSlot current_skinned_pose_slot {};
+  BindlessSkinnedPosePublicationsSlot previous_skinned_pose_slot {};
+  BindlessMorphPublicationsSlot current_morph_slot {};
+  BindlessMorphPublicationsSlot previous_morph_slot {};
+  BindlessMaterialWpoPublicationsSlot current_material_wpo_slot {};
+  BindlessMaterialWpoPublicationsSlot previous_material_wpo_slot {};
+  BindlessMotionVectorStatusPublicationsSlot
+    current_motion_vector_status_slot {};
+  BindlessMotionVectorStatusPublicationsSlot
+    previous_motion_vector_status_slot {};
+  BindlessVelocityDrawMetadataSlot velocity_draw_metadata_slot {};
 };
 
-static_assert(sizeof(DrawFrameBindings) == 32);
+static_assert(sizeof(DrawFrameBindings) == 64);
 static_assert(alignof(DrawFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(
   sizeof(DrawFrameBindings) % packing::kShaderDataFieldAlignment == 0);

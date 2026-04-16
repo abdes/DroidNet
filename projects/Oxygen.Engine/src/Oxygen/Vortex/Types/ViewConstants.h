@@ -121,12 +121,11 @@ public:
     std::uint32_t _pad1 { 0 };
     std::uint32_t _pad2 { 0 };
     std::uint32_t _pad3 { 0 };
-
-    // padding to 256-byte alignment
     glm::vec4 _pad_to_256_1 { 0.0F };
   };
-  // clang-format off
   static_assert(sizeof(GpuData) <= packing::kRootConstantsMaxSize);
+  static_assert(sizeof(GpuData) % packing::kShaderDataFieldAlignment == 0);
+  // clang-format off
   static_assert(offsetof(GpuData, view_matrix) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, projection_matrix) % packing::kShaderDataFieldAlignment == 0);
   static_assert(offsetof(GpuData, inverse_view_projection_matrix) % packing::kShaderDataFieldAlignment == 0);

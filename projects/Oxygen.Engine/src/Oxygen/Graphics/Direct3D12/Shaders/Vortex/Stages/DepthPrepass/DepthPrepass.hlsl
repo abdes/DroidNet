@@ -51,12 +51,17 @@ DepthPrepassVSOutput DepthPrepassVS(
     const Vertex vertex
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
     output.uv = vertex.texcoord;
+    VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
+    LoadVelocityDrawMetadata(
+        draw_bindings.velocity_draw_metadata_slot, g_DrawIndex, velocity_metadata);
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.transforms_slot, draw_bindings.instance_data_slot, metadata,
+        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
         instance_id);
-    const float4 world_position
+    float4 world_position
         = mul(world_matrix, float4(vertex.position, 1.0f));
+    world_position.xyz += ResolveCurrentMaterialWpoOffset(
+        draw_bindings, velocity_metadata);
     const float4 view_position = mul(view_matrix, world_position);
     output.position = mul(projection_matrix, view_position);
     return output;

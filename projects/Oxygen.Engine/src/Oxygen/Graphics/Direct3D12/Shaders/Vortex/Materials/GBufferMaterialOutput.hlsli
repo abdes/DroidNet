@@ -36,6 +36,9 @@ static inline GBufferOutput PackGBufferOutput(
         = EncodeGBufferBaseColor(surface.base_rgb, surface.ao);
     output.gbuffer_custom_data = 0.0f.xxxx;
     output.emissive_scene_color = float4(surface.emissive, surface.base_a);
+#if defined(HAS_VELOCITY)
+    output.velocity = float2(0.0f, 0.0f);
+#endif
     return output;
 }
 

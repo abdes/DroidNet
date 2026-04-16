@@ -31,7 +31,10 @@ struct Vertex {
   glm::vec3 tangent; //!< Tangent vector (optional, for normal mapping)
   glm::vec3 bitangent; //!< Bitangent vector (optional, for normal mapping)
   glm::vec4 color; //!< Vertex color (optional, for per-vertex tinting)
-  // Extend as needed: skin weights, bone indices, etc.
+  // TODO(vortex/skinned-morph): when the engine lands real skinned/morph
+  // runtime support, extend the live vertex ABI with joint indices/weights and
+  // morph/deformation fetch inputs so Stage 3/9 can evaluate those producers
+  // from actual geometry streams instead of placeholder publication metadata.
 };
 
 //! Default geometric epsilon used for vertex fuzzy comparisons & hashing.

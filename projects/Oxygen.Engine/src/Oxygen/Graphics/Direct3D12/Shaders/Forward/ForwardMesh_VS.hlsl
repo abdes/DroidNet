@@ -89,8 +89,8 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
 
     // Fetch per-draw world matrix and apply world, view, and projection transforms
     float4x4 world_matrix;
-    if (draw_bindings.transforms_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[draw_bindings.transforms_slot];
+    if (draw_bindings.current_worlds_slot != 0xFFFFFFFFu) {
+        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[draw_bindings.current_worlds_slot];
         // Use per-instance transform index
         world_matrix = worlds[transform_index];
     } else {

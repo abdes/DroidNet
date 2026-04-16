@@ -254,6 +254,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     stage3_name = "Vortex.Stage3.DepthPrepass"
     stage9_name = "Vortex.Stage9.BasePass"
+    stage9_main_pass_name = "Vortex.Stage9.BasePass.MainPass"
     stage12_name = "Vortex.Stage12.DeferredLighting"
     stage12_spot_name = "Vortex.Stage12.SpotLight"
     stage12_point_name = "Vortex.Stage12.PointLight"
@@ -261,7 +262,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     compositing_name = "Vortex.CompositingTask[label=Composite Copy View 1]"
 
     stage3_records = records_under_prefix(action_records, stage3_name)
-    stage9_records = records_under_prefix(action_records, stage9_name)
+    stage9_main_pass_records = records_under_prefix(
+        action_records, stage9_name + " > " + stage9_main_pass_name
+    )
+    stage9_records = (
+        stage9_main_pass_records
+        if stage9_main_pass_records
+        else records_under_prefix(action_records, stage9_name)
+    )
     stage12_records = records_under_prefix(action_records, stage12_name)
     spot_records = records_under_prefix(action_records, stage12_name + " > " + stage12_spot_name)
     point_records = records_under_prefix(action_records, stage12_name + " > " + stage12_point_name)
@@ -295,9 +303,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "GBufferBaseColor",
         "GBufferCustomData",
         "SceneColor",
+        "Velocity",
     ]
     stage9_gbuffer_nonzero = any(
         sample["name"] == "GBufferBaseColor" and sample["rgb_nonzero"]
+        for sample in stage9["outputs"]
+    )
+    stage9_velocity_nonzero = any(
+        sample["name"] == "Velocity" and sample["nonzero"]
         for sample in stage9["outputs"]
     )
     stage12_spot_scene_color_nonzero = any(
@@ -326,6 +339,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
     report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
     report.append("stage9_gbuffer_base_color_nonzero={}".format(str(stage9_gbuffer_nonzero).lower()))
+    report.append("stage9_velocity_nonzero={}".format(str(stage9_velocity_nonzero).lower()))
     report.append("stage12_spot_scene_color_nonzero={}".format(str(stage12_spot_scene_color_nonzero).lower()))
     report.append("stage12_point_scene_color_nonzero={}".format(str(stage12_point_scene_color_nonzero).lower()))
     report.append("stage12_directional_scene_color_nonzero={}".format(str(stage12_directional_scene_color_nonzero).lower()))
@@ -334,6 +348,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage3_depth_ok
         and stage9_has_expected_targets
         and stage9_gbuffer_nonzero
+        and stage9_velocity_nonzero
         and stage12_spot_scene_color_nonzero
         and stage12_point_scene_color_nonzero
         and stage12_directional_scene_color_nonzero

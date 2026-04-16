@@ -16,6 +16,7 @@
 #include <Oxygen/Vortex/Types/ConventionalShadowDrawRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/VelocityPublications.h>
 
 namespace oxygen::vortex {
 
@@ -46,6 +47,7 @@ struct PreparedSceneFrame {
   // of the prepared frame.
   std::span<const std::byte> draw_metadata_bytes; // temporary generic span
   std::span<const float> world_matrices; // 16 * float per matrix
+  std::span<const float> previous_world_matrices; // 16 * float per matrix
   std::span<const float> normal_matrices; // 16 * float per matrix
 
   // Partition map (Task 11 scaffolding): pass mask -> contiguous draw range.
@@ -65,10 +67,24 @@ struct PreparedSceneFrame {
     visible_receiver_bounding_spheres; // xyz=center, w=radius
   std::span<const vortex::ConventionalShadowDrawRecord>
     conventional_shadow_draw_records;
+  std::span<const SkinnedPosePublication> current_skinned_pose_publications;
+  std::span<const SkinnedPosePublication> previous_skinned_pose_publications;
+  std::span<const MorphPublication> current_morph_publications;
+  std::span<const MorphPublication> previous_morph_publications;
+  std::span<const MaterialWpoPublication> current_material_wpo_publications;
+  std::span<const MaterialWpoPublication> previous_material_wpo_publications;
+  std::span<const MotionVectorStatusPublication>
+    current_motion_vector_status_publications;
+  std::span<const MotionVectorStatusPublication>
+    previous_motion_vector_status_publications;
+  std::span<const VelocityDrawMetadata> velocity_draw_metadata;
 
   // Bindless SRV indices captured at ScenePrep finalization time
   // These must be captured immediately after Finalize to ensure consistency
   oxygen::ShaderVisibleIndex bindless_worlds_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_previous_worlds_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_normals_slot {
@@ -87,6 +103,33 @@ struct PreparedSceneFrame {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_conventional_shadow_draw_records_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_current_skinned_pose_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_previous_skinned_pose_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_current_morph_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_previous_morph_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_current_material_wpo_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_previous_material_wpo_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_current_motion_vector_status_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_previous_motion_vector_status_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_velocity_draw_metadata_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
 

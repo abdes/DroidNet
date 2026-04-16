@@ -66,6 +66,9 @@ constexpr std::array kReservedPriorityBindings {
     oxygen::engine::kImGuiModulePriority, "ImGuiModule" },
   ReservedPriorityBinding {
     oxygen::engine::kScriptingModulePriority, "ScriptingModule" },
+  ReservedPriorityBinding {
+    oxygen::engine::kRuntimeMotionProducerModulePriority,
+    "RuntimeMotionProducerModule" },
   ReservedPriorityBinding { oxygen::engine::kSceneObserverSyncModulePriority,
     "SceneObserverSyncModule" },
 };

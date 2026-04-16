@@ -150,6 +150,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     stage3_scope_name = "Vortex.Stage3.DepthPrepass"
     stage9_scope_name = "Vortex.Stage9.BasePass"
+    stage9_main_pass_scope_name = "Vortex.Stage9.BasePass.MainPass"
     stage12_scope_name = "Vortex.Stage12.DeferredLighting"
     stage12_spot_scope_name = "Vortex.Stage12.SpotLight"
     stage12_point_scope_name = "Vortex.Stage12.PointLight"
@@ -177,7 +178,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_exact_count_check(report, "compositing_scope_count", len(compositing_scope), 1)
 
     stage3_records = records_under_prefix(action_records, stage3_scope_name)
-    stage9_records = records_under_prefix(action_records, stage9_scope_name)
+    stage9_main_pass_records = records_under_prefix(
+        action_records, stage9_scope_name + " > " + stage9_main_pass_scope_name
+    )
+    stage9_records = (
+        stage9_main_pass_records
+        if stage9_main_pass_records
+        else records_under_prefix(action_records, stage9_scope_name)
+    )
     stage12_spot_records = records_under_prefix(
         action_records, stage12_scope_name + " > " + stage12_spot_scope_name
     )

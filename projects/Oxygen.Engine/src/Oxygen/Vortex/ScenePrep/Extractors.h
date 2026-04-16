@@ -90,7 +90,15 @@ inline auto TransformResolveStage(const ScenePrepContext& ctx,
   // transform.
   auto uploader = state.GetTransformUploader();
   if (uploader) {
-    const auto handle = uploader->GetOrAllocate(item.GetWorldTransform());
+    auto previous_world = item.GetWorldTransform();
+    if (const auto history = state.GetRigidTransformHistory();
+      history != nullptr) {
+      const auto snapshot
+        = history->TouchCurrent(item.GetNodeHandle(), item.GetWorldTransform());
+      previous_world = snapshot.previous_world;
+    }
+    const auto handle
+      = uploader->GetOrAllocate(item.GetWorldTransform(), previous_world);
     item.SetTransformHandle(handle);
   } else {
     item.SetTransformHandle(kInvalidTransformHandle);

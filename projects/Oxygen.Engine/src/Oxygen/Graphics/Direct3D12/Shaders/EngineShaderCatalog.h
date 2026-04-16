@@ -291,7 +291,20 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
+    .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
+  },
+  RequiredDefineShaderFileSpec<2, 1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassVelocityAux.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="BasePassVelocityAuxPS" },
+      EntryPoint { .type=kVertex, .name="BasePassVelocityAuxVS" } },
+    .required_defines=std::array<std::string_view, 1>
+      { "USES_MOTION_VECTOR_WORLD_OFFSET" },
     .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Stages/BasePass/BasePassVelocityMerge.hlsl",
+    .entries=std::array { EntryPoint { .type=kCompute, .name="BasePassVelocityMergeCS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
@@ -545,7 +558,9 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 //   OXYGEN_HDR_OUTPUT)
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
-// - VortexBasePassGBuffer: 4 (2 entries x ALPHA_TEST)
+// - VortexBasePassGBuffer: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
+// - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x ALPHA_TEST)
+// - VortexBasePassVelocityMerge: 1
 // - VortexBasePassDebugView: 5 (VS + 4 required debug PS variants)
 // - VortexDeferredLightDirectional: 2 entries
 // - VortexDeferredLightPoint: 3 entries

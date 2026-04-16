@@ -21,6 +21,7 @@ struct SceneTextureBindingData
     uint custom_stencil_srv;
     uint gbuffer_srvs[GBUFFER_COUNT];
     uint scene_color_uav;
+    uint velocity_uav;
     uint valid_flags;
 };
 
@@ -40,6 +41,7 @@ static inline SceneTextureBindingData MakeInvalidSceneTextureBindings()
     bindings.gbuffer_srvs[GBUFFER_BASE_COLOR] = INVALID_BINDLESS_INDEX;
     bindings.gbuffer_srvs[GBUFFER_CUSTOM_DATA] = INVALID_BINDLESS_INDEX;
     bindings.scene_color_uav = INVALID_BINDLESS_INDEX;
+    bindings.velocity_uav = INVALID_BINDLESS_INDEX;
     bindings.valid_flags = 0u;
     return bindings;
 }

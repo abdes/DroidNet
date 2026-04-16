@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `blocked — Phase 03 now has a working retained runtime branch with green live VortexBasic proof, but the closure/docs remediation lane is still open and Phase 04 stays locked until the remaining Phase 03 blockers are closed truthfully`
+Status: `done — Phase 03 closure is accepted for the current engine feature envelope; live D3D12 proof is green and deferred skinned/morph engine enablement is carried forward as explicit TODO work`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -34,7 +34,7 @@ Related:
 | 0 | Scaffold and Build Integration | `done` | — |
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
-| 3 | Deferred Core | `blocked` | final multi-review/remediation gate plus remaining Phase 3 doc/code contract cleanup |
+| 3 | Deferred Core | `done` | — |
 | 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
@@ -69,6 +69,436 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-16 — Phase 03 closure accepted for the current engine feature envelope
+
+- Scope decision:
+  - Phase 03 items 6, 7, and 8 are now treated as `done` for the maximum
+    functional extent possible with the current engine features.
+  - Deferred skinned / morph engine enablement is recorded as explicit TODO
+    carry-forward work and no longer blocks Phase 03 closure.
+- Changed files this session:
+  - `src/Oxygen/Data/Vertex.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vertex.hlsli`
+  - `src/Oxygen/SceneSync/RuntimeMotionProducerModule.h`
+  - `src/Oxygen/Vortex/Internal/DeformationHistoryCache.h`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-examples-vortexbasic Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.Vortex\\.SceneRendererDeferredCore\\.Tests$" --output-on-failure`
+  - existing live D3D12 closure proof retained:
+    - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-active-fixed2`
+- Result:
+  - closure state is now explicit and scoped:
+    - Item 6: done for the current engine feature envelope
+    - Item 7: done for the current engine feature envelope
+    - Item 8: done for the current engine feature envelope
+  - concise code comments now mark the real future extension points for
+    skinned / morph support in:
+    - CPU vertex ABI
+    - shader vertex ABI
+    - SceneSync placeholder producer bridge
+    - renderer-owned deformation history
+- Evidence retained for closure:
+  - focused proof:
+    - `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+  - live D3D12 proof:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-active-fixed2.validation.txt`
+  - key runtime fields:
+    - `overall_verdict=pass`
+    - `stage9_has_expected_targets=true`
+    - `stage9_velocity_nonzero=true`
+    - `stage12_point_scene_color_nonzero=true`
+    - `stage12_spot_scene_color_nonzero=true`
+    - `final_present_nonzero=true`
+- Deferred carry-forward:
+  - full skinned / morph velocity parity remains future engine-enablement work,
+    but it is now documented as TODO carry-forward rather than a Phase 03
+    blocker
+
+### 2026-04-16 — Phase 03 MVWO chain proved live; remaining blocker narrowed to missing skinned/morph substrate
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h`
+  - `src/Oxygen/Vortex/Test/Fakes/Graphics.h`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `Examples/VortexBasic/MainModule.cpp`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-examples-vortexbasic --parallel 4`
+  - `cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.Vortex\\.SceneRendererDeferredCore\\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-active-fixed2`
+- Result:
+  - the Stage-9 MVWO auxiliary path is now active on the default live `VortexBasic` runtime surface instead of only existing as dormant infrastructure
+  - the real regression behind the first activation failure was fixed:
+    - the auxiliary pass no longer clears depth through the D3D12 framebuffer helper path
+    - local-light Stage 12 proof remains nonzero with MVWO/WPO active
+  - focused test coverage now proves the Stage-9 chain shape on the fake renderer path:
+    - one velocity copy
+    - one auxiliary draw
+    - one merge dispatch
+    - color-only aux clear surface (no depth attachment on the aux clear framebuffer)
+- Code / validation delta:
+  - focused proof:
+    - `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+  - live D3D12 proof:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-active-fixed2.validation.txt`
+  - key runtime fields:
+    - `overall_verdict=pass`
+    - `stage9_has_expected_targets=true`
+    - `stage9_velocity_nonzero=true`
+    - `stage12_point_scene_color_nonzero=true`
+    - `stage12_spot_scene_color_nonzero=true`
+  - capture proof now contains:
+    - `Vortex.Stage9.BasePass.VelocityAux`
+    - `Vortex.Stage9.BasePass.VelocityMerge`
+    - `ID3D12GraphicsCommandList::Dispatch()`
+- Remaining blocker:
+  - Item 6 remains open because MVWO merge correctness is only structurally tested so far; producer-specific final-scene proof and broader correctness cases are still missing
+  - Item 7 remains open because the authoritative validation scene still lacks masked, skinned, and morph/deformation producers
+  - the hard blocker for Items 7 and 8 is now explicit in repo code:
+    - `src/Oxygen/Data/Vertex.h` still documents skin weights / bone indices as future extension
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vertex.hlsli` still exposes only rigid vertex attributes
+    - Vortex currently publishes skinned/morph slots, but there is still no live geometry upload / shader fetch path for real joint-weight or morph streams
+  - that missing render substrate prevents truthful closure of full masked/deformed/skinned/WPO parity today
+
+#### TODO — Skinned / Morph Support Once Engine Runtime Exists
+
+- extend the live vertex ABI in:
+  - `src/Oxygen/Data/Vertex.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/Vertex.hlsli`
+  so real skinning and morph stream fetch is possible instead of placeholder publication only
+- teach `GeometryUploader` / scene-prep geometry references to publish the required skinned and morph stream bindings:
+  - joint indices
+  - joint weights
+  - inverse bind data
+  - joint remap data
+  - morph target / deformation streams
+- connect the future engine-side animation / skeleton runtime to `SceneSync::RuntimeMotionProducerModule` so it freezes:
+  - authoritative current joint-palette state
+  - authoritative current morph-weight / deformation state
+  at `kPublishViews`
+- extend `InitViews` and renderer-owned publication/history to materialize truthful current/previous families for:
+  - `SkinnedPosePublication`
+  - `MorphPublication`
+  including invalidation on skeleton layout / morph layout / geometry identity change
+- update Stage 3 / Stage 9 shaders to evaluate:
+  - current skinned deformation
+  - previous skinned deformation
+  - current morph deformation
+  - previous morph deformation
+  before velocity generation, not as disconnected metadata-only flags
+- add focused unit coverage for:
+  - skinned publication roll-forward
+  - morph publication roll-forward
+  - skeleton layout invalidation
+  - morph layout invalidation
+  - first-frame / invalid-history fallback for both families
+- expand `VortexBasic` with deterministic producer-specific proof regions for:
+  - skinned velocity
+  - morph/deformation velocity
+  and keep those captures in the live D3D12 validation pack before any closure claim
+
+### 2026-04-16 — Phase 03 MVWO auxiliary infrastructure landed; default runtime proof restored
+
+- Changed files this session:
+  - `src/Oxygen/SceneSync/RuntimeMotionProducerModule.h`
+  - `src/Oxygen/SceneSync/RuntimeMotionProducerModule.cpp`
+  - `src/Oxygen/SceneSync/Test/RuntimeMotionProducerModule_test.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneTextures.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneTextures.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp`
+  - `src/Oxygen/Vortex/Test/SceneTextures_test.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawHelpers.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/VelocityPublications.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/SceneTextureBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassGBuffer.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassVelocityAux.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassVelocityMerge.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/DepthPrepass/DepthPrepass.hlsl`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicCapture.py`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `tools/vortex/Assert-VortexBasicRuntimeProof.ps1`
+  - `Examples/VortexBasic/MainModule.cpp`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-scenesync Oxygen.SceneSync.RuntimeMotionProducerModule.Tests oxygen-vortex Oxygen.Vortex.SceneRendererDeferredCore.Tests oxygen-examples-vortexbasic --parallel 4`
+  - `cmake --build out/build-ninja --config Debug --target Oxygen.Vortex.SceneTextures.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^(Oxygen\.SceneSync\.RuntimeMotionProducerModule|Oxygen\.Vortex\.(SceneTextures|SceneRendererPublication|SceneRendererDeferredCore|DeformationHistoryCache))\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-baseline-restored`
+- Result:
+  - `SceneSync::RuntimeMotionProducerModule` now exposes a real runtime material-motion input contract:
+    - producer-owned current WPO parameter block publication
+    - producer-owned current MVWO parameter block publication
+    - frozen snapshot overlay at `kPublishViews`
+  - `InitViews` now preserves those parameter blocks in renderer-owned current/previous typed publications instead of publishing capability bits only.
+  - Stage 3 and Stage 9 shaders now consume current/previous material-WPO publications so visible geometry can follow the same renderer-owned motion contract that velocity uses.
+  - Stage 9 now owns explicit MVWO infrastructure:
+    - stage-local `VelocityBasePassCopy`
+    - stage-local `VelocityMotionVectorWorldOffset`
+    - `BasePassVelocityAux.hlsl`
+    - `BasePassVelocityMerge.hlsl`
+    - velocity UAV publication through `SceneTextureBindings`
+    - nested GPU scopes:
+      - `Vortex.Stage9.BasePass.MainPass`
+      - `Vortex.Stage9.BasePass.VelocityAux`
+      - `Vortex.Stage9.BasePass.VelocityMerge`
+  - RenderDoc analyzers now treat `Stage9.MainPass` as the authoritative GBuffer proof surface, so future auxiliary/merge draws do not corrupt the base-pass validation report.
+  - The strengthened default runtime proof is green on:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-baseline-restored.validation.txt`
+- Code / validation delta:
+  - focused unit/integration coverage is green after the slice:
+    - `Oxygen.SceneSync.RuntimeMotionProducerModule.Tests`
+    - `Oxygen.Vortex.SceneTextures.Tests`
+    - `Oxygen.Vortex.SceneRendererPublication.Tests`
+    - `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+    - `Oxygen.Vortex.DeformationHistoryCache.Tests`
+  - the default live D3D12 proof remains green with:
+    - `analysis_result=success`
+    - `overall_verdict=pass`
+    - `stage9_has_expected_targets=true`
+    - `stage9_velocity_nonzero=true`
+    - `stage12_point_scene_color_nonzero=true`
+    - `stage12_spot_scene_color_nonzero=true`
+  - a non-default MVWO activation attempt on the rotating cube proved the new producer chain executes:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-mvwo-active_frame4_vortexbasic_capture_report.txt`
+    - capture evidence includes:
+      - `Vortex.Stage9.BasePass.VelocityAux`
+      - `ID3D12GraphicsCommandList::CopyTextureRegion()`
+      - `Vortex.Stage9.BasePass.VelocityMerge`
+      - `ID3D12GraphicsCommandList::Dispatch()`
+  - that same activation attempt was intentionally not left as the default runtime path because point/spot local-light product proof dropped to zero on the current simple scene; the authoritative validation-scene expansion is therefore still open and required.
+- Remaining blocker:
+  - Item 6 is not closed yet:
+    - MVWO auxiliary/merge infrastructure exists, but it still lacks authoritative runtime proof on the final validation scene
+    - focused merge-correctness tests are still missing
+  - Item 7 is not closed yet:
+    - `VortexBasic` has not yet been expanded into the approved authoritative producer scene for masked / skinned / morph / WPO coverage
+    - the current default scene is intentionally still the pre-expansion two-draw baseline
+  - Item 8 is not closed yet:
+    - docs are synced only to the current in-progress state
+    - final review/remediation has not been run
+    - skinned and morph/deformation runtime producers are still absent
+  - items 6, 7, and 8 remain open
+
+### 2026-04-16 — Phase 03 Stage-2 motion-publication bridge, previous-view publication seam, and runtime regressions advanced
+
+- Changed files this session:
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/PreparedSceneFrame.h`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/Resources/DrawMetadataEmitter.h`
+  - `src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp`
+  - `src/Oxygen/Vortex/Resources/TransformUploader.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp`
+  - `src/Oxygen/Vortex/Test/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Test/Internal/DeformationHistoryCache_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
+  - `src/Oxygen/Vortex/Types/DrawFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/VelocityPublications.h`
+  - `src/Oxygen/Vortex/Types/ViewHistoryFrameBindings.h`
+  - `src/Oxygen/Vortex/Internal/DeformationHistoryCache.h`
+  - `src/Oxygen/Vortex/Internal/DeformationHistoryCache.cpp`
+  - `src/Oxygen/Vortex/Internal/PreviousViewHistoryCache.h`
+  - `src/Oxygen/Vortex/Internal/PreviousViewHistoryCache.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawFrameBindings.hlsli`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.DeformationHistoryCache.Tests.exe`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.Vortex\\.(SceneRendererDeferredCore|DeformationHistoryCache)\\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-basepass-result`
+- Result:
+  - Stage 2 no longer leaves the SceneSync producer bridge unused:
+    - `InitViewsModule` now consumes `RuntimeMotionProducerModule` snapshots
+    - `PreparedSceneFrame` now carries explicit typed current/previous motion-publication slots for:
+      - material WPO
+      - motion-vector status
+      - per-draw velocity publication metadata
+    - renderer-owned render-identity history now rolls current/previous material-motion and motion-vector-status publications through `DeformationHistoryCache`
+  - draw-order publication mapping is now stable against downstream emitter sorting because `DrawMetadataEmitter` preserves per-draw render identity alongside sorted draw metadata
+  - renderer-owned previous-view history now exists and is published through the already-owned per-view `history_frame_slot` seam instead of expanding the shared `ViewConstants` ABI
+  - the Stage 9 bool seam is partially removed:
+    - `BasePassModule::Execute(...)` now returns `BasePassExecutionResult`
+    - `SceneRenderer` Stage 9 / 10 gating now consumes that result object directly
+  - two runtime regressions on the live D3D12 path were fixed:
+    - first-frame compositing now falls back to the published composite source when the resolved scene-color artifact is not ready yet
+    - `TransformUploader` now arms `previous_worlds_buffer_` on frame start, eliminating the invalid-slot previous-world upload failure
+  - fresh live `VortexBasic` proof remains green after the slice
+- Code / validation delta:
+  - fresh D3D12 proof artifact:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-basepass-result.validation.txt`
+  - key proof fields:
+    - `analysis_result=success`
+    - `overall_verdict=pass`
+    - `phase03_runtime_stage_order_match=true`
+    - `stage3_depth_ok=true`
+    - `stage9_gbuffer_base_color_nonzero=true`
+    - `stage12_directional_scene_color_nonzero=true`
+    - `stage12_point_scene_color_nonzero=true`
+    - `stage12_spot_scene_color_nonzero=true`
+    - `final_present_nonzero=true`
+  - new focused cache lifecycle proof is green:
+    - `Oxygen.Vortex.DeformationHistoryCache.Tests`
+- Remaining blocker:
+  - the velocity producer chain is still incomplete:
+    - Base pass does not yet bind/write a real velocity MRT from current/previous typed motion inputs
+    - MVWO auxiliary pass + merge/update is still absent
+    - previous-view data is published but not yet consumed by Stage 9 shaders
+    - skinned / morph current-state runtime payloads are still truthful placeholders or absent because the upstream runtimes do not exist yet
+  - `Oxygen.Vortex.SceneRendererPublication.Tests` currently crashes with an SEH teardown failure and remains a verification gap on this branch
+  - items 6, 7, and 8 remain open
+
+### 2026-04-16 — Phase 03 SceneSync producer slice rerun on live D3D12 VortexBasic validation
+
+- Changed files this session:
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-scenesync`
+- Result:
+  - the primary validation path for the current SceneSync producer slice was rerun through the live D3D12 `VortexBasic` runtime proof flow rather than headless smoke
+  - the runtime proof passed on the new artifact path
+- Code / validation delta:
+  - validation artifact:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-runtime-validation-scenesync.validation.txt`
+  - key proof fields:
+    - `analysis_result=success`
+    - `overall_verdict=pass`
+    - `phase03_runtime_stage_order_match=true`
+    - `stage3_depth_ok=true`
+    - `stage9_gbuffer_base_color_nonzero=true`
+    - `stage12_directional_scene_color_nonzero=true`
+    - `stage12_point_scene_color_nonzero=true`
+    - `stage12_spot_scene_color_nonzero=true`
+    - `final_present_nonzero=true`
+- Remaining blocker:
+  - this D3D12 rerun validates the current runtime branch, but it does not close items 6, 7, or 8 because the Stage-2 consumer wiring, deformation history/publication, previous-view history, Stage-9 output-backed velocity path, MVWO merge path, and final review/remediation loop are still incomplete
+
+### 2026-04-16 — Phase 03 runtime motion producer bridge stood up, verified, and kept open truthfully
+
+- Changed files this session:
+  - `src/Oxygen/Core/EngineModule.h`
+  - `src/Oxygen/Engine/ModuleManager.cpp`
+  - `src/Oxygen/SceneSync/CMakeLists.txt`
+  - `src/Oxygen/SceneSync/RuntimeMotionProducerModule.h`
+  - `src/Oxygen/SceneSync/RuntimeMotionProducerModule.cpp`
+  - `src/Oxygen/SceneSync/Test/CMakeLists.txt`
+  - `src/Oxygen/SceneSync/Test/RuntimeMotionProducerModule_test.cpp`
+  - `Examples/VortexBasic/CMakeLists.txt`
+  - `Examples/VortexBasic/main_impl.cpp`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/03-VELOCITY-PARITY-TRACKER.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-scenesync Oxygen.SceneSync.RuntimeMotionProducerModule.Tests oxygen-examples-vortexbasic --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.SceneSync\\.RuntimeMotionProducerModule\\.Tests$" --output-on-failure`
+  - `out/build-ninja/bin/Debug/Oxygen.Examples.VortexBasic.exe --frames 1 --headless`
+- Result:
+  - `SceneSync` now owns a real `RuntimeMotionProducerModule` that freezes an immutable per-scene current-state motion snapshot at `kPublishViews`.
+  - The snapshot currently publishes:
+    - stable material-motion keys keyed by `NodeHandle + GeometryAssetKey + LOD + Submesh`
+    - resolved material contract hashes
+    - truthful WPO / MVWO / temporal-responsiveness / pixel-animation status bits, which remain false/absent until a real runtime material-motion producer exists
+    - truthful skinned-family records that explicitly carry `has_runtime_pose=false` when skinned meshes are present
+  - `VortexBasic` now instantiates the module on the real runtime path, and the earlier headless one-frame smoke run remained a secondary bring-up check only
+  - Focused unit coverage now proves the snapshot publication seam and material-override key-stability / contract-change behavior.
+- Code / validation delta:
+  - no Phase 03 closure item is claimed closed from this slice
+  - no Stage-9 velocity, MVWO auxiliary path, deformation-history, or previous-view history claims are made from this slice
+- Remaining blocker:
+  - Phase 03 still lacks:
+    - Vortex consumption of the new SceneSync snapshot during Stage 2
+    - renderer-owned deformation-history/current-previous publication families
+    - previous-view history
+    - output-backed Stage-9 velocity production
+    - MVWO auxiliary pass + merge/update
+    - expanded runtime validation surface and final review/remediation loop
+  - items 6, 7, and 8 remain open until those code paths, docs, tests, runtime proof, and final review all pass
+
+### 2026-04-16 — Phase 03 velocity redesign approved and first implementation slice landed
+
+- Changed files this session:
+  - `design/vortex/ARCHITECTURE.md`
+  - `design/vortex/PLAN.md`
+  - `design/vortex/lld/base-pass.md`
+  - `design/vortex/lld/depth-prepass.md`
+  - `design/vortex/lld/init-views.md`
+  - `design/vortex/lld/sceneprep-refactor.md`
+  - `design/vortex/lld/shader-contracts.md`
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Internal/RigidTransformHistoryCache.h`
+  - `src/Oxygen/Vortex/Internal/RigidTransformHistoryCache.cpp`
+  - `src/Oxygen/Vortex/PreparedSceneFrame.h`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/Resources/TransformUploader.h`
+  - `src/Oxygen/Vortex/Resources/TransformUploader.cpp`
+  - `src/Oxygen/Vortex/ScenePrep/Extractors.h`
+  - `src/Oxygen/Vortex/ScenePrep/ScenePrepState.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `src/Oxygen/Vortex/Types/DrawFrameBindings.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DrawFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Depth/DepthPrePass.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardMesh_VS.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/BasePassGBuffer.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/DepthPrepass/DepthPrepass.hlsl`
+- Commands used for verification:
+  - two architecture review subagents over the revised design package
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 Oxygen.Vortex.SceneRendererDeferredCore.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\\.Vortex\\.SceneRendererDeferredCore\\.Tests$" --output-on-failure`
+- Result:
+  - the Phase 03 design package was revised to target full UE5.7-grade opaque velocity parity, explicitly separate renderer motion vectors from Physics-module velocities, and was re-reviewed to unconditional architecture approval
+  - the first code slice landed:
+    - renderer-owned rigid transform history cache
+    - current/previous transform publication seam through `TransformUploader`, `PreparedSceneFrame`, `DrawFrameBindings`, and `Renderer` publication
+    - Stage 9 masked base-pass pipeline permutation selection now drives `ALPHA_TEST` instead of silently treating masked draws as opaque
+  - targeted deferred-core tests remain green after the slice
+- Code / validation delta:
+  - no Phase 03 closure item is claimed closed from this slice
+  - no live runtime validation rerun was claimed yet because the full opaque velocity producer chain is still incomplete
+- Remaining blocker:
+  - full code implementation is still open for:
+    - previous-view history publication/runtime use
+    - output-backed Stage 9 velocity production
+    - motion-vector-world-offset auxiliary path + merge/update
+    - deformation/skinned/WPO producer inputs and validation-surface expansion
+  - items 6, 7, and 8 remain open until those code paths, tests, docs, and runtime proof are complete
+
+### 2026-04-16 — Phase 03 point/spot local-light product gate closure synced
+
+- Changed files this session:
+  - `.planning/workstreams/vortex/phases/03-deferred-core/PHASE3-CLOSURE-GAPS.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `rg -n "diagnostic-only|diagnostic only|point/spot.*SceneColor|durable runtime gate" design/vortex/IMPLEMENTATION-STATUS.md .planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md tools/vortex/README.md tools/vortex/Assert-VortexBasicRuntimeProof.ps1 tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic --parallel 4`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/task21-05-pointspot-product-gate`
+- Result:
+  - The active Phase 03 validator, `tools/vortex/README.md`, and the implementation ledger now tell the same truth for Stage 12 products: point/spot nonzero `SceneColor` is part of the durable live-runtime gate, not a diagnostic-only signal.
+  - Fresh VortexBasic runtime proof passed on the item-5 artifact path and preserved the current structural + product gate.
+- Code / validation delta:
+  - no runtime code changed in this remediation slice
+  - fresh proof artifact: `out/build-ninja/analysis/vortex/vortexbasic/runtime/task21-05-pointspot-product-gate.validation.txt`
+  - fresh proof result: `analysis_result=success`, `overall_verdict=pass`, `stage12_point_scene_color_nonzero=true`, `stage12_spot_scene_color_nonzero=true`
+- Remaining blocker:
+  - final multi-subagent architectural/LLD/code-quality review plus remediation of the remaining open closure-gap items before any Phase 03 closure claim
 
 ### 2026-04-16 — Phase 3 deferred-core closeout blocked
 
@@ -1410,8 +1840,8 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 - Final multi-subagent architectural/LLD/code-quality review over the cleaned
   Phase 03 branch, plus remediation of every finding before any closure claim.
-- Align the remaining docs and status surfaces to the current durable point/spot
-  local-light product gate already enforced by the runtime validator.
+- Remediate the remaining open closure-gap items beyond the now-aligned
+  point/spot local-light product gate before any closure claim.
 
 ### Resume Point
 

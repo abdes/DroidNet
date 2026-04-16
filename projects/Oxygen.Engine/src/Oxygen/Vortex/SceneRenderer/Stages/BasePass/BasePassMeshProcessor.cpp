@@ -21,7 +21,7 @@ auto AppendMetadataCommand(std::vector<BasePassDrawCommand>& draw_commands,
   const std::uint32_t draw_index, const bool write_velocity) -> void
 {
   auto material_handle = metadata.material_handle;
-  auto geometry_lod_index = metadata.submesh_index;
+  auto geometry_lod_index = 0U;
 
   if (draw_index < prepared_scene.render_items.size()) {
     const auto& render_item = prepared_scene.render_items[draw_index];
