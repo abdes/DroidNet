@@ -20,6 +20,12 @@ namespace oxygen {
 //! Runtime-selected physics backend policy.
 using EnginePhysicsBackend = core::meta::physics::PhysicsBackend;
 
+//! Runtime-selected renderer module implementation.
+enum class RendererImplementation : uint8_t {
+  kLegacy,
+  kVortex,
+};
+
 //! Fixed timestep timing configuration for deterministic simulation
 struct TimingConfig {
   //! Fixed timestep delta time for physics and deterministic systems
@@ -73,6 +79,11 @@ struct EngineConfig {
   //! Use 0 for uncapped frame rate. Values above this will be clamped by
   //! AsyncEngine::SetTargetFps.
   static constexpr uint32_t kMaxTargetFps = 240U;
+
+  //! Configuration for renderer module selection only.
+  struct RendererModuleConfig {
+    RendererImplementation implementation { RendererImplementation::kLegacy };
+  } renderer;
 
   struct {
     std::string name;

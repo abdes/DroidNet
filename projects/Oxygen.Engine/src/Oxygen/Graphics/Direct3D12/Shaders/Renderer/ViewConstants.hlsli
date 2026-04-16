@@ -15,6 +15,7 @@ cbuffer ViewConstants : register(b1, space0)
     float time_seconds;
     float4x4 view_matrix;
     float4x4 projection_matrix;
+    float4x4 inverse_view_projection_matrix;
     float3 camera_position;
     float _pad0;
 
@@ -24,10 +25,6 @@ cbuffer ViewConstants : register(b1, space0)
     uint _pad3;
 
     float4 _pad_to_256_1;
-    float4 _pad_to_256_2;
-    float4 _pad_to_256_3;
-    float4 _pad_to_256_4;
-    float4 _pad_to_256_5;
 };
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_VIEWCONSTANTS_HLSLI

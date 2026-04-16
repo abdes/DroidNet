@@ -45,8 +45,6 @@
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/Renderer.h>
-
 using oxygen::observer_ptr;
 using oxygen::core::ExecutionModel;
 using oxygen::core::kPhaseRegistry;
@@ -65,8 +63,6 @@ struct ReservedPriorityBinding {
 
 constexpr std::array kReservedPriorityBindings {
   ReservedPriorityBinding {
-    oxygen::engine::kRendererModulePriority, "RendererModule" },
-  ReservedPriorityBinding {
     oxygen::engine::kImGuiModulePriority, "ImGuiModule" },
   ReservedPriorityBinding {
     oxygen::engine::kScriptingModulePriority, "ScriptingModule" },
@@ -77,6 +73,10 @@ constexpr std::array kReservedPriorityBindings {
 auto FindReservedOwnerByPriority(const std::uint32_t priority)
   -> std::string_view
 {
+  if (priority == oxygen::engine::kRendererModulePriority.get()) {
+    return "RendererModule";
+  }
+
   for (const auto& binding : kReservedPriorityBindings) {
     if (binding.priority.get() == priority) {
       return binding.module_name;
@@ -266,12 +266,32 @@ auto ModuleManager::RegisterModule(
 
   const auto name = module->GetName();
   const auto priority = module->GetPriority().get();
+  const bool is_renderer_module
+    = priority == oxygen::engine::kRendererModulePriority.get();
 
-  if (const auto reserved_owner = FindReservedOwnerByPriority(priority);
-    !reserved_owner.empty() && reserved_owner != name) {
+  if (is_renderer_module) {
+    if (std::ranges::any_of(modules_, [](const auto& existing) {
+          return existing != nullptr
+            && existing->GetPriority().get()
+            == oxygen::engine::kRendererModulePriority.get();
+        })) {
+      ABORT_F("Renderer module '{}' attempted to register, but a renderer "
+              "module is already registered",
+        name);
+    }
+  } else if (priority == oxygen::engine::kRendererModulePriority.get()) {
     ABORT_F("Module '{}' attempted to register with reserved priority {} "
-            "owned by '{}'",
-      name, priority, reserved_owner);
+            "owned by 'RendererModule'",
+      name, priority);
+  }
+
+  if (!is_renderer_module) {
+    if (const auto reserved_owner = FindReservedOwnerByPriority(priority);
+      !reserved_owner.empty() && reserved_owner != name) {
+      ABORT_F("Module '{}' attempted to register with reserved priority {} "
+              "owned by '{}'",
+        name, priority, reserved_owner);
+    }
   }
 
   std::uint32_t required_priority = 0;
@@ -672,9 +692,8 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
       if (m == nullptr) {
         continue;
       }
-      // Typed lookup only (no string matching) to keep this robust across
-      // module name changes.
-      if (m->GetTypeId() == oxygen::engine::Renderer::ClassTypeId()) {
+      if (m->GetPriority().get()
+        == oxygen::engine::kRendererModulePriority.get()) {
         renderer_module = m;
         continue;
       }
