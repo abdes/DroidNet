@@ -454,7 +454,7 @@ Classification values are preserved exactly as requested:
        - per-mode RenderDoc reports under
          `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-debug-view-validation-*.validation.txt`
 
-10. [ ] **Stage 9 products are considered valid one stage later than the architecture says**
+10. [x] **Stage 9 products are considered valid one stage later than the architecture says**
 
     - Severity: `High`
     - Direction: `docs->code`
@@ -474,6 +474,27 @@ Classification values are preserved exactly as requested:
       - Decide whether validity must become true at Stage 9 or remain Stage 10-owned.
       - Align code, tests, and architecture to the same boundary.
       - Do not leave “Stage 9 produces it but Stage 10 makes it valid” half-documented.
+    - Remediation status:
+      - Resolved in favor of **Stage 10-owned validity** for `SceneColor` and
+        the active GBuffers.
+      - Decision rationale:
+        - UE5.7 does not expose a separate top-level “Stage 10” promotion seam;
+          deferred consumers read the same scene-texture family directly after
+          the base pass.
+        - Vortex explicitly introduced Stage 10 as a
+          `RebuildWithGBuffers()` + routing-refresh boundary, so in Vortex the
+          only truthful meaning of “valid” is “consumable through the canonical
+          `SceneTextureBindings` / `ViewFrameBindings` publication stack.”
+        - Stage 9 therefore remains:
+          - raw attachment production for `SceneColor` + active GBuffers
+          - output-backed velocity production/publication
+        - Stage 10 remains:
+          - the first consumable publication boundary for `SceneColor` +
+            active GBuffers + stencil-backed routing
+      - Code/tests already matched this boundary; the remediation was to make
+        the architecture and LLD tell the same story and to harden the runtime
+        code comment/guard so Stage 9 cannot silently start publishing those
+        bindings in the future.
 
 11. [ ] **SceneRenderer shell ownership drifted from `SceneRenderer` to `Renderer`**
 

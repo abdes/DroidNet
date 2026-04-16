@@ -95,10 +95,7 @@ Concrete product family. Owns GPU texture resources.
 ```cpp
 class SceneTextures {
 public:
-  OXGN_VRTX_API explicit SceneTextures(
-    graphics::IGraphics& gfx,
-    const SceneTexturesConfig& config);
-
+  OXGN_VRTX_API explicit SceneTextures(Graphics& gfx, const SceneTexturesConfig& config);
   OXGN_VRTX_API ~SceneTextures();
 
   // Non-copyable, non-movable (owns GPU resources)
@@ -109,30 +106,38 @@ public:
 
   // --- Core products (always valid after construction) ---
 
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneColor() const
+  OXGN_VRTX_NDAPI auto GetSceneColor() const
     -> graphics::Texture&;
-  [[nodiscard]] OXGN_VRTX_API auto GetSceneDepth() const
+  OXGN_VRTX_NDAPI auto GetSceneDepth() const
     -> graphics::Texture&;
-  [[nodiscard]] OXGN_VRTX_API auto GetPartialDepth() const
+  OXGN_VRTX_NDAPI auto GetPartialDepth() const
     -> graphics::Texture&;
-  [[nodiscard]] OXGN_VRTX_API auto GetStencil() const
-    -> graphics::Texture&;
+  OXGN_VRTX_NDAPI auto GetSceneColorResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
+  OXGN_VRTX_NDAPI auto GetSceneDepthResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
+  OXGN_VRTX_NDAPI auto GetStencil() const -> SceneTextureAspectView;
 
   // --- GBuffer products (valid after RebuildWithGBuffers) ---
 
-  [[nodiscard]] OXGN_VRTX_API auto GetGBuffer(GBufferIndex index) const
+  OXGN_VRTX_NDAPI auto GetGBuffer(GBufferIndex index) const
     -> graphics::Texture&;
-  [[nodiscard]] OXGN_VRTX_API auto GetGBufferCount() const
+  OXGN_VRTX_NDAPI auto GetGBufferResource(GBufferIndex index) const
+    -> const std::shared_ptr<graphics::Texture>&;
+  OXGN_VRTX_NDAPI auto GetGBufferNormal() const -> graphics::Texture&;
+  OXGN_VRTX_NDAPI auto GetGBufferMaterial() const -> graphics::Texture&;
+  OXGN_VRTX_NDAPI auto GetGBufferBaseColor() const -> graphics::Texture&;
+  OXGN_VRTX_NDAPI auto GetGBufferCustomData() const -> graphics::Texture&;
+  OXGN_VRTX_NDAPI auto GetGBufferCount() const noexcept
     -> std::uint32_t;
 
   // --- Optional products (null when not enabled) ---
 
-  [[nodiscard]] OXGN_VRTX_API auto GetVelocity() const
-    -> graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto GetCustomDepth() const
-    -> graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto GetCustomStencil() const
-    -> graphics::Texture*;
+  OXGN_VRTX_NDAPI auto GetVelocity() const -> graphics::Texture*;
+  OXGN_VRTX_NDAPI auto GetVelocityResource() const
+    -> const std::shared_ptr<graphics::Texture>&;
+  OXGN_VRTX_NDAPI auto GetCustomDepth() const -> graphics::Texture*;
+  OXGN_VRTX_NDAPI auto GetCustomStencil() const -> SceneTextureAspectView;
 
   // --- Lifecycle ---
 
@@ -141,26 +146,30 @@ public:
 
   // --- Query ---
 
-  [[nodiscard]] OXGN_VRTX_API auto GetExtent() const -> glm::uvec2;
-  [[nodiscard]] OXGN_VRTX_API auto GetConfig() const
+  OXGN_VRTX_NDAPI auto GetExtent() const noexcept -> glm::uvec2;
+  OXGN_VRTX_NDAPI auto GetConfig() const noexcept
     -> const SceneTexturesConfig&;
 
 private:
-  graphics::IGraphics& gfx_;
+  struct RegisteredTexture {
+    std::shared_ptr<graphics::Texture> resource;
+  };
+
+  Graphics& gfx_;
   SceneTexturesConfig config_;
 
   // Core products — allocated at construction
-  std::unique_ptr<graphics::Texture> scene_color_;     // R16G16B16A16_FLOAT
-  std::unique_ptr<graphics::Texture> scene_depth_;     // D32_FLOAT_S8X24_UINT (depth + scene stencil family)
-  std::unique_ptr<graphics::Texture> partial_depth_;   // R32_FLOAT
+  RegisteredTexture scene_color_;
+  RegisteredTexture scene_depth_;
+  RegisteredTexture partial_depth_;
 
   // GBuffer products — allocated at construction, valid after rebuild
-  std::array<std::unique_ptr<graphics::Texture>,
+  std::array<RegisteredTexture,
     static_cast<size_t>(GBufferIndex::kCount)> gbuffers_;
 
   // Optional products — null when not enabled
-  std::unique_ptr<graphics::Texture> velocity_;        // R16G16_FLOAT
-  std::unique_ptr<graphics::Texture> custom_depth_;    // D32_FLOAT_S8X24_UINT when enabled (custom depth + custom stencil family)
+  RegisteredTexture velocity_;
+  RegisteredTexture custom_depth_;
 };
 ```
 
@@ -168,10 +177,14 @@ private:
 
 Getter semantics:
 
-- `GetStencil()` exposes the scene stencil family through the scene
-  depth/stencil resource owned by `SceneTextures`
+- `GetSceneColorResource()`, `GetSceneDepthResource()`, and
+  `GetGBufferResource(...)` expose the shared-resource handle used by
+  publication and extraction code
+- `GetStencil()` exposes the scene stencil family through a
+  `SceneTextureAspectView` into the scene depth/stencil resource owned by
+  `SceneTextures`
 - `GetCustomStencil()` exposes the custom stencil family only when the optional
-  custom depth/stencil path is enabled
+  custom depth/stencil path is enabled, also through `SceneTextureAspectView`
 
 ### 3.4 SceneTextureSetupMode
 
@@ -211,8 +224,8 @@ stage boundaries. Passes consume the mode; they do not update it.
 | After Stage | Flags Set |
 | ----------- | --------- |
 | 3 (depth prepass) | `kSceneDepth`, `kPartialDepth`, optionally `kSceneVelocity` (partial) |
-| 9 (base pass) | `kGBuffers`, `kSceneColor` added |
-| 10 (rebuild) | GBuffer-valid state for deferred consumers |
+| 9 (base pass) | raw `GBuffer*` / `SceneColor` attachments may be written, but they remain unpublished for standard scene-texture consumers |
+| 10 (rebuild) | `SceneColor` + GBuffer-valid published state for deferred consumers |
 | 22 (post-process) | All production products valid |
 | 23 (cleanup) | Extraction set queued |
 
@@ -318,12 +331,14 @@ Stage 3 (Depth Prepass)
 
 Stage 9 (Base Pass)
   └─ Writes: GBufferNormal/Material/BaseColor/CustomData (MRT), SceneColor (emissive), velocity completion
-  └─ SetupMode += kGBuffers | kSceneColor
+  └─ No `SceneTextureSetupMode` promotion for `SceneColor` / `kGBuffers` yet
+  └─ Standard scene-texture bindings still treat SceneColor / GBuffers as unavailable here
 
 Stage 10 (Rebuild)
   └─ SceneTextures::RebuildWithGBuffers() — state transition
+  └─ SetupMode += kGBuffers | kSceneColor | kStencil
   └─ Bindings regenerated with full GBuffer SRVs
-  └─ GBuffers now readable by downstream stages
+  └─ SceneColor + GBuffers now readable by downstream stages through the canonical publication stack
 
 Stage 12 (Deferred Lighting)
   └─ Reads: GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, IBL
@@ -391,8 +406,8 @@ viewport dimensions against current extent and calls `Resize` if they differ.
 1. Validates GBuffer textures exist and have been written
 2. Creates or updates SRV descriptor views for GBuffer read access
 3. Leaves ownership of `SceneTextureSetupMode` to `SceneRenderer`, which marks
-   GBuffers as consumable and republishes shared routing metadata after the
-   rebuild boundary
+   `SceneColor`, `kGBuffers`, and stencil-backed routing as consumable and
+   republishes shared routing metadata after the rebuild boundary
 
 This is called by `SceneRenderer` at stage 10 after the base pass completes.
 

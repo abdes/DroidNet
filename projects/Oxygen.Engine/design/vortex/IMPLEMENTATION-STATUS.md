@@ -70,6 +70,46 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-16 — Stage 9/10 scene-texture validity boundary aligned to Stage 10
+
+- Scope decision:
+  - `SceneColor` plus the active GBuffers remain **Stage 10-owned valid
+    products** in Vortex.
+  - Stage 9 remains the raw attachment-write point for those products and the
+    output-backed publication point for `SceneVelocity`.
+  - UE5.7 does not expose a separate top-level Stage 10 seam, but Vortex does;
+    in Vortex, “valid” therefore means “consumable through the canonical
+    `SceneTextureBindings` / `ViewFrameBindings` publication stack,” which is
+    first true after the Stage 10 rebuild/refresh boundary.
+- Changed files this session:
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `design/vortex/ARCHITECTURE.md`
+  - `design/vortex/PLAN.md`
+  - `design/vortex/lld/scene-textures.md`
+  - `.planning/workstreams/vortex/phases/03-deferred-core/PHASE3-CLOSURE-GAPS.md`
+- Commands used for verification:
+  - `cmake --build out/build-ninja --config Debug --target oxygen-vortex oxygen-graphics-direct3d12 oxygen-examples-vortexbasic Oxygen.Vortex.SceneRendererDeferredCore.Tests Oxygen.Vortex.SceneRendererPublication.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^Oxygen\.Vortex\.(SceneRendererDeferredCore|SceneRendererPublication)\.Tests$" --output-on-failure`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-item10-runtime-validation`
+- Result:
+  - architecture, plan, and scene-textures LLD now agree with the existing
+    implementation and proof surface:
+    - Stage 9 writes raw base-pass attachments
+    - Stage 10 is the first consumable publication boundary for `SceneColor`
+      plus the active GBuffers
+  - `SceneRenderer` now carries an explicit guard that prevents Stage 9 from
+    silently publishing `SceneColor` / GBuffer bindings before the Stage 10
+    rebuild boundary
+  - the deferred-core proof name now states the boundary directly:
+    - `BasePassLeavesSceneColorAndGBuffersInvalidUntilStage10`
+- Evidence retained:
+  - focused proof:
+    - `Oxygen.Vortex.SceneRendererDeferredCore.Tests`
+    - `Oxygen.Vortex.SceneRendererPublication.Tests`
+  - live D3D12 proof:
+    - `out/build-ninja/analysis/vortex/vortexbasic/runtime/phase3-item10-runtime-validation.validation.txt`
+
 ### 2026-04-16 — Phase 03 deferred debug visualization runtime route landed
 
 - Changed files this session:

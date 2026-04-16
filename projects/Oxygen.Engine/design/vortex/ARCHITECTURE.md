@@ -576,7 +576,7 @@ Allowed architectural differences:
 | 7 | `CompositionLighting::ProcessBeforeBasePass` | reserved `MaterialCompositionService::PreBasePass` | future MaterialCompositionService | UE stage family includes deferred decals and AO-adjacent work. Vortex maps only the material-surface modification subset here. |
 | 8 | `FinishInitDynamicShadows` / `RenderShadowDepthMaps` | `ShadowService::RenderShadowDepths` | ShadowService | Shadow-map production stays distinct from lighting use. |
 | 9 | `RenderBasePass` | `BasePassModule::Execute` | BasePassModule | GBuffer MRT writes, masked/opaque alpha-tested deferred shading, emissive accumulation, and the full opaque `SceneVelocity` producer chain for masked, deformed, skinned, and WPO-capable content. Stage 9 includes the primary base-pass velocity write plus any required motion-vector-world-offset auxiliary path and merge/update step before completion. Deferred default, forward branch only where allowed. |
-| 10 | Rebuild scene textures with GBuffers | inline `SceneTextures::RebuildWithGBuffers()` | SceneRenderer | ~50 lines. State transition, not a standalone module. `SceneVelocity` becomes publishable only after the full stage-9 producer chain, including any auxiliary merge/update work, completes. |
+| 10 | Rebuild scene textures with GBuffers | inline `SceneTextures::RebuildWithGBuffers()` | SceneRenderer | ~50 lines. State transition plus canonical scene-texture publication boundary, not a standalone module. `SceneColor` and the active GBuffers become consumable only after this rebuild/refresh seam runs. `SceneVelocity` becomes publishable only after the full stage-9 producer chain, including any auxiliary merge/update work, completes. |
 | 11 | `CompositionLighting::ProcessAfterBasePass` | reserved `MaterialCompositionService::PostBasePass` | future MaterialCompositionService | UE stage family includes deferred decals plus AO-adjacent work. Vortex keeps deferred decal application and material classification here; AO remains with `IndirectLightingService`. |
 | 12 | `RenderLights` | `LightingService::RenderDeferredLighting` | LightingService | Fullscreen/bounded deferred direct lighting. |
 | 13 | `RenderDeferredReflectionsAndSkyLighting` / `AddSubsurfacePass` | reserved `IndirectLightingService::Execute` | future IndirectLightingService | UE 5.7 splits this family across indirect/reflection and subsurface passes. Vortex keeps the family under one future indirect-lighting owner. |
@@ -961,8 +961,8 @@ Minimum setup milestones:
 | Runtime Point | Minimum Valid SceneTextureSetupMode |
 | --- | --- |
 | after stage 3 | `SceneDepth` plus `PartialDepth`; opaque `SceneVelocity` remains unavailable under the current base-pass velocity policy |
-| after stage 9 | active GBuffers plus `SceneColor`; if the active opaque-velocity policy is base pass, `SceneVelocity` is valid only when stage 9 actually bound and produced the velocity target for every supported opaque producer class (masked, deformed, skinned, WPO-capable) |
-| after stage 10 | GBuffer-valid scene-texture state for deferred consumers |
+| after stage 9 | raw base-pass attachments may have been written, but `SceneColor` and the active GBuffers are not yet valid through the canonical `SceneTextureBindings` / `ViewFrameBindings` publication path; if the active opaque-velocity policy is base pass, `SceneVelocity` is valid only when stage 9 actually bound and produced the velocity target for every supported opaque producer class (masked, deformed, skinned, WPO-capable) |
+| after stage 10 | `SceneColor`, the active GBuffers, and stencil-backed scene-texture routing are valid for downstream deferred consumers through the canonical publication stack |
 | after stage 13/15 | indirect / environment products valid when those families are enabled |
 | after stage 19 | late translucent/distortion velocity valid when produced |
 | after stage 23 | extraction set queued for handoff as needed |

@@ -792,6 +792,15 @@ namespace {
       });
   }
 
+  auto HasAnyPublishedGBufferBinding(const SceneTextureBindings& bindings)
+    -> bool
+  {
+    return std::ranges::any_of(
+      bindings.gbuffer_srvs, [](const std::uint32_t index) -> bool {
+        return index != SceneTextureBindings::kInvalidIndex;
+      });
+  }
+
   auto HasPublishedDeferredLightingInputs(const SceneTextureBindings& bindings)
     -> bool
   {
@@ -980,14 +989,20 @@ void SceneRenderer::ApplyStage3DepthPrepassState()
 
 void SceneRenderer::ApplyStage9BasePassState()
 {
-  // Stage 9 writes deferred attachments, but Stage 10 remains the first
-  // bindless publication boundary for SceneColor and the active GBuffers.
-  if (scene_textures_.GetVelocity() == nullptr) {
-    return;
+  // Stage 9 owns the raw attachment writes, but Stage 10 remains the first
+  // truthful publication boundary for SceneColor and the active GBuffers in
+  // the standard SceneTextureBindings route.
+  if (scene_textures_.GetVelocity() != nullptr) {
+    setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
+    RefreshSceneTextureBindings();
   }
-
-  setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
-  RefreshSceneTextureBindings();
+  CHECK_F(scene_texture_bindings_.scene_color_srv
+        == SceneTextureBindings::kInvalidIndex
+      && scene_texture_bindings_.scene_color_uav
+        == SceneTextureBindings::kInvalidIndex
+      && !HasAnyPublishedGBufferBinding(scene_texture_bindings_),
+    "SceneRenderer: Stage 9 must not publish SceneColor or GBuffer bindings "
+    "before the Stage 10 rebuild boundary");
 }
 
 void SceneRenderer::ApplyStage10RebuildState()
