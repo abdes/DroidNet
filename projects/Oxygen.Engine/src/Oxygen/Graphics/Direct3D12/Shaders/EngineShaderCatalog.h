@@ -322,15 +322,23 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightDirectionalPS" }, EntryPoint { .type=kVertex, .name="DeferredLightDirectionalVS" } }
   },
-  // VortexDeferredLightPointVS / VortexDeferredLightPointPS
+  // VortexDeferredLightPointVS / VortexDeferredLightPointPS /
+  // VortexDeferredLightPointStencilMarkPS
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightPoint.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightPointPS" }, EntryPoint { .type=kVertex, .name="DeferredLightPointVS" } }
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="DeferredLightPointPS" },
+      EntryPoint { .type=kPixel, .name="DeferredLightPointStencilMarkPS" },
+      EntryPoint { .type=kVertex, .name="DeferredLightPointVS" } }
   },
-  // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS
+  // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS /
+  // VortexDeferredLightSpotStencilMarkPS
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightSpot.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightSpotPS" }, EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="DeferredLightSpotPS" },
+      EntryPoint { .type=kPixel, .name="DeferredLightSpotStencilMarkPS" },
+      EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
   },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
@@ -544,8 +552,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexBasePassGBuffer: 4 (2 entries x ALPHA_TEST)
 // - VortexBasePassDebugView: 5 (VS + 4 required debug PS variants)
 // - VortexDeferredLightDirectional: 2 entries
-// - VortexDeferredLightPoint: 2 entries
-// - VortexDeferredLightSpot: 2 entries
+// - VortexDeferredLightPoint: 3 entries
+// - VortexDeferredLightSpot: 3 entries
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry

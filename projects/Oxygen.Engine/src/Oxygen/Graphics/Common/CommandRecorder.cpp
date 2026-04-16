@@ -99,6 +99,14 @@ auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
     // in case barriers were placed.
     resource_state_tracker_->OnCommandListClosed();
     FlushBarriers();
+    auto recorded_states = std::vector<CommandList::RecordedResourceState> {};
+    const auto tracker_states = resource_state_tracker_->SnapshotTrackedStates();
+    recorded_states.reserve(tracker_states.size());
+    for (const auto& tracker_state : tracker_states) {
+      recorded_states.push_back(
+        { .resource = tracker_state.resource, .state = tracker_state.state });
+    }
+    command_list_->SetRecordedResourceStates(std::move(recorded_states));
 
     command_list_->OnEndRecording();
     return std::move(command_list_);
@@ -362,6 +370,16 @@ void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
     resource, initial_state, keep_initial_state);
 }
 
+void CommandRecorder::DoAdoptKnownResourceState(const Buffer& resource,
+  const ResourceStates current_state, const bool keep_initial_state)
+{
+  DLOG_F(4, "buffer: adopt known state `{}` current={}{}",
+    resource.GetName(), current_state,
+    keep_initial_state ? " (preserve it)" : "");
+  resource_state_tracker_->AdoptResourceState(
+    resource, current_state, keep_initial_state);
+}
+
 // ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoEnableAutoMemoryBarriers(const Buffer& resource)
 {
@@ -405,6 +423,16 @@ void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,
     keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->BeginTrackingResourceState(
     resource, initial_state, keep_initial_state);
+}
+
+void CommandRecorder::DoAdoptKnownResourceState(const Texture& resource,
+  const ResourceStates current_state, const bool keep_initial_state)
+{
+  DLOG_F(4, "texture: adopt known state `{}` current={}{}",
+    resource.GetName(), current_state,
+    keep_initial_state ? " (preserve it)" : "");
+  resource_state_tracker_->AdoptResourceState(
+    resource, current_state, keep_initial_state);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

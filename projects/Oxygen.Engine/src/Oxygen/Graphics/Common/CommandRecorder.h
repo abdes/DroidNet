@@ -26,6 +26,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -462,6 +463,32 @@ public:
   }
 
   template <Trackable T>
+  [[nodiscard]] auto AdoptKnownResourceState(const T& resource,
+    const bool keep_initial_state = false) -> bool
+  {
+    if (target_queue_ == nullptr) {
+      return false;
+    }
+    const auto known_state
+      = target_queue_->TryGetKnownResourceState(resource.GetNativeResource());
+    if (!known_state.has_value()) {
+      return false;
+    }
+
+    if constexpr (IsBuffer<T>) {
+      DoAdoptKnownResourceState(
+        static_cast<const Buffer&>(resource), *known_state, keep_initial_state);
+    } else if constexpr (IsTexture<T>) {
+      DoAdoptKnownResourceState(static_cast<const Texture&>(resource),
+        *known_state, keep_initial_state);
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for AdoptKnownResourceState");
+    }
+    return true;
+  }
+
+  template <Trackable T>
   auto EnableAutoMemoryBarriers(const T& resource) -> void
   {
     if constexpr (IsBuffer<T>) {
@@ -591,6 +618,10 @@ private:
     ResourceStates initial_state, bool keep_initial_state) -> void;
   OXGN_GFX_API auto DoBeginTrackingResourceState(const Texture& resource,
     ResourceStates initial_state, bool keep_initial_state) -> void;
+  OXGN_GFX_API auto DoAdoptKnownResourceState(const Buffer& resource,
+    ResourceStates current_state, bool keep_initial_state) -> void;
+  OXGN_GFX_API auto DoAdoptKnownResourceState(const Texture& resource,
+    ResourceStates current_state, bool keep_initial_state) -> void;
 
   OXGN_GFX_API auto DoEnableAutoMemoryBarriers(const Buffer& resource) -> void;
   OXGN_GFX_API auto DoEnableAutoMemoryBarriers(const Texture& resource) -> void;
