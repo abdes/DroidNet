@@ -54,7 +54,15 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    const bool owns_registration = resource_registry.AcquireRegistration(texture);
+    auto rtv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
+      ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
+    if (!rtv_handle.IsValid()) {
+      throw std::runtime_error(fmt::format(
+        "Failed to allocate RTV handle for color attachment in texture `{}`",
+        texture->GetName()));
+    }
+
+    resource_registry.Register(texture);
 
     TextureViewDescription view_desc {
       .view_type = ResourceViewType::kTexture_RTV,
@@ -64,33 +72,15 @@ FramebufferImpl::FramebufferImpl(
       .sub_resources = attachment.sub_resources,
     };
 
-    auto rtv = resource_registry.Find(*texture, view_desc);
-    bool owns_view_registration = false;
+    auto rtv = resource_registry.RegisterView(
+      *texture, std::move(rtv_handle), view_desc);
     if (!rtv->IsValid()) {
-      auto rtv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
-        ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
-      if (!rtv_handle.IsValid()) {
-        throw std::runtime_error(fmt::format(
-          "Failed to allocate RTV handle for color attachment in texture `{}`",
-          texture->GetName()));
-      }
-      auto acquired = resource_registry.AcquireViewRegistration(
-        *texture, std::move(rtv_handle), view_desc);
-      rtv = acquired.first;
-      owns_view_registration = acquired.second;
-    }
-    if (!rtv->IsValid()) {
-      if (owns_registration) {
-        resource_registry.UnRegisterResource(*texture);
-      }
+      resource_registry.UnRegisterResource(*texture);
       throw std::runtime_error(fmt::format(
         "Failed to register RTV view for texture `{}`", texture->GetName()));
     }
     rtvs_.push_back(rtv);
     textures_.push_back(std::move(texture));
-    owns_resource_registration_.push_back(owns_registration);
-    owns_view_registration_.push_back(owns_view_registration);
-    registered_views_.push_back(rtv);
   }
 
   if (auto& depth_attachment = desc_.depth_attachment;
@@ -103,7 +93,16 @@ FramebufferImpl::FramebufferImpl(
       "FramebufferImpl {}: height mismatch between attachments",
       texture->GetName());
 
-    const bool owns_registration = resource_registry.AcquireRegistration(texture);
+    DescriptorAllocationHandle dsv_handle
+      = gfx->GetDescriptorAllocator().AllocateRaw(
+        ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+    if (!dsv_handle.IsValid()) {
+      throw std::runtime_error(fmt::format(
+        "Failed to allocate DSV handle for color attachment in texture `{}`",
+        texture->GetName()));
+    }
+
+    resource_registry.Register(texture);
 
     TextureViewDescription view_desc {
       .view_type = ResourceViewType::kTexture_DSV,
@@ -111,37 +110,18 @@ FramebufferImpl::FramebufferImpl(
       .format = depth_attachment.format,
       .dimension = texture->GetDescriptor().texture_type,
       .sub_resources = depth_attachment.sub_resources,
-      .is_read_only_dsv = depth_attachment.is_read_only,
     };
 
-    auto dsv = resource_registry.Find(*texture, view_desc);
-    bool owns_view_registration = false;
+    auto dsv = resource_registry.RegisterView(
+      *texture, std::move(dsv_handle), view_desc);
     if (!dsv->IsValid()) {
-      auto dsv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
-        ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
-      if (!dsv_handle.IsValid()) {
-        throw std::runtime_error(fmt::format(
-          "Failed to allocate DSV handle for color attachment in texture `{}`",
-          texture->GetName()));
-      }
-      auto acquired = resource_registry.AcquireViewRegistration(
-        *texture, std::move(dsv_handle), view_desc);
-      dsv = acquired.first;
-      owns_view_registration = acquired.second;
-    }
-    if (!dsv->IsValid()) {
-      if (owns_registration) {
-        resource_registry.UnRegisterResource(*texture);
-      }
+      resource_registry.UnRegisterResource(*texture);
       throw std::runtime_error(fmt::format(
         "Failed to register DSV view for texture `{}`", texture->GetName()));
     }
     dsv_ = dsv;
 
     textures_.push_back(std::move(texture));
-    owns_resource_registration_.push_back(owns_registration);
-    owns_view_registration_.push_back(owns_view_registration);
-    registered_views_.push_back(dsv);
   }
 }
 
@@ -156,26 +136,12 @@ FramebufferImpl::~FramebufferImpl()
 
   LOG_SCOPE_F(1, "Destroying framebuffer");
   auto& resource_registry = gfx->GetResourceRegistry();
-  for (std::size_t index = 0; index < textures_.size(); ++index) {
-    const auto& texture = textures_[index];
+  for (const auto& texture : textures_) {
     DCHECK_NOTNULL_F(texture, "Texture must not be null");
     DLOG_F(1, "for texture {}", texture->GetName());
-    if (index < owns_resource_registration_.size()
-      && owns_resource_registration_[index]) {
-      gfx->ForgetKnownResourceState(*texture);
-      resource_registry.UnRegisterResource(*texture);
-    } else if (index < owns_view_registration_.size()
-      && owns_view_registration_[index]
-      && index < registered_views_.size()
-      && registered_views_[index]->IsValid()
-      && resource_registry.Contains(*texture)) {
-      resource_registry.UnRegisterView(*texture, registered_views_[index]);
-    }
+    resource_registry.UnRegisterResource(*texture);
   }
   textures_.clear();
-  owns_resource_registration_.clear();
-  owns_view_registration_.clear();
-  registered_views_.clear();
   rtvs_.clear();
 }
 
