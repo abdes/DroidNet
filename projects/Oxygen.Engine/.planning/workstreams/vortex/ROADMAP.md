@@ -24,7 +24,7 @@ phase-traceable.
 - [x] **Phase 2: SceneTextures and SceneRenderer Shell** - Establish (completed 2026-04-14)
       `SceneTextures`, `SceneRenderBuilder`, and the 23-stage `SceneRenderer`
       shell, then close remediation and human review.
-- [ ] **Phase 3: Deferred Core** - Bring up shader foundation, depth prepass,
+- [x] **Phase 3: Deferred Core** - Bring up shader foundation, depth prepass, (completed 2026-04-15)
       base pass, and correctness-first deferred lighting.
 - [ ] **Phase 4: Migration-Critical Services and First Migration** - Activate
       lighting, post-process, shadows, and environment, then migrate
@@ -122,7 +122,7 @@ depth prepass, base pass, and correctness-first deferred lighting.
   2. Opaque rendering writes GBuffers by default through the Vortex base pass.
   3. Deferred direct lighting reads GBuffers and produces a visually correct lit
      scene using fullscreen/stencil-bounded techniques.
-**Plans**: 15 plans
+**Plans**: 17 plans
 
 Plans:
 - [x] 03-01: Seed shared scene/view shader contracts
@@ -140,12 +140,13 @@ Plans:
 - [x] 03-13: Implement Stage 12 CPU deferred-light path and stencil-local-light proof
 - [x] 03-14: Tighten the automated Phase 3 proof sweep
 - [x] 03-15: Add automated RenderDoc capture analysis and Phase 3 ledger closeout
+- [x] 03-16: Publish draw-frame bindings and execute a real Stage 9 base pass
+- [x] 03-17: Execute real Stage 12 deferred lighting and repair closeout truthfulness
 
 Execution note:
-All 15 Phase 03 plans were executed, but phase completion is currently blocked
-by post-execution review findings against the truthfulness of the Stage 10/12/15
-claims. Phase 04 must not start until the Phase 03 remediation work is planned
-and landed.
+Phase 03 remediation landed on 2026-04-15. The renderer now records real
+Stage 3, Stage 9, and Stage 12 work, and the repo-owned deferred-core closeout
+runner passes again with Phase 04 RenderDoc runtime validation still deferred.
 
 ### Phase 4: Migration-Critical Services and First Migration
 **Goal**: Activate the minimum service set required for real runtime migration,
@@ -236,7 +237,7 @@ Phases execute in numeric order: 0 → 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 0. Scaffold and Build Integration | 2/2 | Complete | 2026-04-13 |
 | 1. Substrate Migration | 14/14 | Complete | 2026-04-13 |
 | 2. SceneTextures and SceneRenderer Shell | 8/8 | Complete | 2026-04-14 |
-| 3. Deferred Core | 15/15 | Blocked | - |
+| 3. Deferred Core | 15/17 | Blocked | - |
 | 4. Migration-Critical Services and First Migration | 0/6 | Not started | - |
 | 5. Remaining Services and Runtime Scenarios | 0/6 | Not started | - |
 | 6. Legacy Deprecation | 0/2 | Not started | - |

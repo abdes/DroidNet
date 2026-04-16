@@ -9,9 +9,9 @@
 ### 1.1 What This Covers
 
 The deferred direct-lighting pass at stage 12 — fullscreen pass-per-light
-for directional lights, stencil-bounded sphere geometry for point lights,
-stencil-bounded cone geometry for spot lights. All light types read GBuffer
-products, evaluate Cook-Torrance BRDF, and accumulate into SceneColor.
+for directional lights and one-pass bounded-volume lighting for point/spot
+lights. All light types read GBuffer products, evaluate Cook-Torrance BRDF,
+and accumulate into SceneColor.
 
 In Phase 3 the deferred lighting logic lives inline in `SceneRenderer` as
 a file-separated method. In Phase 4A it migrates into `LightingService`.
@@ -100,32 +100,26 @@ does not replace the canonical per-light deferred direct-lighting contract.
 
 ### 3.1 Per-Light Rendering Approach
 
-| Light Type | Geometry | Stencil | Notes |
-| ---------- | -------- | ------- | ----- |
-| Directional | Fullscreen triangle | None | One fullscreen draw per directional light |
-| Point | Sphere bounding volume | 2-pass stencil | Mark/test to avoid lighting pixels behind the light |
-| Spot | Cone bounding volume | 2-pass stencil | Similar to point but cone frustum |
+| Light Type | Geometry | Draw Policy | Notes |
+| ---------- | -------- | ----------- | ----- |
+| Directional | Fullscreen triangle | Fullscreen | One fullscreen draw per directional light |
+| Point | Sphere bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective fallback |
+| Spot | Cone bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective fallback |
 
-### 3.2 Stencil-Bounded Lighting (Point + Spot)
+### 3.2 Local-Light Volume Modes (Point + Spot)
 
-Two-pass stencil approach for each local light:
+Phase 03 uses a **one-pass bounded-volume** path for every local light. The
+renderer chooses the raster/depth policy per light:
 
-**Pass 1 — Stencil mark:**
+- **Camera outside light volume:** render the volume’s front faces with depth
+  compare `LESS_EQUAL` / `GREATER_EQUAL` depending on the active Z convention.
+- **Camera inside light volume:** render back faces with depth compare
+  `ALWAYS`.
+- **Non-perspective view fallback:** use the same direct one-pass path as the
+  inside-volume mode until a dedicated orthographic local-light policy exists.
 
-- Render back faces of light volume
-- Depth test: GREATER (behind light volume back face)
-- Stencil op: INCR on depth pass
-- No color write
-
-**Pass 2 — Lighting and stencil test:**
-
-- Render front faces of light volume
-- Depth test: LESS_EQUAL (in front of light volume front face)
-- Stencil test: NOT_EQUAL zero (pixel was behind back face)
-- Color write: additive blend to SceneColor
-- Stencil op: ZERO (clear for next light)
-
-This ensures only pixels within the light volume are shaded.
+There is no separate stencil-mark pass in the final Phase 03 contract. Local
+lights are bounded by volume rasterization and per-pixel scene-depth sampling.
 
 ### 3.3 Per-Light Data Access
 
@@ -173,12 +167,10 @@ Before stage 12:
   GBufferNormal/Material/BaseColor/CustomData = SRV (readable, from stage 10 transition)
   SceneColor    = contains emissive from BasePass (stage 9)
   SceneDepth    = SRV (readable)
-  Stencil       = cleared (available for stencil-bounded lighting)
 
 After stage 12:
   GBufferNormal/Material/BaseColor/CustomData = SRV (unchanged)
   SceneColor    = emissive + direct lighting accumulated
-  Stencil       = cleared (each light clears its stencil marks)
 ```
 
 ### 4.4 Execution Flow
@@ -198,15 +190,13 @@ SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
   │
   ├─ for each point light:
   │     ├─ Upload DeferredLightConstants (type=POINT)
-  │     ├─ Stencil mark pass (back faces, INCR)
-  │     ├─ Lighting pass (front faces, stencil test, additive blend)
-  │     └─ Stencil clear (reset to 0)
+  │     └─ One bounded-volume lighting draw
+  │           (outside-volume, inside-volume, or non-perspective fallback policy)
   │
   └─ for each spot light:
         ├─ Upload DeferredLightConstants (type=SPOT)
-        ├─ Stencil mark pass (back faces, INCR)
-        ├─ Lighting pass (front faces, stencil test, additive blend)
-        └─ Stencil clear (reset to 0)
+        └─ One bounded-volume lighting draw
+              (outside-volume, inside-volume, or non-perspective fallback policy)
 ```
 
 ## 5. Shader Contracts
@@ -227,7 +217,9 @@ cbuffer LightConstants : register(b1) {
 };
 
 cbuffer ViewConstants : register(b0) {
-  float4x4 InvViewProjection;
+  float4x4 ViewMatrix;
+  float4x4 ProjectionMatrix;
+  float4x4 InverseViewProjection;
   float3 CameraPosition;
 };
 
@@ -265,25 +257,26 @@ cbuffer LightConstants : register(b1) {
 };
 
 struct LightVolumeVSOutput {
+  float4 screenPosition : TEXCOORD0;
   float4 position : SV_Position;
-  float2 screenUV : TEXCOORD0;
 };
 
 LightVolumeVSOutput DeferredLightPointVS(float3 localPos : POSITION) {
   LightVolumeVSOutput output;
   float4 worldPos = mul(LightWorldMatrix, float4(localPos, 1.0));
-  output.position = mul(ViewProjection, worldPos);
-  output.screenUV = output.position.xy / output.position.w * 0.5 + 0.5;
-  output.screenUV.y = 1.0 - output.screenUV.y;
+  output.screenPosition = mul(ProjectionMatrix, mul(ViewMatrix, worldPos));
+  output.position = output.screenPosition;
   return output;
 }
 
 float4 DeferredLightPointPS(LightVolumeVSOutput input) : SV_Target {
   SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+  float2 screenUV = input.screenPosition.xy / input.screenPosition.w * 0.5 + 0.5;
+  screenUV.y = 1.0 - screenUV.y;
 
   float3 worldPos = ReconstructWorldPosition(
-    input.screenUV,
-    SampleSceneDepth(input.screenUV, bindings),
+    screenUV,
+    SampleSceneDepth(screenUV, bindings),
     InvViewProjection);
 
   float3 lightVec = LightPositionAndRadius.xyz - worldPos;
@@ -296,10 +289,10 @@ float4 DeferredLightPointPS(LightVolumeVSOutput input) : SV_Target {
   attenuation = attenuation * attenuation / (distance * distance + 1.0);
 
   float3 result = EvaluateDeferredLight(
-    input.screenUV, lightDir,
+    screenUV, lightDir,
     LightColor.xyz * LightColor.w,
     attenuation,
-    InvViewProjection, CameraPosition, bindings);
+    CameraPosition, bindings);
 
   return float4(result, 0);
 }
@@ -340,14 +333,25 @@ float4 DeferredLightSpotPS(LightVolumeVSOutput input) : SV_Target {
 #include "../../Contracts/ViewFrameBindings.hlsli"
 
 cbuffer ViewConstants : register(b0) {
-  float4x4 ViewProjection;
-  float4x4 InvViewProjection;
+  float4x4 ViewMatrix;
+  float4x4 ProjectionMatrix;
+  float4x4 InverseViewProjection;
   float3 CameraPosition;
   uint ViewFrameBindingsSlot;
 };
 
 SceneTextureBindingData LoadBindingsFromCurrentView() {
   return LoadSceneTextureBindingsForCurrentView(ViewFrameBindingsSlot);
+}
+
+float2 ResolveDeferredLightScreenUv(float4 screenPosition) {
+  float2 uv = screenPosition.xy / screenPosition.w * 0.5 + 0.5;
+  uv.y = 1.0 - uv.y;
+  return uv;
+}
+
+float3 ReconstructDeferredWorldPosition(float2 uv, float deviceDepth) {
+  return ReconstructWorldPosition(uv, deviceDepth, InverseViewProjection);
 }
 
 #endif // VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
@@ -395,30 +399,44 @@ RTV:              SceneColor (R16G16B16A16_FLOAT)
 DSV:              None (no depth test)
 ```
 
-### 7.2 Stencil Mark PSO (Point/Spot)
-
-```text
-RasterizerState:  CullFront (render back faces)
-DepthStencil:     Depth test GREATER
-                  Stencil op: INCR on depth pass, KEEP on fail
-                  Depth write DISABLED
-BlendState:       Color write DISABLED (stencil-only pass)
-RTV:              None
-DSV:              SceneDepth (stencil write)
-```
-
-### 7.3 Lighting PSO (Point/Spot)
+### 7.2 Outside-Volume Lighting PSO (Point/Spot)
 
 ```text
 RasterizerState:  CullBack (render front faces)
-DepthStencil:     Depth test LESS_EQUAL
-                  Stencil test: NOT_EQUAL 0
-                  Stencil op: ZERO on pass (clear for next light)
+DepthStencil:     Depth test LESS_EQUAL / GREATER_EQUAL
+                  Stencil DISABLED
                   Depth write DISABLED
 BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
 RTV:              SceneColor (R16G16B16A16_FLOAT)
-DSV:              SceneDepth (depth read, stencil read+write)
+DSV:              SceneDepth (depth read)
 ```
+
+### 7.3 Inside-Volume Lighting PSO (Point/Spot)
+
+```text
+RasterizerState:  CullFront (render back faces)
+DepthStencil:     Depth test ALWAYS
+                  Stencil DISABLED
+                  Depth write DISABLED
+BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
+RTV:              SceneColor (R16G16B16A16_FLOAT)
+DSV:              SceneDepth (depth read)
+```
+
+### 7.4 Non-Perspective Fallback PSO (Point/Spot)
+
+```text
+RasterizerState:  CullFront (render back faces)
+DepthStencil:     Depth test ALWAYS
+                  Stencil DISABLED
+                  Depth write DISABLED
+BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
+RTV:              SceneColor (R16G16B16A16_FLOAT)
+DSV:              SceneDepth (depth read)
+```
+
+The non-perspective fallback is an explicit temporary Phase 03 policy, not a
+claim that the camera is geometrically “inside” the light volume.
 
 ## 8. Stage Integration
 
@@ -446,17 +464,15 @@ stage 12 is skipped.
 | -------- | -------- | ----- |
 | Light volume VB/IB (sphere, cone) | Persistent | Allocated once at init |
 | Per-light CBV (DeferredLightConstants) | Per draw | Upload ring buffer |
-| PSOs (3 types × 3 light types) | Persistent | Cached by renderer |
+| PSOs (directional + point/spot outside/inside/fallback variants) | Persistent | Cached by renderer |
 
 ### 9.2 Performance Considerations
 
-- **Pass-per-light:** One draw call per directional, two draw calls per
-  local light (stencil mark + lighting). For scenes with many lights, this
-  scales linearly with light count.
+- **Pass-per-light:** One draw call per light. Directional lights use a
+  fullscreen triangle; point/spot lights use bounded volume draws with
+  mode-specific cull/depth policy. Cost still scales linearly with light count.
 - **Future optimization (Phase 4A):** Tiled/clustered deferred using compute
   shaders. Not in Phase 3 scope.
-- **Stencil reuse:** Each local light clears its own stencil marks, so the
-  stencil buffer is reused across lights without explicit clears.
 
 ## 10. Testability Approach
 
@@ -464,13 +480,14 @@ stage 12 is skipped.
    one white directional light. Verify SceneColor shows correct
    diffuse+specular shading. Compare against reference (Lambertian +
    GGX specular).
-2. **Point light stencil:** Place a point light with small radius. Verify
-   that pixels outside the light radius show zero lighting contribution
+2. **Point light bounded volume:** Place a point light with small radius.
+   Verify that pixels outside the light radius show zero lighting contribution
    (only emissive).
 3. **Multi-light accumulation:** Add 3 colored lights (red, green, blue).
    Verify additive accumulation produces expected color mixing.
-4. **RenderDoc validation:** At frame 10, inspect SceneColor after stage 12.
-   Verify correct light accumulation, no banding, no stencil artifacts.
+4. **RenderDoc validation:** Inspect SceneColor after stage 12.
+   Verify correct light accumulation, no banding, and correct outside-volume /
+   inside-volume local-light products.
 
 ## 11. Open Questions
 

@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Vortex Initial Release
 current_phase: 03
 current_phase_name: deferred-core
-current_plan: 15
-status: blocked
-stopped_at: Post-execution review invalidated the current Phase 03 closeout claims
-last_updated: "2026-04-15T16:30:10.6183034+04:00"
+current_plan: 17
+status: complete
+stopped_at: Phase 03 remediation landed and the deferred-core closeout runner passed
+last_updated: "2026-04-15T18:15:00+04:00"
 last_activity: 2026-04-15
 progress:
   total_phases: 8
-  completed_phases: 2
-  total_plans: 59
-  completed_plans: 39
-  percent: 66
+  completed_phases: 3
+  total_plans: 61
+  completed_plans: 41
+  percent: 67
 ---
 
 # Project State
@@ -25,21 +25,21 @@ See: .planning/PROJECT.md
 
 **Core value:** Ship a production-credible Vortex renderer that proves itself
 through real runtime migration and verified rendering behavior.
-**Current focus:** Phase 03 — deferred-core
+**Current focus:** Phase 03 closeout completed; Phase 04 is unlocked
 
 ## Current Position
 
 **Current Phase:** 03
 **Current Phase Name:** deferred-core
-Phase: 03 (deferred-core) — BLOCKED
-**Total Plans in Phase:** 15
-**Current Plan:** 15
-Plan: 15 of 15
-**Status:** Review-correcting Phase 03
+Phase: 03 (deferred-core) — COMPLETE
+**Total Plans in Phase:** 17
+**Current Plan:** 17
+Plan: 17 of 17
+**Status:** Phase 03 complete
 **Last Activity:** 2026-04-15
-**Last Activity Description:** All 15 Phase 03 plans executed, but blocking review findings invalidated the current closeout claims
+**Last Activity Description:** Real Stage 3/9/12 render paths landed and the deferred-core closeout runner passed
 
-Progress: [███████░░░] 66%
+Progress: [███████░░░] 67%
 
 ## Accumulated Context
 
@@ -101,22 +101,19 @@ Progress: [███████░░░] 66%
   Stage 12 CPU-light orchestration, proof-sweep tightening, and the
   repo-owned closeout runner under `tools/vortex/`.
 
+- Phase 03 remediation is complete: Stage 3 now records a real
+  depth/partial-velocity pass, Stage 9 records a real base pass, and Stage 12
+  records actual fullscreen and stencil-bounded deferred-light draws.
+
 ### Pending Todos
 
-- Re-plan Phase 03 gap-closure work from the blocking review findings before
-  Phase 04 starts.
+- Start Phase 04 planning from the now-truthful deferred-core baseline.
 
 ### Blockers/Concerns
 
-- Blocking review found that Stage 12 still records deferred-light telemetry
-  instead of performing truthful SceneColor accumulation and stencil-bounded
-  local-light work.
-- Blocking review found that the current Phase 03 closeout analyzer proves key
-  claims through token/name checks rather than artifact- or state-level proof.
-- Blocking review found that the current velocity-completion claim is still a
-  shell seam keyed off texture availability, not a proven skinned/WPO path.
-- Phase 04 must not start until the Phase 03 remediation work is planned and
-  landed.
+- Runtime RenderDoc validation remains deferred to Phase 04 because Async and
+  DemoShell still need to migrate to Vortex before a truthful frame-10 runtime
+  capture exists.
 
 ### Performance Metrics
 
@@ -129,5 +126,5 @@ Progress: [███████░░░] 66%
 ## Session Continuity
 
 Last session: 2026-04-15
-Stopped at: Post-execution review invalidated the current Phase 03 closeout
-Resume file: .planning/workstreams/vortex/phases/03-deferred-core/03-15-PLAN.md
+Stopped at: Phase 03 remediation complete; Phase 04 unlocked
+Resume file: design/vortex/PLAN.md
