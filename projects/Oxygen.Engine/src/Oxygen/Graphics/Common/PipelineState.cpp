@@ -128,6 +128,22 @@ auto oxygen::graphics::HashGraphicsPipelineDesc(
   HashCombine(seed, desc.DepthStencilState().stencil_enable);
   HashCombine(seed, desc.DepthStencilState().stencil_read_mask);
   HashCombine(seed, desc.DepthStencilState().stencil_write_mask);
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().front_face.stencil_fail_op));
+  HashCombine(seed, static_cast<int>(
+                      desc.DepthStencilState().front_face.stencil_depth_fail_op));
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().front_face.stencil_pass_op));
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().front_face.stencil_func));
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().back_face.stencil_fail_op));
+  HashCombine(seed, static_cast<int>(
+                      desc.DepthStencilState().back_face.stencil_depth_fail_op));
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().back_face.stencil_pass_op));
+  HashCombine(seed,
+    static_cast<int>(desc.DepthStencilState().back_face.stencil_func));
   // BlendState
   for (const auto& blend : desc.BlendState()) {
     HashCombine(seed, blend.blend_enable);

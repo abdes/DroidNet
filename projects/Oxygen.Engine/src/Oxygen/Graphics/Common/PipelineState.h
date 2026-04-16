@@ -98,6 +98,21 @@ enum class BlendOp : uint8_t {
 };
 OXGN_GFX_API auto to_string(BlendOp value) -> std::string;
 
+//! Stencil operation for depth/stencil state transitions.
+enum class StencilOp : uint8_t {
+  kKeep,
+  kZero,
+  kReplace,
+  kIncrSat,
+  kDecrSat,
+  kInvert,
+  kIncr,
+  kDecr,
+
+  kMaxStencilOp
+};
+OXGN_GFX_API auto to_string(StencilOp value) -> std::string;
+
 //! Color write mask for render targets.
 enum class ColorWriteMask : uint8_t {
   kNone = 0, //!< No color channels.
@@ -215,6 +230,15 @@ struct RasterizerStateDesc {
 //! Controls depth buffer and stencil buffer operations, including testing,
 //! writing, and comparison functions.
 struct DepthStencilStateDesc {
+  struct StencilFaceDesc {
+    StencilOp stencil_fail_op { StencilOp::kKeep };
+    StencilOp stencil_depth_fail_op { StencilOp::kKeep };
+    StencilOp stencil_pass_op { StencilOp::kKeep };
+    CompareOp stencil_func { CompareOp::kAlways };
+
+    auto operator==(const StencilFaceDesc&) const -> bool = default;
+  };
+
   bool depth_test_enable { false }; //!< Enable depth testing.
   bool depth_write_enable { false }; //!< Enable writing to depth buffer.
   CompareOp depth_func {
@@ -223,6 +247,8 @@ struct DepthStencilStateDesc {
   bool stencil_enable { false }; //!< Enable stencil testing.
   uint8_t stencil_read_mask { 0xFF }; //!< Mask for reading from stencil buffer.
   uint8_t stencil_write_mask { 0xFF }; //!< Mask for writing to stencil buffer.
+  StencilFaceDesc front_face {};
+  StencilFaceDesc back_face {};
 
   auto operator==(const DepthStencilStateDesc&) const -> bool = default;
 
