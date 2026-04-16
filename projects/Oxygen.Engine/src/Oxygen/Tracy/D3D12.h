@@ -31,5 +31,6 @@ OXGN_TRACY_NDAPI auto BeginZone(std::span<std::byte> storage,
   ContextHandle context, ID3D12GraphicsCommandList* command_list,
   std::source_location callsite, std::string_view name) -> bool;
 OXGN_TRACY_API auto EndZone(std::span<std::byte> storage) -> void;
+OXGN_TRACY_API auto CachedSourceLocationCountForTesting() -> std::size_t;
 
 } // namespace oxygen::tracy::d3d12

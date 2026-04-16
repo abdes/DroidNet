@@ -84,6 +84,12 @@ public:
   virtual auto EndScope(
     CommandRecorder& recorder, GpuProfileCollectorState& state) -> void
     = 0;
+
+  virtual auto AbortScope(CommandRecorder& recorder,
+    GpuProfileCollectorState& state) -> void
+  {
+    EndScope(recorder, state);
+  }
 };
 
 class CommandRecorder {
@@ -558,12 +564,19 @@ protected:
     = 0;
 
 private:
+  enum class ScopeCloseKind : uint8_t {
+    kEnd,
+    kAbort,
+  };
+
   struct ScopeRecord {
     std::string base_label {};
     std::string formatted_name {};
     GpuProfileCollectorState native_label_state {};
     GpuProfileCollectorState telemetry_state {};
     GpuProfileCollectorState trace_state {};
+    observer_ptr<IGpuProfileCollector> telemetry_collector { nullptr };
+    observer_ptr<IGpuProfileCollector> trace_collector { nullptr };
     bool active { false };
   };
 
@@ -595,6 +608,11 @@ private:
     const Buffer& resource, ResourceStates state) -> void;
   OXGN_GFX_API auto DoRequireResourceStateFinal(
     const Texture& resource, ResourceStates state) -> void;
+
+  OXGN_GFX_API auto CloseScopeRecord(
+    ScopeRecord& record, ScopeCloseKind close_kind) -> void;
+  OXGN_GFX_API auto DrainActiveProfileScopes(ScopeCloseKind close_kind) noexcept
+    -> void;
 
   //! @}
 

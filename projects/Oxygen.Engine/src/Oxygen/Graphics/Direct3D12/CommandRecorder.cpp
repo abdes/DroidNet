@@ -76,7 +76,7 @@ public:
     }
 
     if (!oxygen::tracy::d3d12::BeginZone(std::span { state.storage }, ctx_,
-          command_list, info.callsite, info.formatted_name)) {
+          command_list, info.callsite, info.base_label)) {
       state.flags = 0U;
       return;
     }

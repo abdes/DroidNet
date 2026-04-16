@@ -74,3 +74,15 @@ gtest_program(
     oxygen::profiling-cpu
     oxygen::testing
 )
+
+if(TARGET oxygen::tracy)
+  gtest_program(
+    "Oxygen.Profiling.TracyCache.Tests"
+    SOURCES
+      "TracyCache_test.cpp"
+    DEPS
+      oxygen::profiling-cpu
+      oxygen::tracy
+      oxygen::testing
+  )
+endif()

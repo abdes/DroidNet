@@ -16,9 +16,10 @@
 namespace oxygen::tracy::cpu {
 
 OXGN_TRACY_NDAPI auto BeginZone(std::span<std::byte> storage,
-  std::source_location callsite, std::string_view name, uint32_t color_rgb24)
-  -> bool;
+  std::source_location callsite, std::string_view stable_name,
+  uint32_t color_rgb24) -> bool;
 
 OXGN_TRACY_API auto EndZone(std::span<const std::byte> storage) -> void;
+OXGN_TRACY_API auto CachedSourceLocationCountForTesting() -> std::size_t;
 
 } // namespace oxygen::tracy::cpu
