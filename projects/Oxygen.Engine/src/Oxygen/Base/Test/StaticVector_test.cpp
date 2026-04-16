@@ -161,19 +161,22 @@ NOLINT_TEST(StaticVectorTest, MoveConstructor)
 {
   Counter::reset();
 
-  StaticVector<Counter, 5> vec1;
-  vec1.emplace_back(1);
-  vec1.emplace_back(2);
-  vec1.emplace_back(3);
+  {
+    StaticVector<Counter, 5> vec1;
+    vec1.emplace_back(1);
+    vec1.emplace_back(2);
+    vec1.emplace_back(3);
 
-  Counter::reset();
-  StaticVector vec2(std::move(vec1));
-  EXPECT_EQ(vec2.size(), 3);
-  // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
-  EXPECT_EQ(vec1.size(), 0);
-  EXPECT_EQ(vec2[0].value_, 1);
-  EXPECT_EQ(vec2[2].value_, 3);
-  EXPECT_EQ(Counter::move_constructs_, 3);
+    Counter::reset();
+    StaticVector vec2(std::move(vec1));
+    EXPECT_EQ(vec2.size(), 3);
+    // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
+    EXPECT_EQ(vec1.size(), 0);
+    EXPECT_EQ(vec2[0].value_, 1);
+    EXPECT_EQ(vec2[2].value_, 3);
+    EXPECT_EQ(Counter::move_constructs_, 3);
+  }
+  EXPECT_EQ(Counter::destructs_, 6);
 }
 
 NOLINT_TEST(StaticVectorTest, AssignmentOperators)
@@ -187,20 +190,23 @@ NOLINT_TEST(StaticVectorTest, AssignmentOperators)
   EXPECT_EQ(vec2[0], 1);
   EXPECT_EQ(vec2[2], 3); // Move assignment
   Counter::reset();
-  StaticVector<Counter, 5> vec3;
-  vec3.emplace_back(1);
-  vec3.emplace_back(2);
+  {
+    StaticVector<Counter, 5> vec3;
+    vec3.emplace_back(1);
+    vec3.emplace_back(2);
 
-  StaticVector<Counter, 5> vec4;
-  Counter::reset();
-  // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
-  vec4 = std::move(vec3);
-  EXPECT_EQ(vec4.size(), 2);
-  // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
-  EXPECT_EQ(vec3.size(), 0);
-  EXPECT_EQ(vec4[0].value_, 1);
-  EXPECT_EQ(vec4[1].value_, 2);
-  EXPECT_EQ(Counter::move_constructs_, 2);
+    StaticVector<Counter, 5> vec4;
+    Counter::reset();
+    // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
+    vec4 = std::move(vec3);
+    EXPECT_EQ(vec4.size(), 2);
+    // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state
+    EXPECT_EQ(vec3.size(), 0);
+    EXPECT_EQ(vec4[0].value_, 1);
+    EXPECT_EQ(vec4[1].value_, 2);
+    EXPECT_EQ(Counter::move_constructs_, 2);
+  }
+  EXPECT_EQ(Counter::destructs_, 4);
 
   // Initializer list assignment
   StaticVector<int, 5> vec5 = { 5, 6, 7, 8 };
