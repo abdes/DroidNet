@@ -751,7 +751,7 @@ Phase-3/4/5 LLDs must preserve.
 
 | Invariant | Required Rule |
 | --- | --- |
-| per-view iteration owner | `SceneRenderer` owns per-view iteration. Stage 2 (`InitViews`) runs as the per-frame publisher of per-view prepared-scene packets. Downstream per-view stages consume the current view selected in `RenderContext`; they must not silently take over full-frame iteration. |
+| per-view iteration owner | `Renderer Core` owns published-view materialization plus current-view selection/iteration for the runtime shell. Stage 2 (`InitViews`) still runs as the per-frame publisher of per-view prepared-scene packets, but downstream stages in `SceneRenderer` consume only the current view selected in `RenderContext`; they must not silently take over the outer view-selection loop. |
 | Stage 10 contract | The canonical stage-10 boundary is `SceneTextures::RebuildWithGBuffers()` followed by refresh/republication of shared scene-texture routing metadata. No alternate `TransitionGBuffersToSRV()`-style API may replace or narrow this contract. |
 | Stage 12 Phase-3 ownership | In Phase 3, stage 12 is temporary inline `SceneRenderer::RenderDeferredLighting(ctx, scene_textures)` orchestration and may carry temporary implementation scaffolding only. In Phase 4A, CPU-side ownership moves to `LightingService`, and the temporary procedural point/spot proxy generation is replaced by persistent service-owned sphere/cone geometry. During both phases, the deferred-light shader family remains owned by the Lighting domain. |
 | published scene-texture routing | Passes consume scene textures only through published `SceneTextureBindings` routed by `ViewFrameBindings`. They must not synthesize ad hoc scene-texture bindings locally or bypass the established publication stack. |

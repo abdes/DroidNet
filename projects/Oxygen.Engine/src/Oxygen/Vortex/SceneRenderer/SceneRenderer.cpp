@@ -883,6 +883,9 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   deferred_lighting_state_ = {};
   [[maybe_unused]] const auto shading_mode
     = ResolveShadingModeForCurrentView(ctx);
+  // Renderer Core materializes the eligible views and selects the current
+  // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
+  // that selected current view only.
 
   // Stage 2: InitViews
   if (ctx.current_view.prepared_frame == nullptr) {

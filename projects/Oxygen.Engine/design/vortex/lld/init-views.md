@@ -36,7 +36,10 @@ This module must preserve the following invariants from
 [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
 
 - `InitViews` is the per-frame publisher of per-view prepared scene packets
-- `SceneRenderer`, not `InitViewsModule`, owns downstream per-view iteration
+- `Renderer` materializes the eligible frame-view set and selects the current
+  scene-view cursor; `InitViewsModule` publishes per-view packets, but
+  `SceneRenderer`, not `InitViewsModule`, owns downstream stage execution for
+  the selected current view
 - downstream stages consume the published prepared-scene payload for the
   current view selected in `RenderContext`
 - the desktop runtime path pays one full scene traversal per scene per frame,
@@ -119,7 +122,7 @@ class InitViewsModule {
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later per-view stages | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` during downstream per-view iteration |
+| Per-view `PreparedSceneFrame` payloads | DepthPrepassModule, BasePassModule, later current-view stage execution | Stored in `InitViewsModule` backing storage and rebound into `RenderContext.current_view.prepared_frame` for the current scene-view selected by Renderer Core |
 | Motion-history / velocity auxiliary products | BasePassModule (opaque velocity), later stages | Published alongside the prepared-scene payload, keyed to prepared-frame indices / draw order and referencing explicit current/previous transform or deformation publication slots |
 | Culling statistics | DiagnosticsService (Phase 5) | Optional Tracy counters |
 
