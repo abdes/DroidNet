@@ -218,6 +218,9 @@ void SceneTextures::Resize(const glm::uvec2 new_extent)
 
 void SceneTextures::RebuildWithGBuffers()
 {
+  // This helper only validates the Stage-9-written GBuffer family. The
+  // SceneRenderer-owned Stage 10 boundary remains responsible for setup-mode
+  // promotion, binding regeneration, and downstream publication.
   for (std::size_t i = 0; i < kActiveGBufferCount; ++i) {
     const auto index = static_cast<GBufferIndex>(i);
     static_cast<void>(RequireTexture(gbuffers_.at(i), GBufferName(index)));

@@ -95,11 +95,12 @@ public:
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
 
-  OXGN_VRTX_API void ApplyStage3DepthPrepassState();
-  OXGN_VRTX_API void ApplyStage9BasePassState();
-  OXGN_VRTX_API void ApplyStage10RebuildState();
-  OXGN_VRTX_API void ApplyStage22PostProcessState();
-  OXGN_VRTX_API void ApplyStage23ExtractionState();
+  OXGN_VRTX_API void PublishDepthPrepassProducts();
+  OXGN_VRTX_API void PublishBasePassVelocity();
+  OXGN_VRTX_API void PublishDeferredBasePassSceneTextures(
+    RenderContext& ctx);
+  OXGN_VRTX_API void PublishCustomDepthProducts();
+  OXGN_VRTX_API void FinalizeSceneTextureExtractions();
 
   OXGN_VRTX_NDAPI auto GetSceneTextures() const
     -> const SceneTextures&;

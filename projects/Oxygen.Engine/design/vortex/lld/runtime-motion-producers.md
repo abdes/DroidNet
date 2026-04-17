@@ -497,8 +497,10 @@ Stage 9 owns the full opaque velocity producer chain:
 
 ### 7.4 Stage 10
 
-Stage 10 only rebuilds scene textures and refreshes bindings after Stage 9 has
-actually finished the full producer chain.
+Stage 10 is the SceneRenderer-owned rebuild/promote/refresh boundary. It calls
+`SceneTextures::RebuildWithGBuffers()` as the family-local helper and only then
+refreshes bindings after Stage 9 has actually finished the full producer
+chain.
 
 ## 8. Shader and Resource Contract
 

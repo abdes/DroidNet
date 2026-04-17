@@ -321,8 +321,8 @@ requires its own LLD section or document.
 | 3D.4 | Produce `SceneVelocity` in stage 9 for masked, deformed, skinned, and WPO-capable opaque geometry using current + previous transform/deformation data and previous view data | UE5.7-grade opaque velocity parity target |
 | 3D.5 | Select masked vs opaque base-pass PSOs and drive `ALPHA_TEST` permutations | Required for truthful masked deferred behavior and masked velocity |
 | 3D.6 | Implement the stage-9 motion-vector-world-offset auxiliary path and merge/update step before velocity publication | Required for UE5.7-grade parity when materials declare motion-vector world offset |
-| 3D.7 | Implement `SceneTextures::RebuildWithGBuffers()` | Stage 10 state transition plus the canonical publication boundary for `SceneColor` and the active GBuffers |
-| 3D.8 | Update `SceneTextureSetupMode` so Stage 9 keeps raw base-pass writes unpublished while Stage 10 refreshes the consumable `SceneColor` / GBuffer bindings, and keep velocity publication output-backed only | |
+| 3D.7 | Implement `SceneTextures::RebuildWithGBuffers()` as the family-local Stage 10 helper | Validates the Stage-9-written active GBuffer family but does not own publication |
+| 3D.8 | Implement the SceneRenderer-owned Stage 10 boundary so Stage 9 keeps raw base-pass writes unpublished while Stage 10 promotes setup state, refreshes the consumable `SceneColor` / GBuffer bindings, and keeps velocity publication output-backed only | |
 | 3D.9 | Wire into SceneRenderer stage 9 dispatch | |
 
 #### 3E: Deferred Lighting

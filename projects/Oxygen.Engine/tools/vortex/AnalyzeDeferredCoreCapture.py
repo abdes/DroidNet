@@ -20,7 +20,7 @@ REQUIRED_KEYS = (
     "stage_12_order",
     "gbuffer_contents",
     "scene_color_lit",
-    "stencil_local_lights",
+    "bounded_volume_local_lights",
 )
 
 # Keep the explicit report-key literals in source so the plan-level grep gate can
@@ -32,7 +32,7 @@ REPORT_KEY_PREFIXES = (
     "stage_12_order=",
     "gbuffer_contents=",
     "scene_color_lit=",
-    "stencil_local_lights=",
+    "bounded_volume_local_lights=",
 )
 
 
@@ -356,7 +356,7 @@ def analyze(manifest: CaptureManifest) -> list[str]:
                 scene_renderer,
                 (
                     "depth_prepass_->Execute(ctx, scene_textures_)",
-                    "ApplyStage3DepthPrepassState();",
+                    "PublishDepthPrepassProducts();",
                     "// Stage 9: Base pass",
                 ),
             ),
@@ -393,9 +393,8 @@ def analyze(manifest: CaptureManifest) -> list[str]:
                 (
                     "// Stage 9: Base pass",
                     "base_pass_->Execute(ctx, scene_textures_)",
-                    "ApplyStage9BasePassState();",
-                    "// Stage 10: Rebuild scene textures with GBuffers",
-                    "ApplyStage10RebuildState();",
+                    "PublishBasePassVelocity();",
+                    "PublishDeferredBasePassSceneTextures(ctx);",
                 ),
             ),
             contains_all(
@@ -410,13 +409,16 @@ def analyze(manifest: CaptureManifest) -> list[str]:
             contains_all(
                 deferred_core_tests,
                 (
-                    "BasePassPromotesGBuffersAtStage10",
+                    "BasePassLeavesSceneColorAndGBuffersInvalidUntilStage10",
                     "BasePassCompletesVelocityForDynamicGeometry",
                 ),
             ),
             contains_all(
                 publication_tests,
-                ("Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",),
+                (
+                    "Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",
+                    "SceneTexturesRebuildHelperAloneDoesNotPublishStage10Products",
+                ),
             ),
         )
     )
@@ -427,7 +429,7 @@ def analyze(manifest: CaptureManifest) -> list[str]:
             ordered(
                 scene_renderer,
                 (
-                    "ApplyStage10RebuildState();",
+                    "PublishDeferredBasePassSceneTextures(ctx);",
                     "// Stage 12: Deferred direct lighting",
                     "RenderDeferredLighting(ctx, scene_textures_);",
                 ),
@@ -499,11 +501,17 @@ def analyze(manifest: CaptureManifest) -> list[str]:
             ),
             contains_all(
                 deferred_core_tests,
-                ("GBufferDebugViewsAreAvailable", "BasePassPromotesGBuffersAtStage10"),
+                (
+                    "GBufferDebugViewsAreAvailable",
+                    "BasePassLeavesSceneColorAndGBuffersInvalidUntilStage10",
+                ),
             ),
             contains_all(
                 publication_tests,
-                ("Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",),
+                (
+                    "Stage10PublicationPromotesSceneColorGBuffersAndKeepsVelocityAlive",
+                    "SceneTexturesRebuildHelperAloneDoesNotPublishStage10Products",
+                ),
             ),
         )
     )

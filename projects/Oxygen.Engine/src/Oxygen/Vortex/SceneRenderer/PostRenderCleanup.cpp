@@ -82,7 +82,7 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
         || !scene_texture_extracts_.prev_scene_depth.valid)
     && (scene_texture_extracts_.prev_velocity.texture == nullptr
       || !scene_texture_extracts_.prev_velocity.valid)) {
-    ApplyStage23ExtractionState();
+    FinalizeSceneTextureExtractions();
     return;
   }
 
@@ -110,7 +110,7 @@ void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
       graphics::ResourceStates::kShaderResource);
   }
 
-  ApplyStage23ExtractionState();
+  FinalizeSceneTextureExtractions();
 }
 
 } // namespace oxygen::vortex

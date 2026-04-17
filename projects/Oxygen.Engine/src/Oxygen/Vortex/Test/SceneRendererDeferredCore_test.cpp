@@ -468,8 +468,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     },
     ShadingMode::kDeferred);
 
-  scene_renderer.ApplyStage3DepthPrepassState();
-  scene_renderer.ApplyStage9BasePassState();
+  scene_renderer.PublishDepthPrepassProducts();
+  scene_renderer.PublishBasePassVelocity();
 
   auto bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_EQ(bindings.scene_color_srv,
@@ -486,7 +486,16 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NE(bindings.velocity_srv,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.ApplyStage10RebuildState();
+  auto stage10_context = RenderContext {};
+  stage10_context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  stage10_context.frame_slot = oxygen::frame::Slot { 1U };
+  stage10_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  stage10_context.current_view.view_id = first_view_id_;
+  stage10_context.current_view.exposure_view_id = first_view_id_;
+  stage10_context.current_view.resolved_view
+    = oxygen::observer_ptr<const ResolvedView> { &first_resolved_view_ };
+  stage10_context.view_constants = view_constants_buffer_;
+  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
 
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv,
@@ -512,8 +521,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     },
     ShadingMode::kDeferred);
 
-  scene_renderer.ApplyStage3DepthPrepassState();
-  scene_renderer.ApplyStage9BasePassState();
+  scene_renderer.PublishDepthPrepassProducts();
+  scene_renderer.PublishBasePassVelocity();
 
   const auto& bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_EQ(bindings.scene_color_srv,
