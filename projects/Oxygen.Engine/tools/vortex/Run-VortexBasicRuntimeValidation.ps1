@@ -4,9 +4,11 @@ Runs the full one-command VortexBasic runtime validation flow.
 
 .DESCRIPTION
 Builds the required Vortex targets in the standard out/build-ninja tree,
-launches VortexBasic once with RenderDoc capture enabled, discovers the newly
-produced capture, and validates that capture plus the runtime log through the
-existing Verify-VortexBasicRuntimeProof.ps1 wrapper.
+first runs VortexBasic once under the WinDbg/CDB debugger with capture
+disabled to audit the D3D12 debug-layer surface, then launches VortexBasic once
+with RenderDoc capture enabled, discovers the newly produced capture, and
+validates both the debugger-backed audit and the capture-backed proof through
+the existing Verify-VortexBasicRuntimeProof.ps1 wrapper.
 #>
 [CmdletBinding()]
 param(
@@ -32,7 +34,10 @@ param(
   [int]$BuildJobs = 4,
 
   [Parameter()]
-  [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll'
+  [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll',
+
+  [Parameter()]
+  [string]$DebuggerPath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -117,11 +122,48 @@ function Quote-Argument {
   return '"' + ($Value -replace '"', '\"') + '"'
 }
 
+function Resolve-DebuggerToolPath {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$RepoRoot,
+
+    [Parameter()]
+    [string]$DebuggerPath = ''
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($DebuggerPath)) {
+    $resolved = Resolve-RepoPath -RepoRoot $RepoRoot -Path $DebuggerPath
+    if (-not (Test-Path -LiteralPath $resolved)) {
+      throw "Debugger tool not found: $resolved"
+    }
+    return $resolved
+  }
+
+  $command = Get-Command 'cdb.exe' -ErrorAction SilentlyContinue
+  if ($null -ne $command) {
+    return $command.Source
+  }
+
+  $fallbacks = @(
+    'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe',
+    'C:\Program Files\Windows Kits\10\Debuggers\x64\cdb.exe'
+  )
+  foreach ($candidate in $fallbacks) {
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+
+  throw 'Could not locate cdb.exe. Install the Windows debugger tools or pass -DebuggerPath.'
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildRoot = Join-Path $repoRoot 'out\build-ninja'
 $binaryDirectory = Join-Path $buildRoot 'bin\Debug'
 $vortexBasicExe = Join-Path $binaryDirectory 'Oxygen.Examples.VortexBasic.exe'
 $verifyScript = Join-Path $PSScriptRoot 'Verify-VortexBasicRuntimeProof.ps1'
+$debugAuditAssertScript = Join-Path $PSScriptRoot 'Assert-VortexBasicDebugLayerAudit.ps1'
+$debuggerTool = Resolve-DebuggerToolPath -RepoRoot $repoRoot -DebuggerPath $DebuggerPath
 $renderDocLibraryPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $RenderDocLibrary
 
 if (-not (Test-Path -LiteralPath $renderDocLibraryPath)) {
@@ -137,6 +179,12 @@ $outputDirectory = Split-Path -Parent $outputStem
 $outputStemLeaf = Split-Path -Leaf $outputStem
 $captureFilter = "$outputStemLeaf*.rdc"
 $buildLogPath = "$outputStem.build.log"
+$debugAuditLogPath = "$outputStem.debug-layer.cdb.log"
+$debugAuditStdoutPath = "$outputStem.debug-layer.cdb.stdout.log"
+$debugAuditStderrPath = "$outputStem.debug-layer.cdb.stderr.log"
+$debugAuditTranscriptPath = "$outputStem.debug-layer.transcript.log"
+$debugAuditCommandsPath = "$outputStem.debug-layer.cdb.commands.txt"
+$debugAuditReportPath = "$outputStem.debug-layer.report.txt"
 $stdoutPath = "$outputStem.stdout.log"
 $stderrPath = "$outputStem.stderr.log"
 $validationReportPath = "$outputStem.validation.txt"
@@ -147,29 +195,132 @@ if ($RunFrames -lt ($Frame + 3)) {
   $RunFrames = $Frame + 3
 }
 
-$buildResult = Invoke-LoggedCommand `
-  -FilePath 'cmake' `
-  -ArgumentList @(
-    '--build',
-    $buildRoot,
-    '--config',
-    'Debug',
-    '--target',
-    'oxygen-vortex',
-    'oxygen-graphics-direct3d12',
-    'oxygen-examples-vortexbasic',
-    '--parallel',
-    "$BuildJobs"
-  ) `
-  -LogPath $buildLogPath `
-  -WorkingDirectory $repoRoot
+$buildStdoutPath = "$buildLogPath.stdout.log"
+$buildStderrPath = "$buildLogPath.stderr.log"
+Remove-Item -LiteralPath $buildLogPath, $buildStdoutPath, $buildStderrPath -Force -ErrorAction SilentlyContinue
 
-if ($buildResult.ExitCode -ne 0) {
-  throw "Build failed. See log: $($buildResult.LogPath)"
+$buildArguments = @(
+  '--build',
+  $buildRoot,
+  '--config',
+  'Debug',
+  '--target',
+  'oxygen-vortex',
+  'oxygen-graphics-direct3d12',
+  'oxygen-examples-vortexbasic',
+  '--parallel',
+  "$BuildJobs"
+)
+$buildArgumentString = (($buildArguments | ForEach-Object {
+      Quote-Argument -Value $_
+    }) -join ' ')
+$buildStarted = Get-Date -Format o
+$buildProcess = Start-Process `
+  -FilePath 'cmake' `
+  -ArgumentList $buildArgumentString `
+  -WorkingDirectory $repoRoot `
+  -NoNewWindow `
+  -Wait `
+  -PassThru `
+  -RedirectStandardOutput $buildStdoutPath `
+  -RedirectStandardError $buildStderrPath
+$buildExitCode = $buildProcess.ExitCode
+
+$buildLogLines = New-Object System.Collections.Generic.List[string]
+$buildLogLines.Add("Started: $buildStarted")
+$buildLogLines.Add("WorkingDirectory: $repoRoot")
+$buildLogLines.Add("Command: `"cmake`" $buildArgumentString")
+if (Test-Path -LiteralPath $buildStdoutPath) {
+  $buildLogLines.Add('--- stdout ---')
+  foreach ($line in Get-Content -LiteralPath $buildStdoutPath) {
+    $buildLogLines.Add($line)
+  }
+}
+if (Test-Path -LiteralPath $buildStderrPath) {
+  $buildLogLines.Add('--- stderr ---')
+  foreach ($line in Get-Content -LiteralPath $buildStderrPath) {
+    $buildLogLines.Add($line)
+  }
+}
+$buildLogLines.Add("ExitCode: $buildExitCode")
+Set-Content -LiteralPath $buildLogPath -Value $buildLogLines -Encoding ascii
+
+if ($buildExitCode -ne 0) {
+  throw "Build failed. See log: $buildLogPath"
 }
 
 if (-not (Test-Path -LiteralPath $vortexBasicExe)) {
   throw "VortexBasic executable not found after build: $vortexBasicExe"
+}
+
+Remove-Item -LiteralPath $debugAuditLogPath, $debugAuditStdoutPath, $debugAuditStderrPath, $debugAuditTranscriptPath, $debugAuditCommandsPath, $debugAuditReportPath -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath $debugAuditCommandsPath -Value @(
+    'g'
+    'q'
+  ) -Encoding ascii
+
+$debugAuditArguments = @(
+  '-G',
+  '-g',
+  '-logo', $debugAuditLogPath,
+  '-cf', $debugAuditCommandsPath,
+  $vortexBasicExe,
+  '--frames', "$RunFrames",
+  '--fps', "$Fps",
+  '--debug-layer', 'true',
+  '--capture-provider', 'off'
+)
+
+$previousPath = $env:PATH
+$debugAuditArgumentString = (($debugAuditArguments | ForEach-Object {
+      Quote-Argument -Value $_
+    }) -join ' ')
+try {
+  $env:PATH = "$binaryDirectory;$previousPath"
+  $debugAuditProcess = Start-Process `
+    -FilePath $debuggerTool `
+    -ArgumentList $debugAuditArgumentString `
+    -WorkingDirectory $repoRoot `
+    -NoNewWindow `
+    -Wait `
+    -PassThru `
+    -RedirectStandardOutput $debugAuditStdoutPath `
+    -RedirectStandardError $debugAuditStderrPath
+  $debugAuditExitCode = $debugAuditProcess.ExitCode
+} finally {
+  $env:PATH = $previousPath
+}
+
+if ($debugAuditExitCode -ne 0) {
+  throw "Debugger-backed audit process exited with code $debugAuditExitCode. See log: $debugAuditLogPath"
+}
+
+$debugAuditTranscriptLines = New-Object System.Collections.Generic.List[string]
+if (Test-Path -LiteralPath $debugAuditLogPath) {
+  $debugAuditTranscriptLines.Add('--- debugger log ---')
+  foreach ($line in Get-Content -LiteralPath $debugAuditLogPath) {
+    $debugAuditTranscriptLines.Add($line)
+  }
+}
+if (Test-Path -LiteralPath $debugAuditStdoutPath) {
+  $debugAuditTranscriptLines.Add('--- debugger stdout ---')
+  foreach ($line in Get-Content -LiteralPath $debugAuditStdoutPath) {
+    $debugAuditTranscriptLines.Add($line)
+  }
+}
+if (Test-Path -LiteralPath $debugAuditStderrPath) {
+  $debugAuditTranscriptLines.Add('--- debugger stderr ---')
+  foreach ($line in Get-Content -LiteralPath $debugAuditStderrPath) {
+    $debugAuditTranscriptLines.Add($line)
+  }
+}
+Set-Content -LiteralPath $debugAuditTranscriptPath -Value $debugAuditTranscriptLines -Encoding utf8
+
+& powershell -NoProfile -File $debugAuditAssertScript `
+  -DebuggerLogPath $debugAuditTranscriptPath `
+  -ReportPath $debugAuditReportPath
+if ($LASTEXITCODE -ne 0) {
+  exit $LASTEXITCODE
 }
 
 $captureSnapshotBefore = Get-CaptureSnapshot `
@@ -188,8 +339,6 @@ $appArguments = @(
   '--capture-from-frame', "$Frame",
   '--capture-frame-count', '1'
 )
-
-$previousPath = $env:PATH
 $appArgumentString = (($appArguments | ForEach-Object {
       Quote-Argument -Value $_
     }) -join ' ')
@@ -241,6 +390,7 @@ $productsReportPath = "${captureBasePath}_products_report.txt"
 
 & powershell -NoProfile -File $verifyScript `
   -CapturePath $capturePath `
+  -DebugLayerReportPath $debugAuditReportPath `
   -RuntimeLogPath $stderrPath `
   -CaptureReportPath $captureReportPath `
   -ProductsReportPath $productsReportPath `
@@ -250,6 +400,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "Build log: $buildLogPath"
+Write-Host "Debugger audit log: $debugAuditLogPath"
+Write-Host "Debugger audit stdout: $debugAuditStdoutPath"
+Write-Host "Debugger audit stderr: $debugAuditStderrPath"
+Write-Host "Debugger audit transcript: $debugAuditTranscriptPath"
+Write-Host "Debugger audit report: $debugAuditReportPath"
 Write-Host "Runtime stdout: $stdoutPath"
 Write-Host "Runtime stderr: $stderrPath"
 Write-Host "Capture: $capturePath"

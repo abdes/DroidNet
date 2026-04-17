@@ -7,6 +7,9 @@ This is a VortexBasic-specific wrapper. It delegates RenderDoc UI replay to the
 shared wrapper under tools/shadows, then applies VortexBasic-specific runtime
 assertions from Assert-VortexBasicRuntimeProof.ps1.
 
+The full proof now also requires a debugger-backed D3D12 audit report from the
+no-capture validation run.
+
 It does not launch the app; it only validates an existing capture and log.
 #>
 [CmdletBinding()]
@@ -16,6 +19,9 @@ param(
 
   [Parameter(Mandatory = $true)]
   [string]$RuntimeLogPath,
+
+  [Parameter(Mandatory = $true)]
+  [string]$DebugLayerReportPath,
 
   [Parameter()]
   [string]$CaptureReportPath = '',
@@ -33,6 +39,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $captureFullPath = (Resolve-Path $CapturePath).Path
 $runtimeLogFullPath = (Resolve-Path $RuntimeLogPath).Path
+$debugLayerReportFullPath = (Resolve-Path $DebugLayerReportPath).Path
 
 if ([string]::IsNullOrWhiteSpace($CaptureReportPath)) {
   $captureReportPath = [System.IO.Path]::ChangeExtension(
@@ -72,6 +79,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 & powershell -NoProfile -File (Join-Path $repoRoot 'tools\vortex\Assert-VortexBasicRuntimeProof.ps1') `
+  -DebugLayerReportPath $debugLayerReportFullPath `
   -RuntimeLogPath $runtimeLogFullPath `
   -CaptureReportPath $captureReportFullPath `
   -ProductsReportPath $productsReportFullPath `

@@ -8,13 +8,23 @@ This directory contains Vortex-specific capture analysis and probe scripts.
   - supported one-command VortexBasic validation entrypoint
   - builds `oxygen-vortex`, `oxygen-graphics-direct3d12`, and
     `oxygen-examples-vortexbasic` in the standard `out/build-ninja` tree
+  - runs a debugger-backed no-capture audit under `cdb.exe` with the D3D12
+    debug layer enabled before any RenderDoc capture is attempted
   - launches VortexBasic once with RenderDoc capture enabled
   - discovers the newly produced capture and feeds it into the existing proof
     wrapper
 
+- `Assert-VortexBasicDebugLayerAudit.ps1`
+  - asserts the debugger-backed no-capture D3D12 audit from the `cdb.exe`
+    transcript
+  - fails on breakpoint exceptions, D3D12/DXGI errors, or untriaged warnings
+  - explicitly documents the shutdown `DXGI WARNING: Live IDXGIFactory ...`
+    line as normal and accepted for this audit surface
+
 - `Verify-VortexBasicRuntimeProof.ps1`
   - lower-level VortexBasic-only wrapper for existing capture + runtime log
     validation
+  - now also requires the debugger-backed audit report from the no-capture run
   - runs both:
     - `AnalyzeRenderDocVortexBasicCapture.py` for structural/action-count checks
     - `AnalyzeRenderDocVortexBasicProducts.py` for product-correctness checks
@@ -48,6 +58,23 @@ one-pass bounded-volume Stage 12 path:
 - one local-light draw per point/spot light
 - zero stencil clears for those lights
 - nonzero Stage 12 point/spot `SceneColor` RGB is part of the durable gate
+
+## Current D3D12 Debug-Layer Gate
+
+The one-command validator now owns a distinct debugger-backed audit stage before
+RenderDoc capture:
+
+- VortexBasic is launched once under `cdb.exe` with `--capture-provider off`
+- the audit fails on:
+  - breakpoint exceptions
+  - `D3D12 ERROR:` / `D3D12 CORRUPTION:`
+  - `DXGI ERROR:`
+  - any `D3D12 WARNING:` / `DXGI WARNING:` that is not explicitly triaged
+- the shutdown `DXGI WARNING: Live IDXGIFactory ...` line is documented as
+  normal and accepted for this audit surface
+
+This keeps the debugger-only D3D12 validation surface real instead of pretending
+that the RenderDoc capture run can own it.
 
 ## Auxiliary Probe Scripts
 
