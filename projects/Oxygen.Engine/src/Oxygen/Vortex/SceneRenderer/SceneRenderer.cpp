@@ -1210,12 +1210,18 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_.stage15_requested = stage15_state.requested;
     environment_lighting_state_.sky_requested = stage15_state.sky_requested;
     environment_lighting_state_.sky_executed = stage15_state.sky_executed;
+    environment_lighting_state_.sky_draw_count = stage15_state.sky_draw_count;
     environment_lighting_state_.atmosphere_requested
       = stage15_state.atmosphere_requested;
     environment_lighting_state_.atmosphere_executed
       = stage15_state.atmosphere_executed;
+    environment_lighting_state_.atmosphere_draw_count
+      = stage15_state.atmosphere_draw_count;
     environment_lighting_state_.fog_requested = stage15_state.fog_requested;
     environment_lighting_state_.fog_executed = stage15_state.fog_executed;
+    environment_lighting_state_.fog_draw_count = stage15_state.fog_draw_count;
+    environment_lighting_state_.total_draw_count
+      = stage15_state.total_draw_count;
   }
 
   // Stage 16: reserved - WaterService
