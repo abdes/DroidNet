@@ -70,6 +70,52 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-17 — Phase 4 Async bootstrap seam moved onto the Vortex runtime path
+
+- Scope decision:
+  - `04-05` is now complete for its owned seam boundary:
+    Async no longer links or boots through the legacy renderer target.
+  - The renderer-owned bootstrap/view-registration seam now lives in
+    `src/Oxygen/Vortex/Renderer.h/.cpp` through public runtime view publish and
+    composition helpers.
+  - DemoShell/AppWindow runtime-UI migration still remains explicitly
+    downstream work in `04-11`.
+  - Async parity proof, harness proof, and composition/presentation closeout
+    remain downstream work in `04-09` and `04-06`.
+- Changed files this session:
+  - `Examples/Async/CMakeLists.txt`
+  - `Examples/Async/MainModule.h`
+  - `Examples/Async/MainModule.cpp`
+  - `Examples/Async/main_impl.cpp`
+  - `src/Oxygen/Vortex/Renderer.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-examples-async --parallel 4`
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-examples-async --parallel 4; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; rg -n "Oxygen/Renderer|oxygen::renderer" Examples/Async src/Oxygen/Vortex/Renderer.h src/Oxygen/Vortex/Renderer.cpp -g "!README.md"; if ($LASTEXITCODE -eq 0) { throw 'Legacy renderer references remain in Async bootstrap or Vortex renderer seam sources' }; if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }; exit 0`
+- Result:
+  - `Examples/Async` now links `oxygen::vortex`
+  - `main_impl.cpp` now registers `oxygen::vortex::Renderer` instead of the
+    legacy renderer module and sets `RendererImplementation::kVortex`
+  - `MainModule.cpp` now publishes the main runtime view and queues
+    composition through Vortex-owned helpers instead of the legacy renderer
+    bootstrap path
+  - `Renderer.h/.cpp` now expose the public runtime seam that later
+    DemoShell/AppWindow migration work is expected to consume
+  - the post-migration source audit found no remaining
+    `Oxygen/Renderer` / `oxygen::renderer` references in the owned Async
+    bootstrap files or the Vortex seam sources
+- Code / validation delta:
+  - compile-time seam migration is proven by the Debug build of
+    `oxygen-vortex` plus `oxygen-examples-async`
+  - runtime/UI parity and proof artifacts are intentionally still open; this
+    lane did not claim them
+- Remaining blocker:
+  - `04-11` must migrate DemoShell/AppWindow runtime and UI work onto the new
+    seam
+  - `04-09` must prove Async parity and harnesses on the migrated path
+  - `04-06` must close composition/presentation validation
+
 ### 2026-04-17 — Phase 4 Async seam-migration baseline recorded before 04-05 code motion
 
 - Scope decision:
@@ -2152,7 +2198,7 @@ work; only reopen later closure-gap items if a future audit finds new drift.
 | 4B PostProcessService | D.10 | `done` | `done` |
 | 4C ShadowService | D.11 | `done` | `done` |
 | 4D EnvironmentLightingService | D.12 | `done` | `done` |
-| 4E Examples/Async migration | D.13 | `done` | `not_started` |
+| 4E Examples/Async migration | D.13 | `done` | `in_progress` |
 | 4F Composition/presentation validation | — | — | `not_started` |
 
 ### Resume Point
@@ -2166,11 +2212,13 @@ Phase 4 has completed the service-activation lane and the blocker-closing Stage
    `VortexBasic` validator artifact
    `build/artifacts/vortex/phase-4/vortexbasic/04-08.validation.txt`, not the
    older `04-04` ownership/publication proof alone.
-3. `Examples/Async` remains the next active lane and the first-success
-   integration gate.
-4. Resume the remaining Phase 4 execution in this order:
-   `04-05` -> `04-11` -> `04-09` -> `04-06`.
-5. Keep `VortexBasic` as the durable Stage 15 regression surface while Async
+3. `04-05` is now complete for the initial seam-replacement boundary:
+   Async links and boots through Vortex-owned seams, but runtime/UI migration
+   and proof work remain open.
+4. `Examples/Async` remains the first-success integration gate.
+5. Resume the remaining Phase 4 execution in this order:
+   `04-11` -> `04-09` -> `04-06`.
+6. Keep `VortexBasic` as the durable Stage 15 regression surface while Async
    adds the runtime/UI/harness integration proof.
 
 ---
