@@ -1056,6 +1056,37 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  Stage8PublishesDirectionalShadowFrameSlotForDeferredLighting)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+
+  const auto context = RenderForView(first_view_id_, first_resolved_view_);
+  const auto& published_bindings = scene_renderer_->GetPublishedViewFrameBindings();
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+
+  EXPECT_NE(published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(lighting_state.published_shadow_frame_slot,
+    published_bindings.shadow_frame_slot);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingConsumesDirectionalShadowProductWithoutVsmOrLocalShadowExpansion)
+{
+  static_cast<void>(AddDirectionalLight("Sun"));
+  static_cast<void>(AddPointLight("PointFill"));
+  static_cast<void>(AddSpotLight("SpotRim"));
+
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& lighting_state = scene_renderer_->GetLastDeferredLightingState();
+  EXPECT_TRUE(lighting_state.consumed_directional_shadow_product);
+  EXPECT_FALSE(lighting_state.directional_shadow_vsm_active);
+  EXPECT_GT(lighting_state.directional_shadow_cascade_count, 0U);
+  EXPECT_NE(lighting_state.directional_shadow_surface_srv,
+    oxygen::kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingUsesOutsideVolumeLocalLights)
 {
   const auto outside_view = MakePerspectiveResolvedView(64.0F, 64.0F);

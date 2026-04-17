@@ -538,6 +538,48 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 }
 
 NOLINT_TEST_F(DrawMetadataEmitterTest,
+  EmitDrawMetadata_ShadowOnlyDrawsRetainShadowCasterPassForStage8Consumers)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.Stage8ShadowConsumer");
+
+  BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+  const auto geo_handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+
+  BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+  const auto indices = GeoUploader().GetShaderVisibleIndices(geo_handle);
+  ASSERT_NE(indices.vertex_srv_index, oxygen::kInvalidShaderVisibleIndex);
+  ASSERT_NE(indices.index_srv_index, oxygen::kInvalidShaderVisibleIndex);
+
+  oxygen::vortex::sceneprep::RenderItemData shadow_only_item {};
+  shadow_only_item.geometry = geometry;
+  shadow_only_item.submesh_index = 0U;
+  shadow_only_item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
+    oxygen::vortex::sceneprep::TransformHandle::Index { 41U },
+    oxygen::vortex::sceneprep::TransformHandle::Generation { 1U },
+  };
+  shadow_only_item.cast_shadows = true;
+  shadow_only_item.main_view_visible = false;
+
+  Emitter().EmitDrawMetadata(shadow_only_item);
+  Emitter().SortAndPartition();
+
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), sizeof(oxygen::vortex::DrawMetadata));
+  const auto* draws
+    = reinterpret_cast<const oxygen::vortex::DrawMetadata*>(bytes.data());
+  ASSERT_NE(draws, nullptr);
+  EXPECT_TRUE(draws[0].flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_FALSE(draws[0].flags.IsSet(PassMaskBit::kMainViewVisible));
+
+  const auto partitions = Emitter().GetPartitions();
+  ASSERT_EQ(partitions.size(), 1U);
+  EXPECT_TRUE(partitions[0].pass_mask.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_FALSE(partitions[0].pass_mask.IsSet(PassMaskBit::kMainViewVisible));
+}
+
+NOLINT_TEST_F(DrawMetadataEmitterTest,
   EmitDrawMetadata_AlphaTestFlagRoutesOpaqueDomainMaterialThroughMaskedShadowPath)
 {
   namespace d = oxygen::data;

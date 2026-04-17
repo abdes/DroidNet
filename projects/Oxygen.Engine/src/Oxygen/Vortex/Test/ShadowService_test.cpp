@@ -148,6 +148,21 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_FALSE(cmake_source.contains("ShadowLocalLights"));
 }
 
+NOLINT_TEST(ShadowServiceSurfaceTest,
+  EngineShaderCatalogRegistersDirectionalShadowDepthFamilyOnly)
+{
+  const auto source_root = SourceRoot();
+  const auto catalog_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h");
+
+  EXPECT_TRUE(
+    catalog_source.contains("Vortex/Services/Shadows/DirectionalShadowDepth.hlsl"));
+  EXPECT_TRUE(catalog_source.contains("VortexShadowDepthVS"));
+  EXPECT_TRUE(catalog_source.contains("VortexShadowDepthMaskedPS"));
+  EXPECT_FALSE(catalog_source.contains("Vortex/Services/Shadows/Vsm/"));
+  EXPECT_FALSE(catalog_source.contains("LocalLightShadow"));
+}
+
 class ShadowServiceBehaviorTest : public ::testing::Test {
 protected:
   void SetUp() override
