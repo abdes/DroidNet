@@ -748,6 +748,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     = oxygen::observer_ptr<const CompositionView> { &composition_view };
 
   scene_renderer.OnFrameStart(frame_context);
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
   scene_renderer.OnRender(render_context);
 
   EXPECT_NE(scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot,
@@ -760,11 +762,50 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(environment_state.atmosphere_draw_count, 1U);
   EXPECT_EQ(environment_state.fog_draw_count, 1U);
   EXPECT_EQ(environment_state.total_draw_count, 3U);
+  EXPECT_TRUE(environment_state.published_bindings);
+  EXPECT_EQ(environment_state.published_environment_frame_slot,
+    scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot);
   EXPECT_EQ(graphics_->draw_log_.draws.size(),
     environment_state.total_draw_count);
   EXPECT_FALSE(environment_state.ambient_bridge_published);
   EXPECT_EQ(environment_state.ambient_bridge_irradiance_srv,
     oxygen::kInvalidShaderVisibleIndex);
+
+  const auto has_pipeline =
+    [this](const std::string_view pipeline_name, const std::string_view source_path,
+      const std::string_view entry_point, const bool expect_alpha_blend) -> bool {
+    for (const auto& bind : graphics_->graphics_pipeline_log_.binds) {
+      const auto& pixel_shader = bind.desc.PixelShader();
+      if (pixel_shader.has_value() && bind.desc.GetName() == pipeline_name
+        && pixel_shader->source_path == source_path
+        && pixel_shader->entry_point == entry_point) {
+        const auto& blend_state = bind.desc.BlendState();
+        if (!expect_alpha_blend) {
+          return blend_state.empty()
+            || std::ranges::all_of(blend_state, [](const auto& target) {
+                 return !target.blend_enable;
+               });
+        }
+        return !blend_state.empty()
+          && std::ranges::all_of(blend_state, [](const auto& target) {
+               return target.blend_enable
+                 && target.src_blend
+                   == oxygen::graphics::BlendFactor::kSrcAlpha
+                 && target.dest_blend
+                   == oxygen::graphics::BlendFactor::kInvSrcAlpha;
+             });
+      }
+    }
+    return false;
+  };
+
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Sky",
+    "Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS", false));
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Atmosphere",
+    "Vortex/Services/Environment/AtmosphereCompose.hlsl",
+    "VortexAtmosphereComposePS", true));
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Fog",
+    "Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS", true));
 }
 
 } // namespace

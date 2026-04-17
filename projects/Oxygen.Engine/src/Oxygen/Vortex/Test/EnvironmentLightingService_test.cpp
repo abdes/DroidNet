@@ -425,26 +425,74 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   service.RenderSkyAndFog(ctx, scene_textures);
 
-  const auto has_pixel_shader =
-    [this](const std::string_view source_path,
-      const std::string_view entry_point) -> bool {
+  const auto has_pipeline =
+    [this](const std::string_view pipeline_name, const std::string_view source_path,
+      const std::string_view entry_point, const bool expect_alpha_blend) -> bool {
     for (const auto& bind : graphics_->graphics_pipeline_log_.binds) {
       const auto& pixel_shader = bind.desc.PixelShader();
       if (pixel_shader.has_value() && pixel_shader->source_path == source_path
-        && pixel_shader->entry_point == entry_point) {
-        return true;
+        && pixel_shader->entry_point == entry_point
+        && bind.desc.GetName() == pipeline_name) {
+        const auto& blend_state = bind.desc.BlendState();
+        if (!expect_alpha_blend) {
+          return blend_state.empty()
+            || std::ranges::all_of(blend_state, [](const auto& target) {
+                 return !target.blend_enable;
+               });
+        }
+        return !blend_state.empty()
+          && std::ranges::all_of(blend_state, [](const auto& target) {
+               return target.blend_enable
+                 && target.src_blend
+                   == oxygen::graphics::BlendFactor::kSrcAlpha
+                 && target.dest_blend
+                   == oxygen::graphics::BlendFactor::kInvSrcAlpha
+                 && target.src_blend_alpha
+                   == oxygen::graphics::BlendFactor::kOne
+                 && target.dest_blend_alpha
+                   == oxygen::graphics::BlendFactor::kInvSrcAlpha;
+             });
       }
     }
     return false;
   };
 
-  EXPECT_TRUE(
-    has_pixel_shader("Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS"));
-  EXPECT_TRUE(has_pixel_shader(
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_EQ(stage15.sky_draw_count, 1U);
+  EXPECT_EQ(stage15.atmosphere_draw_count, 1U);
+  EXPECT_EQ(stage15.fog_draw_count, 1U);
+
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Sky",
+    "Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS", false));
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Atmosphere",
     "Vortex/Services/Environment/AtmosphereCompose.hlsl",
-    "VortexAtmosphereComposePS"));
-  EXPECT_TRUE(
-    has_pixel_shader("Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS"));
+    "VortexAtmosphereComposePS", true));
+  EXPECT_TRUE(has_pipeline("Vortex.Environment.Fog",
+    "Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS", true));
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  PublishedBindingsStayAbsentSafeWhileAmbientBridgeRemainsOptIn)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 8U }, oxygen::frame::Slot { 2U });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 14U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 14U }, resolved_view, composition_view);
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 14U });
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_EQ(service.ResolveEnvironmentFrameSlot(ViewId { 14U }), slot);
+  EXPECT_EQ(bindings->ambient_bridge.irradiance_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->ambient_bridge.flags, 0U);
+  EXPECT_EQ(service.GetLastPublicationState().published_view_count, 1U);
+  EXPECT_EQ(service.GetLastPublicationState().ambient_bridge_view_count, 0U);
 }
 
 } // namespace
