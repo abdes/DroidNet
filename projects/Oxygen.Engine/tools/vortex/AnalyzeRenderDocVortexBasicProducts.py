@@ -130,6 +130,22 @@ def resource_dims(texture_desc, descriptor):
     return width, height
 
 
+def probe_positions(width, height):
+    max_x = max(0, width - 1)
+    max_y = max(0, height - 1)
+    x_steps = 7
+    y_steps = 5
+    positions = {}
+
+    for row in range(y_steps):
+        y = 0 if y_steps == 1 else int(round((max_y * row) / float(y_steps - 1)))
+        for col in range(x_steps):
+            x = 0 if x_steps == 1 else int(round((max_x * col) / float(x_steps - 1)))
+            positions["r{}_c{}".format(row, col)] = (x, y)
+
+    return positions
+
+
 def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, type_cast):
     resource_id = descriptor.resource
     resource_key = str(resource_id)
@@ -144,6 +160,10 @@ def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor,
     center_y = max(0, min(height - 1, height // 2))
     center = controller.PickPixel(resource_id, center_x, center_y, sub, type_cast)
     center_values = float4_values(center)
+    probes = {}
+    for probe_name, (probe_x, probe_y) in probe_positions(width, height).items():
+        probe_value = controller.PickPixel(resource_id, probe_x, probe_y, sub, type_cast)
+        probes[probe_name] = float4_values(probe_value)
     return {
         "resource_id": resource_id,
         "name": name,
@@ -154,6 +174,7 @@ def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor,
         "min": min_values,
         "max": max_values,
         "center": center_values,
+        "probes": probes,
         "nonzero": is_nonzero_range(min_values, max_values),
         "rgb_nonzero": rgb_nonzero(min_values, max_values),
     }
@@ -242,8 +263,90 @@ def append_texture_sample(report, prefix, sample):
     report.append("{}_min={}".format(prefix, format_values(sample["min"])))
     report.append("{}_max={}".format(prefix, format_values(sample["max"])))
     report.append("{}_center={}".format(prefix, format_values(sample["center"])))
+    for probe_name in sorted(sample["probes"].keys()):
+        report.append(
+            "{}_probe_{}={}".format(
+                prefix, probe_name, format_values(sample["probes"][probe_name])
+            )
+        )
     report.append("{}_nonzero={}".format(prefix, str(sample["nonzero"]).lower()))
     report.append("{}_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower()))
+
+
+def find_output_sample(draw_state, name):
+    for sample in draw_state["outputs"]:
+        if sample["name"] == name:
+            return sample
+    return None
+
+
+def max_sample_delta(a_sample, b_sample):
+    if a_sample is None or b_sample is None:
+        return 0.0
+
+    deltas = []
+    for field in ("min", "max", "center"):
+        deltas.extend(abs(value) for value in vec_diff(a_sample[field], b_sample[field]))
+    for probe_name in a_sample["probes"].keys():
+        deltas.extend(
+            abs(value)
+            for value in vec_diff(
+                a_sample["probes"][probe_name], b_sample["probes"][probe_name]
+            )
+        )
+    return max(deltas) if deltas else 0.0
+
+
+def make_sample_subresource(rd, sample):
+    sub = rd.Subresource()
+    sub.mip = int(sample["mip"])
+    sub.slice = int(sample["slice"])
+    sub.sample = 0
+    return sub
+
+
+def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b, grid_x=32, grid_y=18):
+    if sample_a is None or sample_b is None:
+        return 0.0
+
+    width = min(int(sample_a["width"]), int(sample_b["width"]))
+    height = min(int(sample_a["height"]), int(sample_b["height"]))
+    sub_a = make_sample_subresource(rd, sample_a)
+    sub_b = make_sample_subresource(rd, sample_b)
+
+    controller.SetFrameEvent(event_id_a, True)
+    values_a = []
+    for row in range(grid_y):
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
+        for col in range(grid_x):
+            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            values_a.append(
+                float4_values(
+                    controller.PickPixel(
+                        sample_a["resource_id"], x, y, sub_a, rd.CompType.Typeless
+                    )
+                )
+            )
+
+    controller.SetFrameEvent(event_id_b, True)
+    max_delta = 0.0
+    index = 0
+    for row in range(grid_y):
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
+        for col in range(grid_x):
+            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            value_b = float4_values(
+                controller.PickPixel(
+                    sample_b["resource_id"], x, y, sub_b, rd.CompType.Typeless
+                )
+            )
+            max_delta = max(
+                max_delta,
+                max(abs(value) for value in vec_diff(values_a[index], value_b)),
+            )
+            index += 1
+
+    return max_delta
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -259,6 +362,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_spot_name = "Vortex.Stage12.SpotLight"
     stage12_point_name = "Vortex.Stage12.PointLight"
     stage12_directional_name = "Vortex.Stage12.DirectionalLight"
+    stage15_sky_name = "Vortex.Stage15.Sky"
+    stage15_atmosphere_name = "Vortex.Stage15.Atmosphere"
+    stage15_fog_name = "Vortex.Stage15.Fog"
     compositing_name = "Vortex.CompositingTask[label=Composite Copy View 1]"
 
     stage3_records = records_under_prefix(action_records, stage3_name)
@@ -274,6 +380,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     spot_records = records_under_prefix(action_records, stage12_name + " > " + stage12_spot_name)
     point_records = records_under_prefix(action_records, stage12_name + " > " + stage12_point_name)
     directional_records = records_under_prefix(action_records, stage12_name + " > " + stage12_directional_name)
+    stage15_sky_records = records_under_prefix(action_records, stage15_sky_name)
+    stage15_atmosphere_records = records_under_prefix(action_records, stage15_atmosphere_name)
+    stage15_fog_records = records_under_prefix(action_records, stage15_fog_name)
     compositing_records = records_under_prefix(action_records, compositing_name)
 
     stage3_last_draw = find_last_named_record(stage3_records, DRAW_NAME)
@@ -281,9 +390,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_spot_last_draw = find_last_named_record(spot_records, DRAW_NAME)
     stage12_point_last_draw = find_last_named_record(point_records, DRAW_NAME)
     stage12_directional_last_draw = find_last_named_record(directional_records, DRAW_NAME)
+    stage15_sky_last_draw = find_last_named_record(stage15_sky_records, DRAW_NAME)
+    stage15_atmosphere_last_draw = find_last_named_record(stage15_atmosphere_records, DRAW_NAME)
+    stage15_fog_last_draw = find_last_named_record(stage15_fog_records, DRAW_NAME)
     compositing_draw = find_last_named_record(compositing_records, DRAW_NAME)
 
-    if stage3_last_draw is None or stage9_last_draw is None or stage12_directional_last_draw is None or compositing_draw is None:
+    if (
+        stage3_last_draw is None
+        or stage9_last_draw is None
+        or stage12_directional_last_draw is None
+        or stage12_point_last_draw is None
+        or stage15_sky_last_draw is None
+        or stage15_atmosphere_last_draw is None
+        or stage15_fog_last_draw is None
+        or compositing_draw is None
+    ):
         raise RuntimeError("Required VortexBasic stage events were not found in the capture.")
 
     stage3 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage3_last_draw.event_id)
@@ -291,6 +412,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_directional = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_directional_last_draw.event_id)
     stage12_spot = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_spot_last_draw.event_id) if stage12_spot_last_draw is not None else {"outputs": [], "depth": None}
     stage12_point = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_point_last_draw.event_id) if stage12_point_last_draw is not None else {"outputs": [], "depth": None}
+    stage15_sky = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_sky_last_draw.event_id)
+    stage15_atmosphere = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage15_atmosphere_last_draw.event_id
+    )
+    stage15_fog = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id)
 
     compositing = analyze_draw_event(controller, rd, resource_names, texture_descs, compositing_draw.event_id)
     final_present = compositing["outputs"][0] if compositing["outputs"] else None
@@ -325,6 +451,58 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         sample["name"] == "SceneColor" and sample["rgb_nonzero"]
         for sample in stage12_directional["outputs"]
     )
+    stage12_final_scene_color = find_output_sample(stage12_point, "SceneColor")
+    stage15_sky_scene_color = find_output_sample(stage15_sky, "SceneColor")
+    stage15_atmosphere_scene_color = find_output_sample(stage15_atmosphere, "SceneColor")
+    stage15_fog_scene_color = find_output_sample(stage15_fog, "SceneColor")
+    stage15_sky_scene_color_delta = max_sample_delta(
+        stage12_final_scene_color, stage15_sky_scene_color
+    )
+    stage15_atmosphere_scene_color_delta = max_sample_delta(
+        stage15_sky_scene_color, stage15_atmosphere_scene_color
+    )
+    stage15_fog_scene_color_delta = max_sample_delta(
+        stage15_atmosphere_scene_color, stage15_fog_scene_color
+    )
+    stage15_sky_scene_color_dense_delta = dense_grid_delta(
+        controller,
+        rd,
+        stage12_point_last_draw.event_id,
+        stage12_final_scene_color,
+        stage15_sky_last_draw.event_id,
+        stage15_sky_scene_color,
+    )
+    stage15_atmosphere_scene_color_dense_delta = dense_grid_delta(
+        controller,
+        rd,
+        stage15_sky_last_draw.event_id,
+        stage15_sky_scene_color,
+        stage15_atmosphere_last_draw.event_id,
+        stage15_atmosphere_scene_color,
+    )
+    stage15_fog_scene_color_dense_delta = dense_grid_delta(
+        controller,
+        rd,
+        stage15_atmosphere_last_draw.event_id,
+        stage15_atmosphere_scene_color,
+        stage15_fog_last_draw.event_id,
+        stage15_fog_scene_color,
+    )
+    stage15_sky_scene_color_delta = max(
+        stage15_sky_scene_color_delta, stage15_sky_scene_color_dense_delta
+    )
+    stage15_atmosphere_scene_color_delta = max(
+        stage15_atmosphere_scene_color_delta,
+        stage15_atmosphere_scene_color_dense_delta,
+    )
+    stage15_fog_scene_color_delta = max(
+        stage15_fog_scene_color_delta, stage15_fog_scene_color_dense_delta
+    )
+    stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
+    stage15_atmosphere_scene_color_changed = (
+        stage15_atmosphere_scene_color_delta > 1.0e-5
+    )
+    stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
 
     report.append("analysis_profile=vortexbasic_stage_products")
@@ -335,6 +513,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage12_spot_last_draw_event={}".format(stage12_spot_last_draw.event_id if stage12_spot_last_draw else ""))
     report.append("stage12_point_last_draw_event={}".format(stage12_point_last_draw.event_id if stage12_point_last_draw else ""))
     report.append("stage12_directional_last_draw_event={}".format(stage12_directional_last_draw.event_id))
+    report.append("stage15_sky_last_draw_event={}".format(stage15_sky_last_draw.event_id))
+    report.append(
+        "stage15_atmosphere_last_draw_event={}".format(stage15_atmosphere_last_draw.event_id)
+    )
+    report.append("stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id))
     report.append("compositing_draw_event={}".format(compositing_draw.event_id))
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
     report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
@@ -343,6 +526,47 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage12_spot_scene_color_nonzero={}".format(str(stage12_spot_scene_color_nonzero).lower()))
     report.append("stage12_point_scene_color_nonzero={}".format(str(stage12_point_scene_color_nonzero).lower()))
     report.append("stage12_directional_scene_color_nonzero={}".format(str(stage12_directional_scene_color_nonzero).lower()))
+    report.append(
+        "stage15_sky_scene_color_delta_max={:.6f}".format(stage15_sky_scene_color_delta)
+    )
+    report.append(
+        "stage15_sky_scene_color_dense_delta_max={:.6f}".format(
+            stage15_sky_scene_color_dense_delta
+        )
+    )
+    report.append(
+        "stage15_atmosphere_scene_color_delta_max={:.6f}".format(
+            stage15_atmosphere_scene_color_delta
+        )
+    )
+    report.append(
+        "stage15_atmosphere_scene_color_dense_delta_max={:.6f}".format(
+            stage15_atmosphere_scene_color_dense_delta
+        )
+    )
+    report.append(
+        "stage15_fog_scene_color_delta_max={:.6f}".format(stage15_fog_scene_color_delta)
+    )
+    report.append(
+        "stage15_fog_scene_color_dense_delta_max={:.6f}".format(
+            stage15_fog_scene_color_dense_delta
+        )
+    )
+    report.append(
+        "stage15_sky_scene_color_changed={}".format(
+            str(stage15_sky_scene_color_changed).lower()
+        )
+    )
+    report.append(
+        "stage15_atmosphere_scene_color_changed={}".format(
+            str(stage15_atmosphere_scene_color_changed).lower()
+        )
+    )
+    report.append(
+        "stage15_fog_scene_color_changed={}".format(
+            str(stage15_fog_scene_color_changed).lower()
+        )
+    )
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     overall = (
         stage3_depth_ok
@@ -352,6 +576,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage12_spot_scene_color_nonzero
         and stage12_point_scene_color_nonzero
         and stage12_directional_scene_color_nonzero
+        and stage15_sky_scene_color_changed
+        and stage15_atmosphere_scene_color_changed
+        and stage15_fog_scene_color_changed
         and final_present_nonzero
     )
     report.append("overall_verdict={}".format("pass" if overall else "fail"))
@@ -368,6 +595,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         append_texture_sample(report, "stage12_point_output_{}".format(index), sample)
     for index, sample in enumerate(stage12_directional["outputs"]):
         append_texture_sample(report, "stage12_directional_output_{}".format(index), sample)
+    for index, sample in enumerate(stage15_sky["outputs"]):
+        append_texture_sample(report, "stage15_sky_output_{}".format(index), sample)
+    for index, sample in enumerate(stage15_atmosphere["outputs"]):
+        append_texture_sample(report, "stage15_atmosphere_output_{}".format(index), sample)
+    for index, sample in enumerate(stage15_fog["outputs"]):
+        append_texture_sample(report, "stage15_fog_output_{}".format(index), sample)
     append_texture_sample(report, "final_present", final_present)
 
 
