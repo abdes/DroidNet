@@ -12,6 +12,10 @@
 
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen {
+class ResolvedView;
+}
+
 namespace oxygen::vortex {
 
 struct PreparedSceneFrame;
@@ -40,7 +44,8 @@ public:
     -> DepthPrepassMeshProcessor& = delete;
 
   OXGN_VRTX_API void BuildDrawCommands(
-    const PreparedSceneFrame& prepared_scene, bool include_masked);
+    const PreparedSceneFrame& prepared_scene,
+    const ResolvedView* resolved_view, bool include_masked);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const DrawCommand>;

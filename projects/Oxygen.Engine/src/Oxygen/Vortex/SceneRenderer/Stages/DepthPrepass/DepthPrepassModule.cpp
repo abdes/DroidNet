@@ -329,7 +329,7 @@ void DepthPrepassModule::Execute(
   }
 
   mesh_processor_->BuildDrawCommands(
-    *ctx.current_view.prepared_frame,
+    *ctx.current_view.prepared_frame, ctx.current_view.resolved_view.get(),
     config_.mode == DepthPrePassMode::kOpaqueAndMasked);
 
   auto* gfx = renderer_.GetGraphics().get();
