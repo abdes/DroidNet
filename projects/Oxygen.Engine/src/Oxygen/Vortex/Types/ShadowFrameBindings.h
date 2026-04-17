@@ -11,27 +11,38 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 
 namespace oxygen::vortex {
 
-//! Bindless shadow-system routing payload for a single view.
+inline constexpr std::uint32_t kShadowTechniqueDirectionalConventional
+  = 1U << 0U;
+inline constexpr std::uint32_t kShadowSamplingContractTexture2DArray
+  = 1U << 0U;
+
+//! Bindless directional conventional-shadow routing payload for one view.
 struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
-  ShaderVisibleIndex shadow_instance_metadata_slot {
+  static constexpr std::uint32_t kMaxCascades = 4U;
+
+  ShaderVisibleIndex conventional_shadow_surface_handle {
     kInvalidShaderVisibleIndex
   };
-  ShaderVisibleIndex directional_shadow_metadata_slot {
-    kInvalidShaderVisibleIndex
-  };
-  ShaderVisibleIndex directional_shadow_texture_slot {
-    kInvalidShaderVisibleIndex
-  };
-  std::uint32_t sun_shadow_index { 0xFFFFFFFFU };
+  std::uint32_t cascade_count { 0U };
+  std::uint32_t technique_flags { 0U };
+  std::uint32_t sampling_contract_flags { 0U };
+
+  std::array<ShadowCascadeBinding, kMaxCascades> cascades {};
+
+  [[nodiscard]] auto HasDirectionalConventionalShadow() const noexcept -> bool
+  {
+    return conventional_shadow_surface_handle.IsValid() && cascade_count > 0U
+      && (technique_flags & kShadowTechniqueDirectionalConventional) != 0U;
+  }
 };
 
-static_assert(sizeof(ShadowFrameBindings) == 16);
 static_assert(
   alignof(ShadowFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(
-  sizeof(ShadowFrameBindings) % packing::kShaderDataFieldAlignment == 0);
+  sizeof(ShadowFrameBindings) % packing::kShaderDataFieldAlignment == 0U);
 
 } // namespace oxygen::vortex
