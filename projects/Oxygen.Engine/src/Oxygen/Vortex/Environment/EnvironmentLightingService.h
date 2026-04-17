@@ -59,10 +59,14 @@ public:
     bool requested { false };
     bool sky_requested { false };
     bool sky_executed { false };
+    std::uint32_t sky_draw_count { 0U };
     bool atmosphere_requested { false };
     bool atmosphere_executed { false };
+    std::uint32_t atmosphere_draw_count { 0U };
     bool fog_requested { false };
     bool fog_executed { false };
+    std::uint32_t fog_draw_count { 0U };
+    std::uint32_t total_draw_count { 0U };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);

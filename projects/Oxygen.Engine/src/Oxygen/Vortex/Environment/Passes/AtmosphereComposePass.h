@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -21,6 +23,9 @@ public:
   struct RecordState {
     bool requested { false };
     bool executed { false };
+    std::uint32_t draw_count { 0U };
+    bool bound_scene_color { false };
+    bool sampled_scene_depth { false };
   };
 
   OXGN_VRTX_API explicit AtmosphereComposePass(Renderer& renderer);
