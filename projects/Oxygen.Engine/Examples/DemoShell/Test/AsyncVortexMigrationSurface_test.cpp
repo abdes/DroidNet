@@ -71,4 +71,36 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   EXPECT_FALSE(async_main.contains("PublishRuntimeCompositionView("));
 }
 
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  DemoShellUiKeepsOverlayButDisablesRendererBoundPanelsOnRuntimePath)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto async_settings
+    = ReadTextFile(root / "Examples/Async/AsyncDemoSettingsService.cpp");
+  const auto demo_shell_header = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
+  const auto demo_shell_source = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
+  const auto demo_shell_ui_header
+    = ReadTextFile(root / "Examples/DemoShell/UI/DemoShellUi.h");
+  const auto demo_shell_ui_source
+    = ReadTextFile(root / "Examples/DemoShell/UI/DemoShellUi.cpp");
+
+  EXPECT_TRUE(async_bootstrap.contains("ImGui"));
+  EXPECT_TRUE(demo_shell_source.contains("DemoShellUi"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("ImGuiModule"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("stats_overlay.Draw(fc);"));
+  EXPECT_TRUE(async_settings.contains(
+    "return settings->GetBool(kSpotlightEnabledKey).value_or(true);"));
+  EXPECT_TRUE(async_settings.contains(
+    "return settings->GetBool(kSpotlightShadowsKey).value_or(false);"));
+
+  EXPECT_TRUE(demo_shell_header.contains("enable_renderer_bound_panels"));
+  EXPECT_TRUE(async_main.contains("enable_renderer_bound_panels = false;"));
+  EXPECT_TRUE(demo_shell_ui_header.contains("MakeRuntimePanelConfig("));
+  EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.rendering = false;"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.lighting = false;"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.ground_grid = false;"));
+}
+
 } // namespace oxygen::examples::testing
