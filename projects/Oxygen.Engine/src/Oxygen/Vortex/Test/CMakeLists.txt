@@ -78,6 +78,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  LightingService
+  SOURCES
+    "LightingService_test.cpp"
+)
+
+m_gtest_program(
   SceneRendererPublication
   SOURCES
     "SceneRendererPublication_test.cpp"
@@ -99,6 +105,12 @@ add_custom_target(
   Oxygen.Vortex.SceneTextures
   DEPENDS
     Oxygen.Vortex.SceneTextures.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.LightingService
+  DEPENDS
+    Oxygen.Vortex.LightingService.Tests
 )
 
 add_custom_target(
