@@ -150,6 +150,17 @@ auto DemoShell::CompleteInitialization() -> bool
   impl_->file_browser_service.ConfigureContentRoots(
     impl_->config.content_roots);
 
+  const auto runtime_panel_config = ui::MakeRuntimePanelConfig(
+    impl_->config.panel_config, impl_->config.enable_renderer_bound_panels);
+  if (runtime_panel_config.rendering != impl_->config.panel_config.rendering
+    || runtime_panel_config.lighting != impl_->config.panel_config.lighting
+    || runtime_panel_config.ground_grid
+      != impl_->config.panel_config.ground_grid) {
+    LOG_F(INFO,
+      "DemoShell: disabled renderer-bound panels for the active runtime seam");
+  }
+  impl_->config.panel_config = runtime_panel_config;
+
   if (impl_->config.enable_camera_rig) {
     auto input_system = impl_->GetInputSystem();
     if (!input_system) {

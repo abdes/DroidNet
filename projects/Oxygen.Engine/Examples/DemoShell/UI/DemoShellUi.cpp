@@ -59,6 +59,20 @@
 
 namespace oxygen::examples::ui {
 
+auto MakeRuntimePanelConfig(
+  DemoShellPanelConfig panel_config, const bool enable_renderer_bound_panels)
+  -> DemoShellPanelConfig
+{
+  if (enable_renderer_bound_panels) {
+    return panel_config;
+  }
+
+  panel_config.rendering = false;
+  panel_config.lighting = false;
+  panel_config.ground_grid = false;
+  return panel_config;
+}
+
 namespace {
 
   constexpr float kGeometryEpsilon = 0.5F;
