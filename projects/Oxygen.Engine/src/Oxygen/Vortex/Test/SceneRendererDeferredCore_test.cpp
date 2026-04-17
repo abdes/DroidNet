@@ -971,6 +971,42 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingRunsThroughLightingServiceAndPublishesLightingBindings)
+{
+  static_cast<void>(AddDirectionalLight("KeyLight"));
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& state = scene_renderer_->GetLastDeferredLightingState();
+  EXPECT_TRUE(state.owned_by_lighting_service);
+  EXPECT_NE(state.published_lighting_frame_slot, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(state.published_lighting_frame_slot,
+    scene_renderer_->GetPublishedViewFrameBindings().lighting_frame_slot);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredLightingShadersStopGeneratingLocalLightProxyVerticesProcedurally)
+{
+  const auto source_root = SourceRoot();
+  const auto point_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightPoint.hlsl";
+  const auto spot_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightSpot.hlsl";
+  const auto common_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli";
+
+  const auto point_source = ReadTextFile(point_path);
+  const auto spot_source = ReadTextFile(spot_path);
+  const auto common_source = ReadTextFile(common_path);
+
+  EXPECT_FALSE(point_source.contains("GenerateDeferredLightSphereVertex"));
+  EXPECT_FALSE(spot_source.contains("GenerateDeferredLightConeVertex"));
+  EXPECT_TRUE(common_source.contains("light_geometry_vertices_srv"));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredShadingFamilyHelpersStayWithLightingServiceOwnership)
 {
   const auto source_root = SourceRoot();
@@ -1058,6 +1094,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
                   == "Vortex.DeferredLight.Spot.Lighting";
               }),
     1);
+  EXPECT_TRUE(state.used_service_owned_local_light_geometry);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
