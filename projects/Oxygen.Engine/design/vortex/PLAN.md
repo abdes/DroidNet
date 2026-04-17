@@ -878,28 +878,28 @@ final target — including future-phase items per PRD §8.13.
 
 | Feature Family | Activation Phase | Current Status | Final Target | Notes |
 | -------------- | --------------- | -------------- | ------------ | ----- |
-| **SceneTextures (core)** | Phase 2 | not started | SceneColor, SceneDepth, PartialDepth, GBufferA–D, Stencil, Velocity, CustomDepth | Phase-1 active subset per PRD §7.17 |
-| **Stencil** | Phase 2 | not started | Active scene stencil support within the first `SceneTextures` subset | Explicitly allocated and validated in 2.12 |
-| **CustomDepth** | Phase 2 | not started | Separate custom-depth path within the first `SceneTextures` subset | Explicitly allocated and validated in 2.12 |
-| **SceneTextureSetupMode** | Phase 2 | not started | Setup-state tracking per ARCH §7.3.3 | |
-| **SceneTextureBindings** | Phase 2 | not started | Bindless routing metadata | |
-| **SceneTextureExtracts** | Phase 2 | not started | Extraction/handoff contract | |
-| **SceneRenderBuilder** | Phase 2 | not started | Bootstrap helper per ARCH §5.1.3 | |
-| **SceneRenderer (shell)** | Phase 2 | not started | 23-stage dispatch skeleton | |
-| **InitViewsModule** | Phase 3 | not started | Visibility, culling, command gen | Stage 2 |
-| **DepthPrepassModule** | Phase 3 | not started | Depth-only under the active desktop deferred opaque-velocity policy | Stage 3 |
-| **BasePassModule** | Phase 3 | not started | GBuffer MRT + masked alpha-clip + active opaque velocity production | Stage 9 |
-| **Deferred lighting** | Phase 3 → 4A | not started | Directional fullscreen + bounded-volume point/spot deferred lighting; transfers to LightingService in 4A | Stage 12 |
+| **SceneTextures (core)** | Phase 2 | done | SceneColor, SceneDepth, PartialDepth, GBufferA–D, Stencil, Velocity, CustomDepth | Phase-1 active subset shipped and validated in 2.12 |
+| **Stencil** | Phase 2 | done | Active scene stencil support within the first `SceneTextures` subset | Explicitly allocated and validated in 2.12 |
+| **CustomDepth** | Phase 2 | done | Separate custom-depth path within the first `SceneTextures` subset | Explicitly allocated and validated in 2.12 |
+| **SceneTextureSetupMode** | Phase 2 | done | Setup-state tracking per ARCH §7.3.3 | Renderer-owned setup-state contract is live |
+| **SceneTextureBindings** | Phase 2 | done | Bindless routing metadata | Published routing contract is live; `GBufferE/F` now remain reserved invalid ABI slots for Phase 7E |
+| **SceneTextureExtracts** | Phase 2 | done | Extraction/handoff contract | Explicit retained-branch handoff/history set is live |
+| **SceneRenderBuilder** | Phase 2 | done | Bootstrap helper per ARCH §5.1.3 | Active bootstrap path used by `Renderer` |
+| **SceneRenderer (shell)** | Phase 2 | done | 23-stage dispatch skeleton | Shell, stage ordering, and per-view publication are live |
+| **InitViewsModule** | Phase 3 | done | Visibility, culling, command gen | Stage 2 prepared-scene publication is live |
+| **DepthPrepassModule** | Phase 3 | done | Depth-only under the active desktop deferred opaque-velocity policy | Stage 3 publication/completeness path is live |
+| **BasePassModule** | Phase 3 | done | GBuffer MRT + masked alpha-clip + active opaque velocity production | Stage 9 GBuffer/velocity path is live |
+| **Deferred lighting** | Phase 3 → 4A | done | Directional fullscreen + bounded-volume point/spot deferred lighting; transfers to LightingService in 4A | Stage 12 is live inline in `SceneRenderer`; ownership transfer remains future 4A work |
 | **GBuffer debug viz** | Phase 3 | done | Runtime-facing deferred debug views for base color, world normals, roughness, metalness, and scene depth | `tools/vortex/Run-VortexBasicDebugViewValidation.ps1` |
-| **Shader contracts** | Phase 3 | not started | Contracts/, Shared/, Materials/ per ARCH §10 | |
+| **Shader contracts** | Phase 3 | done | Contracts/, Shared/, Materials/ per ARCH §10 | Phase 3 shader-contract layer is live and validated |
 | **LightingService** | Phase 4A | not started | Light grid + deferred lighting + forward data | Stages 6, 12 |
 | **PostProcessService** | Phase 4B | not started | Tonemap, exposure, bloom | Stage 22 |
 | **ShadowService** | Phase 4C | not started | Conventional shadows; VSM reserved for Phase 7C | Stage 8 |
 | **EnvironmentLightingService** | Phase 4D | not started | Sky, fog, environment-probe / IBL publication; volumetrics reserved for Phase 7D | Stages 14 (reserved), 15 |
 | **Examples/Async migration** | Phase 4E | not started | Full Vortex runtime | PRD §6.1.1 — first success gate |
-| **Composition/presentation** | Phase 4F | not started | Single-view composition to screen, resolve, handoff | Validated end-to-end during first migration |
-| **ResolveSceneColor** | Phase 2 (stub) → Phase 4F (real) | not started | Scene color resolve | Stage 21 |
-| **PostRenderCleanup** | Phase 2 (stub) → Phase 4F (real) | not started | Extraction/handoff | Stage 23 |
+| **Composition/presentation** | Phase 4F | in progress | Single-view composition to screen, resolve, handoff | Retained single-view runtime path exists; full 4F end-to-end migration validation is still future work |
+| **ResolveSceneColor** | Phase 2 (retained branch) → Phase 4F (migration validation) | done | Scene color resolve | Stage 21 retained-branch primitive is live; full 4F end-to-end validation remains future |
+| **PostRenderCleanup** | Phase 2 (retained branch) → Phase 4F (migration validation) | done | Extraction/handoff | Stage 23 retained-branch primitive is live; full 4F end-to-end validation remains future |
 | **DiagnosticsService** | Phase 5A | not started | GPU debug, ImGui, profiler | |
 | **TranslucencyModule** | Phase 5B | not started | Forward-lit translucency | Stage 18 |
 | **OcclusionModule** | Phase 5C | not started | HZB, occlusion queries | Stage 5 |
