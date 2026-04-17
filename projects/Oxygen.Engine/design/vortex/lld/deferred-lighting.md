@@ -377,7 +377,22 @@ standard Vortex view contract rather than from a lighting-specific `cbuffer`.
 This is the approved Phase 03 bindless contract and must stay coherent with the
 already-approved `SceneTextureBindings` / `ViewFrameBindings` routing model.
 
-### 5.5 Catalog Registration
+### 5.5 DeferredShadingCommon.hlsli (Family-Local)
+
+`DeferredShadingCommon.hlsli` also belongs to the Lighting deferred family.
+It is not renderer-wide `Shared/` code because its current responsibilities are
+specific to deferred-light input validation, deferred surface reconstruction,
+and deferred Cook-Torrance evaluation. It therefore lives at:
+
+```text
+Services/Lighting/DeferredShadingCommon.hlsli
+```
+
+If a future non-lighting family proves stable reuse of this file's helpers,
+that promotion decision must be made explicitly against the architecture
+ownership rules rather than by convenience.
+
+### 5.6 Catalog Registration
 
 | Entrypoint | Profile | Notes |
 | ---------- | ------- | ----- |

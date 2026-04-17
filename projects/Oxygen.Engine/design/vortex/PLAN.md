@@ -276,7 +276,7 @@ requires its own LLD section or document.
 | Depth prepass LLD | DepthPrepassModule, depth-only pass, mesh processor, depth-policy integration, and the non-active depth-pass velocity option boundary | `design/vortex/lld/depth-prepass.md` or DESIGN.md update |
 | Base pass LLD | BasePassModule, GBuffer MRT output, masked/opaque permutations, material shader contract (GBufferOutput), renderer-owned rigid history consumption, Stage-9 opaque velocity production, forward-mode branch | `design/vortex/lld/base-pass.md` or DESIGN.md update |
 | Deferred lighting LLD | Directional fullscreen deferred lighting, one-pass bounded-volume point/spot lighting, SceneColor accumulation | `design/vortex/lld/deferred-lighting.md` or DESIGN.md update |
-| Shader contracts LLD | Vortex shader directory setup, `Contracts/` and `Shared/` initial files, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration | `design/vortex/lld/shader-contracts.md` |
+| Shader contracts LLD | Vortex shader directory setup, stable `Contracts/`, narrow renderer-wide `Shared/`, family-local deferred-light helpers, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration | `design/vortex/lld/shader-contracts.md` |
 | InitViews LLD | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication | `design/vortex/lld/init-views.md` or DESIGN.md update |
 | ScenePrep refactor LLD | Authoritative ScenePrep runtime contract, traversal budget, prepared-scene publication, multi-view-safe state ownership | `design/vortex/lld/sceneprep-refactor.md` |
 
@@ -288,7 +288,7 @@ requires its own LLD section or document.
 | -- | ---- | ----- |
 | 3A.1 | Create `Shaders/Vortex/Contracts/Definitions/` | SceneDefinitions.hlsli, LightDefinitions.hlsli |
 | 3A.2 | Create `Shaders/Vortex/Contracts/` | SceneTextures.hlsli, GBufferLayout.hlsli, GBufferHelpers.hlsli, ViewFrameBindings.hlsli, SceneTextureBindings.hlsli |
-| 3A.3 | Create `Shaders/Vortex/Shared/` | FullscreenTriangle.hlsli, PositionReconstruction.hlsli, PackUnpack.hlsli, BRDFCommon.hlsli, DeferredShadingCommon.hlsli |
+| 3A.3 | Create `Shaders/Vortex/Shared/` | FullscreenTriangle.hlsli, PositionReconstruction.hlsli, PackUnpack.hlsli, BRDFCommon.hlsli |
 | 3A.4 | Create `Shaders/Vortex/Materials/` | GBufferMaterialOutput.hlsli, MaterialTemplateAdapter.hlsli |
 | 3A.5 | Register initial Vortex entrypoints in `EngineShaderCatalog.h` | Depth prepass, base pass, deferred light entrypoints |
 | 3A.6 | Validate ShaderBake compiles all registered entrypoints | Build verification |

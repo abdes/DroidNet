@@ -971,6 +971,31 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DeferredShadingFamilyHelpersStayWithLightingServiceOwnership)
+{
+  const auto source_root = SourceRoot();
+  const auto old_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Shared/DeferredShadingCommon.hlsli";
+  const auto new_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredShadingCommon.hlsli";
+  const auto deferred_common_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli";
+
+  EXPECT_FALSE(std::filesystem::exists(old_path))
+    << old_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(new_path))
+    << new_path.generic_string();
+  EXPECT_TRUE(std::filesystem::exists(deferred_common_path))
+    << deferred_common_path.generic_string();
+
+  const auto deferred_common_source = ReadTextFile(deferred_common_path);
+  EXPECT_TRUE(deferred_common_source.contains(
+    "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"));
+  EXPECT_FALSE(deferred_common_source.contains(
+    "Vortex/Shared/DeferredShadingCommon.hlsli"));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingAccumulatesIntoSceneColor)
 {
   static_cast<void>(AddDirectionalLight("Sun"));

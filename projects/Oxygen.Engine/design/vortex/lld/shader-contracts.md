@@ -60,8 +60,7 @@ src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/
 │   ├── FullscreenTriangle.hlsli
 │   ├── PositionReconstruction.hlsli
 │   ├── PackUnpack.hlsli
-│   ├── BRDFCommon.hlsli
-│   └── DeferredShadingCommon.hlsli
+│   └── BRDFCommon.hlsli
 ├── Materials/
 │   ├── GBufferMaterialOutput.hlsli
 │   └── MaterialTemplateAdapter.hlsli
@@ -75,7 +74,8 @@ src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/
         ├── DeferredLightDirectional.hlsl   (entrypoint)
         ├── DeferredLightPoint.hlsl         (entrypoint)
         ├── DeferredLightSpot.hlsl          (entrypoint)
-        └── DeferredLightingCommon.hlsli    (family-local helper)
+        ├── DeferredLightingCommon.hlsli    (family-local helper)
+        └── DeferredShadingCommon.hlsli     (family-local helper)
 ```
 
 **File conventions:**
@@ -646,7 +646,9 @@ float3 EvaluateBRDF(float3 N, float3 V, float3 L,
 
 ### 5.5 DeferredShadingCommon.hlsli
 
-Common utilities specific to the deferred lighting path.
+Common utilities specific to the deferred lighting path. Because this file is
+currently consumed only by the Lighting deferred family, it lives beside that
+family under `Services/Lighting/` rather than in renderer-wide `Shared/`.
 
 ```hlsl
 // DeferredShadingCommon.hlsli
@@ -654,10 +656,10 @@ Common utilities specific to the deferred lighting path.
 #ifndef VORTEX_DEFERRED_SHADING_COMMON_HLSLI
 #define VORTEX_DEFERRED_SHADING_COMMON_HLSLI
 
-#include "BRDFCommon.hlsli"
-#include "PositionReconstruction.hlsli"
-#include "../Contracts/GBufferHelpers.hlsli"
-#include "../Contracts/SceneTextures.hlsli"
+#include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Shared/PositionReconstruction.hlsli"
+#include "Vortex/Contracts/GBufferHelpers.hlsli"
+#include "Vortex/Contracts/SceneTextures.hlsli"
 
 // Full deferred lighting evaluation for one light.
 // Reads GBuffer, reconstructs position, evaluates BRDF.
