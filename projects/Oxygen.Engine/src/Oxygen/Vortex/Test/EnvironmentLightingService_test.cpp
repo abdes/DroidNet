@@ -27,6 +27,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 
 #include "Fakes/Graphics.h"
@@ -48,6 +49,8 @@ using oxygen::vortex::EnvironmentProbeState;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::SceneTextures;
+using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto ReadTextFile(const std::filesystem::path& path) -> std::string
@@ -303,6 +306,92 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->ambient_bridge.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->ambient_bridge.flags, 0U);
   EXPECT_EQ(service.GetLastPublicationState().ambient_bridge_view_count, 0U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  RenderSkyAndFogRecordsRealStage15DrawsInsteadOfStubExecutionFlags)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 12U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 12U }, resolved_view, composition_view);
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_TRUE(stage15.requested);
+  EXPECT_TRUE(stage15.sky_requested);
+  EXPECT_TRUE(stage15.sky_executed);
+  EXPECT_TRUE(stage15.atmosphere_requested);
+  EXPECT_TRUE(stage15.atmosphere_executed);
+  EXPECT_TRUE(stage15.fog_requested);
+  EXPECT_TRUE(stage15.fog_executed);
+  ASSERT_EQ(graphics_->draw_log_.draws.size(), 3U);
+  for (const auto& draw : graphics_->draw_log_.draws) {
+    EXPECT_EQ(draw.vertex_num, 3U);
+    EXPECT_EQ(draw.instances_num, 1U);
+    EXPECT_EQ(draw.vertex_offset, 0U);
+    EXPECT_EQ(draw.instance_offset, 0U);
+  }
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  RenderSkyAndFogUsesDedicatedSkyAtmosphereAndFogPipelines)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 7U }, oxygen::frame::Slot { 1U });
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 13U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 13U }, resolved_view, composition_view);
+
+  graphics_->graphics_pipeline_log_.binds.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto has_pixel_shader =
+    [this](const std::string_view source_path,
+      const std::string_view entry_point) -> bool {
+    for (const auto& bind : graphics_->graphics_pipeline_log_.binds) {
+      const auto& pixel_shader = bind.desc.PixelShader();
+      if (pixel_shader.has_value() && pixel_shader->source_path == source_path
+        && pixel_shader->entry_point == entry_point) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  EXPECT_TRUE(
+    has_pixel_shader("Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS"));
+  EXPECT_TRUE(has_pixel_shader(
+    "Vortex/Services/Environment/AtmosphereCompose.hlsl",
+    "VortexAtmosphereComposePS"));
+  EXPECT_TRUE(
+    has_pixel_shader("Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS"));
 }
 
 } // namespace
