@@ -301,7 +301,7 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     auto desc = graphics::BufferDesc {};
     desc.size_bytes
       = static_cast<std::uint64_t>(required_slots) * sizeof(ShadowPassConstants);
-    desc.usage = graphics::BufferUsage::kStorage;
+    desc.usage = graphics::BufferUsage::kNone;
     desc.memory = graphics::BufferMemory::kUpload;
     desc.debug_name = "ShadowService.DirectionPassConstants";
     pass_constants_buffer_ = gfx->CreateBuffer(desc);

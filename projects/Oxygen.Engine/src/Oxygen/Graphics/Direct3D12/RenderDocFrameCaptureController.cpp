@@ -47,7 +47,7 @@ auto InitModeText(const oxygen::FrameCaptureInitMode init_mode)
 
 constexpr wchar_t kRenderDocModuleName[] = L"renderdoc.dll";
 
-enum class CaptureMode : uint8_t { kNone, kManual };
+enum class CaptureMode : uint8_t { kNone, kManual, kConfigured };
 
 constexpr auto kRenderDocSupportedFeatures
   = oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame
@@ -253,6 +253,9 @@ private:
     const bool ended = EndCaptureUnlocked(surface);
     if (ended) {
       capture_mode_ = CaptureMode::kNone;
+      configured_capture_frames_remaining_ = 0;
+      configured_capture_started_ = false;
+      configured_capture_start_grace_frames_ = 0;
       status_message_ = "capture ended";
       LOG_F(INFO, "RenderDoc capture ended");
     } else {
@@ -276,6 +279,10 @@ private:
       scheduled_capture_from_frame_ = 0;
       scheduled_capture_frame_count_ = 0;
       capture_mode_ = CaptureMode::kNone;
+      configured_capture_frames_remaining_ = 0;
+      configured_capture_started_ = false;
+      configured_capture_start_grace_frames_ = 0;
+      configured_capture_pending_end_ = false;
       status_message_ = "configured frame-range capture request cleared";
       LOG_F(INFO, "RenderDoc configured frame-range capture request cleared");
       return true;
@@ -290,6 +297,10 @@ private:
     const bool discarded = DiscardCaptureUnlocked(surface);
     if (discarded) {
       capture_mode_ = CaptureMode::kNone;
+      configured_capture_frames_remaining_ = 0;
+      configured_capture_started_ = false;
+      configured_capture_start_grace_frames_ = 0;
+      configured_capture_pending_end_ = false;
       status_message_ = "capture discarded";
       LOG_F(INFO, "RenderDoc capture discarded");
     } else {
@@ -345,6 +356,31 @@ private:
   {
     std::scoped_lock lock(mutex_);
 
+    if (capture_mode_ == CaptureMode::kConfigured
+      && configured_capture_pending_end_) {
+      if (IsCapturingUnlocked()) {
+        const bool ended = EndCaptureUnlocked(nullptr);
+        if (ended) {
+          capture_mode_ = CaptureMode::kNone;
+          configured_capture_started_ = false;
+          configured_capture_pending_end_ = false;
+          status_message_ = "configured capture ended on next frame begin";
+          LOG_F(INFO, "RenderDoc configured capture ended on next frame begin");
+        } else {
+          LOG_F(WARNING, "RenderDoc configured capture end failed: {}",
+            status_message_);
+        }
+      } else {
+        capture_mode_ = CaptureMode::kNone;
+        configured_capture_started_ = false;
+        configured_capture_pending_end_ = false;
+        status_message_ = "configured capture completed before next frame begin";
+        LOG_F(INFO,
+          "RenderDoc configured capture completed before next frame begin");
+      }
+      return;
+    }
+
     if (api_ == nullptr || IsCapturingUnlocked()) {
       return;
     }
@@ -360,47 +396,23 @@ private:
     scheduled_capture_from_frame_ = 0;
     scheduled_capture_frame_count_ = 0;
 
-    if (requested_frame_count == 1) {
-      if (api_->TriggerCapture == nullptr) {
-        status_message_ = "RenderDoc trigger capture is unavailable";
-        LOG_F(WARNING, "RenderDoc configured frame capture rejected: {}",
-          status_message_);
-        return;
-      }
-      if (!SetActiveCaptureTargetUnlocked()) {
-        LOG_F(WARNING,
-          "RenderDoc configured frame capture for frame {} has no observed "
-          "present target; using provider active window",
-          requested_from_frame);
-      }
-      api_->TriggerCapture();
-      status_message_ = "configured frame capture requested for frame "
-        + std::to_string(requested_from_frame);
-      LOG_F(INFO, "RenderDoc configured frame capture requested for frame {}",
-        requested_from_frame);
-      return;
-    }
-
-    if (api_->TriggerMultiFrameCapture == nullptr) {
-      status_message_ = "RenderDoc multi-frame capture is unavailable";
-      LOG_F(WARNING, "RenderDoc configured frame-range capture rejected: {}",
+    if (!StartCaptureUnlocked(nullptr)) {
+      LOG_F(WARNING, "RenderDoc configured capture start failed: {}",
         status_message_);
       return;
     }
 
-    if (!SetActiveCaptureTargetUnlocked()) {
-      LOG_F(WARNING,
-        "RenderDoc configured frame-range capture from frame {} for {} "
-        "frame(s) has no observed present target; using provider active window",
-        requested_from_frame, requested_frame_count);
-    }
-    api_->TriggerMultiFrameCapture(requested_frame_count);
-    status_message_ = "configured frame-range capture requested from frame "
+    capture_mode_ = CaptureMode::kConfigured;
+    configured_capture_frames_remaining_ = requested_frame_count;
+    configured_capture_started_ = true;
+    configured_capture_start_grace_frames_ = 0U;
+    configured_capture_pending_end_ = false;
+    status_message_ = "configured frame-range capture started from frame "
       + std::to_string(requested_from_frame) + " for "
-      + std::to_string(requested_frame_count) + " frame(s)";
+      + std::to_string(requested_frame_count) + " present(s)";
     LOG_F(INFO,
-      "RenderDoc configured frame-range capture requested from frame {} for {} "
-      "frame(s)",
+      "RenderDoc configured frame-range capture started from frame {} for {} "
+      "present(s)",
       requested_from_frame, requested_frame_count);
   }
 
@@ -408,10 +420,6 @@ private:
     oxygen::frame::Slot /*frame_slot*/) -> void override
   {
     std::scoped_lock lock(mutex_);
-
-    if (api_ == nullptr || capture_mode_ != CaptureMode::kManual) {
-      return;
-    }
 
     static_cast<void>(frame_number);
   }
@@ -427,6 +435,30 @@ private:
     }
 
     last_present_target_ = ResolveCaptureTarget(surface);
+
+    if (capture_mode_ != CaptureMode::kConfigured
+      || configured_capture_frames_remaining_ == 0) {
+      return;
+    }
+
+    if (!IsCapturingUnlocked()) {
+      capture_mode_ = CaptureMode::kNone;
+      configured_capture_frames_remaining_ = 0;
+      configured_capture_started_ = false;
+      configured_capture_pending_end_ = false;
+      status_message_ = "RenderDoc configured capture was not active at present";
+      LOG_F(WARNING, "RenderDoc configured capture was not active at present");
+      return;
+    }
+
+    --configured_capture_frames_remaining_;
+    if (configured_capture_frames_remaining_ > 0) {
+      return;
+    }
+
+    configured_capture_pending_end_ = true;
+    status_message_ = "configured capture awaiting close on next frame begin";
+    LOG_F(INFO, "RenderDoc configured capture awaiting close on next frame begin");
   }
 
   auto Initialize() -> void
@@ -593,7 +625,10 @@ private:
       return false;
     }
 
-    const auto target = ResolveCaptureTarget(surface);
+    auto target = ResolveCaptureTarget(surface);
+    if (surface == nullptr && HasExplicitTarget(last_present_target_)) {
+      target = last_present_target_;
+    }
     if (target.device != nullptr && target.window != nullptr
       && api_->SetActiveWindow != nullptr) {
       api_->SetActiveWindow(target.device, target.window);
@@ -630,7 +665,10 @@ private:
       return false;
     }
 
-    const auto target = ResolveCaptureTarget(surface);
+    auto target = ResolveCaptureTarget(surface);
+    if (surface == nullptr && HasExplicitTarget(last_present_target_)) {
+      target = last_present_target_;
+    }
     if (api_->EndFrameCapture(target.device, target.window) == 0U) {
       status_message_ = "RenderDoc failed to end the capture";
       return false;
@@ -647,7 +685,10 @@ private:
       return false;
     }
 
-    const auto target = ResolveCaptureTarget(surface);
+    auto target = ResolveCaptureTarget(surface);
+    if (surface == nullptr && HasExplicitTarget(last_present_target_)) {
+      target = last_present_target_;
+    }
     if (api_->DiscardFrameCapture(target.device, target.window) == 0U) {
       status_message_ = "RenderDoc failed to discard the capture";
       return false;
@@ -681,6 +722,10 @@ private:
   uint64_t scheduled_capture_from_frame_ { 0 };
   uint32_t scheduled_capture_frame_count_ { 0 };
   CaptureMode capture_mode_ { CaptureMode::kNone };
+  uint32_t configured_capture_frames_remaining_ { 0 };
+  bool configured_capture_started_ { false };
+  uint32_t configured_capture_start_grace_frames_ { 0 };
+  bool configured_capture_pending_end_ { false };
 };
 
 #else

@@ -334,10 +334,10 @@ auto Graphics::PresentSurfaces(
   const auto frame_capture = GetFrameCaptureController();
   for (const auto& surface : surfaces) {
     try {
+      surface->Present();
       if (frame_capture != nullptr) {
         frame_capture->OnPresentSurface(surface);
       }
-      surface->Present();
     } catch (const std::exception& e) {
       LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",
         surface->GetName(), e.what());

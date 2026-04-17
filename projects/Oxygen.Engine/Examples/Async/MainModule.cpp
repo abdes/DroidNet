@@ -39,6 +39,7 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
@@ -74,6 +75,18 @@ struct LocalTimeOfDay {
   int second = 0;
   double day_fraction = 0.0;
 };
+
+auto SetShadowParticipation(oxygen::scene::SceneNode& node,
+  const bool casts_shadows, const bool receives_shadows) -> void
+{
+  if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
+    auto& flags = flags_ref->get();
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+  }
+}
 
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
@@ -832,6 +845,7 @@ auto MainModule::EnsureExampleScene() -> void
     const std::string name = std::string("Sphere_") + std::to_string(i);
     auto node = scene_raw->CreateNode(name);
     node.GetRenderable().SetGeometry(sphere_geo);
+    SetShadowParticipation(node, true, true);
 
     // Enlarge sphere to better showcase transparency layering against
     // background
@@ -892,6 +906,7 @@ auto MainModule::EnsureExampleScene() -> void
   // Multi-submesh quad centered at origin facing +Z (already in XY plane)
   multisubmesh_ = scene_raw->CreateNode("MultiSubmesh");
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
+  SetShadowParticipation(multisubmesh_, false, true);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
 
