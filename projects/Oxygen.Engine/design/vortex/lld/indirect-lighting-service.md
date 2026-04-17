@@ -32,6 +32,14 @@ data in stage 12 is explicitly transitional. Once `IndirectLightingService`
 activates, stage 12 returns to direct lighting only and stage 13 becomes the
 canonical home for indirect environment evaluation.
 
+The Phase 4 bridge is intentionally narrow:
+
+- ambient-only
+- opt-in
+- sourced from published `EnvironmentAmbientBridgeBindings`
+- never a license to let reflections, AO, skylight shadowing, or broader
+  indirect-light policy remain in Stage 12
+
 ### 1.3 First Activation Subset
 
 The first activation of stage 13 is intentionally narrower than UE 5.7:
@@ -187,6 +195,17 @@ anonymous history blob.
   active.
 - The service consumes published `EnvironmentFrameBindings`; it does not pull
   environment data through service-internal backdoors.
+
+### 5.2 Bridge Retirement Rule
+
+Once `IndirectLightingService` activates, the design package requires the
+following simultaneously:
+
+1. Stage 12 returns to direct lighting only
+2. any temporary ambient-only bridge text is removed from the active
+   `LightingService` implementation contract
+3. canonical indirect environment evaluation, and any later AO/reflection
+   expansion, remain under Stage-13 ownership
 
 ### 5.1 Explicit Non-Goals For First Activation
 

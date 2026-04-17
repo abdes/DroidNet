@@ -10,7 +10,7 @@ Related:
 
 - [PRD.md](./PRD.md) — stable product requirements
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — stable architecture
-- [DESIGN.md](./DESIGN.md) — evolving LLD (early draft)
+- [DESIGN.md](./DESIGN.md) — stable design entry point and cross-subsystem rationale
 - [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — authoritative file layout
 - [PLAN.md](./PLAN.md) — active execution plan
 
@@ -35,7 +35,7 @@ Related:
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
 | 3 | Deferred Core | `done` | — |
-| 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + Async/DemoShell Vortex migration |
+| 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + `Examples/Async` Vortex migration |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
 | 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
@@ -69,6 +69,69 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-17 - Phase 4 LLD remediation package completed
+
+- Scope decision:
+  - The Phase 4 tracked design package is now treated as complete and
+    internally consistent for the current architecture and planned scope.
+  - `DESIGN.md` remains the stable entry point and cross-subsystem rationale
+    document.
+  - Detailed authoritative contracts for Phase 4 now live in the remediated
+    LLD package under `design/vortex/lld/`.
+- Changed files this session:
+  - `design/vortex/PLAN.md`
+  - `design/vortex/DESIGN.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `design/vortex/lld/README.md`
+  - `design/vortex/lld/phase4-lld-remediation-program.md`
+  - `design/vortex/lld/lighting-service.md`
+  - `design/vortex/lld/shadow-service.md`
+  - `design/vortex/lld/environment-service.md`
+  - `design/vortex/lld/post-process-service.md`
+  - `design/vortex/lld/migration-playbook.md`
+  - `design/vortex/lld/shadow-local-lights.md`
+  - `design/vortex/lld/indirect-lighting-service.md`
+- Verification used for this session:
+  - targeted document rereads of the Phase 4 design package
+  - stale-language / contradiction sweeps via `rg`
+  - mandatory spawned-subagent review passes for:
+    - design-gate truth
+    - lighting-service parity / architecture
+    - shadow-service parity / architecture
+    - environment/post-process parity / architecture
+    - final package coherence
+- Result:
+  - Phase 4 ordering/dependency truth is corrected:
+    `LightingService` now defines the contracts that `ShadowService` and the
+    environment publication / ambient-bridge boundary depend on, rather than
+    the package claiming a blanket `4A-4D` parallel lane.
+  - `LightingService` now has a truthful frame-scope Stage-6 contract,
+    explicit directional-light authority, a complete forward-light publication
+    package, and an explicit split between authoritative light state and
+    service-owned proxy geometry.
+  - `ShadowService` now carries a truthful directional-first Phase 4C contract
+    with per-view publication and without freezing local-light/VSM storage
+    choices into the Stage 4C binding seam.
+  - `EnvironmentLightingService` now truthfully owns active Stage-15
+    sky/atmosphere/fog composition, separates persistent probe state from
+    per-view publication, and narrows the temporary Stage-12 ambient bridge to
+    the explicit `EnvironmentAmbientBridgeBindings` payload.
+  - `PostProcessService` now explicitly owns eye adaptation and future local
+    exposure within Stage 22 while leaving current-view source resolution
+    outside post ownership.
+  - `migration-playbook.md` now describes the real legacy seam inventory for
+    `Examples/Async`, the truthful Phase 4 feature baseline, and the explicit
+    proof boundary that requires all four Phase 4 services to be live in the
+    migrated run.
+- Code / validation delta:
+  - no implementation code changed
+  - no build or tests were run because this was a tracked design-package
+    remediation session
+  - verification evidence for this session is document review and subagent
+    audit, not runtime/build proof
+- Remaining blocker:
+  - none for Phase 4 design readiness
 
 ### 2026-04-16 — SceneRenderer shell ownership aligned to Renderer-selected current-view execution
 
@@ -787,12 +850,16 @@ implementation cannot begin until its design prerequisites are met.
   - `powershell -NoProfile -File tools/vortex/Assert-DeferredCoreCaptureReport.ps1 -ReportPath out/build-ninja/analysis/vortex/deferred-core/frame10/deferred-core-frame10.report.txt`
 - Result:
   - Phase 3 closeout is proven by source/test/log-backed analysis of the current deferred-core tree.
-  - RenderDoc runtime validation deferred to Phase 04 when Async and DemoShell migrate to Vortex.
+  - Historical note from the old frame-10 closeout pack: at that time runtime
+    validation was still deferred to Phase 04.
   - Analyzer report: F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\analysis\vortex\deferred-core\frame10\deferred-core-frame10.report.txt
 - Code / validation delta:
   - The proof pack now closes Stage 2/3/9/12 ordering, GBuffer publication, SceneColor accumulation, and bounded-volume local-light behavior without claiming a runtime capture that does not exist yet.
 - Remaining blocker:
-  - Phase 04 must migrate Async and DemoShell to Vortex before the first truthful frame-10 RenderDoc runtime capture is claimed.
+  - That historical note is now superseded by the current design package:
+    the Phase 4 first-success gate is `Examples/Async` per `PLAN.md`, while
+    the live `VortexBasic` runtime validation path already exists for the Phase
+    3 retained branch.
 
 ### 2026-04-15 — Phase 3 deferred-core closeout blocked
 
@@ -2001,8 +2068,21 @@ work; only reopen later closure-gap items if a future audit finds new drift.
 
 ### Resume Point
 
-Phase 4 is the next active lane. 4A–4D are design-complete and parallelizable.
-4E requires those services. 4F follows 4E.
+Phase 4 is the next active lane. The corrected design package no longer treats
+`4A-4D` as a blanket parallel lane:
+
+1. `LightingService` defines the Stage 6 / Stage 12 publication and ownership
+   contracts that other services depend on.
+2. `PostProcessService` is the least coupled service and may proceed once the
+   Phase 4 design gate is clean.
+3. `ShadowService` follows the corrected lighting contract so directional-light
+   authority and shadow publication are truthful.
+4. `EnvironmentLightingService` follows the corrected lighting contract for the
+   publication / ambient-bridge boundary, even though its Stage 15 sky/fog
+   family remains its own owner.
+5. `Examples/Async` remains the first-success gate after all four
+   migration-critical services are active.
+6. `4F` follows `4E`.
 
 ---
 
@@ -2045,13 +2125,10 @@ When implementation resumes, keep these baseline facts explicit:
 - The active Vortex source-of-truth package is:
   `PRD.md`, `ARCHITECTURE.md`, `DESIGN.md`, `PROJECT-LAYOUT.md`, `PLAN.md`,
   and this file.
-- DESIGN.md is an **early draft** — it covers illustrative shapes (SceneRenderer
-  class structure, SceneTextures allocation, GBuffer format, frame dispatch,
-  subsystem contracts, base pass, deferred lighting, substrate adaptation,
-  shader organization) but is NOT complete LLD. Missing areas include:
-  SceneTextureSetupMode, SceneTextureBindings, SceneTextureExtracts,
-  InitViewsModule, SceneRenderBuilder, velocity distribution, extraction/handoff,
-  per-subsystem LLD.
+- `DESIGN.md` is the stable design entry point and cross-subsystem rationale
+  document. Detailed authoritative per-stage and per-service contracts now live
+  under `design/vortex/lld/`; implementation must follow those LLDs rather than
+  treating `DESIGN.md` as an incomplete substitute for them.
 - Each phase in PLAN.md identifies specific design deliverables that must be
   completed before implementation begins.
 - The current legacy renderer is still the live implementation and the current

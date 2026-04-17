@@ -1,6 +1,6 @@
 # ShadowService LLD
 
-**Phase:** 4C — Migration-Critical Services
+**Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
 **Status:** `ready`
 
@@ -8,28 +8,46 @@
 
 ### 1.1 What This Covers
 
-`ShadowService` — the stage-8 owner responsible for shadow depth map
-production. Phase 4C implements conventional cascaded shadow maps for
-directional lights first, with spot-light shadows optional and point-light
-shadow strategy explicitly deferred pending a dedicated design decision. The
-service produces typed shadow publications consumed by deferred lighting at
-stage 12.
+`ShadowService` is the Stage-8 owner for **directional-first conventional
+shadow-map production** in Phase 4C.
+
+Phase 4C covers:
+
+- directional conventional shadow-map setup
+- directional shadow depth rendering at Stage 8
+- per-view publication of the directional conventional shadow product
+- later consumption of that published directional shadow product by Stage 12
+
+Phase 4C does **not** claim:
+
+- spot-light conventional shadows
+- point-light conventional shadows
+- local-light conventional shadow publication
+- VSM activation
+
+Those remain future `ShadowService` work and are not part of the truthful Phase
+4C baseline.
 
 ### 1.2 Stage Position
 
 | Position | Stage | Notes |
 | -------- | ----- | ----- |
-| Predecessor | Stage 6 (BuildLightGrid) — light data available | |
-| **This** | **Stage 8 — Shadow Depths** | Shadow map production |
-| Successor | Stage 9 (BasePass) — BasePass does not consume shadows directly | |
+| Predecessor | Stage 6 (`LightingService::BuildLightGrid`) | directional-light authority and forward-light publication already resolved |
+| **This** | **Stage 8 - Shadow Depths** | conventional directional shadow production |
+| Successor | Stage 9 (`BasePass`) | base pass does not consume the shadow product directly |
 
-Shadows are consumed at stage 12 (deferred lighting) and stage 18
-(translucency forward lighting).
+The published directional shadow product is consumed later by:
+
+- Stage 12 deferred direct lighting
+- Stage 18 translucency when that family activates
 
 ### 1.3 Architectural Authority
 
-- [ARCHITECTURE.md §8](../ARCHITECTURE.md) — subsystem services
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 8
+- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 8 - subsystem service ownership
+- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 6.2 - Stage 8 ownership
+- [PLAN.md](../PLAN.md) Section 6 - Phase 4C directional-first scope
+- [shadow-local-lights.md](./shadow-local-lights.md) - future local-light
+  conventional shadow expansion
 
 ## 2. Interface Contracts
 
@@ -37,28 +55,40 @@ Shadows are consumed at stage 12 (deferred lighting) and stage 18
 
 ```text
 src/Oxygen/Vortex/
-└── Services/
-    └── Shadows/
-        ├── ShadowService.h
-        ├── ShadowService.cpp
-        ├── Internal/
-        │   ├── CascadeShadowSetup.h/.cpp
-        │   ├── ShadowAtlasAllocator.h/.cpp
-        │   └── ShadowCulling.h/.cpp
-        ├── Passes/
-        │   ├── ShadowDepthPass.h/.cpp
-        │   └── CascadeShadowPass.h/.cpp
-        ├── Types/
-        │   ├── ShadowFrameData.h
-        │   └── ShadowCascadeData.h
-        └── Vsm/
-            └── Internal/               ← reserved (empty in Phase 4C)
+`-- Services/
+    `-- Shadows/
+        |-- ShadowService.h
+        |-- ShadowService.cpp
+        |-- Internal/
+        |   |-- CascadeShadowSetup.h/.cpp
+        |   |-- ConventionalShadowTargetAllocator.h/.cpp
+        |   `-- ShadowCasterCulling.h/.cpp
+        |-- Passes/
+        |   |-- ShadowDepthPass.h/.cpp
+        |   `-- CascadeShadowPass.h/.cpp
+        |-- Types/
+        |   |-- FrameShadowInputs.h
+        |   |-- ShadowFrameBindings.h
+        |   `-- ShadowCascadeBinding.h
+        `-- Vsm/
+            `-- Internal/   <- reserved and empty in Phase 4C
 ```
 
 ### 2.2 Public API
 
 ```cpp
 namespace oxygen::vortex {
+
+struct PreparedViewShadowInput {
+  ViewId view_id;
+  observer_ptr<const PreparedSceneFrame> prepared_scene;
+  observer_ptr<const CompositionView> composition_view;
+};
+
+struct FrameShadowInputs {
+  const FrameLightSelection& frame_light_set;
+  std::span<const PreparedViewShadowInput> active_views;
+};
 
 class ShadowService : public ISubsystemService {
  public:
@@ -70,69 +100,89 @@ class ShadowService : public ISubsystemService {
   void OnFrameStart(const FrameContext& frame) override;
   void Shutdown() override;
 
-  /// Stage 8: render shadow depth maps. Per-frame execution.
-  void RenderShadowDepths(RenderContext& ctx);
+  /// Stage 8: render directional conventional shadow depths and publish one
+  /// per-view directional shadow payload for each active view.
+  void RenderShadowDepths(const FrameShadowInputs& inputs);
 
-  /// CPU-side inspection hook for tests and diagnostics.
-  [[nodiscard]] auto InspectShadowData() const -> const ShadowFrameData&;
+  /// CPU-side inspection hook for tests/diagnostics of one view's directional
+  /// shadow publication.
+  [[nodiscard]] auto InspectShadowData(ViewId view_id) const
+    -> const DirectionalShadowFrameData*;
 
   /// VSM support check. Returns false in Phase 4C.
   [[nodiscard]] auto HasVsm() const -> bool;
 
  private:
   Renderer& renderer_;
-  ShadowFrameData shadow_data_;
   std::unique_ptr<CascadeShadowSetup> cascade_setup_;
-  std::unique_ptr<ShadowAtlasAllocator> atlas_allocator_;
+  std::unique_ptr<ConventionalShadowTargetAllocator> allocator_;
   std::unique_ptr<ShadowDepthPass> depth_pass_;
 };
 
 }  // namespace oxygen::vortex
 ```
 
-### 2.3 ShadowFrameData
+### 2.3 Published Directional Shadow Contract
+
+`ShadowFrameBindings` is the canonical GPU-facing publication seam for Phase 4C.
+In Phase 4C it describes a **directional conventional shadow product**. The
+published contract is intentionally consumer-neutral: it does not freeze one
+atlas packing layout, one DSV-view scheme, or one later VSM migration ABI.
 
 ```cpp
-struct ShadowCascadeData {
-  glm::mat4 view_projection;       // Light-space VP matrix
-  float split_near;                 // Cascade near distance
-  float split_far;                  // Cascade far distance
-  glm::vec4 shadow_bounds;          // Atlas region (x, y, width, height)
+struct ShadowCascadeBinding {
+  glm::mat4 light_view_projection;
+  float split_near{0.0f};
+  float split_far{0.0f};
+  glm::vec4 sampling_metadata0{0.0f};  // service-defined consumer metadata
+  glm::vec4 sampling_metadata1{0.0f};  // service-defined consumer metadata
 };
 
-struct ShadowFrameData {
-  // Directional light cascades
+struct ShadowFrameBindings {
   static constexpr uint32_t kMaxCascades = 4;
+
+  uint32_t conventional_shadow_surface_handle{kInvalidIndex};
   uint32_t cascade_count{0};
-  ShadowCascadeData cascades[kMaxCascades];
+  uint32_t technique_flags{0};
+  uint32_t sampling_contract_flags{0};
 
-  // Shadow atlas
-  uint32_t atlas_srv{kInvalidIndex};         // Bindless SRV index
-  uint32_t atlas_width{2048};
-  uint32_t atlas_height{2048};
+  ShadowCascadeBinding cascades[kMaxCascades];
+};
 
-  // Per-light shadow data for local lights
-  struct LocalLightShadow {
-    glm::mat4 view_projection;
-    glm::vec4 atlas_region;       // UV rect in atlas
-    float bias;
-    float normal_bias;
-  };
-  std::vector<LocalLightShadow> local_shadows;
+struct DirectionalShadowFrameData {
+  ShadowFrameBindings bindings;
+  glm::uvec2 backing_resolution{0, 0};
+  uint32_t storage_flags{0};
 };
 ```
 
-### 2.4 Per-View Publication
+### 2.4 Directional-Light Authority
 
-ShadowFrameData is published per-view through `ShadowFrameBindings` in
-`ViewFrameBindings`, making shadow data accessible to lighting and later
-translucency shaders. GPU consumers use the publication seam; CPU inspection
-uses `InspectShadowData()` only for tests / diagnostics.
+Phase 4C does not run an independent directional-light election.
 
-`PreparedSceneFrame` remains the Stage-2 prepared-scene packet and
-intentionally does not carry shadow caster bounds, receiver bounds, or
-conventional shadow draw records. Shadow payload enters the per-view
-publication stack only once `ShadowService` has produced it at stage 8.
+`ShadowService` consumes the per-frame directional-light selection already
+resolved earlier in frame execution. If no selected directional light exists
+for a view, the published `ShadowFrameBindings` payload for that view is empty.
+
+### 2.5 Per-View Publication
+
+The service publishes one `ShadowFrameBindings` payload per active view through
+`ViewFrameBindings`.
+
+This is distinct from any frame-shared depth-resource allocation:
+
+- backing depth resources may be frame-shared or implementation-specific
+- the published payload remains per-view and multi-view-safe
+- CPU inspection is keyed by view identity and is not the GPU-facing contract
+
+`PreparedSceneFrame` remains the Stage-2 prepared-scene packet. The shadow
+publication seam begins at Stage 8 and is not silently smuggled into
+`PreparedSceneFrame` as a second long-lived shadow ABI.
+
+Phase 4 replaces the current Phase 3 interim shadow-binding shape with the
+target contract in Section 2.3. The CPU struct, HLSL-side sampling contract,
+and `ViewFrameBindings` routing must evolve together; the old slot-based
+interim shape is not the long-lived Phase 4 contract.
 
 ## 3. Data Flow and Dependencies
 
@@ -140,63 +190,71 @@ publication stack only once `ShadowService` has produced it at stage 8.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| Scene | Light list (directional, point, spot) | Shadow casters |
-| Scene | Geometry (shadow-casting meshes) | Draw commands |
-| Views | Camera frustums | Cascade split computation |
-| GeometryUploader | Vertex/index buffers | Mesh data |
+| Renderer Core frame-light selection | selected directional light | authoritative light source for the directional baseline consumed by Stage 8 |
+| Active prepared views | per-view frusta and publication targets | cascade split computation and per-view publication |
+| Scene / prepared-scene draw source | shadow-casting geometry references | directional shadow depth draws |
 
 ### 3.2 Outputs
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| `ShadowFrameBindings` | LightingService (stage 12) | Published through `ViewFrameBindings` |
-| `ShadowFrameBindings` | TranslucencyModule (stage 18) | Published through `ViewFrameBindings` when that stage activates |
-| CPU inspection view of `ShadowFrameData` | Tests / diagnostics | Via `InspectShadowData()` only |
+| `ShadowFrameBindings` | `LightingService` (Stage 12) | Published through `ViewFrameBindings` |
+| `ShadowFrameBindings` | `TranslucencyModule` (Stage 18) | Published through `ViewFrameBindings` when that stage activates |
+| CPU inspection view of `DirectionalShadowFrameData` | Tests / diagnostics | `InspectShadowData(ViewId)` only |
+
+Phase 4C publishes **directional** shadow data only. Local-light conventional
+shadow bindings remain future work and are not exposed through the Phase 4C
+payload.
 
 ### 3.3 Execution Flow
 
 ```text
-ShadowService::RenderShadowDepths(ctx)
-  │
-  ├─ Compute cascade splits for directional light
-  │     └─ PSSM (Practical Split Scheme Maps) split distances
-  │     └─ Per-cascade: compute light VP matrix, atlas region
-  │
-  ├─ Allocate conventional shadow targets
-  │     └─ Spot lights: optional single-perspective allocation in Phase 4C
-  │     └─ Point lights: deferred pending explicit storage strategy
-  │
-  ├─ for each cascade / local shadow:
-  │     ├─ Set viewport to atlas region
-  │     ├─ Set render target: shadow atlas (depth-only DSV)
-  │     ├─ Cull geometry to light frustum
-  │     └─ Draw shadow-casting geometry (depth-only)
-  │
-  └─ Populate ShadowFrameData and publish per-view ShadowFrameBindings
+ShadowService::RenderShadowDepths(frame_shadow_inputs)
+  |
+  |- Resolve selected directional light from the frame-light selection
+  |
+  |- For each active view:
+  |    |- Compute directional cascade splits
+  |    |- Compute light-space matrices and consumer-facing addressing metadata
+  |    |- Allocate / reference conventional backing resources
+  |    |- Cull shadow casters to the directional cascade frusta
+  |    |- Render depth-only directional shadow draws
+  |    `- Publish one ShadowFrameBindings payload for that view
+  |
+  `- Keep CPU inspection state keyed by ViewId only for diagnostics/tests
 ```
 
 ## 4. Resource Management
 
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
-| Shadow atlas texture | Persistent | Reallocated if resolution changes |
-| Shadow depth DSV | Persistent | Same texture, different view per region |
-| Per-cascade VP matrices | Per frame | Computed from camera + light |
-| Shadow depth PSO | Persistent | Shared with depth prepass variant |
+| Conventional shadow depth backing resource | Persistent or frame-persistent implementation detail | initial implementation may use atlas-backed storage |
+| Shadow depth DSV views | Persistent / reused | implementation detail |
+| Per-view directional cascade metadata | Per frame | published through `ShadowFrameBindings` |
+| Shadow depth PSO | Persistent | shared with masked shadow variants |
 
-### 4.1 Allocator Policy
+### 4.1 Storage Policy
 
-Phase 4C may start with one simple atlas allocator, but the **contract**
-must not freeze that shape. The design must allow:
+Phase 4C may start with one simple conventional backing layout, but that choice
+is **not** the long-lived public ABI.
 
-- one simple atlas as an initial implementation
-- dedicated CSM targets or atlas partitions for cascades
-- a non-atlas point-light path (for example cubemap depth targets) if that
-  becomes the selected strategy
-- future VSM payloads without inheriting the conventional-atlas ABI
+The design must allow:
 
-The fixed texture layout is therefore an implementation choice, not part of
-the long-lived interface contract.
+- an atlas-backed initial implementation for cascades
+- dedicated cascade targets if that proves cleaner
+- later local-light conventional targets without inheriting the directional
+  storage ABI
+- later VSM activation without inheriting the conventional storage ABI
+
+The public contract therefore exposes:
+
+- per-cascade transforms
+- split distances
+- consumer-facing sampling metadata
+- technique/capability flags
+
+It does **not** freeze atlas UV math or a single 2D storage shape as the
+architectural contract.
 
 ## 5. Shader Contracts
 
@@ -204,7 +262,6 @@ the long-lived interface contract.
 
 ```hlsl
 // Services/Shadows/ShadowDepth.hlsl
-// Minimal VS for shadow depth rendering.
 
 cbuffer ShadowViewConstants : register(b0) {
   float4x4 LightViewProjection;
@@ -216,34 +273,37 @@ struct ShadowVSOutput {
   float4 position : SV_Position;
 };
 
-ShadowVSOutput ShadowDepthVS(float3 pos : POSITION, uint instanceId : SV_InstanceID) {
-  float4x4 world = LoadInstanceTransform(instanceId);
-  float4 worldPos = mul(world, float4(pos, 1.0));
+ShadowVSOutput ShadowDepthVS(float3 pos : POSITION,
+                             uint instance_id : SV_InstanceID) {
+  float4x4 world = LoadInstanceTransform(instance_id);
+  float4 world_pos = mul(world, float4(pos, 1.0));
   ShadowVSOutput output;
-  output.position = mul(LightViewProjection, worldPos);
+  output.position = mul(LightViewProjection, world_pos);
   output.position.z += DepthBias;
   return output;
 }
 ```
 
-### 5.2 Shadow Sampling (in Lighting Shaders)
+### 5.2 Directional Shadow Sampling Contract
+
+Lighting consumes the published directional conventional shadow product through
+`ShadowFrameBindings`. The architectural contract does not require consumers to
+know whether the underlying storage is atlas-backed, dedicated-per-cascade, or
+otherwise.
 
 ```hlsl
 // Contracts/ShadowData.hlsli
 
-float SampleShadowCascade(float3 worldPos, uint cascadeIndex,
-                            ShadowFrameBindingData shadow) {
-  float4 lightSpacePos = mul(shadow.cascade_vp[cascadeIndex], float4(worldPos, 1.0));
-  float2 shadowUV = lightSpacePos.xy / lightSpacePos.w * 0.5 + 0.5;
-  shadowUV.y = 1.0 - shadowUV.y;
-
-  // Offset into atlas region
-  shadowUV = shadowUV * shadow.cascade_bounds[cascadeIndex].zw
-           + shadow.cascade_bounds[cascadeIndex].xy;
-
-  float shadowDepth = ShadowAtlas.SampleCmpLevelZero(
-    ShadowSampler, shadowUV, lightSpacePos.z / lightSpacePos.w);
-  return shadowDepth;
+float SampleDirectionalShadow(
+  float3 world_pos, uint cascade_index, ShadowFrameBindingData shadow) {
+  float4 light_space_pos
+    = mul(shadow.cascades[cascade_index].light_view_projection,
+          float4(world_pos, 1.0));
+  return SamplePublishedDirectionalShadowSurface(
+    shadow.conventional_shadow_surface_handle,
+    shadow.cascades[cascade_index].sampling_metadata0,
+    shadow.cascades[cascade_index].sampling_metadata1,
+    light_space_pos);
 }
 ```
 
@@ -251,22 +311,25 @@ float SampleShadowCascade(float3 worldPos, uint cascadeIndex,
 
 | Entrypoint | Profile | Notes |
 | ---------- | ------- | ----- |
-| `VortexShadowDepthVS` | vs_6_0 | Depth-only shadow rendering |
-| `VortexShadowDepthMaskedPS` | ps_6_0 | Alpha-tested shadow |
+| `VortexShadowDepthVS` | vs_6_0 | directional conventional shadow depth rendering |
+| `VortexShadowDepthMaskedPS` | ps_6_0 | alpha-tested directional shadow path |
 
 ## 6. Stage Integration
 
 ### 6.1 Dispatch Contract
 
-`shadows_->RenderShadowDepths(ctx)` at stage 8. The service may perform
-frame-shared allocation / cache work, but the published shadow payload remains
-per-view. Directional-shadow sharing across compatible views is an optimization
-only, not the default semantic.
+`shadows_->RenderShadowDepths(frame_shadow_inputs)` runs at Stage 8.
+
+The service may perform frame-shared allocation/cache work internally, but the
+published payload remains per-view and multi-view-safe.
 
 ### 6.2 Null-Safe Behavior
 
-When null: no shadow maps produced. Deferred lighting renders without
-shadow terms (fully lit). Published `ShadowFrameBindings` are empty.
+When `shadows_` is null:
+
+- no conventional shadow depths are produced
+- deferred lighting applies no directional shadow attenuation
+- published `ShadowFrameBindings` payloads are empty
 
 ### 6.3 Capability Gate
 
@@ -274,18 +337,21 @@ Requires `kShadowing`.
 
 ## 7. Testability Approach
 
-1. **Cascade validation:** Single directional light, known scene → verify
-   cascade splits cover camera frustum correctly.
-2. **Shadow visual:** Ground plane under directional light → visible shadow
-   from occluder.
-3. **Conventional target inspection:** RenderDoc frame 10, inspect the chosen
-   shadow targets. Verify cascade regions contain valid depth data.
-4. **Shadow terms:** Compare lit/shadowed pixels in SceneColor — shadowed
-   regions should be darker by shadow attenuation factor.
+1. **Directional cascade validation:** single directional light, known scene ->
+   verify cascade splits cover the camera frustum correctly.
+2. **Directional shadow visual:** ground plane under the selected directional
+   light -> visible occluder shadow.
+3. **Per-view publication:** inspect `ShadowFrameBindings` for multiple views ->
+   verify view-specific matrices/addressing metadata remain isolated.
+4. **RenderDoc:** inspect conventional shadow backing resources and verify
+   Stage-8 ordering relative to Stage 12.
 
 ## 8. Open Questions
 
-1. **Point light shadows:** Explicitly deferred beyond the Phase 4C baseline
-   until the storage strategy is chosen.
-2. **VSM integration:** `Shadows/Vsm/` directory exists but is empty.
-   Virtual shadow maps are Phase 7C scope.
+None for the Phase 4C baseline.
+
+The intentionally deferred work already has named later owners:
+
+- spot-light / point-light conventional shadows ->
+  [shadow-local-lights.md](./shadow-local-lights.md)
+- VSM activation -> later `ShadowService` expansion

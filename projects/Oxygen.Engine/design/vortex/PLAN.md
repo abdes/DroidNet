@@ -400,33 +400,43 @@ criteria):
 
 ```text
 Phase 3 (deferred core)
- ├─► 4A: LightingService (absorbs Phase 3 deferred lighting)
- ├─► 4B: PostProcessService (independent)
- ├─► 4C: ShadowService (independent)
- └─► 4D: EnvironmentLightingService (independent)
-      └─► all of 4A–4D complete ─► 4E: Examples/Async migration
-                                  └─► 4F: Composition/presentation validation
+ ├─► 4A: LightingService
+ │     ├─ defines stage-6 shared forward-light publication
+ │     ├─ defines stage-12 deferred direct-light ownership transfer
+ │     ├─ defines directional-light authority for later shadow/light consumers
+ │     ├─► 4C: ShadowService
+ │     └─► 4D: EnvironmentLightingService publication / bridge finalization
+ ├─► 4B: PostProcessService
+ │     └─ may proceed once the Phase 4 design gate is clean
+ └─► all of 4A, 4B, 4C, and 4D complete ─► 4E: Examples/Async migration
+                                           └─► 4F: Composition/presentation validation
 ```
 
-4A–4D are parallelizable. 4E requires all four services. 4F validates that
-the migrated example presents correctly through Vortex's composition path.
+Phase 4 is not a blanket `4A-4D are parallelizable` lane. `LightingService`
+defines contracts that `ShadowService` and the environment publication / bridge
+boundary depend on. `PostProcessService` is the least coupled service and may
+proceed once the Phase 4 design gate is clean. `Examples/Async` still requires
+all four migration-critical services, and 4F still validates end-to-end
+composition/presentation after the migration.
 
 ### 4A: LightingService + Forward Light Grid
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4A.1 | Implement `Lighting/LightingService.h/.cpp` | Service lifecycle, capability gating |
-| 4A.2 | Implement light grid build (stage 6) | Clustered light-grid and published forward-light package as shared supporting data |
-| 4A.3 | Transfer deferred lighting from Phase 3 inline → LightingService | Stage 12 now dispatched via service |
+| 4A.2 | Implement frame-scope light-grid build and per-view publication seam (stage 6) | Shared frame light set, active prepared views, clustered light-grid build, and typed per-view forward-light publication |
+| 4A.3 | Transfer deferred lighting from Phase 3 inline → LightingService | Stage 12 now dispatched via service while remaining the canonical deferred direct-light owner |
 | 4A.3a | Replace the temporary Phase 03 procedural point/spot proxy generation with persistent `LightingService`-owned sphere/cone geometry | Remove the retained `SV_VertexID` local-light geometry shortcut from the canonical Stage 12 runtime path |
-| 4A.4 | Implement forward light data publication | Per-view typed publication through `ViewFrameBindings` / `LightingFrameBindings` |
+| 4A.4 | Implement forward light data publication | Per-view typed publication through `ViewFrameBindings` / `LightingFrameBindings`, including directional-light data and grid metadata |
 | 4A.5 | Implement lighting shader families | `Shaders/Vortex/Services/Lighting/` — light grid, deferred light, forward common |
 
 **Exit gate:** Light grid produces valid clustered data. Deferred lighting is
 dispatched through the service without redefining the canonical per-light
 stage-12 path. The temporary Phase 03 procedural point/spot proxy generation
 is removed and replaced by persistent `LightingService`-owned sphere/cone
-geometry. Forward-light bindings are published per view.
+geometry. Forward-light bindings are published per view with the truthful
+directional-light payload and clustered-access metadata required by later
+consumers.
 
 ### 4B: PostProcessService
 
@@ -434,7 +444,7 @@ geometry. Forward-light bindings are published per view.
 | -- | ---- | ----- |
 | 4B.1 | Implement `PostProcess/PostProcessService.h/.cpp` | Service lifecycle |
 | 4B.2 | Implement tonemap pass | HDR → LDR (minimum for visible screen output) |
-| 4B.3 | Implement auto-exposure | Luminance histogram or average |
+| 4B.3 | Implement exposure ownership family | Eye adaptation, fixed-exposure fallback, and the reserved local-exposure family under post ownership |
 | 4B.4 | Implement bloom | If straightforward to carry from legacy |
 | 4B.5 | Implement post-process shader families | `Shaders/Vortex/Services/PostProcess/` |
 
@@ -446,30 +456,33 @@ Visual: HDR → LDR with correct exposure.
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4C.1 | Implement `Shadows/ShadowService.h/.cpp` | Service lifecycle, shadow data product |
-| 4C.2 | Implement shadow depth rendering (stage 8) | Conventional shadow maps (directional first) |
-| 4C.3 | Wire shadow data into deferred lighting | Shadow terms in lighting stage 12 |
+| 4C.2 | Implement directional-first shadow depth rendering (stage 8) | Conventional directional shadow maps only; local-light conventional shadows remain later work |
+| 4C.3 | Wire directional shadow data into deferred lighting | Directional shadow terms in lighting stage 12 |
 | 4C.4 | Implement shadow shader families | `Shaders/Vortex/Services/Shadows/` |
 | 4C.5 | Reserve VSM slot | `Shadows/Vsm/` structure, no implementation |
 
-**Exit gate:** Shadow maps rendered. Deferred lighting applies shadow terms.
-Visual: correct directional shadow on ground plane. RenderDoc capture validates
-shadow pass ordering.
+**Exit gate:** Directional shadow maps rendered. Deferred lighting applies
+directional shadow terms. Visual: correct directional shadow on ground plane.
+RenderDoc capture validates shadow pass ordering. No Phase 4 claim is made that
+spot-light or point-light conventional shadows already exist.
 
 ### 4D: EnvironmentLightingService
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 4D.1 | Implement `Environment/EnvironmentLightingService.h/.cpp` | Service lifecycle, environment-probe / IBL publication |
-| 4D.2 | Implement sky/atmosphere rendering (stage 15) | Sky pass, atmosphere composition |
+| 4D.1 | Implement `Environment/EnvironmentLightingService.h/.cpp` | Service lifecycle, persistent probe state, and per-view environment publication |
+| 4D.2 | Implement sky/atmosphere rendering (stage 15) | Active sky background plus atmosphere composition under Stage 15 ownership |
 | 4D.3 | Implement fog | Height fog, distance fog |
-| 4D.4 | Implement environment-probe / IBL publication | Per-view typed publication from environment-owned persistent state |
+| 4D.4 | Implement environment publication | Per-view typed publication from environment-owned persistent state with any Phase 4 ambient bridge explicitly bounded |
 | 4D.5 | Reserve stage 14 volumetrics | No-op slot within the Environment family; future internal stage family, not one monolithic pass |
 | 4D.6 | Implement environment shader families | `Shaders/Vortex/Services/Environment/` |
 
-**Exit gate:** Sky renders. Fog applies. Environment-owned ambient probe data is
-published and available to the appropriate consumers. If Phase 4 uses a
-temporary ambient bridge before stage 13 exists, that bridge is explicitly
-documented and does not violate stage order.
+**Exit gate:** Sky background, atmosphere composition, and fog all render under
+Stage 15 ownership. Environment-owned probe/evaluation data is published per
+view from persistent state. If Phase 4 uses a temporary ambient bridge before
+stage 13 exists, that bridge is explicitly documented through a bounded
+`EnvironmentAmbientBridgeBindings` payload, remains ambient-only, and does not
+redefine Stage 12 as indirect-light owner.
 
 ### 4E: First Migration — `Examples/Async`
 
@@ -480,16 +493,18 @@ Oxygen runtime flow.
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4E.1 | Capture legacy `Examples/Async` visual baseline | RenderDoc frame 10 baseline |
-| 4E.2 | Port `Examples/Async` from legacy Renderer to Vortex | Engine/renderer seam integration through the real SceneRenderer/composition path, no compatibility clutter |
+| 4E.2 | Port `Examples/Async` from legacy Renderer to Vortex | Replace the real legacy renderer seams (`ForwardPipeline`, composition-view routing, DemoShell integration, and legacy renderer-owned view registration paths) with the Vortex runtime path, with no compatibility clutter |
 | 4E.3 | Visual parity validation | RenderDoc capture comparison against legacy baseline |
 | 4E.4 | Behavior parity validation | Workflows, async operations, observable behavior match |
 | 4E.5 | Validate `ForSinglePassHarness()` against Vortex | Non-runtime facade check |
 | 4E.6 | Validate `ForRenderGraphHarness()` against Vortex | Non-runtime facade check |
 
 **Exit gate:** `Examples/Async` runs on Vortex with correct visual output
-matching legacy reference through the real composition submission path and
-presentation surface. Migration uses no long-lived compatibility clutter. Two
-non-runtime facades verified.
+matching the legacy reference through the real composition submission path and
+presentation surface. The baseline includes the active atmosphere path and the
+scene's spotlight presence. Spotlight shadows are not part of the required
+Phase 4 parity baseline unless the phase scope is explicitly widened. Migration
+uses no long-lived compatibility clutter. Two non-runtime facades verified.
 
 ### 4F: Composition and Presentation Validation
 
@@ -787,13 +802,18 @@ Phase 0 (scaffold)
 
 ```text
 Phase 3 complete
- ├─► 4A (lighting service)    ──┐
- ├─► 4B (post-process service)  ├─► 4E (Examples/Async migration)
- ├─► 4C (shadow service)        │    └─► 4F (composition validation)
- └─► 4D (environment service) ──┘
+ ├─► 4A (lighting service)
+ │     ├─► 4C (shadow service)
+ │     └─► 4D (environment publication / bridge-finalized environment service)
+ ├─► 4B (post-process service)
+ └─► all of 4A, 4B, 4C, and 4D ─► 4E (Examples/Async migration)
+                                  └─► 4F (composition validation)
 ```
 
-4A–4D are parallelizable. 4E requires all four. 4F follows 4E.
+Phase 4 is not treated as a blanket parallel lane. `LightingService` defines
+contracts that `ShadowService` and the environment publication / bridge
+boundary depend on. `PostProcessService` is the least coupled service. 4E still
+requires all four migration-critical services. 4F follows 4E.
 
 ### 10.4 Phase 5 Parallelism
 
