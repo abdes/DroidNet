@@ -43,6 +43,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoSettingsService.h"
@@ -660,13 +661,34 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  auto main_view = BuildMainRuntimeView(extent.x, extent.y);
-  renderer->PublishRuntimeCompositionView(*context,
-    vortex::Renderer::RuntimeViewPublishInput {
-      .composition_view = main_view,
-      .render_target = observer_ptr { scene_fb_.get() },
-      .composite_source = observer_ptr { scene_fb_.get() },
-    });
+  const auto main_viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(extent.x),
+    .height = static_cast<float>(extent.y),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  engine::ViewContext view_ctx {};
+  view_ctx.view.viewport = main_viewport;
+  view_ctx.metadata.name = "MainView";
+  view_ctx.metadata.purpose = "primary";
+  view_ctx.metadata.is_scene_view = true;
+  view_ctx.metadata.with_atmosphere = true;
+  view_ctx.render_target = observer_ptr { scene_fb_.get() };
+  view_ctx.composite_source = observer_ptr { scene_fb_.get() };
+
+  renderer->UpsertPublishedRuntimeView(
+    *context, main_view_id_, std::move(view_ctx), vortex::ShadingMode::kDeferred);
+  const auto published_view_id
+    = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
+  if (published_view_id != kInvalidViewId) {
+    if (const auto resolved_view = BuildResolvedView(extent.x, extent.y);
+      resolved_view.has_value()) {
+      renderer->RegisterResolvedView(
+        published_view_id, std::move(*resolved_view));
+    }
+  }
   TrackFrameAction("Published Vortex runtime view");
 
   if (!app_.headless && app_window_ != nullptr && app_window_->GetWindow()
@@ -674,13 +696,19 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     auto target_fb = app_window_->GetCurrentFrameBuffer().lock();
     auto surface = app_window_->GetSurface().lock();
     if (target_fb && surface) {
+      if (published_view_id == kInvalidViewId) {
+        TrackFrameAction(
+          "Publish views skipped composition registration - published view unavailable");
+        TrackPhaseEnd();
+        co_return;
+      }
       renderer->RegisterRuntimeComposition(
         vortex::Renderer::RuntimeCompositionInput {
           .layers = {
             vortex::Renderer::RuntimeCompositionLayer {
               .intent_view_id = main_view_id_,
-              .viewport = main_view.view.viewport,
-              .opacity = main_view.opacity,
+              .viewport = main_viewport,
+              .opacity = 1.0F,
             },
           },
           .composite_target = std::move(target_fb),
@@ -1001,11 +1029,14 @@ auto MainModule::ReleasePublishedRuntimeView(
   }
 }
 
-auto MainModule::BuildMainRuntimeView(
-  const uint32_t width, const uint32_t height) const -> vortex::CompositionView
+auto MainModule::BuildResolvedView(const uint32_t width, const uint32_t height)
+  -> std::optional<ResolvedView>
 {
-  auto view = View {};
-  view.viewport = ViewPort {
+  if (!main_camera_.IsAlive() || !main_camera_.HasCamera()) {
+    return std::nullopt;
+  }
+
+  const auto viewport = ViewPort {
     .top_left_x = 0.0F,
     .top_left_y = 0.0F,
     .width = static_cast<float>(width),
@@ -1013,12 +1044,12 @@ auto MainModule::BuildMainRuntimeView(
     .min_depth = 0.0F,
     .max_depth = 1.0F,
   };
-
-  auto main_view
-    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_view.with_atmosphere = true;
-  main_view.shading_mode = vortex::ShadingMode::kDeferred;
-  return main_view;
+  auto camera_node = main_camera_;
+  auto resolver = vortex::SceneCameraViewResolver {
+    [camera_node](const ViewId& /*unused*/) { return camera_node; },
+    viewport,
+  };
+  return resolver(main_view_id_);
 }
 
 auto MainModule::ResolveViewExtent() const noexcept -> glm::uvec2

@@ -21,46 +21,12 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/ImGuiRuntimeSupport.h"
 
 namespace oxygen::examples {
-
-namespace {
-
-  void MaybeUnhookImGui(observer_ptr<AsyncEngine> engine) noexcept
-  {
-    auto imgui_module_ref = engine->GetModule<engine::imgui::ImGuiModule>();
-    if (!imgui_module_ref) {
-      DLOG_F(INFO, "ImGui module not available; skipping window detach");
-      return;
-    }
-
-    try {
-      imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "Failed to unhook ImGui from window: {}", e.what());
-    }
-  }
-
-  bool MaybeHookImGui(
-    observer_ptr<AsyncEngine> engine, platform::WindowIdType window_id)
-  {
-    auto imgui_module_ref = engine->GetModule<engine::imgui::ImGuiModule>();
-    if (!imgui_module_ref) {
-      LOG_F(INFO, "ImGui module not available; cannot bind to window {}",
-        window_id);
-      return false;
-    }
-
-    imgui_module_ref->get().SetWindowId(window_id);
-
-    return true;
-  }
-
-} // namespace
 
 // Map holding per-AppWindow subscriptions. Kept in translation unit so the
 // public header doesn't need to include heavy engine headers.
@@ -168,8 +134,8 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   if (CreateSurface() && EnsureFramebuffers()) {
     auto sub = engine_->SubscribeModuleAttached(
       [this](engine::ModuleEvent const& ev) {
-        if (ev.type_id == engine::imgui::ImGuiModule::ClassTypeId()) {
-          MaybeHookImGui(engine_, GetWindowId());
+        if (IsImGuiRuntimeModuleEvent(ev)) {
+          AttachImGuiWindow(engine_, GetWindowId());
         }
       },
       /*replay_existing=*/true);
@@ -453,7 +419,7 @@ auto AppWindow::Cleanup() -> void
   LOG_F(INFO, "Cleanup and release resources (window_id={})", GetWindowId());
 
   // Release resources and clear the state.
-  MaybeUnhookImGui(engine_);
+  DetachImGuiWindow(engine_);
   ClearFramebuffers();
 
   if (!gfx_weak_.expired()) {

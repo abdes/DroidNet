@@ -16,12 +16,10 @@
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/ActiveScene.h"
+#include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/DemoPanel.h"
@@ -31,12 +29,7 @@ class IAsyncEngine;
 namespace engine {
   class FrameContext;
   class InputSystem;
-  class Renderer;
   struct ShaderPassConfig;
-}
-namespace renderer {
-  class RenderingPipeline;
-  struct CompositionView;
 }
 } // namespace oxygen
 
@@ -75,7 +68,7 @@ struct DemoShellPanelConfig {
 
 - **Centralized Wiring**: Connects UI panels to engine services and callbacks.
 - **Safe Ownership**: Uses non-owning pointers for engine dependencies.
-- **Flexible Updates**: Allows dynamic renderer and render-graph bindings.
+- **Flexible Updates**: Refreshes scene-backed runtime state without owning renderer internals.
 
 ### Usage Patterns
 
@@ -85,7 +78,7 @@ struct DemoShellPanelConfig {
 ### Architecture Notes
 
  The configuration favors non-owning references to avoid lifetime coupling.
- Panels capture callbacks for scene loading and renderer integration.
+ Panels capture callbacks for scene loading and runtime integration.
 
  @warning Callbacks must remain valid for the lifetime of the shell.
  @see DemoShell, DemoShell::Initialize
@@ -106,8 +99,6 @@ struct DemoShellConfig {
   std::function<void(const std::filesystem::path&)> on_pak_mounted;
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
 
-  std::function<observer_ptr<renderer::RenderingPipeline>()>
-    get_active_pipeline;
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -157,7 +148,7 @@ public:
 
   //! Notify services once the main view is ready in the frame context.
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::CompositionView& view) -> void;
+    const renderer::MainViewContract& view) -> void;
 
   //! Register a demo-specific panel with the shell.
   //!
@@ -240,7 +231,7 @@ public:
 private:
   //! Completes initialization once required modules are available.
   auto CompleteInitialization() -> bool;
-  auto UpdatePanels() -> void;
+  auto SyncRuntimeState() -> void;
   auto OnSceneActivated(scene::Scene& scene) -> void;
 
   struct Impl;

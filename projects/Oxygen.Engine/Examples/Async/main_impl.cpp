@@ -41,6 +41,7 @@
 #include "Common/DemoCli.h"
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/ImGuiRuntimeSupport.h"
 #include "DemoShell/Services/SettingsService.h"
 
 using namespace oxygen;
@@ -129,6 +130,10 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
       | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
     register_module(std::make_unique<oxygen::vortex::Renderer>(
       app.gfx_weak, renderer_config, kAsyncVortexCapabilities));
+
+    if (!app.headless) {
+      register_module(oxygen::examples::CreateImGuiRuntimeModule(app.platform));
+    }
   }
 }
 

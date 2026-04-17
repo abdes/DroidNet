@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
@@ -39,7 +40,6 @@ class Framebuffer;
 }
 
 namespace oxygen::vortex {
-struct CompositionView;
 class Renderer;
 }
 
@@ -150,8 +150,8 @@ private:
   auto ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>;
   auto ReleasePublishedRuntimeView(
     observer_ptr<engine::FrameContext> context = nullptr) -> void;
-  [[nodiscard]] auto BuildMainRuntimeView(uint32_t width, uint32_t height) const
-    -> vortex::CompositionView;
+  [[nodiscard]] auto BuildResolvedView(uint32_t width, uint32_t height)
+    -> std::optional<ResolvedView>;
   [[nodiscard]] auto ResolveViewExtent() const noexcept -> glm::uvec2;
   auto EnsureSceneFramebuffer(uint32_t width, uint32_t height) -> void;
   auto ClearSceneFramebuffer() -> void;
