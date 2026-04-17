@@ -50,15 +50,24 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node,
 
   Vec3 cam_pos { 0.0F, 0.0F, 0.0F };
   Quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
-  if (auto wp = camera_node.GetTransform().GetWorldPosition()) {
-    cam_pos = *wp;
-  } else if (auto lp = camera_node.GetTransform().GetLocalPosition()) {
-    cam_pos = *lp;
-  }
-  if (auto wr = camera_node.GetTransform().GetWorldRotation()) {
-    cam_rot = *wr;
-  } else if (auto lr = camera_node.GetTransform().GetLocalRotation()) {
-    cam_rot = *lr;
+  if (!camera_node.HasParent()) {
+    if (auto lp = camera_node.GetTransform().GetLocalPosition()) {
+      cam_pos = *lp;
+    }
+    if (auto lr = camera_node.GetTransform().GetLocalRotation()) {
+      cam_rot = *lr;
+    }
+  } else {
+    if (auto wp = camera_node.GetTransform().GetWorldPosition()) {
+      cam_pos = *wp;
+    } else if (auto lp = camera_node.GetTransform().GetLocalPosition()) {
+      cam_pos = *lp;
+    }
+    if (auto wr = camera_node.GetTransform().GetWorldRotation()) {
+      cam_rot = *wr;
+    } else if (auto lr = camera_node.GetTransform().GetLocalRotation()) {
+      cam_rot = *lr;
+    }
   }
 
   const auto view_m = [](const Vec3& pos, const Quat& rot) -> Mat4 {

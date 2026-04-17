@@ -68,4 +68,43 @@ TEST(SceneCameraViewResolverTest, UsesViewportOverrideWhenProvided)
   EXPECT_GT(resolved.FocalLengthPixels(), 0.0F);
 }
 
+TEST(SceneCameraViewResolverTest, RootCameraCanResolveWithoutSceneUpdate)
+{
+  auto scene = std::make_shared<Scene>("resolver-root-camera", 4U);
+  auto camera_node = scene->CreateNode("camera");
+  ASSERT_TRUE(camera_node.AttachCamera(std::make_unique<PerspectiveCamera>()));
+
+  camera_node.GetTransform().SetLocalPosition(
+    oxygen::Vec3 { 1.0F, -6.0F, 3.0F });
+  camera_node.GetTransform().SetLocalRotation(
+    glm::quat(glm::radians(oxygen::Vec3 { -20.0F, 0.0F, 0.0F })));
+
+  auto camera_ref = camera_node.GetCameraAs<PerspectiveCamera>();
+  ASSERT_TRUE(camera_ref.has_value());
+
+  auto& camera = camera_ref->get();
+  camera.SetFieldOfView(glm::radians(45.0F));
+  camera.SetAspectRatio(16.0F / 9.0F);
+  camera.SetNearPlane(0.1F);
+  camera.SetFarPlane(600.0F);
+  camera.SetViewport(ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = 1280.0F,
+    .height = 720.0F,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  });
+
+  const auto resolver = SceneCameraViewResolver(
+    [camera_node](const ViewId&) -> SceneNode { return camera_node; });
+
+  const auto resolved = resolver(ViewId { 11U });
+
+  EXPECT_EQ(resolved.CameraPosition(), oxygen::Vec3(1.0F, -6.0F, 3.0F));
+  EXPECT_FLOAT_EQ(resolved.Viewport().width, 1280.0F);
+  EXPECT_FLOAT_EQ(resolved.Viewport().height, 720.0F);
+  EXPECT_GT(resolved.FocalLengthPixels(), 0.0F);
+}
+
 } // namespace
