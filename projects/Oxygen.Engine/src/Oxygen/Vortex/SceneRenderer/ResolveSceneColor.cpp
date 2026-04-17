@@ -52,6 +52,9 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 
 } // namespace
 
+// Stage 21 owner: ResolveSceneColor is the only retained seam allowed to
+// snapshot late scene-color/depth artifacts for Stage 22 consumption and the
+// downstream Stage 23 handoff.
 void SceneRenderer::ResolveSceneColor(RenderContext& /*ctx*/)
 {
   const auto scene_color_ready
