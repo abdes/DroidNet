@@ -13,7 +13,6 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
-#include <Oxygen/Vortex/Types/ConventionalShadowDrawRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
@@ -61,12 +60,6 @@ struct PreparedSceneFrame {
     draw_bounding_spheres; // one per draw metadata record
   std::span<const sceneprep::RenderItemData>
     render_items; // per-view collected items captured at scene-prep finalize
-  std::span<const glm::vec4>
-    shadow_caster_bounding_spheres; // xyz=center, w=radius
-  std::span<const glm::vec4>
-    visible_receiver_bounding_spheres; // xyz=center, w=radius
-  std::span<const vortex::ConventionalShadowDrawRecord>
-    conventional_shadow_draw_records;
   std::span<const SkinnedPosePublication> current_skinned_pose_publications;
   std::span<const SkinnedPosePublication> previous_skinned_pose_publications;
   std::span<const MorphPublication> current_morph_publications;
@@ -102,9 +95,6 @@ struct PreparedSceneFrame {
   oxygen::ShaderVisibleIndex bindless_instance_data_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
-  oxygen::ShaderVisibleIndex bindless_conventional_shadow_draw_records_slot {
-    oxygen::kInvalidShaderVisibleIndex
-  };
   oxygen::ShaderVisibleIndex bindless_current_skinned_pose_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
@@ -132,6 +122,9 @@ struct PreparedSceneFrame {
   oxygen::ShaderVisibleIndex bindless_velocity_draw_metadata_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
+
+  // Shadow payload is intentionally not part of the Stage-2 publication seam.
+  // Later shadow phases publish those products through ShadowFrameBindings.
 
   // View exposure resolved during scene prep (manual or auto baseline).
   float exposure { 1.0F };
