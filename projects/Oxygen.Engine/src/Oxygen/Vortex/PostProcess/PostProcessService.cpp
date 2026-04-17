@@ -106,6 +106,7 @@ auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const auto tonemap = tonemap_pass_->Record(ctx, scene_textures,
     postprocess::TonemapPass::Inputs {
       .scene_signal = inputs.scene_signal,
+      .scene_signal_srv = inputs.scene_signal_srv,
       .post_target = inputs.post_target,
       .exposure_value = exposure.exposure_value,
       .bloom_intensity = config_.bloom_intensity,

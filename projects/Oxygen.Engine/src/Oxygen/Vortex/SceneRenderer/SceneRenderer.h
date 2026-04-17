@@ -43,6 +43,7 @@ class InitViewsModule;
 class DepthPrepassModule;
 class BasePassModule;
 class LightingService;
+class PostProcessService;
 
 class SceneRenderer {
 public:
@@ -184,6 +185,7 @@ private:
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<LightingService> lighting_;
+  std::unique_ptr<PostProcessService> post_process_;
 };
 
 } // namespace oxygen::vortex

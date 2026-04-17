@@ -43,7 +43,7 @@ public:
     const graphics::Texture* scene_signal { nullptr };
     const graphics::Texture* scene_depth { nullptr };
     const graphics::Texture* scene_velocity { nullptr };
-    observer_ptr<graphics::Framebuffer> post_target;
+    observer_ptr<const graphics::Framebuffer> post_target;
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex scene_velocity_srv { kInvalidShaderVisibleIndex };

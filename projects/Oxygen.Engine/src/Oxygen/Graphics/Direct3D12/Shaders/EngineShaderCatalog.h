@@ -359,6 +359,27 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kPixel, .name="DeferredLightSpotPS" },
       EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
   },
+  ShaderFileSpec {
+    .path="Vortex/Services/PostProcess/Tonemap.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexTonemapPS" },
+      EntryPoint { .type=kVertex, .name="VortexTonemapVS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/PostProcess/BloomDownsample.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexBloomDownsamplePS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/PostProcess/BloomUpsample.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexBloomUpsamplePS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/PostProcess/Exposure.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexExposureHistogramCS" } }
+  },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {
     .path="Lighting/LightCulling.hlsl",
@@ -575,6 +596,10 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexDeferredLightDirectional: 2 entries
 // - VortexDeferredLightPoint: 3 entries
 // - VortexDeferredLightSpot: 3 entries
+// - VortexPostProcessTonemap: 2 entries
+// - VortexPostProcessBloomDownsample: 1 entry
+// - VortexPostProcessBloomUpsample: 1 entry
+// - VortexPostProcessExposure: 1 entry
 // - LightCulling: 1
 // - TransmittanceLut_CS: 1 entry
 // - SkyViewLut_CS: 1 entry
@@ -592,6 +617,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 156
+// Total: 161
 
 } // namespace oxygen::graphics::d3d12
