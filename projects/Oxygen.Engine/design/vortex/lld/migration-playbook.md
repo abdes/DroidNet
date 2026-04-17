@@ -1,6 +1,6 @@
 # Migration Playbook LLD
 
-**Phase:** 4E — First Migration
+**Phase:** 4E - First Migration
 **Deliverable:** D.13
 **Status:** `ready`
 
@@ -8,25 +8,39 @@
 
 ### 1.1 What This Covers
 
-Step-by-step playbook for migrating `Examples/Async` from the legacy
-`Oxygen.Renderer` to `Oxygen.Vortex`. This is the PRD §6.1.1 success gate:
-the migrated example must produce correct visual output matching the legacy
-reference, with no long-lived compatibility clutter.
+This document is the step-by-step playbook for migrating `Examples/Async` from
+the legacy `Oxygen.Renderer` path to `Oxygen.Vortex`.
 
-### 1.2 Why Examples/Async
+This is the PRD Section 6.1.1 first-success gate. The migrated example must:
 
-`Examples/Async` is the designated first-migration target because it
-exercises the core rendering path (scene setup, frame dispatch, composition)
-without requiring advanced features (translucency, occlusion, multi-view).
-Success here validates that the four migration-critical services (Lighting,
-PostProcess, Shadows, Environment) are operational.
+- produce correct visual output matching the legacy reference
+- run through the real Vortex runtime seams
+- avoid long-lived compatibility clutter
+- prove that the Phase 4 service set is sufficient for one real Oxygen runtime
+  surface
+
+### 1.2 Why `Examples/Async`
+
+`Examples/Async` is the designated first migration target because it is a real
+runtime surface, not a toy shell:
+
+- it exercises scene setup, frame dispatch, composition, and presentation
+- it carries DemoShell / ImGui integration
+- it includes a spotlight and an atmosphere-enabled main composition view
+- it is smaller than a full editor/runtime migration while still proving the
+  Vortex path against a real app module
+
+The first-success gate remains `Examples/Async`. `DemoShell` is part of the
+example's integration surface, but it is **not** a separate co-equal Phase 4
+migration gate unless product intent is explicitly widened.
 
 ### 1.3 Architectural Authority
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) — runtime seam ownership, composition,
-  resolve, extraction, and handoff boundaries
-- PRD §6.1.1 — first migration exit criterion
-- [PLAN.md §6](../PLAN.md) — Phase 4E step plan
+- [ARCHITECTURE.md](../ARCHITECTURE.md) - runtime seam ownership,
+  composition, resolve, extraction, and handoff boundaries
+- [PLAN.md](../PLAN.md) Section 6 - Phase 4 ordering and success criteria
+- [IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md) - current truth
+  ledger
 
 ## 2. Pre-Migration Baseline
 
@@ -35,30 +49,85 @@ PostProcess, Shadows, Environment) are operational.
 Before any migration work:
 
 1. Build and run `Examples/Async` against legacy `Oxygen.Renderer`.
-2. Capture RenderDoc frame at frame 10 (repo convention).
-3. Save baseline screenshots and texture inspections:
-   - Final back buffer (tonemapped output)
-   - Depth buffer content
-   - Any intermediate render targets visible in RenderDoc
-4. Document observable behaviors:
-   - Async operation workflow (what async tasks execute, when they complete)
-   - Frame timing characteristics
-   - Input handling behavior
+2. Capture a RenderDoc frame at frame 10.
+3. Save baseline artifacts for:
+   - final back buffer / presented image
+   - depth visualization
+   - any visible intermediate render targets that materially affect the scene
+   - observable behavior notes for the async workflow
 
 ### 2.2 Baseline Artifacts
 
 | Artifact | Format | Purpose |
 | -------- | ------ | ------- |
-| `baseline_frame10.png` | Screenshot | Visual reference |
-| `baseline_depth.png` | Depth visualization | Depth accuracy reference |
-| `baseline_renderdoc.rdc` | RenderDoc capture | Full pass inspection |
-| `baseline_behaviors.md` | Document | Observable behavior checklist |
+| `baseline_frame10.png` | screenshot | visual reference |
+| `baseline_depth.png` | screenshot | depth reference |
+| `baseline_renderdoc.rdc` | RenderDoc capture | pass / resource inspection |
+| `baseline_behaviors.md` | notes | observable workflow checklist |
 
-## 3. Migration Steps
+### 2.3 Truthful Phase 4 Feature Baseline
 
-### 3.1 Step 1: Header and Namespace Changes
+The Phase 4 parity target is not "every renderer feature the app can
+eventually grow." It is the smallest truthful baseline required by the live
+example and the Phase 4 scope:
 
-Replace renderer includes and namespaces:
+| Feature | Baseline Status | Why |
+| ------- | --------------- | --- |
+| Deferred direct lighting | required | core Phase 3 -> Phase 4 lighting path |
+| Atmosphere-enabled main scene view | required | the live example sets `with_atmosphere = true` on its main composition view |
+| Spotlight presence | required | the live example creates and updates a camera spotlight |
+| Spotlight shadows | not required in baseline | the live example's settings default keeps `casts_shadows = false`; Phase 4C remains directional-first |
+| Post-process visible output | required | the migrated surface must reach final tonemapped output |
+| Directional conventional shadows | required | this is the truthful Phase 4C baseline |
+| Local-light conventional shadows | not required in baseline | later `ShadowService` expansion owns them |
+
+If the migration target is found to rely materially on spotlight shadows or any
+other out-of-scope feature, the design package must be widened explicitly
+instead of silently treating that dependency as optional.
+
+## 3. Real Legacy Seam Inventory
+
+The migration is not just an include/namespace rewrite. The current
+`Examples/Async` module still depends on real legacy renderer seams.
+
+### 3.1 Known Legacy Renderer Couplings
+
+The live example currently uses legacy renderer families such as:
+
+- legacy renderer includes under `Oxygen/Renderer/...`
+- `renderer::ForwardPipeline`
+- `renderer::CompositionView`
+- legacy renderer-side camera/view routing helpers
+- legacy DemoShell active-pipeline integration
+- legacy renderer-owned view registration patterns
+
+### 3.2 Required Seam Replacements
+
+The migration must replace those seams with truthful Vortex equivalents:
+
+| Current Seam | Migration Requirement |
+| ------------ | --------------------- |
+| `ForwardPipeline` ownership | replace with the Vortex scene-renderer / composition path; no parallel legacy pipeline kept alive |
+| legacy `CompositionView` routing | move to the Vortex-owned composition/view contract without local shortcut paths |
+| DemoShell `get_active_pipeline` dependency | replace with a Vortex-facing runtime seam that still supports the required UI/runtime behavior |
+| legacy renderer-owned view registration assumptions | route through Vortex Renderer Core publication and composition planning |
+| legacy renderer pass/config hooks | replace with Vortex-owned equivalents or remove them if they are legacy-only scaffolding |
+
+### 3.3 Zero-Shim Rule
+
+The migration must leave **zero** long-lived compatibility clutter:
+
+- no legacy/Vortex dual runtime path inside the example
+- no `#ifdef LEGACY_RENDERER` split
+- no adapter layer that just re-exposes legacy renderer APIs under a new name
+- no example-local bypass of the Vortex composition/publication path
+
+## 4. Migration Steps
+
+### 4.1 Step 1 - Replace Includes, Namespaces, and Public Types
+
+Replace legacy renderer includes and namespaces only as part of the broader
+seam migration:
 
 | Legacy | Vortex |
 | ------ | ------ |
@@ -66,178 +135,138 @@ Replace renderer includes and namespaces:
 | `oxygen::renderer::` | `oxygen::vortex::` |
 | `OXGN_RNDR_API` | `OXGN_VRTX_API` |
 
-The example code should use the public API only:
+This step does **not** by itself prove the migration is viable.
 
-- `Renderer` (Vortex facade)
-- `CompositionView` (intent API)
-- Scene setup APIs
+### 4.2 Step 2 - Replace Runtime Bootstrap and View/Composition Seams
 
-### 3.2 Step 2: Renderer Initialization
+Before treating the example as migrated:
 
-Replace legacy renderer creation with Vortex:
+1. verify the Vortex bootstrap path reaches the real
+   `SceneRenderBuilder` / `SceneRenderer` runtime seam
+2. verify Renderer Core owns:
+   - current-view materialization
+   - publication
+   - composition planning
+   - target resolution
+   - composition submission / presentation handoff
+3. remove any dependence on the legacy active-pipeline abstraction
 
-```cpp
-// Legacy:
-auto renderer = oxygen::renderer::CreateRenderer(gfx, config);
+### 4.3 Step 3 - Rehome Scene Setup and Lighting Hooks
 
-// Vortex:
-auto renderer = oxygen::vortex::CreateRenderer(gfx, config);
-```
+Verify scene setup works through engine/Vortex public surfaces only:
 
-The `RendererConfig` structure should carry over. Verify that config fields
-map correctly between legacy and Vortex.
+- scene graph construction
+- geometry/material setup
+- camera setup
+- spotlight creation/update
+- atmosphere-enabled main composition view
 
-This step is not a cosmetic constructor swap. Before treating the migration as
-viable, verify that the Vortex bootstrap path reaches the real
-`SceneRenderBuilder` / `SceneRenderer` runtime seam and that Renderer Core owns
-view assembly, publication, composition planning, target resolution, and
-compositing execution per the architecture.
+If the example currently reaches renderer internals directly, those calls must
+be refactored to a Vortex-facing runtime seam rather than carried forward.
 
-### 3.3 Step 3: Scene Setup
+### 4.4 Step 4 - Verify Frame Loop Integration
 
-Verify scene setup code works unchanged:
+The external frame loop shape may remain compatible, but the migration is only
+truthful if the work beneath it now routes through the real Vortex runtime
+path.
 
-- Scene graph construction (nodes, transforms, geometry, materials)
-- Light setup (directional, point, spot)
-- Camera setup via `CompositionView`
+Compatibility of the outer loop is necessary but not sufficient.
 
-Most scene setup code should be engine-level (not renderer-specific). If
-the example directly calls renderer internals, those calls must be
-refactored to use the Vortex public API.
-
-### 3.4 Step 4: Frame Loop Integration
-
-Verify the frame loop dispatch works:
-
-```cpp
-// Both legacy and Vortex should support this pattern:
-renderer.OnFrameStart(frame);
-renderer.OnPreRender(frame);
-renderer.OnRender(ctx);
-renderer.OnCompositing(ctx);
-renderer.OnFrameEnd(frame);
-```
-
-The Vortex renderer delegates to `SceneRenderer` internally. The external
-frame loop API should be compatible.
-
-Compatibility of the outer loop is necessary but not sufficient. The migrated
-example must prove that composition submission, resolve behavior, and handoff
-artifacts travel through the real Vortex runtime seams rather than through an
-example-local shortcut.
-
-### 3.5 Step 5: Async Operation Validation
+### 4.5 Step 5 - Validate Async Behavior
 
 `Examples/Async` exercises asynchronous operations:
 
-- Verify async tasks complete correctly under Vortex
-- Verify no dead-locks or race conditions in the new dispatch path
-- Verify observable async behavior matches baseline
+- async tasks complete correctly
+- no deadlocks / race conditions are introduced by the Vortex migration
+- observable behavior matches the baseline
 
-### 3.6 Step 6: Non-Runtime Facade Validation
+### 4.6 Step 6 - Validate Non-Runtime Facades
 
-Validate the two non-runtime facades against Vortex:
+Validate these facades against the remediated Vortex substrate:
 
-1. `ForSinglePassHarness()` — single pass, validated context
-2. `ForRenderGraphHarness()` — render graph, validated context
+1. `ForSinglePassHarness()`
+2. `ForRenderGraphHarness()`
 
-These facades must produce valid output when backed by Vortex.
+These remain part of the Phase 4 scope and must be proven against Vortex.
+They are rerun here not because Phase 4 redefines those facade contracts, but
+because the migrated runtime now activates the Phase 4 service set through the
+same SceneRenderBuilder / capability-gated Vortex substrate and the facades
+must remain regression-free against that expanded runtime baseline.
 
-## 4. Visual Parity Validation
+## 5. Visual and Behavior Parity Validation
 
-### 4.1 RenderDoc Comparison
+### 5.1 RenderDoc Comparison
 
-1. Capture Vortex frame at frame 10.
-2. Compare against baseline:
-   - **Back buffer:** Pixel-level comparison. Expect near-identical output.
-     Minor floating-point differences acceptable (< 1/255 per channel).
-   - **Stage-family visibility:** Verify the active stage families are
-     discoverable by stable names and appear in the correct relative order.
-     Bootstrap work may appear outside the main stage list, and resolve /
-     extraction only appear when active.
-   - **GBuffer inspection:** Verify GBufferA–D contain valid data matching
-     scene geometry.
+1. Capture `Examples/Async` on Vortex at frame 10.
+2. Compare against the legacy baseline:
+   - final back buffer / presented image
+   - stage-family ordering and discoverable names
+   - major artifact boundaries and intermediate correctness
+   - atmosphere-visible output
+   - spotlight-visible contribution
 
-### 4.2 Acceptance Criteria
+### 5.2 Acceptance Criteria
 
 | Criterion | Metric | Threshold |
 | --------- | ------ | --------- |
+| Phase 4 service set live in migrated run | design/runtime inspection | `LightingService`, `PostProcessService`, `ShadowService`, and `EnvironmentLightingService` all active as the seams under test |
 | Visual match | PSNR or perceptual diff | > 40 dB (near-identical) |
-| Depth accuracy | Depth buffer comparison | < 0.001 max error |
-| Frame timing | Average frame time | Informational only unless product leadership promotes it to a hard gate |
-| Async behavior | Observable behavior match | All behaviors documented in baseline |
-| No compatibility clutter | Code inspection | Zero legacy compatibility shims |
+| Depth accuracy | depth comparison | < 0.001 max error |
+| Async behavior | observable behavior match | all baseline behaviors preserved |
+| No compatibility clutter | code inspection | zero long-lived shims |
 
-### 4.3 Known Acceptable Differences
+### 5.3 Known Acceptable Differences
 
-- Tone mapping curve may differ slightly (ACES vs legacy operator)
-- Shadow filtering quality may differ (implementation detail)
-- Bloom intensity may differ (tuning parameter)
+- tone-mapping curve differences that stay within the documented threshold
+- bloom-intensity tuning differences
+- implementation-detail shadow filtering differences for the directional
+  baseline
 
-These are acceptable as long as the overall visual impression matches.
+These do **not** justify silently widening or narrowing the feature baseline.
 
-## 5. Behavior Parity Validation
+## 6. Runtime Proof Boundary
 
-### 5.1 Checklist
+The truthful Phase 4 runtime proof boundary is:
 
-- [ ] Application starts and renders first frame
-- [ ] Async operations execute and complete
-- [ ] Camera controls work correctly
-- [ ] Scene updates reflect in rendered output
-- [ ] Window resize triggers correct resolution change
-- [ ] Application shuts down cleanly (no leaks, no crashes)
-- [ ] RenderDoc capture at frame 10 succeeds
+1. `Examples/Async` migrated to Vortex
+2. `LightingService`, `PostProcessService`, `ShadowService`, and
+   `EnvironmentLightingService` are all live in the migrated run as the seams
+   under test
+3. real composition submission / presentation path in use
+4. RenderDoc frame-10 capture from that migrated example
+5. visual/behavior parity checked against the legacy baseline
 
-### 5.2 Error Conditions
-
-- [ ] GPU device lost → graceful recovery or clean error
-- [ ] Invalid scene state → no crash, diagnostic log
-- [ ] Missing assets → fallback behavior, no crash
-
-## 6. Post-Migration Cleanup
-
-### 6.1 Zero Compatibility Clutter Rule
-
-Per PLAN.md, the migration must leave zero long-lived compatibility shims:
-
-- No `#ifdef LEGACY_RENDERER` conditionals
-- No parallel code paths for legacy vs Vortex
-- No adapter layers wrapping legacy APIs
-- No "temporary" workarounds that persist
-
-### 6.2 Code Review Checklist
-
-- [ ] All includes point to `Oxygen/Vortex/`
-- [ ] All namespaces use `oxygen::vortex::`
-- [ ] No references to legacy `Oxygen.Renderer` types
-- [ ] Public API usage only (no internal headers)
-- [ ] Build succeeds with only Vortex dependency
+This document does **not** require `DemoShell` to become a separate standalone
+Phase 4 migration gate. DemoShell remains part of the example integration
+surface that must work correctly inside `Examples/Async`.
 
 ## 7. Composition and Presentation Validation (Phase 4F)
 
 The migration already requires the real runtime composition path to be live.
-Phase 4F therefore deepens proof of the surrounding artifacts rather than
-introducing composition for the first time.
+Phase 4F therefore deepens proof of the retained Stage-21 / Stage-23
+artifacts rather than introducing composition for the first time.
 
 After visual/behavior parity is confirmed:
 
-1. Validate single-view composition to screen under explicit inspection
-2. Validate `ResolveSceneColor` end-to-end when resolve work is actually needed
-3. Validate `PostRenderCleanup` extraction/handoff (SceneTextureExtracts
-   correctly populated, no GPU resource leaks)
+1. validate single-view composition to screen under explicit inspection
+2. validate `ResolveSceneColor` end-to-end when resolve work is actually needed
+3. validate `PostRenderCleanup` extraction/handoff artifacts
 
 ## 8. Testability Approach
 
-1. **Automated regression:** Screenshot comparison test at frame 10 against
-   baseline. Fail if PSNR < 40 dB.
-2. **Manual validation:** Developer visual inspection of RenderDoc capture.
-3. **Behavior test:** Run async workflow → verify completion callbacks fire.
-4. **Leak test:** PIX/DXGI debug layer enabled, verify zero resource leaks
-   at shutdown.
+1. **Automated regression:** screenshot comparison at frame 10 against the
+   baseline.
+2. **Manual RenderDoc review:** inspect stage ordering, atmosphere output,
+   spotlight contribution, and presentation handoff.
+3. **Behavior validation:** run the async workflow and verify completion /
+   interaction behavior.
+4. **Leak / shutdown validation:** PIX or DXGI debug-layer check with clean
+   shutdown expectations.
 
 ## 9. Open Questions
 
-1. **Frame timing parity:** Vortex deferred path may be faster or slower
-   than legacy forward path depending on scene complexity. Performance
-   comparison is informational by default; do not silently treat it as a
-   blocking product gate unless that decision is elevated explicitly.
+None for the Phase 4 migration baseline.
+
+If the migrated example proves to require spotlight shadows or another
+out-of-scope feature, the Phase 4 design package must be widened explicitly
+before implementation continues.

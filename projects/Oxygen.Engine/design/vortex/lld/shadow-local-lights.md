@@ -22,6 +22,11 @@ storage. This future LLD is the handoff artifact that closes that gap. The
 ShadowService roadmap now has a named later-phase owner for local-light
 conventional shadows instead of leaving the issue as an open-ended note.
 
+The corrected Phase 4C contract publishes **directional** conventional shadow
+data only. Phase 5G begins from that truthful baseline and extends
+`ShadowFrameBindings` without pretending that Phase 4 already shipped
+spot-light or point-light conventional shadow payloads.
+
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §8](../ARCHITECTURE.md) — `ShadowService` ownership
@@ -40,6 +45,13 @@ expansion.
 `ShadowFrameBindings` remains the canonical GPU-facing publication seam.
 Phase 5G may extend it with local-light-specific fields, but it must not bake
 today's conventional storage choice into the long-lived binding ABI.
+
+Phase 5G therefore inherits these rules from the remediated Phase 4C baseline:
+
+1. directional conventional shadow publication already exists
+2. local-light conventional shadow publication is added here for the first time
+3. the public binding seam stays consumer-oriented and does not freeze one
+   internal storage layout
 
 ### 2.3 Explicit Non-Goals For 5G
 
@@ -89,6 +101,9 @@ Vortex therefore chooses **one-pass cubemap depth targets** as the default
 conventional point-light direction unless later evidence overturns it. This is
 the closest useful match to UE 5.7 and avoids inventing a niche representation
 with little architectural value.
+
+That choice remains an internal storage decision, not the definition of the
+published shadow-binding ABI.
 
 ### 4.2 VSM Coexistence Rules
 

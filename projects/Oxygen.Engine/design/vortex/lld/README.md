@@ -31,6 +31,12 @@ reviewed.
 
 ## Document Index
 
+### Cross-Phase Design Remediation
+
+| Document | Deliverable | Covers |
+| -------- | ----------- | ------ |
+| [phase4-lld-remediation-program.md](phase4-lld-remediation-program.md) | cross-phase remediation program | Complete tracked remediation series for the Phase 4 LLD package plus the immediate collateral design-doc sync required to keep the design package truthful |
+
 ### Phase 1 — Substrate Migration
 
 | Document | Deliverable | Covers |

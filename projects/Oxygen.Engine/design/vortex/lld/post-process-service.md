@@ -8,13 +8,23 @@
 
 ### 1.1 What This Covers
 
-`PostProcessService` — the stage-22 owner responsible for the per-view
-post-processing family: HDR → LDR tonemapping, exposure, bloom, the temporal
-AA / TSR-facing slot, and related per-view post histories.
+`PostProcessService` - the Stage-22 owner responsible for the per-view
+post-processing family:
+
+- temporal AA / TSR-facing post work
+- exposure ownership (global eye adaptation plus future local exposure)
+- bloom
+- HDR -> display tonemapping
+- related per-view post histories
 
 The service writes into a SceneRenderer-supplied post target. It does **not**
 own presentation, extraction, or handoff policy; those remain with
 SceneRenderer stage 21 / stage 23 and Renderer Core composition ownership.
+
+That post target is delivered through the same scene-renderer-owned runtime
+surfaces as other scene products: it is resolved from the current
+`RenderContext` / `SceneTextures` publication state by SceneRenderer before
+Stage 22 executes rather than invented privately inside the service.
 
 ### 1.2 Stage Position
 
@@ -90,6 +100,21 @@ class PostProcessService : public ISubsystemService {
 }  // namespace oxygen::vortex
 ```
 
+### 2.3 Exposure Ownership Boundary
+
+Exposure has two different ownership concerns:
+
+1. **view-to-view source resolution** for the current frame remains part of the
+   current-view / view-lifecycle contract owned outside post processing
+2. **post-owned exposure work** begins once Stage 22 executes:
+   - eye adaptation
+   - local exposure when activated
+   - exposure histories and post-owned adaptation intermediates
+
+`PostProcessService` therefore owns exposure processing and histories, but it
+does not take over the broader view-lifecycle problem of selecting or
+materializing the current view.
+
 ## 3. Post-Process Chain
 
 ### 3.1 Execution Order
@@ -104,6 +129,7 @@ PostProcessService::Execute(ctx, scene_textures)
   ├─ 1. Exposure work
   │     └─ Compute luminance histogram or use fixed-exposure fallback
   │     └─ Update EyeAdaptation state for the current view
+  │     └─ Build local-exposure intermediates when that path is active
   │
   ├─ 2. Bloom (if enabled)
   │     └─ Downsample bright scene signal
@@ -121,8 +147,9 @@ PostProcessService::Execute(ctx, scene_textures)
 
 Tonemap is the only hard requirement for visible output. Phase 4B may start
 with tonemap plus fixed-exposure fallback. Auto-exposure and bloom are added
-if straightforward. The temporal slot and history ownership are fixed in the
-design even if temporal AA / TSR remains inactive in Phase 4B.
+if straightforward. The temporal slot, exposure ownership boundary, and
+history ownership are fixed in the design even if temporal AA / TSR and local
+exposure remain partially inactive in the first implementation slice.
 
 ## 4. Data Flow and Dependencies
 
@@ -133,6 +160,7 @@ design even if temporal AA / TSR remains inactive in Phase 4B.
 | SceneTextures | SceneColor (SRV) | HDR resolved scene signal |
 | SceneTextures | SceneDepth (SRV) | Depth-aware effects (DOF in future) |
 | SceneTextures | Velocity (SRV) | TAA / TSR motion vectors when enabled |
+| Current-view publication | exposure source / current-view context | view-lifecycle-owned input into Stage 22 exposure work |
 | Previous frame | EyeAdaptation / temporal histories | Post-owned history state |
 
 ### 4.2 Outputs
@@ -141,6 +169,7 @@ design even if temporal AA / TSR remains inactive in Phase 4B.
 | ------- | ------ | ----- |
 | Tonemapped LDR output | SceneRenderer-supplied post target | Consumed by composition / offscreen handoff |
 | EyeAdaptation state | Persistent per-view history | For next frame's adaptation |
+| Local-exposure intermediates | Per-frame post-owned internal products | Optional inputs to bloom / tonemap when enabled |
 | TemporalAA / TSR histories | Persistent per-view history | Updated only when temporal path is active |
 
 ## 5. Shader Contracts
@@ -223,6 +252,7 @@ float4 TonemapPS(FullscreenVSOutput input) : SV_Target {
 | Bloom mip chain (4-6 levels) | Per frame | Service-chosen filtered resolutions |
 | Exposure histogram buffer | Per frame | 256-bin histogram |
 | EyeAdaptation buffer | Persistent per view | Temporal adaptation state |
+| Local-exposure intermediates | Per frame / persistent per view as required | Post-owned once the local-exposure path activates |
 | TemporalAA history | Persistent per view | Reserved in Phase 4B, active when temporal path lands |
 | TSR history | Persistent per view | Future post-owned history family |
 | Tonemap PSO | Persistent | Cached |

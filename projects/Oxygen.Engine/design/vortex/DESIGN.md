@@ -206,7 +206,8 @@ See [`lld/base-pass.md`](lld/base-pass.md) for the MRT write contract,
 material shader interface, and velocity completion sub-pass.
 
 See [`lld/deferred-lighting.md`](lld/deferred-lighting.md) for the
-pass-per-light approach, bounded-volume local-light strategy, and shader contracts.
+directional fullscreen plus bounded-volume local-light deferred-light contract,
+and the shader contracts that support it.
 
 ## 8. Inherited Substrate Adaptation
 
@@ -291,7 +292,7 @@ EngineShaderCatalog registration table.
 | Occlusion / HZB | SceneDepth | Depth prepass |
 | Shadow depth | Light list, view data | LightingService, InitViews |
 | Base pass | Shadow maps (optional) | ShadowService |
-| Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, IBL | Base pass, ShadowService, EnvironmentService |
+| Deferred lighting | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation |
 | Translucency | SceneColor, SceneDepth, forward light data | Prior stages, LightingService |
 | Post-process | SceneColor, SceneDepth, Velocity | Prior stages |
 | Diagnostics | Any SceneTextures product | Prior stages |
@@ -355,7 +356,8 @@ Rationale:
 
 - UE5 deprecated its clustered deferred path
   (`ClusteredDeferredShadingPass.cpp:37`)
-- pass-per-light deferred with stencil bounds is the standard approach
+- directional fullscreen plus bounded-volume local-light deferred lighting is
+  the standard Phase 3/4 approach
 - clustered forward data remains available for forward consumers
 
 ## 13. Design Closure
@@ -367,7 +369,8 @@ The Vortex design is shaped around:
 - subsystem services with concrete classes and domain-specific execution methods
 - GBuffer base pass with MRT output replacing the legacy forward ShaderPass
   contract
-- fullscreen pass-per-light deferred lighting as the initial approach
+- directional fullscreen plus bounded-volume local-light deferred lighting as
+  the initial approach
 - shared forward light data inside LightingService for translucency consumers
 - inherited substrate (facades, composition, publication, upload) adapted
   mechanically

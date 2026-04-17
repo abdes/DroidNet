@@ -1,6 +1,6 @@
 # EnvironmentLightingService LLD
 
-**Phase:** 4D — Migration-Critical Services
+**Phase:** 4D - Migration-Critical Services
 **Deliverable:** D.12
 **Status:** `ready`
 
@@ -8,27 +8,40 @@
 
 ### 1.1 What This Covers
 
-`EnvironmentLightingService` — the capability-family service owning:
+`EnvironmentLightingService` is the capability-family owner for:
 
-- **Stage 14** (reserved): volumetrics / heterogeneous volumes / clouds
-- **Stage 15** (active): sky/atmosphere rendering, height fog, distance
-  fog, and related environment composition
+- **Stage 14** (reserved): future volumetrics / heterogeneous volumes / clouds
+- **Stage 15** (active): sky background, sky-atmosphere composition, height
+  fog, distance fog, and related environment composition
 
-Environment-owned probe / IBL products remain part of the same service, but
-they are **not** defined as same-frame outputs of the stage-15 sky/fog pass.
-They are persistent or change-driven environment products that the service
-prepares when needed and publishes per view when valid. This avoids the
-impossible stage-order dependency where stage 12 would otherwise need data
-that stage 15 had not produced yet.
+The service also owns environment probe / IBL state, but those probe products
+are **not** defined as same-frame outputs of the Stage-15 render passes. They
+are persistent or change-driven environment products prepared when needed and
+published per view when valid.
 
-All environment-family work is grouped under this single service. Stage 14
-is a reserved no-op slot in Phase 4D that prevents architectural shock when
-volumetrics activate in Phase 7D.
+This preserves the stage order:
 
-### 1.2 Architectural Authority
+- Stage 12 remains direct lighting
+- Stage 13 remains the future canonical indirect-light owner
+- Stage 15 remains active environment composition
 
-- [ARCHITECTURE.md §8](../ARCHITECTURE.md) — subsystem services
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stages 14, 15
+### 1.2 Why The Split Matters
+
+If environment probe publication were defined as a same-frame Stage-15 output,
+Stage 12 would depend on data that does not exist yet. Vortex therefore splits
+the environment family into:
+
+1. persistent / change-driven probe state owned by the service
+2. per-view published `EnvironmentFrameBindings`
+3. Stage-15 render work for sky/atmosphere/fog composition
+
+### 1.3 Architectural Authority
+
+- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 8 - subsystem service ownership
+- [ARCHITECTURE.md](../ARCHITECTURE.md) Section 6.2 - stages 14 and 15
+- [PLAN.md](../PLAN.md) Section 6 - Phase 4D scope and Stage-15 ownership
+- [indirect-lighting-service.md](./indirect-lighting-service.md) - future
+  Stage-13 owner that retires any temporary Phase 4 ambient bridge
 
 ## 2. Interface Contracts
 
@@ -36,22 +49,25 @@ volumetrics activate in Phase 7D.
 
 ```text
 src/Oxygen/Vortex/
-└── Services/
-    └── Environment/
-        ├── EnvironmentLightingService.h
-        ├── EnvironmentLightingService.cpp
-        ├── Internal/
-        │   ├── SkyRenderer.h/.cpp
-        │   ├── FogRenderer.h/.cpp
-        │   └── IblProcessor.h/.cpp
-        ├── Passes/
-        │   ├── SkyPass.h/.cpp
-        │   ├── FogPass.h/.cpp
-        │   └── IblProbePass.h/.cpp
-        └── Types/
-            ├── EnvironmentFrameBindings.h
-            ├── SkyParams.h
-            └── FogParams.h
+`-- Services/
+    `-- Environment/
+        |-- EnvironmentLightingService.h
+        |-- EnvironmentLightingService.cpp
+        |-- Internal/
+        |   |-- SkyRenderer.h/.cpp
+        |   |-- AtmosphereRenderer.h/.cpp
+        |   |-- FogRenderer.h/.cpp
+        |   `-- IblProcessor.h/.cpp
+        |-- Passes/
+        |   |-- SkyPass.h/.cpp
+        |   |-- AtmosphereComposePass.h/.cpp
+        |   |-- FogPass.h/.cpp
+        |   `-- IblProbePass.h/.cpp
+        `-- Types/
+            |-- EnvironmentProbeState.h
+            |-- EnvironmentFrameBindings.h
+            |-- SkyParams.h
+            `-- FogParams.h
 ```
 
 ### 2.2 Public API
@@ -69,63 +85,97 @@ class EnvironmentLightingService : public ISubsystemService {
   void OnFrameStart(const FrameContext& frame) override;
   void Shutdown() override;
 
-  /// Stage 15: sky, atmosphere, fog composition. Per-view execution.
+  /// Publishes one per-view environment payload from persistent probe state.
+  void PublishEnvironmentBindings(RenderContext& ctx) const;
+
+  /// Stage 15: sky background, atmosphere composition, and fog composition.
   void RenderSkyAndFog(RenderContext& ctx,
-                        const SceneTextures& scene_textures);
+                       const SceneTextures& scene_textures);
 
  private:
   Renderer& renderer_;
   std::unique_ptr<SkyRenderer> sky_;
+  std::unique_ptr<AtmosphereRenderer> atmosphere_;
   std::unique_ptr<FogRenderer> fog_;
   std::unique_ptr<IblProcessor> ibl_;
-  EnvironmentFrameBindings environment_bindings_;
+  EnvironmentProbeState probe_state_;
 };
 
 }  // namespace oxygen::vortex
 ```
 
-### 2.3 EnvironmentFrameBindings
+### 2.3 Persistent Probe State vs Per-View Publication
+
+`EnvironmentLightingService` owns persistent probe state. It does **not** store
+one singleton `EnvironmentFrameBindings` payload as the canonical contract.
 
 ```cpp
 struct EnvironmentProbeBindings {
-  uint32_t environment_map_srv{kInvalidIndex};   // Cubemap SRV
-  uint32_t irradiance_map_srv{kInvalidIndex};    // Diffuse irradiance SRV
-  uint32_t prefiltered_map_srv{kInvalidIndex};   // Specular prefiltered SRV
-  uint32_t brdf_lut_srv{kInvalidIndex};          // BRDF integration LUT SRV
+  uint32_t environment_map_srv{kInvalidIndex};
+  uint32_t irradiance_map_srv{kInvalidIndex};
+  uint32_t prefiltered_map_srv{kInvalidIndex};
+  uint32_t brdf_lut_srv{kInvalidIndex};
+  uint32_t probe_revision{0};
+};
+
+struct EnvironmentProbeState {
+  EnvironmentProbeBindings probes;
+  uint32_t flags{0};
+  bool valid{false};
 };
 
 struct EnvironmentEvaluationParameters {
   float ambient_intensity{1.0f};
   float average_brightness{1.0f};
   float blend_fraction{0.0f};
-  uint32_t flags{0};  // dynamic/static, sky-visible, bridge-eligible, etc.
+  uint32_t flags{0};  // sky-visible, ambient-bridge-eligible, etc.
 };
 
 struct EnvironmentFrameBindings {
   EnvironmentProbeBindings probes;
   EnvironmentEvaluationParameters evaluation;
 };
-```
 
-The split is intentional. Probe handles and samplers evolve on a different axis
-from evaluation policy. UE 5.7 also effectively separates those concerns:
-processed / captured probe resources are one layer, while brightness, dynamic
-state, and shadowing / occlusion behavior are another. Keeping both layers in
-one typed payload gives Vortex the same flexibility without importing UE's
-entire parameter surface.
+struct EnvironmentAmbientBridgeBindings {
+  uint32_t irradiance_map_srv{kInvalidIndex};
+  float ambient_intensity{1.0f};
+  float average_brightness{1.0f};
+  float blend_fraction{0.0f};
+  uint32_t flags{0};
+};
+```
 
 ### 2.4 Per-View Publication
 
-`EnvironmentFrameBindings` is published per-view through
-`ViewFrameBindings`. The canonical long-lived consumer is future
-`IndirectLightingService` at stage 13. If Phase 4 temporarily samples the
-published ambient probe data in stage 12, that is a narrowly bounded migration
-bridge and must be treated as temporary prose-visible debt rather than a
-redefinition of stage ownership.
+`EnvironmentFrameBindings` is published per view through `ViewFrameBindings`.
 
-The bridge, when enabled, may consume only the stable ambient subset of
-`EnvironmentEvaluationParameters`. Reflection, SSAO, skylight shadowing, and
-other canonical indirect-light controls remain reserved for stage 13.
+Its canonical long-lived consumer is future `IndirectLightingService` at
+Stage 13.
+
+Before Stage 13 exists, Phase 4 may expose only an explicitly documented
+ambient-bridge subset to `LightingService`:
+
+```cpp
+EnvironmentAmbientBridgeBindings
+```
+
+That bridge:
+
+- may consume only:
+  - `irradiance_map_srv`
+  - `ambient_intensity`
+  - `average_brightness`
+  - `blend_fraction`
+  - explicit bridge flags
+- must remain opt-in and explicitly documented
+- must not redefine Stage 12 as the indirect-light owner
+
+Reflection, AO, skylight shadowing, and other canonical indirect-light controls
+remain Stage-13-owned.
+
+Phase 4 replaces the current Phase 3 interim environment-binding shape with the
+target contracts in Sections 2.3 and 2.4. The CPU-side structs, HLSL-side
+counterparts, and `ViewFrameBindings` slot-routing update must land together.
 
 ## 3. Data Flow and Dependencies
 
@@ -133,137 +183,172 @@ other canonical indirect-light controls remain reserved for stage 13.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| Scene | Environment map / sky parameters | Sky rendering |
-| Scene | Fog parameters (height, density, color) | Fog rendering |
-| SceneTextures | SceneColor (RTV) | Sky renders into SceneColor |
-| SceneTextures | SceneDepth (SRV) | Depth-based fog |
-| Environment state | Environment source changes / warm-up flags | Probe refresh when required |
+| Scene | environment map / sky parameters | sky background and environment state |
+| Scene | atmosphere parameters | Stage-15 sky-atmosphere composition |
+| Scene | fog parameters | fog rendering |
+| SceneTextures | SceneColor (RTV/UAV as needed) | Stage-15 composition target |
+| SceneTextures | SceneDepth (SRV) | atmosphere / fog depth-aware composition |
+| Environment source changes | probe refresh trigger | refresh persistent probe state when required |
 
 ### 3.2 Outputs
 
 | Product | Consumer | Delivery |
 | ------- | -------- | -------- |
-| Sky contribution | SceneColor | Direct render |
-| Fog contribution | SceneColor | Composite over scene |
-| `EnvironmentFrameBindings` | Future `IndirectLightingService` (stage 13) | Published through `ViewFrameBindings` |
-| `EnvironmentFrameBindings` | Forward lighting / translucency consumers | Published through `ViewFrameBindings` |
-| `EnvironmentFrameBindings` | Phase 4 ambient bridge, if explicitly enabled | Published through `ViewFrameBindings` |
+| Stage-15 sky/atmosphere/fog contribution | SceneColor | direct composition |
+| `EnvironmentFrameBindings` | future `IndirectLightingService` (Stage 13) | published through `ViewFrameBindings` |
+| `EnvironmentAmbientBridgeBindings` | `LightingService` only when explicitly enabled | published through `ViewFrameBindings` |
+
+No broader Phase 4 claim is made that arbitrary lighting or translucency
+families consume the full environment payload. Those consumers must be named
+explicitly when their contracts exist.
 
 ### 3.3 Execution Flow
 
 ```text
 EnvironmentLightingService::OnFrameStart(frame)
-  │
-  └─ Environment probe refresh (change-driven / amortized)
-        └─ Generate irradiance / prefiltered probe products when required
-        └─ Publish EnvironmentFrameBindings when valid
+  |
+  `- Refresh EnvironmentProbeState when the environment source changes
+       `- Generate / update irradiance and prefiltered probe products
+       `- Keep persistent probe state ready for per-view publication
+
+Renderer Core / current-view publication
+  `- environment_->PublishEnvironmentBindings(ctx)
+       `- Materialize one EnvironmentFrameBindings payload for the current view
 
 EnvironmentLightingService::RenderSkyAndFog(ctx, scene_textures)
-  │
-  ├─ Sky pass:
-  │     └─ Render sky dome or procedural atmosphere
-  │     └─ Write to SceneColor at depth=1.0 (far plane pixels only)
-  │
-  ├─ Fog pass:
-  │     └─ Fullscreen pass reading SceneDepth
-  │     └─ Apply height fog + distance fog
-  │     └─ Blend fog color into SceneColor
-  │
-  └─ Stage 15 finishes with sky/fog composition only
+  |
+  |- Background sky pass
+  |    `- Writes sky background only where the current depth convention says
+  |       the pixel is background / far scene
+  |
+  |- Atmosphere composition pass
+  |    `- Applies atmosphere contribution for the current view
+  |    `- Not limited to background-only pixels
+  |
+  |- Fog pass
+  |    `- Reads SceneDepth
+  |    `- Applies height fog + distance fog
+  |    `- Composites fog into SceneColor
+  |
+  `- Stage 15 finishes with sky/atmosphere/fog composition
 ```
 
 ## 4. Resource Management
 
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
-| Environment cubemap | Persistent (scene) | Loaded from scene assets |
-| Irradiance map | Persistent (scene) | Regenerated on environment change or warm-up |
-| Prefiltered specular map | Persistent (scene) | Mip chain for roughness; amortizable across frames |
-| BRDF integration LUT | Persistent (global) | Precomputed once at init |
-| Sky/fog PSOs | Persistent | Cached |
+| Environment cubemap / source texture | Persistent (scene) | scene-owned input resource |
+| Irradiance map | Persistent | regenerated on environment change / warm-up |
+| Prefiltered specular map | Persistent | regenerated on environment change / warm-up |
+| BRDF integration LUT | Persistent (global) | initialized once |
+| Sky / atmosphere / fog PSOs | Persistent | cached by the service |
+
+Persistent probe state and per-view publication are separate concerns:
+
+- `EnvironmentProbeState` is long-lived service-owned state
+- `EnvironmentFrameBindings` is published per view
+- Stage-15 render work is neither of those things
 
 ## 5. Shader Contracts
 
-### 5.1 Sky Pass
+### 5.1 Background Sky Pass
 
 ```hlsl
 // Services/Environment/SkyPass.hlsl
 
-#include "../../Shared/FullscreenTriangle.hlsli"
-
 TextureCube EnvironmentMap : register(t0);
 
-float4 SkyPassPS(FullscreenVSOutput input) : SV_Target {
-  // Reconstruct view direction from UV
-  float3 viewDir = ReconstructViewDirection(input.uv, InvViewProjection);
-  // Only render where depth == far plane (no geometry)
-  float depth = SceneDepth.Sample(PointClamp, input.uv).r;
-  if (depth < 1.0) discard;  // Geometry present, skip sky
+bool IsFarBackground(float scene_depth, ViewFrameBindingData view) {
+  // Must respect the active renderer depth convention.
+  return EvaluateFarBackgroundMask(scene_depth, view);
+}
 
-  float3 sky = EnvironmentMap.Sample(LinearClamp, viewDir).rgb;
+float4 SkyPassPS(FullscreenVSOutput input) : SV_Target {
+  float scene_depth = SceneDepth.Sample(PointClamp, input.uv).r;
+  if (!IsFarBackground(scene_depth, ViewBindings)) {
+    discard;
+  }
+
+  float3 view_dir = ReconstructViewDirection(input.uv, InvViewProjection);
+  float3 sky = EnvironmentMap.Sample(LinearClamp, view_dir).rgb;
   return float4(sky, 1.0);
 }
 ```
 
-### 5.2 Fog Pass
+The architectural point is the helper: Stage 15 must not bake non-reverse-Z
+assumptions such as `depth == 1.0` into its contract language or examples.
+
+### 5.2 Atmosphere Composition Pass
+
+```hlsl
+// Services/Environment/AtmosphereComposePass.hlsl
+
+float4 AtmosphereComposePS(FullscreenVSOutput input) : SV_Target {
+  float raw_depth = SceneDepth.Sample(PointClamp, input.uv).r;
+  float3 world_pos
+    = ReconstructWorldPosition(input.uv, raw_depth, InvViewProjection);
+
+  float3 atmosphere = EvaluateAtmosphere(world_pos, CameraPosition, Atmosphere);
+  return float4(atmosphere, 1.0f);
+}
+```
+
+This pass may apply aerial-perspective-style contribution over opaque scene
+color. Stage 15 is therefore not a background-only sky stage.
+
+### 5.3 Fog Pass
 
 ```hlsl
 // Services/Environment/FogPass.hlsl
 
-cbuffer FogConstants : register(b1) {
-  float4 FogColor;
-  float FogDensity;
-  float FogHeightFalloff;
-  float FogStartDistance;
-  float FogMaxOpacity;
-};
-
 float4 FogPassPS(FullscreenVSOutput input) : SV_Target {
-  float rawDepth = SceneDepth.Sample(PointClamp, input.uv).r;
-  float3 worldPos = ReconstructWorldPosition(input.uv, rawDepth, InvViewProjection);
+  float raw_depth = SceneDepth.Sample(PointClamp, input.uv).r;
+  float3 world_pos
+    = ReconstructWorldPosition(input.uv, raw_depth, InvViewProjection);
 
-  // Distance fog
-  float dist = length(worldPos - CameraPosition);
-  float distFog = 1.0 - exp(-FogDensity * max(dist - FogStartDistance, 0));
-
-  // Height fog
-  float heightFog = exp(-FogHeightFalloff * max(worldPos.y, 0));
-
-  float fog = saturate(distFog * heightFog * FogMaxOpacity);
-  return float4(FogColor.rgb, fog);  // Alpha blend fog color
+  float dist = length(world_pos - CameraPosition);
+  float dist_fog = 1.0 - exp(-FogDensity * max(dist - FogStartDistance, 0));
+  float height_fog = exp(-FogHeightFalloff * max(world_pos.y, 0));
+  float fog = saturate(dist_fog * height_fog * FogMaxOpacity);
+  return float4(FogColor.rgb, fog);
 }
 ```
 
-### 5.3 Catalog Registration
+### 5.4 Catalog Registration
 
 | Entrypoint | Profile | Notes |
 | ---------- | ------- | ----- |
-| `VortexSkyPassVS` | vs_6_0 | Fullscreen triangle |
-| `VortexSkyPassPS` | ps_6_0 | Environment cubemap sample |
-| `VortexFogPassVS` | vs_6_0 | Fullscreen triangle |
-| `VortexFogPassPS` | ps_6_0 | Height + distance fog |
-| `VortexIblIrradianceCS` | cs_6_0 | Irradiance convolution (compute) |
-| `VortexIblPrefilterCS` | cs_6_0 | Specular prefilter (compute) |
+| `VortexSkyPassVS` | vs_6_0 | fullscreen triangle |
+| `VortexSkyPassPS` | ps_6_0 | background sky |
+| `VortexAtmosphereComposeVS` | vs_6_0 | fullscreen triangle |
+| `VortexAtmosphereComposePS` | ps_6_0 | atmosphere composition |
+| `VortexFogPassVS` | vs_6_0 | fullscreen triangle |
+| `VortexFogPassPS` | ps_6_0 | height + distance fog |
+| `VortexIblIrradianceCS` | cs_6_0 | irradiance convolution |
+| `VortexIblPrefilterCS` | cs_6_0 | specular prefilter |
 
 ## 6. Stage Integration
 
 ### 6.1 Dispatch Contract
 
-- Stage 14: reserved no-op (volumetrics, Phase 7D)
-- Stage 15: `environment_->RenderSkyAndFog(ctx, scene_textures)`
+- current-view publication:
+  `environment_->PublishEnvironmentBindings(ctx)` before any consumer that
+  needs the published environment payload
+- Stage 14: reserved no-op in Phase 4D
+- Stage 15:
+  `environment_->RenderSkyAndFog(ctx, scene_textures)`
 
-Environment probe publication may be refreshed during lifecycle work such as
-`OnFrameStart()`. Stage 15 remains the sky/fog composition stage only.
-
-The reserved stage-14 family remains one Environment-owned umbrella, but it is
-expected to contain multiple internal steps when activated (for example
-volumetric fog, heterogeneous volumes, cloud rendering, and related
-composition work), not one monolithic future pass.
+Stage 15 remains the sky/atmosphere/fog composition stage. Probe publication is
+not a Stage-15-only side effect.
 
 ### 6.2 Null-Safe Behavior
 
-When null: no sky, no fog, and no published environment probe data. SceneColor
-shows only the lighting families that remain active.
+When `environment_` is null:
+
+- no sky / atmosphere / fog composition runs
+- no environment probe state is refreshed
+- no per-view environment payload is published
+- `LightingService` must not assume an ambient bridge exists
 
 ### 6.3 Capability Gate
 
@@ -271,20 +356,24 @@ Requires `kEnvironmentLighting`.
 
 ## 7. Testability Approach
 
-1. **Sky rendering:** Set environment cubemap → verify sky appears at far-
-   plane pixels only (no sky bleeding through geometry).
-2. **Fog validation:** Place camera at known distance → verify fog opacity
-   matches expected exponential falloff.
-3. **Environment publication:** Inspect the published
-   `EnvironmentFrameBindings` payload → verify probe SRVs are valid when the
-   environment is active.
-4. **RenderDoc:** Frame 10, inspect SceneColor after stage 15 — sky should
-   be visible in background, fog should attenuate distant geometry.
+1. **Background sky:** verify sky appears only on far-background pixels under
+   the active depth convention.
+2. **Atmosphere composition:** verify atmosphere contributes over the scene and
+   is not treated as background-only.
+3. **Fog validation:** verify fog opacity matches the expected distance / height
+   behavior.
+4. **Per-view publication:** inspect the published `EnvironmentFrameBindings`
+   payload for multiple views and verify it is derived from persistent probe
+   state rather than a singleton global payload.
+5. **RenderDoc:** inspect Stage-15 ordering and SceneColor evolution after sky,
+   atmosphere, and fog passes.
 
 ## 8. Open Questions
 
-1. **Procedural atmosphere:** Phase 4D may use a simple environment cubemap
-   only. Procedural atmosphere (Bruneton model, Mie/Rayleigh scattering) is
-   a Phase 7+ enhancement.
-2. **Volumetric fog:** Stage 14 is reserved. Heterogeneous volume rendering
-   (3D fog volume, volumetric lighting) deferred to Phase 7D.
+None for the Phase 4D baseline.
+
+Deferred work is already bounded:
+
+- canonical indirect environment evaluation -> future Stage 13 owner in
+  [indirect-lighting-service.md](./indirect-lighting-service.md)
+- volumetrics / heterogeneous volumes / clouds -> future Stage 14 activation
