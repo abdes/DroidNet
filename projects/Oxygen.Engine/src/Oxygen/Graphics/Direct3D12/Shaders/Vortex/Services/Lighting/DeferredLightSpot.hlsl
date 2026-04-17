@@ -23,7 +23,9 @@ DeferredLightVolumeVSOutput DeferredLightSpotVS(uint vertex_id : SV_VertexID)
     ConstantBuffer<DeferredLightConstants> light_constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     return GenerateDeferredLightVolume(
-        GenerateDeferredLightConeVertex(vertex_id),
+        LoadDeferredLightGeometryVertex(
+            light_constants.light_geometry_vertices_srv,
+            vertex_id),
         light_constants.light_world_matrix);
 }
 

@@ -22,22 +22,22 @@ static inline LightingFrameBindings LoadResolvedLightingFrameBindings()
 
 static inline float3 GetSunDirectionWS()
 {
-    return LoadResolvedLightingFrameBindings().sun.direction_ws_illuminance.xyz;
+    return LoadResolvedLightingFrameBindings().directional.direction;
 }
 
 static inline float GetSunIlluminance()
 {
-    return LoadResolvedLightingFrameBindings().sun.direction_ws_illuminance.w;
+    return LoadResolvedLightingFrameBindings().directional.illuminance_lux;
 }
 
 static inline float3 GetSunColorRGB()
 {
-    return LoadResolvedLightingFrameBindings().sun.color_rgb_intensity.xyz;
+    return LoadResolvedLightingFrameBindings().directional.color;
 }
 
 static inline float GetSunIntensity()
 {
-    return LoadResolvedLightingFrameBindings().sun.color_rgb_intensity.w;
+    return LoadResolvedLightingFrameBindings().directional.illuminance_lux;
 }
 
 static inline float3 GetSunLuminanceRGB()
@@ -47,48 +47,41 @@ static inline float3 GetSunLuminanceRGB()
 
 static inline bool HasSunLight()
 {
-    return LoadResolvedLightingFrameBindings().sun.enabled != 0u;
+    return LoadResolvedLightingFrameBindings().has_directional_light != 0u;
 }
 
 static inline uint3 GetClusterDimensions()
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    return uint3(lighting.light_culling.cluster_dim_x,
-                 lighting.light_culling.cluster_dim_y,
-                 lighting.light_culling.cluster_dim_z);
+    return uint3(lighting.grid_size);
 }
 
 static inline uint GetClusterGridSlot()
 {
-    return LoadResolvedLightingFrameBindings().light_culling.bindless_cluster_grid_slot;
+    return LoadResolvedLightingFrameBindings().grid_indirection_srv;
 }
 
 static inline uint GetClusterIndexListSlot()
 {
-    return LoadResolvedLightingFrameBindings().light_culling.bindless_cluster_index_list_slot;
+    return LoadResolvedLightingFrameBindings().light_view_data_srv;
 }
 
 static inline uint GetClusterMaxLightsPerCell()
 {
-    return LoadResolvedLightingFrameBindings().light_culling.max_lights_per_cell;
+    return LoadResolvedLightingFrameBindings().max_culled_lights_per_cell;
 }
 
 static inline uint GetClusterIndex(float2 screen_pos, float linear_depth)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const uint3 cluster_dims = uint3(lighting.light_culling.cluster_dim_x,
-                                     lighting.light_culling.cluster_dim_y,
-                                     lighting.light_culling.cluster_dim_z);
+    const uint3 cluster_dims = uint3(lighting.grid_size);
 
     return ComputeClusterIndex(
         screen_pos,
         linear_depth,
         cluster_dims,
-        lighting.light_culling.light_grid_pixel_size_shift,
-        float3(
-            lighting.light_culling.light_grid_z_params_b,
-            lighting.light_culling.light_grid_z_params_o,
-            lighting.light_culling.light_grid_z_params_s));
+        6u,
+        lighting.grid_z_params);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_LIGHTINGHELPERS_HLSLI

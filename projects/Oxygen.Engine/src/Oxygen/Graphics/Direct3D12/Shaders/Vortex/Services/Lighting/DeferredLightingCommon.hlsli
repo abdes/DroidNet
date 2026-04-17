@@ -20,9 +20,9 @@ struct DeferredLightConstants
     float4 spot_angles;
     float4x4 light_world_matrix;
     uint light_type;
+    uint light_geometry_vertices_srv;
+    uint light_geometry_vertex_count;
     uint _padding0;
-    uint _padding1;
-    uint _padding2;
 };
 
 struct DeferredLightVolumeVSOutput
@@ -31,126 +31,17 @@ struct DeferredLightVolumeVSOutput
     float4 position : SV_POSITION;
 };
 
-static const uint DEFERRED_LIGHT_SPHERE_SLICES = 16u;
-static const uint DEFERRED_LIGHT_SPHERE_STACKS = 8u;
-static const uint DEFERRED_LIGHT_CONE_SLICES = 24u;
-static const float DEFERRED_LIGHT_TWO_PI = 6.28318530718f;
-
-// Phase 03 keeps UE's bounded-volume local-light contract but generates the
-// point/spot proxy geometry procedurally from SV_VertexID instead of binding
-// persistent sphere/cone vertex buffers.
-static inline float3 DeferredLightSphereRingVertex(uint ring, uint slice)
+static inline float3 LoadDeferredLightGeometryVertex(
+    uint light_geometry_vertices_srv,
+    uint vertex_id)
 {
-    const float phi = PI * ring / DEFERRED_LIGHT_SPHERE_STACKS;
-    const float theta = DEFERRED_LIGHT_TWO_PI * slice / DEFERRED_LIGHT_SPHERE_SLICES;
-    const float sin_phi = sin(phi);
-    return float3(
-        sin_phi * cos(theta),
-        cos(phi),
-        sin_phi * sin(theta));
-}
-
-static inline float3 GenerateDeferredLightSphereVertex(uint vertex_id)
-{
-    const uint triangle_index = vertex_id / 3u;
-    const uint corner_index = vertex_id % 3u;
-    const uint top_cap_triangle_count = DEFERRED_LIGHT_SPHERE_SLICES;
-    const uint middle_triangle_count
-        = (DEFERRED_LIGHT_SPHERE_STACKS - 2u)
-        * DEFERRED_LIGHT_SPHERE_SLICES * 2u;
-
-    const float3 north_pole = float3(0.0f, 1.0f, 0.0f);
-    const float3 south_pole = float3(0.0f, -1.0f, 0.0f);
-
-    if (triangle_index < top_cap_triangle_count) {
-        const uint slice = triangle_index;
-        const uint next_slice = (slice + 1u) % DEFERRED_LIGHT_SPHERE_SLICES;
-        if (corner_index == 0u) {
-            return north_pole;
-        }
-        if (corner_index == 1u) {
-            return DeferredLightSphereRingVertex(1u, next_slice);
-        }
-        return DeferredLightSphereRingVertex(1u, slice);
+    if (light_geometry_vertices_srv == INVALID_BINDLESS_INDEX) {
+        return 0.0f.xxx;
     }
 
-    if (triangle_index < top_cap_triangle_count + middle_triangle_count) {
-        const uint local_triangle = triangle_index - top_cap_triangle_count;
-        const uint quad_index = local_triangle / 2u;
-        const uint ring = quad_index / DEFERRED_LIGHT_SPHERE_SLICES + 1u;
-        const uint slice = quad_index % DEFERRED_LIGHT_SPHERE_SLICES;
-        const uint next_slice = (slice + 1u) % DEFERRED_LIGHT_SPHERE_SLICES;
-
-        const float3 v00 = DeferredLightSphereRingVertex(ring, slice);
-        const float3 v01 = DeferredLightSphereRingVertex(ring, next_slice);
-        const float3 v10 = DeferredLightSphereRingVertex(ring + 1u, slice);
-        const float3 v11 = DeferredLightSphereRingVertex(ring + 1u, next_slice);
-
-        if ((local_triangle & 1u) == 0u) {
-            if (corner_index == 0u) {
-                return v00;
-            }
-            if (corner_index == 1u) {
-                return v10;
-            }
-            return v01;
-        }
-
-        if (corner_index == 0u) {
-            return v10;
-        }
-        if (corner_index == 1u) {
-            return v11;
-        }
-        return v01;
-    }
-
-    const uint local_triangle
-        = triangle_index - top_cap_triangle_count - middle_triangle_count;
-    const uint slice = local_triangle;
-    const uint next_slice = (slice + 1u) % DEFERRED_LIGHT_SPHERE_SLICES;
-    if (corner_index == 0u) {
-        return south_pole;
-    }
-    if (corner_index == 1u) {
-        return DeferredLightSphereRingVertex(
-            DEFERRED_LIGHT_SPHERE_STACKS - 1u, slice);
-    }
-    return DeferredLightSphereRingVertex(
-        DEFERRED_LIGHT_SPHERE_STACKS - 1u, next_slice);
-}
-
-static inline float3 DeferredLightConeRingVertex(uint slice)
-{
-    const float theta = DEFERRED_LIGHT_TWO_PI * slice / DEFERRED_LIGHT_CONE_SLICES;
-    return float3(cos(theta), -1.0f, sin(theta));
-}
-
-static inline float3 GenerateDeferredLightConeVertex(uint vertex_id)
-{
-    const uint triangle_index = vertex_id / 3u;
-    const uint corner_index = vertex_id % 3u;
-    const uint side_triangle_count = DEFERRED_LIGHT_CONE_SLICES;
-    const uint slice = triangle_index % DEFERRED_LIGHT_CONE_SLICES;
-    const uint next_slice = (slice + 1u) % DEFERRED_LIGHT_CONE_SLICES;
-
-    if (triangle_index < side_triangle_count) {
-        if (corner_index == 0u) {
-            return float3(0.0f, 0.0f, 0.0f);
-        }
-        if (corner_index == 1u) {
-            return DeferredLightConeRingVertex(next_slice);
-        }
-        return DeferredLightConeRingVertex(slice);
-    }
-
-    if (corner_index == 0u) {
-        return float3(0.0f, -1.0f, 0.0f);
-    }
-    if (corner_index == 1u) {
-        return DeferredLightConeRingVertex(slice);
-    }
-    return DeferredLightConeRingVertex(next_slice);
+    StructuredBuffer<float4> light_geometry_vertices =
+        ResourceDescriptorHeap[light_geometry_vertices_srv];
+    return light_geometry_vertices[vertex_id].xyz;
 }
 
 static inline SceneTextureBindingData LoadBindingsFromCurrentView()

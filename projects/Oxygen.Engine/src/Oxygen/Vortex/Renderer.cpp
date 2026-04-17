@@ -1449,6 +1449,7 @@ auto Renderer::DispatchSceneRendererRender(
       BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
   } else if (auto gfx = GetGraphics(); gfx != nullptr) {
     auto& publication_state = EnsurePublicationState(*gfx);
+    view_bindings = scene_renderer.GetPublishedViewFrameBindings();
 
     const auto scene_texture_frame_slot
       = publication_state.scene_texture_bindings_publisher->Publish(

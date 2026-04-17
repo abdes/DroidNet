@@ -494,12 +494,12 @@ float3 AccumulatePositionalLightsClustered(
     float  roughness)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
-    const uint cluster_grid_slot = lighting.light_culling.bindless_cluster_grid_slot;
-    const uint light_list_slot = lighting.light_culling.bindless_cluster_index_list_slot;
+    const uint cluster_grid_slot = lighting.grid_indirection_srv;
+    const uint light_list_slot = lighting.light_view_data_srv;
 
     const bool has_cluster_data = (cluster_grid_slot != K_INVALID_BINDLESS_INDEX)
                                && (light_list_slot != K_INVALID_BINDLESS_INDEX)
-                               && (lighting.light_culling.cluster_dim_x > 0);
+                               && (lighting.grid_size.x > 0);
 
     if (!has_cluster_data) {
         return AccumulatePositionalLights(world_pos, N, V, NdotV, F0, base_rgb, metalness, roughness);

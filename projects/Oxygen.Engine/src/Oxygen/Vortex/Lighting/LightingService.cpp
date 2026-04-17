@@ -71,8 +71,23 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,
     .used_service_owned_geometry = pass_state.used_service_owned_geometry,
+    .used_outside_volume_local_lights
+    = pass_state.used_outside_volume_local_lights,
+    .used_camera_inside_local_lights
+    = pass_state.used_camera_inside_local_lights,
+    .used_non_perspective_local_lights
+    = pass_state.used_non_perspective_local_lights,
     .directional_draw_count = pass_state.directional_draw_count,
+    .point_light_count = pass_state.point_light_count,
+    .spot_light_count = pass_state.spot_light_count,
+    .local_light_count = pass_state.local_light_count,
+    .outside_volume_local_light_count
+    = pass_state.outside_volume_local_light_count,
+    .camera_inside_local_light_count
+    = pass_state.camera_inside_local_light_count,
     .local_light_draw_count = pass_state.local_light_draw_count,
+    .non_perspective_local_light_count
+    = pass_state.non_perspective_local_light_count,
     .selection_epoch = packets.selection_epoch,
   };
 }
@@ -81,6 +96,12 @@ auto LightingService::InspectForwardLightBindings(const ViewId view_id) const
   -> const LightingFrameBindings*
 {
   return publisher_->InspectBindings(view_id);
+}
+
+auto LightingService::ResolveLightingFrameSlot(const ViewId view_id) const
+  -> ShaderVisibleIndex
+{
+  return publisher_->ResolveBindingSlot(view_id);
 }
 
 } // namespace oxygen::vortex
