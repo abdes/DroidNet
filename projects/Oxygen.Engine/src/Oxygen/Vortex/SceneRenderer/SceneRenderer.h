@@ -16,6 +16,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -46,6 +47,7 @@ class BasePassModule;
 class LightingService;
 class ShadowService;
 class PostProcessService;
+class EnvironmentLightingService;
 
 class SceneRenderer {
 public:
@@ -100,6 +102,26 @@ public:
     std::uint32_t directional_shadow_cascade_count { 0U };
   };
 
+  struct EnvironmentLightingState {
+    bool published_bindings { false };
+    bool owned_by_environment_service { false };
+    bool stage15_requested { false };
+    bool sky_requested { false };
+    bool sky_executed { false };
+    bool atmosphere_requested { false };
+    bool atmosphere_executed { false };
+    bool fog_requested { false };
+    bool fog_executed { false };
+    bool ambient_bridge_published { false };
+    std::uint32_t probe_revision { 0U };
+    ShaderVisibleIndex published_environment_frame_slot {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex ambient_bridge_irradiance_srv {
+      kInvalidShaderVisibleIndex
+    };
+  };
+
   OXGN_VRTX_API explicit SceneRenderer(Renderer& renderer, Graphics& gfx,
     SceneTexturesConfig config, ShadingMode default_shading_mode);
   OXGN_VRTX_API ~SceneRenderer();
@@ -142,6 +164,8 @@ public:
   OXGN_VRTX_NDAPI auto GetPublishedViewId() const -> ViewId;
   OXGN_VRTX_NDAPI auto GetLastDeferredLightingState() const
     -> const DeferredLightingState&;
+  OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
+    -> const EnvironmentLightingState&;
   OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder()
     -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
@@ -189,6 +213,7 @@ private:
   };
   ViewId published_view_id_ { kInvalidViewId };
   DeferredLightingState deferred_lighting_state_ {};
+  EnvironmentLightingState environment_lighting_state_ {};
   FrameLightSelection frame_light_selection_ {};
   std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
   std::vector<PreparedViewShadowInput> frame_shadow_views_ {};
@@ -199,6 +224,7 @@ private:
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;
+  std::unique_ptr<EnvironmentLightingService> environment_;
   std::unique_ptr<PostProcessService> post_process_;
 };
 

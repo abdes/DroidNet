@@ -13,8 +13,20 @@ struct EnvironmentFrameBindings
 {
     uint environment_static_slot;
     uint environment_view_slot;
-    uint _pad_to_16_0;
-    uint _pad_to_16_1;
+    uint environment_map_srv;
+    uint irradiance_map_srv;
+    uint prefiltered_map_srv;
+    uint brdf_lut_srv;
+    uint probe_revision;
+    float ambient_intensity;
+    float average_brightness;
+    float blend_fraction;
+    uint evaluation_flags;
+    uint ambient_bridge_irradiance_map_srv;
+    float ambient_bridge_ambient_intensity;
+    float ambient_bridge_average_brightness;
+    float ambient_bridge_blend_fraction;
+    uint ambient_bridge_flags;
 };
 
 static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
@@ -22,6 +34,11 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     EnvironmentFrameBindings invalid_bindings = (EnvironmentFrameBindings)0;
     invalid_bindings.environment_static_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_view_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.environment_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.ambient_bridge_irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;

@@ -37,6 +37,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
+#include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -1004,6 +1005,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
     shadows_ = std::make_unique<ShadowService>(renderer_);
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
+    environment_ = std::make_unique<EnvironmentLightingService>(renderer_);
+  }
   if (renderer_.HasCapability(RendererCapabilityFamily::kFinalOutputComposition)) {
     post_process_ = std::make_unique<PostProcessService>(renderer_);
   }
@@ -1026,6 +1030,7 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   ResetExtractArtifacts();
   InvalidatePublishedViewFrameBindings();
   deferred_lighting_state_ = {};
+  environment_lighting_state_ = {};
   frame_light_selection_ = {};
   frame_lighting_views_.clear();
   frame_shadow_views_.clear();
@@ -1037,6 +1042,10 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   }
   if (shadows_ != nullptr) {
     shadows_->OnFrameStart(
+      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+  }
+  if (environment_ != nullptr) {
+    environment_->OnFrameStart(
       frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
   }
   if (post_process_ != nullptr) {
@@ -1140,6 +1149,28 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     deferred_lighting_state_.published_shadow_frame_slot
       = published_view_frame_bindings_.shadow_frame_slot;
+  }
+  if (environment_ != nullptr) {
+    published_view_frame_bindings_.environment_frame_slot
+      = environment_->PublishEnvironmentBindings(ctx);
+    environment_lighting_state_.published_environment_frame_slot
+      = published_view_frame_bindings_.environment_frame_slot;
+    environment_lighting_state_.owned_by_environment_service = true;
+    const auto* environment_bindings
+      = environment_->InspectBindings(ctx.current_view.view_id);
+    if (environment_bindings != nullptr) {
+      environment_lighting_state_.published_bindings
+        = environment_lighting_state_.published_environment_frame_slot
+          != kInvalidShaderVisibleIndex;
+      environment_lighting_state_.ambient_bridge_published
+        = environment_bindings->ambient_bridge.flags != 0U;
+      environment_lighting_state_.ambient_bridge_irradiance_srv
+        = environment_bindings->ambient_bridge.irradiance_map_srv;
+      environment_lighting_state_.probe_revision
+        = environment_bindings->probes.probe_revision;
+    }
+  }
+  if (shadows_ != nullptr || environment_ != nullptr) {
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   }
 
@@ -1172,6 +1203,20 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
+  if (environment_ != nullptr) {
+    environment_->RenderSkyAndFog(ctx, scene_textures_);
+    const auto& stage15_state = environment_->GetLastStage15State();
+    environment_lighting_state_.owned_by_environment_service = true;
+    environment_lighting_state_.stage15_requested = stage15_state.requested;
+    environment_lighting_state_.sky_requested = stage15_state.sky_requested;
+    environment_lighting_state_.sky_executed = stage15_state.sky_executed;
+    environment_lighting_state_.atmosphere_requested
+      = stage15_state.atmosphere_requested;
+    environment_lighting_state_.atmosphere_executed
+      = stage15_state.atmosphere_executed;
+    environment_lighting_state_.fog_requested = stage15_state.fog_requested;
+    environment_lighting_state_.fog_executed = stage15_state.fog_executed;
+  }
 
   // Stage 16: reserved - WaterService
 
@@ -1386,6 +1431,12 @@ auto SceneRenderer::GetLastDeferredLightingState() const
   -> const DeferredLightingState&
 {
   return deferred_lighting_state_;
+}
+
+auto SceneRenderer::GetLastEnvironmentLightingState() const
+  -> const EnvironmentLightingState&
+{
+  return environment_lighting_state_;
 }
 
 void SceneRenderer::PublishViewFrameBindings(const ViewId view_id,

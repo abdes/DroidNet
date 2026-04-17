@@ -368,6 +368,26 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kVertex, .name="DeferredLightSpotVS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Environment/Sky.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="VortexSkyPassVS" },
+      EntryPoint { .type=kPixel, .name="VortexSkyPassPS" },
+      EntryPoint { .type=kCompute, .name="VortexIblIrradianceCS" },
+      EntryPoint { .type=kCompute, .name="VortexIblPrefilterCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/AtmosphereCompose.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="VortexAtmosphereComposeVS" },
+      EntryPoint { .type=kPixel, .name="VortexAtmosphereComposePS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/Fog.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="VortexFogPassVS" },
+      EntryPoint { .type=kPixel, .name="VortexFogPassPS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/PostProcess/Tonemap.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexTonemapPS" },
