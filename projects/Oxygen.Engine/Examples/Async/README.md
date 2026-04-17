@@ -8,6 +8,26 @@ This small C++ example demonstrates asynchronous programming patterns used by th
 - Demonstrate the interplay between the example’s runtime loop and asynchronous work
 - Provide a compact, standalone area to prototype async patterns without opening the full engine/editor
 
+## Phase 4 Migration Gate
+
+`Examples/Async` is the Phase 4 first-success integration gate for the Vortex
+migration program. The Phase 4 baseline artifact root for this example is
+`build/artifacts/vortex/phase-4/async/`.
+
+This `04-05` seam-migration lane replaces only the initial runtime seams:
+
+- legacy renderer target linkage
+- Async-owned renderer bootstrap ownership
+- example-local view-registration assumptions that now move behind a
+  Vortex-owned renderer seam
+
+This lane does not claim the downstream DemoShell/AppWindow runtime-UI
+migration or the later parity-proof artifact pack. Those remain owned by the
+follow-on `04-11`, `04-09`, and `04-06` plans.
+
+`Examples/Async` remains the integration gate, while `VortexBasic` remains the
+continuing systems-and-passes validation surface for Phase 4.
+
 ## Files
 
 - `CMakeLists.txt` — build configuration, target is `Oxygen.Examples.Async`
