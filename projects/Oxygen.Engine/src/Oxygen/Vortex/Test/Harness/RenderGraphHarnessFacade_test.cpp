@@ -239,4 +239,32 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest, ExecuteAllowsMultipleRuns)
   EXPECT_EQ(execution_count, 2);
 }
 
+NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
+  FinalizeKeepsARenderablePassTargetForStage22Output)
+{
+  auto facade = renderer_->ForRenderGraphHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 1U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 7U },
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+  facade.SetRenderGraph(
+    [](ViewId, const RenderContext&,
+      oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
+      co_return;
+    });
+
+  auto result = facade.Finalize();
+
+  ASSERT_TRUE(result.has_value());
+  const auto* pass_target = result->GetRenderContext().pass_target.get();
+  ASSERT_NE(pass_target, nullptr);
+  ASSERT_EQ(pass_target->GetDescriptor().color_attachments.size(), 1U);
+  ASSERT_NE(pass_target->GetDescriptor().color_attachments.front().texture, nullptr);
+  EXPECT_TRUE(pass_target->GetDescriptor().color_attachments.front()
+                .texture->GetDescriptor()
+                .is_render_target);
+}
+
 } // namespace

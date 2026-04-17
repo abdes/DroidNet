@@ -6,22 +6,49 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <memory>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
 
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 
 namespace {
 
+using oxygen::Format;
+using oxygen::Graphics;
+using oxygen::RendererConfig;
+using oxygen::TextureType;
+using oxygen::ViewId;
+using oxygen::graphics::Framebuffer;
+using oxygen::graphics::FramebufferDesc;
+using oxygen::graphics::QueueRole;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::TextureDesc;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::vortex::PostProcessConfig;
 using oxygen::vortex::PostProcessFrameBindings;
 using oxygen::vortex::PostProcessService;
+using oxygen::vortex::RenderContext;
+using oxygen::vortex::Renderer;
+using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::SceneTextures;
+using oxygen::vortex::SceneTexturesConfig;
+using oxygen::vortex::testing::FakeGraphics;
 
 auto ReadTextFile(const std::filesystem::path& path) -> std::string
 {
@@ -34,6 +61,46 @@ auto SourceRoot() -> std::filesystem::path
 {
   return std::filesystem::path { __FILE__ }.parent_path().parent_path()
     .parent_path();
+}
+
+auto DestroyRenderer(Renderer* renderer) -> void
+{
+  if (renderer != nullptr) {
+    renderer->OnShutdown();
+    std::default_delete<Renderer> {}(renderer);
+  }
+}
+
+auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
+  -> std::shared_ptr<Renderer>
+{
+  auto config = RendererConfig {};
+  config.upload_queue_key
+    = graphics->QueueKeyFor(QueueRole::kGraphics).get();
+  constexpr auto kCapabilities = RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kFinalOutputComposition;
+  return { new Renderer(
+             std::weak_ptr<Graphics>(graphics), std::move(config), kCapabilities),
+    DestroyRenderer };
+}
+
+auto MakeFramebuffer(const std::shared_ptr<FakeGraphics>& graphics,
+  std::string_view debug_name) -> std::shared_ptr<Framebuffer>
+{
+  auto color_desc = TextureDesc {};
+  color_desc.width = 64U;
+  color_desc.height = 64U;
+  color_desc.format = Format::kRGBA8UNorm;
+  color_desc.texture_type = TextureType::kTexture2D;
+  color_desc.is_render_target = true;
+  color_desc.is_shader_resource = true;
+  color_desc.initial_state = ResourceStates::kCommon;
+  color_desc.debug_name = std::string(debug_name);
+
+  auto color = graphics->CreateTexture(color_desc);
+  auto fb_desc = FramebufferDesc {};
+  fb_desc.AddColorAttachment({ .texture = color });
+  return graphics->CreateFramebuffer(fb_desc);
 }
 
 NOLINT_TEST(PostProcessServiceSurfaceTest,
@@ -88,6 +155,90 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/ExposurePass.cpp"));
   EXPECT_TRUE(
     cmake_source.contains("PostProcess/Types/PostProcessFrameBindings.h"));
+}
+
+NOLINT_TEST(PostProcessServiceSurfaceTest,
+  VortexShaderCatalogRegistersPostProcessFamily)
+{
+  const auto source_root = SourceRoot();
+  const auto catalog_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h");
+
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/PostProcess/Tonemap.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/PostProcess/BloomDownsample.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/PostProcess/BloomUpsample.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/PostProcess/Exposure.hlsl"));
+  EXPECT_TRUE(catalog_source.contains("VortexTonemapVS"));
+  EXPECT_TRUE(catalog_source.contains("VortexTonemapPS"));
+}
+
+class PostProcessServiceBehaviorTest : public ::testing::Test {
+protected:
+  void SetUp() override
+  {
+    graphics_ = std::make_shared<FakeGraphics>();
+    graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+    renderer_ = MakeRenderer(graphics_);
+  }
+
+  std::shared_ptr<FakeGraphics> graphics_ {};
+  std::shared_ptr<Renderer> renderer_ {};
+};
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  ExecutePublishesStage22BindingsAndRecordsTonemapVisibleOutput)
+{
+  auto service = PostProcessService(*renderer_);
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = true,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto framebuffer
+    = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.Output");
+
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 41U };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 9U };
+
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
+  graphics_->draw_log_.draws.clear();
+  graphics_->graphics_pipeline_log_.binds.clear();
+  service.Execute(context.current_view.view_id, context, scene_textures,
+    PostProcessService::Inputs {
+      .scene_signal = &scene_textures.GetSceneColor(),
+      .scene_depth = &scene_textures.GetSceneDepth(),
+      .scene_velocity = scene_textures.GetVelocity(),
+      .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
+      .scene_signal_srv = oxygen::ShaderVisibleIndex { 301U },
+      .scene_depth_srv = oxygen::ShaderVisibleIndex { 302U },
+      .scene_velocity_srv = oxygen::ShaderVisibleIndex { 303U },
+    });
+
+  const auto& state = service.GetLastExecutionState();
+  ASSERT_NE(service.InspectBindings(context.current_view.view_id), nullptr);
+  EXPECT_TRUE(state.published_bindings);
+  EXPECT_NE(state.post_process_frame_slot, kInvalidShaderVisibleIndex);
+  EXPECT_TRUE(state.tonemap_requested);
+  EXPECT_TRUE(state.tonemap_executed);
+  EXPECT_TRUE(state.wrote_visible_output);
+  EXPECT_EQ(service.ResolveBindingSlot(context.current_view.view_id),
+    state.post_process_frame_slot);
+  EXPECT_EQ(service.InspectBindings(context.current_view.view_id)
+      ->resolved_scene_color_srv,
+    oxygen::ShaderVisibleIndex { 301U });
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.PostProcess.Tonemap";
+    }));
 }
 
 } // namespace

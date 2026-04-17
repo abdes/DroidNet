@@ -6,8 +6,11 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -37,6 +40,19 @@ using oxygen::vortex::SceneRenderBuilder;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
+
+auto ReadTextFile(const std::filesystem::path& path) -> std::string
+{
+  auto input = std::ifstream(path);
+  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
+  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+}
+
+auto SourceRoot() -> std::filesystem::path
+{
+  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
+    .parent_path();
+}
 
 auto MakeSceneView() -> CompositionView
 {
@@ -244,6 +260,25 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   EXPECT_NO_THROW(scene_renderer->OnRender(render_context));
   EXPECT_NO_THROW(scene_renderer->OnCompositing(render_context));
   EXPECT_NO_THROW(scene_renderer->OnFrameEnd(frame_context));
+}
+
+NOLINT_TEST(SceneRendererShellProofSurfaceTest,
+  Stage22StaysBetweenResolveAndCleanupOwnershipBoundaries)
+{
+  const auto source_root = SourceRoot();
+  const auto scene_renderer_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+
+  const auto resolve_pos = scene_renderer_source.find("ResolveSceneColor(ctx);");
+  const auto post_process_pos
+    = scene_renderer_source.find("post_process_->Execute(");
+  const auto cleanup_pos = scene_renderer_source.find("PostRenderCleanup(ctx);");
+
+  ASSERT_NE(resolve_pos, std::string::npos);
+  ASSERT_NE(post_process_pos, std::string::npos);
+  ASSERT_NE(cleanup_pos, std::string::npos);
+  EXPECT_LT(resolve_pos, post_process_pos);
+  EXPECT_LT(post_process_pos, cleanup_pos);
 }
 
 NOLINT_TEST(SceneRendererShellProofSurfaceTest,

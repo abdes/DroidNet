@@ -172,4 +172,26 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
   EXPECT_NE(render_context.view_constants.get(), nullptr);
 }
 
+NOLINT_TEST_F(SinglePassHarnessFacadeTest,
+  FinalizeKeepsARenderablePassTargetForStage22Output)
+{
+  auto facade = renderer_->ForSinglePassHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 2U },
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+
+  auto result = facade.Finalize();
+
+  ASSERT_TRUE(result.has_value());
+  const auto* pass_target = result->GetRenderContext().pass_target.get();
+  ASSERT_NE(pass_target, nullptr);
+  ASSERT_EQ(pass_target->GetDescriptor().color_attachments.size(), 1U);
+  ASSERT_NE(pass_target->GetDescriptor().color_attachments.front().texture, nullptr);
+  EXPECT_TRUE(pass_target->GetDescriptor().color_attachments.front()
+                .texture->GetDescriptor()
+                .is_render_target);
+}
+
 } // namespace
