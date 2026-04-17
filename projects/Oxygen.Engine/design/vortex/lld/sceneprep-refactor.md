@@ -137,10 +137,22 @@ Authoritative content lives here:
 - draw-metadata bytes / bindless slots
 - pass partitions
 - draw bounding spheres
-- shadow-related per-draw records
 - explicit current / previous transform publication slots
 - explicit current / previous deformation publication slots
 - any other per-view prepared-scene arrays needed by downstream stages
+
+Explicit exclusion:
+
+- shadow caster bounds
+- visible receiver bounds
+- conventional shadow draw records
+
+Those are not Stage-2 `PreparedSceneFrame` products. Later shadow phases
+publish shadow data through `ShadowFrameBindings` / `ViewFrameBindings` once
+`ShadowService` owns stage-8 production. `InitViewsModule` may publish the
+prepared-scene data that later shadow services consume, but it must not
+pretend to own the shadow payload itself during the Phase-3 deferred-core
+baseline.
 
 Authoritative rule:
 
@@ -197,9 +209,6 @@ struct PreparedSceneViewStorage {
   std::vector<std::byte> draw_metadata_bytes;
   std::vector<PreparedSceneFrame::PartitionRange> partitions;
   std::vector<glm::vec4> draw_bounding_spheres;
-  std::vector<glm::vec4> shadow_caster_bounding_spheres;
-  std::vector<glm::vec4> visible_receiver_bounding_spheres;
-  std::vector<ConventionalShadowDrawRecord> shadow_draw_records;
 
   PreparedSceneFrame published_view {};
 };
@@ -252,6 +261,10 @@ The following auxiliary products may be published alongside
 All auxiliary products must be keyed by prepared-frame indices, draw order, or
 stable scene identity. They must never be keyed only by raw scene traversal
 order.
+
+Shadow payload is intentionally excluded from this Stage-2 auxiliary set.
+`ShadowService` publishes it later through `ShadowFrameBindings` once stage 8
+has produced the data.
 
 ## 4. Runtime Sequence and Traversal Budget
 

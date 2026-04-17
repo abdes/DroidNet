@@ -129,6 +129,11 @@ ShadowFrameData is published per-view through `ShadowFrameBindings` in
 translucency shaders. GPU consumers use the publication seam; CPU inspection
 uses `InspectShadowData()` only for tests / diagnostics.
 
+`PreparedSceneFrame` remains the Stage-2 prepared-scene packet and
+intentionally does not carry shadow caster bounds, receiver bounds, or
+conventional shadow draw records. Shadow payload enters the per-view
+publication stack only once `ShadowService` has produced it at stage 8.
+
 ## 3. Data Flow and Dependencies
 
 ### 3.1 Inputs
