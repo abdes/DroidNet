@@ -1,0 +1,74 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <string_view>
+
+namespace oxygen::examples::testing {
+
+namespace {
+
+auto SourceRoot() -> std::filesystem::path
+{
+  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
+    .parent_path().parent_path();
+}
+
+auto ReadTextFile(const std::filesystem::path& path) -> std::string
+{
+  auto input = std::ifstream(path);
+  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
+  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+}
+
+} // namespace
+
+NOLINT_TEST(AsyncVortexMigrationSurface, RuntimeLaneRejectsLegacyRoutingMarkers)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto demo_shell_header = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
+  const auto demo_shell_source = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
+  const auto app_window_header = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.h");
+  const auto app_window_source = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.cpp");
+
+  constexpr std::array<std::string_view, 4> forbidden_markers {
+    "CompositionView",
+    "get_active_pipeline",
+    "oxygen::renderer",
+    "Oxygen/Renderer",
+  };
+
+  for (const auto marker : forbidden_markers) {
+    EXPECT_FALSE(async_main.contains(marker)) << marker;
+    EXPECT_FALSE(async_bootstrap.contains(marker)) << marker;
+    EXPECT_FALSE(demo_shell_header.contains(marker)) << marker;
+    EXPECT_FALSE(demo_shell_source.contains(marker)) << marker;
+    EXPECT_FALSE(app_window_header.contains(marker)) << marker;
+    EXPECT_FALSE(app_window_source.contains(marker)) << marker;
+  }
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  RuntimeLanePublishesViewsThroughDirectVortexSeams)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+
+  EXPECT_TRUE(async_main.contains("UpsertPublishedRuntimeView("));
+  EXPECT_TRUE(async_main.contains("ResolvePublishedRuntimeViewId("));
+  EXPECT_TRUE(async_main.contains("RegisterResolvedView("));
+  EXPECT_TRUE(async_main.contains("RegisterRuntimeComposition("));
+  EXPECT_FALSE(async_main.contains("PublishRuntimeCompositionView("));
+}
+
+} // namespace oxygen::examples::testing
