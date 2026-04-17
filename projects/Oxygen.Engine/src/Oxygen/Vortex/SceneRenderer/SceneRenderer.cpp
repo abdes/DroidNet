@@ -38,6 +38,7 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -305,6 +306,123 @@ namespace {
       return space::move::Forward;
     }
     return glm::normalize(direction);
+  }
+
+  auto BuildFrameLightSelection(
+    const scene::Scene& scene_ref, const std::uint64_t selection_epoch)
+    -> FrameLightSelection
+  {
+    auto selection = FrameLightSelection { .selection_epoch = selection_epoch };
+    const auto visitor = [&selection, &scene_ref](
+                           const scene::ConstVisitedNode& visited,
+                           const bool dry_run) -> scene::VisitResult {
+      static_cast<void>(dry_run);
+
+      const auto& node = *visited.node_impl;
+      if (!node.HasComponent<scene::detail::TransformComponent>()) {
+        return scene::VisitResult::kContinue;
+      }
+
+      if (node.HasComponent<scene::DirectionalLight>()) {
+        const auto& light = node.GetComponent<scene::DirectionalLight>();
+        if (!light.Common().affects_world || selection.directional_light.has_value()) {
+          return scene::VisitResult::kContinue;
+        }
+
+        selection.directional_light = FrameDirectionalLightSelection {
+          .direction = ComputeDirectionWs(scene_ref, node),
+          .source_radius = light.GetAngularSizeRadians(),
+          .color = light.Common().color_rgb,
+          .illuminance_lux = light.GetIntensityLux(),
+          .specular_scale = 1.0F,
+          .diffuse_scale = 1.0F,
+          .shadow_flags = 0U,
+          .light_function_atlas_index = 0xFFFFFFFFU,
+          .cascade_count = light.CascadedShadows().cascade_count,
+        };
+        return scene::VisitResult::kContinue;
+      }
+
+      if (node.HasComponent<scene::PointLight>()) {
+        const auto& light = node.GetComponent<scene::PointLight>();
+        if (!light.Common().affects_world) {
+          return scene::VisitResult::kContinue;
+        }
+
+        selection.local_lights.push_back(FrameLocalLightSelection {
+          .kind = LocalLightKind::kPoint,
+          .position = ResolveWorldPosition(scene_ref, node),
+          .range = (std::max)(light.GetRange(), 0.001F),
+          .color = light.Common().color_rgb,
+          .intensity = light.GetLuminousFluxLm(),
+          .direction = ComputeDirectionWs(scene_ref, node),
+          .decay_exponent = light.GetDecayExponent(),
+          .inner_cone_cos = 1.0F,
+          .outer_cone_cos = 0.0F,
+          .source_radius = light.GetSourceRadius(),
+        });
+        return scene::VisitResult::kContinue;
+      }
+
+      if (node.HasComponent<scene::SpotLight>()) {
+        const auto& light = node.GetComponent<scene::SpotLight>();
+        if (!light.Common().affects_world) {
+          return scene::VisitResult::kContinue;
+        }
+
+        selection.local_lights.push_back(FrameLocalLightSelection {
+          .kind = LocalLightKind::kSpot,
+          .position = ResolveWorldPosition(scene_ref, node),
+          .range = (std::max)(light.GetRange(), 0.001F),
+          .color = light.Common().color_rgb,
+          .intensity = light.GetLuminousFluxLm(),
+          .direction = ComputeDirectionWs(scene_ref, node),
+          .decay_exponent = light.GetDecayExponent(),
+          .inner_cone_cos = std::cos(light.GetInnerConeAngleRadians()),
+          .outer_cone_cos = std::cos(light.GetOuterConeAngleRadians()),
+          .source_radius = light.GetSourceRadius(),
+        });
+      }
+
+      return scene::VisitResult::kContinue;
+    };
+
+    [[maybe_unused]] const auto traversal_result = scene_ref.Traverse().Traverse(
+      visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
+    return selection;
+  }
+
+  auto CollectLightingViewInputs(const RenderContext& ctx,
+    const InitViewsModule* init_views,
+    std::vector<PreparedViewLightingInput>& out) -> void
+  {
+    out.clear();
+    if (init_views == nullptr) {
+      return;
+    }
+
+    for (const auto& view : ctx.frame_views) {
+      if (!view.is_scene_view) {
+        continue;
+      }
+      out.push_back(PreparedViewLightingInput {
+        .view_id = view.view_id,
+        .prepared_scene = observer_ptr<const PreparedSceneFrame> {
+          init_views->GetPreparedSceneFrame(view.view_id),
+        },
+        .resolved_view = view.resolved_view,
+        .composition_view = view.composition_view,
+      });
+    }
+
+    if (out.empty() && ctx.current_view.view_id != kInvalidViewId) {
+      out.push_back(PreparedViewLightingInput {
+        .view_id = ctx.current_view.view_id,
+        .prepared_scene = ctx.current_view.prepared_frame,
+        .resolved_view = ctx.current_view.resolved_view,
+        .composition_view = ctx.current_view.composition_view,
+      });
+    }
   }
 
   auto MakeScaleMatrix(const glm::vec3 scale) -> glm::mat4
@@ -837,22 +955,15 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     base_pass_ = std::make_unique<BasePassModule>(
       renderer_, scene_textures_.GetConfig());
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
+    && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
+    lighting_ = std::make_unique<LightingService>(renderer_);
+  }
 }
 
 SceneRenderer::~SceneRenderer()
 {
   ResetExtractArtifacts();
-  if (deferred_light_constants_buffer_ != nullptr
-    && deferred_light_constants_mapped_ptr_ != nullptr) {
-    deferred_light_constants_buffer_->UnMap();
-    deferred_light_constants_mapped_ptr_ = nullptr;
-  }
-  if (deferred_light_constants_buffer_ != nullptr) {
-    auto& registry = gfx_.GetResourceRegistry();
-    if (registry.Contains(*deferred_light_constants_buffer_)) {
-      registry.UnRegisterResource(*deferred_light_constants_buffer_);
-    }
-  }
 }
 
 void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
@@ -867,6 +978,13 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   ResetExtractArtifacts();
   InvalidatePublishedViewFrameBindings();
   deferred_lighting_state_ = {};
+  frame_light_selection_ = {};
+  frame_lighting_views_.clear();
+  lighting_grid_built_sequence_ = frame::SequenceNumber {};
+  if (lighting_ != nullptr) {
+    lighting_->OnFrameStart(
+      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+  }
 }
 
 void SceneRenderer::OnPreRender(const engine::FrameContext& /*frame*/) { }
@@ -896,6 +1014,31 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 2: InitViews
   if (ctx.current_view.prepared_frame == nullptr) {
     PrimePreparedView(ctx);
+  }
+
+  if (lighting_ != nullptr && lighting_grid_built_sequence_ != ctx.frame_sequence) {
+    if (auto* scene_mutable = ctx.GetSceneMutable().get(); scene_mutable != nullptr) {
+      scene_mutable->Update(false);
+      const auto* scene_ptr = static_cast<const scene::Scene*>(scene_mutable);
+      frame_light_selection_
+        = BuildFrameLightSelection(*scene_ptr, ctx.frame_sequence.get());
+    } else {
+      frame_light_selection_ = FrameLightSelection {
+        .selection_epoch = ctx.frame_sequence.get(),
+      };
+    }
+    CollectLightingViewInputs(ctx, init_views_.get(), frame_lighting_views_);
+    lighting_->BuildLightGrid(FrameLightingInputs {
+      .frame_light_set = &frame_light_selection_,
+      .active_views = std::span(frame_lighting_views_),
+    });
+    lighting_grid_built_sequence_ = ctx.frame_sequence;
+  }
+  if (lighting_ != nullptr) {
+    published_view_frame_bindings_.lighting_frame_slot
+      = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
+    deferred_lighting_state_.published_lighting_frame_slot
+      = published_view_frame_bindings_.lighting_frame_slot;
   }
 
   // Stage 3: Depth prepass + early velocity
@@ -1452,6 +1595,8 @@ void SceneRenderer::RenderDeferredLighting(
     = published_view_frame_bindings_slot_;
   deferred_lighting_state_.published_scene_texture_frame_slot
     = published_view_frame_bindings_.scene_texture_frame_slot;
+  deferred_lighting_state_.published_lighting_frame_slot
+    = published_view_frame_bindings_.lighting_frame_slot;
 
   if (!renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
     || !renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
@@ -1482,306 +1627,35 @@ void SceneRenderer::RenderDeferredLighting(
   std::copy_n(scene_texture_bindings_.gbuffer_srvs.begin(),
     deferred_lighting_state_.consumed_gbuffer_srvs.size(),
     deferred_lighting_state_.consumed_gbuffer_srvs.begin());
-
-  auto* scene_mutable = ctx.GetSceneMutable().get();
-  if (scene_mutable == nullptr) {
+  if (lighting_ == nullptr) {
     return;
   }
-  scene_mutable->Update(false);
-  const auto* scene_ptr = static_cast<const scene::Scene*>(scene_mutable);
-
-  auto deferred_lights = std::vector<DeferredLightDraw> {};
-  const auto visitor = [this, &deferred_lights, scene_ptr](
-                         const scene::ConstVisitedNode& visited,
-                         const bool dry_run) -> scene::VisitResult {
-    static_cast<void>(dry_run);
-
-    const auto& node = *visited.node_impl;
-    if (!node.HasComponent<scene::detail::TransformComponent>()) {
-      return scene::VisitResult::kContinue;
-    }
-
-    if (node.HasComponent<scene::DirectionalLight>()) {
-      const auto& light = node.GetComponent<scene::DirectionalLight>();
-      if (!light.Common().affects_world) {
-        return scene::VisitResult::kContinue;
-      }
-
-      DeferredLightDraw draw {};
-      draw.kind = DeferredLightKind::kDirectional;
-      draw.constants.light_color_and_intensity = glm::vec4(
-        light.Common().color_rgb, light.GetIntensityLux());
-      draw.constants.light_direction_and_falloff = glm::vec4(
-        ComputeDirectionWs(*scene_ptr, node), 1.0F);
-      draw.constants.light_world_matrix = glm::mat4 { 1.0F };
-      draw.constants.light_type
-        = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
-      deferred_lights.push_back(draw);
-      ++deferred_lighting_state_.directional_light_count;
-    } else if (node.HasComponent<scene::PointLight>()) {
-      const auto& light = node.GetComponent<scene::PointLight>();
-      if (!light.Common().affects_world) {
-        return scene::VisitResult::kContinue;
-      }
-
-      const auto position = ResolveWorldPosition(*scene_ptr, node);
-      const auto radius = (std::max)(light.GetRange(), 0.001F);
-
-      DeferredLightDraw draw {};
-      draw.kind = DeferredLightKind::kPoint;
-      draw.constants.light_position_and_radius = glm::vec4(position, radius);
-      draw.constants.light_color_and_intensity = glm::vec4(
-        light.Common().color_rgb, light.GetLuminousFluxLm());
-      draw.constants.light_direction_and_falloff
-        = glm::vec4(
-          ComputeDirectionWs(*scene_ptr, node), light.GetDecayExponent());
-      draw.constants.light_world_matrix = BuildDeferredLightWorldMatrix(
-        position, glm::quat { 1.0F, 0.0F, 0.0F, 0.0F },
-        glm::vec3 { radius });
-      draw.constants.light_type
-        = static_cast<std::uint32_t>(DeferredLightKind::kPoint);
-      deferred_lights.push_back(draw);
-      ++deferred_lighting_state_.point_light_count;
-      ++deferred_lighting_state_.local_light_count;
-    } else if (node.HasComponent<scene::SpotLight>()) {
-      const auto& light = node.GetComponent<scene::SpotLight>();
-      if (!light.Common().affects_world) {
-        return scene::VisitResult::kContinue;
-      }
-
-      const auto position = ResolveWorldPosition(*scene_ptr, node);
-      const auto rotation = ResolveWorldRotation(*scene_ptr, node);
-      const auto range = (std::max)(light.GetRange(), 0.001F);
-      const auto outer_angle = std::clamp(
-        light.GetOuterConeAngleRadians(), 0.001F, 1.55334F);
-      const auto base_radius = (std::max)(range * std::tan(outer_angle), 0.001F);
-
-      DeferredLightDraw draw {};
-      draw.kind = DeferredLightKind::kSpot;
-      draw.constants.light_position_and_radius = glm::vec4(position, range);
-      draw.constants.light_color_and_intensity = glm::vec4(
-        light.Common().color_rgb, light.GetLuminousFluxLm());
-      draw.constants.light_direction_and_falloff
-        = glm::vec4(
-          ComputeDirectionWs(*scene_ptr, node), light.GetDecayExponent());
-      draw.constants.spot_angles = glm::vec4(
-        std::cos(light.GetInnerConeAngleRadians()),
-        std::cos(light.GetOuterConeAngleRadians()), 0.0F, 0.0F);
-      draw.constants.light_world_matrix = BuildDeferredLightWorldMatrix(
-        position, rotation, glm::vec3 { base_radius, range, base_radius });
-      draw.constants.light_type
-        = static_cast<std::uint32_t>(DeferredLightKind::kSpot);
-      deferred_lights.push_back(draw);
-      ++deferred_lighting_state_.spot_light_count;
-      ++deferred_lighting_state_.local_light_count;
-    }
-
-    return scene::VisitResult::kContinue;
-  };
-
-  [[maybe_unused]] const auto traversal_result = scene_ptr->Traverse().Traverse(
-    visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
-  if (deferred_lights.empty()) {
-    return;
-  }
-
-  for (auto& draw : deferred_lights) {
-    if (draw.kind == DeferredLightKind::kDirectional) {
-      continue;
-    }
-    draw.draw_mode = ResolveLocalLightDrawMode(ctx, draw);
-  }
-
-  const auto ensure_pass_constants = [&](const std::uint32_t required_slots)
-    -> void {
-    CHECK_F(required_slots > 0U,
-      "SceneRenderer: deferred lighting requires at least one constants slot");
-    if (deferred_light_constants_buffer_ != nullptr
-      && deferred_light_constants_slot_count_ >= required_slots) {
-      return;
-    }
-
-    if (deferred_light_constants_buffer_ != nullptr
-      && deferred_light_constants_mapped_ptr_ != nullptr) {
-      deferred_light_constants_buffer_->UnMap();
-      deferred_light_constants_mapped_ptr_ = nullptr;
-    }
-    if (deferred_light_constants_buffer_ != nullptr) {
-      auto& registry = gfx_.GetResourceRegistry();
-      if (registry.Contains(*deferred_light_constants_buffer_)) {
-        registry.UnRegisterResource(*deferred_light_constants_buffer_);
-      }
-    }
-    deferred_light_constants_buffer_.reset();
-    deferred_light_constants_indices_.clear();
-
-    auto desc = graphics::BufferDesc {};
-    desc.size_bytes = static_cast<std::uint64_t>(required_slots)
-      * kDeferredLightConstantsStride;
-    desc.usage = graphics::BufferUsage::kConstant;
-    desc.memory = graphics::BufferMemory::kUpload;
-    desc.debug_name = "Vortex.DeferredLight.Constants";
-    deferred_light_constants_buffer_ = gfx_.CreateBuffer(desc);
-    CHECK_NOTNULL_F(deferred_light_constants_buffer_.get(),
-      "SceneRenderer: failed to create deferred-light constants buffer");
-    gfx_.GetResourceRegistry().Register(deferred_light_constants_buffer_);
-    deferred_light_constants_mapped_ptr_
-      = deferred_light_constants_buffer_->Map(0U, desc.size_bytes);
-    CHECK_NOTNULL_F(deferred_light_constants_mapped_ptr_,
-      "SceneRenderer: failed to map deferred-light constants buffer");
-
-    deferred_light_constants_indices_.reserve(required_slots);
-    for (std::uint32_t i = 0U; i < required_slots; ++i) {
-      const auto view_desc = graphics::BufferViewDescription {
-        .view_type = graphics::ResourceViewType::kConstantBuffer,
-        .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .range = { static_cast<std::uint64_t>(i)
-            * kDeferredLightConstantsStride,
-          kDeferredLightConstantsStride },
-      };
-      deferred_light_constants_indices_.push_back(
-        RegisterBufferViewIndex(
-          gfx_, *deferred_light_constants_buffer_, view_desc));
-    }
-    deferred_light_constants_slot_count_ = required_slots;
-  };
-
-  const auto has_local_lights = std::ranges::any_of(
-    deferred_lights, [](const DeferredLightDraw& draw) -> bool {
-      return draw.kind != DeferredLightKind::kDirectional;
-    });
-  ensure_pass_constants(static_cast<std::uint32_t>(deferred_lights.size()));
-
-  if (NeedsDirectionalLightFramebufferRebuild(
-        deferred_light_directional_framebuffer_, scene_textures)) {
-    deferred_light_directional_framebuffer_
-      = gfx_.CreateFramebuffer(BuildDirectionalLightFramebuffer(scene_textures));
-  }
-  if (has_local_lights
-    && NeedsLocalLightFramebufferRebuild(
-      deferred_light_local_framebuffer_, scene_textures)) {
-    deferred_light_local_framebuffer_
-      = gfx_.CreateFramebuffer(BuildLocalLightFramebuffer(scene_textures));
-  }
-
-  auto pass_constants_indices = std::vector<ShaderVisibleIndex> {};
-  pass_constants_indices.reserve(deferred_lights.size());
-  auto* mapped_bytes
-    = static_cast<std::byte*>(deferred_light_constants_mapped_ptr_);
-  for (std::size_t i = 0; i < deferred_lights.size(); ++i) {
-    std::memcpy(mapped_bytes + i * kDeferredLightConstantsStride,
-      &deferred_lights[i].constants, sizeof(DeferredLightConstants));
-    pass_constants_indices.push_back(deferred_light_constants_indices_[i]);
-  }
-
-  const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx_.AcquireCommandRecorder(
-    queue_key, "Vortex DeferredLighting");
-  if (!recorder) {
-    return;
-  }
-  graphics::GpuEventScope stage_scope(*recorder,
-    "Vortex.Stage12.DeferredLighting",
-    profiling::ProfileGranularity::kTelemetry,
-    profiling::ProfileCategory::kPass);
-
-  RequireKnownPersistentState(*recorder, scene_textures.GetSceneColor());
-  RequireKnownPersistentState(*recorder, scene_textures.GetSceneDepth());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferNormal());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
-  RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
-
-  const auto root_constants_param
-    = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
-  const auto view_constants_param
-    = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
-  const auto reverse_z = IsReverseZ(ctx);
-  const auto bind_common_root_parameters = [&](const ShaderVisibleIndex index) {
-    recorder->SetGraphicsRootConstantBufferView(
-      view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-    recorder->SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
-    recorder->SetGraphicsRoot32BitConstant(root_constants_param, index.get(), 1U);
-  };
-  const auto draw_local_light = [&](const DeferredLightDraw& draw,
-                                  const ShaderVisibleIndex pass_index) -> void {
-    const auto kind = draw.kind;
-    const auto draw_mode = draw.draw_mode;
-    graphics::GpuEventScope local_scope(*recorder,
-      kind == DeferredLightKind::kPoint
-        ? "Vortex.Stage12.PointLight"
-        : "Vortex.Stage12.SpotLight",
-      profiling::ProfileGranularity::kDiagnostic,
-      profiling::ProfileCategory::kPass);
-    CHECK_NOTNULL_F(deferred_light_local_framebuffer_.get(),
-      "SceneRenderer: local-light lighting framebuffer must exist before "
-      "local-light draws");
-
-    recorder->RequireResourceState(
-      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-    recorder->RequireResourceState(
-      scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder->FlushBarriers();
-    recorder->BindFrameBuffer(*deferred_light_local_framebuffer_);
-    SetViewportAndScissor(*recorder, ctx, scene_textures);
-    recorder->SetPipelineState(BuildDeferredLocalPipelineDesc(
-      scene_textures, kind, reverse_z, draw_mode));
-    bind_common_root_parameters(pass_index);
-    recorder->Draw(kind == DeferredLightKind::kPoint
-        ? kDeferredLightPointVertexCount
-        : kDeferredLightSpotVertexCount,
-      1U, 0U, 0U);
-    ++deferred_lighting_state_.direct_local_light_pass_count;
-    if (draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume) {
-      ++deferred_lighting_state_.camera_inside_local_light_count;
-      deferred_lighting_state_.used_camera_inside_local_lights = true;
-    } else if (draw_mode == DeferredLocalLightDrawMode::kNonPerspective) {
-      ++deferred_lighting_state_.non_perspective_local_light_count;
-      deferred_lighting_state_.used_non_perspective_local_lights = true;
-    } else {
-      ++deferred_lighting_state_.outside_volume_local_light_count;
-      deferred_lighting_state_.used_outside_volume_local_lights = true;
-    }
-    deferred_lighting_state_.accumulated_into_scene_color = true;
-  };
-
-  for (std::size_t i = 0; i < deferred_lights.size(); ++i) {
-    const auto& draw = deferred_lights[i];
-    const auto pass_index = pass_constants_indices[i];
-
-    if (draw.kind == DeferredLightKind::kDirectional) {
-      graphics::GpuEventScope light_scope(*recorder,
-        "Vortex.Stage12.DirectionalLight",
-        profiling::ProfileGranularity::kDiagnostic,
-        profiling::ProfileCategory::kPass);
-      recorder->RequireResourceState(scene_textures.GetSceneColor(),
-        graphics::ResourceStates::kRenderTarget);
-      recorder->FlushBarriers();
-      recorder->BindFrameBuffer(*deferred_light_directional_framebuffer_);
-      SetViewportAndScissor(*recorder, ctx, scene_textures);
-      recorder->SetPipelineState(
-        BuildDeferredDirectionalPipelineDesc(scene_textures));
-      bind_common_root_parameters(pass_index);
-      recorder->Draw(3U, 1U, 0U, 0U);
-      deferred_lighting_state_.accumulated_into_scene_color = true;
-      continue;
-    }
-
-    draw_local_light(draw, pass_index);
-  }
-
-  recorder->RequireResourceStateFinal(
-    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-  recorder->RequireResourceStateFinal(
-    scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferNormal(),
-    graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferMaterial(),
-    graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferBaseColor(),
-    graphics::ResourceStates::kShaderResource);
-  recorder->RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
-    graphics::ResourceStates::kShaderResource);
+  lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_);
+  const auto& lighting_state = lighting_->GetLastDeferredLightingState();
+  deferred_lighting_state_.owned_by_lighting_service = true;
+  deferred_lighting_state_.used_service_owned_local_light_geometry
+    = lighting_state.used_service_owned_geometry;
+  deferred_lighting_state_.directional_light_count
+    = lighting_state.directional_draw_count;
+  deferred_lighting_state_.point_light_count = lighting_state.point_light_count;
+  deferred_lighting_state_.spot_light_count = lighting_state.spot_light_count;
+  deferred_lighting_state_.local_light_count = lighting_state.local_light_count;
+  deferred_lighting_state_.outside_volume_local_light_count
+    = lighting_state.outside_volume_local_light_count;
+  deferred_lighting_state_.camera_inside_local_light_count
+    = lighting_state.camera_inside_local_light_count;
+  deferred_lighting_state_.direct_local_light_pass_count
+    = lighting_state.local_light_draw_count;
+  deferred_lighting_state_.non_perspective_local_light_count
+    = lighting_state.non_perspective_local_light_count;
+  deferred_lighting_state_.used_outside_volume_local_lights
+    = lighting_state.used_outside_volume_local_lights;
+  deferred_lighting_state_.used_camera_inside_local_lights
+    = lighting_state.used_camera_inside_local_lights;
+  deferred_lighting_state_.used_non_perspective_local_lights
+    = lighting_state.used_non_perspective_local_lights;
+  deferred_lighting_state_.accumulated_into_scene_color
+    = lighting_state.accumulated_into_scene_color;
 }
 
 } // namespace oxygen::vortex

@@ -13,11 +13,14 @@
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -39,6 +42,7 @@ class Renderer;
 class InitViewsModule;
 class DepthPrepassModule;
 class BasePassModule;
+class LightingService;
 
 class SceneRenderer {
 public:
@@ -70,11 +74,16 @@ public:
     std::uint32_t camera_inside_local_light_count { 0U };
     std::uint32_t direct_local_light_pass_count { 0U };
     std::uint32_t non_perspective_local_light_count { 0U };
+    bool owned_by_lighting_service { false };
+    bool used_service_owned_local_light_geometry { false };
     ViewId published_view_id { kInvalidViewId };
     ShaderVisibleIndex published_view_frame_bindings_slot {
       kInvalidShaderVisibleIndex
     };
     ShaderVisibleIndex published_scene_texture_frame_slot {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex published_lighting_frame_slot {
       kInvalidShaderVisibleIndex
     };
   };
@@ -160,14 +169,7 @@ private:
   ExtractArtifact resolved_scene_depth_artifact_ {};
   ExtractArtifact prev_scene_depth_artifact_ {};
   ExtractArtifact prev_velocity_artifact_ {};
-  std::shared_ptr<graphics::Buffer> deferred_light_constants_buffer_ {};
-  void* deferred_light_constants_mapped_ptr_ { nullptr };
-  std::vector<ShaderVisibleIndex> deferred_light_constants_indices_ {};
-  std::uint32_t deferred_light_constants_slot_count_ { 0U };
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
-  std::shared_ptr<graphics::Framebuffer>
-    deferred_light_directional_framebuffer_ {};
-  std::shared_ptr<graphics::Framebuffer> deferred_light_local_framebuffer_ {};
   ShadingMode default_shading_mode_ { ShadingMode::kForward };
   ViewFrameBindings published_view_frame_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
@@ -175,9 +177,13 @@ private:
   };
   ViewId published_view_id_ { kInvalidViewId };
   DeferredLightingState deferred_lighting_state_ {};
+  FrameLightSelection frame_light_selection_ {};
+  std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
+  frame::SequenceNumber lighting_grid_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<BasePassModule> base_pass_;
+  std::unique_ptr<LightingService> lighting_;
 };
 
 } // namespace oxygen::vortex
