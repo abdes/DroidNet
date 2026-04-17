@@ -50,10 +50,10 @@ namespace oxygen::vortex::harness::single_pass::presets {
   -> Renderer::SinglePassHarnessFacade
 {
   auto facade = renderer.ForSinglePassHarness();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
-  facade.SetResolvedView(resolved_view);
+  facade.SetResolvedView(std::move(resolved_view));
   return facade;
 }
 
@@ -63,7 +63,7 @@ namespace oxygen::vortex::harness::single_pass::presets {
   const ViewId view_id = ViewId { 1U }) -> Renderer::SinglePassHarnessFacade
 {
   auto facade = renderer.ForSinglePassHarness();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
@@ -81,11 +81,11 @@ namespace oxygen::vortex::harness::single_pass::presets {
   -> Renderer::SinglePassHarnessFacade
 {
   auto facade = renderer.ForSinglePassHarness();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
-  facade.SetResolvedView(resolved_view);
-  facade.SetPreparedFrame(prepared_frame);
+  facade.SetResolvedView(std::move(resolved_view));
+  facade.SetPreparedFrame(std::move(prepared_frame));
   return facade;
 }
 
@@ -98,8 +98,9 @@ namespace oxygen::vortex::harness::single_pass::presets {
   -> Renderer::SinglePassHarnessFacade
 {
   auto facade = ForPreparedSceneGraphicsPass(
-    renderer, frame_session, framebuffer, resolved_view, prepared_frame);
-  facade.SetCoreShaderInputs(core_shader_inputs);
+    renderer, std::move(frame_session), framebuffer, std::move(resolved_view),
+    std::move(prepared_frame));
+  facade.SetCoreShaderInputs(std::move(core_shader_inputs));
   return facade;
 }
 
@@ -114,10 +115,10 @@ namespace oxygen::vortex::harness::render_graph::presets {
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
 {
   auto facade = renderer.ForRenderGraphHarness();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
-  facade.SetResolvedView(resolved_view);
+  facade.SetResolvedView(std::move(resolved_view));
   facade.SetRenderGraph(std::move(graph));
   return facade;
 }
@@ -130,8 +131,9 @@ namespace oxygen::vortex::harness::render_graph::presets {
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
 {
   auto facade = ForSingleViewGraph(
-    renderer, frame_session, framebuffer, resolved_view, std::move(graph));
-  facade.SetPreparedFrame(prepared_frame);
+    renderer, std::move(frame_session), framebuffer, std::move(resolved_view),
+    std::move(graph));
+  facade.SetPreparedFrame(std::move(prepared_frame));
   return facade;
 }
 
@@ -144,8 +146,8 @@ namespace oxygen::vortex::harness::render_graph::presets {
   Renderer::RenderGraphHarnessInput graph) -> Renderer::RenderGraphHarnessFacade
 {
   auto facade = ForSingleViewGraph(renderer, frame_session, framebuffer,
-    resolved_view, prepared_frame, std::move(graph));
-  facade.SetCoreShaderInputs(core_shader_inputs);
+    std::move(resolved_view), std::move(prepared_frame), std::move(graph));
+  facade.SetCoreShaderInputs(std::move(core_shader_inputs));
   return facade;
 }
 
@@ -162,7 +164,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   -> Renderer::OffscreenSceneFacade
 {
   auto facade = renderer.ForOffscreenScene();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(Renderer::SceneSourceInput { .scene = scene_source });
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Preview",
     kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
@@ -170,7 +172,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
   if (pipeline.has_value()) {
-    facade.SetPipeline(*pipeline);
+    facade.SetPipeline(std::move(*pipeline));
   }
   return facade;
 }
@@ -184,7 +186,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   -> Renderer::OffscreenSceneFacade
 {
   auto facade = renderer.ForOffscreenScene();
-  facade.SetFrameSession(frame_session);
+  facade.SetFrameSession(std::move(frame_session));
   facade.SetSceneSource(Renderer::SceneSourceInput { .scene = scene_source });
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Capture",
     kInvalidViewId, detail::MakeFramebufferSizedView(framebuffer), camera)
@@ -192,7 +194,7 @@ namespace oxygen::vortex::offscreen::scene::presets {
   facade.SetOutputTarget(
     Renderer::OutputTargetInput { .framebuffer = framebuffer });
   if (pipeline.has_value()) {
-    facade.SetPipeline(*pipeline);
+    facade.SetPipeline(std::move(*pipeline));
   }
   return facade;
 }

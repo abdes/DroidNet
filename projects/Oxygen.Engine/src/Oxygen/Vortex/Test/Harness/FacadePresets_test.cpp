@@ -8,8 +8,11 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Vortex/FacadePresets.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
@@ -26,6 +29,7 @@ using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
+using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::testing::FakeGraphics;
 
@@ -91,7 +95,15 @@ protected:
   [[nodiscard]] static auto MakePreparedFrameInput()
     -> Renderer::PreparedFrameInput
   {
-    return Renderer::PreparedFrameInput {};
+    return Renderer::PreparedFrameInput {
+      .value = oxygen::vortex::PreparedSceneFrame {},
+    };
+  }
+
+  [[nodiscard]] auto AcquireRecorder(std::string_view name) const
+  {
+    return graphics_->AcquireCommandRecorder(
+      graphics_->QueueKeyFor(QueueRole::kGraphics), name, false);
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -147,6 +159,71 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
   auto result = facade.Finalize();
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetViewId(), ViewId { 91U });
+}
+
+NOLINT_TEST_F(FacadePresetsTest,
+  PreparedScenePresetCarriesExplicitCoreInputsOnMigratedSubstrate)
+{
+  auto facade = oxygen::vortex::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 2U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 19U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      MakeResolvedViewInput(), MakePreparedFrameInput(),
+      Renderer::CoreShaderInputsInput {
+        .view_id = ViewId { 91U },
+        .value = oxygen::vortex::ViewConstants {},
+      });
+
+  EXPECT_TRUE(facade.CanFinalize());
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  const auto& render_context = result->GetRenderContext();
+  EXPECT_EQ(render_context.current_view.view_id, ViewId { 91U });
+  EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
+  EXPECT_NE(render_context.view_constants.get(), nullptr);
+}
+
+NOLINT_TEST_F(FacadePresetsTest,
+  RenderGraphPresetExecutesAgainstPreparedSceneSubstrate)
+{
+  auto executed = false;
+  auto facade = oxygen::vortex::harness::render_graph::presets::
+    ForSingleViewGraph(*renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 2U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 23U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      MakeResolvedViewInput(), MakePreparedFrameInput(),
+      Renderer::CoreShaderInputsInput {
+        .view_id = ViewId { 91U },
+        .value = oxygen::vortex::ViewConstants {},
+      },
+      [&executed](ViewId view_id, const RenderContext& context,
+        oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
+        executed = true;
+        EXPECT_EQ(view_id, ViewId { 91U });
+        EXPECT_EQ(context.current_view.view_id, ViewId { 91U });
+        EXPECT_NE(context.current_view.prepared_frame.get(), nullptr);
+        EXPECT_NE(context.view_constants.get(), nullptr);
+        co_return;
+      });
+
+  EXPECT_TRUE(facade.CanFinalize());
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto recorder = AcquireRecorder("FacadePresetsTest.PreparedSceneGraph");
+  ASSERT_NE(recorder, nullptr);
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop,
+    [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
+
+  EXPECT_TRUE(executed);
 }
 
 NOLINT_TEST_F(FacadePresetsTest,

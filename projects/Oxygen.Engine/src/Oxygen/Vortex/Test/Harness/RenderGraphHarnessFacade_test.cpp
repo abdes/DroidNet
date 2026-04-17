@@ -267,4 +267,49 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
                 .is_render_target);
 }
 
+NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
+  ExecutePreservesPreparedSceneAndCoreInputsOnMigratedSubstrate)
+{
+  auto facade = renderer_->ForRenderGraphHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 2U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 13U },
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+  facade.SetPreparedFrame(
+    Renderer::PreparedFrameInput {
+      .value = oxygen::vortex::PreparedSceneFrame {},
+    });
+  facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
+    .view_id = ViewId { 61U },
+    .value = oxygen::vortex::ViewConstants {},
+  });
+
+  auto executed = false;
+  facade.SetRenderGraph(
+    [&executed](ViewId view_id, const RenderContext& context,
+      oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
+      executed = true;
+      EXPECT_EQ(view_id, ViewId { 61U });
+      EXPECT_EQ(context.current_view.view_id, ViewId { 61U });
+      EXPECT_NE(context.current_view.resolved_view.get(), nullptr);
+      EXPECT_NE(context.current_view.prepared_frame.get(), nullptr);
+      EXPECT_NE(context.view_constants.get(), nullptr);
+      co_return;
+    });
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+
+  auto recorder = AcquireRecorder("RenderGraphHarnessFacade.MigratedSubstrate");
+  ASSERT_NE(recorder, nullptr);
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop,
+    [&]() -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
+
+  EXPECT_TRUE(executed);
+}
+
 } // namespace

@@ -194,4 +194,36 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
                 .is_render_target);
 }
 
+NOLINT_TEST_F(SinglePassHarnessFacadeTest,
+  FinalizeCarriesPreparedFrameAndExplicitCoreInputsOnMigratedSubstrate)
+{
+  auto facade = renderer_->ForSinglePassHarness();
+  facade.SetFrameSession(Renderer::FrameSessionInput {
+    .frame_slot = oxygen::frame::Slot { 2U },
+    .frame_sequence = oxygen::frame::SequenceNumber { 21U },
+  });
+  facade.SetOutputTarget(MakeOutputTarget());
+  facade.SetResolvedView(MakeResolvedViewInput());
+  facade.SetPreparedFrame(
+    Renderer::PreparedFrameInput {
+      .value = oxygen::vortex::PreparedSceneFrame {},
+    });
+  facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
+    .view_id = ViewId { 51U },
+    .value = oxygen::vortex::ViewConstants {},
+  });
+
+  auto result = facade.Finalize();
+
+  ASSERT_TRUE(result.has_value());
+  const auto& render_context = result->GetRenderContext();
+  EXPECT_EQ(render_context.frame_slot, oxygen::frame::Slot { 2U });
+  EXPECT_EQ(
+    render_context.frame_sequence, oxygen::frame::SequenceNumber { 21U });
+  EXPECT_EQ(render_context.current_view.view_id, ViewId { 51U });
+  EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
+  EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
+  EXPECT_NE(render_context.view_constants.get(), nullptr);
+}
+
 } // namespace
