@@ -96,14 +96,16 @@ Cross-language numeric/layout constants shared between C++ and HLSL.
 #ifndef VORTEX_SCENE_DEFINITIONS_HLSLI
 #define VORTEX_SCENE_DEFINITIONS_HLSLI
 
-// Active GBuffer indices for Phase 3. These match the semantic C++ GBuffer
-// vocabulary (Normal/Material/BaseColor/CustomData active; later families
-// remain reserved).
+// Published GBuffer binding vocabulary. Phase 3 only activates the first four
+// entries; E/F remain stable reserved binding slots until Phase 7E.
 #define GBUFFER_NORMAL 0      // World normal (encoded)
 #define GBUFFER_MATERIAL 1    // Metallic, specular, roughness
 #define GBUFFER_BASE_COLOR 2  // Base color, AO
 #define GBUFFER_CUSTOM_DATA 3 // Custom data only (shading model is packed into GBUFFER_MATERIAL.a)
-#define GBUFFER_COUNT 4
+#define GBUFFER_SHADOW_FACTORS 4 // reserved until Phase 7E
+#define GBUFFER_WORLD_TANGENT 5  // reserved until Phase 7E
+#define GBUFFER_ACTIVE_COUNT 4
+#define GBUFFER_BINDING_COUNT 6
 
 // SceneTextureBindings valid_flags — must match SetupMode::Flag
 #define SCENE_TEXTURE_FLAG_SCENE_DEPTH  (1u << 0)
@@ -173,6 +175,7 @@ float SampleSceneDepth(float2 uv, SceneTextureBindingData bindings) {
 // Sample GBuffer by index
 float4 SampleGBuffer(uint gbufferIndex, float2 uv,
                       SceneTextureBindingData bindings) {
+  if (gbufferIndex >= GBUFFER_ACTIVE_COUNT) return 0;
   uint srv = bindings.gbuffer_srvs[gbufferIndex];
   if (srv == INVALID_BINDLESS_INDEX) return 0;
   Texture2D tex = ResourceDescriptorHeap[srv];
@@ -209,8 +212,9 @@ struct SceneTextureBindingData {
   uint stencil_srv;
   uint custom_depth_srv;
   uint custom_stencil_srv;
-  uint gbuffer_srvs[GBUFFER_COUNT];
+  uint gbuffer_srvs[GBUFFER_BINDING_COUNT];
   uint scene_color_uav;
+  uint velocity_uav;
   uint valid_flags;
 };
 

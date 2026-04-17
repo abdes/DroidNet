@@ -11,7 +11,10 @@ static const uint GBUFFER_NORMAL = 0u;
 static const uint GBUFFER_MATERIAL = 1u;
 static const uint GBUFFER_BASE_COLOR = 2u;
 static const uint GBUFFER_CUSTOM_DATA = 3u;
-static const uint GBUFFER_COUNT = 4u;
+static const uint GBUFFER_SHADOW_FACTORS = 4u;
+static const uint GBUFFER_WORLD_TANGENT = 5u;
+static const uint GBUFFER_ACTIVE_COUNT = 4u;
+static const uint GBUFFER_BINDING_COUNT = 6u;
 
 struct GBufferOutput
 {

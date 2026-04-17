@@ -74,7 +74,11 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
    Stencil, SSAO, LightingChannels. The full logical family is committed at the
    PRD level even when only a phased active subset is populated initially. The
    first active subset is: `SceneColor`, `SceneDepth`, `PartialDepth`,
-   `GBufferA-D`, `Stencil`, `Velocity`, and `CustomDepth`.
+   `GBufferA-D`, `Stencil`, `Velocity`, and `CustomDepth`. The published
+   scene-texture binding ABI reserves stable `GBufferE/F` slots now as invalid
+   entries; they become real products in Phase `7E`. `SSAO` and
+   `LightingChannelsTexture` remain committed logical family members, but their
+   owning publication paths activate later in Phase `7B` and Phase `7E`.
 4. **Shared clustered light data.** Clustered light-grid build is a shared
    service consumed by forward translucency, forward-only material paths, and
    debug consumers — not the root pipeline abstraction.
@@ -295,7 +299,10 @@ The Vortex renderer must deliver these architectural outcomes:
     set includes `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`,
     `Stencil`, `Velocity`, and `CustomDepth`. `SSAO`,
     `LightingChannelsTexture`, and `GBufferE-F` remain part of the committed
-    logical family but activate in later documented phases.
+    logical family but activate in later documented phases. The published
+    `SceneTextureBindings` ABI already reserves stable invalid slots for
+    `GBufferE/F` so Phase `7E` can activate them without reshaping the binding
+    contract.
 18. **Staged deferred-lighting implementation.** The initial deferred-lighting
     path uses a fullscreen deferred pass for directional lights and one-pass
     bounded-volume deferred lighting for point and spot lights; tiled or
@@ -335,7 +342,8 @@ The Vortex renderer must deliver these architectural outcomes:
     `Velocity`, and `CustomDepth`.
 18. `SSAO`, `LightingChannelsTexture`, and `GBufferE-F` are not required in the
     first active subset, but their later activation must remain explicitly
-    planned and traceable.
+    planned and traceable. The planned owning phases are:
+    `SSAO` → `7B`, `LightingChannelsTexture` → `7E`, `GBufferE/F` → `7E`.
 19. The initial deferred-lighting path prioritizes correctness, debuggability,
     and migration safety over first-pass optimization complexity.
 20. Tiled or clustered deferred are optimization candidates only after the

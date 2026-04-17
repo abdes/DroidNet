@@ -59,7 +59,7 @@ struct SceneTexturesConfig {
   glm::uvec2 extent{0, 0};                  // Viewport dimensions
   bool enable_velocity{true};                // SceneVelocity allocation
   bool enable_custom_depth{false};           // Separate custom depth/stencil path
-  std::uint32_t gbuffer_count{4};            // A-D active; E-F reserved
+  std::uint32_t gbuffer_count{4};            // A-D active; E-F reserved in ABI for Phase 7E
   std::uint32_t msaa_sample_count{1};        // 1 = no MSAA
 };
 
@@ -255,9 +255,10 @@ struct SceneTextureBindings {
   std::uint32_t custom_depth_srv{kInvalidIndex};
   std::uint32_t custom_stencil_srv{kInvalidIndex};
 
-  // GBuffer SRV indices
+  // GBuffer SRV indices: A-D active in Phase 3, E/F reserved as stable
+  // invalid slots until Phase 7E.
   std::array<std::uint32_t,
-    static_cast<size_t>(GBufferIndex::kActiveCount)> gbuffer_srvs{};
+    static_cast<size_t>(GBufferIndex::kCount)> gbuffer_srvs{};
 
   // UAV indices for write access (stage-specific)
   std::uint32_t scene_color_uav{kInvalidIndex};
@@ -281,7 +282,15 @@ allocation to create SRV views for set-up textures and writes
 `kInvalidIndex` for products not yet set up. `stencil_srv` routes the scene
 stencil family from the scene depth/stencil resource. `custom_stencil_srv`
 routes the custom stencil family only when the optional custom depth/stencil
-path is enabled.
+path is enabled. The binding package now reserves the full logical GBuffer
+family at the ABI edge:
+
+- slots `0-3` = Phase 3 active `GBufferA-D`
+- slot `4` = reserved `GBufferShadowFactors` / `GBufferE` for Phase `7E`
+- slot `5` = reserved `GBufferWorldTangent` / `GBufferF` for Phase `7E`
+
+The reserved slots must remain present but invalid until those later phases
+publish real products through them.
 
 **Publication:** `SceneTextureBindings` is published into `ViewFrameBindings`
 through Renderer Core publication helpers so that passes can access scene
@@ -404,8 +413,10 @@ Stage 23 (Cleanup)
 
 All textures are allocated at construction time based on
 `SceneTexturesConfig`. `GBufferShadowFactors` / `GBufferWorldTangent` remain
-reserved in the enum/array only; the current public config contract requires
-exactly four active GBuffers and rejects any `gbuffer_count` other than `4`.
+inactive in Phase 3, but their slots are now reserved in the published
+`SceneTextureBindings` ABI as stable invalid entries. The current public config
+contract still requires exactly four active GBuffers and rejects any
+`gbuffer_count` other than `4`.
 
 ### 5.3 Resize Behavior
 

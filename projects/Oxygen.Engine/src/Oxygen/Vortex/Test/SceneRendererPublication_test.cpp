@@ -268,6 +268,10 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[0],
     SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[4],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[5],
+    SceneTextureBindings::kInvalidIndex);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
@@ -524,6 +528,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[4], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[5], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
@@ -536,6 +542,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[4], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[5], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, bindings.scene_color_srv);
   EXPECT_NE(
@@ -624,6 +632,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[4], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[5], SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(
     scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
@@ -638,6 +648,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[4], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[5], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(
     scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);

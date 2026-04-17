@@ -502,9 +502,18 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav,
     oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_NE(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (std::size_t i = 0;
+       i < static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kActiveCount);
+       ++i) {
+    EXPECT_NE(bindings.gbuffer_srvs[i],
+      oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   }
+  EXPECT_EQ(
+    bindings.gbuffer_srvs[static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kShadowFactors)],
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(
+    bindings.gbuffer_srvs[static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kWorldTangent)],
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.stencil_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 }
 
@@ -806,9 +815,18 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
 
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
-  for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_NE(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  for (std::size_t i = 0;
+       i < static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kActiveCount);
+       ++i) {
+    EXPECT_NE(bindings.gbuffer_srvs[i],
+      oxygen::vortex::SceneTextureBindings::kInvalidIndex);
   }
+  EXPECT_EQ(
+    bindings.gbuffer_srvs[static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kShadowFactors)],
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(
+    bindings.gbuffer_srvs[static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kWorldTangent)],
+    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
 
   const auto source_root = SourceRoot();
   const auto shader_path = source_root
@@ -921,7 +939,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(state.published_scene_texture_frame_slot,
     scene_renderer_->GetPublishedViewFrameBindings().scene_texture_frame_slot);
   EXPECT_EQ(state.consumed_scene_depth_srv, bindings.scene_depth_srv);
-  EXPECT_EQ(state.consumed_gbuffer_srvs, bindings.gbuffer_srvs);
+  for (std::size_t i = 0; i < state.consumed_gbuffer_srvs.size(); ++i) {
+    EXPECT_EQ(state.consumed_gbuffer_srvs[i], bindings.gbuffer_srvs[i]);
+  }
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
   EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
     [](const auto& bind) -> bool {
