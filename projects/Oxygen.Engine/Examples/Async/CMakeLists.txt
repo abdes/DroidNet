@@ -79,7 +79,7 @@ target_link_libraries(
     oxygen::loader
     oxygen::graphics-common
     oxygen::graphics-direct3d12
-    oxygen::renderer
+    oxygen::vortex
     oxygen::engine
     oxygen::data
     oxygen::scene

@@ -27,7 +27,6 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Co.h>
@@ -35,8 +34,8 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 #include "Async/MainModule.h"
 #include "Common/DemoCli.h"
@@ -117,27 +116,19 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
     };
-    // Create the Renderer - we need unique_ptr for registration and
-    // observer_ptr for MainModule
-    auto renderer_unique
-      = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
-
-    // Graphics main module (replaces RenderController/RenderThread pattern)
-    app.renderer = observer_ptr { renderer_unique.get() };
     register_module(std::make_unique<oxygen::examples::async::MainModule>(app));
 
-    // Register as module
-    register_module(std::move(renderer_unique));
-
-    // ImGui module (last): only when not headless and when a graphics backend
-    // exists
-    if (!app.headless) {
-      auto imgui_backend = std::make_unique<
-        oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
-      auto imgui_module = std::make_unique<oxygen::engine::imgui::ImGuiModule>(
-        app.platform, std::move(imgui_backend));
-      register_module(std::move(imgui_module));
-    }
+    constexpr auto kAsyncVortexCapabilities
+      = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
+      | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
+      | oxygen::vortex::RendererCapabilityFamily::kLightingData
+      | oxygen::vortex::RendererCapabilityFamily::kShadowing
+      | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
+      | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
+      | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling
+      | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
+    register_module(std::make_unique<oxygen::vortex::Renderer>(
+      app.gfx_weak, renderer_config, kAsyncVortexCapabilities));
   }
 }
 
@@ -284,6 +275,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       app.platform,
       app.gfx_weak,
       EngineConfig {
+        .renderer = {
+          .implementation = RendererImplementation::kVortex,
+        },
         .application = { .name = "Async Example", .version = 1u, },
         .target_fps = target_fps,
         .frame_count = frames,
