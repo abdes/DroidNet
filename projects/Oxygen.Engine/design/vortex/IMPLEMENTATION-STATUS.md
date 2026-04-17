@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `done — Phase 4 service activation, Async migration, and composition closeout are verified on the current branch`
+Status: `gaps_found — Phase 4 code exists on the current branch, but direct UAT and phase verification reject the visual/parity/composition closeout claim`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -35,7 +35,7 @@ Related:
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
 | 3 | Deferred Core | `done` | — |
-| 4 | Migration-Critical Services + First Migration | `done` | — |
+| 4 | Migration-Critical Services + First Migration | `gaps_found` | Direct UAT and `04-VERIFICATION.md` reject the Phase 4 closeout claim |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
 | 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
@@ -69,6 +69,31 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-18 — Phase 4 completion claim revoked after direct UAT and verifier failure
+
+- Direct user UAT on 2026-04-18 reported the live Async demo is still not
+  acceptable:
+  - ImGui overlay not visibly composed on the scene
+  - Async spheres not showing credible PBR material rendering
+  - sky quality unacceptable
+  - exposure over-exposed
+  - tonemapping not visually confirmed
+  - DemoShell migration still perceived as incomplete / legacy-biased
+- The authoritative verifier now records Phase 4 as `gaps_found` in
+  `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/04-VERIFICATION.md`.
+- The advisory review in
+  `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/04-REVIEW.md`
+  also flags weak Async Stage 22 proof, weak Stage 15 proof derivation, and
+  malformed debugger-audit evidence.
+- Result:
+  - earlier “Phase 4 is complete” wording is superseded
+  - Phase 4 must not advance to Phase 5 yet
+  - resume with a dedicated Phase 4 gap-planning pass grounded in direct UAT,
+    `04-VERIFICATION.md`, and `04-REVIEW.md`
+- Remaining blocker:
+  - close the unresolved visual/parity/composition gaps before restoring any
+    Phase 4 completion claim
 
 ### 2026-04-18 — Phase 4 composition/presentation closeout rerun clean on the debugger-backed Async path
 
@@ -2313,33 +2338,33 @@ work; only reopen later closure-gap items if a future audit finds new drift.
 
 ## Phase 4 — Migration-Critical Services + First Migration
 
-**Status:** `in_progress`
+**Status:** `gaps_found`
 
 ### Per-Service Status
 
 | Service | Deliverable | Design Status | Impl Status |
 | ------- | ----------- | ------------- | ----------- |
 | 4A LightingService | D.9 | `done` | `done` |
-| 4B PostProcessService | D.10 | `done` | `done` |
+| 4B PostProcessService | D.10 | `done` | `gaps_found` |
 | 4C ShadowService | D.11 | `done` | `done` |
-| 4D EnvironmentLightingService | D.12 | `done` | `done` |
-| 4E Examples/Async migration | D.13 | `done` | `done` |
-| 4F Composition/presentation validation | — | — | `done` |
+| 4D EnvironmentLightingService | D.12 | `done` | `gaps_found` |
+| 4E Examples/Async migration | D.13 | `done` | `gaps_found` |
+| 4F Composition/presentation validation | — | — | `gaps_found` |
 
 ### Resume Point
 
-Phase 4 is complete on the current branch:
+Phase 4 is **not** complete on the current branch.
 
-1. `LightingService`, `PostProcessService`, `ShadowService`, and
-   `EnvironmentLightingService` are active and verified.
-2. `Examples/Async` remains the retained first-success integration gate and the
-   authoritative proof root stays
-   `build/artifacts/vortex/phase-4/async/`.
-3. The retained Stage 21 / 22 / 23 boundary documentation and tests are green.
-4. The reused Async proof pack still passes, and the live migrated runtime is
-   debugger-clean under `cdb` apart from the accepted shutdown
-   `DXGI WARNING: Live IDXGIFactory ...` line.
-5. Resume with Phase 5 planning/execution.
+1. The Phase 4 implementation lanes executed and the runtime is now
+   substantially wired, but the phase verifier is still `gaps_found`.
+2. Direct user UAT on 2026-04-18 rejected the current visible result:
+   no visible ImGui overlay composition, poor sky, over-exposed output,
+   tonemapping not visually confirmed, and non-credible PBR material output on
+   the Async spheres.
+3. `04-VERIFICATION.md` and `04-REVIEW.md` are now the authoritative
+   closeout state for Phase 4, and they supersede the earlier completion
+   wording in this file.
+4. Resume with a new Phase 4 gap-planning / remediation pass, not Phase 5.
 
 ---
 
