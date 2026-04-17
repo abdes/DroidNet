@@ -254,6 +254,59 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl"));
 }
 
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  Stage15ShaderSourcesStopUsingZeroOutputPlaceholders)
+{
+  const auto source_root = SourceRoot();
+  const auto sky_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl");
+  const auto atmosphere_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl");
+  const auto fog_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl");
+
+  EXPECT_FALSE(sky_source.contains("* 0.0f"));
+  EXPECT_FALSE(sky_source.contains("return float4(sky_color, 0.0f);"));
+  EXPECT_FALSE(atmosphere_source.contains("* 0.0f"));
+  EXPECT_FALSE(
+    atmosphere_source.contains("return float4(0.0f, 0.0f, 0.0f, atmosphere_alpha);"));
+  EXPECT_FALSE(fog_source.contains("* 0.0f"));
+  EXPECT_FALSE(fog_source.contains("return float4(0.0f, 0.0f, 0.0f, fog_alpha);"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  SkyShaderUsesFarBackgroundMaskInsteadOfDepthEqualityShortcuts)
+{
+  const auto source_root = SourceRoot();
+  const auto sky_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl");
+
+  EXPECT_TRUE(sky_source.contains("EvaluateFarBackgroundMask"));
+  EXPECT_TRUE(sky_source.contains("SampleSceneDepth"));
+  EXPECT_FALSE(sky_source.contains("depth == 1.0"));
+  EXPECT_FALSE(sky_source.contains("scene_depth == 1.0"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  AtmosphereAndFogShadersStayDepthAwareSceneCompositionPasses)
+{
+  const auto source_root = SourceRoot();
+  const auto atmosphere_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl");
+  const auto fog_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl");
+
+  EXPECT_TRUE(atmosphere_source.contains("SampleSceneDepth"));
+  EXPECT_TRUE(atmosphere_source.contains("ReconstructWorldPosition"));
+  EXPECT_TRUE(atmosphere_source.contains("SampleSceneColor"));
+  EXPECT_FALSE(atmosphere_source.contains("discard;"));
+
+  EXPECT_TRUE(fog_source.contains("SampleSceneDepth"));
+  EXPECT_TRUE(fog_source.contains("ReconstructWorldPosition"));
+  EXPECT_TRUE(fog_source.contains("SampleSceneColor"));
+  EXPECT_FALSE(fog_source.contains("discard;"));
+}
+
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
 protected:
   void SetUp() override
