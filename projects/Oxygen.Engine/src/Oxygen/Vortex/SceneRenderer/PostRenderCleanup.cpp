@@ -53,8 +53,8 @@ auto CopyTextureIntoArtifact(graphics::CommandRecorder& recorder,
 } // namespace
 
 // Stage 23 extraction/handoff owner: PostRenderCleanup is the only retained
-// seam allowed to snapshot history artifacts and finalize their handoff after
-// Stage 22 completes.
+// seam allowed to snapshot the PrevSceneDepth/PrevVelocity artifacts and
+// finalize their handoff after Stage 22 completes.
 void SceneRenderer::PostRenderCleanup(RenderContext& /*ctx*/)
 {
   const auto scene_depth_ready

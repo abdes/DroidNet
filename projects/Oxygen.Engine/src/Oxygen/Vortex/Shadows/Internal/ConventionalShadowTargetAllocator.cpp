@@ -90,7 +90,7 @@ auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
   desc.mip_levels = 1U;
   desc.sample_count = 1U;
   desc.sample_quality = 0U;
-  desc.format = Format::kDepth32;
+  desc.format = Format::kDepth32Stencil8;
   desc.texture_type = TextureType::kTexture2DArray;
   desc.debug_name = "Vortex.DirectionalShadowSurface";
   desc.is_shader_resource = true;
