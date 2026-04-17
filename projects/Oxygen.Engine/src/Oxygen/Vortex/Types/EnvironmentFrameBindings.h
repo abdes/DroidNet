@@ -11,6 +11,9 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
 
 namespace oxygen::vortex {
 
@@ -18,11 +21,14 @@ namespace oxygen::vortex {
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   ShaderVisibleIndex environment_static_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex environment_view_slot { kInvalidShaderVisibleIndex };
-  std::array<std::uint32_t, 2> _pad_to_16 {};
+  EnvironmentProbeBindings probes {};
+  EnvironmentEvaluationParameters evaluation {};
+  EnvironmentAmbientBridgeBindings ambient_bridge {};
 };
 
-static_assert(sizeof(EnvironmentFrameBindings) == 16);
+static_assert(sizeof(EnvironmentFrameBindings) == 64);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
+static_assert(sizeof(EnvironmentFrameBindings) % 16 == 0);
 
 } // namespace oxygen::vortex
