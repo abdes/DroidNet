@@ -93,8 +93,17 @@ does not replace the canonical per-light deferred direct-lighting contract.
 | Owner | Owned By | Lifetime |
 | ----- | -------- | -------- |
 | Deferred lighting logic | `SceneRenderer` (Phase 3 inline) | Per SceneRenderer |
-| Light volume geometry (sphere, cone) | Renderer geometry cache | Persistent |
-| Per-light PSOs | Renderer PSO cache | Persistent |
+| Local-light proxy geometry | Phase 03: shader-generated procedural sphere/cone volumes; Phase 4A: `LightingService` proxy-geometry cache | Phase 03 draw-time generation; Phase 4A persistent |
+| Per-light constants buffer + per-light CBV views | `SceneRenderer` (Phase 03 inline) | Per SceneRenderer allocation, per-frame contents |
+| Per-light PSOs | `SceneRenderer` (Phase 03 inline), later `LightingService` | Persistent |
+
+The key Phase 03 deviation from UE5.7 is explicit and already approved in the
+architecture package: Vortex keeps UE's bounded-volume local-light algorithm,
+but the retained Phase 03 branch generates point/spot proxy geometry
+procedurally from `SV_VertexID` and selects per-light constants through the
+bindless heap instead of using persistent renderer-owned proxy meshes plus
+traditional pass-uniform plumbing. That deviation remains temporary and is
+scheduled to migrate to `LightingService` in Phase 4A.
 
 ## 3. Light Types and Rendering Strategy
 
@@ -103,8 +112,8 @@ does not replace the canonical per-light deferred direct-lighting contract.
 | Light Type | Geometry | Draw Policy | Notes |
 | ---------- | -------- | ----------- | ----- |
 | Directional | Fullscreen triangle | Fullscreen | One fullscreen draw per directional light |
-| Point | Sphere bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective bounded-volume mode |
-| Spot | Cone bounding volume | One-pass bounded volume | Outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Point | Procedural sphere bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Spot | Procedural cone bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
 
 ### 3.2 Local-Light Volume Modes (Point + Spot)
 
@@ -124,7 +133,17 @@ lights are bounded by volume rasterization and per-pixel scene-depth sampling.
 
 ### 3.3 Per-Light Data Access
 
-Phase 3 uses a simple per-light constant buffer approach:
+Phase 3 uses a bindless-selected per-light constant-buffer-view model.
+The CPU-side contract is still a `DeferredLightConstants` struct, but shaders do
+not receive it through a fixed `register(b1)` pass binding. Instead:
+
+1. `SceneRenderer` uploads one packed `DeferredLightConstants` record per light
+   into `Vortex.DeferredLight.Constants`
+2. it creates one shader-visible CBV view per record
+3. it passes the selected CBV index through the root constant
+   `g_PassConstantsIndex`
+4. the shader reads
+   `ConstantBuffer<DeferredLightConstants> light_constants = ResourceDescriptorHeap[g_PassConstantsIndex];`
 
 ```cpp
 struct DeferredLightConstants {
@@ -138,10 +157,10 @@ struct DeferredLightConstants {
 };
 ```
 
-Phase 4A keeps this per-light payload model as the canonical deferred
-direct-lighting path. The Lighting service adds a separately published
-forward-light package for translucency and later optional optimizations, but
-stage 12 does not become defined by that package.
+This matches the approved Vortex bindless contract and the current
+`SceneRenderer` implementation. Phase 4A keeps the same per-light payload
+schema but moves the CPU-side ownership into `LightingService`; it does not
+change stage 12 into a forward-light-grid-driven contract.
 
 ## 4. Data Flow and Dependencies
 
@@ -149,11 +168,12 @@ stage 12 does not become defined by that package.
 
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
-| SceneTextures | GBufferNormal/Material/BaseColor/CustomData (SRV) | Material data for BRDF evaluation |
-| SceneTextures | SceneDepth (SRV) | Position reconstruction |
+| Published `SceneTextureBindings` via `ViewFrameBindings` | GBufferNormal/Material/BaseColor/CustomData (SRV) | Material data for BRDF evaluation |
+| Published `SceneTextureBindings` via `ViewFrameBindings` | SceneDepth (SRV) | Position reconstruction |
 | SceneTextures | SceneColor (RTV) | Accumulation target |
 | Scene | Light list (position, color, type, radius, etc.) | Per-light parameters |
-| ViewConstants | View/projection matrices, camera position | Transforms |
+| `ViewConstants.hlsli` globals | `view_matrix`, `projection_matrix`, `camera_position` | View-space transforms and camera data |
+| Root constants | `g_PassConstantsIndex` | Selects the current light's CBV in the bindless heap |
 
 ### 4.2 Outputs
 
@@ -181,23 +201,28 @@ SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
   │
   ├─ Read current view from RenderContext
   ├─ Load published SceneTextureBindings for the current view
-  ├─ Bind SceneTextures as SRVs (GBufferNormal/Material/BaseColor/CustomData, SceneDepth) through the published routing metadata
+  ├─ Ensure the per-light constants upload buffer and CBV views exist
   ├─ Set blend state: Additive (SrcBlend=ONE, DestBlend=ONE)
   │
   ├─ for each directional light:
-  │     ├─ Upload DeferredLightConstants (type=DIRECTIONAL)
+  │     ├─ Write DeferredLightConstants (type=DIRECTIONAL)
+  │     ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
   │     ├─ Bind fullscreen directional PSO
-  │     └─ Draw fullscreen triangle (3 vertices, no VB)
+  │     └─ Draw fullscreen triangle (3 vertices, no VB/IB)
   │
   ├─ for each point light:
-  │     ├─ Upload DeferredLightConstants (type=POINT)
+  │     ├─ Write DeferredLightConstants (type=POINT)
+  │     ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
   │     └─ One bounded-volume lighting draw
-  │           (outside-volume, inside-volume, or non-perspective bounded-volume policy)
+  │           (outside-volume, inside-volume, or non-perspective bounded-volume policy;
+  │            proxy sphere generated procedurally from `SV_VertexID`)
   │
   └─ for each spot light:
-        ├─ Upload DeferredLightConstants (type=SPOT)
+        ├─ Write DeferredLightConstants (type=SPOT)
+        ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
         └─ One bounded-volume lighting draw
-              (outside-volume, inside-volume, or non-perspective bounded-volume policy)
+              (outside-volume, inside-volume, or non-perspective bounded-volume policy;
+               proxy cone generated procedurally from `SV_VertexID`)
 ```
 
 ## 5. Shader Contracts
@@ -205,169 +230,163 @@ SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
 ### 5.1 Directional Light Shader
 
 ```hlsl
-// Services/Lighting/DeferredLightDirectional.hlsl
-
-#include "../../Shared/FullscreenTriangle.hlsli"
-#include "../../Shared/DeferredShadingCommon.hlsli"
-#include "../../Contracts/SceneTextures.hlsli"
-#include "../../Contracts/ViewFrameBindings.hlsli"
-
-cbuffer LightConstants : register(b1) {
-  float4 LightDirection;    // xyz = direction to light, w = unused
-  float4 LightColor;        // xyz = color, w = intensity
-};
-
-cbuffer ViewConstants : register(b0) {
-  float4x4 ViewMatrix;
-  float4x4 ProjectionMatrix;
-  float4x4 InverseViewProjection;
-  float3 CameraPosition;
-};
-
-FullscreenVSOutput DeferredLightDirectionalVS(uint vid : SV_VertexID) {
-  return FullscreenTriangleVS(vid);
+cbuffer RootConstants : register(b2, space0)
+{
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
 }
 
-float4 DeferredLightDirectionalPS(FullscreenVSOutput input) : SV_Target {
-  SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+[shader("vertex")]
+VortexFullscreenTriangleOutput DeferredLightDirectionalVS(uint vertex_id : SV_VertexID)
+{
+    return GenerateVortexFullscreenTriangle(vertex_id);
+}
 
-  float3 result = EvaluateDeferredLight(
-    input.uv,
-    LightDirection.xyz,
-    LightColor.xyz * LightColor.w,
-    1.0,  // directional lights have no attenuation
-    InvViewProjection,
-    CameraPosition,
-    bindings);
-
-  return float4(result, 0);
+[shader("pixel")]
+float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Target0
+{
+    ConstantBuffer<DeferredLightConstants> light_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+    const float3 lighting = EvaluateDeferredLight(
+        input.uv,
+        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz),
+        LoadDeferredLightColor(light_constants.light_color_and_intensity),
+        1.0f,
+        camera_position,
+        bindings);
+    return float4(lighting, 0.0f);
 }
 ```
 
 ### 5.2 Point Light Shader
 
 ```hlsl
-// Services/Lighting/DeferredLightPoint.hlsl
-
-#include "DeferredLightingCommon.hlsli"
-
-cbuffer LightConstants : register(b1) {
-  float4 LightPositionAndRadius;  // xyz=position, w=radius
-  float4 LightColor;              // xyz=color, w=intensity
-  float4x4 LightWorldMatrix;     // Sphere volume transform
-};
-
-struct LightVolumeVSOutput {
-  float4 screenPosition : TEXCOORD0;
-  float4 position : SV_Position;
-};
-
-LightVolumeVSOutput DeferredLightPointVS(float3 localPos : POSITION) {
-  LightVolumeVSOutput output;
-  float4 worldPos = mul(LightWorldMatrix, float4(localPos, 1.0));
-  output.screenPosition = mul(ProjectionMatrix, mul(ViewMatrix, worldPos));
-  output.position = output.screenPosition;
-  return output;
+[shader("vertex")]
+DeferredLightVolumeVSOutput DeferredLightPointVS(uint vertex_id : SV_VertexID)
+{
+    ConstantBuffer<DeferredLightConstants> light_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    return GenerateDeferredLightVolume(
+        GenerateDeferredLightSphereVertex(vertex_id),
+        light_constants.light_world_matrix);
 }
 
-float4 DeferredLightPointPS(LightVolumeVSOutput input) : SV_Target {
-  SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
-  float2 screenUV = input.screenPosition.xy / input.screenPosition.w * 0.5 + 0.5;
-  screenUV.y = 1.0 - screenUV.y;
-
-  float3 worldPos = ReconstructWorldPosition(
-    screenUV,
-    SampleSceneDepth(screenUV, bindings),
-    InvViewProjection);
-
-  float3 lightVec = LightPositionAndRadius.xyz - worldPos;
-  float distance = length(lightVec);
-  float3 lightDir = lightVec / max(distance, 0.001);
-
-  // Inverse square falloff with radius clamp
-  float radius = LightPositionAndRadius.w;
-  float attenuation = saturate(1.0 - pow(distance / radius, 4.0));
-  attenuation = attenuation * attenuation / (distance * distance + 1.0);
-
-  float3 result = EvaluateDeferredLight(
-    screenUV, lightDir,
-    LightColor.xyz * LightColor.w,
-    attenuation,
-    CameraPosition, bindings);
-
-  return float4(result, 0);
+[shader("pixel")]
+float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
+{
+    ConstantBuffer<DeferredLightConstants> light_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+    const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
+    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
+    const float3 world_position
+        = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
+    const float3 light_vector
+        = light_constants.light_position_and_radius.xyz - world_position;
+    const float attenuation = ComputeLocalLightDistanceAttenuation(
+        light_vector, light_constants.light_position_and_radius.w);
+    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
+        screen_uv,
+        scene_depth,
+        world_position,
+        VortexSafeNormalize(light_vector),
+        LoadDeferredLightColor(light_constants.light_color_and_intensity),
+        attenuation,
+        camera_position,
+        bindings);
+    return float4(lighting, 0.0f);
 }
 ```
 
 ### 5.3 Spot Light Shader
 
 ```hlsl
-// Services/Lighting/DeferredLightSpot.hlsl
+[shader("vertex")]
+DeferredLightVolumeVSOutput DeferredLightSpotVS(uint vertex_id : SV_VertexID)
+{
+    ConstantBuffer<DeferredLightConstants> light_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    return GenerateDeferredLightVolume(
+        GenerateDeferredLightConeVertex(vertex_id),
+        light_constants.light_world_matrix);
+}
 
-// Similar to point light but with angular attenuation.
-// Uses cone bounding volume instead of sphere.
-// Inner/outer angle falloff applied to attenuation.
-
-float4 DeferredLightSpotPS(LightVolumeVSOutput input) : SV_Target {
-  // ... same as point light with added angular falloff:
-  float cosAngle = dot(-lightDir, SpotDirection.xyz);
-  float angularAtt = saturate(
-    (cosAngle - SpotAngles.y) / (SpotAngles.x - SpotAngles.y));
-  angularAtt = angularAtt * angularAtt;
-
-  attenuation *= angularAtt;
-  // ... rest same as point light
+[shader("pixel")]
+float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
+{
+    ConstantBuffer<DeferredLightConstants> light_constants
+        = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
+    const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
+    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
+    const float3 world_position
+        = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
+    const float3 light_vector
+        = light_constants.light_position_and_radius.xyz - world_position;
+    const float base_attenuation = ComputeLocalLightDistanceAttenuation(
+        light_vector, light_constants.light_position_and_radius.w);
+    const float spot_attenuation = ComputeSpotLightAngularAttenuation(
+        light_vector,
+        light_constants.light_direction_and_falloff.xyz,
+        light_constants.spot_angles.x,
+        light_constants.spot_angles.y);
+    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
+        screen_uv,
+        scene_depth,
+        world_position,
+        VortexSafeNormalize(light_vector),
+        LoadDeferredLightColor(light_constants.light_color_and_intensity),
+        base_attenuation * spot_attenuation,
+        camera_position,
+        bindings);
+    return float4(lighting, 0.0f);
 }
 ```
 
 ### 5.4 DeferredLightingCommon.hlsli (Family-Local)
 
 ```hlsl
-// Services/Lighting/DeferredLightingCommon.hlsli
-// Family-local include — shared between point, spot, directional shaders.
-
-#ifndef VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
-#define VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
-
-#include "../../Shared/DeferredShadingCommon.hlsli"
-#include "../../Contracts/SceneTextures.hlsli"
-#include "../../Contracts/ViewFrameBindings.hlsli"
-
-cbuffer ViewConstants : register(b0) {
-  float4x4 ViewMatrix;
-  float4x4 ProjectionMatrix;
-  float4x4 InverseViewProjection;
-  float3 CameraPosition;
-  uint ViewFrameBindingsSlot;
+struct DeferredLightConstants
+{
+    float4 light_position_and_radius;
+    float4 light_color_and_intensity;
+    float4 light_direction_and_falloff;
+    float4 spot_angles;
+    float4x4 light_world_matrix;
+    uint light_type;
+    uint _padding0;
+    uint _padding1;
+    uint _padding2;
 };
 
-SceneTextureBindingData LoadBindingsFromCurrentView() {
-  return LoadSceneTextureBindingsForCurrentView(ViewFrameBindingsSlot);
-}
-
-float2 ResolveDeferredLightScreenUv(float4 screenPosition) {
-  float2 uv = screenPosition.xy / screenPosition.w * 0.5 + 0.5;
-  uv.y = 1.0 - uv.y;
-  return uv;
-}
-
-float3 ReconstructDeferredWorldPosition(float2 uv, float deviceDepth) {
-  return ReconstructWorldPosition(uv, deviceDepth, InverseViewProjection);
-}
-
-#endif // VORTEX_DEFERRED_LIGHTING_COMMON_HLSLI
+// Shared helpers:
+// - GenerateDeferredLightSphereVertex(vertex_id)
+// - GenerateDeferredLightConeVertex(vertex_id)
+// - GenerateDeferredLightVolume(local_position, light_world_matrix)
+// - LoadBindingsFromCurrentView()
+// - ResolveDeferredLightScreenUv(screen_position)
+// - ReconstructDeferredWorldPosition(screen_uv, scene_depth)
+// - ComputeLocalLightDistanceAttenuation(...)
+// - ComputeSpotLightAngularAttenuation(...)
 ```
+
+The include consumes `Renderer/ViewConstants.hlsli`, so view-space globals such
+as `view_matrix`, `projection_matrix`, and `camera_position` come from the
+standard Vortex view contract rather than from a lighting-specific `cbuffer`.
+This is the approved Phase 03 bindless contract and must stay coherent with the
+already-approved `SceneTextureBindings` / `ViewFrameBindings` routing model.
 
 ### 5.5 Catalog Registration
 
 | Entrypoint | Profile | Notes |
 | ---------- | ------- | ----- |
-| `VortexDeferredLightDirectionalVS` | vs_6_0 | Fullscreen triangle |
-| `VortexDeferredLightDirectionalPS` | ps_6_0 | GBuffer read + BRDF |
-| `VortexDeferredLightPointVS` | vs_6_0 | Sphere volume |
-| `VortexDeferredLightPointPS` | ps_6_0 | GBuffer read + BRDF + attenuation |
-| `VortexDeferredLightSpotVS` | vs_6_0 | Cone volume |
-| `VortexDeferredLightSpotPS` | ps_6_0 | GBuffer read + BRDF + attenuation + angle |
+| `DeferredLightDirectionalVS` | vs_6_0 | Fullscreen triangle |
+| `DeferredLightDirectionalPS` | ps_6_0 | GBuffer read + BRDF |
+| `DeferredLightPointVS` | vs_6_0 | Procedural sphere volume |
+| `DeferredLightPointPS` | ps_6_0 | GBuffer read + BRDF + attenuation |
+| `DeferredLightSpotVS` | vs_6_0 | Procedural cone volume |
+| `DeferredLightSpotPS` | ps_6_0 | GBuffer read + BRDF + attenuation + angle |
 
 ## 6. Light Volume Geometry
 
@@ -477,7 +496,7 @@ stage 12 is skipped.
 | Resource | Lifetime | Notes |
 | -------- | -------- | ----- |
 | Procedural light-volume geometry (sphere, cone) | Shader-generated | Temporary Phase 03-only implementation shortcut; scheduled for removal in Phase 4A |
-| Per-light CBV (DeferredLightConstants) | Per draw | Upload ring buffer |
+| Per-light CBV views over `DeferredLightConstants` upload buffer | Per light / per draw | Upload buffer + shader-visible CBV descriptors selected through `g_PassConstantsIndex` |
 | PSOs (directional + point/spot outside/inside/non-perspective variants) | Persistent | Cached by renderer |
 
 ### 9.2 Performance Considerations

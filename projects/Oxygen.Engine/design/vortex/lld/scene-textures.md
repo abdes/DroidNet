@@ -186,6 +186,12 @@ Getter semantics:
   `SceneTextures`
 - `GetCustomStencil()` exposes the custom stencil family only when the optional
   custom depth/stencil path is enabled, also through `SceneTextureAspectView`
+- there is no raw stencil/custom-stencil texture getter in the Vortex contract;
+  stage/services consume stencil families through the aspect-view accessors and
+  through published `SceneTextureBindings`
+- `RebuildWithGBuffers()` is only the family-local readiness helper; the
+  consumable publication boundary is
+  `SceneRenderer::PublishDeferredBasePassSceneTextures(ctx)`
 
 ### 3.4 SceneTextureSetupMode
 
@@ -255,6 +261,7 @@ struct SceneTextureBindings {
 
   // UAV indices for write access (stage-specific)
   std::uint32_t scene_color_uav{kInvalidIndex};
+  std::uint32_t velocity_uav{kInvalidIndex};
 
   // Validity tracking (mirrors setup mode for shader safety)
   std::uint32_t valid_flags{0};
@@ -280,7 +287,14 @@ path is enabled.
 through Renderer Core publication helpers so that passes can access scene
 products through the standard per-view binding stack. Publication is an
 explicit renderer-side step; passes never synthesize or own shared
-scene-texture routing metadata.
+scene-texture routing metadata. The semantic publication seams are:
+
+- `PublishDepthPrepassProducts()` for stage-3 depth/partial-depth publication
+- `PublishBasePassVelocity()` for stage-9 velocity-only publication
+- `PublishDeferredBasePassSceneTextures(ctx)` for the full Stage-10
+  `SceneColor` / GBuffer / stencil publication boundary
+- `PublishCustomDepthProducts()` for the later custom-depth/custom-stencil
+  publication milestone
 
 **File:** `SceneRenderer/SceneTextures.h`
 
@@ -390,14 +404,17 @@ Stage 23 (Cleanup)
 
 All textures are allocated at construction time based on
 `SceneTexturesConfig`. `GBufferShadowFactors` / `GBufferWorldTangent` remain
-reserved in the array but are not
-allocated until `gbuffer_count > 4`.
+reserved in the enum/array only; the current public config contract requires
+exactly four active GBuffers and rejects any `gbuffer_count` other than `4`.
 
 ### 5.3 Resize Behavior
 
 `Resize(new_extent)` destroys and recreates all textures at the new
-dimensions. This is a full reallocation, not a view re-creation. After resize,
-`SceneTextureSetupMode` resets to `kNone`.
+dimensions. This is a full reallocation, not a view re-creation. `SceneTextures`
+does not itself own setup/binding/publication state; after any resize,
+`SceneRenderer` frame-start logic resets `SceneTextureSetupMode`,
+invalidates `SceneTextureBindings`, and republishes nothing until the
+appropriate later milestones run again.
 
 **When called:** At frame start if viewport changed. The SceneRenderer checks
 viewport dimensions against current extent and calls `Resize` if they differ.
@@ -406,8 +423,8 @@ viewport dimensions against current extent and calls `Resize` if they differ.
 
 `RebuildWithGBuffers()` is NOT a reallocation. It is a readiness check that:
 
-1. Validates GBuffer textures exist and have been written
-2. Confirms the active family is ready for Stage-10 promotion
+1. Validates the active GBuffer family is allocated/present
+2. Confirms the family is ready for Stage-10 promotion
 3. Does **not** mutate `SceneTextureSetupMode`
 4. Does **not** regenerate `SceneTextureBindings`
 5. Does **not** publish or republish per-view routing metadata
@@ -416,6 +433,10 @@ The canonical Stage-10 owner is `SceneRenderer`. It calls
 `RebuildWithGBuffers()` as a family-local helper, then promotes
 `SceneTextureSetupMode`, regenerates `SceneTextureBindings`, and triggers the
 current-view routing republish after the rebuild boundary.
+
+That means Stage 9 may write the raw attachments, but standard scene-texture
+consumers still treat `SceneColor`, the active GBuffers, and the scene stencil
+route as unavailable until `PublishDeferredBasePassSceneTextures(ctx)` runs.
 
 ## 6. Shader Contracts
 
@@ -450,9 +471,11 @@ void LightingService::RenderDeferredLighting(
 ```
 
 **Null-safe behavior:** SceneTextures is never null — it exists from
-SceneRenderer construction. Optional products (velocity, custom depth) may
-be null if not enabled; accessors return `nullptr` for disabled optional
-products such as `CustomDepth` / `CustomStencil`.
+SceneRenderer construction. Pointer-returning optional products (`GetVelocity()`
+and `GetCustomDepth()`) return `nullptr` when disabled. Aspect-view accessors
+(`GetStencil()` and `GetCustomStencil()`) return a `SceneTextureAspectView`
+whose `.texture` is null / `IsValid()` is false when the optional route is not
+available.
 
 ## 8. Testability Approach
 

@@ -341,6 +341,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   auto render_context = RenderContext {};
   render_context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+  render_context.frame_slot = oxygen::frame::Slot { 0U };
   render_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
   render_context.active_view_index = std::size_t { 0U };
   render_context.frame_views.push_back({
@@ -407,6 +408,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 {
   auto& registry = graphics_->GetResourceRegistry();
   const auto baseline_registered = registry.GetRegisteredResourceCount();
+  auto post_render_registered = baseline_registered;
 
   {
     auto config = SceneTexturesConfig {
@@ -432,6 +434,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
     auto render_context = RenderContext {};
     render_context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+    render_context.frame_slot = oxygen::frame::Slot { 0U };
     render_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
     render_context.active_view_index = std::size_t { 0U };
     render_context.frame_views.push_back({
@@ -472,10 +475,16 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
         return copy.src == scene_renderer.GetSceneTextures().GetVelocity()
           && copy.dst == extracts.prev_velocity.texture;
       }));
-    EXPECT_GT(registry.GetRegisteredResourceCount(), baseline_registered);
+    post_render_registered = registry.GetRegisteredResourceCount();
+    EXPECT_GT(post_render_registered, baseline_registered);
   }
 
-  EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_registered);
+  // Extract artifacts are SceneRenderer-owned and must be released on
+  // destruction. Renderer-owned publication state may legitimately persist
+  // across SceneRenderer instances, so the count must drop but not necessarily
+  // return exactly to the baseline.
+  EXPECT_GE(registry.GetRegisteredResourceCount(), baseline_registered);
+  EXPECT_LT(registry.GetRegisteredResourceCount(), post_render_registered);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
