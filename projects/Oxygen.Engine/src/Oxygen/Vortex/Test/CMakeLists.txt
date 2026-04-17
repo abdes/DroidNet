@@ -90,6 +90,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  ShadowService
+  SOURCES
+    "ShadowService_test.cpp"
+)
+
+m_gtest_program(
   SceneRendererPublication
   SOURCES
     "SceneRendererPublication_test.cpp"
@@ -123,6 +129,12 @@ add_custom_target(
   Oxygen.Vortex.PostProcessService
   DEPENDS
     Oxygen.Vortex.PostProcessService.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.ShadowService
+  DEPENDS
+    Oxygen.Vortex.ShadowService.Tests
 )
 
 add_custom_target(
