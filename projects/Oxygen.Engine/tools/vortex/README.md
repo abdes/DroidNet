@@ -29,16 +29,24 @@ This directory contains Vortex-specific capture analysis and probe scripts.
     - `AnalyzeRenderDocVortexBasicCapture.py` for structural/action-count checks
     - `AnalyzeRenderDocVortexBasicProducts.py` for product-correctness checks
   - then gates the combined result in `Assert-VortexBasicRuntimeProof.ps1`
+  - the blocker-closing `04-08` proof also requires:
+    - `stage15_sky_scene_color_changed=true`
+    - `stage15_atmosphere_scene_color_changed=true`
+    - `stage15_fog_scene_color_changed=true`
 
 - `AnalyzeRenderDocVortexBasicCapture.py`
   - structural analyzer for the current VortexBasic scene/runtime shape
-  - verifies Stage 3 / 9 / 12 / compositing scopes and action counts
+  - verifies Stage 3 / 9 / 12 / 15 / compositing scopes and action counts
+  - `04-08` requires:
+    - `stage15_sky_draw_count_match=true`
+    - `stage15_atmosphere_draw_count_match=true`
+    - `stage15_fog_draw_count_match=true`
 
 - `AnalyzeRenderDocVortexBasicProducts.py`
   - product analyzer for the current VortexBasic scene/runtime shape
   - verifies that Stage 3, Stage 9, point/spot/directional Stage 12
-    SceneColor accumulation, and final present produce the expected
-    non-broken outputs
+    SceneColor accumulation, Stage 15 sky/atmosphere/fog `SceneColor` deltas,
+    and final present produce the expected non-broken outputs
 
 ## Current Local-Light Gate
 
@@ -58,6 +66,23 @@ one-pass bounded-volume Stage 12 path:
 - one local-light draw per point/spot light
 - zero stencil clears for those lights
 - nonzero Stage 12 point/spot `SceneColor` RGB is part of the durable gate
+
+## Stage 15 Blocker-Closing Gate
+
+The `04-08` validator closes the environment blocker only when Stage 15 is
+proven to be real instead of merely live:
+
+- structural gate in `AnalyzeRenderDocVortexBasicCapture.py`
+  - one Stage 15 scope each for sky / atmosphere / fog
+  - one draw each for sky / atmosphere / fog
+  - ordered Stage 15 execution between Stage 12 and compositing
+- product gate in `AnalyzeRenderDocVortexBasicProducts.py`
+  - `stage15_sky_scene_color_changed=true`
+  - `stage15_atmosphere_scene_color_changed=true`
+  - `stage15_fog_scene_color_changed=true`
+
+If any Stage 15 pass disappears or stops changing `SceneColor`, the validator
+must fail.
 
 ## Current D3D12 Debug-Layer Gate
 
