@@ -1958,12 +1958,12 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
   depth/stencil handling for the new passes, upgraded the deferred-light family
   around the retained bounded-volume local-light path plus procedural local-light
   volume generation, and reran the repo-owned closeout proof successfully.
-- `03-18` through `03-20` now exist on the retained runtime branch:
+- `03-18` through `03-21` are complete on the retained runtime branch:
   graphics-layer state continuity is restored, registration/view ownership is
   explicit again, and live `VortexBasic` runtime proof is green on the current
   cleanup-lane build.
-- `03-21` is the current open control point. The cleanup lane has already
-  landed:
+- `03-21` is closed. The cleanup lane landed and the final Phase 03 review
+  reran the live proof surface against the cleaned branch:
   - hard registry ownership with atomic shared resource/view acquisition
   - explicit Stage 21 resolved scene-color/depth artifacts consumed by
     composition
@@ -1979,9 +1979,8 @@ Phase 2 is complete. Resume with Phase 3 deferred-core planning.
 
 ### Resume Point
 
-Phase 3 is closed for the current engine scope. Resume with Phase 4 work or
-with later closure-gap cleanup items (`10+`) if additional documentation /
-architecture alignment is desired before moving on.
+Phase 3 is permanently closed for the current engine scope. Resume with Phase 4
+work; only reopen later closure-gap items if a future audit finds new drift.
 
 ---
 
@@ -1993,17 +1992,17 @@ architecture alignment is desired before moving on.
 
 | Service | Deliverable | Design Status | Impl Status |
 | ------- | ----------- | ------------- | ----------- |
-| 4A LightingService | D.9 | `not_started` | `not_started` |
-| 4B PostProcessService | D.10 | `not_started` | `not_started` |
-| 4C ShadowService | D.11 | `not_started` | `not_started` |
-| 4D EnvironmentLightingService | D.12 | `not_started` | `not_started` |
-| 4E Examples/Async migration | D.13 | `not_started` | `not_started` |
+| 4A LightingService | D.9 | `done` | `not_started` |
+| 4B PostProcessService | D.10 | `done` | `not_started` |
+| 4C ShadowService | D.11 | `done` | `not_started` |
+| 4D EnvironmentLightingService | D.12 | `done` | `not_started` |
+| 4E Examples/Async migration | D.13 | `done` | `not_started` |
 | 4F Composition/presentation validation | — | — | `not_started` |
 
 ### Resume Point
 
-Phase 3 must be completed first. 4A–4D are parallelizable. 4E requires all
-four services. 4F follows 4E.
+Phase 4 is the next active lane. 4A–4D are design-complete and parallelizable.
+4E requires those services. 4F follows 4E.
 
 ---
 
