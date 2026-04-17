@@ -433,6 +433,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.name = "MainView";
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
+  view_ctx.metadata.with_atmosphere = true;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
 

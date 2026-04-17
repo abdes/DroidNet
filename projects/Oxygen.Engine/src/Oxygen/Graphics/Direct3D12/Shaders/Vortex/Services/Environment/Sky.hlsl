@@ -21,18 +21,23 @@ static inline float ResolveFarDepthReference()
     return IsReverseZProjection() ? 0.0f : 1.0f;
 }
 
-static inline bool EvaluateFarBackgroundMask(float scene_depth)
+static inline float EvaluateFarBackgroundMask(float scene_depth)
 {
-    const float far_depth = ResolveFarDepthReference();
     const float epsilon = 1.0e-3f;
-    return abs(scene_depth - far_depth) <= epsilon;
+    const float reverse_z_far = saturate(1.0f - abs(scene_depth) / epsilon);
+    const float forward_z_far = saturate(1.0f - abs(scene_depth - 1.0f) / epsilon);
+    return max(reverse_z_far, forward_z_far);
 }
 
 static inline float3 ReconstructViewDirection(float2 uv)
 {
     const float3 far_world_position = ReconstructWorldPosition(
         uv, ResolveFarDepthReference(), inverse_view_projection_matrix);
-    return normalize(far_world_position - camera_position);
+    const float3 view_vector = far_world_position - camera_position;
+    const float distance_to_sample = length(view_vector);
+    return distance_to_sample > 1.0e-4f
+        ? view_vector / distance_to_sample
+        : normalize(float3(uv - 0.5f, 1.0f));
 }
 
 static inline float3 EvaluateSkyColor(float3 view_direction)
@@ -63,7 +68,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float scene_depth = SampleSceneDepth(input.uv, bindings);
-    if (!EvaluateFarBackgroundMask(scene_depth)) {
+    if (EvaluateFarBackgroundMask(scene_depth) <= 0.0f) {
         discard;
     }
 

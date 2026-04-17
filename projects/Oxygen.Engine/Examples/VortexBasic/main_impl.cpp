@@ -156,6 +156,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
         | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
         | oxygen::vortex::RendererCapabilityFamily::kLightingData
         | oxygen::vortex::RendererCapabilityFamily::kDeferredShading
+        | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
         | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
         | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling;
       register_module(std::make_unique<oxygen::vortex::Renderer>(
