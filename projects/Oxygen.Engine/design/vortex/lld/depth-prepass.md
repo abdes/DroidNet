@@ -40,6 +40,9 @@ publish opaque `SceneVelocity`.
   consumes the current view only
 - masked opaque participation here is depth-policy work only; masked materials
   still belong to the deferred opaque/base-pass contract
+- stage 3 applies an explicit stage-local front-to-back refinement within the
+  accepted opaque and masked depth buckets using the current view plus the
+  published per-draw bounds; it must not rely on accidental upstream ordering
 - under the active desktop deferred opaque-velocity policy, stage 3 must not
   publish opaque `SceneVelocity`
 - any future depth-pass velocity path must be enabled only through an explicit
@@ -122,7 +125,10 @@ After stage 3:
 DepthPrepassModule::Execute(ctx, scene_textures)
   ├─ if mode == kDisabled -> return
   ├─ read current-view PreparedSceneFrame
-  ├─ build opaque+masked depth draw commands
+  ├─ build stage-local depth draw commands
+  │    ├─ partition accepted draws into opaque vs masked buckets
+  │    ├─ stable-sort each bucket front-to-back using the published draw bounds
+  │    └─ fall back to accepted-draw order only if the current view or bounds are unavailable
   ├─ bind depth-only framebuffer
   ├─ issue opaque depth draws
   ├─ issue masked depth draws with alpha-test permutation
@@ -152,8 +158,11 @@ This LLD does not authorize mixing both policies implicitly.
 
 1. **Unit test:** depth-prepass draw command count and masked participation
    follow the prepared-scene payload.
-2. **Integration test:** SceneDepth and PartialDepth become valid after stage 3.
-3. **Policy test:** stage 3 never marks or publishes opaque `SceneVelocity`
+2. **Ordering test:** opaque and masked depth buckets are refined front-to-back
+   using the documented stage-local key, and equal-key cases preserve their
+   original relative order.
+3. **Integration test:** SceneDepth and PartialDepth become valid after stage 3.
+4. **Policy test:** stage 3 never marks or publishes opaque `SceneVelocity`
    under the active desktop deferred base-pass velocity policy.
 
 ## 7. Closure

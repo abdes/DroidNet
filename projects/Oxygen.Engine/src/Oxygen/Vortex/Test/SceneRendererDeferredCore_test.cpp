@@ -37,6 +37,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
@@ -165,6 +166,26 @@ auto MakePerspectiveResolvedView(const float width, const float height)
   params.view_matrix = glm::mat4(1.0F);
   params.proj_matrix = glm::perspective(
     glm::radians(60.0F), width / height, 0.1F, 1000.0F);
+  params.camera_position = glm::vec3(0.0F, 0.0F, 0.0F);
+  params.near_plane = 0.1F;
+  params.far_plane = 1000.0F;
+  return ResolvedView(params);
+}
+
+auto MakeOrthographicResolvedView(const float width, const float height)
+  -> ResolvedView
+{
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = width,
+    .height = height,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  params.view_matrix = glm::mat4(1.0F);
+  params.proj_matrix = glm::orthoRH_ZO(-1.0F, 1.0F, -1.0F, 1.0F, 0.1F, 1000.0F);
   params.camera_position = glm::vec3(0.0F, 0.0F, 0.0F);
   params.near_plane = 0.1F;
   params.far_plane = 1000.0F;
@@ -1117,6 +1138,158 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   draw_commands = mesh_processor.GetDrawCommands();
   ASSERT_EQ(draw_commands.size(), 1U);
   EXPECT_TRUE(draw_commands.front().writes_velocity);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  DepthPrepassMeshProcessorRefinesOpaqueDrawsFrontToBackForPerspectiveViews)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  draw_metadata[0].vertex_count = 3U;
+  draw_metadata[0].instance_count = 1U;
+  draw_metadata[0].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata[1].vertex_count = 3U;
+  draw_metadata[1].instance_count = 1U;
+  draw_metadata[1].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+
+  auto draw_bounds = std::array<glm::vec4, 2> {
+    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view, false);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 2U);
+  EXPECT_EQ(draw_commands[0].draw_index, 1U);
+  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  DepthPrepassMeshProcessorKeepsOpaqueBeforeMaskedWhileRefiningBuckets)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+  }
+  draw_metadata[0].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata[1].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kMasked };
+  draw_metadata[2].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  draw_metadata[3].flags
+    = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kMasked };
+
+  auto draw_bounds = std::array<glm::vec4, 4> {
+    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.5F }, // opaque far
+    glm::vec4 { 0.0F, 0.0F, -1.0F, 0.5F }, // masked near
+    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F }, // opaque near
+    glm::vec4 { 0.0F, 0.0F, -6.0F, 0.5F }, // masked far
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view, true);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 4U);
+  EXPECT_EQ(draw_commands[0].draw_index, 2U);
+  EXPECT_EQ(draw_commands[1].draw_index, 0U);
+  EXPECT_EQ(draw_commands[2].draw_index, 1U);
+  EXPECT_EQ(draw_commands[3].draw_index, 3U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  DepthPrepassMeshProcessorPreservesRelativeOrderForEqualDepthKeys)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+    metadata.flags
+      = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  }
+
+  auto draw_bounds = std::array<glm::vec4, 2> {
+    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+    glm::vec4 { 0.0F, 0.0F, -4.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view, false);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 2U);
+  EXPECT_EQ(draw_commands[0].draw_index, 0U);
+  EXPECT_EQ(draw_commands[1].draw_index, 1U);
+}
+
+NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
+  DepthPrepassMeshProcessorUsesViewAxisDepthForNonPerspectiveViews)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics);
+  auto mesh_processor
+    = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
+
+  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  for (auto& metadata : draw_metadata) {
+    metadata.vertex_count = 3U;
+    metadata.instance_count = 1U;
+    metadata.flags
+      = oxygen::vortex::PassMask { oxygen::vortex::PassMaskBit::kOpaque };
+  }
+
+  auto draw_bounds = std::array<glm::vec4, 2> {
+    glm::vec4 { 3.0F, 0.0F, -6.0F, 2.0F },
+    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.5F },
+  };
+
+  auto prepared_frame = oxygen::vortex::PreparedSceneFrame {};
+  prepared_frame.draw_metadata_bytes = std::as_bytes(std::span(draw_metadata));
+  prepared_frame.draw_bounding_spheres = std::span(draw_bounds);
+
+  const auto resolved_view = MakeOrthographicResolvedView(64.0F, 64.0F);
+  mesh_processor.BuildDrawCommands(prepared_frame, &resolved_view, false);
+
+  const auto draw_commands = mesh_processor.GetDrawCommands();
+  ASSERT_EQ(draw_commands.size(), 2U);
+  EXPECT_EQ(draw_commands[0].draw_index, 1U);
+  EXPECT_EQ(draw_commands[1].draw_index, 0U);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
