@@ -67,6 +67,13 @@ $expectedChecks = @{
   'compositing_scope_count_match' = 'true'
   'compositing_draw_count_match' = 'true'
   'phase03_runtime_stage_order_match' = 'true'
+  'stage15_sky_scope_count_match' = 'true'
+  'stage15_sky_draw_count_match' = 'true'
+  'stage15_atmosphere_scope_count_match' = 'true'
+  'stage15_atmosphere_draw_count_match' = 'true'
+  'stage15_fog_scope_count_match' = 'true'
+  'stage15_fog_draw_count_match' = 'true'
+  'stage15_runtime_stage_order_match' = 'true'
 }
 
 $expectedDebugChecks = @{
@@ -87,6 +94,9 @@ $expectedProductChecks = @{
   'stage12_spot_scene_color_nonzero' = 'true'
   'stage12_point_scene_color_nonzero' = 'true'
   'stage12_directional_scene_color_nonzero' = 'true'
+  'stage15_sky_scene_color_changed' = 'true'
+  'stage15_atmosphere_scene_color_changed' = 'true'
+  'stage15_fog_scene_color_changed' = 'true'
   'final_present_nonzero' = 'true'
   'overall_verdict' = 'pass'
 }
