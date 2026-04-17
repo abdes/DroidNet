@@ -51,6 +51,7 @@ class Buffer;
 class CommandRecorder;
 class Framebuffer;
 class Surface;
+class Texture;
 } // namespace oxygen::graphics
 
 namespace oxygen::content {
@@ -130,6 +131,24 @@ public:
   struct CoreShaderInputsInput {
     ViewId view_id {};
     ViewConstants value;
+  };
+
+  struct RuntimeViewPublishInput {
+    CompositionView composition_view {};
+    observer_ptr<graphics::Framebuffer> render_target { nullptr };
+    observer_ptr<graphics::Framebuffer> composite_source { nullptr };
+  };
+
+  struct RuntimeCompositionLayer {
+    ViewId intent_view_id { kInvalidViewId };
+    ViewPort viewport {};
+    float opacity { 1.0F };
+  };
+
+  struct RuntimeCompositionInput {
+    std::vector<RuntimeCompositionLayer> layers {};
+    std::shared_ptr<graphics::Framebuffer> composite_target {};
+    std::shared_ptr<graphics::Surface> target_surface {};
   };
 
   class ValidatedSinglePassHarnessContext {
@@ -459,6 +478,9 @@ public:
     ViewId view_id, RenderGraphFactory factory, ResolvedView view) -> void;
   OXGN_VRTX_API auto RegisterResolvedView(ViewId view_id, ResolvedView view)
     -> void;
+  OXGN_VRTX_API auto PublishRuntimeCompositionView(
+    engine::FrameContext& frame_context, const RuntimeViewPublishInput& input,
+    std::optional<ShadingMode> shading_mode_override = std::nullopt) -> ViewId;
   OXGN_VRTX_API auto UpsertPublishedRuntimeView(
     engine::FrameContext& frame_context, ViewId intent_view_id,
     engine::ViewContext view,
@@ -483,6 +505,8 @@ public:
   OXGN_VRTX_API auto PruneStalePublishedRuntimeViews(
     engine::FrameContext& frame_context) -> std::vector<ViewId>;
   OXGN_VRTX_API auto UnregisterViewRenderGraph(ViewId view_id) -> void;
+  OXGN_VRTX_API auto RegisterRuntimeComposition(
+    const RuntimeCompositionInput& input) -> void;
   OXGN_VRTX_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
 

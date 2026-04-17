@@ -41,6 +41,7 @@
 #include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
@@ -848,6 +849,59 @@ auto Renderer::RegisterResolvedView(ViewId view_id, ResolvedView view) -> void
   resolved_views_.insert_or_assign(view_id, std::move(view));
 }
 
+auto Renderer::PublishRuntimeCompositionView(
+  engine::FrameContext& frame_context, const RuntimeViewPublishInput& input,
+  const std::optional<ShadingMode> shading_mode_override) -> ViewId
+{
+  const auto& composition_view = input.composition_view;
+  CHECK_F(composition_view.id != kInvalidViewId,
+    "Renderer::PublishRuntimeCompositionView requires a valid intent view id");
+
+  auto render_target = input.render_target;
+  auto composite_source = input.composite_source;
+  if (render_target == nullptr) {
+    render_target = composite_source;
+  }
+  if (composite_source == nullptr) {
+    composite_source = render_target;
+  }
+
+  CHECK_NOTNULL_F(render_target.get(),
+    "Renderer::PublishRuntimeCompositionView requires a render_target or "
+    "composite_source framebuffer");
+  CHECK_NOTNULL_F(composite_source.get(),
+    "Renderer::PublishRuntimeCompositionView requires a composite_source or "
+    "render_target framebuffer");
+
+  engine::ViewContext view_context {};
+  view_context.view = composition_view.view;
+  view_context.metadata = {
+    .name = std::string(composition_view.name),
+    .purpose = composition_view.camera.has_value() ? "scene" : "overlay",
+    .is_scene_view = composition_view.camera.has_value(),
+    .with_atmosphere = composition_view.with_atmosphere,
+    .exposure_view_id = composition_view.exposure_source_view_id,
+  };
+  view_context.render_target = render_target;
+  view_context.composite_source = composite_source;
+
+  const auto published_view_id = UpsertPublishedRuntimeView(frame_context,
+    composition_view.id, std::move(view_context),
+    shading_mode_override.has_value() ? shading_mode_override
+                                      : composition_view.shading_mode);
+
+  if (composition_view.camera.has_value()) {
+    auto camera_node = composition_view.camera.value();
+    auto resolver = SceneCameraViewResolver {
+      [camera_node](const ViewId& /*view_id*/) { return camera_node; },
+      composition_view.view.viewport,
+    };
+    RegisterResolvedView(published_view_id, resolver(published_view_id));
+  }
+
+  return published_view_id;
+}
+
 auto Renderer::UpsertPublishedRuntimeView(engine::FrameContext& frame_context,
   const ViewId intent_view_id, engine::ViewContext view,
   const std::optional<ShadingMode> shading_mode_override) -> ViewId
@@ -974,6 +1028,46 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
   std::unique_lock lock(view_registration_mutex_);
   render_graphs_.erase(view_id);
   resolved_views_.erase(view_id);
+}
+
+auto Renderer::RegisterRuntimeComposition(
+  const RuntimeCompositionInput& input) -> void
+{
+  if (input.composite_target == nullptr || input.target_surface == nullptr
+    || input.layers.empty()) {
+    return;
+  }
+
+  auto submission = CompositionSubmission {};
+  submission.composite_target = input.composite_target;
+  submission.tasks.reserve(input.layers.size());
+
+  for (const auto& layer : input.layers) {
+    if (layer.intent_view_id == kInvalidViewId || layer.opacity <= 0.0F) {
+      continue;
+    }
+
+    const auto published_view_id
+      = ResolvePublishedRuntimeViewId(layer.intent_view_id);
+    CHECK_F(published_view_id != kInvalidViewId,
+      "Renderer::RegisterRuntimeComposition requires published runtime view "
+      "state for intent id {}",
+      layer.intent_view_id.get());
+
+    if (layer.opacity >= 1.0F) {
+      submission.tasks.push_back(
+        CompositingTask::MakeCopy(published_view_id, layer.viewport));
+    } else {
+      submission.tasks.push_back(CompositingTask::MakeBlend(
+        published_view_id, layer.viewport, layer.opacity));
+    }
+  }
+
+  if (submission.tasks.empty()) {
+    return;
+  }
+
+  RegisterComposition(std::move(submission), input.target_surface);
 }
 
 auto Renderer::RegisterComposition(CompositionSubmission submission,
