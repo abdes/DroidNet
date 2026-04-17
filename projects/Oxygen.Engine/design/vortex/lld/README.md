@@ -49,7 +49,7 @@ reviewed.
 | Document | Deliverable | Covers |
 | -------- | ----------- | ------ |
 | [sceneprep-refactor.md](sceneprep-refactor.md) | cross-cutting support LLD | Authoritative ScenePrep -> InitViews -> PreparedSceneFrame contract, traversal budget, publication model, multi-view-safe state ownership |
-| [shader-contracts.md](shader-contracts.md) | D.7 | Vortex shader directory setup, Contracts/ and Shared/ files, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration |
+| [shader-contracts.md](shader-contracts.md) | D.7 | Vortex shader directory setup, Contracts/, narrow renderer-wide Shared/, family-local deferred-light helpers, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration |
 | [init-views.md](init-views.md) | D.8 | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication |
 | [depth-prepass.md](depth-prepass.md) | D.4 | DepthPrepassModule, depth-only pass, mesh processor, partial velocity writes, DepthPrePassPolicy |
 | [base-pass.md](base-pass.md) | D.5 | BasePassModule, GBuffer MRT output, base-pass mesh processor, material shader contract, velocity completion, forward-mode branch |

@@ -224,6 +224,7 @@ cbuffer DeferredLightConstants : register(b1) {
 //   Services/Lighting/LightGridCommon.hlsli
 //   Services/Lighting/ForwardLightingCommon.hlsli
 //   Services/Lighting/DeferredLightingCommon.hlsli
+//   Services/Lighting/DeferredShadingCommon.hlsli
 ```
 
 ### 5.3 Catalog Additions (Phase 4A)
