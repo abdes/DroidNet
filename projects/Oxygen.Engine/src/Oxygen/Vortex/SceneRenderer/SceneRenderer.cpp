@@ -39,6 +39,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -959,6 +960,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
     lighting_ = std::make_unique<LightingService>(renderer_);
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kFinalOutputComposition)) {
+    post_process_ = std::make_unique<PostProcessService>(renderer_);
+  }
 }
 
 SceneRenderer::~SceneRenderer()
@@ -983,6 +987,10 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   lighting_grid_built_sequence_ = frame::SequenceNumber {};
   if (lighting_ != nullptr) {
     lighting_->OnFrameStart(
+      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+  }
+  if (post_process_ != nullptr) {
+    post_process_->OnFrameStart(
       frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
   }
 }
@@ -1109,11 +1117,62 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 
   // Stage 20: reserved - LightShaftBloomModule
 
+  // Maintain late scene-texture publication before the output handoff stages.
+  PublishCustomDepthProducts();
+
   // Stage 21: Resolve scene color
   ResolveSceneColor(ctx);
 
   // Stage 22: Post processing
-  PublishCustomDepthProducts();
+  if (post_process_ != nullptr) {
+    auto post_target = ctx.pass_target;
+    if (post_target == nullptr) {
+      if (const auto* active_view = ctx.GetActiveViewEntry(); active_view != nullptr
+        && active_view->primary_target != nullptr) {
+        post_target
+          = observer_ptr<const graphics::Framebuffer> { active_view->primary_target };
+      }
+    }
+
+    const auto* scene_signal = scene_textures_.GetSceneColorResource().get();
+    auto scene_signal_srv = scene_texture_bindings_.scene_color_srv;
+    if (scene_texture_extracts_.resolved_scene_color.valid
+      && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
+      scene_signal = scene_texture_extracts_.resolved_scene_color.texture;
+      scene_signal_srv = RegisterSceneTextureView(
+        *scene_texture_extracts_.resolved_scene_color.texture,
+        MakeSrvDesc(*scene_texture_extracts_.resolved_scene_color.texture,
+          scene_texture_extracts_.resolved_scene_color.texture->GetDescriptor().format));
+    } else if (scene_signal != nullptr
+      && scene_signal_srv == SceneTextureBindings::kInvalidIndex) {
+      scene_signal_srv = RegisterSceneTextureView(*scene_textures_.GetSceneColorResource(),
+        MakeSrvDesc(scene_textures_.GetSceneColor(),
+          scene_textures_.GetSceneColor().GetDescriptor().format));
+    }
+
+    const auto* scene_depth = scene_textures_.GetSceneDepthResource().get();
+    if (scene_texture_extracts_.resolved_scene_depth.valid
+      && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
+      scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
+    }
+
+    auto post_process_inputs = PostProcessService::Inputs {
+      .scene_signal = scene_signal,
+      .scene_depth = scene_depth,
+      .scene_velocity = ResolveVelocitySourceTexture(),
+      .post_target = post_target,
+      .scene_signal_srv = ShaderVisibleIndex { scene_signal_srv },
+      .scene_depth_srv
+      = ShaderVisibleIndex { scene_texture_bindings_.scene_depth_srv },
+      .scene_velocity_srv
+      = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
+    };
+    post_process_->Execute(
+      ctx.current_view.view_id, ctx, scene_textures_, post_process_inputs);
+    published_view_frame_bindings_.post_process_frame_slot
+      = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
+    renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  }
 
   // Stage 23: Post-render cleanup / extraction
   PostRenderCleanup(ctx);

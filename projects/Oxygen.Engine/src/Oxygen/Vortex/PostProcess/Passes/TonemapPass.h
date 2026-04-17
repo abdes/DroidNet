@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -26,7 +27,8 @@ class TonemapPass {
 public:
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
-    observer_ptr<graphics::Framebuffer> post_target;
+    ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
+    observer_ptr<const graphics::Framebuffer> post_target;
     float exposure_value { 1.0F };
     float bloom_intensity { 0.0F };
   };

@@ -23,9 +23,9 @@ auto ExposurePass::Execute(const PostProcessConfig& config) const -> Result
 {
   static_cast<void>(renderer_);
   return {
-    .requested = true,
+    .requested = config.enable_auto_exposure,
     .executed = config.enable_auto_exposure,
-    .used_fixed_exposure = !config.enable_auto_exposure,
+    .used_fixed_exposure = true,
     .exposure_value = calculator_->ResolveExposure(config),
   };
 }
