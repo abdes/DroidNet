@@ -151,6 +151,16 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
   -> graphics::GraphicsPipelineDesc
 {
   auto root_bindings = BuildVortexRootBindings();
+  const auto alpha_blend = graphics::BlendTargetDesc {
+    .blend_enable = true,
+    .src_blend = graphics::BlendFactor::kSrcAlpha,
+    .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+    .blend_op = graphics::BlendOp::kAdd,
+    .src_blend_alpha = graphics::BlendFactor::kOne,
+    .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
+    .blend_op_alpha = graphics::BlendOp::kAdd,
+    .write_mask = graphics::ColorWriteMask::kAll,
+  };
   return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -165,7 +175,7 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
     .SetDepthStencilState(graphics::DepthStencilStateDesc::Disabled())
-    .SetBlendState({})
+    .SetBlendState({ alpha_blend })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {
         scene_textures.GetSceneColor().GetDescriptor().format,

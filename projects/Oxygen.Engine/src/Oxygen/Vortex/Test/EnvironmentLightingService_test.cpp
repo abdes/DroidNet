@@ -298,12 +298,12 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
   EXPECT_TRUE(atmosphere_source.contains("SampleSceneDepth"));
   EXPECT_TRUE(atmosphere_source.contains("ReconstructWorldPosition"));
-  EXPECT_TRUE(atmosphere_source.contains("SampleSceneColor"));
+  EXPECT_TRUE(atmosphere_source.contains("atmosphere_alpha"));
   EXPECT_FALSE(atmosphere_source.contains("discard;"));
 
   EXPECT_TRUE(fog_source.contains("SampleSceneDepth"));
   EXPECT_TRUE(fog_source.contains("ReconstructWorldPosition"));
-  EXPECT_TRUE(fog_source.contains("SampleSceneColor"));
+  EXPECT_TRUE(fog_source.contains("fog_alpha"));
   EXPECT_FALSE(fog_source.contains("discard;"));
 }
 
