@@ -756,6 +756,12 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_TRUE(environment_state.owned_by_environment_service);
   EXPECT_TRUE(environment_state.atmosphere_requested);
   EXPECT_TRUE(environment_state.atmosphere_executed);
+  EXPECT_EQ(environment_state.sky_draw_count, 1U);
+  EXPECT_EQ(environment_state.atmosphere_draw_count, 1U);
+  EXPECT_EQ(environment_state.fog_draw_count, 1U);
+  EXPECT_EQ(environment_state.total_draw_count, 3U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(),
+    environment_state.total_draw_count);
   EXPECT_FALSE(environment_state.ambient_bridge_published);
   EXPECT_EQ(environment_state.ambient_bridge_irradiance_srv,
     oxygen::kInvalidShaderVisibleIndex);
