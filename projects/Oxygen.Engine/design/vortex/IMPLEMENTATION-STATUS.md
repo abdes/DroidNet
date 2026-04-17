@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `done — Phase 03 closure is accepted for the current engine feature envelope; live D3D12 proof is green and deferred skinned/morph engine enablement is carried forward as explicit TODO work`
+Status: `in_progress — Phase 4 service activation is partially complete; the live 04-08 VortexBasic Stage 15 proof is green, and Async migration plus composition validation remain open`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -35,7 +35,7 @@ Related:
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
 | 3 | Deferred Core | `done` | — |
-| 4 | Migration-Critical Services + First Migration | `not_started` | Lighting/PostProcess/Shadow/Environment activation + `Examples/Async` Vortex migration |
+| 4 | Migration-Critical Services + First Migration | `in_progress` | `Examples/Async` Vortex migration + composition/presentation validation |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
 | 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
@@ -69,6 +69,63 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-17 — Phase 4 Stage 15 runtime blocker closed on the live VortexBasic proof surface
+
+- Scope decision:
+  - `04-04` ownership/publication proof remains historically correct but is no
+    longer treated as sufficient for `ENV-01` closure.
+  - `04-05` and `04-06` stayed blocked until the strengthened `04-08`
+    VortexBasic validator was green.
+  - `VortexBasic` remains the durable Stage 15 systems-and-passes proof
+    surface; `Examples/Async` remains the first-success integration gate.
+- Changed files this session:
+  - `tools/vortex/AnalyzeRenderDocVortexBasicCapture.py`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `tools/vortex/Assert-VortexBasicRuntimeProof.ps1`
+  - `tools/vortex/README.md`
+  - `Examples/VortexBasic/MainModule.cpp`
+  - `Examples/VortexBasic/main_impl.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+  - `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/04-04-SUMMARY.md`
+  - `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/.continue-here.md`
+  - `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/04-VALIDATION.md`
+- Commands used for verification:
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/phase-4/vortexbasic/04-08`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/phase-4/vortexbasic/04-08; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; $report = 'build/artifacts/vortex/phase-4/vortexbasic/04-08.validation.txt'; if (!(Test-Path $report)) { throw 'Missing 04-08.validation.txt' }; $required = @('stage15_sky_draw_count_match=true', 'stage15_atmosphere_draw_count_match=true', 'stage15_fog_draw_count_match=true', 'stage15_sky_scene_color_changed=true', 'stage15_atmosphere_scene_color_changed=true', 'stage15_fog_scene_color_changed=true'); foreach ($entry in $required) { rg --fixed-strings --quiet $entry $report; if ($LASTEXITCODE -eq 1) { throw \"Missing required Stage 15 proof key: $entry\" }; if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE } }`
+- Result:
+  - the structural analyzer now emits explicit Stage 15 scope, draw-count, and
+    ordered-execution proof keys for sky / atmosphere / fog
+  - the product analyzer now emits per-pass Stage 15 `SceneColor` change keys
+  - the assertion layer now fails if any Stage 15 pass disappears or becomes
+    zero-output again
+  - the live proof scene now exercises the environment lane through
+    `kEnvironmentLighting` plus `with_atmosphere=true`
+  - the sky pass required a runtime bug fix before blocker closure:
+    the far-background mask now tolerates the live depth endpoint used by the
+    VortexBasic capture instead of collapsing the sky pass to zero contribution
+- Code / validation delta:
+  - blocker-closing proof artifacts:
+    - `build/artifacts/vortex/phase-4/vortexbasic/04-08.validation.txt`
+    - `build/artifacts/vortex/phase-4/vortexbasic/04-08_frame4_vortexbasic_capture_report.txt`
+    - `build/artifacts/vortex/phase-4/vortexbasic/04-08_frame4_products_report.txt`
+    - `build/artifacts/vortex/phase-4/vortexbasic/04-08.debug-layer.report.txt`
+  - key proof fields:
+    - `analysis_result=success`
+    - `overall_verdict=pass`
+    - `runtime_exit_code=0`
+    - `d3d12_error_count=0`
+    - `stage15_sky_draw_count_match=true`
+    - `stage15_atmosphere_draw_count_match=true`
+    - `stage15_fog_draw_count_match=true`
+    - `stage15_sky_scene_color_changed=true`
+    - `stage15_atmosphere_scene_color_changed=true`
+    - `stage15_fog_scene_color_changed=true`
+- Remaining blocker:
+  - the environment blocker is resolved
+  - the next open Phase 4 work is the migration/integration lane in this order:
+    `04-05` -> `04-11` -> `04-09` -> `04-06`
 
 ### 2026-04-17 - Phase 4 LLD remediation package completed
 
@@ -2053,36 +2110,36 @@ work; only reopen later closure-gap items if a future audit finds new drift.
 
 ## Phase 4 — Migration-Critical Services + First Migration
 
-**Status:** `not_started`
+**Status:** `in_progress`
 
 ### Per-Service Status
 
 | Service | Deliverable | Design Status | Impl Status |
 | ------- | ----------- | ------------- | ----------- |
-| 4A LightingService | D.9 | `done` | `not_started` |
-| 4B PostProcessService | D.10 | `done` | `not_started` |
-| 4C ShadowService | D.11 | `done` | `not_started` |
-| 4D EnvironmentLightingService | D.12 | `done` | `not_started` |
+| 4A LightingService | D.9 | `done` | `done` |
+| 4B PostProcessService | D.10 | `done` | `done` |
+| 4C ShadowService | D.11 | `done` | `done` |
+| 4D EnvironmentLightingService | D.12 | `done` | `done` |
 | 4E Examples/Async migration | D.13 | `done` | `not_started` |
 | 4F Composition/presentation validation | — | — | `not_started` |
 
 ### Resume Point
 
-Phase 4 is the next active lane. The corrected design package no longer treats
-`4A-4D` as a blanket parallel lane:
+Phase 4 has completed the service-activation lane and the blocker-closing Stage
+15 proof lane:
 
-1. `LightingService` defines the Stage 6 / Stage 12 publication and ownership
-   contracts that other services depend on.
-2. `PostProcessService` is the least coupled service and may proceed once the
-   Phase 4 design gate is clean.
-3. `ShadowService` follows the corrected lighting contract so directional-light
-   authority and shadow publication are truthful.
-4. `EnvironmentLightingService` follows the corrected lighting contract for the
-   publication / ambient-bridge boundary, even though its Stage 15 sky/fog
-   family remains its own owner.
-5. `Examples/Async` remains the first-success gate after all four
-   migration-critical services are active.
-6. `4F` follows `4E`.
+1. `LightingService`, `PostProcessService`, `ShadowService`, and
+   `EnvironmentLightingService` are now active on the current branch.
+2. The authoritative `ENV-01` blocker-closeout proof is the live
+   `VortexBasic` validator artifact
+   `build/artifacts/vortex/phase-4/vortexbasic/04-08.validation.txt`, not the
+   older `04-04` ownership/publication proof alone.
+3. `Examples/Async` remains the next active lane and the first-success
+   integration gate.
+4. Resume the remaining Phase 4 execution in this order:
+   `04-05` -> `04-11` -> `04-09` -> `04-06`.
+5. Keep `VortexBasic` as the durable Stage 15 regression surface while Async
+   adds the runtime/UI/harness integration proof.
 
 ---
 
