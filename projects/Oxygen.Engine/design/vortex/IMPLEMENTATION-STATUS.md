@@ -70,6 +70,38 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-17 — Phase 4 Async seam-migration baseline recorded before 04-05 code motion
+
+- Scope decision:
+  - `Examples/Async` remains the Phase 4 first-success integration gate.
+  - The baseline artifact root for Async migration proof remains
+    `build/artifacts/vortex/phase-4/async/`.
+  - `04-05` owns only the initial seam replacement:
+    legacy renderer linking, Async bootstrap ownership, and renderer-owned
+    view-registration assumptions.
+  - DemoShell/AppWindow runtime-UI migration and Async parity-proof capture
+    remain downstream work in `04-11`, `04-09`, and `04-06`.
+  - `VortexBasic` remains the durable Phase 4 systems-and-passes validator
+    even after Async builds against Vortex.
+- Changed files this session:
+  - `Examples/Async/README.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Verification used for this session:
+  - `rg -n "build/artifacts/vortex/phase-4/async/|legacy renderer|bootstrap|view-registration|VortexBasic" Examples/Async/README.md design/vortex/IMPLEMENTATION-STATUS.md`
+- Result:
+  - the Async README now names the Phase 4 artifact root and the owned seam
+    replacements for the first migration lane
+  - the implementation ledger now records the same seam truth and explicitly
+    preserves the downstream runtime-UI and proof boundaries
+- Code / validation delta:
+  - no implementation code changed yet
+  - build/test execution remains pending for the code-migration task
+  - this ledger update exists to lock the Phase 4 migration truth before code
+    motion starts
+  - Remaining blocker:
+    - `04-05` code migration still pending
+    - `04-11`, `04-09`, and `04-06` remain deferred
+
 ### 2026-04-17 — Phase 4 Stage 15 runtime blocker closed on the live VortexBasic proof surface
 
 - Scope decision:
