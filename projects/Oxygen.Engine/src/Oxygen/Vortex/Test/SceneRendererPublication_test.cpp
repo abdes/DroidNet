@@ -114,7 +114,8 @@ protected:
       = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
     constexpr CapabilitySet kDeferredPublicationCapabilities
       = RendererCapabilityFamily::kScenePreparation
-      | RendererCapabilityFamily::kDeferredShading;
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData;
     renderer_
       = { new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config),
             kDeferredPublicationCapabilities),
@@ -272,6 +273,28 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(scene_texture_bindings.gbuffer_srvs[5],
     SceneTextureBindings::kInvalidIndex);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  RendererPublishesLightingBindingsThroughViewFrameBindings)
+{
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.LightingBindings", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.LightingBindings");
+  static_cast<void>(frame_context.RegisterView(
+    MakeView(oxygen::observer_ptr { framebuffer.get() }, 64.0F, 64.0F, true)));
+
+  RunRendererFrame(frame_context);
+
+  auto* scene_renderer = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  ASSERT_NE(scene_renderer, nullptr);
+  EXPECT_NE(scene_renderer->GetPublishedViewFrameBindings().lighting_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

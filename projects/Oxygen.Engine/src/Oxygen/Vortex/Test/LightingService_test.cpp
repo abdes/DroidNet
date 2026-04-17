@@ -9,25 +9,44 @@
 #include <array>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <type_traits>
 
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 
 namespace {
 
+using oxygen::Graphics;
+using oxygen::RendererConfig;
+using oxygen::ResolvedView;
+using oxygen::ViewPort;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::vortex::DirectionalLightForwardData;
 using oxygen::vortex::FrameDirectionalLightSelection;
 using oxygen::vortex::FrameLightSelection;
+using oxygen::vortex::FrameLightingInputs;
 using oxygen::vortex::FrameLocalLightSelection;
 using oxygen::vortex::LightingFrameBindings;
+using oxygen::vortex::LightingService;
 using oxygen::vortex::LocalLightKind;
+using oxygen::vortex::PreparedViewLightingInput;
+using oxygen::vortex::Renderer;
+using oxygen::vortex::RendererCapabilityFamily;
+using oxygen::vortex::testing::FakeGraphics;
 
 auto ReadTextFile(const std::filesystem::path& path) -> std::string
 {
@@ -40,6 +59,46 @@ auto SourceRoot() -> std::filesystem::path
 {
   return std::filesystem::path { __FILE__ }.parent_path().parent_path()
     .parent_path();
+}
+
+auto DestroyRenderer(Renderer* renderer) -> void
+{
+  if (renderer != nullptr) {
+    renderer->OnShutdown();
+    std::default_delete<Renderer> {}(renderer);
+  }
+}
+
+auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
+  -> std::shared_ptr<Renderer>
+{
+  auto config = RendererConfig {};
+  config.upload_queue_key
+    = graphics->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics).get();
+  constexpr auto kCapabilities = RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData;
+  return { new Renderer(
+             std::weak_ptr<Graphics>(graphics), std::move(config), kCapabilities),
+    DestroyRenderer };
+}
+
+auto MakeResolvedView(const float width, const float height) -> ResolvedView
+{
+  auto params = ResolvedView::Params {};
+  params.view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = width,
+    .height = height,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  params.view_matrix = glm::mat4(1.0F);
+  params.proj_matrix = glm::mat4(1.0F);
+  params.near_plane = 0.1F;
+  params.far_plane = 1000.0F;
+  return ResolvedView(params);
 }
 
 NOLINT_TEST(LightingServiceSurfaceTest,
@@ -104,6 +163,96 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("Lighting/Internal/DeferredLightPacketBuilder.cpp"));
   EXPECT_TRUE(cmake_source.contains("Lighting/Passes/DeferredLightPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Types/FrameLightSelection.h"));
+}
+
+class LightingServiceBehaviorTest : public ::testing::Test {
+protected:
+  void SetUp() override
+  {
+    graphics_ = std::make_shared<FakeGraphics>();
+    graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+    renderer_ = MakeRenderer(graphics_);
+  }
+
+  std::shared_ptr<FakeGraphics> graphics_;
+  std::shared_ptr<Renderer> renderer_;
+};
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  BuildLightGridPublishesSharedBuffersForEveryActiveViewOncePerFrame)
+{
+  auto service = LightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 8U }, oxygen::frame::Slot { 1U });
+
+  auto selection = FrameLightSelection {};
+  selection.selection_epoch = 91U;
+  selection.directional_light = FrameDirectionalLightSelection {
+    .direction = glm::vec3 { 0.0F, -1.0F, 0.0F },
+    .source_radius = 0.05F,
+    .color = glm::vec3 { 1.0F, 0.95F, 0.8F },
+    .illuminance_lux = 1600.0F,
+  };
+  selection.local_lights.push_back(FrameLocalLightSelection {
+    .kind = LocalLightKind::kPoint,
+    .position = glm::vec3 { 1.0F, 0.0F, 0.0F },
+    .range = 6.0F,
+    .color = glm::vec3 { 0.4F, 0.7F, 1.0F },
+    .intensity = 80.0F,
+  });
+  selection.local_lights.push_back(FrameLocalLightSelection {
+    .kind = LocalLightKind::kSpot,
+    .position = glm::vec3 { -2.0F, 3.0F, 1.0F },
+    .range = 8.0F,
+    .color = glm::vec3 { 1.0F, 0.6F, 0.3F },
+    .intensity = 120.0F,
+    .direction = glm::vec3 { 0.0F, -1.0F, 0.0F },
+    .decay_exponent = 2.0F,
+    .inner_cone_cos = 0.95F,
+    .outer_cone_cos = 0.75F,
+  });
+
+  auto first_view = MakeResolvedView(64.0F, 64.0F);
+  auto second_view = MakeResolvedView(96.0F, 54.0F);
+  const auto view_inputs = std::array {
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 11U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr<const ResolvedView> { &first_view },
+      .composition_view = {},
+    },
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 22U },
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr<const ResolvedView> { &second_view },
+      .composition_view = {},
+    },
+  };
+
+  service.BuildLightGrid(FrameLightingInputs {
+    .frame_light_set = &selection,
+    .active_views = std::span(view_inputs),
+  });
+
+  const auto& state = service.GetLastGridBuildState();
+  EXPECT_EQ(state.build_count, 1U);
+  EXPECT_EQ(state.published_view_count, 2U);
+  EXPECT_EQ(state.directional_light_count, 1U);
+  EXPECT_EQ(state.local_light_count, 2U);
+  EXPECT_EQ(state.selection_epoch, 91U);
+
+  const auto* first_bindings = service.InspectForwardLightBindings(oxygen::ViewId { 11U });
+  const auto* second_bindings = service.InspectForwardLightBindings(oxygen::ViewId { 22U });
+  ASSERT_NE(first_bindings, nullptr);
+  ASSERT_NE(second_bindings, nullptr);
+  EXPECT_NE(first_bindings->local_light_buffer_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->local_light_buffer_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
 }
 
 } // namespace
