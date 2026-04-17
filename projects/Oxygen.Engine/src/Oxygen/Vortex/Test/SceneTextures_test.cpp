@@ -18,6 +18,7 @@ namespace {
 using oxygen::Format;
 using oxygen::vortex::GBufferIndex;
 using oxygen::vortex::SceneTextureAspectView;
+using oxygen::vortex::SceneTextureBindings;
 using oxygen::vortex::SceneTextureSetupMode;
 using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
@@ -174,6 +175,26 @@ TEST(SceneTextureSetupModeContractTest, FlagsComposeWithoutAdHocSequencing)
 
   setup_mode.Clear(SceneTextureSetupMode::Flag::kSceneVelocity);
   EXPECT_FALSE(setup_mode.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity));
+}
+
+TEST(SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedAbi)
+{
+  SceneTextureBindings bindings {};
+
+  EXPECT_EQ(bindings.gbuffer_srvs.size(),
+    static_cast<std::size_t>(GBufferIndex::kCount));
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kNormal)],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kMaterial)],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kBaseColor)],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kCustomData)],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kShadowFactors)],
+    SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(GBufferIndex::kWorldTangent)],
+    SceneTextureBindings::kInvalidIndex);
 }
 
 TEST(ViewFrameBindingsContractTest, SceneTextureSlotPreservesLayoutContract)

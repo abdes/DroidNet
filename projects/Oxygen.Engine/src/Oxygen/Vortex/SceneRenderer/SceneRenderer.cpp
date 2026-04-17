@@ -787,7 +787,10 @@ namespace {
   auto HasPublishedGBufferBindings(const SceneTextureBindings& bindings) -> bool
   {
     return std::ranges::all_of(
-      bindings.gbuffer_srvs, [](const std::uint32_t index) -> bool {
+      bindings.gbuffer_srvs.begin(),
+      bindings.gbuffer_srvs.begin()
+        + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
+      [](const std::uint32_t index) -> bool {
         return index != SceneTextureBindings::kInvalidIndex;
       });
   }
@@ -796,7 +799,10 @@ namespace {
     -> bool
   {
     return std::ranges::any_of(
-      bindings.gbuffer_srvs, [](const std::uint32_t index) -> bool {
+      bindings.gbuffer_srvs.begin(),
+      bindings.gbuffer_srvs.begin()
+        + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
+      [](const std::uint32_t index) -> bool {
         return index != SceneTextureBindings::kInvalidIndex;
       });
   }
@@ -1206,22 +1212,13 @@ void SceneRenderer::RefreshSceneTextureBindings()
   }
 
   if (setup_mode_.IsSet(SceneTextureSetupMode::Flag::kGBuffers)) {
-    scene_texture_bindings_.gbuffer_srvs[0]
-      = RegisterSceneTextureView(scene_textures_.GetGBufferNormal(),
-        MakeSrvDesc(scene_textures_.GetGBufferNormal(),
-          scene_textures_.GetGBufferNormal().GetDescriptor().format));
-    scene_texture_bindings_.gbuffer_srvs[1]
-      = RegisterSceneTextureView(scene_textures_.GetGBufferMaterial(),
-        MakeSrvDesc(scene_textures_.GetGBufferMaterial(),
-          scene_textures_.GetGBufferMaterial().GetDescriptor().format));
-    scene_texture_bindings_.gbuffer_srvs[2]
-      = RegisterSceneTextureView(scene_textures_.GetGBufferBaseColor(),
-        MakeSrvDesc(scene_textures_.GetGBufferBaseColor(),
-          scene_textures_.GetGBufferBaseColor().GetDescriptor().format));
-    scene_texture_bindings_.gbuffer_srvs[3]
-      = RegisterSceneTextureView(scene_textures_.GetGBufferCustomData(),
-        MakeSrvDesc(scene_textures_.GetGBufferCustomData(),
-          scene_textures_.GetGBufferCustomData().GetDescriptor().format));
+    for (std::uint32_t i = 0; i < scene_textures_.GetGBufferCount(); ++i) {
+      const auto gbuffer_index = static_cast<GBufferIndex>(i);
+      auto& texture = scene_textures_.GetGBuffer(gbuffer_index);
+      scene_texture_bindings_.gbuffer_srvs[i]
+        = RegisterSceneTextureView(texture,
+          MakeSrvDesc(texture, texture.GetDescriptor().format));
+    }
   }
 }
 
@@ -1482,8 +1479,9 @@ void SceneRenderer::RenderDeferredLighting(
     = scene_texture_bindings_.scene_depth_srv;
   deferred_lighting_state_.consumed_scene_color_uav
     = scene_texture_bindings_.scene_color_uav;
-  deferred_lighting_state_.consumed_gbuffer_srvs
-    = scene_texture_bindings_.gbuffer_srvs;
+  std::copy_n(scene_texture_bindings_.gbuffer_srvs.begin(),
+    deferred_lighting_state_.consumed_gbuffer_srvs.size(),
+    deferred_lighting_state_.consumed_gbuffer_srvs.begin());
 
   auto* scene_mutable = ctx.GetSceneMutable().get();
   if (scene_mutable == nullptr) {

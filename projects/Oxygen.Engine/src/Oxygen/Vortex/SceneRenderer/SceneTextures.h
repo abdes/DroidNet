@@ -152,9 +152,10 @@ struct SceneTextureBindings {
     = std::numeric_limits<std::uint32_t>::max();
 
   static constexpr auto MakeInvalidGBufferSrvs() -> std::array<std::uint32_t,
-    static_cast<std::size_t>(GBufferIndex::kActiveCount)>
+    static_cast<std::size_t>(GBufferIndex::kCount)>
   {
-    return { kInvalidIndex, kInvalidIndex, kInvalidIndex, kInvalidIndex };
+    return { kInvalidIndex, kInvalidIndex, kInvalidIndex, kInvalidIndex,
+      kInvalidIndex, kInvalidIndex };
   }
 
   std::uint32_t scene_color_srv { kInvalidIndex };
@@ -164,8 +165,11 @@ struct SceneTextureBindings {
   std::uint32_t stencil_srv { kInvalidIndex };
   std::uint32_t custom_depth_srv { kInvalidIndex };
   std::uint32_t custom_stencil_srv { kInvalidIndex };
+  // The published ABI reserves the full logical GBuffer family now. Phase 3
+  // only activates A-D; E/F remain stable invalid slots until their owning
+  // later phase publishes them.
   std::array<std::uint32_t,
-    static_cast<std::size_t>(GBufferIndex::kActiveCount)>
+    static_cast<std::size_t>(GBufferIndex::kCount)>
     gbuffer_srvs { MakeInvalidGBufferSrvs() };
   std::uint32_t scene_color_uav { kInvalidIndex };
   std::uint32_t velocity_uav { kInvalidIndex };

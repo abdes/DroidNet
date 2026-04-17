@@ -46,7 +46,7 @@ static inline float4 LoadSceneColor(uint2 pixel_coord, SceneTextureBindingData b
 static inline float4 SampleGBuffer(
     uint gbuffer_index, float2 uv, SceneTextureBindingData bindings)
 {
-    if (gbuffer_index >= GBUFFER_COUNT) {
+    if (gbuffer_index >= GBUFFER_ACTIVE_COUNT) {
         return 0.0f.xxxx;
     }
 
