@@ -369,11 +369,14 @@ ARCHITECTURE.md §6.2.
 
 ### 3.5 ResolveSceneColor (Stage 21)
 
-File-separated method (~180 lines). In the current Phase 03 runtime branch,
-this stage copies live `SceneColor` and `SceneDepth` into explicit resolved
-artifacts for downstream Renderer Core composition/extraction work. It does
-**not** take ownership of composition target resolution, composition queueing,
-or presentation. When post-processing is active (Phase 4+), this remains the
+File-separated method (~180 lines). This is already part of the retained
+Phase 03 runtime branch, not a future stub. The stage copies live
+`SceneColor` and `SceneDepth` into explicit resolved artifacts for downstream
+Renderer Core composition/extraction work. It does **not** take ownership of
+composition target resolution, composition queueing, or presentation. Phase 4F
+does not introduce this stage; it validates the already-live retained-branch
+behavior end-to-end as part of the first migration-grade composition path.
+When post-processing is active (Phase 4+), this remains the
 SceneRenderer-owned resolve / HDR merge point before Renderer Core consumes the
 resolved product for composition.
 
@@ -381,13 +384,17 @@ resolved product for composition.
 
 ### 3.6 PostRenderCleanup (Stage 23)
 
-File-separated method (~200-300 lines). In Phase 2, this is a minimal stub
-that:
+File-separated method (~200-300 lines). This is already part of the retained
+Phase 03 runtime branch, not a future stub. It:
 
 1. Creates an explicit `SceneTextureExtracts` set describing extracted handoff
    artifacts, not live in-frame attachments
 2. Invokes Renderer Core helper surfaces for one-way handoff completion
 3. Resets transient per-frame state
+
+Phase 4F does not introduce Stage 23; it validates the already-live
+retained-branch extraction/handoff behavior end-to-end inside the full
+composition/presentation path.
 
 **File:** `SceneRenderer/PostRenderCleanup.cpp`
 

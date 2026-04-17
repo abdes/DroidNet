@@ -493,14 +493,17 @@ non-runtime facades verified.
 
 ### 4F: Composition and Presentation Validation
 
-Deepens proof for the resolve / extraction / handoff artifacts that sit around
-the already-live runtime composition path used by the first migration target.
+Deepens proof for the already-live retained-branch Stage 21 / Stage 23
+resolve / extraction / handoff artifacts that sit around the runtime
+composition path used by the first migration target. Phase 4F validates those
+existing primitives end-to-end inside composition/presentation; it does not
+introduce them for the first time.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
 | 4F.1 | Validate single-view composition and presentation artifacts | `CompositionView` → SceneRenderer → `CompositionSubmission` → presentation remains correct under inspection |
-| 4F.2 | Validate `ResolveSceneColor` artifact behavior end-to-end | Stage 21 resolve runs only when needed and produces the correct post-process input |
-| 4F.3 | Validate `PostRenderCleanup` extraction/handoff artifacts | Stage 23 extraction handoff through Renderer Core helpers produces the correct outputs |
+| 4F.2 | Validate `ResolveSceneColor` artifact behavior end-to-end | The already-live retained-branch Stage 21 resolve runs only when needed and produces the correct post-process input |
+| 4F.3 | Validate `PostRenderCleanup` extraction/handoff artifacts | The already-live retained-branch Stage 23 extraction handoff through Renderer Core helpers produces the correct outputs |
 
 **Exit gate:** `Examples/Async` presents correct output through Vortex
 composition path. No composition artifacts, no missing handoffs, no dropped
