@@ -149,4 +149,21 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
   EXPECT_EQ(result->GetViewId(), ViewId { 91U });
 }
 
+NOLINT_TEST_F(FacadePresetsTest,
+  PreparedScenePresetRemainsValidWithoutEnvironmentBridgeInputs)
+{
+  auto facade = oxygen::vortex::harness::single_pass::presets::
+    ForPreparedSceneGraphicsPass(*renderer_,
+      Renderer::FrameSessionInput { .frame_slot = oxygen::frame::Slot { 0U } },
+      oxygen::observer_ptr<const Framebuffer> { framebuffer_.get() },
+      MakeResolvedViewInput(), MakePreparedFrameInput());
+
+  auto validation = facade.Validate();
+  EXPECT_TRUE(validation.Ok());
+
+  auto result = facade.Finalize();
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->GetRenderContext().current_view.composition_view.get(), nullptr);
+}
+
 } // namespace
