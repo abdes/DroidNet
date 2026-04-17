@@ -52,6 +52,10 @@ namespace ui {
   class CameraRigController;
   class GridVm;
 
+  [[nodiscard]] auto MakeRuntimePanelConfig(
+    DemoShellPanelConfig panel_config, bool enable_renderer_bound_panels)
+    -> DemoShellPanelConfig;
+
   //! UI shell hosting the side bar and side panel.
   /*!
    Provides a reusable UI layout for demos, consisting of a left-docked

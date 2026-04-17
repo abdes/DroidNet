@@ -86,6 +86,7 @@ struct DemoShellPanelConfig {
 struct DemoShellConfig {
   observer_ptr<IAsyncEngine> engine { nullptr };
   bool enable_camera_rig { true };
+  bool enable_renderer_bound_panels { true };
 
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};

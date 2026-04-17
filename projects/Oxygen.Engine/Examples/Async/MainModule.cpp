@@ -355,6 +355,7 @@ auto MainModule::OnAttachedImpl(
 
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { app_.engine.get() };
+  shell_config.enable_renderer_bound_panels = false;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
     .camera_controls = true,
