@@ -587,9 +587,9 @@ Allowed architectural differences:
 | 18 | `RenderTranslucency` | `TranslucencyModule::Execute` | TranslucencyModule | Forward-lit translucency consuming prior opaque products and shared forward light data from `LightingService`. |
 | 19 | `RenderDistortion` / translucent `RenderVelocities` | reserved `DistortionModule::Execute` | future DistortionModule | Distortion mesh processing, intermediate resources, and late translucent velocity production when required. |
 | 20 | `RenderLightShaftBloom` / translucency upscale | reserved `LightShaftBloomModule::Execute` | future LightShaftBloomModule | Post-translucency image-space light-shaft effects and related upscale work. |
-| 21 | `AddResolveSceneColorPass` | `ResolveSceneColor` file-separated method | SceneRenderer | ~180 lines. Implemented in a dedicated file, not a standalone module. |
+| 21 | `AddResolveSceneColorPass` | `ResolveSceneColor` file-separated method | SceneRenderer | ~180 lines. Implemented in a dedicated file, not a standalone module. Already active on the retained Phase 03 runtime branch. |
 | 22 | Post processing | `PostProcessService::Execute` | PostProcessService | Tone map, exposure, AA/TSR slot (consumes `SceneVelocity`), bloom, debug post. |
-| 23 | `OnRenderFinish` / `QueueSceneTextureExtractions` | `PostRenderCleanup` file-separated method | SceneRenderer | SceneRenderer-owned post-render cleanup stage that invokes Renderer Core extraction/handoff helpers for history export, cleanup, and handoff completion. |
+| 23 | `OnRenderFinish` / `QueueSceneTextureExtractions` | `PostRenderCleanup` file-separated method | SceneRenderer | SceneRenderer-owned post-render cleanup stage that invokes Renderer Core extraction/handoff helpers for history export, cleanup, and handoff completion. Already active on the retained Phase 03 runtime branch. |
 
 ### 5.2 Layer Model
 
@@ -724,9 +724,9 @@ but its architectural position must not move.
 | 18 | translucency | per view | `TranslucencyModule` | render-capable | UE uses `RenderTranslucency(...)` as a distinct family after opaque lighting/environment stages | Legacy has `TransparentPass` as a major forward-pipeline stage | Keep as its own stage module consuming shared forward light data |
 | 19 | distortion and translucent velocities | conditional / reserved | future `DistortionModule` | render-capable when active | UE uses `RenderDistortion(...)` plus late translucent `RenderVelocities(...)` | Legacy has no distortion/velocity family split like this | Correct reserved late-stage family in Vortex |
 | 20 | light shaft bloom / translucency upscale | conditional / reserved | future `LightShaftBloomModule` | render-capable when active | UE uses `RenderLightShaftBloom(...)` and translucency upscale-related work late | Legacy has no equivalent dedicated family | Correct as reserved image-space late stage |
-| 21 | resolve scene color | per frame / per target | `SceneRenderer` | optional render work | UE uses `AddResolveSceneColorPass(...)` | Legacy resolves/tonemaps as part of the forward pipeline and compositing path | Correct as a thin SceneRenderer-owned stage |
+| 21 | resolve scene color | per frame / per target | `SceneRenderer` | optional render work | UE uses `AddResolveSceneColorPass(...)` | Legacy resolves/tonemaps as part of the forward pipeline and compositing path | Correct as a thin SceneRenderer-owned stage. This stage is already live on the retained Phase 03 branch; later phases validate or extend it rather than introducing it from scratch |
 | 22 | post processing | per view | `PostProcessService` | render-capable | UE has a broad `PostProcessing` family | Legacy has `ToneMapPass` + `AutoExposurePass` and related post work in `ForwardPipeline` | Correct service boundary for Vortex |
-| 23 | post-render / extraction / cleanup | per frame | `SceneRenderer` using `Renderer Core` helpers | optional render work plus handoff | UE uses `OnRenderFinish(...)` and `QueueSceneTextureExtractions(...)` | Legacy renderer finishes with `OnCompositing(...)` and `OnFrameEnd(...)`; extraction/handoff is less explicit but still end-of-frame | Correct end-of-frame owner for Vortex. `SceneRenderer` may invoke Renderer Core helper APIs for extraction/handoff, but Renderer Core must not gain scene-policy ownership and must not call back upward into scene-stage logic |
+| 23 | post-render / extraction / cleanup | per frame | `SceneRenderer` using `Renderer Core` helpers | optional render work plus handoff | UE uses `OnRenderFinish(...)` and `QueueSceneTextureExtractions(...)` | Legacy renderer finishes with `OnCompositing(...)` and `OnFrameEnd(...)`; extraction/handoff is less explicit but still end-of-frame | Correct end-of-frame owner for Vortex. `SceneRenderer` may invoke Renderer Core helper APIs for extraction/handoff, but Renderer Core must not gain scene-policy ownership and must not call back upward into scene-stage logic. This stage is already live on the retained Phase 03 branch; later phases validate or extend it rather than introducing it from scratch |
 
 ### 6.3 Runtime Rules
 
@@ -1203,6 +1203,10 @@ separate from each other.
 UE 5.7 validates this strongly through `FSceneTextureExtracts` and
 `QueueExtractions(...)`. Legacy Oxygen validates the need for an explicit
 end-of-frame handoff through `OnCompositing(...)` and `OnFrameEnd(...)`.
+The retained current Vortex runtime branch already implements this boundary
+through Stage 21 `ResolveSceneColor` and Stage 23 `PostRenderCleanup`; Phase 4F
+deepens end-to-end validation of that existing contract instead of introducing
+those stages for the first time.
 
 #### 7.6.1 Stable Contract
 
