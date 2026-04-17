@@ -27,7 +27,9 @@ using oxygen::Format;
 using oxygen::Graphics;
 using oxygen::RendererConfig;
 using oxygen::TextureType;
+using oxygen::ViewId;
 using oxygen::engine::FrameContext;
+using oxygen::engine::ViewContext;
 using oxygen::graphics::Framebuffer;
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
@@ -35,6 +37,7 @@ using oxygen::graphics::ResourceStates;
 using oxygen::graphics::Surface;
 using oxygen::graphics::Texture;
 using oxygen::vortex::Renderer;
+using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
 
 class FakeSurface final : public Surface {
@@ -139,6 +142,28 @@ protected:
           .max_depth = 1.0F },
         1.0F));
     return submission;
+  }
+
+  [[nodiscard]] auto MakeRuntimeViewContext(
+    const std::shared_ptr<Framebuffer>& render_target,
+    const std::shared_ptr<Framebuffer>& composite_source) const -> ViewContext
+  {
+    auto view_context = ViewContext {};
+    view_context.view.viewport = {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 64.0F,
+      .height = 64.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
+    view_context.metadata.name = "RuntimeScene";
+    view_context.metadata.purpose = "scene";
+    view_context.metadata.is_scene_view = true;
+    view_context.render_target = oxygen::observer_ptr { render_target.get() };
+    view_context.composite_source
+      = oxygen::observer_ptr { composite_source.get() };
+    return view_context;
   }
 
   std::shared_ptr<FakeGraphics> graphics_;
@@ -250,6 +275,72 @@ NOLINT_TEST_F(
   });
 
   EXPECT_EQ(graphics_->draw_log_.draws.size(), first_draw_count);
+}
+
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  RegisterRuntimeCompositionCopiesPublishedSingleViewToPresentationTarget)
+{
+  auto surface_texture = MakeColorTexture("Queue.RuntimeSurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto present_target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> { surface.get() });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U },
+      },
+      oxygen::observer_ptr<const Framebuffer> { present_target.get() });
+  auto active_frame = harness.Finalize();
+  ASSERT_TRUE(active_frame.has_value());
+
+  auto scene_texture = MakeColorTexture("Queue.RuntimeScene");
+  graphics_->GetResourceRegistry().Register(scene_texture);
+  auto scene_target = MakeFramebuffer(scene_texture);
+
+  constexpr auto intent_view_id = ViewId { 41U };
+  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
+    *frame_context_, intent_view_id,
+    MakeRuntimeViewContext(scene_target, scene_target), ShadingMode::kDeferred);
+  EXPECT_EQ(
+    renderer_->ResolvePublishedRuntimeViewId(intent_view_id), published_view_id);
+
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->draw_log_.draws.clear();
+
+  renderer_->RegisterRuntimeComposition(Renderer::RuntimeCompositionInput {
+    .layers = {
+      Renderer::RuntimeCompositionLayer {
+        .intent_view_id = intent_view_id,
+        .viewport = {
+          .top_left_x = 0.0F,
+          .top_left_y = 0.0F,
+          .width = 64.0F,
+          .height = 64.0F,
+          .min_depth = 0.0F,
+          .max_depth = 1.0F,
+        },
+        .opacity = 1.0F,
+      },
+    },
+    .composite_target = present_target,
+    .target_surface = surface,
+  });
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(
+      oxygen::observer_ptr<FrameContext> { frame_context_.get() });
+  });
+
+  ASSERT_EQ(graphics_->texture_copy_log_.copies.size(), 1U);
+  EXPECT_EQ(graphics_->texture_copy_log_.copies[0].src, scene_texture.get());
+  EXPECT_EQ(graphics_->texture_copy_log_.copies[0].dst, surface_texture.get());
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
 }
 
 } // namespace
