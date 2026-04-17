@@ -282,6 +282,44 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
 }
 
 NOLINT_TEST(SceneRendererShellProofSurfaceTest,
+  Stage13And14RemainReservedAheadOfStage15Activation)
+{
+  const auto source_root = SourceRoot();
+  const auto scene_renderer_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+
+  const auto stage12_pos
+    = scene_renderer_source.find("// Stage 12: Deferred direct lighting");
+  const auto stage13_pos
+    = scene_renderer_source.find("// Stage 13: reserved - IndirectLightingService");
+  const auto stage14_pos = scene_renderer_source.find(
+    "// Stage 14: reserved - EnvironmentLightingService volumetrics");
+  const auto stage15_pos
+    = scene_renderer_source.find("// Stage 15: Sky / atmosphere / fog");
+
+  ASSERT_NE(stage12_pos, std::string::npos);
+  ASSERT_NE(stage13_pos, std::string::npos);
+  ASSERT_NE(stage14_pos, std::string::npos);
+  ASSERT_NE(stage15_pos, std::string::npos);
+  EXPECT_LT(stage12_pos, stage13_pos);
+  EXPECT_LT(stage13_pos, stage14_pos);
+  EXPECT_LT(stage14_pos, stage15_pos);
+}
+
+NOLINT_TEST(SceneRendererShellProofSurfaceTest,
+  ResolveAndCleanupSourcesCarryRetainedStageOwnerMarkers)
+{
+  const auto source_root = SourceRoot();
+  const auto resolve_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/ResolveSceneColor.cpp");
+  const auto cleanup_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/PostRenderCleanup.cpp");
+
+  EXPECT_TRUE(resolve_source.contains("Stage 21 owner"));
+  EXPECT_TRUE(cleanup_source.contains("Stage 23 extraction/handoff owner"));
+}
+
+NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   FrameStartUsesTheLargestSceneViewEnvelopeInsteadOfTheFirstValidViewport)
 {
   auto graphics = std::make_shared<FakeGraphics>();

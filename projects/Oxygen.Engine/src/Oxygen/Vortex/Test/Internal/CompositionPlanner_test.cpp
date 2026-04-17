@@ -181,6 +181,55 @@ TEST(CompositionPlannerTest, OverlayViewUsesTextureBlendTask)
   EXPECT_FLOAT_EQ(submission.tasks[0].texture_blend.alpha, 1.0F);
 }
 
+TEST(CompositionPlannerTest, SceneHudAndImGuiLayersStayOrderedOnSingleViewPath)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+
+  CompositionView scene_view = CompositionView::ForScene(
+    ViewId { 108U }, MakeView(), oxygen::scene::SceneNode {});
+  scene_view.opacity = 1.0F;
+
+  const auto overlay = [](oxygen::graphics::CommandRecorder&) { };
+  CompositionView hud_view = CompositionView::ForHud(
+    ViewId { 109U }, CompositionView::kZOrderGameUI, MakeView(), overlay);
+  hud_view.opacity = 0.75F;
+
+  CompositionView imgui_view
+    = CompositionView::ForImGui(ViewId { 110U }, MakeView(), overlay);
+  imgui_view.opacity = 1.0F;
+
+  CompositionViewImpl scene_impl;
+  CompositionViewImpl hud_impl;
+  CompositionViewImpl imgui_impl;
+  PrepareView(scene_impl, scene_view, *graphics);
+  PrepareView(hud_impl, hud_view, *graphics);
+  PrepareView(imgui_impl, imgui_view, *graphics);
+
+  FramePlanBuilder builder;
+  std::array views { &scene_impl, &hud_impl, &imgui_impl };
+  builder.BuildFrameViewPackets(observer_ptr<oxygen::scene::Scene> {},
+    std::span<CompositionViewImpl* const> { views.data(), views.size() },
+    MakeInputs(ViewId { 208U }));
+
+  CompositionPlanner planner(observer_ptr { &builder });
+  planner.PlanCompositingTasks();
+  const auto submission
+    = planner.BuildCompositionSubmission(MakeCompositeTarget(graphics));
+
+  ASSERT_EQ(submission.tasks.size(), 3U);
+  EXPECT_EQ(submission.tasks[0].type,
+    oxygen::vortex::CompositingTaskType::kCopy);
+  EXPECT_EQ(submission.tasks[0].copy.source_view_id, ViewId { 208U });
+
+  EXPECT_EQ(submission.tasks[1].type,
+    oxygen::vortex::CompositingTaskType::kBlendTexture);
+  EXPECT_FLOAT_EQ(submission.tasks[1].texture_blend.alpha, 0.75F);
+
+  EXPECT_EQ(submission.tasks[2].type,
+    oxygen::vortex::CompositingTaskType::kBlendTexture);
+  EXPECT_FLOAT_EQ(submission.tasks[2].texture_blend.alpha, 1.0F);
+}
+
 TEST(CompositionPlannerTest, SceneViewPlansDepthPrePassByDefault)
 {
   auto graphics = std::make_shared<FakeGraphics>();
