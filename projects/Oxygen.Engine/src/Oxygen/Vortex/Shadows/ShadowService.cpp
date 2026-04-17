@@ -91,14 +91,25 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       const auto view_state = cascade_shadow_pass_->RenderDirectionalView(
         view_input, *directional_light);
       view_data = view_state.frame_data;
+      const auto shadow_surface = view_state.shadow_surface;
       rendered_cascade_count = view_state.rendered_cascade_count;
       rendered_draw_count = view_state.rendered_draw_count;
       shadow_caster_draw_count = view_state.shadow_caster_draw_count;
+      const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
+      published_views_.insert_or_assign(view_input.view_id,
+        PublishedView {
+          .slot = slot,
+          .data = view_data,
+          .surface = shadow_surface,
+        });
+    } else {
+      const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
+      published_views_.insert_or_assign(view_input.view_id,
+        PublishedView {
+          .slot = slot,
+          .data = view_data,
+        });
     }
-
-    const auto slot = PublishShadowBindings(view_input.view_id, view_data.bindings);
-    published_views_.insert_or_assign(
-      view_input.view_id, PublishedView { .slot = slot, .data = view_data });
 
     last_render_state_.published_view_count += 1U;
     last_render_state_.rendered_cascade_count += rendered_cascade_count;
@@ -115,6 +126,13 @@ auto ShadowService::InspectShadowData(const ViewId view_id) const
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? &it->second.data : nullptr;
+}
+
+auto ShadowService::InspectShadowSurface(const ViewId view_id) const
+  -> const graphics::Texture*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? it->second.surface.get() : nullptr;
 }
 
 auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const

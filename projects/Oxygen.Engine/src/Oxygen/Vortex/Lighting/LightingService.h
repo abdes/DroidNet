@@ -9,9 +9,11 @@
 #include <memory>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -56,6 +58,12 @@ public:
     std::uint32_t camera_inside_local_light_count { 0U };
     std::uint32_t local_light_draw_count { 0U };
     std::uint32_t non_perspective_local_light_count { 0U };
+    bool consumed_directional_shadow_product { false };
+    bool directional_shadow_vsm_active { false };
+    std::uint32_t directional_shadow_cascade_count { 0U };
+    ShaderVisibleIndex directional_shadow_surface_srv {
+      kInvalidShaderVisibleIndex
+    };
     std::uint64_t selection_epoch { 0U };
   };
 
@@ -72,7 +80,9 @@ public:
   OXGN_VRTX_API auto BuildLightGrid(const FrameLightingInputs& inputs) -> void;
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
     const SceneTextures& scene_textures,
-    const FrameLightSelection& frame_light_set) -> void;
+    const FrameLightSelection& frame_light_set,
+    const ShadowFrameBindings* directional_shadow_bindings,
+    const graphics::Texture* directional_shadow_surface) -> void;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(ViewId view_id) const
     -> const LightingFrameBindings*;

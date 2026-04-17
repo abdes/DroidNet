@@ -12,6 +12,7 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
+#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -43,6 +44,12 @@ public:
     std::uint32_t camera_inside_local_light_count { 0U };
     std::uint32_t local_light_draw_count { 0U };
     std::uint32_t non_perspective_local_light_count { 0U };
+    bool consumed_directional_shadow_product { false };
+    bool directional_shadow_vsm_active { false };
+    std::uint32_t directional_shadow_cascade_count { 0U };
+    ShaderVisibleIndex directional_shadow_surface_srv {
+      kInvalidShaderVisibleIndex
+    };
   };
 
   explicit DeferredLightPass(Renderer& renderer);
@@ -50,7 +57,9 @@ public:
 
   [[nodiscard]] auto Record(RenderContext& ctx,
     const SceneTextures& scene_textures,
-    const internal::DeferredLightPacketSet& packets) -> ExecutionState;
+    const internal::DeferredLightPacketSet& packets,
+    const ShadowFrameBindings* directional_shadow_bindings,
+    const graphics::Texture* directional_shadow_surface) -> ExecutionState;
 
 private:
   Renderer& renderer_;

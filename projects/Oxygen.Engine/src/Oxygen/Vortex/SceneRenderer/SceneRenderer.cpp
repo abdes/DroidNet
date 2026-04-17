@@ -39,6 +39,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -421,6 +422,45 @@ namespace {
         .view_id = ctx.current_view.view_id,
         .prepared_scene = ctx.current_view.prepared_frame,
         .resolved_view = ctx.current_view.resolved_view,
+        .composition_view = ctx.current_view.composition_view,
+      });
+    }
+  }
+
+  auto CollectShadowViewInputs(const RenderContext& ctx,
+    const InitViewsModule* init_views,
+    std::vector<PreparedViewShadowInput>& out) -> void
+  {
+    out.clear();
+    if (init_views == nullptr) {
+      return;
+    }
+
+    for (const auto& view : ctx.frame_views) {
+      if (!view.is_scene_view) {
+        continue;
+      }
+      out.push_back(PreparedViewShadowInput {
+        .view_id = view.view_id,
+        .prepared_scene = observer_ptr<const PreparedSceneFrame> {
+          init_views->GetPreparedSceneFrame(view.view_id),
+        },
+        .resolved_view = view.resolved_view,
+        .view_constants = view.view_id == ctx.current_view.view_id
+          ? observer_ptr<const graphics::Buffer> { ctx.view_constants.get() }
+          : observer_ptr<const graphics::Buffer> {},
+        .composition_view = view.composition_view,
+      });
+    }
+
+    if (out.empty() && ctx.current_view.view_id != kInvalidViewId) {
+      out.push_back(PreparedViewShadowInput {
+        .view_id = ctx.current_view.view_id,
+        .prepared_scene = ctx.current_view.prepared_frame,
+        .resolved_view = ctx.current_view.resolved_view,
+        .view_constants = observer_ptr<const graphics::Buffer> {
+          ctx.view_constants.get(),
+        },
         .composition_view = ctx.current_view.composition_view,
       });
     }
@@ -960,6 +1000,10 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
     lighting_ = std::make_unique<LightingService>(renderer_);
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
+    && renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
+    shadows_ = std::make_unique<ShadowService>(renderer_);
+  }
   if (renderer_.HasCapability(RendererCapabilityFamily::kFinalOutputComposition)) {
     post_process_ = std::make_unique<PostProcessService>(renderer_);
   }
@@ -984,9 +1028,15 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
   deferred_lighting_state_ = {};
   frame_light_selection_ = {};
   frame_lighting_views_.clear();
+  frame_shadow_views_.clear();
   lighting_grid_built_sequence_ = frame::SequenceNumber {};
+  shadow_depths_built_sequence_ = frame::SequenceNumber {};
   if (lighting_ != nullptr) {
     lighting_->OnFrameStart(
+      frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
+  }
+  if (shadows_ != nullptr) {
+    shadows_->OnFrameStart(
       frame.GetFrameSequenceNumber(), frame.GetFrameSlot());
   }
   if (post_process_ != nullptr) {
@@ -1076,6 +1126,22 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 7: reserved - MaterialCompositionService::PreBasePass
 
   // Stage 8: Shadow depth
+  if (shadows_ != nullptr
+    && shadow_depths_built_sequence_ != ctx.frame_sequence) {
+    CollectShadowViewInputs(ctx, init_views_.get(), frame_shadow_views_);
+    shadows_->RenderShadowDepths(FrameShadowInputs {
+      .frame_light_set = &frame_light_selection_,
+      .active_views = std::span(frame_shadow_views_),
+    });
+    shadow_depths_built_sequence_ = ctx.frame_sequence;
+  }
+  if (shadows_ != nullptr) {
+    published_view_frame_bindings_.shadow_frame_slot
+      = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
+    deferred_lighting_state_.published_shadow_frame_slot
+      = published_view_frame_bindings_.shadow_frame_slot;
+    renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  }
 
   // Stage 9: Base pass
   if (base_pass_ != nullptr) {
@@ -1656,6 +1722,8 @@ void SceneRenderer::RenderDeferredLighting(
     = published_view_frame_bindings_.scene_texture_frame_slot;
   deferred_lighting_state_.published_lighting_frame_slot
     = published_view_frame_bindings_.lighting_frame_slot;
+  deferred_lighting_state_.published_shadow_frame_slot
+    = published_view_frame_bindings_.shadow_frame_slot;
 
   if (!renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)
     || !renderer_.HasCapability(RendererCapabilityFamily::kLightingData)) {
@@ -1689,7 +1757,15 @@ void SceneRenderer::RenderDeferredLighting(
   if (lighting_ == nullptr) {
     return;
   }
-  lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_);
+  const auto* shadow_bindings = shadows_ != nullptr
+    ? shadows_->InspectShadowData(ctx.current_view.view_id)
+    : nullptr;
+  const auto* shadow_surface = shadows_ != nullptr
+    ? shadows_->InspectShadowSurface(ctx.current_view.view_id)
+    : nullptr;
+  lighting_->RenderDeferredLighting(ctx, scene_textures, frame_light_selection_,
+    shadow_bindings != nullptr ? &shadow_bindings->bindings : nullptr,
+    shadow_surface);
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
   deferred_lighting_state_.owned_by_lighting_service = true;
   deferred_lighting_state_.used_service_owned_local_light_geometry
@@ -1715,6 +1791,14 @@ void SceneRenderer::RenderDeferredLighting(
     = lighting_state.used_non_perspective_local_lights;
   deferred_lighting_state_.accumulated_into_scene_color
     = lighting_state.accumulated_into_scene_color;
+  deferred_lighting_state_.consumed_directional_shadow_product
+    = lighting_state.consumed_directional_shadow_product;
+  deferred_lighting_state_.directional_shadow_vsm_active
+    = lighting_state.directional_shadow_vsm_active;
+  deferred_lighting_state_.directional_shadow_cascade_count
+    = lighting_state.directional_shadow_cascade_count;
+  deferred_lighting_state_.directional_shadow_surface_srv
+    = lighting_state.directional_shadow_surface_srv;
 }
 
 } // namespace oxygen::vortex

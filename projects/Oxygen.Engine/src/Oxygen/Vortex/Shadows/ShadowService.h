@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -54,6 +55,8 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
     -> const DirectionalShadowFrameData*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectShadowSurface(ViewId view_id) const
+    -> const graphics::Texture*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }
@@ -67,6 +70,7 @@ private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     DirectionalShadowFrameData data {};
+    std::shared_ptr<graphics::Texture> surface {};
   };
 
   auto EnsurePublishResources() -> bool;

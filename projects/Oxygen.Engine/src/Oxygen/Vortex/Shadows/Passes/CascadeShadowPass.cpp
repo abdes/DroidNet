@@ -42,6 +42,7 @@ auto CascadeShadowPass::RenderDirectionalView(
     = allocator_->AcquireDirectionalSurface(directional_light.cascade_count);
   state.frame_data = cascade_setup_->BuildDirectionalFrameData(
     view_input, directional_light, allocation);
+  state.shadow_surface = allocation.surface;
 
   if (view_input.prepared_scene != nullptr) {
     shadow_caster_culling_->BuildDrawCommands(*view_input.prepared_scene);
@@ -49,8 +50,10 @@ auto CascadeShadowPass::RenderDirectionalView(
       shadow_caster_culling_->GetDrawCommands().size());
   }
 
-  const auto render_state = depth_pass_->Record(
-    view_input, state.frame_data, shadow_caster_culling_->GetDrawCommands());
+  const auto render_state = allocation.surface != nullptr
+    ? depth_pass_->Record(view_input, allocation.surface, state.frame_data,
+        shadow_caster_culling_->GetDrawCommands())
+    : ShadowDepthPass::RenderState {};
   state.rendered_cascade_count = render_state.rendered_cascade_count;
   state.rendered_draw_count = render_state.rendered_draw_count;
   return state;

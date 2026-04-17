@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
@@ -43,6 +44,7 @@ class InitViewsModule;
 class DepthPrepassModule;
 class BasePassModule;
 class LightingService;
+class ShadowService;
 class PostProcessService;
 
 class SceneRenderer {
@@ -87,6 +89,15 @@ public:
     ShaderVisibleIndex published_lighting_frame_slot {
       kInvalidShaderVisibleIndex
     };
+    ShaderVisibleIndex published_shadow_frame_slot {
+      kInvalidShaderVisibleIndex
+    };
+    ShaderVisibleIndex directional_shadow_surface_srv {
+      kInvalidShaderVisibleIndex
+    };
+    bool consumed_directional_shadow_product { false };
+    bool directional_shadow_vsm_active { false };
+    std::uint32_t directional_shadow_cascade_count { 0U };
   };
 
   OXGN_VRTX_API explicit SceneRenderer(Renderer& renderer, Graphics& gfx,
@@ -180,11 +191,14 @@ private:
   DeferredLightingState deferred_lighting_state_ {};
   FrameLightSelection frame_light_selection_ {};
   std::vector<PreparedViewLightingInput> frame_lighting_views_ {};
+  std::vector<PreparedViewShadowInput> frame_shadow_views_ {};
   frame::SequenceNumber lighting_grid_built_sequence_ { 0U };
+  frame::SequenceNumber shadow_depths_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<LightingService> lighting_;
+  std::unique_ptr<ShadowService> shadows_;
   std::unique_ptr<PostProcessService> post_process_;
 };
 
