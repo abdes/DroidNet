@@ -157,10 +157,15 @@ auto EnvironmentLightingService::RenderSkyAndFog(
       || fog_state.requested,
     .sky_requested = sky_state.requested,
     .sky_executed = sky_state.executed,
+    .sky_draw_count = sky_state.draw_count,
     .atmosphere_requested = atmosphere_state.requested,
     .atmosphere_executed = atmosphere_state.executed,
+    .atmosphere_draw_count = atmosphere_state.draw_count,
     .fog_requested = fog_state.requested,
     .fog_executed = fog_state.executed,
+    .fog_draw_count = fog_state.draw_count,
+    .total_draw_count = sky_state.draw_count + atmosphere_state.draw_count
+      + fog_state.draw_count,
   };
 }
 
