@@ -22,6 +22,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
@@ -148,24 +149,6 @@ auto AdoptOrBeginPersistentState(graphics::CommandRecorder& recorder,
   }
 }
 
-auto BuildShadowFramebuffer(const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const std::uint32_t cascade_index) -> graphics::FramebufferDesc
-{
-  auto desc = graphics::FramebufferDesc {};
-  desc.SetDepthAttachment({
-    .texture = shadow_surface,
-    .sub_resources = graphics::TextureSubResourceSet {
-      .base_mip_level = 0U,
-      .num_mip_levels = 1U,
-      .base_array_slice = cascade_index,
-      .num_array_slices = 1U,
-    },
-    .format = shadow_surface->GetDescriptor().format,
-    .is_read_only = false,
-  });
-  return desc;
-}
-
 auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
   const bool alpha_test) -> graphics::GraphicsPipelineDesc
 {
@@ -215,20 +198,56 @@ auto IsMaskedDraw(
     && metadata[draw_command.draw_index].flags.IsSet(PassMaskBit::kMasked);
 }
 
-auto EnsureFramebufferForCascade(Graphics& gfx,
-  std::vector<std::shared_ptr<graphics::Framebuffer>>& framebuffers,
-  const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const std::uint32_t cascade_index)
-  -> std::shared_ptr<graphics::Framebuffer>
+auto EnsureDepthStencilViewForCascade(Graphics& gfx,
+  std::vector<graphics::NativeView>& dsvs, graphics::Texture& shadow_surface,
+  const std::uint32_t cascade_index) -> graphics::NativeView
 {
-  if (framebuffers.size() <= cascade_index) {
-    framebuffers.resize(cascade_index + 1U);
+  if (dsvs.size() <= cascade_index) {
+    dsvs.resize(cascade_index + 1U);
   }
-  if (framebuffers[cascade_index] == nullptr) {
-    framebuffers[cascade_index]
-      = gfx.CreateFramebuffer(BuildShadowFramebuffer(shadow_surface, cascade_index));
+  if (dsvs[cascade_index]->IsValid()) {
+    return dsvs[cascade_index];
   }
-  return framebuffers[cascade_index];
+
+  auto& registry = gfx.GetResourceRegistry();
+  CHECK_F(registry.Contains(shadow_surface),
+    "ShadowDepthPass: shadow surface '{}' must be registered before DSV "
+    "lookup",
+    shadow_surface.GetName());
+
+  const auto dsv_desc = graphics::TextureViewDescription {
+    .view_type = graphics::ResourceViewType::kTexture_DSV,
+    .visibility = graphics::DescriptorVisibility::kCpuOnly,
+    .format = shadow_surface.GetDescriptor().format,
+    .dimension = TextureType::kTexture2DArray,
+    .sub_resources = graphics::TextureSubResourceSet {
+      .base_mip_level = 0U,
+      .num_mip_levels = 1U,
+      .base_array_slice = cascade_index,
+      .num_array_slices = 1U,
+    },
+    .is_read_only_dsv = false,
+  };
+
+  if (const auto existing = registry.Find(shadow_surface, dsv_desc);
+    existing->IsValid()) {
+    dsvs[cascade_index] = existing;
+    return existing;
+  }
+
+  auto& allocator = gfx.GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_DSV,
+    graphics::DescriptorVisibility::kCpuOnly);
+  CHECK_F(handle.IsValid(),
+    "ShadowDepthPass: failed to allocate a DSV for shadow cascade {}",
+    cascade_index);
+  const auto dsv
+    = registry.RegisterView(shadow_surface, std::move(handle), dsv_desc);
+  CHECK_F(dsv->IsValid(),
+    "ShadowDepthPass: failed to register a DSV for shadow cascade {}",
+    cascade_index);
+  dsvs[cascade_index] = dsv;
+  return dsv;
 }
 
 } // namespace
@@ -359,24 +378,27 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
 
   for (std::uint32_t cascade_index = 0U;
        cascade_index < frame_data.bindings.cascade_count; ++cascade_index) {
-    const auto framebuffer = EnsureFramebufferForCascade(
-      *gfx, cascade_framebuffers_, shadow_surface, cascade_index);
+    const auto dsv = EnsureDepthStencilViewForCascade(
+      *gfx, cascade_dsvs_, *shadow_surface, cascade_index);
+    const auto& shadow_desc = shadow_surface->GetDescriptor();
     recorder->FlushBarriers();
-    recorder->ClearFramebuffer(*framebuffer, std::nullopt, 1.0F, 0U);
-    recorder->BindFrameBuffer(*framebuffer);
+    recorder->SetRenderTargets({}, dsv);
+    recorder->ClearDepthStencilView(*shadow_surface, dsv,
+      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 1.0F,
+      0U);
     recorder->SetViewport({
       .top_left_x = 0.0F,
       .top_left_y = 0.0F,
-      .width = static_cast<float>(frame_data.backing_resolution.x),
-      .height = static_cast<float>(frame_data.backing_resolution.y),
+      .width = static_cast<float>(shadow_desc.width),
+      .height = static_cast<float>(shadow_desc.height),
       .min_depth = 0.0F,
       .max_depth = 1.0F,
     });
     recorder->SetScissors({
       .left = 0,
       .top = 0,
-      .right = static_cast<std::int32_t>(frame_data.backing_resolution.x),
-      .bottom = static_cast<std::int32_t>(frame_data.backing_resolution.y),
+      .right = static_cast<std::int32_t>(shadow_desc.width),
+      .bottom = static_cast<std::int32_t>(shadow_desc.height),
     });
 
     auto current_alpha_test = std::optional<bool> {};

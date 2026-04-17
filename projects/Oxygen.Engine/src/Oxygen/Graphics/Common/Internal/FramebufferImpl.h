@@ -9,6 +9,7 @@
 #include <memory>
 #include <span>
 
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -54,8 +55,8 @@ private:
 
   StaticVector<std::shared_ptr<Texture>, kMaxRenderTargets + 1> textures_ {};
   StaticVector<bool, kMaxRenderTargets + 1> owns_resource_registration_ {};
-  StaticVector<bool, kMaxRenderTargets + 1> owns_view_registration_ {};
-  StaticVector<NativeView, kMaxRenderTargets + 1> registered_views_ {};
+  StaticVector<DescriptorAllocationHandle, kMaxRenderTargets + 1>
+    owned_descriptor_handles_ {};
   StaticVector<NativeView, kMaxRenderTargets> rtvs_ {};
   NativeView dsv_ {};
 

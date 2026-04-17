@@ -21,12 +21,82 @@ This `04-05` seam-migration lane replaces only the initial runtime seams:
 - example-local view-registration assumptions that now move behind a
   Vortex-owned renderer seam
 
-This lane does not claim the downstream DemoShell/AppWindow runtime-UI
-migration or the later parity-proof artifact pack. Those remain owned by the
-follow-on `04-11`, `04-09`, and `04-06` plans.
+This README preserves the original `04-05` seam boundary truthfully:
+DemoShell/AppWindow runtime-UI migration plus the parity/composition proof-pack
+closeout were completed later by `04-11`, `04-09`, and `04-06` on the same
+artifact root.
 
 `Examples/Async` remains the integration gate, while `VortexBasic` remains the
 continuing systems-and-passes validation surface for Phase 4.
+
+## Phase 4 Proof Pack
+
+`04-09` owns the migrated Async parity and harness baseline under
+`build/artifacts/vortex/phase-4/async/`. `04-06` reuses that same artifact pack
+for composition/presentation closeout; it does not create a second capture
+lane.
+
+Composition-specific retained boundaries on the migrated path:
+
+- `ResolveSceneColor` remains the Stage 21 owner when the main scene view needs
+  a retained resolved handoff. It snapshots `ResolvedSceneColor` and
+  `ResolvedSceneDepth` before Stage 22 consumes the scene signal.
+- `PostRenderCleanup` remains the Stage 23 extraction/handoff owner. It
+  snapshots `PrevSceneDepth` and `PrevVelocity` after Stage 22 completes, then
+  finalizes the history handoff without taking presentation ownership.
+- Final presentation stays on the retained `Renderer` compositing/present path.
+  The Async proof pack inspects that path through
+  `baseline_renderdoc.rdc_async_capture_report.txt`,
+  `baseline_renderdoc.rdc_async_products_report.txt`, and
+  `baseline_renderdoc.rdc_async_capture_report.txt.validation.txt`.
+
+To re-run the composition closeout proof:
+
+```powershell
+powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 `
+  -CapturePath build/artifacts/vortex/phase-4/async/baseline_renderdoc.rdc
+```
+
+Successful composition/presentation closeout keeps these checks green in the
+generated reports:
+
+- `async_runtime_stage_order_valid=true`
+- `compositing_scope_present=true`
+- `stage22_tonemap_scope_present=true`
+- `final_present_nonzero=true`
+- `final_present_vs_tonemap_changed=true`
+
+These artifact checks are necessary but not sufficient for Phase 4 closeout.
+The migrated Async demo now also carries a debugger-backed `04-06` audit on the
+same runtime path. The clean closeout expectation is:
+
+- `cdb` reaches the Async `exit code: 0` line
+- no `D3D12 WARNING` or `D3D12 ERROR` lines appear in
+  `build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log`
+- the only accepted debugger-only shutdown noise is the documented
+  `DXGI WARNING: Live IDXGIFactory ...` line
+
+ImGui / DemoShell overlay correctness is tracked in
+`build/artifacts/vortex/phase-4/async/baseline_behaviors.md`. The required
+source-audit lines are:
+
+- `imgui_runtime_registered: pass`
+- `demoshell_ui_draw_path: pass`
+
+The retained debugger-backed audit artifacts live alongside the proof pack:
+
+- `build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log`
+- `build/artifacts/vortex/phase-4/async/04-06.debug-layer.report.txt`
+
+To rerun the debugger-backed audit:
+
+```powershell
+cdb.exe -G -g `
+  -logo build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log `
+  -cf build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.commands.txt `
+  out/build-ninja/bin/Debug/Oxygen.Examples.Async.exe `
+  --frames 14 --fps 30 --vsync false --debug-layer true --capture-provider off
+```
 
 ## Files
 

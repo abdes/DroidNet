@@ -25,10 +25,8 @@ auto CleanupFramebufferRegistrations(oxygen::Graphics& gfx,
     textures,
   oxygen::StaticVector<bool, oxygen::kMaxRenderTargets + 1>&
     owns_resource_registration,
-  oxygen::StaticVector<bool, oxygen::kMaxRenderTargets + 1>&
-    owns_view_registration,
-  oxygen::StaticVector<oxygen::graphics::NativeView,
-    oxygen::kMaxRenderTargets + 1>& registered_views,
+  oxygen::StaticVector<oxygen::graphics::DescriptorAllocationHandle,
+    oxygen::kMaxRenderTargets + 1>& owned_descriptor_handles,
   oxygen::StaticVector<oxygen::graphics::NativeView, oxygen::kMaxRenderTargets>&
     rtvs,
   oxygen::graphics::NativeView& dsv) noexcept -> void
@@ -42,19 +40,12 @@ auto CleanupFramebufferRegistrations(oxygen::Graphics& gfx,
       && owns_resource_registration[index]) {
       gfx.ForgetKnownResourceState(*texture);
       resource_registry.UnRegisterResource(*texture);
-    } else if (index < owns_view_registration.size()
-      && owns_view_registration[index]
-      && index < registered_views.size()
-      && registered_views[index]->IsValid()
-      && resource_registry.Contains(*texture)) {
-      resource_registry.UnRegisterView(*texture, registered_views[index]);
     }
   }
 
+  owned_descriptor_handles.clear();
   textures.clear();
   owns_resource_registration.clear();
-  owns_view_registration.clear();
-  registered_views.clear();
   rtvs.clear();
   dsv = {};
 }
@@ -95,7 +86,7 @@ FramebufferImpl::FramebufferImpl(
       return;
     }
     CleanupFramebufferRegistrations(*gfx, resource_registry, textures_,
-      owns_resource_registration_, owns_view_registration_, registered_views_,
+      owns_resource_registration_, owned_descriptor_handles_,
       rtvs_, dsv_);
   });
 
@@ -111,7 +102,7 @@ FramebufferImpl::FramebufferImpl(
 
     const bool owns_registration = resource_registry.AcquireRegistration(texture);
 
-    TextureViewDescription view_desc {
+    const auto view_desc = TextureViewDescription {
       .view_type = ResourceViewType::kTexture_RTV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = attachment.format,
@@ -119,21 +110,14 @@ FramebufferImpl::FramebufferImpl(
       .sub_resources = attachment.sub_resources,
     };
 
-    auto rtv = resource_registry.Find(*texture, view_desc);
-    bool owns_view_registration = false;
-    if (!rtv->IsValid()) {
-      auto rtv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
-        ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
-      if (!rtv_handle.IsValid()) {
-        throw std::runtime_error(fmt::format(
-          "Failed to allocate RTV handle for color attachment in texture `{}`",
-          texture->GetName()));
-      }
-      auto acquired = resource_registry.AcquireViewRegistration(
-        *texture, std::move(rtv_handle), view_desc);
-      rtv = acquired.first;
-      owns_view_registration = acquired.second;
+    auto rtv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
+      ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
+    if (!rtv_handle.IsValid()) {
+      throw std::runtime_error(fmt::format(
+        "Failed to allocate RTV handle for color attachment in texture `{}`",
+        texture->GetName()));
     }
+    const auto rtv = texture->GetNativeView(rtv_handle, view_desc);
     if (!rtv->IsValid()) {
       if (owns_registration) {
         resource_registry.UnRegisterResource(*texture);
@@ -142,10 +126,9 @@ FramebufferImpl::FramebufferImpl(
         "Failed to register RTV view for texture `{}`", texture->GetName()));
     }
     rtvs_.push_back(rtv);
+    owned_descriptor_handles_.push_back(std::move(rtv_handle));
     textures_.push_back(std::move(texture));
     owns_resource_registration_.push_back(owns_registration);
-    owns_view_registration_.push_back(owns_view_registration);
-    registered_views_.push_back(rtv);
   }
 
   if (auto& depth_attachment = desc_.depth_attachment;
@@ -160,7 +143,7 @@ FramebufferImpl::FramebufferImpl(
 
     const bool owns_registration = resource_registry.AcquireRegistration(texture);
 
-    TextureViewDescription view_desc {
+    const auto view_desc = TextureViewDescription {
       .view_type = ResourceViewType::kTexture_DSV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = depth_attachment.format,
@@ -169,21 +152,15 @@ FramebufferImpl::FramebufferImpl(
       .is_read_only_dsv = depth_attachment.is_read_only,
     };
 
-    auto dsv = resource_registry.Find(*texture, view_desc);
-    bool owns_view_registration = false;
-    if (!dsv->IsValid()) {
-      auto dsv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
-        ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
-      if (!dsv_handle.IsValid()) {
-        throw std::runtime_error(fmt::format(
-          "Failed to allocate DSV handle for color attachment in texture `{}`",
-          texture->GetName()));
-      }
-      auto acquired = resource_registry.AcquireViewRegistration(
-        *texture, std::move(dsv_handle), view_desc);
-      dsv = acquired.first;
-      owns_view_registration = acquired.second;
+    auto dsv = NativeView {};
+    auto dsv_handle = gfx->GetDescriptorAllocator().AllocateRaw(
+      ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
+    if (!dsv_handle.IsValid()) {
+      throw std::runtime_error(fmt::format(
+        "Failed to allocate DSV handle for color attachment in texture `{}`",
+        texture->GetName()));
     }
+    dsv = texture->GetNativeView(dsv_handle, view_desc);
     if (!dsv->IsValid()) {
       if (owns_registration) {
         resource_registry.UnRegisterResource(*texture);
@@ -192,11 +169,9 @@ FramebufferImpl::FramebufferImpl(
         "Failed to register DSV view for texture `{}`", texture->GetName()));
     }
     dsv_ = dsv;
-
+    owned_descriptor_handles_.push_back(std::move(dsv_handle));
     textures_.push_back(std::move(texture));
     owns_resource_registration_.push_back(owns_registration);
-    owns_view_registration_.push_back(owns_view_registration);
-    registered_views_.push_back(dsv);
   }
 
   construction_complete = true;
@@ -214,8 +189,7 @@ FramebufferImpl::~FramebufferImpl()
   LOG_SCOPE_F(1, "Destroying framebuffer");
   auto& resource_registry = gfx->GetResourceRegistry();
   CleanupFramebufferRegistrations(*gfx, resource_registry, textures_,
-    owns_resource_registration_, owns_view_registration_, registered_views_,
-    rtvs_, dsv_);
+    owns_resource_registration_, owned_descriptor_handles_, rtvs_, dsv_);
 }
 
 auto FramebufferImpl::GetFramebufferInfo() const -> const FramebufferInfo&

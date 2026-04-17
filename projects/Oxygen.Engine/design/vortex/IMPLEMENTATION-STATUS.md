@@ -1,6 +1,6 @@
 ﻿# Vortex Renderer Implementation Status
 
-Status: `in_progress — Phase 4 service activation is partially complete; the live 04-08 VortexBasic Stage 15 proof is green, and Async migration plus composition validation remain open`
+Status: `done — Phase 4 service activation, Async migration, and composition closeout are verified on the current branch`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -35,7 +35,7 @@ Related:
 | 1 | Substrate Migration | `done` | — |
 | 2 | SceneTextures + SceneRenderer Shell | `done` | — |
 | 3 | Deferred Core | `done` | — |
-| 4 | Migration-Critical Services + First Migration | `in_progress` | `Examples/Async` Vortex migration + composition/presentation validation |
+| 4 | Migration-Critical Services + First Migration | `done` | — |
 | 5 | Remaining Services + Runtime Scenarios | `not_started` | Phase 4 + per-service/scenario LLDs |
 | 6 | Legacy Deprecation | `not_started` | Phase 5 |
 | 7 | Future Capabilities (post-release) | `not_started` | Phase 6 |
@@ -69,6 +69,131 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-18 — Phase 4 composition/presentation closeout rerun clean on the debugger-backed Async path
+
+- Scope decision:
+  - `04-09` remains the owner of Async parity thresholds and harness proof.
+  - `04-06` reuses the retained Async proof pack, strengthens the retained
+    Stage 21 / 22 / 23 boundary documentation, and now also proves the live
+    migrated runtime under `cdb`.
+  - The runtime fix stayed inside the retained Phase 4 path:
+    no new composition seam, no new renderer path, and no legacy fallback.
+- Changed files this session:
+  - `src/Oxygen/Graphics/Common/Internal/FramebufferImpl.h`
+  - `src/Oxygen/Graphics/Common/Internal/FramebufferImpl.cpp`
+  - `src/Oxygen/Vortex/Internal/ViewportClamp.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp`
+  - `src/Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.cpp`
+  - `src/Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h`
+  - `src/Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.cpp`
+  - `src/Oxygen/Vortex/Lighting/Passes/DeferredLightPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/SkyPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/FogPass.cpp`
+  - `src/Oxygen/Vortex/PostProcess/Passes/TonemapPass.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/PostRenderCleanup.cpp`
+  - `Examples/Async/README.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-examples-vortexbasic Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.SceneRendererShell.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "^(Oxygen\.Vortex\.(RendererCompositionQueue|CompositionPlanner|SceneRendererShell)\.Tests|RendererCompositionQueueTest\.|CompositionPlannerTest\.|SceneRendererShellProofSurfaceTest\.)"`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/phase-4/vortexbasic/04-06`
+  - `powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 -CapturePath build/artifacts/vortex/phase-4/async/baseline_renderdoc.rdc`
+  - `cdb.exe -G -g -logo build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log -cf build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.commands.txt out/build-ninja/bin/Debug/Oxygen.Examples.Async.exe --frames 14 --fps 30 --vsync false --debug-layer true --capture-provider off`
+- Result:
+  - composition queue / planner / shell regressions pass on the retained
+    migrated single-view path
+  - `VortexBasic` remains green for the systems-and-passes validator lane
+  - `Verify-AsyncRuntimeProof.ps1` still passes against the retained Async
+    proof pack
+  - the debugger-backed Async rerun now reaches `exit code: 0`
+  - the D3D12 debug-layer failures that blocked the earlier closeout are gone:
+    `#821`, `#1378`, `#538`, and the previously removed `#615`
+  - the only remaining debugger-surface noise is the accepted shutdown
+    `DXGI WARNING: Live IDXGIFactory ...` line
+- Code / validation delta:
+  - CPU-only framebuffer RTV/DSV views are now per-framebuffer allocations
+    instead of shared registry-cached views, which prevents descriptor-slot
+    aliasing between the resized scene-depth path and the retained shadow path
+  - temporary Stage 15 framebuffers are now deferred-released so their CPU
+    descriptor slots stay valid until GPU completion
+  - the shadow surface uses the stencil-capable depth format the runtime path
+    actually binds
+  - viewport/scissor setup on the retained runtime passes is clamped to their
+    actual target extents
+- Remaining blocker:
+  - none for `04-06`
+
+### 2026-04-18 — Phase 4 composition/presentation closeout blocked by debugger-backed Async audit
+
+- Scope decision:
+  - `04-09` remains the owner of Async parity thresholds and harness proof.
+  - `04-06` still reuses the existing Async artifact pack to inspect only the
+    composition/presentation boundary on the migrated path.
+  - `ResolveSceneColor` remains the Stage 21 owner when resolve is required.
+  - `PostRenderCleanup` remains the Stage 23 extraction/handoff owner.
+  - `VortexBasic` remains the Phase 4 systems-and-passes validator, but it is
+    not sufficient to close `04-06` after the migrated Async run under `cdb`
+    surfaced debugger-visible D3D12 failures.
+- Changed files this session:
+  - `src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/PostRenderCleanup.cpp`
+  - `Examples/Async/README.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.SceneRendererShell.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "RendererCompositionQueue|CompositionPlanner|SceneRendererShell"` (fails on this branch because the broad regex still matches legacy `Oxygen.Renderer.*` `_NOT_BUILT` placeholders)
+  - `ctest --preset test-debug --output-on-failure -R "^(Oxygen\.Vortex\.(RendererCompositionQueue|CompositionPlanner|SceneRendererShell)\.Tests|RendererCompositionQueueTest\.|CompositionPlannerTest\.|SceneRendererShellProofSurfaceTest\.)"`
+  - `cmake --build --preset windows-debug --target oxygen-vortex oxygen-examples-vortexbasic Oxygen.Vortex.RendererCompositionQueue.Tests Oxygen.Vortex.CompositionPlanner.Tests Oxygen.Vortex.SceneRendererShell.Tests --parallel 4`
+  - `rg -n "ResolveSceneColor|PostRenderCleanup|build/artifacts/vortex/phase-4/async/" Examples/Async/README.md design/vortex/IMPLEMENTATION-STATUS.md src/Oxygen/Vortex/SceneRenderer/ResolveSceneColor.cpp src/Oxygen/Vortex/SceneRenderer/PostRenderCleanup.cpp`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/phase-4/vortexbasic/04-06`
+  - `powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 -CapturePath build/artifacts/vortex/phase-4/async/baseline_renderdoc.rdc`
+  - `cdb.exe -G -g -logo build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log -cf build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.commands.txt out/build-ninja/bin/Debug/Oxygen.Examples.Async.exe --frames 14 --fps 30 --vsync false --debug-layer true --capture-provider off`
+- Result:
+  - the composition queue tests now exercise the migrated single-view runtime
+    publication/composition path instead of a raw texture shortcut
+  - the planner proof now pins scene -> HUD -> ImGui ordering on the retained
+    single-view path
+  - the shell proof now locks Stage 13 and Stage 14 as reserved/inactive and
+    verifies that the retained Stage 21 / Stage 23 ownership markers exist in
+    source
+  - the Async README now documents the shared proof-pack root, the Stage 21 /
+    23 owners, the generated report files, the final-presentation keys, and
+    the ImGui overlay audit keys
+  - `Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/phase-4/vortexbasic/04-06`
+    completed successfully on this branch
+  - `Verify-AsyncRuntimeProof.ps1` passed again against
+    `build/artifacts/vortex/phase-4/async/baseline_renderdoc.rdc`, preserving:
+    `async_runtime_stage_order_valid=true`,
+    `compositing_scope_present=true`,
+    `stage22_tonemap_scope_present=true`,
+    `final_present_nonzero=true`,
+    `final_present_vs_tonemap_changed=true`
+  - the reused `baseline_behaviors.md` still reports
+    `imgui_runtime_registered: pass` and `demoshell_ui_draw_path: pass`
+  - the debugger-backed Async audit wrote:
+    - `build/artifacts/vortex/phase-4/async/04-06.debug-layer.transcript.log`
+    - `build/artifacts/vortex/phase-4/async/04-06.debug-layer.report.txt`
+  - that audit failed with:
+    - `D3D12 ERROR #615 DEPTH_STENCIL_FORMAT_MISMATCH_PIPELINE_STATE` against `Vortex.DirectionalShadowSurface`
+    - `D3D12 WARNING #821 CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE`
+    - `D3D12 WARNING #1378 DRAW_POTENTIALLY_OUTSIDE_OF_VALID_RENDER_AREA`
+    - no logged Async `exit code:` before the debugger terminated on the D3D12 break
+- Code / validation delta:
+  - The retained Stage 21 / 22 / 23 documentation and tests are stronger and
+    the reused Async proof pack still validates structurally, but the
+    debugger-backed migrated runtime path is not clean.
+  - The authoritative Async proof pack remains
+    `build/artifacts/vortex/phase-4/async/`; 04-06 revalidates it instead of
+    hand-waving or duplicating it.
+- Remaining blocker:
+  - fix the migrated Async `cdb` audit failures on the Vortex path:
+    - shadow draw uses a depth/stencil surface format that does not match the pipeline state
+    - shadow draw viewport/scissor exceeds the smallest attached target extent
+    - rerun the `04-06.debug-layer.*` audit and retain a clean Async `exit code:` before accepting any `04-06` closeout claim
 
 ### 2026-04-17 — Phase 4 Async bootstrap seam moved onto the Vortex runtime path
 
@@ -2198,28 +2323,23 @@ work; only reopen later closure-gap items if a future audit finds new drift.
 | 4B PostProcessService | D.10 | `done` | `done` |
 | 4C ShadowService | D.11 | `done` | `done` |
 | 4D EnvironmentLightingService | D.12 | `done` | `done` |
-| 4E Examples/Async migration | D.13 | `done` | `in_progress` |
-| 4F Composition/presentation validation | — | — | `not_started` |
+| 4E Examples/Async migration | D.13 | `done` | `done` |
+| 4F Composition/presentation validation | — | — | `done` |
 
 ### Resume Point
 
-Phase 4 has completed the service-activation lane and the blocker-closing Stage
-15 proof lane:
+Phase 4 is complete on the current branch:
 
 1. `LightingService`, `PostProcessService`, `ShadowService`, and
-   `EnvironmentLightingService` are now active on the current branch.
-2. The authoritative `ENV-01` blocker-closeout proof is the live
-   `VortexBasic` validator artifact
-   `build/artifacts/vortex/phase-4/vortexbasic/04-08.validation.txt`, not the
-   older `04-04` ownership/publication proof alone.
-3. `04-05` is now complete for the initial seam-replacement boundary:
-   Async links and boots through Vortex-owned seams, but runtime/UI migration
-   and proof work remain open.
-4. `Examples/Async` remains the first-success integration gate.
-5. Resume the remaining Phase 4 execution in this order:
-   `04-11` -> `04-09` -> `04-06`.
-6. Keep `VortexBasic` as the durable Stage 15 regression surface while Async
-   adds the runtime/UI/harness integration proof.
+   `EnvironmentLightingService` are active and verified.
+2. `Examples/Async` remains the retained first-success integration gate and the
+   authoritative proof root stays
+   `build/artifacts/vortex/phase-4/async/`.
+3. The retained Stage 21 / 22 / 23 boundary documentation and tests are green.
+4. The reused Async proof pack still passes, and the live migrated runtime is
+   debugger-clean under `cdb` apart from the accepted shutdown
+   `DXGI WARNING: Live IDXGIFactory ...` line.
+5. Resume with Phase 5 planning/execution.
 
 ---
 

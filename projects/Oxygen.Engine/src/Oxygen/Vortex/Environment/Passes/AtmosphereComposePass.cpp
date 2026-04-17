@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -125,13 +126,16 @@ auto BuildAtmosphereFramebuffer(const SceneTextures& scene_textures)
 auto SetViewportAndScissor(graphics::CommandRecorder& recorder,
   const RenderContext& ctx, const SceneTextures& scene_textures) -> void
 {
+  const auto extent = scene_textures.GetExtent();
   if (ctx.current_view.resolved_view != nullptr) {
-    recorder.SetViewport(ctx.current_view.resolved_view->Viewport());
-    recorder.SetScissors(ctx.current_view.resolved_view->Scissor());
+    const auto clamped = oxygen::vortex::internal::ResolveClampedViewportState(
+      ctx.current_view.resolved_view->Viewport(),
+      ctx.current_view.resolved_view->Scissor(), extent.x, extent.y);
+    recorder.SetViewport(clamped.viewport);
+    recorder.SetScissors(clamped.scissors);
     return;
   }
 
-  const auto extent = scene_textures.GetExtent();
   recorder.SetViewport({
     .top_left_x = 0.0F,
     .top_left_y = 0.0F,
@@ -261,6 +265,7 @@ auto AtmosphereComposePass::Record(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  gfx->RegisterDeferredRelease(std::move(framebuffer));
   state.draw_count = 1U;
   state.bound_scene_color = true;
   state.sampled_scene_depth = true;

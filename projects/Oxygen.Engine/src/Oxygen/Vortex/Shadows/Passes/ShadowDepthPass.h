@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
@@ -67,7 +68,7 @@ private:
   void* pass_constants_mapped_ptr_ { nullptr };
   std::vector<ShaderVisibleIndex> pass_constants_srvs_ {};
   std::uint32_t pass_constants_slot_count_ { 0U };
-  std::vector<std::shared_ptr<graphics::Framebuffer>> cascade_framebuffers_ {};
+  std::vector<graphics::NativeView> cascade_dsvs_ {};
 };
 
 } // namespace shadows
