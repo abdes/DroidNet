@@ -24,6 +24,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
@@ -49,16 +50,17 @@ using oxygen::ResolvedView;
 using oxygen::TextureType;
 using oxygen::ViewId;
 using oxygen::ViewPort;
-using oxygen::engine::FrameContext;
-using oxygen::graphics::Framebuffer;
-using oxygen::graphics::FramebufferDesc;
-using oxygen::graphics::QueueRole;
-using oxygen::graphics::ResourceStates;
+  using oxygen::engine::FrameContext;
+  using oxygen::graphics::Framebuffer;
+  using oxygen::graphics::FramebufferDesc;
+  using oxygen::graphics::QueueRole;
+  using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
 using oxygen::scene::Scene;
-using oxygen::vortex::CapabilitySet;
-using oxygen::vortex::RenderContext;
-using oxygen::vortex::Renderer;
+  using oxygen::vortex::CapabilitySet;
+  using oxygen::vortex::CompositionView;
+  using oxygen::vortex::RenderContext;
+  using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::SceneTextureBindings;
@@ -115,7 +117,8 @@ protected:
     constexpr CapabilitySet kDeferredPublicationCapabilities
       = RendererCapabilityFamily::kScenePreparation
       | RendererCapabilityFamily::kDeferredShading
-      | RendererCapabilityFamily::kLightingData;
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting;
     renderer_
       = { new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config),
             kDeferredPublicationCapabilities),
@@ -708,6 +711,54 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_TRUE(render_context.GetActiveViewEntry()->is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
     render_context.GetActiveViewEntry()->primary_target.get());
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 96U, 54U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage15Environment", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage15Environment");
+  const auto view_id = ViewId { 12U };
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto render_context = MakeSceneRenderContext(
+    scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
+  auto composition_view = CompositionView {};
+  composition_view.id = view_id;
+  composition_view.with_atmosphere = true;
+  render_context.frame_views.front().composition_view
+    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+  render_context.current_view.composition_view
+    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+
+  scene_renderer.OnFrameStart(frame_context);
+  scene_renderer.OnRender(render_context);
+
+  EXPECT_NE(scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  const auto& environment_state = scene_renderer.GetLastEnvironmentLightingState();
+  EXPECT_TRUE(environment_state.owned_by_environment_service);
+  EXPECT_TRUE(environment_state.atmosphere_requested);
+  EXPECT_TRUE(environment_state.atmosphere_executed);
+  EXPECT_FALSE(environment_state.ambient_bridge_published);
+  EXPECT_EQ(environment_state.ambient_bridge_irradiance_srv,
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 } // namespace
