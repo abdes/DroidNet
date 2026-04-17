@@ -246,11 +246,8 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   // === Stage 9: Base pass — GBuffer MRT + velocity completion ===
   // if (base_pass_) base_pass_->Execute(ctx, scene_textures_);
 
-  // === Stage 10: Rebuild scene textures with GBuffers ===
-  // scene_textures_.RebuildWithGBuffers();
-  // setup_mode_.Set(SceneTextureSetupMode::Flag::kGBuffers);
-  // RefreshSceneTextureBindings();
-  // renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  // === Stage 10: SceneRenderer-owned rebuild/publish boundary ===
+  // PublishDeferredBasePassSceneTextures(ctx);
 
   // === Stage 11: reserved — MaterialCompositionService::PostBasePass ===
 
@@ -320,7 +317,7 @@ if (ctx.current_view.prepared_frame == nullptr) {
 // Later scene-view stages consume the selected current view only.
 if (depth_prepass_) depth_prepass_->Execute(ctx, scene_textures_);
 if (base_pass_) base_pass_->Execute(ctx, scene_textures_);
-renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+PublishDeferredBasePassSceneTextures(ctx);
 ```
 
 Future heterogeneous multi-view scene execution may still call the scene-view

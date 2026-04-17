@@ -118,7 +118,8 @@ public:
     -> const std::shared_ptr<graphics::Texture>&;
   OXGN_VRTX_NDAPI auto GetStencil() const -> SceneTextureAspectView;
 
-  // --- GBuffer products (valid after RebuildWithGBuffers) ---
+  // --- GBuffer products (allocated at construction; consumable publication
+  //     begins only after SceneRenderer completes Stage 10) ---
 
   OXGN_VRTX_NDAPI auto GetGBuffer(GBufferIndex index) const
     -> graphics::Texture&;
@@ -335,9 +336,11 @@ Stage 9 (Base Pass)
   └─ Standard scene-texture bindings still treat SceneColor / GBuffers as unavailable here
 
 Stage 10 (Rebuild)
-  └─ SceneTextures::RebuildWithGBuffers() — state transition
+  └─ SceneRenderer-owned `PublishDeferredBasePassSceneTextures(ctx)`
+  └─ Calls `SceneTextures::RebuildWithGBuffers()` — family-local helper
   └─ SetupMode += kGBuffers | kSceneColor | kStencil
   └─ Bindings regenerated with full GBuffer SRVs
+  └─ Shared routing metadata republished for the current view
   └─ SceneColor + GBuffers now readable by downstream stages through the canonical publication stack
 
 Stage 12 (Deferred Lighting)
@@ -401,15 +404,18 @@ viewport dimensions against current extent and calls `Resize` if they differ.
 
 ### 5.4 RebuildWithGBuffers
 
-`RebuildWithGBuffers()` is NOT a reallocation. It is a state transition that:
+`RebuildWithGBuffers()` is NOT a reallocation. It is a readiness check that:
 
 1. Validates GBuffer textures exist and have been written
-2. Creates or updates SRV descriptor views for GBuffer read access
-3. Leaves ownership of `SceneTextureSetupMode` to `SceneRenderer`, which marks
-   `SceneColor`, `kGBuffers`, and stencil-backed routing as consumable and
-   republishes shared routing metadata after the rebuild boundary
+2. Confirms the active family is ready for Stage-10 promotion
+3. Does **not** mutate `SceneTextureSetupMode`
+4. Does **not** regenerate `SceneTextureBindings`
+5. Does **not** publish or republish per-view routing metadata
 
-This is called by `SceneRenderer` at stage 10 after the base pass completes.
+The canonical Stage-10 owner is `SceneRenderer`. It calls
+`RebuildWithGBuffers()` as a family-local helper, then promotes
+`SceneTextureSetupMode`, regenerates `SceneTextureBindings`, and triggers the
+current-view routing republish after the rebuild boundary.
 
 ## 6. Shader Contracts
 
@@ -459,8 +465,9 @@ products such as `CustomDepth` / `CustomStencil`.
 4. **Stencil/custom-depth contract:** Verify the scene depth resource exposes
    the scene stencil family, and the optional custom depth path exposes custom
    depth plus custom stencil routing when enabled.
-5. **RebuildWithGBuffers:** Call after setup, verify GBuffer SRVs are valid and
-   binding regeneration is required before downstream use.
+5. **RebuildWithGBuffers:** Call after setup, verify it does not by itself
+   publish `SceneColor` / GBuffer bindings, and verify Stage 10 binding
+   regeneration is still required before downstream use.
 6. **Config validation:** Invalid configs (zero extent) produce errors.
 
 ### 8.2 Integration Tests

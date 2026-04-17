@@ -178,6 +178,36 @@ protected:
     return view;
   }
 
+  [[nodiscard]] auto MakeSceneRenderContext(const std::shared_ptr<Scene>& scene,
+    const ViewId view_id, const ResolvedView& resolved_view,
+    const oxygen::observer_ptr<Framebuffer> framebuffer) const -> RenderContext
+  {
+    auto render_context = RenderContext {};
+    render_context.scene = oxygen::observer_ptr<Scene> { scene.get() };
+    render_context.frame_slot = oxygen::frame::Slot { 0U };
+    render_context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+    render_context.active_view_index = std::size_t { 0U };
+    render_context.frame_views.push_back({
+      .view_id = view_id,
+      .is_scene_view = true,
+      .composition_view = {},
+      .shading_mode_override = {},
+      .resolved_view = oxygen::observer_ptr<const ResolvedView> { &resolved_view },
+      .primary_target = framebuffer,
+    });
+    render_context.current_view.view_id = view_id;
+    render_context.current_view.exposure_view_id = view_id;
+    render_context.current_view.resolved_view
+      = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+    render_context.view_constants = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererPublicationTest.ViewConstants",
+    });
+    return render_context;
+  }
+
   auto RunRendererFrame(FrameContext& frame_context) const -> void
   {
     renderer_->OnFrameStart(oxygen::observer_ptr<FrameContext> { &frame_context });
@@ -460,8 +490,16 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   };
   auto scene_renderer = SceneRenderer(
     *renderer_, *graphics_, config, ShadingMode::kDeferred);
+  auto stage10_scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage3ToStage10", 16U);
+  auto stage10_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage3ToStage10");
+  auto stage10_view = MakeResolvedView(96.0F, 54.0F);
+  auto stage10_context = MakeSceneRenderContext(stage10_scene, ViewId { 7U },
+    stage10_view,
+    oxygen::observer_ptr { stage10_framebuffer.get() });
 
-  scene_renderer.ApplyStage3DepthPrepassState();
+  scene_renderer.PublishDepthPrepassProducts();
   auto bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
@@ -469,7 +507,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.ApplyStage9BasePassState();
+  scene_renderer.PublishBasePassVelocity();
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
@@ -481,7 +519,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.ApplyStage10RebuildState();
+  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.stencil_srv, SceneTextureBindings::kInvalidIndex);
@@ -491,8 +529,11 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.scene_color_uav, bindings.scene_color_srv);
+  EXPECT_NE(
+    scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
 
-  scene_renderer.ApplyStage22PostProcessState();
+  scene_renderer.PublishCustomDepthProducts();
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.custom_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.custom_stencil_srv, SceneTextureBindings::kInvalidIndex);
@@ -510,19 +551,87 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
       .msaa_sample_count = 1U,
     },
     ShadingMode::kDeferred);
-  scene_renderer.ApplyStage9BasePassState();
+  auto stage10_scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage10Publication", 16U);
+  auto stage10_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage10Publication");
+  auto stage10_view = MakeResolvedView(64.0F, 64.0F);
+  auto stage10_context = MakeSceneRenderContext(stage10_scene, ViewId { 11U },
+    stage10_view,
+    oxygen::observer_ptr { stage10_framebuffer.get() });
+
+  scene_renderer.PublishBasePassVelocity();
 
   auto bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.ApplyStage10RebuildState();
+  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
 
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(
+    scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  SceneTexturesRebuildHelperAloneDoesNotPublishStage10Products)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+  auto stage10_scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.RebuildHelper", 16U);
+  auto stage10_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.RebuildHelper");
+  auto stage10_view = MakeResolvedView(64.0F, 64.0F);
+  auto stage10_context = MakeSceneRenderContext(stage10_scene, ViewId { 8U },
+    stage10_view,
+    oxygen::observer_ptr { stage10_framebuffer.get() });
+
+  scene_renderer.PublishDepthPrepassProducts();
+  scene_renderer.PublishBasePassVelocity();
+
+  scene_renderer.GetSceneTextures().RebuildWithGBuffers();
+
+  auto bindings = scene_renderer.GetSceneTextureBindings();
+  EXPECT_NE(bindings.scene_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.stencil_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(
+    scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
+
+  bindings = scene_renderer.GetSceneTextureBindings();
+  EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_uav, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.stencil_srv, SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[0], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[1], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[2], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.gbuffer_srvs[3], SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(
+    scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

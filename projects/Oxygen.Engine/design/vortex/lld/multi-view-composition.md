@@ -66,8 +66,7 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
     if (occlusion_) occlusion_->Execute(ctx, scene_textures_);       // 5
     if (base_pass_) base_pass_->Execute(ctx, scene_textures_);       // 9
 
-    scene_textures_.RebuildWithGBuffers();                             // 10
-    RefreshSceneTextureBindings();
+    PublishDeferredBasePassSceneTextures(ctx);                         // 10
 
     if (lighting_) lighting_->RenderDeferredLighting(ctx, scene_textures_); // 12
     if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);  // 15

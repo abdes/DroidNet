@@ -66,8 +66,9 @@ This module must preserve the following invariants from
   consumes the current view only
 - masked opaque materials remain part of the deferred opaque contract and must
   alpha-clip truthfully before GBuffer/velocity writes
-- stage 10 remains the canonical `RebuildWithGBuffers()` plus routing-refresh
-  boundary
+- stage 10 remains the SceneRenderer-owned
+  `PublishDeferredBasePassSceneTextures(ctx)` boundary, which invokes
+  `RebuildWithGBuffers()` and then refreshes routing/publication state
 - the active desktop deferred opaque-velocity policy is stage-9 base-pass
   velocity
 - no bool-only completion claim is allowed; velocity publication must be
@@ -446,9 +447,7 @@ Immediately after stage 9, `SceneRenderer` performs the inline stage-10 rebuild
 boundary:
 
 ```cpp
-scene_textures_.RebuildWithGBuffers();
-RefreshSceneTextureBindings();
-renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+PublishDeferredBasePassSceneTextures(ctx);
 ```
 
 `SceneVelocity` may be published only from the output-backed stage-9 result.

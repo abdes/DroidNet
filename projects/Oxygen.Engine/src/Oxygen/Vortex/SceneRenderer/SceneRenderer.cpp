@@ -907,7 +907,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
-    ApplyStage3DepthPrepassState();
+    PublishDepthPrepassProducts();
   }
 
   // Stage 4: reserved - GeometryVirtualizationService
@@ -930,11 +930,10 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     const auto base_pass_result = base_pass_->Execute(ctx, scene_textures_);
     if (base_pass_result.published_base_pass_products
       && base_pass_result.completed_velocity_for_dynamic_geometry) {
-      ApplyStage9BasePassState();
+      PublishBasePassVelocity();
     }
     if (base_pass_result.published_base_pass_products) {
-      ApplyStage10RebuildState();
-      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+      PublishDeferredBasePassSceneTextures(ctx);
     }
   }
 
@@ -965,7 +964,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   ResolveSceneColor(ctx);
 
   // Stage 22: Post processing
-  ApplyStage22PostProcessState();
+  PublishCustomDepthProducts();
 
   // Stage 23: Post-render cleanup / extraction
   PostRenderCleanup(ctx);
@@ -979,7 +978,7 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
 
 void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
 
-void SceneRenderer::ApplyStage3DepthPrepassState()
+void SceneRenderer::PublishDepthPrepassProducts()
 {
   auto flags = SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kPartialDepth;
@@ -990,7 +989,7 @@ void SceneRenderer::ApplyStage3DepthPrepassState()
   RefreshSceneTextureBindings();
 }
 
-void SceneRenderer::ApplyStage9BasePassState()
+void SceneRenderer::PublishBasePassVelocity()
 {
   // Stage 9 owns the raw attachment writes, but Stage 10 remains the first
   // truthful publication boundary for SceneColor and the active GBuffers in
@@ -1008,19 +1007,33 @@ void SceneRenderer::ApplyStage9BasePassState()
     "before the Stage 10 rebuild boundary");
 }
 
-void SceneRenderer::ApplyStage10RebuildState()
+void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
 {
+  // SceneRenderer is the sole owner of the deferred base-pass scene-texture
+  // publication seam. RebuildWithGBuffers() is only the family-local
+  // readiness helper; this method performs promotion, binding refresh, and
+  // current-view routing republish.
+  CHECK_F(ctx.current_view.view_id != kInvalidViewId,
+    "SceneRenderer: PublishDeferredBasePassSceneTextures requires a valid "
+    "current view");
+  CHECK_F(ctx.current_view.resolved_view != nullptr,
+    "SceneRenderer: PublishDeferredBasePassSceneTextures requires a resolved "
+    "current view");
+  CHECK_F(ctx.frame_slot != frame::kInvalidSlot,
+    "SceneRenderer: PublishDeferredBasePassSceneTextures requires a valid "
+    "frame slot for publication");
   scene_textures_.RebuildWithGBuffers();
   setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kGBuffers
     | SceneTextureSetupMode::Flag::kSceneColor
     | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
+  renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
   CHECK_F(HasPublishedGBufferBindings(scene_texture_bindings_),
     "SceneRenderer: Stage 10 must publish GBuffer bindings before deferred "
     "lighting or GBuffer debug inspection");
 }
 
-void SceneRenderer::ApplyStage22PostProcessState()
+void SceneRenderer::PublishCustomDepthProducts()
 {
   if (scene_textures_.GetCustomDepth() != nullptr) {
     setup_mode_.Set(SceneTextureSetupMode::Flag::kCustomDepth);
@@ -1028,7 +1041,7 @@ void SceneRenderer::ApplyStage22PostProcessState()
   RefreshSceneTextureBindings();
 }
 
-void SceneRenderer::ApplyStage23ExtractionState()
+void SceneRenderer::FinalizeSceneTextureExtractions()
 {
   // Stage 23 is an extraction boundary only; scene-texture bindless
   // availability remains defined by the prior setup milestones.

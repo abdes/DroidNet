@@ -247,6 +247,10 @@ public:
     -> SceneTextureAspectView;
 
   OXGN_VRTX_API void Resize(glm::uvec2 new_extent);
+  // Family-local Stage 10 helper. This validates that the active GBuffer
+  // family is present after Stage 9, but it does not promote setup mode,
+  // regenerate SceneTextureBindings, or publish routing metadata. The
+  // SceneRenderer-owned Stage 10 boundary performs those steps.
   OXGN_VRTX_API void RebuildWithGBuffers();
 
   [[nodiscard]] OXGN_VRTX_API auto GetExtent() const noexcept -> glm::uvec2;
