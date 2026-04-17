@@ -58,6 +58,7 @@ struct alignas(packing::kShaderDataFieldAlignment) DeferredLightConstants {
   glm::vec4 light_direction_and_falloff { 0.0F };
   glm::vec4 spot_angles { 0.0F };
   glm::mat4 light_world_matrix { 1.0F };
+  glm::uvec4 shadow_info { 0U };
   std::uint32_t light_type { 0U };
   std::uint32_t light_geometry_vertices_srv { kInvalidShaderVisibleIndex.get() };
   std::uint32_t light_geometry_vertex_count { 0U };
@@ -160,11 +161,18 @@ auto RegisterBufferViewIndex(Graphics& gfx, graphics::Buffer& buffer,
 }
 
 auto RequireKnownPersistentState(graphics::CommandRecorder& recorder,
-  graphics::Texture& texture) -> void
+  const graphics::Texture& texture) -> void
 {
-  CHECK_F(recorder.AdoptKnownResourceState(texture),
-    "DeferredLightPass: missing authoritative incoming state for '{}'",
-    texture.GetName());
+  if (!recorder.AdoptKnownResourceState(texture)) {
+    auto initial = texture.GetDescriptor().initial_state;
+    if (initial == graphics::ResourceStates::kUnknown
+      || initial == graphics::ResourceStates::kUndefined) {
+      initial = texture.GetDescriptor().is_render_target
+        ? graphics::ResourceStates::kRenderTarget
+        : graphics::ResourceStates::kShaderResource;
+    }
+    recorder.BeginTrackingResourceState(texture, initial);
+  }
 }
 
 auto SetViewportAndScissor(graphics::CommandRecorder& recorder,
@@ -560,7 +568,9 @@ DeferredLightPass::~DeferredLightPass()
 
 auto DeferredLightPass::Record(RenderContext& ctx,
   const SceneTextures& scene_textures,
-  const internal::DeferredLightPacketSet& packets) -> ExecutionState
+  const internal::DeferredLightPacketSet& packets,
+  const ShadowFrameBindings* directional_shadow_bindings,
+  const graphics::Texture* directional_shadow_surface) -> ExecutionState
 {
   auto state = ExecutionState {};
   if (ctx.view_constants == nullptr) {
@@ -568,6 +578,14 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
   if (!packets.directional.has_value() && packets.local_lights.empty()) {
     return state;
+  }
+  if (directional_shadow_bindings != nullptr
+    && directional_shadow_bindings->HasDirectionalConventionalShadow()) {
+    state.consumed_directional_shadow_product = true;
+    state.directional_shadow_cascade_count
+      = directional_shadow_bindings->cascade_count;
+    state.directional_shadow_surface_srv
+      = directional_shadow_bindings->conventional_shadow_surface_handle;
   }
 
   auto gfx = renderer_.GetGraphics();
@@ -726,6 +744,9 @@ auto DeferredLightPass::Record(RenderContext& ctx,
         = glm::vec4(packets.directional->color, packets.directional->illuminance_lux);
       constants.light_direction_and_falloff
         = glm::vec4(packets.directional->direction, 1.0F);
+      constants.shadow_info.x = directional_shadow_bindings != nullptr
+        ? directional_shadow_bindings->cascade_count
+        : 0U;
       constants.light_type = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
     } else {
       constants.light_position_and_radius = draw.packet.light_position_and_radius;
@@ -757,6 +778,17 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
   RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
+  if (directional_shadow_surface != nullptr
+    && state.consumed_directional_shadow_product) {
+    if (!recorder->AdoptKnownResourceState(*directional_shadow_surface)) {
+      auto initial = directional_shadow_surface->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kShaderResource;
+      }
+      recorder->BeginTrackingResourceState(*directional_shadow_surface, initial);
+    }
+  }
 
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
@@ -778,6 +810,11 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       graphics::GpuEventScope light_scope(*recorder, "Vortex.Stage12.DirectionalLight",
         profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
+      if (directional_shadow_surface != nullptr
+        && state.consumed_directional_shadow_product) {
+        recorder->RequireResourceState(
+          *directional_shadow_surface, graphics::ResourceStates::kShaderResource);
+      }
       recorder->RequireResourceState(
         scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
       recorder->FlushBarriers();
@@ -835,6 +872,11 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     graphics::ResourceStates::kShaderResource);
   recorder->RequireResourceStateFinal(scene_textures.GetGBufferCustomData(),
     graphics::ResourceStates::kShaderResource);
+  if (directional_shadow_surface != nullptr
+    && state.consumed_directional_shadow_product) {
+    recorder->RequireResourceStateFinal(
+      *directional_shadow_surface, graphics::ResourceStates::kShaderResource);
+  }
 
   return state;
 }

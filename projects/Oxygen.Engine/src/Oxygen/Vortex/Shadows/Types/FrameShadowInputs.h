@@ -11,6 +11,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -22,6 +23,7 @@ struct PreparedViewShadowInput {
   ViewId view_id { kInvalidViewId };
   observer_ptr<const PreparedSceneFrame> prepared_scene;
   observer_ptr<const ResolvedView> resolved_view;
+  observer_ptr<const graphics::Buffer> view_constants;
   observer_ptr<const CompositionView> composition_view;
 };
 

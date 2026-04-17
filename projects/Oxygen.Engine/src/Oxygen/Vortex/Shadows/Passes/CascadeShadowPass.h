@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
@@ -32,6 +33,7 @@ class CascadeShadowPass {
 public:
   struct ViewShadowPassState {
     DirectionalShadowFrameData frame_data {};
+    std::shared_ptr<graphics::Texture> shadow_surface {};
     std::uint32_t shadow_caster_draw_count { 0U };
     std::uint32_t rendered_cascade_count { 0U };
     std::uint32_t rendered_draw_count { 0U };

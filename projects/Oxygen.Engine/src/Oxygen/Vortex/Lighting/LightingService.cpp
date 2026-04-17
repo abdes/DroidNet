@@ -62,11 +62,13 @@ auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs) -> void
 
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const SceneTextures& scene_textures,
-  const FrameLightSelection& frame_light_set) -> void
+  const FrameLightSelection& frame_light_set,
+  const ShadowFrameBindings* directional_shadow_bindings,
+  const graphics::Texture* directional_shadow_surface) -> void
 {
   const auto packets = deferred_packets_->Build(frame_light_set);
-  const auto pass_state
-    = deferred_pass_->Record(ctx, scene_textures, packets);
+  const auto pass_state = deferred_pass_->Record(ctx, scene_textures, packets,
+    directional_shadow_bindings, directional_shadow_surface);
   last_deferred_lighting_state_ = {
     .consumed_packets = pass_state.consumed_packets,
     .accumulated_into_scene_color = pass_state.accumulated_into_scene_color,
@@ -88,6 +90,12 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .local_light_draw_count = pass_state.local_light_draw_count,
     .non_perspective_local_light_count
     = pass_state.non_perspective_local_light_count,
+    .consumed_directional_shadow_product
+    = pass_state.consumed_directional_shadow_product,
+    .directional_shadow_vsm_active = pass_state.directional_shadow_vsm_active,
+    .directional_shadow_cascade_count
+    = pass_state.directional_shadow_cascade_count,
+    .directional_shadow_surface_srv = pass_state.directional_shadow_surface_srv,
     .selection_epoch = packets.selection_epoch,
   };
 }

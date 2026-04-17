@@ -6,13 +6,23 @@
 
 #pragma once
 
+#include <memory>
 #include <span>
+#include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/api_export.h>
+
+namespace oxygen::graphics {
+class Buffer;
+class Framebuffer;
+class Texture;
+} // namespace oxygen::graphics
 
 namespace oxygen::vortex {
 
@@ -39,6 +49,7 @@ public:
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
   [[nodiscard]] OXGN_VRTX_API auto Record(
     const PreparedViewShadowInput& view_input,
+    const std::shared_ptr<graphics::Texture>& shadow_surface,
     const DirectionalShadowFrameData& frame_data,
     std::span<const DrawCommand> draw_commands) -> RenderState;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
@@ -52,6 +63,11 @@ private:
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };
   RenderState last_render_state_ {};
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
+  void* pass_constants_mapped_ptr_ { nullptr };
+  std::vector<ShaderVisibleIndex> pass_constants_srvs_ {};
+  std::uint32_t pass_constants_slot_count_ { 0U };
+  std::vector<std::shared_ptr<graphics::Framebuffer>> cascade_framebuffers_ {};
 };
 
 } // namespace shadows

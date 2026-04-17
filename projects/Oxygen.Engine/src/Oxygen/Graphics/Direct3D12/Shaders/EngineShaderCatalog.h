@@ -340,6 +340,14 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_LINEAR" }
   },
+  // VortexShadowDepthVS / VortexShadowDepthMaskedPS
+  ShaderFileSpec {
+    .path="Vortex/Services/Shadows/DirectionalShadowDepth.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexShadowDepthMaskedPS" },
+      EntryPoint { .type=kVertex, .name="VortexShadowDepthVS" } },
+    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+  },
   // VortexDeferredLightDirectionalVS / VortexDeferredLightDirectionalPS
   ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightDirectional.hlsl",
@@ -593,6 +601,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x ALPHA_TEST)
 // - VortexBasePassVelocityMerge: 1
 // - VortexBasePassDebugView: 7 (VS + 6 required debug PS variants)
+// - VortexShadowDepth: 4 (2 entries x ALPHA_TEST)
 // - VortexDeferredLightDirectional: 2 entries
 // - VortexDeferredLightPoint: 3 entries
 // - VortexDeferredLightSpot: 3 entries
@@ -617,6 +626,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 161
+// Total: 165
 
 } // namespace oxygen::graphics::d3d12
