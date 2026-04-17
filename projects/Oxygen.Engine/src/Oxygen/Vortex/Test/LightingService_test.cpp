@@ -71,9 +71,9 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kPoint,
     .position = glm::vec3 { 1.0F, 2.0F, 3.0F },
+    .range = 6.0F,
     .color = glm::vec3 { 0.4F, 0.6F, 0.9F },
     .intensity = 80.0F,
-    .range = 6.0F,
   });
 
   ASSERT_TRUE(selection.directional_light.has_value());
