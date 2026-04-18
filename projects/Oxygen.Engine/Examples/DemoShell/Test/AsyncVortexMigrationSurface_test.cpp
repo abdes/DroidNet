@@ -72,6 +72,27 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
 }
 
 NOLINT_TEST(AsyncVortexMigrationSurface,
+  RuntimeLaneLetsVortexOwnImGuiPlumbingAndComposition)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto app_window_source
+    = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.cpp");
+  const auto renderer_source = ReadTextFile(root / "src/Oxygen/Vortex/Renderer.cpp");
+
+  EXPECT_TRUE(async_main.contains("shell.OnRuntimeMainViewReady("));
+  EXPECT_FALSE(async_main.contains("ImGuiOverlayPass"));
+  EXPECT_FALSE(async_main.contains("MakeTextureBlend("));
+  EXPECT_FALSE(async_main.contains("RegisterComposition("));
+  EXPECT_TRUE(async_bootstrap.contains(".enable_imgui = !app.headless"));
+  EXPECT_FALSE(async_bootstrap.contains("CreateImGuiRuntimeModule("));
+  EXPECT_TRUE(app_window_source.contains("renderer.SetImGuiWindowId(GetWindowId())"));
+  EXPECT_TRUE(renderer_source.contains("CreateImGuiGraphicsBackend()"));
+  EXPECT_TRUE(renderer_source.contains("imgui_runtime_->RenderOverlay("));
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
   DemoShellUiKeepsOverlayButDisablesRendererBoundPanelsOnRuntimePath)
 {
   const auto root = SourceRoot();
@@ -86,9 +107,10 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   const auto demo_shell_ui_source
     = ReadTextFile(root / "Examples/DemoShell/UI/DemoShellUi.cpp");
 
-  EXPECT_TRUE(async_bootstrap.contains("ImGui"));
+  EXPECT_TRUE(async_bootstrap.contains(".enable_imgui = !app.headless"));
   EXPECT_TRUE(demo_shell_source.contains("DemoShellUi"));
-  EXPECT_TRUE(demo_shell_ui_source.contains("ImGuiModule"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("GetModule<vortex::Renderer>()"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("renderer.GetImGuiContext()"));
   EXPECT_TRUE(demo_shell_ui_source.contains("stats_overlay.Draw(fc);"));
   EXPECT_TRUE(async_settings.contains(
     "return settings->GetBool(kSpotlightEnabledKey).value_or(true);"));

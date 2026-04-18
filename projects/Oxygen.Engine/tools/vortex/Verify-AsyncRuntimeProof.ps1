@@ -159,7 +159,7 @@ if ([string]::IsNullOrWhiteSpace($ProductsReportPath)) {
     $captureFullPath, "$([System.IO.Path]::GetExtension($captureFullPath))_async_products_report.txt")
 }
 if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
-  $ValidationReportPath = "$CaptureReportPath.validation.txt"
+  $ValidationReportPath = "$captureFullPath.validation.txt"
 }
 if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
   $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame10.png'

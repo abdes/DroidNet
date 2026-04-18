@@ -146,6 +146,11 @@ public:
   {
     return graphics_;
   }
+  auto GetPlatformShared() const noexcept
+    -> std::shared_ptr<oxygen::Platform> override
+  {
+    return {};
+  }
 
   auto GetEngineConfig() const noexcept -> const EngineConfig& override
   {

@@ -13,6 +13,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
@@ -150,6 +152,10 @@ public:
   //! Notify services once the main view is ready in the frame context.
   auto OnMainViewReady(const engine::FrameContext& context,
     const renderer::MainViewContract& view) -> void;
+
+  //! Notify runtime-backed services once the Vortex main view is ready.
+  auto OnRuntimeMainViewReady(
+    ViewId view_id, scene::SceneNode camera, const ViewPort& viewport) -> void;
 
   //! Register a demo-specific panel with the shell.
   //!

@@ -212,14 +212,10 @@ void AxesWidget::Draw(observer_ptr<scene::SceneNode> camera)
   glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
 
   const auto& tf = camera->GetTransform();
-  if (auto wp = tf.GetWorldPosition()) {
-    cam_pos = *wp;
-  } else if (auto lp = tf.GetLocalPosition()) {
+  if (auto lp = tf.GetLocalPosition()) {
     cam_pos = *lp;
   }
-  if (auto wr = tf.GetWorldRotation()) {
-    cam_rot = *wr;
-  } else if (auto lr = tf.GetLocalRotation()) {
+  if (auto lr = tf.GetLocalRotation()) {
     cam_rot = *lr;
   }
 

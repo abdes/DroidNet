@@ -299,6 +299,18 @@ auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
   }
 }
 
+auto DemoShell::OnRuntimeMainViewReady(
+  const ViewId view_id, scene::SceneNode camera, const ViewPort& viewport)
+  -> void
+{
+  if (!impl_->initialized) {
+    return;
+  }
+
+  impl_->camera_settings_service.OnRuntimeMainViewReady(camera, viewport);
+  impl_->environment_settings_service.OnRuntimeMainViewReady(view_id);
+}
+
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
 {
   if (!panel) {

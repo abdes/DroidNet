@@ -80,6 +80,10 @@ STAGE15_ATMOSPHERE_SCOPE_NAME = "Vortex.Stage15.Atmosphere"
 STAGE15_FOG_SCOPE_NAME = "Vortex.Stage15.Fog"
 STAGE22_TONEMAP_SCOPE_NAME = "Vortex.PostProcess.Tonemap"
 COMPOSITING_SCOPE_PREFIX = "Vortex.CompositingTask[label=Composite Copy View "
+IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES = (
+    "Vortex.CompositingTask[label=Composite Blend Texture Vortex.ImGuiOverlay",
+    "Vortex.CompositingTask[label=Composite Blend Texture Async.DemoShellOverlay",
+)
 
 
 def records_with_name(action_records, name):
@@ -88,6 +92,13 @@ def records_with_name(action_records, name):
 
 def records_with_name_prefix(action_records, prefix):
     return [record for record in action_records if record.name.startswith(prefix)]
+
+
+def records_with_name_prefixes(action_records, prefixes):
+    records = []
+    for prefix in prefixes:
+        records.extend(records_with_name_prefix(action_records, prefix))
+    return records
 
 
 def records_under_prefix(action_records, prefix):
@@ -391,6 +402,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     compositing_scopes = records_with_name_prefix(
         action_records, COMPOSITING_SCOPE_PREFIX
     )
+    imgui_overlay_blend_scopes = records_with_name_prefixes(
+        action_records, IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES
+    )
     compositing_records = []
     for scope in compositing_scopes:
         compositing_records.extend(records_under_prefix(action_records, scope.name))
@@ -545,6 +559,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         ),
     )
     overlay_or_composition_changed = overlay_or_composition_delta > 1.0e-5
+    imgui_overlay_composited_on_scene = (
+        len(imgui_overlay_blend_scopes) > 0 and overlay_or_composition_changed
+    )
 
     color_export_path = os.environ.get(COLOR_EXPORT_ENV, "").strip()
     depth_export_path = os.environ.get(DEPTH_EXPORT_ENV, "").strip()
@@ -625,6 +642,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             str(overlay_or_composition_changed).lower()
         )
     )
+    report.append(
+        "imgui_overlay_composited_on_scene={}".format(
+            str(imgui_overlay_composited_on_scene).lower()
+        )
+    )
     report.append("exported_color_path={}".format(color_export_path))
     report.append("exported_color_exists={}".format(str(color_exported).lower()))
     report.append("exported_depth_path={}".format(depth_export_path))
@@ -638,6 +660,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_fog_scene_color_changed
         and tonemap_output_nonzero
         and final_present_nonzero
+        and imgui_overlay_composited_on_scene
         and color_exported
         and depth_exported
     )

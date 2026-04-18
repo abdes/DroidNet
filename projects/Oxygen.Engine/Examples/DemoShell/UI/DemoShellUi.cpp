@@ -19,9 +19,9 @@
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
 #include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
@@ -464,18 +464,17 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
     return;
   }
 
-  auto imgui_module_ref
-    = impl_->engine->GetModule<engine::imgui::ImGuiModule>();
-  if (!imgui_module_ref) {
+  auto renderer_ref = impl_->engine->GetModule<vortex::Renderer>();
+  if (!renderer_ref) {
     return;
   }
 
-  auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
+  auto& renderer = renderer_ref->get();
+  if (!renderer.IsImGuiFrameActive()) {
     return;
   }
 
-  auto* imgui_context = imgui_module.GetImGuiContext();
+  auto* imgui_context = renderer.GetImGuiContext();
   if (imgui_context == nullptr) {
     return;
   }

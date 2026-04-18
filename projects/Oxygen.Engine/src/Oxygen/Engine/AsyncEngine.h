@@ -113,6 +113,12 @@ public:
     return *platform_; // Guaranteed non-null
   }
 
+  [[nodiscard]] auto GetPlatformShared() const noexcept
+    -> std::shared_ptr<::oxygen::Platform> override
+  {
+    return platform_;
+  }
+
   // Register a module (takes ownership). Modules are sorted by priority.
   OXGN_NGIN_API auto RegisterModule(
     std::unique_ptr<engine::EngineModule> module) noexcept -> bool;

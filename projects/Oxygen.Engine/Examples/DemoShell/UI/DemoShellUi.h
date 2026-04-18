@@ -19,9 +19,6 @@ namespace engine {
   class FrameContext;
   struct ShaderPassConfig;
 }
-namespace imgui {
-  class ImGuiModule;
-}
 namespace renderer {
   class RenderingPipeline;
 }

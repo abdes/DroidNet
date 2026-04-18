@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
@@ -393,6 +394,12 @@ auto Graphics::GetFrameCaptureController() const
 {
   return observer_ptr<graphics::FrameCaptureController>(
     frame_capture_controller_.get());
+}
+
+auto Graphics::CreateImGuiGraphicsBackend() const
+  -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>
+{
+  return std::make_unique<D3D12ImGuiGraphicsBackend>();
 }
 
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*

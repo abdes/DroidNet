@@ -142,7 +142,8 @@ $baselineDepthFullPath = (Resolve-Path $BaselineDepthPath).Path
 $comparisonDepthFullPath = (Resolve-Path $ComparisonDepthPath).Path
 
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
-  $ReportPath = "$captureReportFullPath.validation.txt"
+  $captureReportStem = $captureReportFullPath -replace '_async_capture_report\.txt$', ''
+  $ReportPath = "$captureReportStem.validation.txt"
 }
 $reportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
 
@@ -181,6 +182,9 @@ $requiredCaptureChecks = @(
   'stage15_atmosphere_scope_present',
   'stage15_fog_scope_present',
   'stage22_tonemap_scope_present',
+  'imgui_overlay_scope_present',
+  'imgui_overlay_blend_scope_present',
+  'imgui_overlay_after_tonemap',
   'compositing_scope_present',
   'async_runtime_stage_order_valid'
 )
@@ -197,6 +201,7 @@ $requiredProductChecks = @(
   'stage15_atmosphere_scene_color_changed',
   'stage15_fog_scene_color_changed',
   'stage22_tonemap_output_nonzero',
+  'imgui_overlay_composited_on_scene',
   'final_present_nonzero',
   'exported_color_exists',
   'exported_depth_exists'
