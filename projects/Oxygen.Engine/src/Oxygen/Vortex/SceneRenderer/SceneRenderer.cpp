@@ -30,6 +30,8 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -944,6 +946,54 @@ namespace {
     };
   }
 
+  auto ResolveAuthoredExposureValue(
+    const scene::environment::PostProcessVolume& post_process,
+    const RenderContext& ctx) -> float
+  {
+    if (!post_process.GetExposureEnabled()) {
+      return 1.0F;
+    }
+
+    float ev = post_process.GetManualExposureEv();
+    if (post_process.GetExposureMode() == engine::ExposureMode::kManualCamera
+      && ctx.current_view.resolved_view != nullptr
+      && ctx.current_view.resolved_view->CameraEv().has_value()) {
+      ev = *ctx.current_view.resolved_view->CameraEv();
+    }
+
+    return (1.0F / 12.5F)
+      * std::exp2(post_process.GetExposureCompensationEv() - ev)
+      * post_process.GetExposureKey();
+  }
+
+  auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx)
+    -> PostProcessConfig
+  {
+    auto config = PostProcessConfig {};
+    const auto* scene = ctx.GetScene().get();
+    if (scene == nullptr) {
+      return config;
+    }
+
+    const auto environment = scene->GetEnvironment();
+    if (environment == nullptr) {
+      return config;
+    }
+
+    const auto post_process
+      = environment->TryGetSystem<scene::environment::PostProcessVolume>();
+    if (!post_process) {
+      return config;
+    }
+
+    config.enable_bloom = post_process->GetBloomIntensity() > 0.0F;
+    config.bloom_intensity = post_process->GetBloomIntensity();
+    config.bloom_threshold = post_process->GetBloomThreshold();
+    config.enable_auto_exposure = false;
+    config.fixed_exposure = ResolveAuthoredExposureValue(*post_process, ctx);
+    return config;
+  }
+
   auto HasPublishedGBufferBindings(const SceneTextureBindings& bindings) -> bool
   {
     return std::ranges::all_of(
@@ -1242,6 +1292,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 
   // Stage 22: Post processing
   if (post_process_ != nullptr) {
+    post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));
     auto post_target = ctx.pass_target;
     if (post_target == nullptr) {
       if (const auto* active_view = ctx.GetActiveViewEntry(); active_view != nullptr
@@ -1268,9 +1319,14 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     }
 
     const auto* scene_depth = scene_textures_.GetSceneDepthResource().get();
+    auto scene_depth_srv = scene_texture_bindings_.scene_depth_srv;
     if (scene_texture_extracts_.resolved_scene_depth.valid
       && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
       scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
+      scene_depth_srv = RegisterSceneTextureView(
+        *scene_texture_extracts_.resolved_scene_depth.texture,
+        MakeSrvDesc(*scene_texture_extracts_.resolved_scene_depth.texture,
+          scene_texture_extracts_.resolved_scene_depth.texture->GetDescriptor().format));
     }
 
     auto post_process_inputs = PostProcessService::Inputs {
@@ -1279,8 +1335,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .scene_velocity = ResolveVelocitySourceTexture(),
       .post_target = post_target,
       .scene_signal_srv = ShaderVisibleIndex { scene_signal_srv },
-      .scene_depth_srv
-      = ShaderVisibleIndex { scene_texture_bindings_.scene_depth_srv },
+      .scene_depth_srv = ShaderVisibleIndex { scene_depth_srv },
       .scene_velocity_srv
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
     };
