@@ -70,6 +70,38 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-18 — 04-17 spotlight cone/runtime-light repair completed
+
+- **Plan**: `04-17` — Repair direct-light/runtime-scene response on Async.
+- **Changed files**:
+  - `src/Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.cpp`
+  - `src/Oxygen/Scene/Light/SpotLight.h`
+- **What changed**:
+  - deferred spotlight proxy cones now rotate to the authored spotlight
+    direction instead of remaining aligned to the default axis
+  - deferred spotlight proxy cone radius now uses `range * tan(theta)` at the
+    outer cone, fixing the user-observed mismatch in outer-cone behavior
+  - `scene::SpotLight` now canonicalizes authored inner/outer cone ordering at
+    the component boundary
+- **Commands used for verification**:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.LightingService.Tests --parallel 4`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.LightingService.Tests.exe`
+- **Result**:
+  - build passed
+  - `Oxygen.Vortex.LightingService.Tests` passed (`5/5`)
+  - direct manual runtime validation from the user confirmed:
+    - the spotlight now casts visible light on the scene
+    - the spotlight reflection is visible on the metallic spheres
+- **Not run**:
+  - full Async validator rerun for this task
+  - broader `ctest -R "LightingService"` suite is not clean on this branch
+    because unrelated `SceneRendererDeferredCoreTest` cases crash with
+    heap-corruption (`0xc0000374`)
+- **Phase 4 status**:
+  - `04-17` is complete for the spotlight-runtime fix lane
+  - Phase 4 overall remains `gaps_found` due to the wider environment parity
+    program and other open lanes
+
 ### 2026-04-18 — 04-15: Async parity proof replaced with reference-based surface
 
 - **Plan**: `04-15` — Replace hollow Async parity proof with a real
