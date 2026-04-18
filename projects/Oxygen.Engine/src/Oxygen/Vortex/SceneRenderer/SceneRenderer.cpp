@@ -971,48 +971,54 @@ namespace {
   {
     auto config = PostProcessConfig {};
     const auto* scene = ctx.GetScene().get();
-    if (scene == nullptr) {
-      return config;
+    if (scene != nullptr) {
+      const auto environment = scene->GetEnvironment();
+      if (environment != nullptr) {
+        const auto post_process
+          = environment->TryGetSystem<scene::environment::PostProcessVolume>();
+        if (post_process) {
+          config.enable_bloom = post_process->GetBloomIntensity() > 0.0F;
+          config.bloom_intensity = post_process->GetBloomIntensity();
+          config.bloom_threshold = post_process->GetBloomThreshold();
+          config.tone_mapper = post_process->GetToneMapper();
+          config.enable_auto_exposure = post_process->GetExposureEnabled()
+            && post_process->GetExposureMode() == engine::ExposureMode::kAuto;
+          config.fixed_exposure = ResolveAuthoredExposureValue(*post_process, ctx);
+          config.gamma = post_process->GetDisplayGamma();
+          config.metering_mode = post_process->GetAutoExposureMeteringMode();
+          config.auto_exposure_speed_up = post_process->GetAutoExposureSpeedUp();
+          config.auto_exposure_speed_down
+            = post_process->GetAutoExposureSpeedDown();
+          config.auto_exposure_low_percentile
+            = post_process->GetAutoExposureLowPercentile();
+          config.auto_exposure_high_percentile
+            = post_process->GetAutoExposureHighPercentile();
+          config.auto_exposure_min_ev = post_process->GetAutoExposureMinEv();
+          config.auto_exposure_max_ev = post_process->GetAutoExposureMaxEv();
+          config.auto_exposure_min_log_luminance
+            = post_process->GetAutoExposureMinLogLuminance();
+          config.auto_exposure_log_luminance_range
+            = post_process->GetAutoExposureLogLuminanceRange();
+          config.auto_exposure_target_luminance
+            = post_process->GetAutoExposureTargetLuminance()
+            * engine::ExposureBiasScale(
+              post_process->GetExposureCompensationEv(),
+              post_process->GetExposureKey());
+          config.auto_exposure_spot_meter_radius
+            = post_process->GetAutoExposureSpotMeterRadius();
+        }
+      }
     }
 
-    const auto environment = scene->GetEnvironment();
-    if (environment == nullptr) {
-      return config;
+    if (ctx.shader_debug_mode != ShaderDebugMode::kDisabled) {
+      config.enable_auto_exposure = false;
+      config.fixed_exposure = 1.0F;
+      config.tone_mapper = engine::ToneMapper::kNone;
+      config.enable_bloom = false;
+      config.bloom_intensity = 0.0F;
+      config.bloom_threshold = 0.0F;
     }
 
-    const auto post_process
-      = environment->TryGetSystem<scene::environment::PostProcessVolume>();
-    if (!post_process) {
-      return config;
-    }
-
-    config.enable_bloom = post_process->GetBloomIntensity() > 0.0F;
-    config.bloom_intensity = post_process->GetBloomIntensity();
-    config.bloom_threshold = post_process->GetBloomThreshold();
-    config.tone_mapper = post_process->GetToneMapper();
-    config.enable_auto_exposure = post_process->GetExposureEnabled()
-      && post_process->GetExposureMode() == engine::ExposureMode::kAuto;
-    config.fixed_exposure = ResolveAuthoredExposureValue(*post_process, ctx);
-    config.gamma = post_process->GetDisplayGamma();
-    config.metering_mode = post_process->GetAutoExposureMeteringMode();
-    config.auto_exposure_speed_up = post_process->GetAutoExposureSpeedUp();
-    config.auto_exposure_speed_down = post_process->GetAutoExposureSpeedDown();
-    config.auto_exposure_low_percentile
-      = post_process->GetAutoExposureLowPercentile();
-    config.auto_exposure_high_percentile
-      = post_process->GetAutoExposureHighPercentile();
-    config.auto_exposure_min_ev = post_process->GetAutoExposureMinEv();
-    config.auto_exposure_max_ev = post_process->GetAutoExposureMaxEv();
-    config.auto_exposure_min_log_luminance
-      = post_process->GetAutoExposureMinLogLuminance();
-    config.auto_exposure_log_luminance_range
-      = post_process->GetAutoExposureLogLuminanceRange();
-    config.auto_exposure_target_luminance
-      = post_process->GetAutoExposureTargetLuminance()
-      * engine::ExposureBiasScale(post_process->GetExposureCompensationEv(),
-        post_process->GetExposureKey());
-    config.auto_exposure_spot_meter_radius
-      = post_process->GetAutoExposureSpotMeterRadius();
     return config;
   }
 
@@ -1273,7 +1279,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
-  if (environment_ != nullptr) {
+  if (environment_ != nullptr
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures_);
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;

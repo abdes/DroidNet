@@ -91,7 +91,8 @@ auto SetShadowParticipation(oxygen::scene::SceneNode& node,
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque,
-  bool double_sided = false)
+  bool double_sided = false, const float metalness = 0.0F,
+  const float roughness = 0.9F)
 {
   // NOLINTBEGIN(*-magic-numbers)
   namespace d = oxygen::data;
@@ -115,8 +116,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = d::Unorm16 { 0.0F };
-  desc.roughness = d::Unorm16 { 0.9F };
+  desc.metalness = d::Unorm16 { metalness };
+  desc.roughness = d::Unorm16 { roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices at default invalid (no textures)
   const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
@@ -241,7 +242,10 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 } });
-  std::vector<uint32_t> indices { 0, 1, 2, 2, 1, 3 };
+  // Keep triangle winding consistent with the authored +Z normals. The
+  // previous ordering faced -Z, which made the double-sided shading path treat
+  // the visible side as a backface and flip the normal away from the light.
+  std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
 
   // Create two distinct solid-color materials
   const auto red = MakeSolidColorMaterial("Red", { 1.0F, 0.1F, 0.1F, 1.0F },
@@ -886,7 +890,12 @@ auto MainModule::EnsureExampleScene() -> void
     const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
                                        : data::MaterialDomain::kOpaque;
     const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
-    const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
+    const float roughness
+      = 0.08F + (0.84F * static_cast<float>(i % 4) / 3.0F);
+    const float metalness
+      = static_cast<float>((i / 4) % 4) / 3.0F;
+    const auto mat = MakeSolidColorMaterial(
+      mat_name.c_str(), color, domain, false, metalness, roughness);
     // Apply override for submesh index 0 across all LODs so switching LOD
     // retains the material override. Use EffectiveLodCount() to iterate.
     const std::size_t lod_count
@@ -1191,24 +1200,8 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       last_ovr_toggle_ = ovr_phase;
       const bool apply_override = (ovr_phase % 2) == 1;
       if (apply_override) {
-        data::pak::render::MaterialAssetDesc desc {};
-        desc.header.asset_type
-          = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-        const auto* name = "BlueOverride";
-        constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-        const std::size_t n = (std::min)(maxn, std::strlen(name));
-        std::memcpy(desc.header.name, name, n);
-        desc.header.name[n] = '\0';
-        desc.material_domain
-          = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
-        desc.base_color[0] = 0.2F;
-        desc.base_color[1] = 0.3F;
-        desc.base_color[2] = 1.0F;
-        desc.base_color[3] = 1.0F;
-        const data::AssetKey asset_key = data::AssetKey::FromVirtualPath(
-          "/Engine/Examples/Async/Materials/BlueOverride.omat");
-        auto blue = std::make_shared<const data::MaterialAsset>(
-          asset_key, desc, std::vector<data::ShaderReference> {});
+        const auto blue = MakeSolidColorMaterial("BlueOverride",
+          { 0.2F, 0.3F, 1.0F, 1.0F }, data::MaterialDomain::kOpaque, true);
         r.SetMaterialOverride(lod, 1, blue);
       } else {
         r.ClearMaterialOverride(lod, 1);

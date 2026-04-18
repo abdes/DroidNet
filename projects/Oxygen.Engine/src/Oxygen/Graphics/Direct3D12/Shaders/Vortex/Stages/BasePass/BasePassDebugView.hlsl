@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/GBufferHelpers.hlsli"
 #include "Vortex/Contracts/ViewFrameBindings.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
+#include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 
 static float3 EvaluateBasePassDebugView(
@@ -37,21 +38,10 @@ static float3 EvaluateBasePassDebugView(
         return float3(1.0f, 0.0f, 1.0f);
     }
     const float device_depth = SampleSceneDepth(uv, bindings);
-    const float projection_zz = projection_matrix._33;
-    const float projection_zw = projection_matrix._34;
-    const float projection_wz = projection_matrix._43;
-    const float epsilon = 1.0e-6f;
-    float linear_eye_depth = 0.0f;
-    if (abs(projection_zw) > 0.5f)
-    {
-        linear_eye_depth = max(
-            projection_wz / max(device_depth + projection_zz, epsilon), 0.0f);
-    }
-    else if (abs(projection_zz) > epsilon)
-    {
-        linear_eye_depth
-            = max((projection_wz - device_depth) / projection_zz, 0.0f);
-    }
+    const float3 world_position = ReconstructWorldPosition(
+        uv, device_depth, inverse_view_projection_matrix);
+    const float4 view_position = mul(view_matrix, float4(world_position, 1.0f));
+    const float linear_eye_depth = max(-view_position.z, 0.0f);
     const float display = saturate(1.0f / (1.0f + linear_eye_depth));
     return display.xxx;
 #else

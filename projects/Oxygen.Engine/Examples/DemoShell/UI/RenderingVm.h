@@ -49,6 +49,13 @@ public:
   [[nodiscard]] auto GetAtmosphereBlueNoiseEnabled() -> bool;
   //! Returns the persisted directional shadow quality tier.
   [[nodiscard]] auto GetShadowQualityTier() -> ShadowQualityTier;
+  [[nodiscard]] auto SupportsRenderModeControls() const -> bool;
+  [[nodiscard]] auto SupportsWireframeColorControl() const -> bool;
+  [[nodiscard]] auto SupportsGpuDebugPassControl() const -> bool;
+  [[nodiscard]] auto SupportsAtmosphereBlueNoiseControl() const -> bool;
+  [[nodiscard]] auto SupportsDebugMode(engine::ShaderDebugMode mode) const
+    -> bool;
+  [[nodiscard]] auto IsVortexRuntimeBound() const -> bool;
 
   //! Sets view mode and forwards changes to the service.
   auto SetRenderMode(renderer::RenderMode mode) -> void;

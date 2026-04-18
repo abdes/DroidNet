@@ -67,7 +67,6 @@ auto MakeRuntimePanelConfig(
     return panel_config;
   }
 
-  panel_config.rendering = false;
   panel_config.lighting = false;
   panel_config.ground_grid = false;
   return panel_config;
@@ -470,6 +469,24 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   }
 
   auto& renderer = renderer_ref->get();
+  if (impl_->panel_config.rendering && !impl_->rendering_panel
+    && impl_->rendering_settings_service) {
+    impl_->rendering_settings_service->BindVortexRenderer(
+      observer_ptr { &renderer });
+    impl_->rendering_vm
+      = std::make_unique<RenderingVm>(impl_->rendering_settings_service);
+    impl_->rendering_panel = std::make_shared<RenderingPanel>(
+      observer_ptr { impl_->rendering_vm.get() });
+    if (impl_->panel_registry->RegisterPanel(impl_->rendering_panel)) {
+      LOG_F(INFO, "Registered Rendering panel for the Vortex runtime seam");
+    } else {
+      LOG_F(WARNING,
+        "Failed to register Rendering panel for the Vortex runtime seam");
+      impl_->rendering_panel.reset();
+      impl_->rendering_vm.reset();
+    }
+  }
+
   if (!renderer.IsImGuiFrameActive()) {
     return;
   }
