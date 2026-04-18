@@ -238,13 +238,18 @@ auto CameraSettingsService::OnMainViewReady(
     return;
   }
 
+  OnRuntimeMainViewReady(camera, view.view.viewport);
+}
+
+auto CameraSettingsService::OnRuntimeMainViewReady(
+  scene::SceneNode camera, const ViewPort& viewport) -> void
+{
   const bool camera_changed = !active_camera_.IsAlive()
     || active_camera_.GetHandle() != camera.GetHandle();
   if (camera_changed) {
     SetActiveCamera(camera);
   }
 
-  const auto& viewport = view.view.viewport;
   if (viewport.width > 0.0F && viewport.height > 0.0F) {
     const float aspect
       = viewport.height > 0.0F ? (viewport.width / viewport.height) : 1.0F;

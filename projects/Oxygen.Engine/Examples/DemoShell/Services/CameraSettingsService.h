@@ -181,6 +181,8 @@ public:
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
     const renderer::CompositionView& view) -> void override;
+  auto OnRuntimeMainViewReady(
+    scene::SceneNode camera, const ViewPort& viewport) -> void;
 
 private:
   // NOLINTBEGIN(*-magic-numbers)

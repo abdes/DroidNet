@@ -72,6 +72,7 @@ set(
   "SceneRenderer/Stages/InitViews/InitViewsModule.h"
   "Passes/ComputeRenderPass.h"
   "Passes/GraphicsRenderPass.h"
+  "Passes/ImGuiOverlayPass.h"
   "Passes/RenderPass.h"
   "Environment/EnvironmentLightingService.h"
   "Environment/Internal/SkyRenderer.h"
@@ -182,6 +183,8 @@ set(
   "Internal/DeformationHistoryCache.h"
   "Internal/FrameViewPacket.cpp"
   "Internal/FrameViewPacket.h"
+  "Internal/ImGuiRuntime.cpp"
+  "Internal/ImGuiRuntime.h"
   "Internal/PerViewStructuredPublisher.h"
   "Internal/PreviousViewHistoryCache.cpp"
   "Internal/PreviousViewHistoryCache.h"
@@ -197,6 +200,7 @@ set(
   "PreparedSceneFrame.cpp"
   "Passes/ComputeRenderPass.cpp"
   "Passes/GraphicsRenderPass.cpp"
+  "Passes/ImGuiOverlayPass.cpp"
   "Passes/RenderPass.cpp"
   "Environment/EnvironmentLightingService.cpp"
   "Environment/Internal/SkyRenderer.cpp"
@@ -307,6 +311,8 @@ target_link_libraries(
     oxygen::nexus
     oxygen::scenesync
   PRIVATE
+    oxygen::imgui
+    oxygen::platform
     oxygen::profiling
 )
 

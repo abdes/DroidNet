@@ -126,6 +126,7 @@ public:
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
     const renderer::CompositionView& view) -> void override;
+  auto OnRuntimeMainViewReady(ViewId view_id) -> void;
 
   // SkyAtmosphere
   [[nodiscard]] virtual auto GetSkyAtmosphereEnabled() const -> bool;

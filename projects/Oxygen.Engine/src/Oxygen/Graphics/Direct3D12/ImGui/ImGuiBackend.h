@@ -58,10 +58,12 @@ public:
     return "ImGui D3D12";
   }
 
-  OXGN_D3D12_API auto Init(std::weak_ptr<Graphics> gfx_weak) -> void override;
+  OXGN_D3D12_API auto Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
+    -> void override;
   OXGN_D3D12_API auto Shutdown() -> void override;
   OXGN_D3D12_API auto NewFrame() -> void override;
-  OXGN_D3D12_API auto Render(CommandRecorder& recorder) -> void override;
+  OXGN_D3D12_API auto Render(graphics::CommandRecorder& recorder)
+    -> void override;
   [[nodiscard]] OXGN_D3D12_API auto RegisterOrUpdateTexture(
     std::string_view key, const std::shared_ptr<graphics::Texture>& texture)
     -> std::uintptr_t override;

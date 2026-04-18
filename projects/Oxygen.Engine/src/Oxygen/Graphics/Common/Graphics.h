@@ -53,6 +53,9 @@ namespace graphics {
   class TimestampQueryProvider;
   struct TextureDesc;
   class Texture;
+  namespace imgui {
+    class ImGuiGraphicsBackend;
+  } // namespace imgui
 
   namespace detail {
     class DeferredReclaimer; // TODO: this needs to become public
@@ -220,6 +223,9 @@ public:
 
   [[nodiscard]] OXGN_GFX_API virtual auto GetFrameCaptureController() const
     -> observer_ptr<graphics::FrameCaptureController>;
+
+  [[nodiscard]] OXGN_GFX_API virtual auto CreateImGuiGraphicsBackend() const
+    -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>;
 
   //! Register a surface for deferred release so the final release occurs
   //! inside the engine's render/frame timeline via DeferredReclaimer.

@@ -6,6 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
@@ -78,6 +79,12 @@ auto Graphics::GetReadbackManager() const
   -> observer_ptr<graphics::ReadbackManager>
 {
   return observer_ptr<graphics::ReadbackManager>(readback_manager_.get());
+}
+
+auto Graphics::CreateImGuiGraphicsBackend() const
+  -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>
+{
+  return {};
 }
 
 auto Graphics::CreateTexture(const TextureDesc& desc) const

@@ -75,7 +75,12 @@ STAGE15_SKY_SCOPE_NAME = "Vortex.Stage15.Sky"
 STAGE15_ATMOSPHERE_SCOPE_NAME = "Vortex.Stage15.Atmosphere"
 STAGE15_FOG_SCOPE_NAME = "Vortex.Stage15.Fog"
 STAGE22_TONEMAP_SCOPE_NAME = "Vortex.PostProcess.Tonemap"
+IMGUI_OVERLAY_SCOPE_NAME = "Vortex.ImGuiOverlay"
 COMPOSITING_SCOPE_PREFIX = "Vortex.CompositingTask[label=Composite Copy View "
+IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES = (
+    "Vortex.CompositingTask[label=Composite Blend Texture Vortex.ImGuiOverlay",
+    "Vortex.CompositingTask[label=Composite Blend Texture Async.DemoShellOverlay",
+)
 
 
 def records_with_name(action_records, name):
@@ -84,6 +89,13 @@ def records_with_name(action_records, name):
 
 def records_with_name_prefix(action_records, prefix):
     return [record for record in action_records if record.name.startswith(prefix)]
+
+
+def records_with_name_prefixes(action_records, prefixes):
+    records = []
+    for prefix in prefixes:
+        records.extend(records_with_name_prefix(action_records, prefix))
+    return records
 
 
 def records_under_prefix(action_records, prefix):
@@ -148,8 +160,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage22_tonemap_scope = records_with_name(
         action_records, STAGE22_TONEMAP_SCOPE_NAME
     )
+    imgui_overlay_scope = records_with_name(action_records, IMGUI_OVERLAY_SCOPE_NAME)
     compositing_scope = records_with_name_prefix(
         action_records, COMPOSITING_SCOPE_PREFIX
+    )
+    imgui_overlay_blend_scope = records_with_name_prefixes(
+        action_records, IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES
     )
 
     stage3_records = records_under_prefix(action_records, STAGE3_SCOPE_NAME)
@@ -215,7 +231,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_presence_check(
         report, "stage22_tonemap_scope", len(stage22_tonemap_scope) or len(stage22_fallback_draws)
     )
+    append_presence_check(report, "imgui_overlay_scope", len(imgui_overlay_scope))
     append_presence_check(report, "compositing_scope", len(compositing_scope))
+    append_presence_check(
+        report, "imgui_overlay_blend_scope", len(imgui_overlay_blend_scope)
+    )
 
     append_positive_count_check(
         report, "stage3_draw_count", count_named_records(stage3_records, DRAW_NAME)
@@ -268,6 +288,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             "true" if len(post_compositing_draws) > 0 else "false"
         )
     )
+    report.append(
+        "imgui_overlay_after_tonemap={}".format(
+            "true"
+            if imgui_overlay_blend_scope
+            and imgui_overlay_blend_scope[0].event_id > stage22_anchor_event_id
+            else "false"
+        )
+    )
 
     append_order_check(
         report,
@@ -290,6 +318,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "tonemap",
         "composit",
         "imgui",
+        "demoshelloverlay",
     )
     interesting = []
     for record in action_records:

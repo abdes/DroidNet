@@ -21,10 +21,10 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/ImGuiRuntimeSupport.h"
 
 namespace oxygen::examples {
 
@@ -134,8 +134,9 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   if (CreateSurface() && EnsureFramebuffers()) {
     auto sub = engine_->SubscribeModuleAttached(
       [this](engine::ModuleEvent const& ev) {
-        if (IsImGuiRuntimeModuleEvent(ev)) {
-          AttachImGuiWindow(engine_, GetWindowId());
+        if (ev.type_id == vortex::Renderer::ClassTypeId()) {
+          auto& renderer = static_cast<vortex::Renderer&>(*ev.module);
+          renderer.SetImGuiWindowId(GetWindowId());
         }
       },
       /*replay_existing=*/true);
@@ -419,7 +420,9 @@ auto AppWindow::Cleanup() -> void
   LOG_F(INFO, "Cleanup and release resources (window_id={})", GetWindowId());
 
   // Release resources and clear the state.
-  DetachImGuiWindow(engine_);
+  if (auto renderer = engine_->GetModule<vortex::Renderer>()) {
+    renderer->get().SetImGuiWindowId(platform::kInvalidWindowId);
+  }
   ClearFramebuffers();
 
   if (!gfx_weak_.expired()) {

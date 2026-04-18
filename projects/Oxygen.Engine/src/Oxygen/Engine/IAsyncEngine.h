@@ -25,6 +25,7 @@ class IAssetLoader;
 
 namespace oxygen {
 class Graphics;
+class Platform;
 }
 
 namespace oxygen::scripting {
@@ -62,6 +63,9 @@ public:
     -> const ::oxygen::PathFinder& = 0;
   [[nodiscard]] virtual auto GetGraphics() const noexcept
     -> std::weak_ptr<::oxygen::Graphics>
+    = 0;
+  [[nodiscard]] virtual auto GetPlatformShared() const noexcept
+    -> std::shared_ptr<::oxygen::Platform>
     = 0;
 
   [[nodiscard]] virtual auto GetEngineConfig() const noexcept

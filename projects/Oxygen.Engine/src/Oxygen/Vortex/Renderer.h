@@ -29,6 +29,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
@@ -45,6 +46,8 @@
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
+
+struct ImGuiContext;
 
 namespace oxygen::graphics {
 class Buffer;
@@ -80,6 +83,7 @@ template <typename RenderContextT> class BasicRenderContextPool;
 class CompositingPass;
 struct CompositingPassConfig;
 class GpuTimelineProfiler;
+class ImGuiRuntime;
 class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
@@ -540,6 +544,10 @@ public:
   OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
+  OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto GetImGuiContext() noexcept -> ImGuiContext*;
+  [[nodiscard]] OXGN_VRTX_NDAPI auto IsImGuiFrameActive() const noexcept
+    -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
@@ -563,6 +571,7 @@ private:
   };
 
   auto EnsureViewConstantsManager(Graphics& gfx) -> void;
+  auto EnsureImGuiRuntime() -> internal::ImGuiRuntime*;
   OXGN_VRTX_API auto PopulateRenderContextViewState(
     RenderContext& render_context, engine::FrameContext& context,
     bool prefer_composite_source) const -> void;
@@ -615,6 +624,7 @@ private:
   std::shared_ptr<internal::CompositingPass> compositing_pass_;
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
+  std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;

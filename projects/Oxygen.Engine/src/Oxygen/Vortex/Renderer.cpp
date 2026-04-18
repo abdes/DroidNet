@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -35,6 +36,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
+#include <Oxygen/Vortex/Internal/ImGuiRuntime.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
 #include <Oxygen/Vortex/Internal/RenderContextPool.h>
@@ -337,6 +339,42 @@ auto Renderer::RegisterConsoleBindings(
   console_ = console;
 }
 
+auto Renderer::EnsureImGuiRuntime() -> internal::ImGuiRuntime*
+{
+  if (imgui_runtime_) {
+    return imgui_runtime_.get();
+  }
+  if (!config_.enable_imgui
+    || !HasCapability(RendererCapabilityFamily::kDiagnosticsAndProfiling)
+    || engine_ == nullptr) {
+    return nullptr;
+  }
+
+  const auto gfx = GetGraphics();
+  if (!gfx) {
+    return nullptr;
+  }
+
+  auto graphics_backend = gfx->CreateImGuiGraphicsBackend();
+  if (!graphics_backend) {
+    return nullptr;
+  }
+
+  auto platform = engine_->GetPlatformShared();
+  if (!platform) {
+    return nullptr;
+  }
+
+  auto runtime = std::make_unique<internal::ImGuiRuntime>(
+    std::move(platform), std::move(graphics_backend));
+  if (!runtime->Initialize(gfx)) {
+    return nullptr;
+  }
+
+  imgui_runtime_ = std::move(runtime);
+  return imgui_runtime_.get();
+}
+
 auto Renderer::ApplyConsoleCVars(
   observer_ptr<const console::Console> /*console*/) noexcept -> void
 {
@@ -363,6 +401,7 @@ auto Renderer::OnShutdown() noexcept -> void
 
   ResetPublicationState();
   scene_renderer_.reset();
+  imgui_runtime_.reset();
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
@@ -528,6 +567,10 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
     return;
   }
 
+  if (auto* imgui_runtime = EnsureImGuiRuntime(); imgui_runtime != nullptr) {
+    imgui_runtime->OnFrameStart();
+  }
+
   frame_slot_ = context->GetFrameSlot();
   frame_seq_num_ = context->GetFrameSequenceNumber().get();
   rigid_transform_history_cache_.BeginFrame(frame_seq_num_);
@@ -603,6 +646,32 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
   if (context != nullptr) {
     co_await DispatchSceneRendererCompositing(context);
+  }
+
+  if (context != nullptr && imgui_runtime_ != nullptr
+    && imgui_runtime_->IsFrameActive()) {
+    std::shared_ptr<graphics::Framebuffer> composite_target {};
+    std::shared_ptr<graphics::Surface> target_surface {};
+    {
+      std::scoped_lock lock(composition_mutex_);
+      if (!pending_compositions_.empty()) {
+        composite_target = pending_compositions_.front().submission.composite_target;
+        target_surface = pending_compositions_.front().target_surface;
+      }
+    }
+
+    if (composite_target && target_surface) {
+      if (const auto overlay
+          = imgui_runtime_->RenderOverlay(
+              *this, observer_ptr { composite_target.get() });
+        overlay.has_value()) {
+        auto submission = CompositionSubmission {};
+        submission.composite_target = composite_target;
+        submission.tasks.push_back(CompositingTask::MakeTextureBlend(
+          overlay->texture, overlay->viewport, 1.0F));
+        RegisterComposition(std::move(submission), std::move(target_surface));
+      }
+    }
   }
 
   if (context == nullptr) {
@@ -809,6 +878,9 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
 auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
+  if (imgui_runtime_ != nullptr) {
+    imgui_runtime_->OnFrameEnd();
+  }
   if (context != nullptr && scene_renderer_ != nullptr
     && scene_renderer_started_frame_ == context->GetFrameSequenceNumber()) {
     scene_renderer_->OnFrameEnd(*context);
@@ -1114,6 +1186,26 @@ auto Renderer::IsViewReady(const ViewId view_id) const -> bool
   std::shared_lock lock(view_state_mutex_);
   const auto it = view_ready_states_.find(view_id);
   return it != view_ready_states_.end() && it->second;
+}
+
+auto Renderer::SetImGuiWindowId(const platform::WindowIdType window_id) -> void
+{
+  if (auto* imgui_runtime = EnsureImGuiRuntime(); imgui_runtime != nullptr) {
+    imgui_runtime->SetWindowId(window_id);
+  }
+}
+
+auto Renderer::GetImGuiContext() noexcept -> ImGuiContext*
+{
+  if (auto* imgui_runtime = EnsureImGuiRuntime(); imgui_runtime != nullptr) {
+    return imgui_runtime->GetImGuiContext();
+  }
+  return nullptr;
+}
+
+auto Renderer::IsImGuiFrameActive() const noexcept -> bool
+{
+  return imgui_runtime_ != nullptr && imgui_runtime_->IsFrameActive();
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>

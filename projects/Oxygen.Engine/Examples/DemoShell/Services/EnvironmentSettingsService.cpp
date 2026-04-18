@@ -750,7 +750,13 @@ auto EnvironmentSettingsService::OnMainViewReady(
   const engine::FrameContext& /*context*/,
   const renderer::CompositionView& view) -> void
 {
-  main_view_id_ = view.id;
+  OnRuntimeMainViewReady(view.id);
+}
+
+auto EnvironmentSettingsService::OnRuntimeMainViewReady(const ViewId view_id)
+  -> void
+{
+  main_view_id_ = view_id;
 }
 
 auto EnvironmentSettingsService::HasScene() const noexcept -> bool

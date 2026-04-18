@@ -387,6 +387,8 @@ auto MainModule::OnAttachedImpl(
 
   if (!shell->RegisterPanel(async_panel_)) {
     LOG_F(WARNING, "Async: failed to register Async panel");
+  } else if (!shell->GetActivePanelName().has_value()) {
+    shell->SetActivePanel(async_panel_->GetName());
   }
 
   // Create Main View ID
@@ -639,6 +641,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   TrackPhaseStart("Publish Views");
+  auto& shell = GetShell();
 
   auto renderer = ResolveVortexRenderer();
   if (!renderer) {
@@ -691,6 +694,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.with_atmosphere = true;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
+  shell.OnRuntimeMainViewReady(main_view_id_, main_camera_, main_viewport);
 
   renderer->UpsertPublishedRuntimeView(
     *context, main_view_id_, std::move(view_ctx), vortex::ShadingMode::kDeferred);
@@ -870,11 +874,11 @@ auto MainModule::EnsureExampleScene() -> void
     const double init_angle = base_phase + jitter;
     const double speed = speed_dist(rng);
     const double radius = radius_dist(rng);
-    const double hue = hue_dist(rng);
 
     // Apply per-sphere material override (transparent glass-like)
     auto r = node.GetRenderable();
     const std::string mat_name = std::string("SphereMat_") + std::to_string(i);
+    const double hue = hue_dist(rng);
     const auto rgb = ColorFromHue(hue);
     const bool is_transparent
       = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
