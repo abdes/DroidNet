@@ -62,6 +62,12 @@ public:
   [[nodiscard]] auto GetAutoExposureHighPercentile() -> float;
   auto SetAutoExposureHighPercentile(float percentile) -> void;
 
+  [[nodiscard]] auto GetAutoExposureMinEv() -> float;
+  auto SetAutoExposureMinEv(float min_ev) -> void;
+
+  [[nodiscard]] auto GetAutoExposureMaxEv() -> float;
+  auto SetAutoExposureMaxEv(float max_ev) -> void;
+
   [[nodiscard]] auto GetAutoExposureMinLogLuminance() -> float;
   auto SetAutoExposureMinLogLuminance(float min_log_lum) -> void;
 
@@ -119,6 +125,8 @@ private:
   float auto_exposure_high_percentile_ {
     engine::AutoExposurePassConfig::kDefaultHighPercentile
   };
+  float auto_exposure_min_ev_ { -6.0F };
+  float auto_exposure_max_ev_ { 16.0F };
   float auto_exposure_min_log_lum_ {
     engine::AutoExposurePassConfig::kDefaultMinLogLuminance
   };

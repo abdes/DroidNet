@@ -77,7 +77,7 @@ example and the Phase 4 scope:
 | Atmosphere-enabled main scene view | required | the live example sets `with_atmosphere = true` on its main composition view |
 | Spotlight presence | required | the live example creates and updates a camera spotlight |
 | Spotlight shadows | not required in baseline | the live example's settings default keeps `casts_shadows = false`; Phase 4C remains directional-first |
-| Post-process visible output | required | the migrated surface must reach final tonemapped output |
+| Post-process visible output | required | the migrated surface must reach real Stage-22 sampled tonemapped output before composition |
 | Directional conventional shadows | required | this is the truthful Phase 4C baseline |
 | Local-light conventional shadows | not required in baseline | later `ShadowService` expansion owns them |
 

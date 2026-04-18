@@ -6,9 +6,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <memory>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -31,6 +31,7 @@ namespace {
 
 using oxygen::Format;
 using oxygen::Graphics;
+using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::RendererConfig;
 using oxygen::TextureType;
 using oxygen::ViewId;
@@ -39,7 +40,6 @@ using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::QueueRole;
 using oxygen::graphics::ResourceStates;
 using oxygen::graphics::TextureDesc;
-using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::vortex::PostProcessConfig;
 using oxygen::vortex::PostProcessFrameBindings;
 using oxygen::vortex::PostProcessService;
@@ -54,12 +54,15 @@ auto ReadTextFile(const std::filesystem::path& path) -> std::string
 {
   auto input = std::ifstream(path);
   EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+  return { std::istreambuf_iterator<char>(input),
+    std::istreambuf_iterator<char>() };
 }
 
 auto SourceRoot() -> std::filesystem::path
 {
-  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
+  return std::filesystem::path { __FILE__ }
+    .parent_path()
+    .parent_path()
     .parent_path();
 }
 
@@ -75,12 +78,11 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   -> std::shared_ptr<Renderer>
 {
   auto config = RendererConfig {};
-  config.upload_queue_key
-    = graphics->QueueKeyFor(QueueRole::kGraphics).get();
+  config.upload_queue_key = graphics->QueueKeyFor(QueueRole::kGraphics).get();
   constexpr auto kCapabilities = RendererCapabilityFamily::kDeferredShading
     | RendererCapabilityFamily::kFinalOutputComposition;
-  return { new Renderer(
-             std::weak_ptr<Graphics>(graphics), std::move(config), kCapabilities),
+  return { new Renderer(std::weak_ptr<Graphics>(graphics), std::move(config),
+             kCapabilities),
     DestroyRenderer };
 }
 
@@ -148,7 +150,8 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
 
   EXPECT_TRUE(cmake_source.contains("PostProcess/PostProcessService.h"));
   EXPECT_TRUE(cmake_source.contains("PostProcess/PostProcessService.cpp"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/Internal/ExposureCalculator.cpp"));
+  EXPECT_TRUE(
+    cmake_source.contains("PostProcess/Internal/ExposureCalculator.cpp"));
   EXPECT_TRUE(cmake_source.contains("PostProcess/Internal/BloomChain.cpp"));
   EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/TonemapPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/BloomPass.cpp"));
@@ -157,21 +160,21 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
     cmake_source.contains("PostProcess/Types/PostProcessFrameBindings.h"));
 }
 
-NOLINT_TEST(PostProcessServiceSurfaceTest,
-  VortexShaderCatalogRegistersPostProcessFamily)
+NOLINT_TEST(
+  PostProcessServiceSurfaceTest, VortexShaderCatalogRegistersPostProcessFamily)
 {
   const auto source_root = SourceRoot();
   const auto catalog_source = ReadTextFile(
     source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h");
 
-  EXPECT_TRUE(catalog_source.contains(
-    "Vortex/Services/PostProcess/Tonemap.hlsl"));
+  EXPECT_TRUE(
+    catalog_source.contains("Vortex/Services/PostProcess/Tonemap.hlsl"));
   EXPECT_TRUE(catalog_source.contains(
     "Vortex/Services/PostProcess/BloomDownsample.hlsl"));
-  EXPECT_TRUE(catalog_source.contains(
-    "Vortex/Services/PostProcess/BloomUpsample.hlsl"));
-  EXPECT_TRUE(catalog_source.contains(
-    "Vortex/Services/PostProcess/Exposure.hlsl"));
+  EXPECT_TRUE(
+    catalog_source.contains("Vortex/Services/PostProcess/BloomUpsample.hlsl"));
+  EXPECT_TRUE(
+    catalog_source.contains("Vortex/Services/PostProcess/Exposure.hlsl"));
   EXPECT_TRUE(catalog_source.contains("VortexTonemapVS"));
   EXPECT_TRUE(catalog_source.contains("VortexTonemapPS"));
 }
@@ -180,40 +183,80 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   TonemapPassConsumesResolvedExposureInsteadOfIgnoringStage22Inputs)
 {
   const auto source_root = SourceRoot();
-  const auto tonemap_pass_source = ReadTextFile(
-    source_root / "Vortex/PostProcess/Passes/TonemapPass.cpp");
-  const auto tonemap_shader_source = ReadTextFile(
-    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/PostProcess/Tonemap.hlsl");
+  const auto tonemap_pass_source
+    = ReadTextFile(source_root / "Vortex/PostProcess/Passes/TonemapPass.cpp");
+  const auto tonemap_shader_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/PostProcess/Tonemap.hlsl");
 
-  EXPECT_FALSE(tonemap_pass_source.contains("static_cast<void>(inputs.exposure_value);"));
-  EXPECT_TRUE(tonemap_pass_source.contains("std::bit_cast<std::uint32_t>(inputs.exposure_value)"));
-  EXPECT_TRUE(tonemap_shader_source.contains("float g_ExposureValue;"));
-  EXPECT_TRUE(tonemap_shader_source.contains("scene_signal.Load(int3(pixel, 0)).rgb * max(g_ExposureValue"));
+  EXPECT_FALSE(
+    tonemap_pass_source.contains("static_cast<void>(inputs.exposure_value);"));
+  EXPECT_TRUE(tonemap_pass_source.contains("UpdatePassConstants(inputs)"));
+  EXPECT_TRUE(tonemap_pass_source.contains("pass_constants_buffer_"));
+  EXPECT_TRUE(tonemap_shader_source.contains("struct TonemapPassConstants"));
+  EXPECT_TRUE(tonemap_shader_source.contains("pass.exposure_buffer_index"));
+  EXPECT_TRUE(tonemap_shader_source.contains("switch (pass.tone_mapper)"));
+  EXPECT_TRUE(tonemap_shader_source.contains("color *= exposure;"));
 }
 
 NOLINT_TEST(PostProcessServiceSurfaceTest,
   SceneRendererFeedsStage22FromAuthoredSceneExposureInsteadOfDefaultConfig)
 {
   const auto source_root = SourceRoot();
-  const auto scene_renderer_source = ReadTextFile(
-    source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+  const auto scene_renderer_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+  const auto post_process_types
+    = ReadTextFile(source_root / "Core/Types/PostProcess.h");
 
-  EXPECT_TRUE(scene_renderer_source.contains("post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));"));
-  EXPECT_TRUE(scene_renderer_source.contains("environment->TryGetSystem<scene::environment::PostProcessVolume>()"));
-  EXPECT_TRUE(scene_renderer_source.contains("ctx.current_view.resolved_view->CameraEv().has_value()"));
-  EXPECT_TRUE(scene_renderer_source.contains("post_process.GetExposureCompensationEv() - ev"));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));"));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "environment->TryGetSystem<scene::environment::PostProcessVolume>()"));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "ctx.current_view.resolved_view->CameraEv().has_value()"));
+  EXPECT_TRUE(
+    scene_renderer_source.contains("engine::ExposureScaleFromEv100("));
+  EXPECT_TRUE(scene_renderer_source.contains("engine::ExposureBiasScale("));
+  EXPECT_TRUE(post_process_types.contains("ExposureScaleFromEv100("));
+  EXPECT_TRUE(post_process_types.contains("ExposureBiasScale("));
 }
 
 NOLINT_TEST(PostProcessServiceSurfaceTest,
-  SceneRendererReregistersResolvedDepthSrvBeforePublishingStage22Bindings)
+  SceneRendererBuildsCanonicalStage22InputsBeforeDispatch)
 {
   const auto source_root = SourceRoot();
-  const auto scene_renderer_source = ReadTextFile(
-    source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+  const auto scene_renderer_source
+    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
 
-  EXPECT_TRUE(scene_renderer_source.contains("auto scene_depth_srv = scene_texture_bindings_.scene_depth_srv;"));
-  EXPECT_TRUE(scene_renderer_source.contains("scene_depth_srv = RegisterSceneTextureView("));
-  EXPECT_TRUE(scene_renderer_source.contains(".scene_depth_srv = ShaderVisibleIndex { scene_depth_srv }"));
+  EXPECT_TRUE(
+    scene_renderer_source.contains("active_view->composite_source != nullptr"));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "SceneRenderer Stage 22 requires a SceneRenderer-supplied post target"));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "const auto scene_signal_srv = ShaderVisibleIndex { "
+    "RegisterSceneTextureView("));
+  EXPECT_TRUE(scene_renderer_source.contains(
+    "const auto scene_depth_srv = ShaderVisibleIndex { "
+    "RegisterSceneTextureView("));
+}
+
+NOLINT_TEST(PostProcessServiceSurfaceTest,
+  FixedExposureAndAutoEvClampShareTheSameEv100CalibrationBasis)
+{
+  constexpr float kEv100 = 14.0F;
+  constexpr float kCompensationEv = 1.25F;
+  constexpr float kExposureKey = 10.0F;
+
+  const float manual_scale = oxygen::engine::ExposureScaleFromEv100(
+    kEv100, kCompensationEv, kExposureKey);
+  const float auto_target_luminance = oxygen::engine::kExposureMiddleGrey
+    * oxygen::engine::ExposureBiasScale(kCompensationEv, kExposureKey);
+  const float average_luminance
+    = oxygen::engine::Ev100ToAverageLuminance(kEv100);
+  const float auto_scale = auto_target_luminance / average_luminance;
+
+  EXPECT_FLOAT_EQ(
+    oxygen::engine::AverageLuminanceToEv100(average_luminance), kEv100);
+  EXPECT_FLOAT_EQ(manual_scale, auto_scale);
 }
 
 class PostProcessServiceBehaviorTest : public ::testing::Test {
@@ -233,13 +276,14 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   ExecutePublishesStage22BindingsAndRecordsTonemapVisibleOutput)
 {
   auto service = PostProcessService(*renderer_);
-  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
-    .extent = { 64U, 64U },
-    .enable_velocity = true,
-    .enable_custom_depth = false,
-    .gbuffer_count = 4U,
-    .msaa_sample_count = 1U,
-  });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
   auto framebuffer
     = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.Output");
 
@@ -272,13 +316,56 @@ NOLINT_TEST_F(PostProcessServiceBehaviorTest,
   EXPECT_EQ(service.ResolveBindingSlot(context.current_view.view_id),
     state.post_process_frame_slot);
   EXPECT_EQ(service.InspectBindings(context.current_view.view_id)
-      ->resolved_scene_color_srv,
+              ->resolved_scene_color_srv,
     oxygen::ShaderVisibleIndex { 301U });
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
-  EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
-    [](const auto& bind) -> bool {
+  EXPECT_TRUE(std::ranges::any_of(
+    graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.PostProcess.Tonemap";
     }));
+}
+
+NOLINT_TEST_F(PostProcessServiceBehaviorTest,
+  ExecutePublishesConfiguredAutoExposureEvClampBindings)
+{
+  auto service = PostProcessService(*renderer_);
+  auto config = PostProcessConfig {};
+  config.auto_exposure_min_ev = -3.5F;
+  config.auto_exposure_max_ev = 11.25F;
+  service.SetConfig(config);
+
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto framebuffer
+    = MakeFramebuffer(graphics_, "PostProcessServiceBehaviorTest.ClampOutput");
+
+  auto context = RenderContext {};
+  context.current_view.view_id = ViewId { 42U };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 10U };
+
+  service.OnFrameStart(context.frame_sequence, context.frame_slot);
+  service.Execute(context.current_view.view_id, context, scene_textures,
+    PostProcessService::Inputs {
+      .scene_signal = &scene_textures.GetSceneColor(),
+      .scene_depth = &scene_textures.GetSceneDepth(),
+      .scene_velocity = scene_textures.GetVelocity(),
+      .post_target = oxygen::observer_ptr<Framebuffer> { framebuffer.get() },
+      .scene_signal_srv = oxygen::ShaderVisibleIndex { 401U },
+      .scene_depth_srv = oxygen::ShaderVisibleIndex { 402U },
+      .scene_velocity_srv = oxygen::ShaderVisibleIndex { 403U },
+    });
+
+  const auto* bindings = service.InspectBindings(context.current_view.view_id);
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_FLOAT_EQ(bindings->auto_exposure_min_ev, config.auto_exposure_min_ev);
+  EXPECT_FLOAT_EQ(bindings->auto_exposure_max_ev, config.auto_exposure_max_ev);
 }
 
 } // namespace

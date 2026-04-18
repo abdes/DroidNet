@@ -100,9 +100,9 @@ void PostProcessPanel::DrawExposureSection()
     float ev = vm_->GetManualExposureEv();
     // Range roughly covering starlight to bright sunlight
     if (ImGui::DragFloat(
-          "Manual Exposure (EV100)", &ev, 0.01F, 0.0F, 16.0F, "%.2f")) {
+          "Manual Exposure (EV100)", &ev, 0.01F, -16.0F, 24.0F, "%.2f")) {
       ev = std::round(ev * 100.0F) / 100.0F;
-      ev = std::max(ev, 0.0F);
+      ev = std::clamp(ev, -16.0F, 24.0F);
       vm_->SetManualExposureEv(ev);
     }
     if (ImGui::IsItemHovered()) {
@@ -143,14 +143,16 @@ void PostProcessPanel::DrawExposureSection()
     ImGui::Text("Computed EV: %.2f", computed_ev);
   }
 
-  if (current_mode == ExposureMode::kAuto) {
-    float comp = vm_->GetExposureCompensation();
-    if (ImGui::DragFloat("Compensation", &comp, 0.1F, -10.0F, 10.0F)) {
-      vm_->SetExposureCompensation(comp);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Biases the target exposure (EV stops).");
-    }
+  ImGui::SeparatorText("Global");
+
+  float comp = vm_->GetExposureCompensation();
+  if (ImGui::DragFloat("Compensation (EV)", &comp, 0.1F, -10.0F, 10.0F)) {
+    vm_->SetExposureCompensation(comp);
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Exposure compensation in EV stops. Applied by the Vortex Stage 22 "
+      "path in both fixed and auto modes.");
   }
 
   float exposure_key = vm_->GetExposureKey();
@@ -159,18 +161,38 @@ void PostProcessPanel::DrawExposureSection()
   }
   if (ImGui::IsItemHovered()) {
     ImGui::SetTooltip(
-      "Calibration constant (K). Scales global brightness. Default: 12.5.");
+      "Display-key scale applied after exposure calibration. Higher values "
+      "brighten the final result in both fixed and auto modes.");
   }
 
   if (current_mode == ExposureMode::kAuto) {
-    ImGui::Separator();
-    ImGui::Text("Auto Exposure Settings");
+    ImGui::SeparatorText("Auto Exposure");
 
     if (ImGui::Button("Reset Defaults")) {
       vm_->ResetAutoExposureDefaults();
     }
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip("Reset only auto-exposure settings to defaults.");
+    }
+
+    float min_ev = vm_->GetAutoExposureMinEv();
+    if (ImGui::DragFloat("Minimum EV", &min_ev, 0.1F, -16.0F, 24.0F, "%.1f")) {
+      vm_->SetAutoExposureMinEv(min_ev);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Lower EV clamp for the auto-exposure solve. Prevents the scene from "
+        "adapting below this brightness.");
+    }
+
+    float max_ev = vm_->GetAutoExposureMaxEv();
+    if (ImGui::DragFloat("Maximum EV", &max_ev, 0.1F, -16.0F, 24.0F, "%.1f")) {
+      vm_->SetAutoExposureMaxEv(max_ev);
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Upper EV clamp for the auto-exposure solve. Prevents the scene from "
+        "adapting above this brightness.");
     }
 
     float speed_up = vm_->GetAutoExposureAdaptationSpeedUp();
@@ -237,15 +259,6 @@ void PostProcessPanel::DrawExposureSection()
       ImGui::SetTooltip("Target average luminance (middle gray) to aim for.");
     }
 
-    float spot_radius = vm_->GetAutoExposureSpotMeterRadius();
-    if (ImGui::DragFloat("Spot Radius", &spot_radius, 0.005F, 0.01F, 1.0F)) {
-      vm_->SetAutoExposureSpotMeterRadius(spot_radius);
-    }
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip(
-        "Spot metering radius in normalized screen-space distance.");
-    }
-
     engine::MeteringMode metering = vm_->GetAutoExposureMeteringMode();
     auto metering_str = "Average";
     if (metering == engine::MeteringMode::kCenterWeighted) {
@@ -271,16 +284,36 @@ void PostProcessPanel::DrawExposureSection()
     if (ImGui::IsItemHovered()) {
       ImGui::SetTooltip("Weighting method for calculating average luminance.");
     }
+
+    float spot_radius = vm_->GetAutoExposureSpotMeterRadius();
+    const bool spot_metering_active = metering == engine::MeteringMode::kSpot;
+    if (!spot_metering_active) {
+      ImGui::BeginDisabled();
+    }
+    if (ImGui::DragFloat("Spot Radius", &spot_radius, 0.005F, 0.01F, 1.0F)) {
+      vm_->SetAutoExposureSpotMeterRadius(spot_radius);
+    }
+    if (!spot_metering_active) {
+      ImGui::EndDisabled();
+    }
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Spot metering radius in normalized screen-space distance. Used only "
+        "when Metering is set to Spot.");
+    }
   }
 
   if (exposure_enabled) {
     if (current_mode == ExposureMode::kAuto) {
-      ImGui::Text("Final Exposure (linear): Renderer (auto)");
+      ImGui::TextUnformatted(
+        "Exposure is computed by the Vortex Stage 22 auto-exposure solver.");
     } else {
-      ImGui::Text("Final Exposure (linear): Renderer");
+      ImGui::TextUnformatted(
+        "Exposure is applied by the Vortex Stage 22 fixed-exposure path.");
     }
   } else {
-    ImGui::Text("Final Exposure (linear): 1.0000 (disabled)");
+    ImGui::TextUnformatted(
+      "Exposure is disabled. Stage 22 uses a neutral multiplier of 1.0.");
   }
 
   if (!exposure_enabled) {
@@ -292,16 +325,8 @@ void PostProcessPanel::DrawTonemappingSection()
 {
   using engine::ToneMapper;
 
-  bool enabled = vm_->GetTonemappingEnabled();
-  if (ImGui::Checkbox("Enabled##Tonemapping", &enabled)) {
-    vm_->SetTonemappingEnabled(enabled);
-  }
-
-  if (!enabled) {
-    ImGui::BeginDisabled();
-  }
-
-  ToneMapper current_mode = vm_->GetToneMapper();
+  ToneMapper current_mode
+    = vm_->GetTonemappingEnabled() ? vm_->GetToneMapper() : ToneMapper::kNone;
   auto mode_str = "Unknown";
   switch (current_mode) {
   case ToneMapper::kAcesFitted:
@@ -318,27 +343,41 @@ void PostProcessPanel::DrawTonemappingSection()
     break;
   }
 
-  if (ImGui::BeginCombo("Operator", mode_str)) {
+  if (ImGui::BeginCombo("Tone Curve", mode_str)) {
+    if (ImGui::Selectable("None", current_mode == ToneMapper::kNone)) {
+      vm_->SetTonemappingEnabled(false);
+    }
     if (ImGui::Selectable("ACES", current_mode == ToneMapper::kAcesFitted)) {
+      vm_->SetTonemappingEnabled(true);
       vm_->SetToneMapper(ToneMapper::kAcesFitted);
     }
     if (ImGui::Selectable("Filmic", current_mode == ToneMapper::kFilmic)) {
+      vm_->SetTonemappingEnabled(true);
       vm_->SetToneMapper(ToneMapper::kFilmic);
     }
     if (ImGui::Selectable("Reinhard", current_mode == ToneMapper::kReinhard)) {
+      vm_->SetTonemappingEnabled(true);
       vm_->SetToneMapper(ToneMapper::kReinhard);
     }
     ImGui::EndCombo();
   }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Select the Stage 22 tone curve. 'None' keeps the pass active but uses "
+      "the neutral curve path.");
+  }
 
   float gamma = vm_->GetGamma();
-  if (ImGui::DragFloat("Gamma", &gamma, 0.05F, 1.0F, 3.0F, "%.2f")) {
+  if (ImGui::DragFloat("Display Gamma", &gamma, 0.05F, 1.0F, 3.0F, "%.2f")) {
     vm_->SetGamma(gamma);
   }
-
-  if (!enabled) {
-    ImGui::EndDisabled();
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Display gamma applied after the selected tonemap operator.");
   }
+
+  ImGui::TextUnformatted(
+    "Tonemapping is always applied by the Vortex Stage 22 post-process pass.");
 }
 
 } // namespace oxygen::examples::ui

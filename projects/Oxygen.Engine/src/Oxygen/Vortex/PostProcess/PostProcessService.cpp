@@ -74,17 +74,30 @@ auto PostProcessService::BuildBindings(const Inputs& inputs) const
     .eye_adaptation_srv = inputs.eye_adaptation_srv,
     .eye_adaptation_uav = inputs.eye_adaptation_uav,
     .post_history_srv = inputs.post_history_srv,
-    .fixed_exposure = config_.fixed_exposure,
-    .bloom_intensity = config_.bloom_intensity,
-    .bloom_threshold = config_.bloom_threshold,
+    .tone_mapper = config_.tone_mapper,
+    .metering_mode = config_.metering_mode,
     .enable_bloom = config_.enable_bloom ? 1U : 0U,
     .enable_auto_exposure = config_.enable_auto_exposure ? 1U : 0U,
+    .fixed_exposure = config_.fixed_exposure,
+    .gamma = config_.gamma,
+    .bloom_intensity = config_.bloom_intensity,
+    .bloom_threshold = config_.bloom_threshold,
+    .auto_exposure_speed_up = config_.auto_exposure_speed_up,
+    .auto_exposure_speed_down = config_.auto_exposure_speed_down,
+    .auto_exposure_low_percentile = config_.auto_exposure_low_percentile,
+    .auto_exposure_high_percentile = config_.auto_exposure_high_percentile,
+    .auto_exposure_min_ev = config_.auto_exposure_min_ev,
+    .auto_exposure_max_ev = config_.auto_exposure_max_ev,
+    .auto_exposure_min_log_luminance = config_.auto_exposure_min_log_luminance,
+    .auto_exposure_log_luminance_range
+    = config_.auto_exposure_log_luminance_range,
+    .auto_exposure_target_luminance = config_.auto_exposure_target_luminance,
+    .auto_exposure_spot_meter_radius = config_.auto_exposure_spot_meter_radius,
   };
 }
 
-auto PostProcessService::PublishBindings(
-  const ViewId view_id, const PostProcessFrameBindings& bindings)
-  -> ShaderVisibleIndex
+auto PostProcessService::PublishBindings(const ViewId view_id,
+  const PostProcessFrameBindings& bindings) -> ShaderVisibleIndex
 {
   if (!EnsurePublishResources()) {
     return kInvalidShaderVisibleIndex;
@@ -99,16 +112,27 @@ auto PostProcessService::PublishBindings(
 auto PostProcessService::Execute(const ViewId view_id, RenderContext& ctx,
   const SceneTextures& scene_textures, const Inputs& inputs) -> void
 {
-  const auto bindings = BuildBindings(inputs);
+  const auto exposure = exposure_pass_->Execute(ctx, config_,
+    postprocess::ExposurePass::Inputs {
+      .scene_signal = inputs.scene_signal,
+      .scene_signal_srv = inputs.scene_signal_srv,
+    });
+  auto bindings = BuildBindings(inputs);
+  bindings.eye_adaptation_srv = exposure.exposure_buffer_srv;
+  bindings.eye_adaptation_uav = exposure.exposure_buffer_uav;
   const auto slot = PublishBindings(view_id, bindings);
-  const auto exposure = exposure_pass_->Execute(config_);
   const auto bloom = bloom_pass_->Execute(config_, bindings);
   const auto tonemap = tonemap_pass_->Record(ctx, scene_textures,
     postprocess::TonemapPass::Inputs {
       .scene_signal = inputs.scene_signal,
+      .exposure_buffer = exposure.exposure_buffer,
       .scene_signal_srv = inputs.scene_signal_srv,
+      .bloom_texture_srv = bloom.bloom_texture_srv,
+      .exposure_buffer_srv = exposure.exposure_buffer_srv,
       .post_target = inputs.post_target,
+      .tone_mapper = config_.tone_mapper,
       .exposure_value = exposure.exposure_value,
+      .gamma = config_.gamma,
       .bloom_intensity = config_.bloom_intensity,
     });
 
@@ -139,8 +163,9 @@ auto PostProcessService::ResolveBindingSlot(const ViewId view_id) const
   -> ShaderVisibleIndex
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.slot
-                                      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  return it != published_views_.end()
+    ? it->second.slot
+    : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
 }
 
 } // namespace oxygen::vortex

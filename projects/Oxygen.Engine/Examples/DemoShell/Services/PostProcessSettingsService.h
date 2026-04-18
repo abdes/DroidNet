@@ -104,6 +104,12 @@ namespace ui {
     [[nodiscard]] virtual auto GetAutoExposureHighPercentile() const -> float;
     virtual auto SetAutoExposureHighPercentile(float percentile) -> void;
 
+    [[nodiscard]] virtual auto GetAutoExposureMinEv() const -> float;
+    virtual auto SetAutoExposureMinEv(float min_ev) -> void;
+
+    [[nodiscard]] virtual auto GetAutoExposureMaxEv() const -> float;
+    virtual auto SetAutoExposureMaxEv(float max_ev) -> void;
+
     [[nodiscard]] virtual auto GetAutoExposureMinLogLuminance() const -> float;
     virtual auto SetAutoExposureMinLogLuminance(float luminance) -> void;
 
@@ -136,6 +142,7 @@ namespace ui {
 
   private:
     auto UpdateAutoExposureTarget() -> void;
+    auto SyncScenePostProcessState() -> void;
 
     static constexpr auto kExposureModeKey = "post_process.exposure.mode";
     static constexpr auto kExposureEnabledKey = "post_process.exposure.enabled";
@@ -158,6 +165,10 @@ namespace ui {
       = "post_process.auto_exposure.low_percentile";
     static constexpr auto kAutoExposureHighPercentileKey
       = "post_process.auto_exposure.high_percentile";
+    static constexpr auto kAutoExposureMinEvKey
+      = "post_process.auto_exposure.min_ev";
+    static constexpr auto kAutoExposureMaxEvKey
+      = "post_process.auto_exposure.max_ev";
     static constexpr auto kAutoExposureMinLogLumKey
       = "post_process.auto_exposure.min_log_lum";
     static constexpr auto kAutoExposureLogLumRangeKey

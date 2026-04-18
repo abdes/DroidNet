@@ -17,9 +17,9 @@
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 namespace oxygen {
 class Graphics;
@@ -69,6 +69,8 @@ struct RenderContext {
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
+    observer_ptr<graphics::Framebuffer> render_target;
+    observer_ptr<graphics::Framebuffer> composite_source;
     observer_ptr<graphics::Framebuffer> primary_target;
   };
 
@@ -140,8 +142,9 @@ struct RenderContext {
   [[nodiscard]] auto GetActiveViewEntry() const noexcept
     -> const ViewExecutionEntry*
   {
-    return active_view_index < frame_views.size() ? &frame_views[active_view_index]
-                                                  : nullptr;
+    return active_view_index < frame_views.size()
+      ? &frame_views[active_view_index]
+      : nullptr;
   }
 
   auto GetRenderer() const -> auto& { return *renderer_; }

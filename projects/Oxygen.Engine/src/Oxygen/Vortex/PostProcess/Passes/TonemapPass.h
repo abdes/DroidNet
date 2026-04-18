@@ -6,11 +6,17 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
+#include <memory>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
+class Buffer;
 class Framebuffer;
 class Texture;
 } // namespace oxygen::graphics
@@ -27,9 +33,14 @@ class TonemapPass {
 public:
   struct Inputs {
     const graphics::Texture* scene_signal { nullptr };
+    const graphics::Buffer* exposure_buffer { nullptr };
     ShaderVisibleIndex scene_signal_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex bloom_texture_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex exposure_buffer_srv { kInvalidShaderVisibleIndex };
     observer_ptr<const graphics::Framebuffer> post_target;
+    engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
     float exposure_value { 1.0F };
+    float gamma { 2.2F };
     float bloom_intensity { 0.0F };
   };
 
@@ -49,10 +60,18 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto Record(
     RenderContext& ctx, const SceneTextures& scene_textures, const Inputs& inputs)
-    const -> ExecutionState;
+    -> ExecutionState;
 
 private:
+  auto EnsurePassConstantsBuffer() -> void;
+  auto ReleasePassConstantsBuffer() -> void;
+  auto UpdatePassConstants(const Inputs& inputs) -> ShaderVisibleIndex;
+
   Renderer& renderer_;
+  std::shared_ptr<graphics::Buffer> pass_constants_buffer_ {};
+  std::byte* pass_constants_mapped_ptr_ { nullptr };
+  std::array<ShaderVisibleIndex, 8U> pass_constants_indices_ {};
+  std::size_t pass_constants_slot_ { 0U };
 };
 
 } // namespace postprocess

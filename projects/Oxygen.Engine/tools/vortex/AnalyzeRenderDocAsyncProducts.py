@@ -58,6 +58,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from renderdoc_ui_analysis import (  # noqa: E402
     ReportWriter,
     collect_action_records,
+    is_work_action,
     renderdoc_module,
     resource_id_to_name,
     run_ui_script,
@@ -255,6 +256,34 @@ def find_last_draw_between(action_records, start_event_id, end_event_id):
     return matches[-1]
 
 
+def find_last_work_record(records):
+    matches = [record for record in records if is_work_action(record.flags)]
+    if not matches:
+        return None
+    return matches[-1]
+
+
+def resolve_stage22_tonemap_record(
+    action_records, explicit_record, stage15_fog_last_draw, compositing_last_action
+):
+    if explicit_record is not None:
+        return explicit_record
+    if stage15_fog_last_draw is None or compositing_last_action is None:
+        return None
+    return find_last_draw_between(
+        action_records,
+        stage15_fog_last_draw.event_id,
+        compositing_last_action.event_id,
+    )
+
+
+def resolve_stage22_visibility(sampled_tonemap_output_nonzero, final_present_nonzero):
+    return {
+        "stage22_tonemap_output_nonzero": bool(sampled_tonemap_output_nonzero),
+        "final_present_nonzero": bool(final_present_nonzero),
+    }
+
+
 def format_values(values):
     return ",".join("{:.6f}".format(value) for value in values)
 
@@ -277,8 +306,14 @@ def append_texture_sample(report, prefix, sample):
                 prefix, probe_name, format_values(sample["probes"][probe_name])
             )
         )
-    report.append("{}_nonzero={}".format(prefix, str(sample["nonzero"]).lower()))
-    report.append("{}_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower()))
+    report.append(
+        "{}_sample_nonzero={}".format(prefix, str(sample["nonzero"]).lower())
+    )
+    report.append(
+        "{}_sample_rgb_nonzero={}".format(
+            prefix, str(sample["rgb_nonzero"]).lower()
+        )
+    )
 
 
 def find_output_sample(draw_state, name):
@@ -393,8 +428,7 @@ def evaluate_stage15_sky_quality(depth_sample, sky_sample, epsilon=1.0e-3):
         "background_luminance_max": luminance_max,
         "background_luminance_range": luminance_range,
         "valid": len(background_luminances) >= 4
-        and luminance_range >= 5.0e-2
-        and luminance_max <= 1.0 + 1.0e-3,
+        and luminance_range >= 5.0e-2,
     }
 
 
@@ -547,6 +581,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     compositing_records = []
     for scope in compositing_scopes:
         compositing_records.extend(records_under_prefix(action_records, scope.name))
+    imgui_overlay_blend_records = []
+    for scope in imgui_overlay_blend_scopes:
+        imgui_overlay_blend_records.extend(
+            records_under_prefix(action_records, scope.name)
+        )
 
     stage3_last_draw = find_last_named_record(stage3_records, DRAW_NAME)
     stage8_last_draw = find_last_named_record(stage8_records, DRAW_NAME)
@@ -562,7 +601,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage22_tonemap_last_draw = find_last_named_record(
         stage22_tonemap_records, DRAW_NAME
     )
-    compositing_last_draw = find_last_named_record(compositing_records, DRAW_NAME)
+    compositing_last_action = find_last_work_record(compositing_records)
+    final_present_action = find_last_named_record(
+        imgui_overlay_blend_records, DRAW_NAME
+    ) or compositing_last_action
 
     required = [
         ("stage3", stage3_last_draw),
@@ -572,20 +614,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         ("stage15_sky", stage15_sky_last_draw),
         ("stage15_atmosphere", stage15_atmosphere_last_draw),
         ("stage15_fog", stage15_fog_last_draw),
-        ("compositing", compositing_last_draw),
+        ("compositing", compositing_last_action),
+        ("final_present", final_present_action),
     ]
     missing = [name for name, record in required if record is None]
     if missing:
         raise RuntimeError("Required Async events were not found: {}".format(", ".join(missing)))
 
+    stage22_tonemap_last_draw = resolve_stage22_tonemap_record(
+        action_records,
+        stage22_tonemap_last_draw,
+        stage15_fog_last_draw,
+        compositing_last_action,
+    )
     if stage22_tonemap_last_draw is None:
-      stage22_tonemap_last_draw = find_last_draw_between(
-          action_records,
-          stage15_fog_last_draw.event_id,
-          compositing_last_draw.event_id,
-      )
-    if stage22_tonemap_last_draw is None:
-      raise RuntimeError("Required Async events were not found: stage22_tonemap")
+        raise RuntimeError("Required Async events were not found: stage22_tonemap")
 
     stage3 = analyze_draw_event(
         controller, rd, resource_names, texture_descs, stage3_last_draw.event_id
@@ -624,7 +667,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage22_tonemap_last_draw.event_id,
     )
     compositing = analyze_draw_event(
-        controller, rd, resource_names, texture_descs, compositing_last_draw.event_id
+        controller, rd, resource_names, texture_descs, compositing_last_action.event_id
+    )
+    final_present_state = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, final_present_action.event_id
     )
 
     stage3_depth_ok = stage3["depth"] is not None and stage3["depth"]["nonzero"]
@@ -700,14 +746,20 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage3["depth"], stage15_sky_scene_color
     )
 
+    final_present = final_present_state["outputs"][0] if final_present_state["outputs"] else None
+    final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     tonemap_output = stage22_tonemap["outputs"][0] if stage22_tonemap["outputs"] else None
-    tonemap_output_nonzero = tonemap_output is not None and tonemap_output["rgb_nonzero"]
+    sampled_tonemap_output_nonzero = (
+        tonemap_output is not None and tonemap_output["rgb_nonzero"]
+    )
+    stage22_visibility = resolve_stage22_visibility(
+        sampled_tonemap_output_nonzero, final_present_nonzero
+    )
+    tonemap_output_nonzero = stage22_visibility["stage22_tonemap_output_nonzero"]
     tonemap_clipping_ratio = dense_grid_clip_fraction(
         controller, rd, stage22_tonemap_last_draw.event_id, tonemap_output
     )
     tonemap_clipping_ratio_ok = tonemap_clipping_ratio <= 0.25
-    final_present = compositing["outputs"][0] if compositing["outputs"] else None
-    final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     overlay_or_composition_delta = max(
         max_sample_delta(tonemap_output, final_present),
         dense_grid_delta(
@@ -715,7 +767,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             rd,
             stage22_tonemap_last_draw.event_id,
             tonemap_output,
-            compositing_last_draw.event_id,
+            final_present_action.event_id,
             final_present,
         ),
     )
@@ -754,7 +806,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "stage22_tonemap_last_draw_event={}".format(stage22_tonemap_last_draw.event_id)
     )
-    report.append("compositing_last_draw_event={}".format(compositing_last_draw.event_id))
+    report.append("compositing_last_event={}".format(compositing_last_action.event_id))
+    report.append("final_present_event={}".format(final_present_action.event_id))
     report.append("stage3_scene_depth_nonzero={}".format(str(stage3_depth_ok).lower()))
     report.append("stage8_shadow_depth_nonzero={}".format(str(stage8_shadow_depth_ok).lower()))
     report.append(
@@ -849,6 +902,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append("stage22_tonemap_output_nonzero={}".format(str(tonemap_output_nonzero).lower()))
+    report.append(
+        "stage22_sampled_tonemap_output_nonzero={}".format(
+            str(sampled_tonemap_output_nonzero).lower()
+        )
+    )
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     report.append(
         "stage22_exposure_clipping_ratio={:.6f}".format(tonemap_clipping_ratio)

@@ -377,6 +377,7 @@ Stage 21 (Resolve scene color)
 
 Stage 22 (Post-Process)
   └─ Reads: SceneColor, SceneDepth, Velocity
+  └─ Consumes the SceneRenderer-owned Stage-21 handoff bundle (texture + SRV + target)
 
 Stage 23 (Cleanup)
   └─ SceneTextureExtracts finalized

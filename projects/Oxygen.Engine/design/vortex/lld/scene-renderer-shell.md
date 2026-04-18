@@ -190,6 +190,20 @@ private:
 - `SceneRenderer/ResolveSceneColor.cpp` — file-separated method
 - `SceneRenderer/PostRenderCleanup.cpp` — file-separated method
 
+### 2.4 Stage-21 / Stage-22 Handoff Rule
+
+`SceneRenderer` owns the authoritative Stage-21 -> Stage-22 handoff. That
+handoff is not just a texture pointer. It is the coherent bundle of:
+
+- selected scene-signal texture
+- shader-visible SRV for that exact texture
+- selected scene-depth texture
+- shader-visible SRV for that exact texture
+- the composition-facing post target for the active view
+
+Stage-22 consumers (`PostProcessService` and its passes) must consume that
+bundle; they must not reinterpret or replace it.
+
 ## 3. Frame Dispatch Design
 
 ### 3.1 OnFrameStart

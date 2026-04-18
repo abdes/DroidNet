@@ -16,18 +16,22 @@ namespace oxygen::examples::testing {
 
 namespace {
 
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
-    .parent_path().parent_path();
-}
+  auto SourceRoot() -> std::filesystem::path
+  {
+    return std::filesystem::path { __FILE__ }
+      .parent_path()
+      .parent_path()
+      .parent_path()
+      .parent_path();
+  }
 
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
-}
+  auto ReadTextFile(const std::filesystem::path& path) -> std::string
+  {
+    auto input = std::ifstream(path);
+    EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
+    return { std::istreambuf_iterator<char>(input),
+      std::istreambuf_iterator<char>() };
+  }
 
 } // namespace
 
@@ -35,11 +39,16 @@ NOLINT_TEST(AsyncVortexMigrationSurface, RuntimeLaneRejectsLegacyRoutingMarkers)
 {
   const auto root = SourceRoot();
   const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
-  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
-  const auto demo_shell_header = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
-  const auto demo_shell_source = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
-  const auto app_window_header = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.h");
-  const auto app_window_source = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.cpp");
+  const auto async_bootstrap
+    = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto demo_shell_header
+    = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
+  const auto demo_shell_source
+    = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
+  const auto app_window_header
+    = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.h");
+  const auto app_window_source
+    = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.cpp");
 
   constexpr std::array<std::string_view, 4> forbidden_markers {
     "CompositionView",
@@ -76,10 +85,12 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
 {
   const auto root = SourceRoot();
   const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
-  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto async_bootstrap
+    = ReadTextFile(root / "Examples/Async/main_impl.cpp");
   const auto app_window_source
     = ReadTextFile(root / "Examples/DemoShell/Runtime/AppWindow.cpp");
-  const auto renderer_source = ReadTextFile(root / "src/Oxygen/Vortex/Renderer.cpp");
+  const auto renderer_source
+    = ReadTextFile(root / "src/Oxygen/Vortex/Renderer.cpp");
 
   EXPECT_TRUE(async_main.contains("shell.OnRuntimeMainViewReady("));
   EXPECT_FALSE(async_main.contains("ImGuiOverlayPass"));
@@ -87,7 +98,8 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   EXPECT_FALSE(async_main.contains("RegisterComposition("));
   EXPECT_TRUE(async_bootstrap.contains(".enable_imgui = !app.headless"));
   EXPECT_FALSE(async_bootstrap.contains("CreateImGuiRuntimeModule("));
-  EXPECT_TRUE(app_window_source.contains("renderer.SetImGuiWindowId(GetWindowId())"));
+  EXPECT_TRUE(
+    app_window_source.contains("renderer.SetImGuiWindowId(GetWindowId())"));
   EXPECT_TRUE(renderer_source.contains("CreateImGuiGraphicsBackend()"));
   EXPECT_TRUE(renderer_source.contains("imgui_runtime_->RenderOverlay("));
 }
@@ -97,11 +109,14 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
 {
   const auto root = SourceRoot();
   const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
-  const auto async_bootstrap = ReadTextFile(root / "Examples/Async/main_impl.cpp");
+  const auto async_bootstrap
+    = ReadTextFile(root / "Examples/Async/main_impl.cpp");
   const auto async_settings
     = ReadTextFile(root / "Examples/Async/AsyncDemoSettingsService.cpp");
-  const auto demo_shell_header = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
-  const auto demo_shell_source = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
+  const auto demo_shell_header
+    = ReadTextFile(root / "Examples/DemoShell/DemoShell.h");
+  const auto demo_shell_source
+    = ReadTextFile(root / "Examples/DemoShell/DemoShell.cpp");
   const auto demo_shell_ui_header
     = ReadTextFile(root / "Examples/DemoShell/UI/DemoShellUi.h");
   const auto demo_shell_ui_source
@@ -122,7 +137,45 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   EXPECT_TRUE(demo_shell_ui_header.contains("MakeRuntimePanelConfig("));
   EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.rendering = false;"));
   EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.lighting = false;"));
-  EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.ground_grid = false;"));
+  EXPECT_TRUE(
+    demo_shell_ui_source.contains("panel_config.ground_grid = false;"));
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  PostProcessResetPathsDoNotRequireLegacyPipelinesOnVortex)
+{
+  const auto root = SourceRoot();
+  const auto post_process_settings = ReadTextFile(
+    root / "Examples/DemoShell/Services/PostProcessSettingsService.cpp");
+  const auto post_process_vm
+    = ReadTextFile(root / "Examples/DemoShell/UI/PostProcessVm.cpp");
+
+  EXPECT_FALSE(post_process_settings.contains("DCHECK_NOTNULL_F(pipeline);"));
+  EXPECT_TRUE(post_process_settings.contains("SyncScenePostProcessState();"));
+  EXPECT_TRUE(post_process_settings.contains("engine::ExposureBiasScale("));
+  EXPECT_TRUE(post_process_settings.contains("Initialize(pipeline_);"));
+  EXPECT_FALSE(post_process_vm.contains("std::max(ev, 0.0F)"));
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  PostProcessPanelMatchesCurrentVortexExposureAndToneCurveSurface)
+{
+  const auto root = SourceRoot();
+  const auto post_process_panel
+    = ReadTextFile(root / "Examples/DemoShell/UI/PostProcessPanel.cpp");
+  const auto post_process_service = ReadTextFile(
+    root / "Examples/DemoShell/Services/PostProcessSettingsService.h");
+
+  EXPECT_TRUE(post_process_panel.contains("Compensation (EV)"));
+  EXPECT_TRUE(post_process_panel.contains("Exposure Key"));
+  EXPECT_TRUE(post_process_panel.contains("Minimum EV"));
+  EXPECT_TRUE(post_process_panel.contains("Maximum EV"));
+  EXPECT_TRUE(post_process_panel.contains("Tone Curve"));
+  EXPECT_TRUE(post_process_panel.contains("Display Gamma"));
+  EXPECT_TRUE(post_process_panel.contains("\"None\""));
+  EXPECT_FALSE(post_process_panel.contains("Enabled##Tonemapping"));
+  EXPECT_TRUE(post_process_service.contains("GetAutoExposureMinEv"));
+  EXPECT_TRUE(post_process_service.contains("GetAutoExposureMaxEv"));
 }
 
 } // namespace oxygen::examples::testing
