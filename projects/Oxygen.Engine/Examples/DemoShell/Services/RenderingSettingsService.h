@@ -21,6 +21,10 @@ namespace oxygen::renderer {
 class RenderingPipeline;
 } // namespace oxygen::renderer
 
+namespace oxygen::vortex {
+class Renderer;
+} // namespace oxygen::vortex
+
 namespace oxygen::examples {
 
 class SettingsService;
@@ -49,6 +53,11 @@ public:
 
   //! Associates the service with a rendering pipeline.
   virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
+    -> void;
+
+  //! Binds the service to the Vortex runtime seam when no legacy pipeline is
+  //! present.
+  virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
 
   //! Returns the persisted render mode.
@@ -87,6 +96,15 @@ public:
   //! Persists the directional shadow quality tier for the next renderer init.
   virtual auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
 
+  [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
+  [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
+  [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
+  [[nodiscard]] virtual auto SupportsAtmosphereBlueNoiseControl() const
+    -> bool;
+  [[nodiscard]] virtual auto SupportsDebugMode(
+    engine::ShaderDebugMode mode) const -> bool;
+  [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
+
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
@@ -108,7 +126,10 @@ private:
     = "rendering.shadow_quality_tier";
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
+  observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   mutable std::atomic_uint64_t epoch_ { 0 };
+
+  auto ApplyVortexSettings() -> void;
 };
 
 } // namespace oxygen::examples

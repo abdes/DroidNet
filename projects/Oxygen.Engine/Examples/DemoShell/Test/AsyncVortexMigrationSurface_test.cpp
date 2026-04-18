@@ -105,7 +105,7 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
 }
 
 NOLINT_TEST(AsyncVortexMigrationSurface,
-  DemoShellUiKeepsOverlayButDisablesRendererBoundPanelsOnRuntimePath)
+  DemoShellUiKeepsOverlayAndOnlyDisablesLegacyBoundPanelsOnRuntimePath)
 {
   const auto root = SourceRoot();
   const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
@@ -135,10 +135,14 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   EXPECT_TRUE(demo_shell_header.contains("enable_renderer_bound_panels"));
   EXPECT_TRUE(async_main.contains("enable_renderer_bound_panels = false;"));
   EXPECT_TRUE(demo_shell_ui_header.contains("MakeRuntimePanelConfig("));
-  EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.rendering = false;"));
+  EXPECT_FALSE(
+    demo_shell_ui_source.contains("panel_config.rendering = false;"));
   EXPECT_TRUE(demo_shell_ui_source.contains("panel_config.lighting = false;"));
   EXPECT_TRUE(
     demo_shell_ui_source.contains("panel_config.ground_grid = false;"));
+  EXPECT_TRUE(demo_shell_ui_source.contains("BindVortexRenderer("));
+  EXPECT_TRUE(demo_shell_ui_source.contains(
+    "Registered Rendering panel for the Vortex runtime seam"));
 }
 
 NOLINT_TEST(AsyncVortexMigrationSurface,
@@ -176,6 +180,31 @@ NOLINT_TEST(AsyncVortexMigrationSurface,
   EXPECT_FALSE(post_process_panel.contains("Enabled##Tonemapping"));
   EXPECT_TRUE(post_process_service.contains("GetAutoExposureMinEv"));
   EXPECT_TRUE(post_process_service.contains("GetAutoExposureMaxEv"));
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  AsyncSceneSeedsMeaningfulRoughnessAndMetalnessVariationForDebugViews)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+
+  EXPECT_TRUE(async_main.contains("const float metalness ="));
+  EXPECT_TRUE(async_main.contains("const float roughness ="));
+  EXPECT_TRUE(async_main.contains(
+    "MakeSolidColorMaterial(\n      mat_name.c_str(), color, domain, false, metalness, roughness)"));
+  EXPECT_TRUE(async_main.contains("desc.metalness = d::Unorm16 { metalness };"));
+  EXPECT_TRUE(async_main.contains("desc.roughness = d::Unorm16 { roughness };"));
+}
+
+NOLINT_TEST(AsyncVortexMigrationSurface,
+  AsyncSceneKeepsTheTwoSubmeshOverrideMaterialDoubleSided)
+{
+  const auto root = SourceRoot();
+  const auto async_main = ReadTextFile(root / "Examples/Async/MainModule.cpp");
+
+  EXPECT_TRUE(async_main.contains(
+    "MakeSolidColorMaterial(\"BlueOverride\",\n"
+    "          { 0.2F, 0.3F, 1.0F, 1.0F }, data::MaterialDomain::kOpaque, true)"));
 }
 
 } // namespace oxygen::examples::testing
