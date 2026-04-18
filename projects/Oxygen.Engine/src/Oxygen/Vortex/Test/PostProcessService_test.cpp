@@ -176,6 +176,46 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   EXPECT_TRUE(catalog_source.contains("VortexTonemapPS"));
 }
 
+NOLINT_TEST(PostProcessServiceSurfaceTest,
+  TonemapPassConsumesResolvedExposureInsteadOfIgnoringStage22Inputs)
+{
+  const auto source_root = SourceRoot();
+  const auto tonemap_pass_source = ReadTextFile(
+    source_root / "Vortex/PostProcess/Passes/TonemapPass.cpp");
+  const auto tonemap_shader_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/PostProcess/Tonemap.hlsl");
+
+  EXPECT_FALSE(tonemap_pass_source.contains("static_cast<void>(inputs.exposure_value);"));
+  EXPECT_TRUE(tonemap_pass_source.contains("std::bit_cast<std::uint32_t>(inputs.exposure_value)"));
+  EXPECT_TRUE(tonemap_shader_source.contains("float g_ExposureValue;"));
+  EXPECT_TRUE(tonemap_shader_source.contains("scene_signal.Load(int3(pixel, 0)).rgb * max(g_ExposureValue"));
+}
+
+NOLINT_TEST(PostProcessServiceSurfaceTest,
+  SceneRendererFeedsStage22FromAuthoredSceneExposureInsteadOfDefaultConfig)
+{
+  const auto source_root = SourceRoot();
+  const auto scene_renderer_source = ReadTextFile(
+    source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+
+  EXPECT_TRUE(scene_renderer_source.contains("post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));"));
+  EXPECT_TRUE(scene_renderer_source.contains("environment->TryGetSystem<scene::environment::PostProcessVolume>()"));
+  EXPECT_TRUE(scene_renderer_source.contains("ctx.current_view.resolved_view->CameraEv().has_value()"));
+  EXPECT_TRUE(scene_renderer_source.contains("post_process.GetExposureCompensationEv() - ev"));
+}
+
+NOLINT_TEST(PostProcessServiceSurfaceTest,
+  SceneRendererReregistersResolvedDepthSrvBeforePublishingStage22Bindings)
+{
+  const auto source_root = SourceRoot();
+  const auto scene_renderer_source = ReadTextFile(
+    source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
+
+  EXPECT_TRUE(scene_renderer_source.contains("auto scene_depth_srv = scene_texture_bindings_.scene_depth_srv;"));
+  EXPECT_TRUE(scene_renderer_source.contains("scene_depth_srv = RegisterSceneTextureView("));
+  EXPECT_TRUE(scene_renderer_source.contains(".scene_depth_srv = ShaderVisibleIndex { scene_depth_srv }"));
+}
+
 class PostProcessServiceBehaviorTest : public ::testing::Test {
 protected:
   void SetUp() override

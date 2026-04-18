@@ -11,7 +11,7 @@
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_SceneSignalSrv;
-    uint g_BloomTextureSrv;
+    float g_ExposureValue;
 }
 
 static float3 ACESFilm(float3 x)
@@ -45,7 +45,8 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const uint2 pixel = min(
         uint2(input.uv * float2(width, height)),
         uint2(max(width, 1u) - 1u, max(height, 1u) - 1u));
-    const float3 hdr = scene_signal.Load(int3(pixel, 0)).rgb;
+    const float3 hdr
+        = scene_signal.Load(int3(pixel, 0)).rgb * max(g_ExposureValue, 1.0e-4f);
     const float3 ldr = ACESFilm(hdr);
     return float4(ldr, 1.0f);
 }

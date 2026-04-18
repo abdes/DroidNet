@@ -467,6 +467,35 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b,
     return max_delta
 
 
+def dense_grid_clip_fraction(controller, rd, event_id, sample, grid_x=32, grid_y=18, clip_threshold=0.995):
+    if sample is None:
+        return 1.0
+
+    width = int(sample["width"])
+    height = int(sample["height"])
+    sub = make_sample_subresource(rd, sample)
+    controller.SetFrameEvent(event_id, True)
+
+    clipped_count = 0
+    total_count = 0
+    for row in range(grid_y):
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
+        for col in range(grid_x):
+            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            values = float4_values(
+                controller.PickPixel(
+                    sample["resource_id"], x, y, sub, rd.CompType.Typeless
+                )
+            )
+            if max(values[:3]) >= clip_threshold:
+                clipped_count += 1
+            total_count += 1
+
+    if total_count == 0:
+        return 1.0
+    return clipped_count / float(total_count)
+
+
 def save_texture_sample(controller, rd, sample, path_value, type_cast):
     if sample is None or not path_value:
         return False
@@ -673,6 +702,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     tonemap_output = stage22_tonemap["outputs"][0] if stage22_tonemap["outputs"] else None
     tonemap_output_nonzero = tonemap_output is not None and tonemap_output["rgb_nonzero"]
+    tonemap_clipping_ratio = dense_grid_clip_fraction(
+        controller, rd, stage22_tonemap_last_draw.event_id, tonemap_output
+    )
+    tonemap_clipping_ratio_ok = tonemap_clipping_ratio <= 0.25
     final_present = compositing["outputs"][0] if compositing["outputs"] else None
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     overlay_or_composition_delta = max(
@@ -818,6 +851,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage22_tonemap_output_nonzero={}".format(str(tonemap_output_nonzero).lower()))
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     report.append(
+        "stage22_exposure_clipping_ratio={:.6f}".format(tonemap_clipping_ratio)
+    )
+    report.append(
+        "stage22_exposure_clipping_ratio_ok={}".format(
+            str(tonemap_clipping_ratio_ok).lower()
+        )
+    )
+    report.append(
         "final_present_vs_tonemap_delta_max={:.6f}".format(overlay_or_composition_delta)
     )
     report.append(
@@ -845,6 +886,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_far_background_mask["valid"]
         and stage15_sky_quality["valid"]
         and tonemap_output_nonzero
+        and tonemap_clipping_ratio_ok
         and final_present_nonzero
         and imgui_overlay_composited_on_scene
         and color_exported

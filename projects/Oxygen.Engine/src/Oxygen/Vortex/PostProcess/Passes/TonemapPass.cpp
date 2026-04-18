@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <bit>
 #include <limits>
 #include <vector>
 
@@ -189,8 +190,6 @@ auto TonemapPass::Record(RenderContext& ctx,
   -> ExecutionState
 {
   static_cast<void>(scene_textures);
-  static_cast<void>(inputs.exposure_value);
-  static_cast<void>(inputs.bloom_intensity);
 
   auto state = ExecutionState {
     .requested = inputs.scene_signal != nullptr && inputs.post_target != nullptr,
@@ -232,7 +231,7 @@ auto TonemapPass::Record(RenderContext& ctx,
     inputs.scene_signal_srv.get(), 0U);
   recorder->SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    0U, 1U);
+    std::bit_cast<std::uint32_t>(inputs.exposure_value), 1U);
   recorder->Draw(3U, 1U, 0U, 0U);
   recorder->RequireResourceStateFinal(
     *inputs.scene_signal, graphics::ResourceStates::kShaderResource);

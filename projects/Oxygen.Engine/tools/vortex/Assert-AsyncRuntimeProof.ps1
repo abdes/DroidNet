@@ -134,6 +134,19 @@ $script
   return $output | ConvertFrom-Json
 }
 
+function Test-SourceContains {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Needle
+  )
+
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return $false
+  }
+  $content = Get-Content -LiteralPath $Path -Raw
+  return $content.Contains($Needle)
+}
+
 $captureReportFullPath = (Resolve-Path $CaptureReportPath).Path
 $productsReportFullPath = (Resolve-Path $ProductsReportPath).Path
 $baselineFrameFullPath = (Resolve-Path $BaselineFramePath).Path
@@ -149,6 +162,13 @@ $reportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathF
 
 $captureReportMap = Read-ReportMap -Path $captureReportFullPath
 $productsReportMap = Read-ReportMap -Path $productsReportFullPath
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$sceneRendererPath = Join-Path $repoRoot 'src\Oxygen\Vortex\SceneRenderer\SceneRenderer.cpp'
+$stage22ResolvedDepthSrvMatchesInput = (
+  (Test-SourceContains -Path $sceneRendererPath -Needle 'auto scene_depth_srv = scene_texture_bindings_.scene_depth_srv;') -and
+  (Test-SourceContains -Path $sceneRendererPath -Needle 'scene_depth_srv = RegisterSceneTextureView(') -and
+  (Test-SourceContains -Path $sceneRendererPath -Needle '.scene_depth_srv = ShaderVisibleIndex { scene_depth_srv }')
+)
 
 foreach ($required in @('analysis_result', 'overall_verdict')) {
   if (-not $captureReportMap.ContainsKey($required)) {
@@ -204,6 +224,7 @@ $requiredProductChecks = @(
   'stage15_far_background_mask_valid',
   'stage15_sky_quality_ok',
   'stage22_tonemap_output_nonzero',
+  'stage22_exposure_clipping_ratio_ok',
   'imgui_overlay_composited_on_scene',
   'final_present_nonzero',
   'exported_color_exists',
@@ -213,6 +234,9 @@ foreach ($key in $requiredProductChecks) {
   if ((Get-ReportValue -Report $productsReportMap -Key $key) -ne 'true') {
     throw "Async products report check failed or missing: $key"
   }
+}
+if (-not $stage22ResolvedDepthSrvMatchesInput) {
+  throw 'Async Stage 22 source-backed resolved-depth SRV invariant failed'
 }
 
 $colorMetrics = Invoke-ImageMetric `
@@ -249,6 +273,7 @@ $reportLines = @(
   "depth_max_error={0:F6}" -f $depthMaxError
   "visual_psnr_pass=true"
   "depth_max_error_pass=true"
+  "stage22_resolved_depth_srv_matches_input=$($stage22ResolvedDepthSrvMatchesInput.ToString().ToLowerInvariant())"
   'overall_verdict=pass'
 )
 
