@@ -1,6 +1,12 @@
 <#
 .SYNOPSIS
 Runs the Async runtime capture validation flow against an existing RenderDoc capture.
+
+.DESCRIPTION
+When -ReferenceRoot is provided, baseline frame/depth are loaded from the
+external reference directory for parity comparison. When -InitializeBaselineArtifacts
+is set, the current capture exports are written as the baseline (used by
+Capture-AsyncLegacyReference.ps1 to seed the reference).
 #>
 [CmdletBinding()]
 param(
@@ -24,6 +30,9 @@ param(
 
   [Parameter()]
   [string]$BehaviorPath = '',
+
+  [Parameter()]
+  [string]$ReferenceRoot = '',
 
   [Parameter()]
   [switch]$InitializeBaselineArtifacts
@@ -160,11 +169,27 @@ if ([string]::IsNullOrWhiteSpace($ProductsReportPath)) {
 if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
   $ValidationReportPath = "$captureFullPath.validation.txt"
 }
-if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
-  $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame.png'
-}
-if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
-  $BaselineDepthPath = Join-Path $captureDirectory 'baseline_depth.png'
+# --- Resolve baseline frame/depth paths ---
+# When a reference root is provided, load the baseline from the external
+# reference directory. Otherwise fall back to the capture directory.
+if (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
+  $resolvedReferenceRoot = Resolve-RepoPath -RepoRoot $repoRoot -Path $ReferenceRoot
+  if (-not (Test-Path -LiteralPath $resolvedReferenceRoot)) {
+    throw "Reference root not found: $resolvedReferenceRoot"
+  }
+  if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
+    $BaselineFramePath = Join-Path $resolvedReferenceRoot 'reference_frame10.png'
+  }
+  if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
+    $BaselineDepthPath = Join-Path $resolvedReferenceRoot 'reference_depth.png'
+  }
+} else {
+  if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
+    $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame.png'
+  }
+  if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
+    $BaselineDepthPath = Join-Path $captureDirectory 'baseline_depth.png'
+  }
 }
 if ([string]::IsNullOrWhiteSpace($BehaviorPath)) {
   $BehaviorPath = Join-Path $captureDirectory 'baseline_behaviors.md'
@@ -179,11 +204,15 @@ $behaviorFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPat
 
 $comparisonFrameFullPath = if ($InitializeBaselineArtifacts) {
   $baselineFrameFullPath
+} elseif (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
+  Join-Path $captureDirectory 'current_frame.verify.png'
 } else {
   Join-Path $captureDirectory 'baseline_frame.verify.png'
 }
 $comparisonDepthFullPath = if ($InitializeBaselineArtifacts) {
   $baselineDepthFullPath
+} elseif (-not [string]::IsNullOrWhiteSpace($ReferenceRoot)) {
+  Join-Path $captureDirectory 'current_depth.verify.png'
 } else {
   Join-Path $captureDirectory 'baseline_depth.verify.png'
 }

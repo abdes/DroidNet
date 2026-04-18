@@ -218,6 +218,8 @@ foreach ($key in $requiredCaptureChecks) {
 $requiredProductChecks = @(
   'stage3_scene_depth_nonzero',
   'stage8_shadow_depth_nonzero',
+  'stage12_directional_scene_color_nonzero',
+  'stage12_spot_scene_color_nonzero',
   'stage15_sky_scene_color_changed',
   'stage15_atmosphere_scene_color_changed',
   'stage15_fog_scene_color_changed',

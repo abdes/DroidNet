@@ -470,19 +470,23 @@ spot-light or point-light conventional shadows already exist.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 4D.1 | Implement `Environment/EnvironmentLightingService.h/.cpp` | Service lifecycle, persistent probe state, and per-view environment publication |
-| 4D.2 | Implement sky/atmosphere rendering (stage 15) | Active sky background plus atmosphere composition under Stage 15 ownership |
-| 4D.3 | Implement fog | Height fog, distance fog |
-| 4D.4 | Implement environment publication | Per-view typed publication from environment-owned persistent state with any Phase 4 ambient bridge explicitly bounded |
-| 4D.5 | Reserve stage 14 volumetrics | No-op slot within the Environment family; future internal stage family, not one monolithic pass |
-| 4D.6 | Implement environment shader families | `Shaders/Vortex/Services/Environment/` |
+| 4D.1 | Implement the authored atmosphere-state model | Planet transform, Rayleigh/Mie/absorption parameters, art-direction controls, holdout/main-pass rules |
+| 4D.2 | Implement dual atmosphere-light support | Two atmosphere-light slots, direction overrides, transmittance-aware light data |
+| 4D.3 | Implement atmosphere LUT generation and caching | Transmittance, multi-scattering, sky-view, camera aerial perspective, distant sky-light LUT |
+| 4D.4 | Implement sky-atmosphere rendering | Stage-15 sky rendering plus sky-material-aware / holdout-safe behavior |
+| 4D.5 | Implement camera aerial perspective integration | Per-view aerial-perspective volume and consumption path for opaque/translucent/sky consumers |
+| 4D.6 | Implement parity-grade exponential height fog | Primary + second fog layers, cubemap inscattering, directional inscattering, sky-atmosphere coupling |
+| 4D.7 | Implement local fog volumes | Authored component model, GPU instance packing, sorting, tiled culling, composition |
+| 4D.8 | Implement volumetric fog | Froxel grid, light injection, temporal reprojection, final integration |
+| 4D.9 | Implement sky-light/environment coupling | Distant sky-light LUT, real-time capture coupling, environment-family sky-light use |
+| 4D.10 | Implement environment publication | Per-view typed publication for atmosphere, fog, local-fog, volumetric-fog, and sky-light products |
+| 4D.11 | Implement environment shader families | `Shaders/Vortex/Services/Environment/` parity-grade atmosphere/fog/media families |
 
-**Exit gate:** Sky background, atmosphere composition, and fog all render under
-Stage 15 ownership. Environment-owned probe/evaluation data is published per
-view from persistent state. If Phase 4 uses a temporary ambient bridge before
-stage 13 exists, that bridge is explicitly documented through a bounded
-`EnvironmentAmbientBridgeBindings` payload, remains ambient-only, and does not
-redefine Stage 12 as indirect-light owner.
+**Exit gate:** The environment family reaches UE5.7-informed parity for the
+approved scope: physical sky atmosphere, aerial perspective, exponential height
+fog coupling, local fog volumes, volumetric fog, sky-light coupling, and dual
+atmosphere-light support, with clouds explicitly excluded. Stage 12 remains
+direct-light-only. Stage 13 remains the future canonical indirect-light owner.
 
 ### 4E: First Migration — `Examples/Async`
 
@@ -501,10 +505,13 @@ Oxygen runtime flow.
 
 **Exit gate:** `Examples/Async` runs on Vortex with correct visual output
 matching the legacy reference through the real composition submission path and
-presentation surface. The baseline includes the active atmosphere path and the
-scene's spotlight presence. Spotlight shadows are not part of the required
-Phase 4 parity baseline unless the phase scope is explicitly widened. Migration
-uses no long-lived compatibility clutter. Two non-runtime facades verified.
+presentation surface. The baseline includes the parity-grade environment family
+approved for this program: sky atmosphere, aerial perspective, exponential
+height fog coupling, local fog volumes, volumetric fog, sky-light coupling, and
+dual atmosphere-light support, with clouds excluded. Spotlight shadows are not
+part of the required Phase 4 parity baseline unless the phase scope is
+explicitly widened. Migration uses no long-lived compatibility clutter. Two
+non-runtime facades verified.
 
 ### 4F: Composition and Presentation Validation
 
@@ -529,6 +536,10 @@ frames.
 - `Examples/Async` runs on Vortex with correct visual output (PRD §6.1.1)
 - All four migration-critical services active: Lighting, PostProcess, Shadows,
   Environment
+- The Environment family reaches the approved UE5.7-informed parity envelope:
+  physical sky atmosphere, aerial perspective, exponential height fog
+  interaction, local fog volumes, volumetric fog, sky-light coupling, and dual
+  atmosphere-light support, with clouds excluded
 - Two non-runtime facades verified against Vortex substrate
 - Composition path validated end-to-end
 - RenderDoc frame 10 capture shows correct active stage-family ordering,
@@ -748,7 +759,7 @@ Design prerequisite for the first activation of stage 13:
 
 | Family | Stage | Scope |
 | ------ | ----- | ----- |
-| Volumetric fog / clouds | Stage 14 | EnvironmentLightingService internal activation |
+| Volumetric fog / clouds | Stage 14 | Volumetric fog promoted into active Phase 4D environment parity scope; clouds remain future EnvironmentLightingService work |
 | Heterogeneous volumes | Stage 14 | EnvironmentLightingService volumetric rendering family aligned with the reserved stage-14 slot |
 | Single layer water (WaterService) | Stage 16 | Standalone service |
 | Hair strands | Stage 17 | Specialized strand-rendering family initially planned against the reserved post-opaque extension slot until a dedicated owner is justified |
@@ -868,6 +879,9 @@ Exit criteria:
 - `Examples/Async` runs on Vortex with visual parity to legacy reference
 - Four migration-critical services active (Lighting, PostProcess, Shadows,
   Environment)
+- Environment parity includes sky atmosphere, aerial perspective, exponential
+  height fog interaction, local fog volumes, volumetric fog, sky-light
+  coupling, and dual atmosphere-light support, with clouds excluded
 - Composition path validated end-to-end
 - Two non-runtime facades verified (ForSinglePassHarness, ForRenderGraphHarness)
 - Migration uses no long-lived compatibility clutter
@@ -918,7 +932,7 @@ final target — including future-phase items per PRD §8.13.
 | **LightingService** | Phase 4A | not started | Light grid + deferred lighting + forward data | Stages 6, 12 |
 | **PostProcessService** | Phase 4B | not started | Tonemap, exposure, bloom | Stage 22 |
 | **ShadowService** | Phase 4C | not started | Conventional shadows; VSM reserved for Phase 7C | Stage 8 |
-| **EnvironmentLightingService** | Phase 4D | not started | Sky, fog, environment-probe / IBL publication; volumetrics reserved for Phase 7D | Stages 14 (reserved), 15 |
+| **EnvironmentLightingService** | Phase 4D | widened / in progress | Sky atmosphere, aerial perspective, height fog, local fog volumes, volumetric fog, sky-light coupling, environment publication | Stages 14, 15 |
 | **Examples/Async migration** | Phase 4E | not started | Full Vortex runtime | PRD §6.1.1 — first success gate |
 | **Composition/presentation** | Phase 4F | in progress | Single-view composition to screen, resolve, handoff | Retained single-view runtime path exists; full 4F end-to-end migration validation is still future work |
 | **ResolveSceneColor** | Phase 2 (retained branch) → Phase 4F (migration validation) | done | Scene color resolve | Stage 21 retained-branch primitive is live; full 4F end-to-end validation remains future |
@@ -938,7 +952,7 @@ final target — including future-phase items per PRD §8.13.
 | **MegaLights-class lighting extensions** | Phase 7B | not started | Advanced direct-lighting extension family under LightingService | Stage 12 |
 | **Tiled/clustered deferred** | Phase 7B | not started | Deferred lighting optimization path | Profiling-justified |
 | **Virtual shadow maps (VSM)** | Phase 7C | not started | ShadowService internal strategy upgrade | Stage 8 |
-| **Volumetric fog / clouds** | Phase 7D | not started | EnvironmentLightingService internal activation | Stage 14 |
+| **Volumetric fog / clouds** | Phase 4D / 7D split | volumetric fog promoted to active Phase 4D scope; clouds still future | EnvironmentLightingService stage-14 family; clouds remain future | Stage 14 |
 | **Heterogeneous volumes** | Phase 7D | not started | EnvironmentLightingService volumetric rendering family | Stage 14 |
 | **WaterService** | Phase 7D | not started | Single layer water | Stage 16 |
 | **Hair strands** | Phase 7D | not started | Specialized strand-rendering family against the reserved post-opaque extension slot | Stage 17 |
@@ -1033,7 +1047,8 @@ for the complete assignment):
 - Geometry virtualization — Phase 7A (Nanite-equivalent, stage 4)
 - GI / reflections — Phase 7B (Lumen-equivalent, stage 13)
 - MegaLights-class lighting extensions — Phase 7B (LightingService stage-12 extension family)
-- Volumetric fog / clouds — Phase 7D (stage 14)
+- Volumetric fog — Phase 4D widened parity scope (stage 14)
+- Clouds — Phase 7D (stage 14)
 - Heterogeneous volumes — Phase 7D (stage 14)
 - Light shaft bloom / translucency upscale — Phase 7D (stage 20)
 - Hair strands — Phase 7D (reserved post-opaque extension slot, stage 17)

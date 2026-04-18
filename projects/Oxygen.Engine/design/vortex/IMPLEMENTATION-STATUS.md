@@ -70,6 +70,60 @@ implementation cannot begin until its design prerequisites are met.
 
 ## Documentation Sync Log
 
+### 2026-04-18 — 04-15: Async parity proof replaced with reference-based surface
+
+- **Plan**: `04-15` — Replace hollow Async parity proof with a real
+  reference baseline and route back to Phase 4 re-verification.
+- **Dependency**: `04-17` (direct-light/PBR repair) — not yet executed;
+  `04-15` lands the tooling infrastructure ahead of runtime fixes.
+- Changed files:
+  - `tools/vortex/Capture-AsyncLegacyReference.ps1` (new) — dedicated
+    legacy/reference baseline capture for Async frame-10 proof
+  - `tools/vortex/Run-AsyncRuntimeValidation.ps1` — added `-ReferenceRoot`
+    parameter; current Vortex validation now consumes an external reference
+    instead of self-initializing baseline artifacts
+  - `tools/vortex/Verify-AsyncRuntimeProof.ps1` — added `-ReferenceRoot`
+    parameter; baseline frame/depth loaded from external reference directory
+  - `tools/vortex/AnalyzeRenderDocAsyncProducts.py` — promoted
+    `stage12_directional_scene_color_nonzero` and
+    `stage12_spot_scene_color_nonzero` into the `overall_verdict` gate
+  - `tools/vortex/Assert-AsyncRuntimeProof.ps1` — added
+    `stage12_directional_scene_color_nonzero` and
+    `stage12_spot_scene_color_nonzero` to the required product checks
+  - `tools/vortex/README.md` — documented the Async reference-based proof flow
+  - `Examples/Async/README.md` — documented split `reference/` vs `current/`
+    artifact layout
+- Artifact layout (new):
+  - `build/artifacts/vortex/phase-4/async/reference/` — legacy/reference
+    baseline: `reference_frame10.png`, `reference_depth.png`,
+    `reference_renderdoc.rdc`, `reference_behaviors.md`
+  - `build/artifacts/vortex/phase-4/async/current/` — current Vortex capture:
+    `current_renderdoc.rdc` plus validation reports
+- Harness rerun evidence:
+  - `Oxygen.Vortex.SinglePassHarnessFacade.Tests` — passed
+  - `Oxygen.Vortex.RenderGraphHarnessFacade.Tests` — passed
+  - `Oxygen.Vortex.RendererFacadePresets.Tests` — passed
+  - Legacy `Oxygen.Renderer.*` harness targets have pre-existing failures
+    (ViewConstants buffer creation in fake graphics layer); not in scope.
+- Blocking assertion surface now includes:
+  - overlay composition (`imgui_overlay_composited_on_scene`)
+  - Stage 15 sky quality (`stage15_sky_quality_ok`)
+  - Stage 22 exposure/tonemap (`stage22_exposure_clipping_ratio_ok`,
+    `stage22_tonemap_output_nonzero`)
+  - direct-light nonzero (`stage12_directional_scene_color_nonzero`,
+    `stage12_spot_scene_color_nonzero`)
+  - PBR-response (gated indirectly via direct-light and scene-color delta keys)
+  - final presentation (`final_present_nonzero`,
+    `final_present_vs_tonemap_changed`)
+- Runtime validation NOT executed:
+  - `Capture-AsyncLegacyReference.ps1` and `Run-AsyncRuntimeValidation.ps1
+    -ReferenceRoot` require the Async example to run cleanly (currently
+    exits with code 1 — dependent on `04-17` runtime fixes).
+  - Full proof pack execution is deferred until `04-17` lands.
+- Phase 4 status: remains `gaps_found`
+- **Next step**: Phase 4 re-verification after `04-17` lands and the full
+  reference-based proof pack executes green. Do not advance to Phase 5.
+
 ### 2026-04-18 — Phase 4 completion claim revoked after direct UAT and verifier failure
 
 - Direct user UAT on 2026-04-18 reported the live Async demo is still not
