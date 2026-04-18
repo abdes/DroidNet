@@ -107,10 +107,7 @@ function Write-BehaviorSummary {
   )
 
   $asyncMainPath = Join-Path $RepoRoot 'Examples\Async\MainModule.cpp'
-  $asyncBootstrapPath = Join-Path $RepoRoot 'Examples\Async\main_impl.cpp'
   $asyncSettingsPath = Join-Path $RepoRoot 'Examples\Async\AsyncDemoSettingsService.cpp'
-  $demoShellPath = Join-Path $RepoRoot 'Examples\DemoShell\DemoShell.cpp'
-  $demoShellUiPath = Join-Path $RepoRoot 'Examples\DemoShell\UI\DemoShellUi.cpp'
 
   $lines = @(
     '# Async Baseline Behaviors'
@@ -122,16 +119,18 @@ function Write-BehaviorSummary {
     "- spotlight_presence: $(Get-ReportValue -Report $ProductsReport -Key 'stage12_spot_scene_color_nonzero')"
     "- directional_shadow_path: $(Get-ReportValue -Report $CaptureReport -Key 'stage8_draw_count_present')"
     "- post_processed_visible_output: $(Get-ReportValue -Report $ProductsReport -Key 'stage22_tonemap_output_nonzero')"
+    "- imgui_overlay_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_scope_present')"
+    "- imgui_overlay_blend_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_blend_scope_present')"
+    "- imgui_overlay_after_tonemap: $(Get-ReportValue -Report $CaptureReport -Key 'imgui_overlay_after_tonemap')"
+    "- imgui_overlay_composited_on_scene: $(Get-ReportValue -Report $ProductsReport -Key 'imgui_overlay_composited_on_scene')"
     "- final_present_nonzero: $(Get-ReportValue -Report $ProductsReport -Key 'final_present_nonzero')"
     "- final_present_vs_tonemap_changed: $(Get-ReportValue -Report $ProductsReport -Key 'final_present_vs_tonemap_changed')"
     ''
-    '## Source Audit'
+    '## Supplemental Source Audit (Non-Blocking)'
     "- main_view_with_atmosphere: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'view_ctx.metadata.with_atmosphere = true;') { 'pass' } else { 'fail' })"
     "- spotlight_setup_present: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'EnsureCameraSpotLight();') { 'pass' } else { 'fail' })"
     "- spotlight_node_present: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'CameraSpotLight') { 'pass' } else { 'fail' })"
     "- spotlight_shadows_default_off: $(if (Test-SourceContains -Path $asyncSettingsPath -Needle 'return settings->GetBool(kSpotlightShadowsKey).value_or(false);') { 'pass' } else { 'fail' })"
-    "- imgui_runtime_registered: $(if (Test-SourceContains -Path $asyncBootstrapPath -Needle 'CreateImGuiRuntimeModule(app.platform)') { 'pass' } else { 'fail' })"
-    "- demoshell_ui_draw_path: $(if ((Test-SourceContains -Path $demoShellPath -Needle 'demo_shell_ui->Draw(fc);') -or (Test-SourceContains -Path $demoShellUiPath -Needle 'stats_overlay.Draw(fc);')) { 'pass' } else { 'fail' })"
     ''
     '## Structural Notes'
     "- stage3_scope_present: $(Get-ReportValue -Report $CaptureReport -Key 'stage3_scope_present')"
