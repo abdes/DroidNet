@@ -1,20 +1,18 @@
 <#
 .SYNOPSIS
-Runs the end-to-end Async runtime capture flow and validates against a reference baseline.
+Captures the legacy/reference Async baseline for Phase 4 parity comparison.
 
 .DESCRIPTION
-Captures the current Vortex Async runtime and compares it against an external
-reference baseline produced by Capture-AsyncLegacyReference.ps1. When
--ReferenceRoot is provided, the validator measures parity against that
-baseline instead of self-initializing from the current run.
+Builds the Async example, runs it once with RenderDoc capture enabled, and
+writes the reference artifacts (frame, depth, capture, behaviors) into the
+specified output directory. These reference artifacts are consumed by
+Run-AsyncRuntimeValidation.ps1 -ReferenceRoot to measure parity against a
+real baseline instead of self-validating the current run.
 #>
 [CmdletBinding()]
 param(
-  [Parameter()]
-  [string]$Output = 'build/artifacts/vortex/phase-4/async/current',
-
-  [Parameter()]
-  [string]$ReferenceRoot = '',
+  [Parameter(Mandatory = $true)]
+  [string]$Output,
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
@@ -86,15 +84,14 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildRoot = Join-Path $repoRoot 'out\build-ninja'
 $binaryDirectory = Join-Path $buildRoot 'bin\Debug'
 $asyncExe = Join-Path $binaryDirectory 'Oxygen.Examples.Async.exe'
-$verifyScript = Join-Path $PSScriptRoot 'Verify-AsyncRuntimeProof.ps1'
 $renderDocLibraryPath = Resolve-RepoPath -RepoRoot $repoRoot -Path $RenderDocLibrary
 $outputDirectory = Resolve-RepoPath -RepoRoot $repoRoot -Path $Output
-$captureStem = Join-Path $outputDirectory 'current_renderdoc'
-$finalCapturePath = Join-Path $outputDirectory 'current_renderdoc.rdc'
-$stdoutPath = Join-Path $outputDirectory 'current.stdout.log'
-$stderrPath = Join-Path $outputDirectory 'current.stderr.log'
-$buildLogPath = Join-Path $outputDirectory 'current.build.log'
-$captureFilter = 'current_renderdoc*.rdc'
+$captureStem = Join-Path $outputDirectory 'reference_renderdoc'
+$finalCapturePath = Join-Path $outputDirectory 'reference_renderdoc.rdc'
+$stdoutPath = Join-Path $outputDirectory 'reference.stdout.log'
+$stderrPath = Join-Path $outputDirectory 'reference.stderr.log'
+$buildLogPath = Join-Path $outputDirectory 'reference.build.log'
+$captureFilter = 'reference_renderdoc*.rdc'
 
 if (-not (Test-Path -LiteralPath $renderDocLibraryPath)) {
   throw "RenderDoc runtime library not found: $renderDocLibraryPath"
@@ -102,6 +99,7 @@ if (-not (Test-Path -LiteralPath $renderDocLibraryPath)) {
 
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 
+# --- Build ---
 $buildStdoutPath = "$buildLogPath.stdout.log"
 $buildStderrPath = "$buildLogPath.stderr.log"
 Remove-Item -LiteralPath $buildLogPath, $buildStdoutPath, $buildStderrPath -Force -ErrorAction SilentlyContinue
@@ -155,6 +153,7 @@ if (-not (Test-Path -LiteralPath $asyncExe)) {
   throw "Async executable not found after build: $asyncExe"
 }
 
+# --- Capture reference frame ---
 Remove-Item -LiteralPath $stdoutPath, $stderrPath, $finalCapturePath -Force -ErrorAction SilentlyContinue
 $captureSnapshotBefore = Get-CaptureSnapshot -Directory $outputDirectory -Filter $captureFilter
 
@@ -191,15 +190,16 @@ try {
 }
 
 if ($appExitCode -ne 0) {
-  throw "Async exited with code $appExitCode. See log: $stderrPath"
+  throw "Async reference capture exited with code $appExitCode. See log: $stderrPath"
 }
 
 $blockingLogMatches = @(Get-BlockingRuntimeLogMatches -Paths @($stdoutPath, $stderrPath))
 if ($blockingLogMatches.Count -gt 0) {
   $summary = ($blockingLogMatches | Select-Object -First 12) -join [Environment]::NewLine
-  throw "Async runtime log contains blocking errors before capture closeout:`n$summary"
+  throw "Async reference runtime log contains blocking errors:`n$summary"
 }
 
+# --- Discover and stabilize capture ---
 $captureDeadline = (Get-Date).AddSeconds(30)
 $captures = @()
 while ((Get-Date) -lt $captureDeadline) {
@@ -214,41 +214,43 @@ while ((Get-Date) -lt $captureDeadline) {
 }
 
 if ($captures.Count -ne 1) {
-  throw "Expected exactly one new Async capture, found $($captures.Count). Check: $outputDirectory"
+  throw "Expected exactly one new reference capture, found $($captures.Count). Check: $outputDirectory"
 }
 
 $capturePath = $captures[0].FullName
 Wait-ForStableFile -Path $capturePath
 Move-Item -LiteralPath $capturePath -Destination $finalCapturePath -Force
 
-$verifyArgs = @(
-  '-NoProfile',
-  '-File', $verifyScript,
-  '-CapturePath', $finalCapturePath
-)
-
-if ([string]::IsNullOrWhiteSpace($ReferenceRoot)) {
-  # Self-baseline mode (legacy fallback)
-  $verifyArgs += '-InitializeBaselineArtifacts'
-} else {
-  # Reference-based parity mode
-  $referenceDirectory = Resolve-RepoPath -RepoRoot $repoRoot -Path $ReferenceRoot
-  if (-not (Test-Path -LiteralPath $referenceDirectory)) {
-    throw "Reference root not found: $referenceDirectory"
-  }
-  $verifyArgs += @(
-    '-ReferenceRoot', $referenceDirectory
-  )
-}
-
-& powershell @verifyArgs
+# --- Extract reference frame and depth via Verify in initialize mode ---
+& powershell -NoProfile -File (Join-Path $PSScriptRoot 'Verify-AsyncRuntimeProof.ps1') `
+  -CapturePath $finalCapturePath `
+  -InitializeBaselineArtifacts `
+  -BaselineFramePath (Join-Path $outputDirectory 'reference_frame10.png') `
+  -BaselineDepthPath (Join-Path $outputDirectory 'reference_depth.png') `
+  -BehaviorPath (Join-Path $outputDirectory 'reference_behaviors.md')
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
+# --- Validate reference artifacts exist ---
+$requiredArtifacts = @(
+  (Join-Path $outputDirectory 'reference_frame10.png'),
+  (Join-Path $outputDirectory 'reference_depth.png'),
+  (Join-Path $outputDirectory 'reference_renderdoc.rdc'),
+  (Join-Path $outputDirectory 'reference_behaviors.md')
+)
+foreach ($artifact in $requiredArtifacts) {
+  if (-not (Test-Path -LiteralPath $artifact)) {
+    throw "Missing required reference artifact: $artifact"
+  }
+}
+
+Write-Host ''
+Write-Host 'Reference capture complete.'
 Write-Host "Build log: $buildLogPath"
 Write-Host "Runtime stdout: $stdoutPath"
 Write-Host "Runtime stderr: $stderrPath"
 Write-Host "Capture: $finalCapturePath"
-Write-Host "Behavior notes: $(Join-Path $outputDirectory 'current_behaviors.md')"
-Write-Host "Validation report: $(Join-Path $outputDirectory 'current_renderdoc.rdc.validation.txt')"
+Write-Host "Reference frame: $(Join-Path $outputDirectory 'reference_frame10.png')"
+Write-Host "Reference depth: $(Join-Path $outputDirectory 'reference_depth.png')"
+Write-Host "Behaviors: $(Join-Path $outputDirectory 'reference_behaviors.md')"

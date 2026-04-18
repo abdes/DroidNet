@@ -11,8 +11,12 @@ This small C++ example demonstrates asynchronous programming patterns used by th
 ## Phase 4 Migration Gate
 
 `Examples/Async` is the Phase 4 first-success integration gate for the Vortex
-migration program. The Phase 4 baseline artifact root for this example is
-`build/artifacts/vortex/phase-4/async/`.
+migration program. The Phase 4 artifact roots for this example are:
+
+- `build/artifacts/vortex/phase-4/async/reference/` — legacy/reference baseline
+  captured by `Capture-AsyncLegacyReference.ps1`
+- `build/artifacts/vortex/phase-4/async/current/` — current Vortex capture
+  produced by `Run-AsyncRuntimeValidation.ps1`
 
 This `04-05` seam-migration lane replaces only the initial runtime seams:
 
@@ -45,16 +49,30 @@ Composition-specific retained boundaries on the migrated path:
   snapshots `PrevSceneDepth` and `PrevVelocity` after Stage 22 completes, then
   finalizes the history handoff without taking presentation ownership.
 - Final presentation stays on the retained `Renderer` compositing/present path.
-  The Async proof pack inspects that path through
-  `baseline_renderdoc.rdc_async_capture_report.txt`,
-  `baseline_renderdoc.rdc_async_products_report.txt`, and
-  `baseline_renderdoc.rdc_async_capture_report.txt.validation.txt`.
+  The Async proof pack inspects that path through the capture and products
+  reports in the `current/` artifact root.
 
-To re-run the composition closeout proof:
+To capture the legacy/reference baseline:
+
+```powershell
+powershell -NoProfile -File tools/vortex/Capture-AsyncLegacyReference.ps1 `
+  -Output build/artifacts/vortex/phase-4/async/reference
+```
+
+To re-run the current Vortex validation against the reference:
+
+```powershell
+powershell -NoProfile -File tools/vortex/Run-AsyncRuntimeValidation.ps1 `
+  -Output build/artifacts/vortex/phase-4/async/current `
+  -ReferenceRoot build/artifacts/vortex/phase-4/async/reference
+```
+
+To re-run just the composition closeout proof on an existing capture:
 
 ```powershell
 powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 `
-  -CapturePath build/artifacts/vortex/phase-4/async/baseline_renderdoc.rdc
+  -CapturePath build/artifacts/vortex/phase-4/async/current/current_renderdoc.rdc `
+  -ReferenceRoot build/artifacts/vortex/phase-4/async/reference
 ```
 
 Successful composition/presentation closeout keeps these checks green in the
