@@ -176,6 +176,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     imgui_overlay_blend_scope = records_with_name_prefixes(
         action_records, IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES
     )
+    imgui_overlay_runtime_scope_count = len(imgui_overlay_scope) + len(
+        imgui_overlay_blend_scope
+    )
 
     stage3_records = records_under_prefix(action_records, STAGE3_SCOPE_NAME)
     stage8_records = records_under_prefix(action_records, STAGE8_SCOPE_NAME)
@@ -240,7 +243,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_presence_check(
         report, "stage22_tonemap_scope", len(stage22_tonemap_scope) or len(stage22_fallback_draws)
     )
-    append_presence_check(report, "imgui_overlay_scope", len(imgui_overlay_scope))
+    report.append(
+        "imgui_overlay_runtime_scope_count={}".format(
+            imgui_overlay_runtime_scope_count
+        )
+    )
+    append_presence_check(
+        report, "imgui_overlay_scope", imgui_overlay_runtime_scope_count
+    )
     append_presence_check(report, "compositing_scope", len(compositing_scope))
     append_presence_check(
         report, "imgui_overlay_blend_scope", len(imgui_overlay_blend_scope)

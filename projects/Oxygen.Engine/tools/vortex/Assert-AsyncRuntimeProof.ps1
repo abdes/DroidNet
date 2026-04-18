@@ -226,6 +226,7 @@ $requiredProductChecks = @(
   'stage15_sky_quality_ok',
   'stage22_tonemap_output_nonzero',
   'stage22_exposure_clipping_ratio_ok',
+  'final_present_vs_tonemap_changed',
   'imgui_overlay_composited_on_scene',
   'final_present_nonzero',
   'exported_color_exists',
