@@ -216,6 +216,13 @@ def find_last_named_record(records, name):
     return matches[-1]
 
 
+def find_last_named_record_any(records, names):
+    matches = [record for record in records if record.name in names]
+    if not matches:
+        return None
+    return matches[-1]
+
+
 def find_texture_with_usage(controller, resource_names, texture_descs, event_id, exclude_ids):
     candidates = []
     for resource_key, desc in texture_descs.items():
@@ -401,7 +408,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_sky_last_draw = find_last_named_record(stage15_sky_records, DRAW_NAME)
     stage15_atmosphere_last_draw = find_last_named_record(stage15_atmosphere_records, DRAW_NAME)
     stage15_fog_last_draw = find_last_named_record(stage15_fog_records, DRAW_NAME)
-    compositing_draw = find_last_named_record(compositing_records, DRAW_NAME)
+    compositing_draw = find_last_named_record_any(
+        compositing_records, {DRAW_NAME, COPY_NAME}
+    )
 
     if (
         stage3_last_draw is None
