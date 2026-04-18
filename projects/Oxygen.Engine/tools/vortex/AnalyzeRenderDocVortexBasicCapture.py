@@ -83,7 +83,7 @@ EXPECTED_STAGE12_POINT_DRAW_COUNT = 1
 EXPECTED_STAGE12_POINT_STENCIL_CLEAR_COUNT = 0
 EXPECTED_STAGE12_SPOT_DRAW_COUNT = 1
 EXPECTED_STAGE12_SPOT_STENCIL_CLEAR_COUNT = 0
-EXPECTED_COMPOSITING_DRAW_COUNT = 1
+EXPECTED_COMPOSITING_PRESENT_OPERATION_COUNT = 1
 EXPECTED_STAGE15_SKY_DRAW_COUNT = 1
 EXPECTED_STAGE15_ATMOSPHERE_DRAW_COUNT = 1
 EXPECTED_STAGE15_FOG_DRAW_COUNT = 1
@@ -104,6 +104,10 @@ def records_under_prefix(action_records, prefix):
 
 def count_named_records(action_records, name):
     return sum(1 for record in action_records if record.name == name)
+
+
+def count_named_records_any(action_records, names):
+    return sum(1 for record in action_records if record.name in names)
 
 
 def append_exact_count_check(report, label, actual, expected):
@@ -320,11 +324,15 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     append_exact_count_check(
         report,
-        "compositing_draw_count",
-        count_named_records(
-            compositing_records, "ID3D12GraphicsCommandList::DrawInstanced()"
+        "compositing_present_operation_count",
+        count_named_records_any(
+            compositing_records,
+            {
+                "ID3D12GraphicsCommandList::DrawInstanced()",
+                "ID3D12GraphicsCommandList::CopyTextureRegion()",
+            },
         ),
-        EXPECTED_COMPOSITING_DRAW_COUNT,
+        EXPECTED_COMPOSITING_PRESENT_OPERATION_COUNT,
     )
 
     append_order_check(

@@ -332,14 +332,22 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   Stage15ProofToolsUseFinalStage12BaselineAndEmitBlockingAsyncQualityKeys)
 {
   const auto repo_root = SourceRoot().parent_path().parent_path();
+  const auto vortexbasic_capture = ReadTextFile(
+    repo_root / "tools/vortex/AnalyzeRenderDocVortexBasicCapture.py");
   const auto vortexbasic_products = ReadTextFile(
     repo_root / "tools/vortex/AnalyzeRenderDocVortexBasicProducts.py");
   const auto async_products = ReadTextFile(
     repo_root / "tools/vortex/AnalyzeRenderDocAsyncProducts.py");
   const auto async_assert = ReadTextFile(
     repo_root / "tools/vortex/Assert-AsyncRuntimeProof.ps1");
+  const auto vortexbasic_assert = ReadTextFile(
+    repo_root / "tools/vortex/Assert-VortexBasicRuntimeProof.ps1");
 
+  EXPECT_TRUE(vortexbasic_capture.contains("compositing_present_operation_count"));
+  EXPECT_TRUE(vortexbasic_capture.contains("ID3D12GraphicsCommandList::CopyTextureRegion()"));
   EXPECT_TRUE(vortexbasic_products.contains("choose_latest_stage_sample"));
+  EXPECT_TRUE(vortexbasic_products.contains("find_last_named_record_any"));
+  EXPECT_TRUE(vortexbasic_products.contains("COPY_NAME"));
   EXPECT_TRUE(vortexbasic_products.contains("stage12_final_last_draw_event"));
   EXPECT_FALSE(vortexbasic_products.contains("stage12_final_scene_color = find_output_sample(stage12_point, \"SceneColor\")"));
 
@@ -350,6 +358,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(async_assert.contains("'stage15_async_scene_color_changed'"));
   EXPECT_TRUE(async_assert.contains("'stage15_far_background_mask_valid'"));
   EXPECT_TRUE(async_assert.contains("'stage15_sky_quality_ok'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'compositing_present_operation_count_match'"));
+  EXPECT_FALSE(vortexbasic_assert.contains("'compositing_draw_count_match'"));
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
