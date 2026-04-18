@@ -13,7 +13,7 @@
 
 static inline bool IsReverseZProjection()
 {
-    return projection_matrix._33 < 0.0f;
+    return projection_matrix._33 > 0.0f;
 }
 
 static inline float ResolveFarDepthReference()
@@ -23,10 +23,9 @@ static inline float ResolveFarDepthReference()
 
 static inline float EvaluateFarBackgroundMask(float scene_depth)
 {
+    const float far_depth = ResolveFarDepthReference();
     const float epsilon = 1.0e-3f;
-    const float reverse_z_far = saturate(1.0f - abs(scene_depth) / epsilon);
-    const float forward_z_far = saturate(1.0f - abs(scene_depth - 1.0f) / epsilon);
-    return max(reverse_z_far, forward_z_far);
+    return saturate(1.0f - abs(scene_depth - far_depth) / epsilon);
 }
 
 static inline float3 ReconstructViewDirection(float2 uv)

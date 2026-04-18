@@ -13,7 +13,7 @@
 
 static inline bool IsReverseZProjection()
 {
-    return projection_matrix._33 < 0.0f;
+    return projection_matrix._33 > 0.0f;
 }
 
 static inline float ResolveFarDepthReference()
