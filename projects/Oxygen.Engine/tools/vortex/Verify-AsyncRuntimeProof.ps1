@@ -162,7 +162,7 @@ if ([string]::IsNullOrWhiteSpace($ValidationReportPath)) {
   $ValidationReportPath = "$captureFullPath.validation.txt"
 }
 if ([string]::IsNullOrWhiteSpace($BaselineFramePath)) {
-  $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame10.png'
+  $BaselineFramePath = Join-Path $captureDirectory 'baseline_frame.png'
 }
 if ([string]::IsNullOrWhiteSpace($BaselineDepthPath)) {
   $BaselineDepthPath = Join-Path $captureDirectory 'baseline_depth.png'
@@ -181,7 +181,7 @@ $behaviorFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPat
 $comparisonFrameFullPath = if ($InitializeBaselineArtifacts) {
   $baselineFrameFullPath
 } else {
-  Join-Path $captureDirectory 'baseline_frame10.verify.png'
+  Join-Path $captureDirectory 'baseline_frame.verify.png'
 }
 $comparisonDepthFullPath = if ($InitializeBaselineArtifacts) {
   $baselineDepthFullPath

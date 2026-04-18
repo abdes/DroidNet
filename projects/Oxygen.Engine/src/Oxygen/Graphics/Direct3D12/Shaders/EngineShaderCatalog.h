@@ -406,7 +406,9 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Services/PostProcess/Exposure.hlsl",
     .entries=std::array {
-      EntryPoint { .type=kCompute, .name="VortexExposureHistogramCS" } }
+      EntryPoint { .type=kCompute, .name="ClearHistogram" },
+      EntryPoint { .type=kCompute, .name="VortexExposureHistogramCS" },
+      EntryPoint { .type=kCompute, .name="VortexExposureAverageCS" } }
   },
   // Light culling compute shader (final clustered analytic path)
   ShaderFileSpec {

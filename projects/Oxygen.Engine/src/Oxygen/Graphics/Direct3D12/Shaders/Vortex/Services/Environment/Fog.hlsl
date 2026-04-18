@@ -11,6 +11,8 @@
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
+static const float kStandardSkyLuminance = 5000.0f;
+
 static inline bool IsReverseZProjection()
 {
     return projection_matrix._33 > 0.0f;
@@ -60,5 +62,5 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const float fog_alpha = saturate(
         distance_factor * height_factor * 0.65f + far_background * 0.12f);
     const float3 fog_color = EvaluateFogColor(distance_factor, height_factor);
-    return float4(fog_color * fog_alpha, fog_alpha);
+    return float4(fog_color * fog_alpha * kStandardSkyLuminance, fog_alpha);
 }

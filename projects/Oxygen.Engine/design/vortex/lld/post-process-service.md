@@ -115,6 +115,22 @@ Exposure has two different ownership concerns:
 does not take over the broader view-lifecycle problem of selecting or
 materializing the current view.
 
+### 2.4 Stage-22 Input Ownership Contract
+
+`SceneRenderer` is the sole owner of the Stage-22 runtime input bundle.
+Before `PostProcessService::Execute(...)` is called, `SceneRenderer` must
+resolve one coherent bundle for the active view:
+
+- `scene_signal` texture pointer
+- `scene_signal_srv` for that exact texture
+- `scene_depth` texture pointer
+- `scene_depth_srv` for that exact texture
+- the SceneRenderer-supplied post target consumed by composition / handoff
+
+`PostProcessService`, `TonemapPass`, and `ExposurePass` are consumers of that
+bundle. They must not invent an alternate routing model or silently choose a
+different source texture / SRV pair.
+
 ## 3. Post-Process Chain
 
 ### 3.1 Execution Order
@@ -268,6 +284,9 @@ Stage 21 remains a thin optional resolve owned by SceneRenderer. Stage 22 must
 therefore accept either the resolved scene signal or the original scene color
 when no separate resolve work was needed.
 
+The post target supplied to Stage 22 is the composition-facing per-view output
+surface selected by `SceneRenderer`, not an ad hoc pass-local target.
+
 ### 7.2 Null-Safe Behavior
 
 When null: SceneRenderer routes the resolved scene signal directly to its
@@ -290,6 +309,10 @@ produces output.
    around object in the post target.
 4. **RenderDoc:** Frame 10, inspect post-process pass inputs (SceneColor)
    and output (LDR post target).
+
+5. **Handoff integrity:** prove that the sampled Stage-22 output in the
+   SceneRenderer-supplied post target is non-black before composition. Final
+   present or overlay output must not stand in for Stage-22 success.
 
 ## 9. Open Questions
 

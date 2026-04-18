@@ -11,6 +11,8 @@
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
+static const float kStandardSkyLuminance = 5000.0f;
+
 static inline bool IsReverseZProjection()
 {
     return projection_matrix._33 > 0.0f;
@@ -52,7 +54,7 @@ static inline float3 EvaluateSkyColor(float3 view_direction)
     float3 sky = lerp(night_color, zenith, upward);
     sky += horizon * horizon_color * 0.35f;
     sky += sun_disc * float3(1.0f, 0.85f, 0.55f) * 2.5f;
-    return saturate(sky);
+    return sky * kStandardSkyLuminance;
 }
 
 [shader("vertex")]

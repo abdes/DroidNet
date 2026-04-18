@@ -6,12 +6,47 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string_view>
 
 #include <Oxygen/Core/api_export.h>
 
 namespace oxygen::engine {
+
+inline constexpr float kExposureCalibrationKey = 12.5F;
+inline constexpr float kExposureMiddleGrey = 0.18F;
+
+[[nodiscard]] inline auto ExposureBiasScale(
+  const float compensation_ev, const float exposure_key) noexcept -> float
+{
+  return std::exp2(compensation_ev) * (exposure_key / kExposureCalibrationKey);
+}
+
+[[nodiscard]] inline auto Ev100ToUnitlessLuminance(const float ev100) noexcept
+  -> float
+{
+  return std::exp2(ev100);
+}
+
+[[nodiscard]] inline auto Ev100ToAverageLuminance(const float ev100) noexcept
+  -> float
+{
+  return kExposureMiddleGrey * Ev100ToUnitlessLuminance(ev100);
+}
+
+[[nodiscard]] inline auto AverageLuminanceToEv100(
+  const float average_luminance) noexcept -> float
+{
+  return std::log2(average_luminance / kExposureMiddleGrey);
+}
+
+[[nodiscard]] inline auto ExposureScaleFromEv100(const float ev100,
+  const float compensation_ev, const float exposure_key) noexcept -> float
+{
+  return ExposureBiasScale(compensation_ev, exposure_key)
+    / Ev100ToUnitlessLuminance(ev100);
+}
 
 //! Metering modes for auto exposure.
 // NOLINTNEXTLINE(performance-enum-size)

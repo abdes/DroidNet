@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -64,6 +65,46 @@ namespace {
     return observer_ptr { &pp };
   }
 
+  struct PersistedPostProcessState {
+    engine::ExposureMode exposure_mode { engine::ExposureMode::kManual };
+    float manual_exposure_ev { 9.7F };
+    float exposure_compensation { 0.0F };
+    float exposure_key { 12.5F };
+    bool exposure_enabled { true };
+    float auto_exposure_speed_up {
+      engine::AutoExposurePassConfig::kDefaultAdaptationSpeedUp
+    };
+    float auto_exposure_speed_down {
+      engine::AutoExposurePassConfig::kDefaultAdaptationSpeedDown
+    };
+    float auto_exposure_low_percentile {
+      engine::AutoExposurePassConfig::kDefaultLowPercentile
+    };
+    float auto_exposure_high_percentile {
+      engine::AutoExposurePassConfig::kDefaultHighPercentile
+    };
+    float auto_exposure_min_ev { -6.0F };
+    float auto_exposure_max_ev { 16.0F };
+    float auto_exposure_min_log_luminance {
+      engine::AutoExposurePassConfig::kDefaultMinLogLuminance
+    };
+    float auto_exposure_log_luminance_range {
+      engine::AutoExposurePassConfig::kDefaultLogLuminanceRange
+    };
+    float auto_exposure_target_luminance {
+      engine::AutoExposurePassConfig::kDefaultTargetLuminance
+    };
+    float auto_exposure_spot_meter_radius {
+      engine::AutoExposurePassConfig::kDefaultSpotMeterRadius
+    };
+    engine::MeteringMode auto_exposure_metering_mode {
+      engine::AutoExposurePassConfig::kDefaultMeteringMode
+    };
+    bool tonemapping_enabled { true };
+    engine::ToneMapper tone_mapper { engine::ToneMapper::kAcesFitted };
+    float gamma { 2.2F };
+  };
+
   auto ApplyExposureToPipeline(
     observer_ptr<renderer::RenderingPipeline> pipeline,
     const engine::ExposureMode mode, const float manual_ev,
@@ -88,7 +129,7 @@ namespace {
     // H = q * L / N^2
     // We use the same formula as Manual mode:
     const float exposure
-      = (1.0F / 12.5F) * std::exp2(compensation_ev - ev) * exposure_key;
+      = engine::ExposureScaleFromEv100(ev, compensation_ev, exposure_key);
 
     if (!enabled) {
       pipeline->SetExposureValue(1.0F);
@@ -105,22 +146,69 @@ namespace {
     }
   }
 
-  auto ApplyExposureToScene(observer_ptr<scene::Scene> scene,
-    const engine::ExposureMode mode, const float manual_ev,
-    const float compensation_ev, const float exposure_key, const bool enabled,
-    const engine::MeteringMode metering_mode) -> void
+  auto ResolveSceneToneMapper(const PersistedPostProcessState& state)
+    -> engine::ToneMapper
+  {
+    return state.tonemapping_enabled ? state.tone_mapper
+                                     : engine::ToneMapper::kNone;
+  }
+
+  auto ApplyPersistedPostProcessToScene(observer_ptr<scene::Scene> scene,
+    const PersistedPostProcessState& state) -> void
   {
     const auto pp = EnsurePostProcessVolume(scene);
     if (!pp) {
       return;
     }
 
-    pp->SetExposureEnabled(enabled);
-    pp->SetExposureMode(ToSceneExposureMode(mode));
-    pp->SetManualExposureEv(manual_ev);
-    pp->SetExposureCompensationEv(compensation_ev);
-    pp->SetExposureKey(exposure_key);
-    pp->SetAutoExposureMeteringMode(metering_mode);
+    pp->SetExposureEnabled(state.exposure_enabled);
+    pp->SetExposureMode(ToSceneExposureMode(state.exposure_mode));
+    pp->SetManualExposureEv(state.manual_exposure_ev);
+    pp->SetExposureCompensationEv(state.exposure_compensation);
+    pp->SetExposureKey(state.exposure_key);
+    pp->SetAutoExposureAdaptationSpeeds(
+      state.auto_exposure_speed_up, state.auto_exposure_speed_down);
+    pp->SetAutoExposureHistogramPercentiles(
+      state.auto_exposure_low_percentile, state.auto_exposure_high_percentile);
+    pp->SetAutoExposureRangeEv(
+      state.auto_exposure_min_ev, state.auto_exposure_max_ev);
+    pp->SetAutoExposureHistogramWindow(state.auto_exposure_min_log_luminance,
+      state.auto_exposure_log_luminance_range);
+    pp->SetAutoExposureTargetLuminance(state.auto_exposure_target_luminance);
+    pp->SetAutoExposureSpotMeterRadius(state.auto_exposure_spot_meter_radius);
+    pp->SetAutoExposureMeteringMode(state.auto_exposure_metering_mode);
+    pp->SetToneMapper(ResolveSceneToneMapper(state));
+    pp->SetDisplayGamma(state.gamma);
+  }
+
+  auto CapturePersistedPostProcessState(
+    const PostProcessSettingsService& service) -> PersistedPostProcessState
+  {
+    return {
+      .exposure_mode = service.GetExposureMode(),
+      .manual_exposure_ev = service.GetManualExposureEv(),
+      .exposure_compensation = service.GetExposureCompensation(),
+      .exposure_key = service.GetExposureKey(),
+      .exposure_enabled = service.GetExposureEnabled(),
+      .auto_exposure_speed_up = service.GetAutoExposureAdaptationSpeedUp(),
+      .auto_exposure_speed_down = service.GetAutoExposureAdaptationSpeedDown(),
+      .auto_exposure_low_percentile = service.GetAutoExposureLowPercentile(),
+      .auto_exposure_high_percentile = service.GetAutoExposureHighPercentile(),
+      .auto_exposure_min_ev = service.GetAutoExposureMinEv(),
+      .auto_exposure_max_ev = service.GetAutoExposureMaxEv(),
+      .auto_exposure_min_log_luminance
+      = service.GetAutoExposureMinLogLuminance(),
+      .auto_exposure_log_luminance_range
+      = service.GetAutoExposureLogLuminanceRange(),
+      .auto_exposure_target_luminance
+      = service.GetAutoExposureTargetLuminance(),
+      .auto_exposure_spot_meter_radius
+      = service.GetAutoExposureSpotMeterRadius(),
+      .auto_exposure_metering_mode = service.GetAutoExposureMeteringMode(),
+      .tonemapping_enabled = service.GetTonemappingEnabled(),
+      .tone_mapper = service.GetToneMapper(),
+      .gamma = service.GetGamma(),
+    };
   }
 
   auto ResolveActiveCameraExposure(
@@ -167,7 +255,6 @@ namespace {
 auto PostProcessSettingsService::Initialize(
   observer_ptr<renderer::RenderingPipeline> pipeline) -> void
 {
-  DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
 
   // Push initial state
@@ -194,9 +281,7 @@ auto PostProcessSettingsService::Initialize(
     pipeline_->SetAutoExposureMeteringMode(GetAutoExposureMeteringMode());
   }
 
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
-    GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::BindCameraSettings(
@@ -223,9 +308,7 @@ auto PostProcessSettingsService::BindScene(observer_ptr<scene::Scene> scene)
       ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
       GetExposureKey(), GetExposureEnabled());
   }
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
-    GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 }
 
 // Exposure
@@ -263,9 +346,7 @@ auto PostProcessSettingsService::SetExposureEnabled(bool enabled) -> void
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), enabled);
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(),
-    GetExposureCompensation(), GetExposureKey(), enabled,
-    GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 
   if (enabled) {
     UpdateAutoExposureTarget();
@@ -286,9 +367,7 @@ auto PostProcessSettingsService::SetExposureMode(engine::ExposureMode mode)
   ApplyExposureToPipeline(pipeline_, mode, GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), GetExposureEnabled());
-  ApplyExposureToScene(scene_, mode, GetManualExposureEv(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(),
-    GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetManualExposureEv() const -> float
@@ -302,15 +381,14 @@ auto PostProcessSettingsService::SetManualExposureEv(float ev) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  ev = std::max(ev, 0.0F);
+  ev = std::clamp(ev, -16.0F, 24.0F);
   settings->SetFloat(kExposureManualEVKey, ev);
   epoch_++;
 
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), ev,
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
     GetExposureKey(), GetExposureEnabled());
-  ApplyExposureToScene(scene_, GetExposureMode(), ev, GetExposureCompensation(),
-    GetExposureKey(), GetExposureEnabled(), GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetManualCameraAperture() const -> float
@@ -397,8 +475,7 @@ auto PostProcessSettingsService::SetExposureCompensation(float stops) -> void
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), stops, GetExposureKey(),
     GetExposureEnabled());
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(), stops,
-    GetExposureKey(), GetExposureEnabled(), GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 
   UpdateAutoExposureTarget();
 }
@@ -421,9 +498,7 @@ auto PostProcessSettingsService::SetExposureKey(float exposure_key) -> void
   ApplyExposureToPipeline(pipeline_, GetExposureMode(), GetManualExposureEv(),
     ResolveManualCameraEv(camera_settings_), GetExposureCompensation(),
     exposure_key, GetExposureEnabled());
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(),
-    GetExposureCompensation(), exposure_key, GetExposureEnabled(),
-    GetAutoExposureMeteringMode());
+  SyncScenePostProcessState();
 
   // Also update auto-exposure target if in use (as Key affects Target scalar)
   UpdateAutoExposureTarget();
@@ -450,6 +525,7 @@ auto PostProcessSettingsService::SetAutoExposureAdaptationSpeedUp(float speed)
   if (pipeline_) {
     pipeline_->SetAutoExposureAdaptationSpeedUp(speed);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureAdaptationSpeedDown() const
@@ -471,6 +547,7 @@ auto PostProcessSettingsService::SetAutoExposureAdaptationSpeedDown(float speed)
   if (pipeline_) {
     pipeline_->SetAutoExposureAdaptationSpeedDown(speed);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureLowPercentile() const -> float
@@ -491,6 +568,7 @@ auto PostProcessSettingsService::SetAutoExposureLowPercentile(float percentile)
   if (pipeline_) {
     pipeline_->SetAutoExposureLowPercentile(percentile);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureHighPercentile() const -> float
@@ -511,6 +589,45 @@ auto PostProcessSettingsService::SetAutoExposureHighPercentile(float percentile)
   if (pipeline_) {
     pipeline_->SetAutoExposureHighPercentile(percentile);
   }
+  SyncScenePostProcessState();
+}
+
+auto PostProcessSettingsService::GetAutoExposureMinEv() const -> float
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kAutoExposureMinEvKey).value_or(-6.0F);
+}
+
+auto PostProcessSettingsService::SetAutoExposureMinEv(float min_ev) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  const auto clamped_min_ev = std::clamp(min_ev, -16.0F, 24.0F);
+  const auto max_ev = std::max(GetAutoExposureMaxEv(), clamped_min_ev);
+  settings->SetFloat(kAutoExposureMinEvKey, clamped_min_ev);
+  settings->SetFloat(kAutoExposureMaxEvKey, max_ev);
+  epoch_++;
+  SyncScenePostProcessState();
+}
+
+auto PostProcessSettingsService::GetAutoExposureMaxEv() const -> float
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  return settings->GetFloat(kAutoExposureMaxEvKey).value_or(16.0F);
+}
+
+auto PostProcessSettingsService::SetAutoExposureMaxEv(float max_ev) -> void
+{
+  const auto settings = SettingsService::ForDemoApp();
+  DCHECK_NOTNULL_F(settings);
+  const auto clamped_max_ev = std::clamp(max_ev, -16.0F, 24.0F);
+  const auto min_ev = std::min(GetAutoExposureMinEv(), clamped_max_ev);
+  settings->SetFloat(kAutoExposureMinEvKey, min_ev);
+  settings->SetFloat(kAutoExposureMaxEvKey, clamped_max_ev);
+  epoch_++;
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureMinLogLuminance() const -> float
@@ -531,6 +648,7 @@ auto PostProcessSettingsService::SetAutoExposureMinLogLuminance(float luminance)
   if (pipeline_) {
     pipeline_->SetAutoExposureMinLogLuminance(luminance);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureLogLuminanceRange() const
@@ -552,6 +670,7 @@ auto PostProcessSettingsService::SetAutoExposureLogLuminanceRange(float range)
   if (pipeline_) {
     pipeline_->SetAutoExposureLogLuminanceRange(range);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureTargetLuminance() const -> float
@@ -570,6 +689,7 @@ auto PostProcessSettingsService::SetAutoExposureTargetLuminance(float luminance)
   settings->SetFloat(kAutoExposureTargetLumKey, luminance);
   epoch_++;
   UpdateAutoExposureTarget();
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureSpotMeterRadius() const -> float
@@ -590,6 +710,7 @@ auto PostProcessSettingsService::SetAutoExposureSpotMeterRadius(float radius)
   if (pipeline_) {
     pipeline_->SetAutoExposureSpotMeterRadius(radius);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetAutoExposureMeteringMode() const
@@ -620,8 +741,7 @@ auto PostProcessSettingsService::SetAutoExposureMeteringMode(
     pipeline_->SetAutoExposureMeteringMode(mode);
   }
 
-  ApplyExposureToScene(scene_, GetExposureMode(), GetManualExposureEv(),
-    GetExposureCompensation(), GetExposureKey(), GetExposureEnabled(), mode);
+  SyncScenePostProcessState();
 }
 
 // Tonemapping
@@ -644,6 +764,7 @@ auto PostProcessSettingsService::SetTonemappingEnabled(bool enabled) -> void
     pipeline_->SetToneMapper(
       enabled ? GetToneMapper() : engine::ToneMapper::kNone);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetToneMapper() const -> engine::ToneMapper
@@ -676,6 +797,7 @@ auto PostProcessSettingsService::SetToneMapper(engine::ToneMapper mode) -> void
   if (pipeline_ && GetTonemappingEnabled()) {
     pipeline_->SetToneMapper(mode);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::GetGamma() const -> float
@@ -695,6 +817,7 @@ auto PostProcessSettingsService::SetGamma(float gamma) -> void
   if (pipeline_) {
     pipeline_->SetGamma(gamma);
   }
+  SyncScenePostProcessState();
 }
 
 auto PostProcessSettingsService::ResetToDefaults() -> void
@@ -724,6 +847,8 @@ auto PostProcessSettingsService::ResetToDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultLowPercentile);
   settings->SetFloat(kAutoExposureHighPercentileKey,
     engine::AutoExposurePassConfig::kDefaultHighPercentile);
+  settings->SetFloat(kAutoExposureMinEvKey, -6.0F);
+  settings->SetFloat(kAutoExposureMaxEvKey, 16.0F);
   settings->SetFloat(kAutoExposureMinLogLumKey,
     engine::AutoExposurePassConfig::kDefaultMinLogLuminance);
   settings->SetFloat(kAutoExposureLogLumRangeKey,
@@ -757,6 +882,8 @@ auto PostProcessSettingsService::ResetAutoExposureDefaults() -> void
     engine::AutoExposurePassConfig::kDefaultLowPercentile);
   settings->SetFloat(kAutoExposureHighPercentileKey,
     engine::AutoExposurePassConfig::kDefaultHighPercentile);
+  settings->SetFloat(kAutoExposureMinEvKey, -6.0F);
+  settings->SetFloat(kAutoExposureMaxEvKey, 16.0F);
   settings->SetFloat(kAutoExposureMinLogLumKey,
     engine::AutoExposurePassConfig::kDefaultMinLogLuminance);
   settings->SetFloat(kAutoExposureLogLumRangeKey,
@@ -778,23 +905,9 @@ auto PostProcessSettingsService::UpdateAutoExposureTarget() -> void
     return;
   }
 
-  // Calculate effective target luminance by applying exposure compensation
-  // bias and exposure key.
-  //
-  // Standard Exposure Formula: Exposure = Target / Average
-  // Final Color = Color * Exposure
-  //
-  // Compensation (Stops): Target *= 2^Compensation
-  // Exposure Key (K): Standard is 12.5.
-  // We scale the target by (K / 12.5) to match the Manual mode behavior where
-  // Exposure scales linearly with Key.
-
   const float base_target = GetAutoExposureTargetLuminance();
-  const float comp = GetExposureCompensation();
-  const float key = GetExposureKey();
-
-  // Combine factors
-  const float effective_target = base_target * std::exp2(comp) * (key / 12.5F);
+  const float effective_target = base_target
+    * engine::ExposureBiasScale(GetExposureCompensation(), GetExposureKey());
 
   pipeline_->SetAutoExposureTargetLuminance(effective_target);
 }
@@ -818,6 +931,12 @@ auto PostProcessSettingsService::GetEpoch() const noexcept -> std::uint64_t
     }
   }
   return epoch_.load(std::memory_order_acquire);
+}
+
+auto PostProcessSettingsService::SyncScenePostProcessState() -> void
+{
+  ApplyPersistedPostProcessToScene(
+    scene_, CapturePersistedPostProcessState(*this));
 }
 
 } // namespace oxygen::examples::ui

@@ -31,11 +31,11 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
-#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/Internal/ImGuiRuntime.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
@@ -63,7 +63,8 @@ namespace oxygen::vortex {
 struct RendererPublicationState {
   std::unique_ptr<internal::PerViewStructuredPublisher<DrawFrameBindings>>
     draw_frame_bindings_publisher;
-  std::unique_ptr<internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>
     view_history_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
@@ -306,8 +307,8 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     upload::kDefaultRingBufferStagingSlack, "Vortex.InlineStaging");
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
-  gpu_timeline_profiler_
-    = std::make_unique<internal::GpuTimelineProfiler>(observer_ptr { gfx.get() });
+  gpu_timeline_profiler_ = std::make_unique<internal::GpuTimelineProfiler>(
+    observer_ptr { gfx.get() });
   render_context_pool_
     = std::make_unique<internal::BasicRenderContextPool<RenderContext>>();
 }
@@ -574,10 +575,10 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   frame_slot_ = context->GetFrameSlot();
   frame_seq_num_ = context->GetFrameSequenceNumber().get();
   rigid_transform_history_cache_.BeginFrame(frame_seq_num_);
-  deformation_history_cache_.BeginFrame(
-    frame_seq_num_, observer_ptr<const scene::Scene> { context->GetScene().get() });
-  previous_view_history_cache_.BeginFrame(
-    frame_seq_num_, observer_ptr<const scene::Scene> { context->GetScene().get() });
+  deformation_history_cache_.BeginFrame(frame_seq_num_,
+    observer_ptr<const scene::Scene> { context->GetScene().get() });
+  previous_view_history_cache_.BeginFrame(frame_seq_num_,
+    observer_ptr<const scene::Scene> { context->GetScene().get() });
   const auto dt = context->GetModuleTimingData().game_delta_time;
   const auto dt_seconds
     = std::chrono::duration_cast<std::chrono::duration<float>>(dt.get())
@@ -636,13 +637,12 @@ auto Renderer::OnRender(observer_ptr<engine::FrameContext> context) -> co::Co<>
 auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  const auto finalize_gpu_timestamps = oxygen::ScopeGuard {
-    [this]() noexcept -> void {
-      if (gpu_timeline_profiler_) {
-        gpu_timeline_profiler_->OnFrameRecordTailResolve();
-      }
-    }
-  };
+  const auto finalize_gpu_timestamps
+    = oxygen::ScopeGuard { [this]() noexcept -> void {
+        if (gpu_timeline_profiler_) {
+          gpu_timeline_profiler_->OnFrameRecordTailResolve();
+        }
+      } };
 
   if (context != nullptr) {
     co_await DispatchSceneRendererCompositing(context);
@@ -655,15 +655,15 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     {
       std::scoped_lock lock(composition_mutex_);
       if (!pending_compositions_.empty()) {
-        composite_target = pending_compositions_.front().submission.composite_target;
+        composite_target
+          = pending_compositions_.front().submission.composite_target;
         target_surface = pending_compositions_.front().target_surface;
       }
     }
 
     if (composite_target && target_surface) {
-      if (const auto overlay
-          = imgui_runtime_->RenderOverlay(
-              *this, observer_ptr { composite_target.get() });
+      if (const auto overlay = imgui_runtime_->RenderOverlay(
+            *this, observer_ptr { composite_target.get() });
         overlay.has_value()) {
         auto submission = CompositionSubmission {};
         submission.composite_target = composite_target;
@@ -757,6 +757,24 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     const auto resolve_composition_source
       = [&](const ViewId view_id) -> std::shared_ptr<graphics::Texture> {
       if (view_id == scene_renderer.GetPublishedViewId()) {
+        const auto& published_bindings
+          = scene_renderer.GetPublishedViewFrameBindings();
+        if (published_bindings.post_process_frame_slot
+          != kInvalidShaderVisibleIndex) {
+          auto post_processed = ResolveViewOutputTexture(*context, view_id);
+          if (post_processed) {
+            DLOG_F(1,
+              "Vortex compositing source for view {}: '{}' (post-process "
+              "composite source)",
+              view_id.get(), post_processed->GetDescriptor().debug_name);
+            return post_processed;
+          }
+          LOG_F(WARNING,
+            "Vortex compositing source for published view {} is missing the "
+            "post-process composite source despite a live Stage 22 frame slot",
+            view_id.get());
+        }
+
         const auto& resolved_scene_color
           = scene_renderer.GetResolvedSceneColorTexture();
         if (resolved_scene_color) {
@@ -898,7 +916,8 @@ auto Renderer::GetRuntimeMotionProducerModule() const noexcept
   if (engine_ == nullptr) {
     return nullptr;
   }
-  if (const auto module = engine_->GetModule<scenesync::RuntimeMotionProducerModule>();
+  if (const auto module
+    = engine_->GetModule<scenesync::RuntimeMotionProducerModule>();
     module.has_value()) {
     return observer_ptr<scenesync::RuntimeMotionProducerModule> {
       &module->get()
@@ -1035,7 +1054,8 @@ auto Renderer::DetachPublishedRuntimeViewState(const ViewId intent_view_id)
 
 auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 {
-  const auto published_view_id = DetachPublishedRuntimeViewState(intent_view_id);
+  const auto published_view_id
+    = DetachPublishedRuntimeViewState(intent_view_id);
   if (published_view_id == kInvalidViewId) {
     return;
   }
@@ -1049,7 +1069,8 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
 auto Renderer::RemovePublishedRuntimeView(
   engine::FrameContext& frame_context, const ViewId intent_view_id) -> void
 {
-  const auto published_view_id = DetachPublishedRuntimeViewState(intent_view_id);
+  const auto published_view_id
+    = DetachPublishedRuntimeViewState(intent_view_id);
 
   if (published_view_id == kInvalidViewId) {
     return;
@@ -1102,8 +1123,8 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
   resolved_views_.erase(view_id);
 }
 
-auto Renderer::RegisterRuntimeComposition(
-  const RuntimeCompositionInput& input) -> void
+auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
+  -> void
 {
   if (input.composite_target == nullptr || input.target_surface == nullptr
     || input.layers.empty()) {
@@ -1230,7 +1251,8 @@ auto Renderer::GetInlineTransfersCoordinator()
 
 auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
 {
-  CHECK_NOTNULL_F(uploader_.get(), "Renderer upload coordinator is unavailable");
+  CHECK_NOTNULL_F(
+    uploader_.get(), "Renderer upload coordinator is unavailable");
   return *uploader_;
 }
 
@@ -1292,6 +1314,8 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
       .composition_view = {},
       .shading_mode_override = ResolvePublishedRuntimeShadingMode(view.id),
       .resolved_view = {},
+      .render_target = view.render_target,
+      .composite_source = view.composite_source,
       .primary_target = primary_target,
     };
     if (const auto it = resolved_views_.find(view.id);
@@ -1554,39 +1578,44 @@ auto Renderer::DispatchSceneRendererRender(
     if (const auto prepared_frame = render_context.current_view.prepared_frame;
       prepared_frame != nullptr) {
       auto draw_bindings = DrawFrameBindings {
-        .draw_metadata_slot = BindlessDrawMetadataSlot {
-          prepared_frame->bindless_draw_metadata_slot },
-        .current_worlds_slot = BindlessWorldsSlot {
-          prepared_frame->bindless_worlds_slot },
-        .previous_worlds_slot = BindlessWorldsSlot {
-          prepared_frame->bindless_previous_worlds_slot },
-        .normal_matrices_slot = BindlessNormalsSlot {
-          prepared_frame->bindless_normals_slot },
+        .draw_metadata_slot = BindlessDrawMetadataSlot { prepared_frame
+            ->bindless_draw_metadata_slot },
+        .current_worlds_slot
+        = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
+        .previous_worlds_slot
+        = BindlessWorldsSlot { prepared_frame->bindless_previous_worlds_slot },
+        .normal_matrices_slot
+        = BindlessNormalsSlot { prepared_frame->bindless_normals_slot },
         .material_shading_constants_slot
-        = BindlessMaterialShadingConstantsSlot {
-            prepared_frame->bindless_material_shading_slot },
-        .instance_data_slot = BindlessInstanceDataSlot {
-          prepared_frame->bindless_instance_data_slot },
-        .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-          prepared_frame->bindless_current_skinned_pose_slot },
-        .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-          prepared_frame->bindless_previous_skinned_pose_slot },
-        .current_morph_slot = BindlessMorphPublicationsSlot {
-          prepared_frame->bindless_current_morph_slot },
-        .previous_morph_slot = BindlessMorphPublicationsSlot {
-          prepared_frame->bindless_previous_morph_slot },
-        .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
-          prepared_frame->bindless_current_material_wpo_slot },
-        .previous_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
-          prepared_frame->bindless_previous_material_wpo_slot },
+        = BindlessMaterialShadingConstantsSlot { prepared_frame
+            ->bindless_material_shading_slot },
+        .instance_data_slot = BindlessInstanceDataSlot { prepared_frame
+            ->bindless_instance_data_slot },
+        .current_skinned_pose_slot
+        = BindlessSkinnedPosePublicationsSlot { prepared_frame
+            ->bindless_current_skinned_pose_slot },
+        .previous_skinned_pose_slot
+        = BindlessSkinnedPosePublicationsSlot { prepared_frame
+            ->bindless_previous_skinned_pose_slot },
+        .current_morph_slot = BindlessMorphPublicationsSlot { prepared_frame
+            ->bindless_current_morph_slot },
+        .previous_morph_slot = BindlessMorphPublicationsSlot { prepared_frame
+            ->bindless_previous_morph_slot },
+        .current_material_wpo_slot
+        = BindlessMaterialWpoPublicationsSlot { prepared_frame
+            ->bindless_current_material_wpo_slot },
+        .previous_material_wpo_slot
+        = BindlessMaterialWpoPublicationsSlot { prepared_frame
+            ->bindless_previous_material_wpo_slot },
         .current_motion_vector_status_slot
-        = BindlessMotionVectorStatusPublicationsSlot {
-            prepared_frame->bindless_current_motion_vector_status_slot },
+        = BindlessMotionVectorStatusPublicationsSlot { prepared_frame
+            ->bindless_current_motion_vector_status_slot },
         .previous_motion_vector_status_slot
-        = BindlessMotionVectorStatusPublicationsSlot {
-            prepared_frame->bindless_previous_motion_vector_status_slot },
-        .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
-          prepared_frame->bindless_velocity_draw_metadata_slot },
+        = BindlessMotionVectorStatusPublicationsSlot { prepared_frame
+            ->bindless_previous_motion_vector_status_slot },
+        .velocity_draw_metadata_slot
+        = BindlessVelocityDrawMetadataSlot { prepared_frame
+            ->bindless_velocity_draw_metadata_slot },
       };
       view_bindings.draw_frame_slot
         = publication_state.draw_frame_bindings_publisher->Publish(

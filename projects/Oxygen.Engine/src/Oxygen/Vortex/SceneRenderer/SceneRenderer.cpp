@@ -15,6 +15,7 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -34,24 +35,24 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
-#include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {
 
@@ -117,9 +118,8 @@ namespace {
     std::uint32_t _padding1 { 0U };
     std::uint32_t _padding2 { 0U };
   };
-  static_assert(sizeof(DeferredLightConstants)
-      % packing::kShaderDataFieldAlignment
-    == 0U);
+  static_assert(
+    sizeof(DeferredLightConstants) % packing::kShaderDataFieldAlignment == 0U);
 
   struct DeferredLightDraw {
     DeferredLightConstants constants {};
@@ -167,8 +167,7 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors
+          table.count = range.num_descriptors
               == (std::numeric_limits<std::uint32_t>::max)()
             ? (std::numeric_limits<std::uint32_t>::max)()
             : range.num_descriptors;
@@ -200,8 +199,8 @@ namespace {
     }
   }
 
-  auto RequireKnownPersistentState(graphics::CommandRecorder& recorder,
-    graphics::Texture& texture) -> void
+  auto RequireKnownPersistentState(
+    graphics::CommandRecorder& recorder, graphics::Texture& texture) -> void
   {
     CHECK_F(recorder.AdoptKnownResourceState(texture),
       "SceneRenderer: missing authoritative incoming state for '{}'",
@@ -266,25 +265,27 @@ namespace {
       || ctx.current_view.resolved_view->ReverseZ();
   }
 
-  auto ResolveWorldRotation(const scene::Scene& scene,
-    const scene::SceneNodeImpl& node) -> glm::quat
+  auto ResolveWorldRotation(
+    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::quat
   {
-    const auto& transform = node.GetComponent<scene::detail::TransformComponent>();
+    const auto& transform
+      = node.GetComponent<scene::detail::TransformComponent>();
     const auto ignore_parent = node.GetFlags().GetEffectiveValue(
       scene::SceneNodeFlags::kIgnoreParentTransform);
     auto rotation = transform.GetLocalRotation();
     if (const auto parent = node.AsGraphNode().GetParent();
       parent.IsValid() && !ignore_parent) {
-      rotation = ResolveWorldRotation(scene, scene.GetNodeImplRef(parent))
-        * rotation;
+      rotation
+        = ResolveWorldRotation(scene, scene.GetNodeImplRef(parent)) * rotation;
     }
     return rotation;
   }
 
-  auto ResolveWorldMatrix(const scene::Scene& scene,
-    const scene::SceneNodeImpl& node) -> glm::mat4
+  auto ResolveWorldMatrix(
+    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::mat4
   {
-    const auto& transform = node.GetComponent<scene::detail::TransformComponent>();
+    const auto& transform
+      = node.GetComponent<scene::detail::TransformComponent>();
     const auto ignore_parent = node.GetFlags().GetEffectiveValue(
       scene::SceneNodeFlags::kIgnoreParentTransform);
     auto world = transform.GetLocalMatrix();
@@ -295,17 +296,18 @@ namespace {
     return world;
   }
 
-  auto ResolveWorldPosition(const scene::Scene& scene,
-    const scene::SceneNodeImpl& node) -> glm::vec3
+  auto ResolveWorldPosition(
+    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::vec3
   {
     const auto world = ResolveWorldMatrix(scene, node);
     return glm::vec3(world[3]);
   }
 
-  auto ComputeDirectionWs(const scene::Scene& scene,
-    const scene::SceneNodeImpl& node) -> glm::vec3
+  auto ComputeDirectionWs(
+    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::vec3
   {
-    const auto direction = ResolveWorldRotation(scene, node) * space::move::Forward;
+    const auto direction
+      = ResolveWorldRotation(scene, node) * space::move::Forward;
     const auto length_sq = glm::dot(direction, direction);
     if (length_sq <= math::EpsilonDirection) {
       return space::move::Forward;
@@ -313,14 +315,13 @@ namespace {
     return glm::normalize(direction);
   }
 
-  auto BuildFrameLightSelection(
-    const scene::Scene& scene_ref, const std::uint64_t selection_epoch)
-    -> FrameLightSelection
+  auto BuildFrameLightSelection(const scene::Scene& scene_ref,
+    const std::uint64_t selection_epoch) -> FrameLightSelection
   {
     auto selection = FrameLightSelection { .selection_epoch = selection_epoch };
-    const auto visitor = [&selection, &scene_ref](
-                           const scene::ConstVisitedNode& visited,
-                           const bool dry_run) -> scene::VisitResult {
+    const auto visitor
+      = [&selection, &scene_ref](const scene::ConstVisitedNode& visited,
+          const bool dry_run) -> scene::VisitResult {
       static_cast<void>(dry_run);
 
       const auto& node = *visited.node_impl;
@@ -330,7 +331,8 @@ namespace {
 
       if (node.HasComponent<scene::DirectionalLight>()) {
         const auto& light = node.GetComponent<scene::DirectionalLight>();
-        if (!light.Common().affects_world || selection.directional_light.has_value()) {
+        if (!light.Common().affects_world
+          || selection.directional_light.has_value()) {
           return scene::VisitResult::kContinue;
         }
 
@@ -392,8 +394,9 @@ namespace {
       return scene::VisitResult::kContinue;
     };
 
-    [[maybe_unused]] const auto traversal_result = scene_ref.Traverse().Traverse(
-      visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
+    [[maybe_unused]] const auto traversal_result
+      = scene_ref.Traverse().Traverse(
+        visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
     return selection;
   }
 
@@ -490,7 +493,8 @@ namespace {
     const float near_clip, const DeferredLightConstants& constants) -> bool
   {
     const auto position = glm::vec3 { constants.light_position_and_radius };
-    const auto radius = constants.light_position_and_radius.w * 1.05F + near_clip;
+    const auto radius
+      = constants.light_position_and_radius.w * 1.05F + near_clip;
     const auto delta = camera - position;
     return glm::dot(delta, delta) < radius * radius;
   }
@@ -501,32 +505,30 @@ namespace {
     const auto position = glm::vec3 { constants.light_position_and_radius };
     const auto direction
       = glm::normalize(glm::vec3 { constants.light_direction_and_falloff });
-    const auto range = (std::max)(constants.light_position_and_radius.w, 0.001F);
+    const auto range
+      = (std::max)(constants.light_position_and_radius.w, 0.001F);
     const auto outer_cosine
       = std::clamp(constants.spot_angles.y, 0.001F, 0.999999F);
     const auto outer_sine
       = std::sqrt((std::max)(0.0F, 1.0F - outer_cosine * outer_cosine));
-    const auto outer_tangent
-      = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
+    const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
     const auto to_camera = camera - position;
     const auto axial_distance = glm::dot(to_camera, direction);
     if (axial_distance < -near_clip || axial_distance > range + near_clip) {
       return false;
     }
 
-    const auto radial_sq
-      = (std::max)(glm::dot(to_camera, to_camera)
-          - axial_distance * axial_distance,
-        0.0F);
+    const auto radial_sq = (std::max)(glm::dot(to_camera, to_camera)
+        - axial_distance * axial_distance,
+      0.0F);
     const auto expanded_radius
       = (std::max)(axial_distance + near_clip, 0.0F) * outer_tangent
       + near_clip;
     return radial_sq <= expanded_radius * expanded_radius;
   }
 
-  auto ResolveLocalLightDrawMode(
-    const RenderContext& ctx, const DeferredLightDraw& draw)
-    -> DeferredLocalLightDrawMode
+  auto ResolveLocalLightDrawMode(const RenderContext& ctx,
+    const DeferredLightDraw& draw) -> DeferredLocalLightDrawMode
   {
     const auto* resolved_view = ctx.current_view.resolved_view.get();
     if (resolved_view == nullptr || !IsPerspectiveProjection(*resolved_view)) {
@@ -587,7 +589,7 @@ namespace {
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
       || desc.color_attachments[0].texture.get()
-        != scene_textures.GetSceneColorResource().get()
+      != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture != nullptr;
   }
 
@@ -602,9 +604,9 @@ namespace {
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
       || desc.color_attachments[0].texture.get()
-        != scene_textures.GetSceneColorResource().get()
+      != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture.get()
-        != scene_textures.GetSceneDepthResource().get()
+      != scene_textures.GetSceneDepthResource().get()
       || !desc.depth_attachment.is_read_only;
   }
 
@@ -666,7 +668,7 @@ namespace {
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
       || desc.color_attachments[0].texture.get()
-        != scene_textures.GetSceneColorResource().get()
+      != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture != nullptr;
   }
 
@@ -701,8 +703,7 @@ namespace {
 
     auto root_bindings = BuildVortexRootBindings();
     auto pixel_defines = std::vector<graphics::ShaderDefine> {};
-    AddBooleanDefine(
-      true, GetShaderDebugDefineName(mode), pixel_defines);
+    AddBooleanDefine(true, GetShaderDebugDefineName(mode), pixel_defines);
 
     return graphics::GraphicsPipelineDesc::Builder {}
       .SetVertexShader(graphics::ShaderRequest {
@@ -796,9 +797,9 @@ namespace {
       .stencil_write_mask = 0x00,
     };
     if (!direct_local_light) {
-      depth_stencil.depth_func
-        = reverse_z ? graphics::CompareOp::kGreaterOrEqual
-                    : graphics::CompareOp::kLessOrEqual;
+      depth_stencil.depth_func = reverse_z
+        ? graphics::CompareOp::kGreaterOrEqual
+        : graphics::CompareOp::kLessOrEqual;
     }
 
     return graphics::GraphicsPipelineDesc::Builder {}
@@ -961,9 +962,8 @@ namespace {
       ev = *ctx.current_view.resolved_view->CameraEv();
     }
 
-    return (1.0F / 12.5F)
-      * std::exp2(post_process.GetExposureCompensationEv() - ev)
-      * post_process.GetExposureKey();
+    return engine::ExposureScaleFromEv100(ev,
+      post_process.GetExposureCompensationEv(), post_process.GetExposureKey());
   }
 
   auto ResolveAuthoredPostProcessConfig(const RenderContext& ctx)
@@ -989,15 +989,36 @@ namespace {
     config.enable_bloom = post_process->GetBloomIntensity() > 0.0F;
     config.bloom_intensity = post_process->GetBloomIntensity();
     config.bloom_threshold = post_process->GetBloomThreshold();
-    config.enable_auto_exposure = false;
+    config.tone_mapper = post_process->GetToneMapper();
+    config.enable_auto_exposure = post_process->GetExposureEnabled()
+      && post_process->GetExposureMode() == engine::ExposureMode::kAuto;
     config.fixed_exposure = ResolveAuthoredExposureValue(*post_process, ctx);
+    config.gamma = post_process->GetDisplayGamma();
+    config.metering_mode = post_process->GetAutoExposureMeteringMode();
+    config.auto_exposure_speed_up = post_process->GetAutoExposureSpeedUp();
+    config.auto_exposure_speed_down = post_process->GetAutoExposureSpeedDown();
+    config.auto_exposure_low_percentile
+      = post_process->GetAutoExposureLowPercentile();
+    config.auto_exposure_high_percentile
+      = post_process->GetAutoExposureHighPercentile();
+    config.auto_exposure_min_ev = post_process->GetAutoExposureMinEv();
+    config.auto_exposure_max_ev = post_process->GetAutoExposureMaxEv();
+    config.auto_exposure_min_log_luminance
+      = post_process->GetAutoExposureMinLogLuminance();
+    config.auto_exposure_log_luminance_range
+      = post_process->GetAutoExposureLogLuminanceRange();
+    config.auto_exposure_target_luminance
+      = post_process->GetAutoExposureTargetLuminance()
+      * engine::ExposureBiasScale(post_process->GetExposureCompensationEv(),
+        post_process->GetExposureKey());
+    config.auto_exposure_spot_meter_radius
+      = post_process->GetAutoExposureSpotMeterRadius();
     return config;
   }
 
   auto HasPublishedGBufferBindings(const SceneTextureBindings& bindings) -> bool
   {
-    return std::ranges::all_of(
-      bindings.gbuffer_srvs.begin(),
+    return std::ranges::all_of(bindings.gbuffer_srvs.begin(),
       bindings.gbuffer_srvs.begin()
         + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
       [](const std::uint32_t index) -> bool {
@@ -1008,8 +1029,7 @@ namespace {
   auto HasAnyPublishedGBufferBinding(const SceneTextureBindings& bindings)
     -> bool
   {
-    return std::ranges::any_of(
-      bindings.gbuffer_srvs.begin(),
+    return std::ranges::any_of(bindings.gbuffer_srvs.begin(),
       bindings.gbuffer_srvs.begin()
         + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
       [](const std::uint32_t index) -> bool {
@@ -1058,15 +1078,13 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   if (renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
     environment_ = std::make_unique<EnvironmentLightingService>(renderer_);
   }
-  if (renderer_.HasCapability(RendererCapabilityFamily::kFinalOutputComposition)) {
+  if (renderer_.HasCapability(
+        RendererCapabilityFamily::kFinalOutputComposition)) {
     post_process_ = std::make_unique<PostProcessService>(renderer_);
   }
 }
 
-SceneRenderer::~SceneRenderer()
-{
-  ResetExtractArtifacts();
-}
+SceneRenderer::~SceneRenderer() { ResetExtractArtifacts(); }
 
 void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
 {
@@ -1133,8 +1151,10 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     PrimePreparedView(ctx);
   }
 
-  if (lighting_ != nullptr && lighting_grid_built_sequence_ != ctx.frame_sequence) {
-    if (auto* scene_mutable = ctx.GetSceneMutable().get(); scene_mutable != nullptr) {
+  if (lighting_ != nullptr
+    && lighting_grid_built_sequence_ != ctx.frame_sequence) {
+    if (auto* scene_mutable = ctx.GetSceneMutable().get();
+      scene_mutable != nullptr) {
       scene_mutable->Update(false);
       const auto* scene_ptr = static_cast<const scene::Scene*>(scene_mutable);
       frame_light_selection_
@@ -1211,7 +1231,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     if (environment_bindings != nullptr) {
       environment_lighting_state_.published_bindings
         = environment_lighting_state_.published_environment_frame_slot
-          != kInvalidShaderVisibleIndex;
+        != kInvalidShaderVisibleIndex;
       environment_lighting_state_.ambient_bridge_published
         = environment_bindings->ambient_bridge.flags != 0U;
       environment_lighting_state_.ambient_bridge_irradiance_srv
@@ -1293,49 +1313,56 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 22: Post processing
   if (post_process_ != nullptr) {
     post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));
-    auto post_target = ctx.pass_target;
-    if (post_target == nullptr) {
-      if (const auto* active_view = ctx.GetActiveViewEntry(); active_view != nullptr
-        && active_view->primary_target != nullptr) {
-        post_target
-          = observer_ptr<const graphics::Framebuffer> { active_view->primary_target };
+    auto post_target = observer_ptr<const graphics::Framebuffer> {};
+    if (const auto* active_view = ctx.GetActiveViewEntry();
+      active_view != nullptr) {
+      if (active_view->composite_source != nullptr) {
+        post_target = observer_ptr<const graphics::Framebuffer> {
+          active_view->composite_source.get()
+        };
+      } else if (active_view->primary_target != nullptr) {
+        post_target = observer_ptr<const graphics::Framebuffer> {
+          active_view->primary_target.get()
+        };
       }
+    }
+    if (post_target == nullptr) {
+      post_target = ctx.pass_target;
     }
 
     const auto* scene_signal = scene_textures_.GetSceneColorResource().get();
-    auto scene_signal_srv = scene_texture_bindings_.scene_color_srv;
+    auto scene_signal_kind = std::string_view { "scene_color" };
     if (scene_texture_extracts_.resolved_scene_color.valid
       && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
       scene_signal = scene_texture_extracts_.resolved_scene_color.texture;
-      scene_signal_srv = RegisterSceneTextureView(
-        *scene_texture_extracts_.resolved_scene_color.texture,
-        MakeSrvDesc(*scene_texture_extracts_.resolved_scene_color.texture,
-          scene_texture_extracts_.resolved_scene_color.texture->GetDescriptor().format));
-    } else if (scene_signal != nullptr
-      && scene_signal_srv == SceneTextureBindings::kInvalidIndex) {
-      scene_signal_srv = RegisterSceneTextureView(*scene_textures_.GetSceneColorResource(),
-        MakeSrvDesc(scene_textures_.GetSceneColor(),
-          scene_textures_.GetSceneColor().GetDescriptor().format));
+      scene_signal_kind = "resolved_scene_color";
     }
+    CHECK_NOTNULL_F(scene_signal,
+      "SceneRenderer Stage 22 requires a valid SceneColor source texture");
+    const auto scene_signal_srv = ShaderVisibleIndex { RegisterSceneTextureView(
+      *const_cast<graphics::Texture*>(scene_signal),
+      MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
 
     const auto* scene_depth = scene_textures_.GetSceneDepthResource().get();
-    auto scene_depth_srv = scene_texture_bindings_.scene_depth_srv;
     if (scene_texture_extracts_.resolved_scene_depth.valid
       && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
       scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
-      scene_depth_srv = RegisterSceneTextureView(
-        *scene_texture_extracts_.resolved_scene_depth.texture,
-        MakeSrvDesc(*scene_texture_extracts_.resolved_scene_depth.texture,
-          scene_texture_extracts_.resolved_scene_depth.texture->GetDescriptor().format));
     }
+    CHECK_NOTNULL_F(scene_depth,
+      "SceneRenderer Stage 22 requires a valid SceneDepth source texture");
+    const auto scene_depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(
+      *const_cast<graphics::Texture*>(scene_depth),
+      MakeSrvDesc(*scene_depth, scene_depth->GetDescriptor().format)) };
+    CHECK_NOTNULL_F(post_target.get(),
+      "SceneRenderer Stage 22 requires a SceneRenderer-supplied post target");
 
     auto post_process_inputs = PostProcessService::Inputs {
       .scene_signal = scene_signal,
       .scene_depth = scene_depth,
       .scene_velocity = ResolveVelocitySourceTexture(),
       .post_target = post_target,
-      .scene_signal_srv = ShaderVisibleIndex { scene_signal_srv },
-      .scene_depth_srv = ShaderVisibleIndex { scene_depth_srv },
+      .scene_signal_srv = scene_signal_srv,
+      .scene_depth_srv = scene_depth_srv,
       .scene_velocity_srv
       = ShaderVisibleIndex { scene_texture_bindings_.velocity_srv },
     };
@@ -1595,9 +1622,8 @@ void SceneRenderer::RefreshSceneTextureBindings()
     for (std::uint32_t i = 0; i < scene_textures_.GetGBufferCount(); ++i) {
       const auto gbuffer_index = static_cast<GBufferIndex>(i);
       auto& texture = scene_textures_.GetGBuffer(gbuffer_index);
-      scene_texture_bindings_.gbuffer_srvs[i]
-        = RegisterSceneTextureView(texture,
-          MakeSrvDesc(texture, texture.GetDescriptor().format));
+      scene_texture_bindings_.gbuffer_srvs[i] = RegisterSceneTextureView(
+        texture, MakeSrvDesc(texture, texture.GetDescriptor().format));
     }
   }
 }
@@ -1607,15 +1633,15 @@ void SceneRenderer::ResetExtractArtifacts()
   auto& registry = gfx_.GetResourceRegistry();
   const auto reset_artifact
     = [this, &registry](std::shared_ptr<graphics::Texture>& texture) -> void {
-      if (!texture) {
-        return;
-      }
-      if (registry.Contains(*texture)) {
-        gfx_.ForgetKnownResourceState(*texture);
-        registry.UnRegisterResource(*texture);
-      }
-      gfx_.RegisterDeferredRelease(std::move(texture));
-    };
+    if (!texture) {
+      return;
+    }
+    if (registry.Contains(*texture)) {
+      gfx_.ForgetKnownResourceState(*texture);
+      registry.UnRegisterResource(*texture);
+    }
+    gfx_.RegisterDeferredRelease(std::move(texture));
+  };
 
   scene_texture_extracts_.Reset();
   reset_artifact(resolved_scene_color_artifact_.texture);
@@ -1738,7 +1764,8 @@ auto SceneRenderer::RenderDebugVisualization(
   const auto requires_scene_depth = mode == ShaderDebugMode::kSceneDepthRaw
     || mode == ShaderDebugMode::kSceneDepthLinear;
 
-  if (requires_gbuffer && !HasPublishedGBufferBindings(scene_texture_bindings_)) {
+  if (requires_gbuffer
+    && !HasPublishedGBufferBindings(scene_texture_bindings_)) {
     return false;
   }
   if (requires_scene_depth
@@ -1749,20 +1776,20 @@ auto SceneRenderer::RenderDebugVisualization(
 
   if (NeedsDebugVisualizationFramebufferRebuild(
         debug_visualization_framebuffer_, scene_textures)) {
-    debug_visualization_framebuffer_
-      = gfx_.CreateFramebuffer(BuildDebugVisualizationFramebuffer(scene_textures));
+    debug_visualization_framebuffer_ = gfx_.CreateFramebuffer(
+      BuildDebugVisualizationFramebuffer(scene_textures));
   }
 
   const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx_.AcquireCommandRecorder(
-    queue_key, "Vortex DebugVisualization");
+  auto recorder
+    = gfx_.AcquireCommandRecorder(queue_key, "Vortex DebugVisualization");
   if (!recorder) {
     return false;
   }
 
   graphics::GpuEventScope debug_scope(*recorder,
-    fmt::format("Vortex.DebugVisualization.{}",
-      GetDeferredDebugVisualizationName(mode)),
+    fmt::format(
+      "Vortex.DebugVisualization.{}", GetDeferredDebugVisualizationName(mode)),
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
 
@@ -1773,8 +1800,10 @@ auto SceneRenderer::RenderDebugVisualization(
   if (requires_gbuffer) {
     RequireKnownPersistentState(*recorder, scene_textures.GetGBufferNormal());
     RequireKnownPersistentState(*recorder, scene_textures.GetGBufferMaterial());
-    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferBaseColor());
-    RequireKnownPersistentState(*recorder, scene_textures.GetGBufferCustomData());
+    RequireKnownPersistentState(
+      *recorder, scene_textures.GetGBufferBaseColor());
+    RequireKnownPersistentState(
+      *recorder, scene_textures.GetGBufferCustomData());
   }
 
   recorder->RequireResourceState(

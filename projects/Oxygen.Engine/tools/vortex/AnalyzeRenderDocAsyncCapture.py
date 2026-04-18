@@ -124,7 +124,7 @@ def append_positive_count_check(report, label, count):
     report.append("{}={}".format(label, count))
     report.append("{}_present={}".format(label, "true" if present else "false"))
     if not present:
-        raise RuntimeError("{} expected at least one draw".format(label))
+        raise RuntimeError("{} expected at least one matching action".format(label))
 
 
 def append_order_check(report, label, ordered_event_ids):
@@ -140,6 +140,15 @@ def append_order_check(report, label, ordered_event_ids):
                 label, ordered_event_ids
             )
         )
+
+
+def summarize_compositing_activity(compositing_records):
+    return {
+        "work_count": sum(
+            1 for record in compositing_records if is_work_action(record.flags)
+        ),
+        "draw_count": count_named_records(compositing_records, DRAW_NAME),
+    }
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -274,10 +283,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         count_named_records(stage22_tonemap_records, DRAW_NAME)
         or len(stage22_fallback_draws),
     )
+    compositing_activity = summarize_compositing_activity(compositing_records)
     append_positive_count_check(
-        report,
-        "compositing_draw_count",
-        count_named_records(compositing_records, DRAW_NAME),
+        report, "compositing_work_count", compositing_activity["work_count"]
+    )
+    report.append(
+        "compositing_draw_count={}".format(compositing_activity["draw_count"])
+    )
+    report.append(
+        "compositing_draw_present={}".format(
+            "true" if compositing_activity["draw_count"] > 0 else "false"
+        )
     )
 
     report.append(

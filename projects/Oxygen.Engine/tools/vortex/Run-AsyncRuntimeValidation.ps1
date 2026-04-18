@@ -9,11 +9,11 @@ param(
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
-  [int]$Frame = 10,
+  [int]$Frame = 90,
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
-  [int]$RunFrames = 14,
+  [int]$RunFrames = 94,
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
@@ -40,6 +40,37 @@ function Quote-Argument {
   }
 
   return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Get-BlockingRuntimeLogMatches {
+  param([Parameter(Mandatory = $true)][string[]]$Paths)
+
+  $patterns = @(
+    'CHECK FAILED',
+    'handler threw:',
+    '\bUnhandled exception\b',
+    '\bassert(ion)? failed\b',
+    '\bfatal\b',
+    '\babort(ed|ing)?\b'
+  )
+
+  $matches = New-Object System.Collections.Generic.List[string]
+  foreach ($path in $Paths) {
+    if (-not (Test-Path -LiteralPath $path)) {
+      continue
+    }
+
+    foreach ($line in Get-Content -LiteralPath $path) {
+      foreach ($pattern in $patterns) {
+        if ($line -match $pattern) {
+          $matches.Add("$([System.IO.Path]::GetFileName($path)): $line")
+          break
+        }
+      }
+    }
+  }
+
+  return $matches
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -152,6 +183,12 @@ try {
 
 if ($appExitCode -ne 0) {
   throw "Async exited with code $appExitCode. See log: $stderrPath"
+}
+
+$blockingLogMatches = @(Get-BlockingRuntimeLogMatches -Paths @($stdoutPath, $stderrPath))
+if ($blockingLogMatches.Count -gt 0) {
+  $summary = ($blockingLogMatches | Select-Object -First 12) -join [Environment]::NewLine
+  throw "Async runtime log contains blocking errors before capture closeout:`n$summary"
 }
 
 $captureDeadline = (Get-Date).AddSeconds(30)

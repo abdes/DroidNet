@@ -167,6 +167,73 @@ public:
     return auto_exposure_metering_mode_;
   }
 
+  //! Sets the histogram percentiles used by auto exposure.
+  auto SetAutoExposureHistogramPercentiles(
+    const float low_percentile, const float high_percentile) noexcept -> void
+  {
+    auto_exposure_low_percentile_ = low_percentile;
+    auto_exposure_high_percentile_ = high_percentile;
+  }
+
+  //! Gets the low histogram percentile used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureLowPercentile() const noexcept -> float
+  {
+    return auto_exposure_low_percentile_;
+  }
+
+  //! Gets the high histogram percentile used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureHighPercentile() const noexcept -> float
+  {
+    return auto_exposure_high_percentile_;
+  }
+
+  //! Sets the histogram luminance window used by auto exposure.
+  auto SetAutoExposureHistogramWindow(
+    const float min_log_luminance, const float log_luminance_range) noexcept
+    -> void
+  {
+    auto_exposure_min_log_luminance_ = min_log_luminance;
+    auto_exposure_log_luminance_range_ = log_luminance_range;
+  }
+
+  //! Gets the minimum log2 luminance used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureMinLogLuminance() const noexcept -> float
+  {
+    return auto_exposure_min_log_luminance_;
+  }
+
+  //! Gets the log2 luminance range used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureLogLuminanceRange() const noexcept
+    -> float
+  {
+    return auto_exposure_log_luminance_range_;
+  }
+
+  //! Sets the target average luminance used by auto exposure.
+  auto SetAutoExposureTargetLuminance(const float target_luminance) noexcept
+    -> void
+  {
+    auto_exposure_target_luminance_ = target_luminance;
+  }
+
+  //! Gets the target average luminance used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureTargetLuminance() const noexcept -> float
+  {
+    return auto_exposure_target_luminance_;
+  }
+
+  //! Sets the spot-meter radius used by auto exposure.
+  auto SetAutoExposureSpotMeterRadius(const float radius) noexcept -> void
+  {
+    auto_exposure_spot_meter_radius_ = radius;
+  }
+
+  //! Gets the spot-meter radius used by auto exposure.
+  [[nodiscard]] auto GetAutoExposureSpotMeterRadius() const noexcept -> float
+  {
+    return auto_exposure_spot_meter_radius_;
+  }
+
   //! Sets bloom intensity (unitless).
   auto SetBloomIntensity(const float intensity) noexcept -> void
   {
@@ -224,6 +291,18 @@ public:
     return vignette_intensity_;
   }
 
+  //! Sets the display gamma applied after tonemapping.
+  auto SetDisplayGamma(const float gamma) noexcept -> void
+  {
+    display_gamma_ = gamma;
+  }
+
+  //! Gets the display gamma applied after tonemapping.
+  [[nodiscard]] auto GetDisplayGamma() const noexcept -> float
+  {
+    return display_gamma_;
+  }
+
 private:
   engine::ToneMapper tone_mapper_ = engine::ToneMapper::kAcesFitted;
   engine::ExposureMode exposure_mode_ = engine::ExposureMode::kAuto;
@@ -267,6 +346,12 @@ private:
 
   engine::MeteringMode auto_exposure_metering_mode_
     = engine::MeteringMode::kAverage;
+  float auto_exposure_low_percentile_ = 0.1F;
+  float auto_exposure_high_percentile_ = 0.9F;
+  float auto_exposure_min_log_luminance_ = -12.0F;
+  float auto_exposure_log_luminance_range_ = 25.0F;
+  float auto_exposure_target_luminance_ = 0.18F;
+  float auto_exposure_spot_meter_radius_ = 0.2F;
 
   float bloom_intensity_ = 0.0F;
   float bloom_threshold_ = 1.0F;
@@ -275,6 +360,7 @@ private:
   float contrast_ = 1.0F;
 
   float vignette_intensity_ = 0.0F;
+  float display_gamma_ = 2.2F;
 };
 
 } // namespace oxygen::scene::environment
