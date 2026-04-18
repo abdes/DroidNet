@@ -288,6 +288,116 @@ def find_output_sample(draw_state, name):
     return None
 
 
+def sample_rgb_delta(values_a, values_b):
+    return max(abs(values_b[index] - values_a[index]) for index in range(3))
+
+
+def resolve_far_depth_reference(depth_sample, epsilon=1.0e-3):
+    if depth_sample is None:
+        return 0.0
+
+    probe_depths = [depth_sample["center"][0]]
+    probe_depths.extend(values[0] for values in depth_sample["probes"].values())
+    zero_hits = sum(1 for value in probe_depths if abs(value - 0.0) <= epsilon)
+    one_hits = sum(1 for value in probe_depths if abs(value - 1.0) <= epsilon)
+    return 0.0 if zero_hits >= one_hits else 1.0
+
+
+def probe_luminance(values):
+    return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722
+
+
+def evaluate_stage15_far_background_mask(
+    depth_sample, stage12_sample, sky_sample, epsilon=1.0e-3, foreground_delta_limit=5.0e-3
+):
+    if depth_sample is None or stage12_sample is None or sky_sample is None:
+        return {
+            "far_depth_reference": 0.0,
+            "background_probe_count": 0,
+            "foreground_probe_count": 0,
+            "foreground_delta_max": 0.0,
+            "valid": False,
+        }
+
+    far_depth_reference = resolve_far_depth_reference(depth_sample, epsilon)
+    background_probe_count = 0
+    foreground_probe_count = 0
+    foreground_delta_max = 0.0
+
+    def visit(depth_values, before_values, after_values):
+        nonlocal background_probe_count
+        nonlocal foreground_probe_count
+        nonlocal foreground_delta_max
+
+        depth_value = depth_values[0]
+        delta = sample_rgb_delta(before_values, after_values)
+        if abs(depth_value - far_depth_reference) <= epsilon:
+            background_probe_count += 1
+        else:
+            foreground_probe_count += 1
+            foreground_delta_max = max(foreground_delta_max, delta)
+
+    visit(depth_sample["center"], stage12_sample["center"], sky_sample["center"])
+    for probe_name in stage12_sample["probes"].keys():
+        visit(
+            depth_sample["probes"][probe_name],
+            stage12_sample["probes"][probe_name],
+            sky_sample["probes"][probe_name],
+        )
+
+    return {
+        "far_depth_reference": far_depth_reference,
+        "background_probe_count": background_probe_count,
+        "foreground_probe_count": foreground_probe_count,
+        "foreground_delta_max": foreground_delta_max,
+        "valid": foreground_delta_max <= foreground_delta_limit,
+    }
+
+
+def evaluate_stage15_sky_quality(depth_sample, sky_sample, epsilon=1.0e-3):
+    if depth_sample is None or sky_sample is None:
+        return {
+            "background_probe_count": 0,
+            "background_luminance_min": 0.0,
+            "background_luminance_max": 0.0,
+            "background_luminance_range": 0.0,
+            "valid": False,
+        }
+
+    far_depth_reference = resolve_far_depth_reference(depth_sample, epsilon)
+    background_luminances = []
+
+    def maybe_add(depth_values, color_values):
+        if abs(depth_values[0] - far_depth_reference) <= epsilon:
+            background_luminances.append(probe_luminance(color_values))
+
+    maybe_add(depth_sample["center"], sky_sample["center"])
+    for probe_name in sky_sample["probes"].keys():
+        maybe_add(depth_sample["probes"][probe_name], sky_sample["probes"][probe_name])
+
+    if not background_luminances:
+        return {
+            "background_probe_count": 0,
+            "background_luminance_min": 0.0,
+            "background_luminance_max": 0.0,
+            "background_luminance_range": 0.0,
+            "valid": False,
+        }
+
+    luminance_min = min(background_luminances)
+    luminance_max = max(background_luminances)
+    luminance_range = luminance_max - luminance_min
+    return {
+        "background_probe_count": len(background_luminances),
+        "background_luminance_min": luminance_min,
+        "background_luminance_max": luminance_max,
+        "background_luminance_range": luminance_range,
+        "valid": len(background_luminances) >= 4
+        and luminance_range >= 5.0e-2
+        and luminance_max <= 1.0 + 1.0e-3,
+    }
+
+
 def max_sample_delta(a_sample, b_sample):
     if a_sample is None or b_sample is None:
         return 0.0
@@ -542,6 +652,24 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
     stage15_atmosphere_scene_color_changed = stage15_atmosphere_scene_color_delta > 1.0e-5
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
+    stage15_async_scene_color_delta = max(
+        max_sample_delta(stage12_final_scene_color, stage15_fog_scene_color),
+        dense_grid_delta(
+            controller,
+            rd,
+            stage12_spot_last_draw.event_id,
+            stage12_final_scene_color,
+            stage15_fog_last_draw.event_id,
+            stage15_fog_scene_color,
+        ),
+    )
+    stage15_async_scene_color_changed = stage15_async_scene_color_delta > 1.0e-5
+    stage15_far_background_mask = evaluate_stage15_far_background_mask(
+        stage3["depth"], stage12_final_scene_color, stage15_sky_scene_color
+    )
+    stage15_sky_quality = evaluate_stage15_sky_quality(
+        stage3["depth"], stage15_sky_scene_color
+    )
 
     tonemap_output = stage22_tonemap["outputs"][0] if stage22_tonemap["outputs"] else None
     tonemap_output_nonzero = tonemap_output is not None and tonemap_output["rgb_nonzero"]
@@ -632,6 +760,61 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             str(stage15_fog_scene_color_changed).lower()
         )
     )
+    report.append(
+        "stage15_async_scene_color_delta_max={:.6f}".format(
+            stage15_async_scene_color_delta
+        )
+    )
+    report.append(
+        "stage15_async_scene_color_changed={}".format(
+            str(stage15_async_scene_color_changed).lower()
+        )
+    )
+    report.append(
+        "stage15_far_depth_reference={:.6f}".format(
+            stage15_far_background_mask["far_depth_reference"]
+        )
+    )
+    report.append(
+        "stage15_background_probe_count={}".format(
+            stage15_sky_quality["background_probe_count"]
+        )
+    )
+    report.append(
+        "stage15_foreground_probe_count={}".format(
+            stage15_far_background_mask["foreground_probe_count"]
+        )
+    )
+    report.append(
+        "stage15_foreground_delta_max={:.6f}".format(
+            stage15_far_background_mask["foreground_delta_max"]
+        )
+    )
+    report.append(
+        "stage15_far_background_mask_valid={}".format(
+            str(stage15_far_background_mask["valid"]).lower()
+        )
+    )
+    report.append(
+        "stage15_background_luminance_min={:.6f}".format(
+            stage15_sky_quality["background_luminance_min"]
+        )
+    )
+    report.append(
+        "stage15_background_luminance_max={:.6f}".format(
+            stage15_sky_quality["background_luminance_max"]
+        )
+    )
+    report.append(
+        "stage15_background_luminance_range={:.6f}".format(
+            stage15_sky_quality["background_luminance_range"]
+        )
+    )
+    report.append(
+        "stage15_sky_quality_ok={}".format(
+            str(stage15_sky_quality["valid"]).lower()
+        )
+    )
     report.append("stage22_tonemap_output_nonzero={}".format(str(tonemap_output_nonzero).lower()))
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     report.append(
@@ -658,6 +841,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_sky_scene_color_changed
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
+        and stage15_async_scene_color_changed
+        and stage15_far_background_mask["valid"]
+        and stage15_sky_quality["valid"]
         and tonemap_output_nonzero
         and final_present_nonzero
         and imgui_overlay_composited_on_scene

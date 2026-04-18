@@ -280,6 +280,14 @@ def find_output_sample(draw_state, name):
     return None
 
 
+def choose_latest_stage_sample(candidates):
+    available = [candidate for candidate in candidates if candidate[0] is not None]
+    if not available:
+        return None, None, ""
+    last_draw, draw_state, label = max(available, key=lambda candidate: candidate[0].event_id)
+    return last_draw, draw_state, label
+
+
 def max_sample_delta(a_sample, b_sample):
     if a_sample is None or b_sample is None:
         return 0.0
@@ -451,7 +459,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         sample["name"] == "SceneColor" and sample["rgb_nonzero"]
         for sample in stage12_directional["outputs"]
     )
-    stage12_final_scene_color = find_output_sample(stage12_point, "SceneColor")
+    stage12_final_last_draw, stage12_final_draw_state, stage12_final_label = choose_latest_stage_sample(
+        [
+            (stage12_directional_last_draw, stage12_directional, "directional"),
+            (stage12_point_last_draw, stage12_point, "point"),
+            (stage12_spot_last_draw, stage12_spot, "spot"),
+        ]
+    )
+    stage12_final_scene_color = find_output_sample(stage12_final_draw_state, "SceneColor")
+    if stage12_final_last_draw is None or stage12_final_scene_color is None:
+        raise RuntimeError("Required VortexBasic final Stage 12 SceneColor output was not found.")
     stage15_sky_scene_color = find_output_sample(stage15_sky, "SceneColor")
     stage15_atmosphere_scene_color = find_output_sample(stage15_atmosphere, "SceneColor")
     stage15_fog_scene_color = find_output_sample(stage15_fog, "SceneColor")
@@ -467,7 +484,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_sky_scene_color_dense_delta = dense_grid_delta(
         controller,
         rd,
-        stage12_point_last_draw.event_id,
+        stage12_final_last_draw.event_id,
         stage12_final_scene_color,
         stage15_sky_last_draw.event_id,
         stage15_sky_scene_color,
@@ -513,6 +530,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage12_spot_last_draw_event={}".format(stage12_spot_last_draw.event_id if stage12_spot_last_draw else ""))
     report.append("stage12_point_last_draw_event={}".format(stage12_point_last_draw.event_id if stage12_point_last_draw else ""))
     report.append("stage12_directional_last_draw_event={}".format(stage12_directional_last_draw.event_id))
+    report.append("stage12_final_last_draw_event={}".format(stage12_final_last_draw.event_id))
+    report.append("stage12_final_last_draw_label={}".format(stage12_final_label))
     report.append("stage15_sky_last_draw_event={}".format(stage15_sky_last_draw.event_id))
     report.append(
         "stage15_atmosphere_last_draw_event={}".format(stage15_atmosphere_last_draw.event_id)

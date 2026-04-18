@@ -288,6 +288,27 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  SkyShaderUsesProjectionAwareFarDepthReferenceWithoutDualEndpointFallback)
+{
+  const auto source_root = SourceRoot();
+  const auto sky_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl");
+  const auto atmosphere_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl");
+  const auto fog_source = ReadTextFile(
+    source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl");
+
+  EXPECT_TRUE(sky_source.contains("const float far_depth = ResolveFarDepthReference();"));
+  EXPECT_TRUE(sky_source.contains("abs(scene_depth - far_depth)"));
+  EXPECT_TRUE(sky_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_TRUE(atmosphere_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_TRUE(fog_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_FALSE(sky_source.contains("reverse_z_far"));
+  EXPECT_FALSE(sky_source.contains("forward_z_far"));
+  EXPECT_FALSE(sky_source.contains("max(reverse_z_far, forward_z_far)"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   AtmosphereAndFogShadersStayDepthAwareSceneCompositionPasses)
 {
   const auto source_root = SourceRoot();
@@ -305,6 +326,30 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(fog_source.contains("ReconstructWorldPosition"));
   EXPECT_TRUE(fog_source.contains("fog_alpha"));
   EXPECT_FALSE(fog_source.contains("discard;"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  Stage15ProofToolsUseFinalStage12BaselineAndEmitBlockingAsyncQualityKeys)
+{
+  const auto repo_root = SourceRoot().parent_path().parent_path();
+  const auto vortexbasic_products = ReadTextFile(
+    repo_root / "tools/vortex/AnalyzeRenderDocVortexBasicProducts.py");
+  const auto async_products = ReadTextFile(
+    repo_root / "tools/vortex/AnalyzeRenderDocAsyncProducts.py");
+  const auto async_assert = ReadTextFile(
+    repo_root / "tools/vortex/Assert-AsyncRuntimeProof.ps1");
+
+  EXPECT_TRUE(vortexbasic_products.contains("choose_latest_stage_sample"));
+  EXPECT_TRUE(vortexbasic_products.contains("stage12_final_last_draw_event"));
+  EXPECT_FALSE(vortexbasic_products.contains("stage12_final_scene_color = find_output_sample(stage12_point, \"SceneColor\")"));
+
+  EXPECT_TRUE(async_products.contains("stage15_async_scene_color_changed"));
+  EXPECT_TRUE(async_products.contains("stage15_far_background_mask_valid"));
+  EXPECT_TRUE(async_products.contains("stage15_sky_quality_ok"));
+
+  EXPECT_TRUE(async_assert.contains("'stage15_async_scene_color_changed'"));
+  EXPECT_TRUE(async_assert.contains("'stage15_far_background_mask_valid'"));
+  EXPECT_TRUE(async_assert.contains("'stage15_sky_quality_ok'"));
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
