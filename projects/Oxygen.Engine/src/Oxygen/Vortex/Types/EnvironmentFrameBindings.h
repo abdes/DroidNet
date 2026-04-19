@@ -17,6 +17,13 @@
 
 namespace oxygen::vortex {
 
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagAtmosphereLight0Enabled = 1U << 0U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagAtmosphereLight1Enabled = 1U << 1U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagShadowAuthoritySlot0Only = 1U << 2U;
+
 //! Bindless environment-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   ShaderVisibleIndex environment_static_slot { kInvalidShaderVisibleIndex };
