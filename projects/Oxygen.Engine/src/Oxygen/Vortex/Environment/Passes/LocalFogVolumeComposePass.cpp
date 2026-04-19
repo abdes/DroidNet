@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 
+#include <cmath>
 #include <limits>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -17,7 +19,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
-#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -34,7 +35,6 @@ auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
   -> graphics::ResourceViewType
 {
   using graphics::ResourceViewType;
-
   switch (type) {
   case bindless_d3d12::RangeType::SRV:
     return ResourceViewType::kRawBuffer_SRV;
@@ -92,6 +92,16 @@ auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
   return bindings;
 }
 
+auto TrackBufferFromKnownOrInitial(
+  graphics::CommandRecorder& recorder, const graphics::Buffer& buffer) -> void
+{
+  if (recorder.IsResourceTracked(buffer) || recorder.AdoptKnownResourceState(buffer)) {
+    return;
+  }
+  recorder.BeginTrackingResourceState(buffer, graphics::ResourceStates::kCommon,
+    true);
+}
+
 auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
   const graphics::Texture& texture) -> void
 {
@@ -107,7 +117,7 @@ auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
   recorder.BeginTrackingResourceState(texture, initial);
 }
 
-auto BuildAtmosphereFramebuffer(const SceneTextures& scene_textures)
+auto BuildFramebuffer(const SceneTextures& scene_textures)
   -> graphics::FramebufferDesc
 {
   auto desc = graphics::FramebufferDesc {};
@@ -152,35 +162,42 @@ auto SetViewportAndScissor(graphics::CommandRecorder& recorder,
   });
 }
 
-auto BuildAtmospherePipelineDesc(const SceneTextures& scene_textures)
+auto BuildPipelineDesc(
+  const SceneTextures& scene_textures, const bool reverse_z)
   -> graphics::GraphicsPipelineDesc
 {
   auto root_bindings = BuildVortexRootBindings();
-  const auto alpha_blend = graphics::BlendTargetDesc {
+  const auto fog_blend = graphics::BlendTargetDesc {
     .blend_enable = true,
-    .src_blend = graphics::BlendFactor::kSrcAlpha,
-    .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+    .src_blend = graphics::BlendFactor::kOne,
+    .dest_blend = graphics::BlendFactor::kSrcAlpha,
     .blend_op = graphics::BlendOp::kAdd,
-    .src_blend_alpha = graphics::BlendFactor::kOne,
-    .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
+    .src_blend_alpha = graphics::BlendFactor::kZero,
+    .dest_blend_alpha = graphics::BlendFactor::kSrcAlpha,
     .blend_op_alpha = graphics::BlendOp::kAdd,
     .write_mask = graphics::ColorWriteMask::kAll,
   };
   return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
-      .source_path = "Vortex/Services/Environment/AtmosphereCompose.hlsl",
-      .entry_point = "VortexAtmosphereComposeVS",
+      .source_path = "Vortex/Services/Environment/LocalFogVolumeCompose.hlsl",
+      .entry_point = "VortexLocalFogVolumeComposeVS",
     })
     .SetPixelShader(graphics::ShaderRequest {
       .stage = ShaderType::kPixel,
-      .source_path = "Vortex/Services/Environment/AtmosphereCompose.hlsl",
-      .entry_point = "VortexAtmosphereComposePS",
+      .source_path = "Vortex/Services/Environment/LocalFogVolumeCompose.hlsl",
+      .entry_point = "VortexLocalFogVolumeComposePS",
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
-    .SetDepthStencilState(graphics::DepthStencilStateDesc::Disabled())
-    .SetBlendState({ alpha_blend })
+    .SetDepthStencilState(graphics::DepthStencilStateDesc {
+      .depth_test_enable = true,
+      .depth_write_enable = false,
+      .depth_func = reverse_z ? graphics::CompareOp::kGreaterOrEqual
+                              : graphics::CompareOp::kLessOrEqual,
+      .stencil_enable = false,
+    })
+    .SetBlendState({ fog_blend })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {
         scene_textures.GetSceneColor().GetDescriptor().format,
@@ -191,63 +208,159 @@ auto BuildAtmospherePipelineDesc(const SceneTextures& scene_textures)
     })
     .SetRootBindings(std::span<const graphics::RootBindingItem>(
       root_bindings.data(), root_bindings.size()))
-    .SetDebugName("Vortex.Environment.Atmosphere")
+    .SetDebugName("Vortex.Environment.LocalFogCompose")
     .Build();
+}
+
+auto ComputeLocalFogStartDepthZ(const ResolvedView& resolved_view,
+  const float global_start_distance_meters) -> float
+{
+  if (global_start_distance_meters <= 1.0e-6F) {
+    return resolved_view.ReverseZ() ? 1.0F : 0.0F;
+  }
+
+  const auto view_space_corner
+    = resolved_view.InverseProjection() * glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
+  const auto corner = glm::vec3(view_space_corner);
+  const auto corner_length = glm::length(corner);
+  if (corner_length <= 1.0e-6F) {
+    return 0.0F;
+  }
+
+  const auto ratio = std::abs(view_space_corner.z) / corner_length;
+  const auto view_space_start_fog_point
+    = glm::vec4(0.0F, 0.0F, -global_start_distance_meters * ratio, 1.0F);
+  const auto clip_space
+    = resolved_view.ProjectionMatrix() * view_space_start_fog_point;
+  if (std::abs(clip_space.w) <= 1.0e-6F) {
+    return 0.0F;
+  }
+
+  return std::clamp(clip_space.z / clip_space.w, 0.0F, 1.0F);
 }
 
 } // namespace
 
-AtmosphereComposePass::AtmosphereComposePass(Renderer& renderer)
+LocalFogVolumeComposePass::LocalFogVolumeComposePass(Renderer& renderer)
   : renderer_(renderer)
 {
 }
 
-AtmosphereComposePass::~AtmosphereComposePass() = default;
+LocalFogVolumeComposePass::~LocalFogVolumeComposePass() = default;
 
-auto AtmosphereComposePass::Record(
-  RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
+auto LocalFogVolumeComposePass::EnsurePassConstantsBuffer() -> bool
 {
-  const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_atmosphere;
-  auto state = RecordState {
-    .requested = requested,
-    .executed = requested
-      && renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting),
-  };
+  if (pass_constants_buffer_.has_value()) {
+    return true;
+  }
+  auto gfx = renderer_.GetGraphics();
+  if (gfx == nullptr) {
+    return false;
+  }
+  pass_constants_buffer_.emplace(observer_ptr { gfx.get() },
+    renderer_.GetStagingProvider(), static_cast<std::uint32_t>(sizeof(PassConstants)),
+    observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+    "Environment.LocalFogCompose.PassConstants");
+  return true;
+}
 
-  if (!state.executed) {
+auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
+  const SceneTextures& scene_textures,
+  const internal::LocalFogVolumeState::ViewProducts& products) -> RecordState
+{
+  auto state = RecordState {
+    .requested = renderer_.GetLocalFogEnabled() && ctx.current_view.with_local_fog
+      && products.buffer_ready
+      && products.tile_data_ready
+      && products.occupied_tile_buffer_slot.IsValid()
+      && products.instance_count > 0U
+      && products.occupied_tile_draw_args_buffer != nullptr
+      && products.occupied_tile_draw_count_buffer != nullptr,
+    .executed = false,
+  };
+  if (!state.requested
+    || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
     return state;
   }
 
   auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr) {
-    state.executed = false;
+  if (gfx == nullptr || !EnsurePassConstantsBuffer()) {
     return state;
   }
 
-  auto framebuffer
-    = gfx->CreateFramebuffer(BuildAtmosphereFramebuffer(scene_textures));
+  const auto tile_pixel_size = renderer_.GetLocalFogTilePixelSize();
+  const auto extent = scene_textures.GetExtent();
+  auto view_width = extent.x;
+  auto view_height = extent.y;
+  const auto global_start_distance_meters
+    = renderer_.GetLocalFogGlobalStartDistanceMeters();
+  auto start_depth_z = 0.0F;
+  auto reverse_z = true;
+  if (const auto* resolved_view = ctx.current_view.resolved_view.get();
+    resolved_view != nullptr) {
+    const auto viewport = resolved_view->Viewport();
+    if (viewport.IsValid()) {
+      view_width = (std::max)(
+        static_cast<std::uint32_t>(std::ceil(viewport.width)), 1U);
+      view_height = (std::max)(
+        static_cast<std::uint32_t>(std::ceil(viewport.height)), 1U);
+    }
+    start_depth_z = ComputeLocalFogStartDepthZ(
+      *resolved_view, global_start_distance_meters);
+    reverse_z = resolved_view->ReverseZ();
+  }
+
+  pass_constants_buffer_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+  auto constants = PassConstants {
+    .instance_buffer_slot = products.instance_buffer_slot.get(),
+    .tile_data_texture_slot = products.tile_data_texture_slot.get(),
+    .occupied_tile_buffer_slot = products.occupied_tile_buffer_slot.get(),
+    .tile_resolution_x = products.tile_resolution_x,
+    .tile_resolution_y = products.tile_resolution_y,
+    .max_instances_per_tile = products.max_instances_per_tile,
+    .instance_count = products.instance_count,
+    .tile_pixel_size = tile_pixel_size,
+    .view_width = view_width,
+    .view_height = view_height,
+    .global_start_distance_meters = global_start_distance_meters,
+    .start_depth_z = start_depth_z,
+  };
+  auto constants_alloc = pass_constants_buffer_->Allocate(1U);
+  if (!constants_alloc.has_value() || !constants_alloc->TryWriteObject(constants)) {
+    return state;
+  }
+
+  auto framebuffer = gfx->CreateFramebuffer(BuildFramebuffer(scene_textures));
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
   auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "EnvironmentLightingService Atmosphere");
+    = gfx->AcquireCommandRecorder(queue_key, "EnvironmentLightingService LocalFogCompose");
   if (!recorder) {
-    state.executed = false;
     return state;
   }
 
-  graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage15.Atmosphere",
-    profiling::ProfileGranularity::kDiagnostic,
-    profiling::ProfileCategory::kPass);
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneColor());
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneDepth());
+  TrackBufferFromKnownOrInitial(*recorder, *products.occupied_tile_draw_args_buffer);
+  TrackBufferFromKnownOrInitial(*recorder, *products.occupied_tile_draw_count_buffer);
+
+  graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage15.LocalFog",
+    profiling::ProfileGranularity::kDiagnostic,
+    profiling::ProfileCategory::kPass);
   recorder->RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceState(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  recorder->RequireResourceState(
+    *products.occupied_tile_draw_args_buffer,
+    graphics::ResourceStates::kIndirectArgument);
+  recorder->RequireResourceState(
+    *products.occupied_tile_draw_count_buffer,
+    graphics::ResourceStates::kIndirectArgument);
   recorder->FlushBarriers();
+
   recorder->BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(*recorder, ctx, scene_textures);
-  recorder->SetPipelineState(BuildAtmospherePipelineDesc(scene_textures));
+  recorder->SetPipelineState(BuildPipelineDesc(scene_textures, reverse_z));
   if (ctx.view_constants != nullptr) {
     recorder->SetGraphicsRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
@@ -258,16 +371,41 @@ auto AtmosphereComposePass::Record(
     0U, 0U);
   recorder->SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    0U, 1U);
-  recorder->Draw(3U, 1U, 0U, 0U);
+    constants_alloc->srv.get(), 1U);
+  recorder->ExecuteIndirect(*products.occupied_tile_draw_args_buffer,
+    graphics::CommandRecorder::IndirectCommandDesc {
+      .kind = graphics::CommandRecorder::IndirectCommandKind::kDraw,
+    },
+    graphics::CommandRecorder::IndirectExecutionDesc {
+      .argument_buffer_range = { 0U, 0U },
+      .command_count = graphics::CommandRecorder::IndirectCommandCount {
+        products.tile_capacity
+      },
+      .count_buffer
+      = observer_ptr<const graphics::Buffer> {
+        products.occupied_tile_draw_count_buffer.get()
+      },
+      .count_buffer_range = { 0U, sizeof(std::uint32_t) },
+    });
+
+  LOG_F(INFO, "local_fog_indirect_draw_valid=true tile_capacity={} instances={}",
+    products.tile_capacity, products.instance_count);
+
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+  recorder->RequireResourceStateFinal(*products.occupied_tile_draw_args_buffer,
+    graphics::ResourceStates::kIndirectArgument);
+  recorder->RequireResourceStateFinal(*products.occupied_tile_draw_count_buffer,
+    graphics::ResourceStates::kIndirectArgument);
   gfx->RegisterDeferredRelease(std::move(framebuffer));
+
+  state.executed = true;
   state.draw_count = 1U;
   state.bound_scene_color = true;
   state.sampled_scene_depth = true;
+  state.consumed_instance_buffer = true;
   return state;
 }
 

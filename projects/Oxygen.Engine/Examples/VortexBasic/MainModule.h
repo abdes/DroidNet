@@ -9,16 +9,20 @@
 #include <atomic>
 #include <memory>
 #include <optional>
+#include <random>
 #include <string_view>
 
+#include <glm/gtc/quaternion.hpp>
 #include <glm/vec2.hpp>
+#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Scene/Scene.h>
@@ -27,7 +31,6 @@
 
 namespace oxygen {
 class Graphics;
-class IAsyncEngine;
 namespace engine {
   class FrameContext;
 }
@@ -110,12 +113,13 @@ private:
   auto ReleasePublishedRuntimeView(
     observer_ptr<engine::FrameContext> context = nullptr) -> void;
   auto ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>;
-  [[nodiscard]] auto BuildResolvedView(
-    uint32_t width, uint32_t height) -> std::optional<ResolvedView>;
+  [[nodiscard]] auto BuildResolvedView(uint32_t width, uint32_t height)
+    -> std::optional<ResolvedView>;
   auto EnsureScene() -> void;
   auto EnsureCamera(uint32_t width, uint32_t height) -> void;
   auto EnsureLighting() -> void;
-  auto UpdateValidationScene(observer_ptr<engine::FrameContext> context) -> void;
+  auto UpdateValidationScene(observer_ptr<engine::FrameContext> context)
+    -> void;
   [[nodiscard]] auto ResolveViewExtent() const noexcept -> glm::uvec2;
   auto EnsureSceneFb(uint32_t width, uint32_t height) -> void;
   auto ClearSceneFb() -> void;
@@ -133,6 +137,7 @@ private:
   scene::SceneNode directional_light_node_ {};
   scene::SceneNode point_light_node_ {};
   scene::SceneNode spot_light_node_ {};
+  scene::SceneNode local_fog_volume_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
   static inline std::atomic<uint64_t> s_next_view_id_ { 2000 };
@@ -142,7 +147,12 @@ private:
   uint32_t scene_fb_width_ { 0 };
   uint32_t scene_fb_height_ { 0 };
   float animation_time_seconds_ { 0.0F };
-  vortex::ShaderDebugMode shader_debug_mode_ { vortex::ShaderDebugMode::kDisabled };
+  Quat cube_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
+  glm::vec3 cube_rotation_axis_ { 0.0F, 0.0F, 1.0F };
+  std::mt19937 cube_rotation_rng_ { std::random_device {}() };
+  vortex::ShaderDebugMode shader_debug_mode_ {
+    vortex::ShaderDebugMode::kDisabled
+  };
 };
 
 } // namespace oxygen::examples::vortex_basic

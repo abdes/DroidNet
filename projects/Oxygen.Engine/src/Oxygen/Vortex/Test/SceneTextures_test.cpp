@@ -6,6 +6,10 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
 #include <glm/vec2.hpp>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -177,6 +181,15 @@ TEST(SceneTextureSetupModeContractTest, FlagsComposeWithoutAdHocSequencing)
   EXPECT_FALSE(setup_mode.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity));
 }
 
+auto ReadTextFile(const std::filesystem::path& path) -> std::string
+{
+  std::ifstream stream(path, std::ios::binary);
+  EXPECT_TRUE(stream.is_open()) << path.string();
+  std::ostringstream buffer;
+  buffer << stream.rdbuf();
+  return buffer.str();
+}
+
 TEST(SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedAbi)
 {
   SceneTextureBindings bindings {};
@@ -200,10 +213,18 @@ TEST(SceneTextureBindingsContractTest, ReservesFutureGBufferSlotsInThePublishedA
 TEST(ViewFrameBindingsContractTest, SceneTextureSlotPreservesLayoutContract)
 {
   ViewFrameBindings bindings {};
+  const auto source_root
+    = std::filesystem::path { __FILE__ }.parent_path().parent_path().parent_path();
+  const auto hlsl_path = source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/ViewFrameBindings.hlsli";
+  const auto hlsl_source = ReadTextFile(hlsl_path);
 
   EXPECT_EQ(bindings.scene_texture_frame_slot, oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_EQ(sizeof(ViewFrameBindings), 48U);
+  EXPECT_EQ(sizeof(ViewFrameBindings), 64U);
   EXPECT_EQ(alignof(ViewFrameBindings), 16U);
+  EXPECT_TRUE(hlsl_source.contains("uint _pad0;"));
+  EXPECT_TRUE(hlsl_source.contains("uint _pad1;"));
+  EXPECT_TRUE(hlsl_source.contains("uint _pad2;"));
 }
 
 } // namespace

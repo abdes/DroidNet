@@ -282,7 +282,7 @@ namespace {
     if (shading_mode == ShadingMode::kDeferred) {
       request.current_closest = true;
     }
-    if (shading_mode == ShadingMode::kDeferred) {
+    if (shading_mode == ShadingMode::kDeferred || ctx.current_view.with_local_fog) {
       request.current_furthest = true;
       request.publish_previous_furthest = true;
     }

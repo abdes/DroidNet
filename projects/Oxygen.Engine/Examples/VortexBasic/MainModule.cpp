@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,6 +19,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -34,13 +36,14 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
-#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 
 #include "DemoShell/Runtime/AppWindow.h"
@@ -55,9 +58,41 @@ namespace {
 
 constexpr uint32_t kDefaultOffscreenWidth = 1280U;
 constexpr uint32_t kDefaultOffscreenHeight = 720U;
+constexpr glm::vec3 kFloorCenter { 0.0F, 0.0F, -0.125F };
+constexpr glm::vec3 kFloorScale { 20.0F, 20.0F, 0.25F };
+constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
+constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
+constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
+constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
+constexpr float kDirectionalLightOrbitPeriodSeconds = 10.0F;
+constexpr float kDirectionalLightOrbitRadiusX = 18.0F;
+constexpr float kDirectionalLightOrbitRadiusY = 12.0F;
+constexpr float kDirectionalLightBaseHeight = 12.0F;
+constexpr float kDirectionalLightHeightVariation = 6.0F;
+constexpr float kPointLightOrbitRadius = 2.0F;
+constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
+constexpr float kSpotlightOscillationAmplitude = 3.0F;
+constexpr float kSpotlightOscillationPeriodSeconds = 6.0F;
+constexpr float kCubeRotationAnglePerSecond = glm::radians(20.0F);
 
-auto NormalizeOrFallback(
-  const glm::vec3& direction, const glm::vec3& fallback) -> glm::vec3
+auto RandomUnitAxis(std::mt19937& rng) -> glm::vec3
+{
+  std::uniform_real_distribution<float> component_dist(-1.0F, 1.0F);
+  auto axis = glm::vec3(0.0F);
+  while (true) {
+    axis = glm::vec3 {
+      component_dist(rng),
+      component_dist(rng),
+      component_dist(rng),
+    };
+    if (glm::dot(axis, axis) > oxygen::math::Epsilon) {
+      return glm::normalize(axis);
+    }
+  }
+}
+
+auto NormalizeOrFallback(const glm::vec3& direction, const glm::vec3& fallback)
+  -> glm::vec3
 {
   const auto length_sq = glm::dot(direction, direction);
   if (length_sq <= oxygen::math::Epsilon) {
@@ -71,8 +106,7 @@ auto RotationFromDirToDir(const glm::vec3& from_dir,
   const glm::vec3& direction) -> glm::quat
 {
   const auto to_dir = NormalizeOrFallback(direction, fallback_dir);
-  const auto cos_theta
-    = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
+  const auto cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
 
   if (cos_theta >= 0.9999F) {
     return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
@@ -94,11 +128,37 @@ auto LookRotation(const glm::vec3& position, const glm::vec3& target)
     oxygen::space::move::Forward, oxygen::space::move::Up, target - position);
 }
 
-auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target)
-  -> glm::quat
+auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
+  const glm::vec3& up_direction = oxygen::space::move::Up) -> glm::quat
 {
-  return RotationFromDirToDir(oxygen::space::look::Forward,
-    oxygen::space::look::Forward, oxygen::space::look::Up, target - position);
+  const auto forward_raw = target - position;
+  const float forward_len2 = glm::dot(forward_raw, forward_raw);
+  if (forward_len2 <= 1e-8F) {
+    return { 1.0F, 0.0F, 0.0F, 0.0F };
+  }
+
+  const auto forward = glm::normalize(forward_raw);
+  glm::vec3 up_dir = up_direction;
+  const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
+  if (dot_abs > 0.999F) {
+    up_dir = (std::abs(forward.z) > 0.9F) ? oxygen::space::move::Back
+                                          : oxygen::space::move::Up;
+  }
+
+  const auto right_raw = glm::cross(forward, up_dir);
+  const float right_len2 = glm::dot(right_raw, right_raw);
+  if (right_len2 <= std::numeric_limits<float>::epsilon()) {
+    return { 1.0F, 0.0F, 0.0F, 0.0F };
+  }
+
+  const auto right = right_raw / std::sqrt(right_len2);
+  const auto up = glm::cross(right, forward);
+
+  glm::mat4 look_matrix(1.0F);
+  look_matrix[0] = glm::vec4(right, 0.0F);
+  look_matrix[1] = glm::vec4(up, 0.0F);
+  look_matrix[2] = glm::vec4(-forward, 0.0F);
+  return glm::quat_cast(look_matrix);
 }
 
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
@@ -137,8 +197,7 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
 
 auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
   const glm::vec4& rgba, const float roughness = 0.9F,
-  const float metalness = 0.0F)
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+  const float metalness = 0.0F) -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   namespace d = oxygen::data;
   namespace pak = d::pak;
@@ -175,9 +234,8 @@ auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<d::GeometryAsset>(
-    d::AssetKey::FromVirtualPath(
-      "/Engine/Examples/VortexBasic/Geometry/" + std::string(geometry_name)
-      + ".ogeo"),
+    d::AssetKey::FromVirtualPath("/Engine/Examples/VortexBasic/Geometry/"
+      + std::string(geometry_name) + ".ogeo"),
     geo_desc, std::vector<std::shared_ptr<d::Mesh>> { std::move(mesh) });
 }
 
@@ -433,12 +491,14 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.name = "MainView";
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
-  view_ctx.metadata.with_atmosphere = true;
+  view_ctx.metadata.with_atmosphere = app_.with_atmosphere;
+  view_ctx.metadata.with_height_fog = app_.with_height_fog;
+  view_ctx.metadata.with_local_fog = app_.with_local_fog;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
 
-  renderer->UpsertPublishedRuntimeView(
-    *context, main_view_id_, std::move(view_ctx), vortex::ShadingMode::kDeferred);
+  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
+    std::move(view_ctx), vortex::ShadingMode::kDeferred);
   const auto published_view_id
     = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
   if (published_view_id != kInvalidViewId) {
@@ -491,8 +551,7 @@ auto MainModule::OnCompositing(observer_ptr<engine::FrameContext> /*context*/)
   submission.tasks.push_back(
     vortex::CompositingTask::MakeCopy(published_id, viewport));
 
-  renderer->RegisterComposition(
-    std::move(submission), std::move(surface));
+  renderer->RegisterComposition(std::move(submission), std::move(surface));
   co_return;
 }
 
@@ -512,19 +571,42 @@ auto MainModule::EnsureScene() -> void
   scene_ = std::make_shared<scene::Scene>("VortexBasicScene", kCapacity);
 
   auto cube_geo = BuildCubeGeometry(
-    "ValidationCube", "ValidationCube", { 0.68F, 0.70F, 0.76F, 1.0F }, 0.35F,
-    0.65F);
+    "ValidationCube", "ValidationCube", kCubeColor, 0.28F, 0.85F);
   auto floor_geo = BuildCubeGeometry(
-    "ValidationFloor", "ValidationFloor", { 0.22F, 0.23F, 0.25F, 1.0F }, 0.85F);
+    "ValidationFloor", "ValidationFloor", kFloorColor, 0.90F);
 
   cube_node_ = scene_->CreateNode("Cube");
   cube_node_.GetRenderable().SetGeometry(std::move(cube_geo));
-  cube_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 0.75F });
+  cube_node_.GetTransform().SetLocalPosition(kCubeCenter);
+  cube_rotation_ = glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+  cube_rotation_axis_ = RandomUnitAxis(cube_rotation_rng_);
+  cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
 
   floor_node_ = scene_->CreateNode("Floor");
   floor_node_.GetRenderable().SetGeometry(std::move(floor_geo));
-  floor_node_.GetTransform().SetLocalScale({ 8.0F, 8.0F, 0.25F });
-  floor_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, -0.35F });
+  floor_node_.GetTransform().SetLocalScale(kFloorScale);
+  floor_node_.GetTransform().SetLocalPosition(kFloorCenter);
+
+  if (app_.with_local_fog) {
+    local_fog_volume_node_ = scene_->CreateNode("LocalFogVolume");
+    if (const auto impl = local_fog_volume_node_.GetImpl(); impl.has_value()) {
+      impl->get().AddComponent<scene::environment::LocalFogVolume>();
+      auto& local_fog
+        = impl->get().GetComponent<scene::environment::LocalFogVolume>();
+      local_fog.SetEnabled(true);
+      local_fog.SetRadialFogExtinction(2.60F);
+      local_fog.SetHeightFogExtinction(1.40F);
+      local_fog.SetHeightFogFalloff(0.22F);
+      local_fog.SetHeightFogOffset(-0.5F);
+      local_fog.SetFogPhaseG(0.15F);
+      local_fog.SetFogAlbedo({ 0.10F, 0.92F, 0.86F });
+      local_fog.SetFogEmissive({ 7.5F, 0.4F, 5.5F });
+      local_fog.SetSortPriority(2);
+    }
+    local_fog_volume_node_.GetTransform().SetLocalPosition(
+      { 0.0F, 0.0F, 1.6F });
+    local_fog_volume_node_.GetTransform().SetLocalScale({ 8.0F, 8.0F, 8.0F });
+  }
 }
 
 auto MainModule::EnsureLighting() -> void
@@ -538,21 +620,19 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
-    light->SetIntensityLux(22000.0F);
+    light->SetIntensityLux(20000.0F);
     light->SetIsSunLight(true);
     CHECK_F(directional_light_node_.AttachLight(std::move(light)),
       "Failed to attach DirectionalLight to SunLight");
-    directional_light_node_.GetTransform().SetLocalRotation(
-      glm::quat(glm::radians(glm::vec3 { -38.0F, 0.0F, -25.0F })));
   }
 
   if (!point_light_node_.IsAlive()) {
     point_light_node_ = scene_->CreateNode("PointFill");
     auto light = std::make_unique<scene::PointLight>();
     light->Common().affects_world = true;
-    light->Common().color_rgb = { 0.28F, 0.55F, 1.0F };
-    light->SetLuminousFluxLm(2400.0F);
-    light->SetRange(5.5F);
+    light->Common().color_rgb = { 0.30F, 0.56F, 1.0F };
+    light->SetLuminousFluxLm(1200.0F);
+    light->SetRange(3.0F);
     CHECK_F(point_light_node_.AttachLight(std::move(light)),
       "Failed to attach PointLight to PointFill");
   }
@@ -561,11 +641,11 @@ auto MainModule::EnsureLighting() -> void
     spot_light_node_ = scene_->CreateNode("SpotRim");
     auto light = std::make_unique<scene::SpotLight>();
     light->Common().affects_world = true;
-    light->Common().color_rgb = { 1.0F, 0.58F, 0.24F };
-    light->SetLuminousFluxLm(3200.0F);
-    light->SetRange(7.0F);
-    light->SetInnerConeAngleRadians(glm::radians(18.0F));
-    light->SetOuterConeAngleRadians(glm::radians(28.0F));
+    light->Common().color_rgb = { 1.0F, 0.15F, 0.1F };
+    light->SetLuminousFluxLm(12000.0F);
+    light->SetRange(10.0F);
+    light->SetInnerConeAngleRadians(glm::radians(40.0F));
+    light->SetOuterConeAngleRadians(glm::radians(55.0F));
     CHECK_F(spot_light_node_.AttachLight(std::move(light)),
       "Failed to attach SpotLight to SpotRim");
   }
@@ -577,82 +657,57 @@ auto MainModule::UpdateValidationScene(
   const auto delta_seconds = context != nullptr
     ? std::chrono::duration<float>(context->GetGameDeltaTime().get()).count()
     : 0.0F;
-  animation_time_seconds_ += delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F);
+  animation_time_seconds_
+    += delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F);
 
   if (cube_node_.IsAlive()) {
-    cube_node_.GetTransform().SetLocalRotation(
-      glm::quat(glm::vec3(0.0F, animation_time_seconds_ * 0.75F, 0.0F)));
-    if (scene_ && app_.engine) {
-      if (auto motion_module
-          = app_.engine->GetModule<scenesync::RuntimeMotionProducerModule>()) {
-        if (const auto geometry = cube_node_.GetRenderable().GetGeometry();
-          geometry) {
-          const auto wpo_offset = glm::vec3 {
-            0.0F,
-            0.06F * std::sin(animation_time_seconds_ * 1.7F),
-            0.0F,
-          };
-          const auto mvwo_offset = glm::vec3 {
-            0.04F * std::cos(animation_time_seconds_ * 2.1F),
-            0.0F,
-            0.0F,
-          };
-          motion_module->get().UpsertMaterialMotionInput(
-            observer_ptr<const scene::Scene> { scene_.get() },
-            scenesync::RuntimeMaterialMotionInputState {
-              .key =
-                scenesync::RuntimeMaterialMotionKey {
-                  .node_handle = cube_node_.GetHandle(),
-                  .geometry_asset_key = geometry->GetAssetKey(),
-                  .lod_index = 0U,
-                  .submesh_index = 0U,
-                },
-              .has_runtime_wpo_input = true,
-              .has_runtime_motion_vector_input = true,
-              .capabilities =
-                {
-                  .uses_world_position_offset = true,
-                  .uses_motion_vector_world_offset = true,
-                  .uses_temporal_responsiveness = false,
-                  .has_pixel_animation = false,
-                },
-              .wpo_parameter_block0
-                = { wpo_offset.x, wpo_offset.y, wpo_offset.z, 0.0F },
-              .motion_vector_parameter_block0
-                = { mvwo_offset.x, mvwo_offset.y, mvwo_offset.z, 0.0F },
-            });
-        }
-      }
-    }
+    const float rotation_step_radians
+      = kCubeRotationAnglePerSecond
+      * (delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F));
+    cube_rotation_ = glm::normalize(
+      glm::angleAxis(rotation_step_radians, cube_rotation_axis_)
+      * cube_rotation_);
+    cube_node_.GetTransform().SetLocalPosition(kCubeCenter);
+    cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
   }
 
   if (point_light_node_.IsAlive()) {
-    const auto radius = 2.4F;
-    point_light_node_.GetTransform().SetLocalPosition({
-      std::cos(animation_time_seconds_ * 1.2F) * radius,
-      std::sin(animation_time_seconds_ * 1.2F) * radius,
-      1.8F + 0.4F * std::sin(animation_time_seconds_ * 0.8F),
-    });
+    const auto orbit_angle = animation_time_seconds_
+      * (oxygen::math::TwoPi / kPointLightOrbitPeriodSeconds);
+    const auto point_light_offset = oxygen::space::move::Right
+        * (std::cos(orbit_angle) * kPointLightOrbitRadius)
+      + oxygen::space::move::Back
+        * (std::sin(orbit_angle) * kPointLightOrbitRadius);
+    point_light_node_.GetTransform().SetLocalPosition(
+      kCubeCenter + point_light_offset);
   }
 
   if (spot_light_node_.IsAlive()) {
+    const auto oscillation_angle = animation_time_seconds_
+      * (oxygen::math::TwoPi / kSpotlightOscillationPeriodSeconds);
     const auto position = glm::vec3 {
-      -2.8F,
-      -2.2F + 0.35F * std::sin(animation_time_seconds_ * 0.65F),
-      3.2F,
+      std::sin(oscillation_angle) * kSpotlightOscillationAmplitude,
+      4.0F,
+      4.0F,
     };
     spot_light_node_.GetTransform().SetLocalPosition(position);
     spot_light_node_.GetTransform().SetLocalRotation(
-      LookRotation(position, { 0.0F, 0.0F, 0.6F }));
+      LookRotation(position, kCubeCenter));
   }
 
   if (directional_light_node_.IsAlive()) {
+    const auto orbit_angle = animation_time_seconds_
+      * (oxygen::math::TwoPi / kDirectionalLightOrbitPeriodSeconds);
+    const auto sun_position = oxygen::space::move::Right
+        * (std::cos(orbit_angle) * kDirectionalLightOrbitRadiusX)
+      + oxygen::space::move::Back
+        * (std::sin(orbit_angle) * kDirectionalLightOrbitRadiusY)
+      + oxygen::space::move::Up
+        * (kDirectionalLightBaseHeight
+          + std::sin(orbit_angle) * kDirectionalLightHeightVariation);
+    directional_light_node_.GetTransform().SetLocalPosition(sun_position);
     directional_light_node_.GetTransform().SetLocalRotation(
-      glm::quat(glm::radians(glm::vec3 {
-        -38.0F,
-        0.0F,
-        -25.0F + 6.0F * std::sin(animation_time_seconds_ * 0.2F),
-      })));
+      LookRotation(sun_position, kSceneFocusPoint));
   }
 }
 
@@ -683,8 +738,8 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
     CHECK_F(ok, "Failed to attach PerspectiveCamera");
   }
 
-  constexpr glm::vec3 kCameraPosition { 0.0F, -4.0F, 2.0F };
-  constexpr glm::vec3 kCameraTarget { 0.0F, 0.0F, 0.25F };
+  constexpr glm::vec3 kCameraPosition { 0.0F, 8.0F, 4.0F };
+  constexpr glm::vec3 kCameraTarget { 0.0F, 0.0F, 1.5F };
   camera_node_.GetTransform().SetLocalPosition(kCameraPosition);
   camera_node_.GetTransform().SetLocalRotation(
     CameraLookRotation(kCameraPosition, kCameraTarget));
@@ -695,7 +750,7 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
       ? (static_cast<float>(width) / static_cast<float>(height))
       : 1.0F;
     auto& cam = cam_ref->get();
-    cam.SetFieldOfView(glm::radians(45.0F));
+    cam.SetFieldOfView(glm::radians(55.0F));
     cam.SetAspectRatio(aspect);
     cam.SetNearPlane(0.1F);
     cam.SetFarPlane(100.0F);

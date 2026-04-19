@@ -393,6 +393,17 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kPixel, .name="VortexFogPassPS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Environment/LocalFogVolumeTiledCulling.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexLocalFogVolumeTiledCullingCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/LocalFogVolumeCompose.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="VortexLocalFogVolumeComposeVS" },
+      EntryPoint { .type=kPixel, .name="VortexLocalFogVolumeComposePS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/PostProcess/Tonemap.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexTonemapPS" },

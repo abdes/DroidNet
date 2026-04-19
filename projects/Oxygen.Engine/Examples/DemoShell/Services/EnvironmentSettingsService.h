@@ -408,11 +408,11 @@ private:
   struct LocalFogVolumeUiState {
     scene::SceneNode node {};
     bool enabled { true };
-    float radial_fog_extinction { 0.0F };
-    float height_fog_extinction { 0.0F };
-    float height_fog_falloff { 0.0F };
+    float radial_fog_extinction { 1.0F };
+    float height_fog_extinction { 1.0F };
+    float height_fog_falloff { 1000.0F };
     float height_fog_offset { 0.0F };
-    float fog_phase_g { 0.0F };
+    float fog_phase_g { 0.2F };
     glm::vec3 fog_albedo { 1.0F, 1.0F, 1.0F };
     glm::vec3 fog_emissive { 0.0F, 0.0F, 0.0F };
     int sort_priority { 0 };

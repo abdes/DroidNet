@@ -19,6 +19,30 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
+## Local Fog Correction (2026-04-19)
+
+- The current Vortex local-fog runtime path is **not** at UE5.7 parity and
+  must not be described as an already-landed feature that only needs
+  hardening.
+- The authoritative local-fog contract is the UE5.7 implementation in:
+  - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Renderer\Private\LocalFogVolumeRendering.h`
+  - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Renderer\Private\LocalFogVolumeRendering.cpp`
+  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeCommon.ush`
+  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeTiledCulling.usf`
+  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeSplat.usf`
+- The Vortex local-fog rewrite must mirror the UE5.7 per-view pack/sort/cap
+  flow, tile-texture culling contract, analytical integral, and composition
+  ordering.
+- The parity gate remains open until all required integration points are
+  evidenced:
+  - Stage 14 tiled culling path
+  - Stage 15 dedicated splat path
+  - height-fog inline composition parity when enabled
+  - volumetric-fog injection parity when volumetric fog is enabled
+- If Vortex still lacks the upstream height-fog or volumetric-fog subsystems
+  needed for those integration points, that is an explicit parity blocker, not
+  a reason to call local fog complete.
+
 ## 1. Scope and Intent
 
 ### 1.1 Goal
@@ -459,6 +483,10 @@ Rules:
   whenever local fog depends on it.
 - The implementation must mirror UE5.7 screen-HZB semantics rather than
   improvising a reduced substitute or reusing unrelated HZB products.
+- The required Screen HZB shape is the UE5.7 default path: mip 0 is
+  half-resolution, rounded up to power-of-two extents, and the published mip
+  count is derived from that reduced extent rather than from full-resolution
+  SceneDepth.
 
 ### 5.2 Required Serialization Changes
 
@@ -954,7 +982,9 @@ Required shader file families:
   - input: local fog instance data, directional light, sky light, `PhaseG`
   - output: local medium color + coverage
 - `LocalFogVolumeTiledCullingCS`
-  - input: local fog instances + view/depth data + Screen HZB bindings
+  - input: local fog instances + per-tile frustum planes + Screen HZB bindings
+  - classification: cull against tile frustum planes before the HZB visibility
+    test; do not fall back to screen-rect overlap as the primary tile test
   - output: tile lists / draw-indirect buffers
 - `LocalFogVolumeComposePS`
   - input: SceneColor, SceneDepth, local fog tile/instance data
@@ -971,6 +1001,9 @@ Shader design rule:
 - the junior implementation must mirror the ownership split in C++:
   atmosphere LUT generation, height fog, local fog, and volumetric fog are
   separate shader families, not one catch-all environment shader blob
+- local fog tiled culling must consume the full UE5.7-shaped Screen HZB
+  contract, including active view-rect mapping; it must not assume the HZB
+  covers the full scene-texture extent for sub-viewport views
 
 ## 8. Execution Order and File Ownership
 
@@ -1011,6 +1044,8 @@ This is the implementation order a junior engineer should follow.
 4. implement sky-atmosphere rendering
 5. implement camera aerial perspective
 6. implement Stage 5 Screen HZB publication for environment consumers
+   - this includes the active view-rect mapping surface and sub-viewport-safe
+     Stage 14 local-fog consumption, not only raw HZB extents
 7. implement full height fog
 8. implement local fog volumes
 9. implement volumetric fog

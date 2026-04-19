@@ -934,11 +934,11 @@ def _pack_local_fog_volume_record(
         )
 
     enabled = _u32_bool(volume.get("enabled"), 1)
-    radial_fog_extinction = _f(volume.get("radial_fog_extinction"), 0.0)
-    height_fog_extinction = _f(volume.get("height_fog_extinction"), 0.0)
-    height_fog_falloff = _f(volume.get("height_fog_falloff"), 0.0)
+    radial_fog_extinction = _f(volume.get("radial_fog_extinction"), 1.0)
+    height_fog_extinction = _f(volume.get("height_fog_extinction"), 1.0)
+    height_fog_falloff = _f(volume.get("height_fog_falloff"), 1000.0)
     height_fog_offset = _f(volume.get("height_fog_offset"), 0.0)
-    fog_phase_g = _f(volume.get("fog_phase_g"), 0.0)
+    fog_phase_g = _f(volume.get("fog_phase_g"), 0.2)
     fog_albedo = _vec3(volume.get("fog_albedo", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
     fog_emissive = _vec3(
         volume.get("fog_emissive", [0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]

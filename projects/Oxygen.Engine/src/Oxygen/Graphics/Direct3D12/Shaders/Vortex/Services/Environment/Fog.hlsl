@@ -58,7 +58,7 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const float far_background = EvaluateFarBackgroundMask(raw_depth);
 
     const float distance_factor = 1.0f - exp(-distance_to_sample * 0.012f);
-    const float height_factor = exp(-max(world_position.y + 4.0f, 0.0f) * 0.08f);
+    const float height_factor = exp(-max(world_position.z + 4.0f, 0.0f) * 0.08f);
     const float fog_alpha = saturate(
         distance_factor * height_factor * 0.65f + far_background * 0.12f);
     const float3 fog_color = EvaluateFogColor(distance_factor, height_factor);

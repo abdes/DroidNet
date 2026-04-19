@@ -11,10 +11,14 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
 #include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Internal/SkyRenderer.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -25,6 +29,11 @@ EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
   , sky_(std::make_unique<environment::SkyRenderer>(renderer))
   , atmosphere_(std::make_unique<environment::AtmosphereRenderer>(renderer))
   , fog_(std::make_unique<environment::FogRenderer>(renderer))
+  , local_fog_state_(std::make_unique<environment::internal::LocalFogVolumeState>(renderer))
+  , local_fog_tiled_culling_(
+      std::make_unique<environment::LocalFogVolumeTiledCullingPass>(renderer))
+  , local_fog_compose_(
+      std::make_unique<environment::LocalFogVolumeComposePass>(renderer))
   , ibl_(std::make_unique<environment::internal::IblProcessor>(renderer))
 {
 }
@@ -67,7 +76,11 @@ auto EnvironmentLightingService::OnFrameStart(
     .frame_slot = slot,
     .probe_revision = probe_state_.probes.probe_revision,
   };
+  last_stage14_state_ = {};
   last_stage15_state_ = {};
+  if (local_fog_state_ != nullptr) {
+    local_fog_state_->OnFrameStart(sequence, slot);
+  }
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
   }
@@ -148,13 +161,34 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
 auto EnvironmentLightingService::RenderSkyAndFog(
   RenderContext& ctx, const SceneTextures& scene_textures) -> void
 {
+  auto& local_fog_products = local_fog_state_->Prepare(ctx);
+  LOG_F(INFO, "local_fog_volume_instance_count={}",
+    local_fog_products.instance_count);
+  const auto local_fog_culling_state
+    = local_fog_tiled_culling_->Record(ctx, scene_textures, local_fog_products);
   const auto sky_state = sky_->Render(ctx, scene_textures);
   const auto atmosphere_state = atmosphere_->Render(ctx, scene_textures);
   const auto fog_state = fog_->Render(ctx, scene_textures);
+  const auto local_fog_compose_state
+    = local_fog_compose_->Record(ctx, scene_textures, local_fog_products);
+  last_stage14_state_ = {
+    .view_id = ctx.current_view.view_id,
+    .requested = local_fog_products.prepared,
+    .local_fog_requested = local_fog_culling_state.requested,
+    .local_fog_executed = local_fog_culling_state.executed,
+    .local_fog_hzb_consumed
+    = local_fog_culling_state.consumed_published_screen_hzb,
+    .local_fog_buffer_ready
+    = local_fog_products.buffer_ready && local_fog_products.tile_data_ready,
+    .local_fog_instance_count = local_fog_products.instance_count,
+    .local_fog_dispatch_count_x = local_fog_culling_state.dispatch_count_x,
+    .local_fog_dispatch_count_y = local_fog_culling_state.dispatch_count_y,
+    .local_fog_dispatch_count_z = local_fog_culling_state.dispatch_count_z,
+  };
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = sky_state.requested || atmosphere_state.requested
-      || fog_state.requested,
+      || fog_state.requested || local_fog_compose_state.requested,
     .sky_requested = sky_state.requested,
     .sky_executed = sky_state.executed,
     .sky_draw_count = sky_state.draw_count,
@@ -164,8 +198,11 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .fog_requested = fog_state.requested,
     .fog_executed = fog_state.executed,
     .fog_draw_count = fog_state.draw_count,
+    .local_fog_requested = local_fog_compose_state.requested,
+    .local_fog_executed = local_fog_compose_state.executed,
+    .local_fog_draw_count = local_fog_compose_state.draw_count,
     .total_draw_count = sky_state.draw_count + atmosphere_state.draw_count
-      + fog_state.draw_count,
+      + fog_state.draw_count + local_fog_compose_state.draw_count,
   };
 }
 

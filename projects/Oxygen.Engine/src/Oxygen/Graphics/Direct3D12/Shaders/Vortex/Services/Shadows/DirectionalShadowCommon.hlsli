@@ -45,7 +45,7 @@ static inline VortexShadowFrameBindings MakeInvalidVortexShadowFrameBindings()
 static inline VortexShadowFrameBindings LoadVortexShadowFrameBindings()
 {
     const ViewFrameBindingsData view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+        LoadVortexViewFrameBindings(bindless_view_frame_bindings_slot);
     if (view_bindings.shadow_frame_slot == INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(view_bindings.shadow_frame_slot)) {
         return MakeInvalidVortexShadowFrameBindings();

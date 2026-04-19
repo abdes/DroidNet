@@ -234,6 +234,30 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("mode")
         .StoreTo(&shader_debug_mode_name)
         .Build());
+    vortex_options->Add(clap::Option::WithKey("with-atmosphere")
+        .About("Enable the atmosphere/aerial-perspective view layer")
+        .Long("with-atmosphere")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_atmosphere)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("with-height-fog")
+        .About("Enable the height-fog view layer")
+        .Long("with-height-fog")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_height_fog)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("with-local-fog")
+        .About("Enable local fog volume authoring and rendering")
+        .Long("with-local-fog")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.with_local_fog)
+        .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
@@ -267,6 +291,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed fps option = {}", target_fps);
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
+    LOG_F(INFO, "Parsed with-atmosphere option = {}", app.with_atmosphere);
+    LOG_F(INFO, "Parsed with-height-fog option = {}", app.with_height_fog);
+    LOG_F(INFO, "Parsed with-local-fog option = {}", app.with_local_fog);
     const auto shader_debug_mode
       = ParseVortexShaderDebugMode(shader_debug_mode_name);
     LOG_F(INFO, "Parsed Vortex shader debug mode = {}",

@@ -30,8 +30,11 @@ namespace environment {
 class SkyRenderer;
 class AtmosphereRenderer;
 class FogRenderer;
+class LocalFogVolumeTiledCullingPass;
+class LocalFogVolumeComposePass;
 namespace internal {
 class IblProcessor;
+class LocalFogVolumeState;
 }
 } // namespace environment
 
@@ -66,7 +69,23 @@ public:
     bool fog_requested { false };
     bool fog_executed { false };
     std::uint32_t fog_draw_count { 0U };
+    bool local_fog_requested { false };
+    bool local_fog_executed { false };
+    std::uint32_t local_fog_draw_count { 0U };
     std::uint32_t total_draw_count { 0U };
+  };
+
+  struct Stage14State {
+    ViewId view_id { kInvalidViewId };
+    bool requested { false };
+    bool local_fog_requested { false };
+    bool local_fog_executed { false };
+    bool local_fog_hzb_consumed { false };
+    bool local_fog_buffer_ready { false };
+    std::uint32_t local_fog_instance_count { 0U };
+    std::uint32_t local_fog_dispatch_count_x { 0U };
+    std::uint32_t local_fog_dispatch_count_y { 0U };
+    std::uint32_t local_fog_dispatch_count_z { 0U };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);
@@ -115,6 +134,11 @@ public:
   {
     return last_stage15_state_;
   }
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastStage14State() const noexcept
+    -> const Stage14State&
+  {
+    return last_stage14_state_;
+  }
 
 private:
   struct PublishedView {
@@ -130,6 +154,7 @@ private:
   EnvironmentProbeState probe_state_ {};
   ProbeRefreshState last_probe_refresh_state_ {};
   PublicationState last_publication_state_ {};
+  Stage14State last_stage14_state_ {};
   Stage15State last_stage15_state_ {};
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
     bindings_publisher_ {};
@@ -137,6 +162,10 @@ private:
   std::unique_ptr<environment::SkyRenderer> sky_ {};
   std::unique_ptr<environment::AtmosphereRenderer> atmosphere_ {};
   std::unique_ptr<environment::FogRenderer> fog_ {};
+  std::unique_ptr<environment::internal::LocalFogVolumeState> local_fog_state_ {};
+  std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
+    local_fog_tiled_culling_ {};
+  std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_ {};
   std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
 };
 

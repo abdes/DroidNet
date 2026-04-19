@@ -203,7 +203,8 @@ FogPass::~FogPass() = default;
 auto FogPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
-  const auto requested = ctx.current_view.view_id != kInvalidViewId;
+  const auto requested = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.with_height_fog;
   auto state = RecordState {
     .requested = requested,
     .executed = requested

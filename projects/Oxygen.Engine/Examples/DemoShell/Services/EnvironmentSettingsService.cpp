@@ -1650,7 +1650,20 @@ auto EnvironmentSettingsService::AddLocalFogVolume() -> void
   }
 
   impl_opt->get().AddComponent<scene::environment::LocalFogVolume>();
-  local_fog_volumes_.push_back(LocalFogVolumeUiState { .node = node });
+  const auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  local_fog_volumes_.push_back(LocalFogVolumeUiState {
+    .node = node,
+    .enabled = local_fog.IsEnabled(),
+    .radial_fog_extinction = local_fog.GetRadialFogExtinction(),
+    .height_fog_extinction = local_fog.GetHeightFogExtinction(),
+    .height_fog_falloff = local_fog.GetHeightFogFalloff(),
+    .height_fog_offset = local_fog.GetHeightFogOffset(),
+    .fog_phase_g = local_fog.GetFogPhaseG(),
+    .fog_albedo = local_fog.GetFogAlbedo(),
+    .fog_emissive = local_fog.GetFogEmissive(),
+    .sort_priority = local_fog.GetSortPriority(),
+  });
   selected_local_fog_volume_index_
     = static_cast<int>(local_fog_volumes_.size()) - 1;
   MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));

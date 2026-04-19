@@ -549,6 +549,16 @@ public:
   [[nodiscard]] OXGN_VRTX_NDAPI auto IsImGuiFrameActive() const noexcept
     -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogGlobalStartDistanceMeters() const
+    noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogMaxDensityIntoVolumetricFog()
+    const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
+    -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTileMaxInstanceCount()
+    const noexcept -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogUseHzb() const noexcept -> bool;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
