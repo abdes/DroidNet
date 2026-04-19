@@ -47,6 +47,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
+#include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::internal {
@@ -68,6 +69,8 @@ struct RendererPublicationState {
     view_history_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ScreenHzbFrameBindings>>
+    screen_hzb_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
     view_frame_bindings_publisher;
   frame::SequenceNumber prepared_frame_sequence { 0U };
@@ -444,6 +447,13 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       observer_ptr { &gfx }, GetStagingProvider(),
       observer_ptr { &GetInlineTransfersCoordinator() }, "DrawFrameBindings");
   }
+  if (!state.screen_hzb_bindings_publisher) {
+    state.screen_hzb_bindings_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<ScreenHzbFrameBindings>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() },
+      "ScreenHzbFrameBindings");
+  }
   if (!state.view_history_frame_bindings_publisher) {
     state.view_history_frame_bindings_publisher = std::make_unique<
       internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>(
@@ -471,6 +481,7 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
 
   state.scene_texture_bindings_publisher->OnFrameStart(sequence, slot);
   state.draw_frame_bindings_publisher->OnFrameStart(sequence, slot);
+  state.screen_hzb_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_history_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.prepared_frame_sequence = sequence;
@@ -507,6 +518,10 @@ auto Renderer::RefreshCurrentViewFrameBindings(
       render_context.current_view.view_id,
       scene_renderer.GetSceneTextureBindings());
   view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+  view_bindings.screen_hzb_frame_slot
+    = publication_state.screen_hzb_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      scene_renderer.GetPublishedScreenHzbBindings());
 
   const auto view_frame_bindings_slot
     = publication_state.view_frame_bindings_publisher->Publish(
@@ -1447,6 +1462,18 @@ auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,
     = snapshot.previous.inverse_view_projection_matrix,
     .current_pixel_jitter = snapshot.current.pixel_jitter,
     .previous_pixel_jitter = snapshot.previous.pixel_jitter,
+    .current_view_rect_min_and_size = {
+      snapshot.current.viewport.top_left_x,
+      snapshot.current.viewport.top_left_y,
+      snapshot.current.viewport.width,
+      snapshot.current.viewport.height,
+    },
+    .previous_view_rect_min_and_size = {
+      snapshot.previous.viewport.top_left_x,
+      snapshot.previous.viewport.top_left_y,
+      snapshot.previous.viewport.width,
+      snapshot.previous.viewport.height,
+    },
   };
   if (snapshot.previous_valid) {
     history.validity_flags |= static_cast<std::uint32_t>(
@@ -1671,6 +1698,10 @@ auto Renderer::DispatchSceneRendererRender(
         render_context.current_view.view_id,
         scene_renderer.GetSceneTextureBindings());
     view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+    view_bindings.screen_hzb_frame_slot
+      = publication_state.screen_hzb_bindings_publisher->Publish(
+        render_context.current_view.view_id,
+        scene_renderer.GetPublishedScreenHzbBindings());
     if (render_context.current_view.resolved_view != nullptr) {
       view_bindings.history_frame_slot
         = publication_state.view_history_frame_bindings_publisher->Publish(

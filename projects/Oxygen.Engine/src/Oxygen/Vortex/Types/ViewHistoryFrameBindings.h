@@ -39,8 +39,10 @@ struct alignas(packing::kShaderDataFieldAlignment) ViewHistoryFrameBindings {
   glm::mat4 previous_inverse_view_projection_matrix { 1.0F };
   glm::vec2 current_pixel_jitter { 0.0F, 0.0F };
   glm::vec2 previous_pixel_jitter { 0.0F, 0.0F };
+  glm::vec4 current_view_rect_min_and_size { 0.0F, 0.0F, 0.0F, 0.0F };
+  glm::vec4 previous_view_rect_min_and_size { 0.0F, 0.0F, 0.0F, 0.0F };
   std::uint32_t validity_flags { 0U };
-  std::array<std::uint32_t, 1U> _pad_to_16 {};
+  std::array<std::uint32_t, 3U> _pad_to_16 {};
 };
 
 static_assert(

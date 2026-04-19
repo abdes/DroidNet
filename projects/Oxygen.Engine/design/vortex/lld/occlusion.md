@@ -117,9 +117,16 @@ class OcclusionModule {
 
 ### 3.3 HZB Generation
 
-1. Read SceneDepth (full resolution).
-2. Build mip chain: each level = max of 2×2 block from previous level.
-3. Result: hierarchical depth pyramid for fast AABB depth testing.
+1. Read SceneDepth over the active view rect.
+2. Derive HZB mip 0 from a half-resolution, power-of-two-padded extent per
+   axis: `max(round_up_pow2(view_rect_extent) / 2, 1)`.
+3. Derive the published mip count from that reduced extent:
+   `max(floor(log2(max(mip0_width, mip0_height))), 1)`.
+4. Build mip 0 by reducing full-resolution SceneDepth into that reduced root,
+   then reduce each subsequent mip from the previous HZB level with
+   conservative 2x2 downsampling.
+5. Result: a UE5.7-shaped hierarchical depth pyramid for fast AABB depth
+   testing and local-fog consumers.
 
 ### 3.4 Occlusion Testing
 
@@ -210,10 +217,14 @@ count may disable occlusion for simpler dispatch.
 
 ## 8. Open Questions
 
-1. **Two-phase vs single-phase:** Two-phase occlusion (previous + current
-   HZB) adds complexity. Phase 5C may start with single-phase
-   (current-frame HZB only) and add temporal refinement later if popping
-   is observed.
-2. **GPU-driven indirect draw:** When integrated with GPU-driven rendering
+1. **GPU-driven indirect draw:** When integrated with GPU-driven rendering
    pipeline (Phase 7+), occlusion results feed into indirect draw argument
    buffers rather than stage-local CPU visibility lists.
+
+## 9. Parity Notes
+
+- Two-phase HZB behavior is required for this lane's UE5.7 parity target.
+  Previous-frame furthest-HZB publication is not optional follow-up work.
+- Current-frame HZB publication must include the view-to-HZB mapping terms
+  needed by downstream consumers; stages must not reconstruct those mappings
+  from raw width/height as an implementation shortcut.

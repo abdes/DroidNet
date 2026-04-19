@@ -44,12 +44,14 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetCompleteness() const
     -> DepthPrePassCompleteness;
+  [[nodiscard]] OXGN_VRTX_API auto HasValidDepthProduct() const -> bool;
   [[nodiscard]] OXGN_VRTX_API auto HasPublishedDepthProducts() const -> bool;
 
 private:
   Renderer& renderer_;
   DepthPrepassConfig config_ {};
   DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
+  bool has_valid_depth_product_ { false };
   bool has_published_depth_products_ { false };
   std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
   std::shared_ptr<graphics::Framebuffer> depth_framebuffer_ {};

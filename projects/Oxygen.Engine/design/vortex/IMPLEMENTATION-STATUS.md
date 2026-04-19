@@ -42,6 +42,102 @@ Related:
 5. **Per-session update.** Each implementation session must update this file
    with: changed files, commands run, results, and remaining blockers.
 
+### 2026-04-19 — Stage 5 HZB core implementation summary
+
+- Scope:
+  - revalidated the Stage 5 HZB findings against current Vortex code and UE5.7
+    source/shader references
+  - corrected the Stage 5 HZB design before implementation
+  - implemented the generic Stage 5 HZB core only
+  - explicitly excluded consumer lanes, runtime validation flows, and proof
+    tooling from this summary
+- HZB core delivered:
+  - explicit HZB request + valid-depth eligibility
+  - UE5.7-shaped current-frame HZB mapping/publication surface
+  - previous-frame furthest-HZB handoff plus previous-view rect publication
+  - bindless routing through `ViewFrameBindings::screen_hzb_frame_slot`
+  - focused Stage 5 HZB coverage in `SceneRendererPublication` and
+    `SceneRendererDeferredCore`
+- HZB-core files:
+  - `design/vortex/lld/hzb.md`
+  - `design/vortex/lld/occlusion.md`
+  - `src/Oxygen/Vortex/RenderContext.h`
+  - `src/Oxygen/Vortex/Renderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.cpp`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h`
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.cpp`
+  - `src/Oxygen/Vortex/Types/ScreenHzbFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/ViewFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/ViewHistoryFrameBindings.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/ScreenHzbBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/ViewFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/ViewHistoryFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Stages/Hzb/ScreenHzbBuild.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex --parallel 4`
+  - `cmake --build --preset windows-debug --target Oxygen.Vortex.SceneRendererPublication Oxygen.Vortex.SceneRendererDeferredCore --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "^(Oxygen\\.Vortex\\.(SceneRendererPublication|SceneRendererDeferredCore)\\.Tests|SceneRendererPublicationTest\\.|SceneRendererDeferredCore(Test|SurfaceTest)\\.)"`
+- Result:
+  - the Stage 5 HZB core is implemented in code
+  - focused HZB core tests are green
+  - the generic HZB publication/design surface is separated from
+    consumer-specific policy in the committed core lane
+- Remaining blocker:
+  - capture-backed/runtime parity proof is still outstanding
+  - consumer lanes are tracked separately and are not part of this HZB core
+    summary
+
+### 2026-04-19 — VortexBasic debugger audit is clean again, but the full live parity pack still has capture-product gaps
+
+- Scope:
+  - reran the live `VortexBasic` runtime surface under `cdb.exe`
+  - reran a normal no-capture `VortexBasic` launch and inspected the emitted logs
+  - repaired the Stage 5 Screen HZB depth-SRV path that was tripping the D3D12
+    debug layer on `Depth32Stencil8`
+  - updated the VortexBasic RenderDoc proof scripts to follow the real Stage 15
+    local-fog indirect-draw command shape
+- Changed files this session:
+  - `src/Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.cpp`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicCapture.py`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `tools/vortex/Assert-VortexBasicRuntimeProof.ps1`
+  - `design/vortex/lld/occlusion.md`
+  - `design/vortex/lld/environment-service.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `ctest --output-on-failure -R "SceneRendererPublicationTest.Stage5PublishesRealScreenHzbProductsForDeferredViews"`
+  - `ctest --output-on-failure -R "EnvironmentLightingServiceSurfaceTest.Stage15ProofToolsUseFinalStage12BaselineAndEmitBlockingAsyncQualityKeys"`
+  - `powershell -NoProfile -File tools/vortex/Run-VortexBasicRuntimeValidation.ps1 -Output build/artifacts/vortex/live/vortexbasic/2026-04-19-hzb-audit -BuildJobs 8`
+  - `out/build-ninja/bin/Debug/Oxygen.Examples.VortexBasic.exe --frames 6 --fps 30 --capture-provider off`
+- Result:
+  - debugger-backed audit now passes again:
+    `runtime_exit_code=0`, `d3d12_error_count=0`, `dxgi_error_count=0`,
+    `blocking_warning_count=0`
+  - the only accepted debugger warning is the documented shutdown
+    `DXGI WARNING: Live IDXGIFactory ...` line
+  - the normal no-capture runtime run exits `0` and its log scan found no real
+    runtime error signatures (`D3D12 ERROR`, `DXGI ERROR`, break-exception, or
+    loguru `ERROR`)
+  - the full capture-backed VortexBasic validator remains **incomplete**:
+    the generated products report still records `stage12_spot_scene_color_nonzero=false`,
+    `stage12_point_scene_color_nonzero=false`,
+    `stage12_directional_scene_color_nonzero=false`,
+    `stage15_sky_scene_color_changed=false`,
+    `stage15_local_fog_scene_color_changed=false`,
+    and the current Screen-HZB capture-product probe still does not resolve the
+    published HZB resource name from the capture
+- Remaining blocker:
+  - do not claim VortexBasic parity complete yet; debugger/runtime cleanliness
+    is restored, but the live capture-backed product proof is still red and
+    needs a dedicated follow-up pass
+
 ## Phase Summary
 
 | Phase | Name | Status | Blocker |

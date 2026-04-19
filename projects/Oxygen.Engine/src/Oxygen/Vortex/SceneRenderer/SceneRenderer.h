@@ -23,6 +23,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -48,6 +49,7 @@ class LightingService;
 class ShadowService;
 class PostProcessService;
 class EnvironmentLightingService;
+class ScreenHzbModule;
 
 class SceneRenderer {
 public:
@@ -143,6 +145,7 @@ public:
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
+  OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
   OXGN_VRTX_API void PublishBasePassVelocity();
   OXGN_VRTX_API void PublishDeferredBasePassSceneTextures(
     RenderContext& ctx);
@@ -163,6 +166,8 @@ public:
     const RenderContext& ctx) const -> ShadingMode;
   OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindings() const
     -> const ViewFrameBindings&;
+  OXGN_VRTX_NDAPI auto GetPublishedScreenHzbBindings() const
+    -> const ScreenHzbFrameBindings&;
   OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindingsSlot() const
     -> ShaderVisibleIndex;
   OXGN_VRTX_NDAPI auto GetPublishedViewId() const -> ViewId;
@@ -212,6 +217,7 @@ private:
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
   ShadingMode default_shading_mode_ { ShadingMode::kForward };
   ViewFrameBindings published_view_frame_bindings_ {};
+  ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
     kInvalidShaderVisibleIndex
   };
@@ -225,6 +231,7 @@ private:
   frame::SequenceNumber shadow_depths_built_sequence_ { 0U };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
+  std::unique_ptr<ScreenHzbModule> screen_hzb_;
   std::unique_ptr<BasePassModule> base_pass_;
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;

@@ -317,7 +317,9 @@ DepthPrepassModule::~DepthPrepassModule() = default;
 void DepthPrepassModule::Execute(
   RenderContext& ctx, SceneTextures& scene_textures)
 {
+  auto empty_prepared_frame = PreparedSceneFrame {};
   has_published_depth_products_ = false;
+  has_valid_depth_product_ = false;
   completeness_ = DepthPrePassCompleteness::kIncomplete;
   if (config_.mode == DepthPrePassMode::kDisabled) {
     completeness_ = DepthPrePassCompleteness::kDisabled;
@@ -329,13 +331,17 @@ void DepthPrepassModule::Execute(
     && ctx.current_view.prepared_frame->IsValid();
   const auto writes_velocity
     = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
-  if (!has_current_view_payload || ctx.view_constants == nullptr) {
+  if (ctx.view_constants == nullptr) {
     return;
   }
 
-  mesh_processor_->BuildDrawCommands(
-    *ctx.current_view.prepared_frame, ctx.current_view.resolved_view.get(),
-    config_.mode == DepthPrePassMode::kOpaqueAndMasked);
+  if (mesh_processor_ != nullptr) {
+    mesh_processor_->BuildDrawCommands(
+      has_current_view_payload ? *ctx.current_view.prepared_frame
+                               : empty_prepared_frame,
+      ctx.current_view.resolved_view.get(),
+      config_.mode == DepthPrePassMode::kOpaqueAndMasked);
+  }
 
   auto* gfx = renderer_.GetGraphics().get();
   if (gfx == nullptr) {
@@ -396,8 +402,12 @@ void DepthPrepassModule::Execute(
   CopySceneDepthToPartialDepth(*recorder, scene_textures);
   TransitionDepthPrepassFinalStates(*recorder, scene_textures, writes_velocity);
 
-  completeness_ = DepthPrePassCompleteness::kComplete;
-  has_published_depth_products_ = true;
+  has_valid_depth_product_ = true;
+  completeness_ = has_current_view_payload
+    ? DepthPrePassCompleteness::kComplete
+    : DepthPrePassCompleteness::kIncomplete;
+  has_published_depth_products_
+    = completeness_ == DepthPrePassCompleteness::kComplete;
 }
 
 void DepthPrepassModule::SetConfig(const DepthPrepassConfig& config)
@@ -408,6 +418,11 @@ void DepthPrepassModule::SetConfig(const DepthPrepassConfig& config)
 auto DepthPrepassModule::GetCompleteness() const -> DepthPrePassCompleteness
 {
   return completeness_;
+}
+
+auto DepthPrepassModule::HasValidDepthProduct() const -> bool
+{
+  return has_valid_depth_product_;
 }
 
 auto DepthPrepassModule::HasPublishedDepthProducts() const -> bool

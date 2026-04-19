@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -28,6 +29,7 @@ class Graphics;
 namespace oxygen::graphics {
 class Buffer;
 class Framebuffer;
+class Texture;
 } // namespace oxygen::graphics
 
 namespace oxygen::scene {
@@ -63,6 +65,22 @@ using KnownPassTypes = PassTypeList<>;
 static constexpr std::size_t kNumPassTypes = KnownPassTypes::size;
 
 struct RenderContext {
+  struct ScreenHzbRequest {
+    bool current_furthest { false };
+    bool current_closest { false };
+    bool publish_previous_furthest { false };
+
+    [[nodiscard]] auto WantsCurrentHzb() const noexcept -> bool
+    {
+      return current_furthest || current_closest;
+    }
+
+    [[nodiscard]] auto WantsPreviousFurthest() const noexcept -> bool
+    {
+      return publish_previous_furthest;
+    }
+  };
+
   struct ViewExecutionEntry {
     oxygen::ViewId view_id {};
     bool is_scene_view { false };
@@ -93,6 +111,20 @@ struct RenderContext {
     mutable DepthPrePassCompleteness depth_prepass_completeness {
       DepthPrePassCompleteness::kIncomplete
     };
+    ScreenHzbRequest screen_hzb_request {};
+    bool scene_depth_product_valid { false };
+    observer_ptr<const graphics::Texture> screen_hzb_closest_texture;
+    observer_ptr<const graphics::Texture> screen_hzb_furthest_texture;
+    observer_ptr<const graphics::Texture> screen_hzb_previous_furthest_texture;
+    ShaderVisibleIndex screen_hzb_frame_slot { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex screen_hzb_previous_furthest_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t screen_hzb_width { 0U };
+    std::uint32_t screen_hzb_height { 0U };
+    std::uint32_t screen_hzb_mip_count { 0U };
+    bool screen_hzb_available { false };
+    bool screen_hzb_has_previous { false };
 
     [[nodiscard]] auto HasPlannedDepthPrePass() const noexcept -> bool
     {
@@ -102,6 +134,21 @@ struct RenderContext {
     [[nodiscard]] auto IsEarlyDepthComplete() const noexcept -> bool
     {
       return depth_prepass_completeness == DepthPrePassCompleteness::kComplete;
+    }
+
+    [[nodiscard]] auto HasValidSceneDepthProduct() const noexcept -> bool
+    {
+      return scene_depth_product_valid;
+    }
+
+    [[nodiscard]] auto WantsScreenHzb() const noexcept -> bool
+    {
+      return screen_hzb_request.WantsCurrentHzb();
+    }
+
+    [[nodiscard]] auto CanBuildScreenHzb() const noexcept -> bool
+    {
+      return screen_hzb_request.WantsCurrentHzb() && scene_depth_product_valid;
     }
   };
 
