@@ -35,6 +35,7 @@ namespace {
   using data::AssetType;
   using data::ComponentType;
   using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::LocalFogVolumeRecord;
   using data::pak::world::NodeRecord;
   using data::pak::world::OrthographicCameraRecord;
   using data::pak::world::PerspectiveCameraRecord;
@@ -110,6 +111,14 @@ namespace {
         return a.node_index < b.node_index;
       });
 
+    std::ranges::sort(build.local_fog_volumes,
+      [](const LocalFogVolumeRecord& a, const LocalFogVolumeRecord& b) {
+        if (a.node_index != b.node_index) {
+          return a.node_index < b.node_index;
+        }
+        return a.sort_priority < b.sort_priority;
+      });
+
     std::ranges::sort(build.perspective_cameras,
       [](const PerspectiveCameraRecord& a, const PerspectiveCameraRecord& b) {
         return a.node_index < b.node_index;
@@ -172,7 +181,7 @@ namespace {
     };
 
     std::vector<ComponentTablePayload> component_tables;
-    component_tables.reserve(6);
+    component_tables.reserve(7);
 
     auto add_component_table = [&](const ComponentType type,
                                  const size_t entry_size,
@@ -191,6 +200,9 @@ namespace {
 
     add_component_table(ComponentType::kRenderable, sizeof(RenderableRecord),
       std::as_bytes(std::span(build.renderables)));
+    add_component_table(ComponentType::kLocalFogVolume,
+      sizeof(LocalFogVolumeRecord),
+      std::as_bytes(std::span(build.local_fog_volumes)));
     add_component_table(ComponentType::kPerspectiveCamera,
       sizeof(PerspectiveCameraRecord),
       std::as_bytes(std::span(build.perspective_cameras)));

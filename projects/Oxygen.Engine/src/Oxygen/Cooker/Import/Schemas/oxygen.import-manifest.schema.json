@@ -825,6 +825,7 @@
         },
         "scene_descriptor_settings": {
             "type": "object",
+            "description": "Scene-descriptor jobs always consume v3-only authored scene descriptors; legacy descriptors must be updated and re-cooked before import.",
             "properties": {
                 "output": {
                     "type": "string"

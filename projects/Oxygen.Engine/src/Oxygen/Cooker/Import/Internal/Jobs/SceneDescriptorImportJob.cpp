@@ -62,6 +62,7 @@ namespace {
     std::string scene_name;
     SceneBuild build;
     std::vector<data::AssetKey> geometry_keys;
+    std::vector<SceneEnvironmentSystem> environment_systems;
   };
 
   class SceneDescriptorAdapter final {
@@ -198,6 +199,27 @@ namespace {
       });
   }
 
+  auto ValidateDescriptorVersion(ImportSession& session,
+    const ImportRequest& request, const nlohmann::json& descriptor_doc) -> bool
+  {
+    const auto version_it = descriptor_doc.find("version");
+    const auto invalid_version = version_it == descriptor_doc.end()
+      || !version_it->is_number_unsigned()
+      || version_it->get<uint32_t>() != data::pak::world::kSceneAssetVersion;
+    if (!invalid_version) {
+      return true;
+    }
+
+    AddDiagnostic(session, request, ImportSeverity::kError,
+      "scene.descriptor.recook_required",
+      "Scene descriptor version "
+        + std::to_string(
+          static_cast<uint32_t>(data::pak::world::kSceneAssetVersion))
+        + " is required; update the authored descriptor and re-cook the scene "
+          "content.");
+    return false;
+  }
+
   auto MakeDuration(const std::chrono::steady_clock::time_point start,
     const std::chrono::steady_clock::time_point end)
     -> std::chrono::microseconds
@@ -270,6 +292,276 @@ namespace {
 
       context.mounts.push_back(std::move(mount));
     }
+  }
+
+  template <typename RecordT>
+  auto PackRecordBytes(const RecordT& record) -> std::vector<std::byte>
+  {
+    const auto bytes = std::as_bytes(std::span<const RecordT, 1>(&record, 1));
+    return { bytes.begin(), bytes.end() };
+  }
+
+  template <size_t Count>
+  auto CopyFloatArray(const json& source, float (&dest)[Count]) -> void
+  {
+    for (size_t i = 0; i < Count; ++i) {
+      dest[i] = source.at(i).get<float>();
+    }
+  }
+
+  auto ResolveResourceDescriptorKey(SceneDescriptorExecutionContext& context,
+    std::string_view virtual_path, std::string object_path)
+    -> std::optional<data::AssetKey>
+  {
+    if (!internal::IsCanonicalVirtualPath(virtual_path)) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.reference_virtual_path_invalid",
+        "Reference virtual_path must be canonical", std::move(object_path));
+      return std::nullopt;
+    }
+
+    auto relpath = std::string {};
+    if (!internal::TryVirtualPathToRelPath(
+          context.request, virtual_path, relpath)) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.reference_virtual_path_unmounted",
+        "Reference virtual_path is outside mounted cooked roots",
+        std::move(object_path));
+      return std::nullopt;
+    }
+
+    auto file_matches = std::vector<std::filesystem::path> {};
+    for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
+      const auto candidate = it->root / std::filesystem::path(relpath);
+      std::error_code ec;
+      if (std::filesystem::exists(candidate, ec)) {
+        file_matches.push_back(candidate);
+      }
+    }
+
+    if (file_matches.size() > 1U) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.reference_ambiguous",
+        "Reference virtual_path resolved to multiple mounted descriptors: "
+          + std::string(virtual_path),
+        std::move(object_path));
+      return std::nullopt;
+    }
+
+    if (file_matches.empty()) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        "scene.descriptor.reference_missing",
+        "Reference virtual_path was not found: " + std::string(virtual_path),
+        std::move(object_path));
+      return std::nullopt;
+    }
+
+    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
+  }
+
+  auto BuildSkyAtmosphereSystemRecord(SceneDescriptorExecutionContext& context,
+    const json& source, std::string_view object_path)
+    -> std::optional<SceneEnvironmentSystem>
+  {
+    static_cast<void>(context);
+    static_cast<void>(object_path);
+    auto record = data::pak::world::SkyAtmosphereEnvironmentRecord {};
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    record.planet_radius_m
+      = source.value("planet_radius_m", record.planet_radius_m);
+    record.atmosphere_height_m
+      = source.value("atmosphere_height_m", record.atmosphere_height_m);
+    CopyFloatArray(source.at("ground_albedo_rgb"), record.ground_albedo_rgb);
+    CopyFloatArray(
+      source.at("rayleigh_scattering_rgb"), record.rayleigh_scattering_rgb);
+    record.rayleigh_scale_height_m
+      = source.value("rayleigh_scale_height_m", record.rayleigh_scale_height_m);
+    CopyFloatArray(source.at("mie_scattering_rgb"), record.mie_scattering_rgb);
+    CopyFloatArray(source.at("mie_absorption_rgb"), record.mie_absorption_rgb);
+    record.mie_scale_height_m
+      = source.value("mie_scale_height_m", record.mie_scale_height_m);
+    record.mie_g = source.value("mie_anisotropy", record.mie_g);
+    CopyFloatArray(source.at("ozone_absorption_rgb"), record.absorption_rgb);
+    CopyFloatArray(source.at("ozone_density_profile"), record.ozone_density_profile);
+    record.multi_scattering_factor
+      = source.value("multi_scattering_factor", record.multi_scattering_factor);
+    CopyFloatArray(
+      source.at("sky_luminance_factor_rgb"), record.sky_luminance_factor_rgb);
+    CopyFloatArray(source.at("sky_and_aerial_perspective_luminance_factor_rgb"),
+      record.sky_and_aerial_perspective_luminance_factor_rgb);
+    record.aerial_perspective_distance_scale = source.value(
+      "aerial_perspective_distance_scale",
+      record.aerial_perspective_distance_scale);
+    record.aerial_scattering_strength
+      = source.value("aerial_scattering_strength", record.aerial_scattering_strength);
+    record.aerial_perspective_start_depth_m = source.value(
+      "aerial_perspective_start_depth_m",
+      record.aerial_perspective_start_depth_m);
+    record.height_fog_contribution
+      = source.value("height_fog_contribution", record.height_fog_contribution);
+    record.trace_sample_count_scale
+      = source.value("trace_sample_count_scale", record.trace_sample_count_scale);
+    record.transmittance_min_light_elevation_deg = source.value(
+      "transmittance_min_light_elevation_deg",
+      record.transmittance_min_light_elevation_deg);
+    record.sun_disk_enabled = source.value("sun_disk_enabled", true) ? 1U : 0U;
+    record.holdout = source.value("holdout", false) ? 1U : 0U;
+    record.render_in_main_pass
+      = source.value("render_in_main_pass", true) ? 1U : 0U;
+
+    return SceneEnvironmentSystem {
+      .system_type
+      = static_cast<uint32_t>(data::pak::world::EnvironmentComponentType::kSkyAtmosphere),
+      .record_bytes = PackRecordBytes(record),
+    };
+  }
+
+  auto BuildFogSystemRecord(SceneDescriptorExecutionContext& context,
+    const json& source, std::string_view object_path)
+    -> std::optional<SceneEnvironmentSystem>
+  {
+    auto record = data::pak::world::FogEnvironmentRecord {};
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    record.model = source.value("model", record.model);
+    record.extinction_sigma_t_per_m = source.value(
+      "extinction_sigma_t_per_m", record.extinction_sigma_t_per_m);
+    record.height_falloff_per_m
+      = source.value("height_falloff_per_m", record.height_falloff_per_m);
+    record.height_offset_m
+      = source.value("height_offset_m", record.height_offset_m);
+    record.start_distance_m
+      = source.value("start_distance_m", record.start_distance_m);
+    record.max_opacity = source.value("max_opacity", record.max_opacity);
+    CopyFloatArray(
+      source.at("single_scattering_albedo_rgb"), record.single_scattering_albedo_rgb);
+    record.anisotropy_g = source.value("anisotropy_g", record.anisotropy_g);
+    record.enable_height_fog
+      = source.value("enable_height_fog", true) ? 1U : 0U;
+    record.enable_volumetric_fog
+      = source.value("enable_volumetric_fog", false) ? 1U : 0U;
+    record.second_fog_density
+      = source.value("second_fog_density", record.second_fog_density);
+    record.second_fog_height_falloff = source.value(
+      "second_fog_height_falloff", record.second_fog_height_falloff);
+    record.second_fog_height_offset = source.value(
+      "second_fog_height_offset", record.second_fog_height_offset);
+    CopyFloatArray(
+      source.at("fog_inscattering_luminance"), record.fog_inscattering_luminance);
+    CopyFloatArray(source.at("sky_atmosphere_ambient_contribution_color_scale"),
+      record.sky_atmosphere_ambient_contribution_color_scale);
+    if (source.contains("inscattering_color_cubemap_ref")) {
+      const auto cubemap_key = ResolveResourceDescriptorKey(context,
+        source.at("inscattering_color_cubemap_ref").get<std::string>(),
+        std::string(object_path) + ".inscattering_color_cubemap_ref");
+      if (!cubemap_key.has_value()) {
+        return std::nullopt;
+      }
+      record.inscattering_color_cubemap_asset = *cubemap_key;
+    }
+    record.inscattering_color_cubemap_angle = source.value(
+      "inscattering_color_cubemap_angle", record.inscattering_color_cubemap_angle);
+    CopyFloatArray(
+      source.at("inscattering_texture_tint"), record.inscattering_texture_tint);
+    record.fully_directional_inscattering_color_distance = source.value(
+      "fully_directional_inscattering_color_distance",
+      record.fully_directional_inscattering_color_distance);
+    record.non_directional_inscattering_color_distance = source.value(
+      "non_directional_inscattering_color_distance",
+      record.non_directional_inscattering_color_distance);
+    CopyFloatArray(source.at("directional_inscattering_luminance"),
+      record.directional_inscattering_luminance);
+    record.directional_inscattering_exponent = source.value(
+      "directional_inscattering_exponent",
+      record.directional_inscattering_exponent);
+    record.directional_inscattering_start_distance = source.value(
+      "directional_inscattering_start_distance",
+      record.directional_inscattering_start_distance);
+    record.end_distance_m
+      = source.value("end_distance_m", record.end_distance_m);
+    record.fog_cutoff_distance_m
+      = source.value("fog_cutoff_distance_m", record.fog_cutoff_distance_m);
+    record.volumetric_fog_scattering_distribution = source.value(
+      "volumetric_fog_scattering_distribution",
+      record.volumetric_fog_scattering_distribution);
+    CopyFloatArray(
+      source.at("volumetric_fog_albedo"), record.volumetric_fog_albedo);
+    CopyFloatArray(
+      source.at("volumetric_fog_emissive"), record.volumetric_fog_emissive);
+    record.volumetric_fog_extinction_scale = source.value(
+      "volumetric_fog_extinction_scale",
+      record.volumetric_fog_extinction_scale);
+    record.volumetric_fog_distance
+      = source.value("volumetric_fog_distance", record.volumetric_fog_distance);
+    record.volumetric_fog_start_distance = source.value(
+      "volumetric_fog_start_distance", record.volumetric_fog_start_distance);
+    record.volumetric_fog_near_fade_in_distance = source.value(
+      "volumetric_fog_near_fade_in_distance",
+      record.volumetric_fog_near_fade_in_distance);
+    record.volumetric_fog_static_lighting_scattering_intensity = source.value(
+      "volumetric_fog_static_lighting_scattering_intensity",
+      record.volumetric_fog_static_lighting_scattering_intensity);
+    record.override_light_colors_with_fog_inscattering_colors = source.value(
+      "override_light_colors_with_fog_inscattering_colors", false)
+      ? 1U
+      : 0U;
+    record.holdout = source.value("holdout", false) ? 1U : 0U;
+    record.render_in_main_pass
+      = source.value("render_in_main_pass", true) ? 1U : 0U;
+    record.visible_in_reflection_captures = source.value(
+      "visible_in_reflection_captures", true)
+      ? 1U
+      : 0U;
+    record.visible_in_real_time_sky_captures = source.value(
+      "visible_in_real_time_sky_captures", true)
+      ? 1U
+      : 0U;
+
+    return SceneEnvironmentSystem {
+      .system_type
+      = static_cast<uint32_t>(data::pak::world::EnvironmentComponentType::kFog),
+      .record_bytes = PackRecordBytes(record),
+    };
+  }
+
+  auto BuildSkyLightSystemRecord(SceneDescriptorExecutionContext& context,
+    const json& source, std::string_view object_path)
+    -> std::optional<SceneEnvironmentSystem>
+  {
+    auto record = data::pak::world::SkyLightEnvironmentRecord {};
+    record.enabled = source.value("enabled", true) ? 1U : 0U;
+    record.source = source.value("source", record.source);
+    if (source.contains("cubemap_ref")) {
+      const auto cubemap_key = ResolveResourceDescriptorKey(context,
+        source.at("cubemap_ref").get<std::string>(),
+        std::string(object_path) + ".cubemap_ref");
+      if (!cubemap_key.has_value()) {
+        return std::nullopt;
+      }
+      record.cubemap_asset = *cubemap_key;
+    }
+    record.intensity = source.value("intensity", record.intensity);
+    CopyFloatArray(source.at("tint_rgb"), record.tint_rgb);
+    record.diffuse_intensity
+      = source.value("diffuse_intensity", record.diffuse_intensity);
+    record.specular_intensity
+      = source.value("specular_intensity", record.specular_intensity);
+    record.real_time_capture_enabled
+      = source.value("real_time_capture_enabled", false) ? 1U : 0U;
+    CopyFloatArray(
+      source.at("lower_hemisphere_color"), record.lower_hemisphere_color);
+    record.volumetric_scattering_intensity = source.value(
+      "volumetric_scattering_intensity",
+      record.volumetric_scattering_intensity);
+    record.affect_reflections
+      = source.value("affect_reflections", true) ? 1U : 0U;
+    record.affect_global_illumination
+      = source.value("affect_global_illumination", true) ? 1U : 0U;
+
+    return SceneEnvironmentSystem {
+      .system_type
+      = static_cast<uint32_t>(data::pak::world::EnvironmentComponentType::kSkyLight),
+      .record_bytes = PackRecordBytes(record),
+    };
   }
 
   auto ResolveAssetReference(SceneDescriptorExecutionContext& context,
@@ -505,6 +797,7 @@ namespace {
       .scene_name = descriptor_doc.at("name").get<std::string>(),
       .build = {},
       .geometry_keys = {},
+      .environment_systems = {},
     };
 
     const auto scene_virtual_path
@@ -854,6 +1147,72 @@ namespace {
       }
     }
 
+    if (descriptor_doc.contains("environment")) {
+      const auto& environment_doc = descriptor_doc.at("environment");
+      if (environment_doc.contains("sky_atmosphere")) {
+        auto sky_record = BuildSkyAtmosphereSystemRecord(context,
+          environment_doc.at("sky_atmosphere"),
+          "environment.sky_atmosphere");
+        if (!sky_record.has_value()) {
+          return std::nullopt;
+        }
+        prepared.environment_systems.push_back(std::move(*sky_record));
+      }
+      if (environment_doc.contains("fog")) {
+        auto fog_record = BuildFogSystemRecord(
+          context, environment_doc.at("fog"), "environment.fog");
+        if (!fog_record.has_value()) {
+          return std::nullopt;
+        }
+        prepared.environment_systems.push_back(std::move(*fog_record));
+      }
+      if (environment_doc.contains("sky_light")) {
+        auto sky_light_record = BuildSkyLightSystemRecord(context,
+          environment_doc.at("sky_light"),
+          "environment.sky_light");
+        if (!sky_light_record.has_value()) {
+          return std::nullopt;
+        }
+        prepared.environment_systems.push_back(std::move(*sky_light_record));
+      }
+    }
+
+    if (descriptor_doc.contains("local_fog_volumes")) {
+      const auto& local_fog_doc = descriptor_doc.at("local_fog_volumes");
+      prepared.build.local_fog_volumes.reserve(local_fog_doc.size());
+      for (size_t i = 0; i < local_fog_doc.size(); ++i) {
+        const auto& volume_doc = local_fog_doc.at(i);
+        const auto object_path
+          = std::string { "local_fog_volumes[" } + std::to_string(i) + "]";
+        const auto node_index = volume_doc.at("node").get<uint32_t>();
+        if (!ValidateNodeIndex(context, node_index, node_count,
+              "scene.descriptor.local_fog_node_index_out_of_range",
+              "Local fog volume node index is out of range",
+              object_path + ".node")) {
+          return std::nullopt;
+        }
+
+        auto record = data::pak::world::LocalFogVolumeRecord {};
+        record.node_index = node_index;
+        record.enabled = volume_doc.value("enabled", true) ? 1U : 0U;
+        record.radial_fog_extinction = volume_doc.value(
+          "radial_fog_extinction", record.radial_fog_extinction);
+        record.height_fog_extinction = volume_doc.value(
+          "height_fog_extinction", record.height_fog_extinction);
+        record.height_fog_falloff = volume_doc.value(
+          "height_fog_falloff", record.height_fog_falloff);
+        record.height_fog_offset
+          = volume_doc.value("height_fog_offset", record.height_fog_offset);
+        record.fog_phase_g
+          = volume_doc.value("fog_phase_g", record.fog_phase_g);
+        CopyFloatArray(volume_doc.at("fog_albedo"), record.fog_albedo);
+        CopyFloatArray(volume_doc.at("fog_emissive"), record.fog_emissive);
+        record.sort_priority
+          = volume_doc.value("sort_priority", record.sort_priority);
+        prepared.build.local_fog_volumes.push_back(record);
+      }
+    }
+
     if (descriptor_doc.contains("references")) {
       const auto& refs_doc = descriptor_doc.at("references");
 
@@ -958,6 +1317,12 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
+  if (!ValidateDescriptorVersion(session, Request(), descriptor_doc)) {
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Scene descriptor requires re-cook");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
+
   if (!ValidateDescriptorSchema(session, Request(), descriptor_doc)) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Scene descriptor schema validation failed");
@@ -999,7 +1364,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto adapter = std::make_shared<SceneDescriptorAdapter>(prepared.build);
   auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
     Request().source_path.string(), prepared.geometry_keys,
-    std::vector<SceneEnvironmentSystem> {}, std::move(request_for_pipeline),
+    prepared.environment_systems, std::move(request_for_pipeline),
     observer_ptr { &GetNamingService() }, StopToken());
 
   co_await pipeline.Submit(std::move(item));
