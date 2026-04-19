@@ -16,6 +16,10 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::scene {
+class Scene;
+}
+
 namespace oxygen::vortex {
 
 struct RenderContext;
@@ -33,6 +37,10 @@ class FogRenderer;
 class LocalFogVolumeTiledCullingPass;
 class LocalFogVolumeComposePass;
 namespace internal {
+struct StableAtmosphereState;
+struct ResolvedAtmosphereLightState;
+class AtmosphereState;
+class AtmosphereLightState;
 class IblProcessor;
 class LocalFogVolumeState;
 }
@@ -139,6 +147,10 @@ public:
   {
     return last_stage14_state_;
   }
+  [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereState() const noexcept
+    -> const environment::internal::StableAtmosphereState&;
+  [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereLightState() const noexcept
+    -> const environment::internal::ResolvedAtmosphereLightState&;
 
 private:
   struct PublishedView {
@@ -147,6 +159,7 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
+  auto RefreshStableAtmosphereState(const scene::Scene* scene) -> void;
 
   Renderer& renderer_;
   frame::SequenceNumber current_sequence_ { 0U };
@@ -162,6 +175,9 @@ private:
   std::unique_ptr<environment::SkyRenderer> sky_ {};
   std::unique_ptr<environment::AtmosphereRenderer> atmosphere_ {};
   std::unique_ptr<environment::FogRenderer> fog_ {};
+  std::unique_ptr<environment::internal::AtmosphereLightState>
+    atmosphere_light_state_ {};
+  std::unique_ptr<environment::internal::AtmosphereState> atmosphere_state_ {};
   std::unique_ptr<environment::internal::LocalFogVolumeState> local_fog_state_ {};
   std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
     local_fog_tiled_culling_ {};

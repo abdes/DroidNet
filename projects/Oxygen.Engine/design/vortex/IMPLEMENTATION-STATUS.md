@@ -212,6 +212,28 @@ Related:
     `04-19`, `04-27`, `04-20`, `04-28`, `04-21`, `04-22`, `04-23`, `04-29`,
     `04-24`, `04-30`, `04-25`, and `04-15`
 
+### 2026-04-19 — 04-19 closed with deterministic dual-atmosphere-light state
+
+- `04-19` is now closed for the stable-state lane.
+- Landed scope:
+  - `AtmosphereLightState` resolves slot 0 / slot 1 using scene traversal and
+    first-wins conflict handling
+  - `AtmosphereState` owns stable authored atmosphere/fog/sky-light state
+    separately from later LUT generation
+  - slot 1 participates in atmosphere data while conventional shadow authority
+    remains slot-0-only
+  - `EnvironmentLightingService` refreshes the stable atmosphere family from
+    the active scene before publication / Stage 14 / Stage 15 work
+- New verification evidence:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4`
+  - `out\build-ninja\bin\Debug\Oxygen.Vortex.EnvironmentLightingService.Tests.exe --gtest_filter=EnvironmentLightingServiceBehaviorTest.StableAtmosphereStateResolvesSlot0AndSlot1ExplicitClaimsAndKeepsSlot0ShadowAuthority:EnvironmentLightingServiceBehaviorTest.StableAtmosphereStateFallsBackSlot0ToFirstSunWhenNoExplicitPrimaryExists:EnvironmentLightingServiceBehaviorTest.StableAtmosphereLightResolutionUsesFirstWinsConflictHandlingForSlot0:EnvironmentLightingServiceBehaviorTest.StableAtmosphereStateInvalidatesOnlyOnAuthoredAtmosphereOrLightChanges`
+  - `ctest --preset test-debug --output-on-failure -R "EnvironmentLightingService"`
+  - `rg -n "slot 0|slot 1|first-wins|conflict" src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp src/Oxygen/Vortex/Environment/Internal/AtmosphereLightState.cpp`
+- Remaining truth:
+  - `04-19` closes stable atmosphere/light state only
+  - LUT generation, visible atmosphere products, height fog execution, and the
+    remaining environment parity gates remain later-lane work
+
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |

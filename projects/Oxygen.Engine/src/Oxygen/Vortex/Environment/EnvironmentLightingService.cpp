@@ -8,7 +8,10 @@
 
 #include <memory>
 
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
@@ -29,6 +32,10 @@ EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
   , sky_(std::make_unique<environment::SkyRenderer>(renderer))
   , atmosphere_(std::make_unique<environment::AtmosphereRenderer>(renderer))
   , fog_(std::make_unique<environment::FogRenderer>(renderer))
+  , atmosphere_light_state_(
+      std::make_unique<environment::internal::AtmosphereLightState>())
+  , atmosphere_state_(
+      std::make_unique<environment::internal::AtmosphereState>())
   , local_fog_state_(std::make_unique<environment::internal::LocalFogVolumeState>(renderer))
   , local_fog_tiled_culling_(
       std::make_unique<environment::LocalFogVolumeTiledCullingPass>(renderer))
@@ -108,6 +115,7 @@ auto EnvironmentLightingService::BuildBindings(
   const ShaderVisibleIndex environment_view_slot,
   const bool enable_ambient_bridge) const -> EnvironmentFrameBindings
 {
+  const auto& stable_state = atmosphere_state_->GetState();
   auto bindings = EnvironmentFrameBindings {
     .environment_static_slot = environment_static_slot,
     .environment_view_slot = environment_view_slot,
@@ -121,6 +129,16 @@ auto EnvironmentLightingService::BuildBindings(
     .evaluation = EnvironmentEvaluationParameters {},
     .ambient_bridge = EnvironmentAmbientBridgeBindings {},
   };
+
+  if (stable_state.view_products.atmosphere_lights[0].enabled) {
+    bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight0Enabled;
+  }
+  if (stable_state.view_products.atmosphere_lights[1].enabled) {
+    bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight1Enabled;
+  }
+  if (stable_state.conventional_shadow_authority_slot0_only) {
+    bindings.contract_flags |= kEnvironmentContractFlagShadowAuthoritySlot0Only;
+  }
 
   if (enable_ambient_bridge) {
     bindings.evaluation.flags |= kEnvironmentEvaluationFlagAmbientBridgeEligible;
@@ -142,6 +160,7 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   const ShaderVisibleIndex environment_view_slot,
   const bool enable_ambient_bridge) -> ShaderVisibleIndex
 {
+  RefreshStableAtmosphereState(ctx.GetScene().get());
   if (ctx.current_view.view_id == kInvalidViewId || !EnsurePublishResources()) {
     return kInvalidShaderVisibleIndex;
   }
@@ -167,6 +186,7 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
 auto EnvironmentLightingService::RenderSkyAndFog(
   RenderContext& ctx, const SceneTextures& scene_textures) -> void
 {
+  RefreshStableAtmosphereState(ctx.GetScene().get());
   auto& local_fog_products = local_fog_state_->Prepare(ctx);
   LOG_F(INFO, "local_fog_volume_instance_count={}",
     local_fog_products.instance_count);
@@ -225,6 +245,32 @@ auto EnvironmentLightingService::ResolveEnvironmentFrameSlot(const ViewId view_i
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? it->second.slot
                                       : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+}
+
+auto EnvironmentLightingService::InspectAtmosphereState() const noexcept
+  -> const environment::internal::StableAtmosphereState&
+{
+  return atmosphere_state_->GetState();
+}
+
+auto EnvironmentLightingService::InspectAtmosphereLightState() const noexcept
+  -> const environment::internal::ResolvedAtmosphereLightState&
+{
+  return atmosphere_light_state_->GetState();
+}
+
+auto EnvironmentLightingService::RefreshStableAtmosphereState(
+  const scene::Scene* scene) -> void
+{
+  if (scene == nullptr) {
+    atmosphere_light_state_->Reset();
+    atmosphere_state_->Reset();
+    return;
+  }
+
+  static_cast<void>(atmosphere_light_state_->Update(*scene));
+  static_cast<void>(
+    atmosphere_state_->Update(*scene, atmosphere_light_state_->GetState()));
 }
 
 } // namespace oxygen::vortex
