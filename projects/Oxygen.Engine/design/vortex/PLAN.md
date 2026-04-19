@@ -27,6 +27,21 @@ Related:
 - [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) — running
   resumability ledger (source of truth for *current state*)
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+  explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
+
 ## 1. Planning Principles
 
 ### 1.1 Design-First Execution
@@ -44,13 +59,18 @@ deliverables per phase.
 
 ### 1.2 Delivery Strategy
 
-Vortex is delivered as a clean-slate module that coexists with the legacy
-`Oxygen.Renderer`. The legacy module stays intact and functional throughout.
+Vortex is delivered as a clean-slate module in a workspace that still contains
+legacy `Oxygen.Renderer` code. That legacy code is dead-code seam inventory
+only and must not be treated as production, fallback, design guidance, or
+completion evidence for Vortex.
 
 Guiding principles:
 
-- copy + adapt, not git-move
-- preserve the production runtime path in the legacy module throughout
+- re-design and re-implement within Vortex-owned boundaries; only
+  architecture-neutral substrate concepts may survive, and only after they are
+  requalified against the UE5.7 parity target
+- do not use the legacy module as fallback behavior, implementation guidance,
+  or parity proof for any Vortex milestone
 - build Vortex incrementally, one phase at a time
 - each phase must compile and link cleanly before the next starts
 - domain systems are vertical slices added after the core shell works
@@ -496,22 +516,24 @@ Oxygen runtime flow.
 
 | ID | Task | Scope |
 | -- | ---- | ----- |
-| 4E.1 | Capture legacy `Examples/Async` visual baseline | RenderDoc frame 10 baseline |
+| 4E.1 | Capture `Examples/Async` parity evidence pack | RenderDoc frame 10 evidence aligned to the relevant UE5.7 source/shader contracts |
 | 4E.2 | Port `Examples/Async` from legacy Renderer to Vortex | Replace the real legacy renderer seams (`ForwardPipeline`, composition-view routing, DemoShell integration, and legacy renderer-owned view registration paths) with the Vortex runtime path, with no compatibility clutter |
-| 4E.3 | Visual parity validation | RenderDoc capture comparison against legacy baseline |
+| 4E.3 | Visual parity validation | RenderDoc frame-10 comparison against the relevant UE5.7-derived parity target |
 | 4E.4 | Behavior parity validation | Workflows, async operations, observable behavior match |
 | 4E.5 | Validate `ForSinglePassHarness()` against Vortex | Non-runtime facade check |
 | 4E.6 | Validate `ForRenderGraphHarness()` against Vortex | Non-runtime facade check |
 
 **Exit gate:** `Examples/Async` runs on Vortex with correct visual output
-matching the legacy reference through the real composition submission path and
-presentation surface. The baseline includes the parity-grade environment family
-approved for this program: sky atmosphere, aerial perspective, exponential
-height fog coupling, local fog volumes, volumetric fog, sky-light coupling, and
-dual atmosphere-light support, with clouds excluded. Spotlight shadows are not
-part of the required Phase 4 parity baseline unless the phase scope is
-explicitly widened. Migration uses no long-lived compatibility clutter. Two
-non-runtime facades verified.
+through the real composition submission path and presentation surface, with
+completion gated by explicit parity evidence against the relevant UE5.7
+source/shader contracts. The required environment family includes sky
+atmosphere, aerial perspective, exponential height fog coupling, local fog
+volumes, volumetric fog, sky-light coupling, and dual atmosphere-light support,
+with clouds excluded. Spotlight shadows are not part of the required Phase 4
+parity target unless the phase scope is explicitly widened. Migration uses no
+long-lived compatibility clutter. Two non-runtime facades verified. If the
+UE5.7 parity gate cannot be closed, Phase 4 remains incomplete pending explicit
+human approval.
 
 ### 4F: Composition and Presentation Validation
 
@@ -876,7 +898,8 @@ This is the PRD's required first meaningful success gate (PRD Goal 11, §8.8).
 
 Exit criteria:
 
-- `Examples/Async` runs on Vortex with visual parity to legacy reference
+- `Examples/Async` runs on Vortex with maximum-parity visual and behavioral
+  output proven against the relevant UE5.7 source/shader references
 - Four migration-critical services active (Lighting, PostProcess, Shadows,
   Environment)
 - Environment parity includes sky atmosphere, aerial perspective, exponential
@@ -885,7 +908,7 @@ Exit criteria:
 - Composition path validated end-to-end
 - Two non-runtime facades verified (ForSinglePassHarness, ForRenderGraphHarness)
 - Migration uses no long-lived compatibility clutter
-- RenderDoc A/B capture validates visual parity at frame 10
+- RenderDoc frame-10 evidence closes the owning UE5.7 parity gate
 
 ### M5. Full Feature Set (Phase 5)
 
@@ -986,7 +1009,7 @@ Every phase must pass:
 | Shadow terms | 4C | Directional shadow on ground plane | Visual + RenderDoc |
 | Sky + ambient | 4D | Atmosphere renders, IBL ambient visible | Visual |
 | Tonemapped output | 4B | HDR → LDR with correct exposure | Visual |
-| **Migration parity** | **4E** | **Ported example matches legacy reference** | **RenderDoc A/B comparison at frame 10** |
+| **Migration parity** | **4E** | **Ported example closes the owning UE5.7 parity gate** | **RenderDoc frame-10 parity review against the relevant UE5.7 source/shader references** |
 | Composition to screen | 4F | Correct presentation through composition path | Visual |
 | Translucency | 5B | Forward-lit blending over deferred background | Visual |
 | Occlusion | 5C | Draw call reduction in complex scenes | Profiling counters |
@@ -1032,7 +1055,7 @@ Per ARCHITECTURE.md §11.3.1:
 | SceneTextures four-part contract complexity | Medium | 2 | LLD design deliverable required before implementation (per §1.5 criteria) |
 | Forward light data shape tuning | Low | 4A | Start with simplest scenario (1 directional), add complexity incrementally |
 | InitViews module scope (~6.5k UE5 lines) | Medium | 3B | May need to be phased internally; LLD design will determine scope |
-| Migration visual parity gap | Medium | 4E | Capture legacy baseline first; validate incrementally during port |
+| Migration visual parity gap | Medium | 4E | Derive the parity checklist from the relevant UE5.7 source/shader ownership first; validate incrementally during port |
 | Multi-view interaction complexity | Medium | 5D | Start with two identical views; add heterogeneity incrementally |
 | Offscreen deferred/forward mode switching | Low | 5E | Reuse per-view ShadingMode validated in 5D |
 

@@ -4,6 +4,21 @@
 **Deliverable:** D.12
 **Status:** `needs-implementation`
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+  explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
+
 ## 1. Scope and Intent
 
 ### 1.1 Goal
@@ -59,7 +74,7 @@ Environment-family execution is split as follows:
   - prepare local-fog and volumetric-fog per-view data
 - **Stage 14**
   - volumetric-media preparation and execution
-  - local fog volume culling and optional injection
+  - local fog volume culling through mandatory Screen HZB-backed tiled classification and optional injection
   - volumetric fog froxel integration
 - **Stage 15**
   - sky-atmosphere rendering
@@ -100,7 +115,7 @@ The environment family implements:
   - volumetric-fog coupling
 - Local fog volumes as a separate authored and rendered system with:
   - per-instance transforms
-  - tiled culling
+  - depth/HZB-aware tiled culling
   - analytic local media evaluation
   - directional-light and sky-light scattering
 - Volumetric fog as a froxel system with temporal reprojection and light
@@ -428,6 +443,22 @@ Relevant files:
 
 - [PakFormat_world.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h>)
 - [SceneAsset.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/SceneAsset.h>)
+
+### 5.1.1 Screen HZB Mandate For Local Fog
+
+The first-wave local-fog renderer path is not allowed to reinterpret missing
+screen-HZB plumbing as optional. If Vortex or the Graphics backend does not yet
+publish Screen HZB in the UE5.7 shape needed by local fog, the implementation
+must add that backend/publication path cleanly before local fog can be
+considered complete.
+
+Rules:
+
+- `depth/HZB if available` is not an implementation escape hatch for local fog.
+- Stage 5 Screen HZB publication is first-wave work for the environment lane
+  whenever local fog depends on it.
+- The implementation must mirror UE5.7 screen-HZB semantics rather than
+  improvising a reduced substitute or reusing unrelated HZB products.
 
 ### 5.2 Required Serialization Changes
 
@@ -842,7 +873,7 @@ revision replaces it.
 | 3 | pre-stage | per-view sky-view LUT build | stable atmosphere state, per-view camera | `SkyViewLut` | UAV write -> SRV |
 | 4 | pre-stage | per-view camera aerial perspective build | LUTs, atmosphere lights, per-view camera | `CameraAerialPerspectiveVolume` | UAV write -> SRV |
 | 5 | Stage 14 | local fog volume gather/sort/upload | scene traversal results | GPU instance + tile inputs | upload -> SRV/UAV |
-| 6 | Stage 14 | local fog tiled culling | local fog GPU instance data, depth/HZB if available | tile buffers/textures | UAV write -> SRV/UAV |
+| 6 | Stage 14 | local fog tiled culling | local fog GPU instance data, SceneDepth, Stage 5 Screen HZB products | tile buffers/textures + draw-indirect buffers | UAV write -> SRV/UAV |
 | 7 | Stage 14 | volumetric fog grid allocate/clear | fog model, view data | empty froxel resources | UAV write |
 | 8 | Stage 14 | volumetric light injection | froxel grid, atmosphere lights, local lights, shadows | scattering/extinction intermediates | UAV write |
 | 9 | Stage 14 | optional local-fog injection into volumetric fog | local fog data, froxel grid | updated volumetric media | UAV write |
@@ -858,6 +889,9 @@ Junior implementation rule:
   write-to-read transition
 - do not rely on implicit resource-state promotion between the volumetric and
   composition passes
+- do not treat Screen HZB as optional for local fog. If the Vortex/Graphics
+  path is missing it, implement it before claiming Stage 14 local-fog culling
+  is aligned with UE5.7.
 
 ### 7.3 Required Vortex Runtime Types
 
@@ -917,10 +951,10 @@ Required shader file families:
     optional volumetric fog SRV
   - output: fog color + transmittance
 - `LocalFogVolumeCommon`
-  - input: local fog instance data, directional light, sky light
+  - input: local fog instance data, directional light, sky light, `PhaseG`
   - output: local medium color + coverage
 - `LocalFogVolumeTiledCullingCS`
-  - input: local fog instances + view/depth data
+  - input: local fog instances + view/depth data + Screen HZB bindings
   - output: tile lists / draw-indirect buffers
 - `LocalFogVolumeComposePS`
   - input: SceneColor, SceneDepth, local fog tile/instance data
@@ -976,11 +1010,18 @@ This is the implementation order a junior engineer should follow.
 3. implement LUT pipeline
 4. implement sky-atmosphere rendering
 5. implement camera aerial perspective
-6. implement full height fog
-7. implement local fog volumes
-8. implement volumetric fog
-9. implement sky-light coupling
-10. implement full publication bindings
+6. implement Stage 5 Screen HZB publication for environment consumers
+7. implement full height fog
+8. implement local fog volumes
+9. implement volumetric fog
+10. implement sky-light coupling
+11. implement full publication bindings
+
+Implementation note:
+
+- Local fog must not resume on a placeholder Stage 5. If Screen HZB is missing
+  in Vortex, this renderer-layer sequence must fill that gap before local-fog
+  culling/proof is treated as production-credible.
 
 ### 8.5 Proof and Validation Last
 
@@ -1029,7 +1070,7 @@ Add tests and runtime proof for:
 - dual atmosphere-light data flow
 - camera aerial perspective
 - height-fog + sky-atmosphere coupling
-- local fog volume sorting/culling/shading
+- local fog volume sorting/HZB culling/shading
 - volumetric fog integration
 - sky-light coupling
 
