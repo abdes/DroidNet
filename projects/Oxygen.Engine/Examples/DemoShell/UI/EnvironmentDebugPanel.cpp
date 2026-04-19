@@ -243,9 +243,13 @@ auto EnvironmentDebugPanel::DrawContents() -> void
 
 void EnvironmentDebugPanel::DrawFog()
 {
-  if (!ImGui::CollapsingHeader("Fog")) {
+  if (!ImGui::CollapsingHeader("Height Fog")) {
     return;
   }
+
+  ImGui::TextDisabled(
+    "Edits the DemoShell height-fog override state that is applied to "
+    "SceneEnvironment Fog metadata.");
 
   bool fog_enabled = environment_vm_->GetFogEnabled();
   if (ImGui::Checkbox("Enabled##Fog", &fog_enabled)) {
@@ -264,20 +268,20 @@ void EnvironmentDebugPanel::DrawFog()
   float extinction_sigma_t_per_m
     = environment_vm_->GetFogExtinctionSigmaTPerMeter();
   if (ImGui::SliderFloat("Extinction σt (1/m)", &extinction_sigma_t_per_m, 0.0F,
-        1.0F, "%.6f", ImGuiSliderFlags_Logarithmic)) {
+        10.0F, "%.6f", ImGuiSliderFlags_Logarithmic)) {
     environment_vm_->SetFogExtinctionSigmaTPerMeter(extinction_sigma_t_per_m);
   }
 
   float start_distance_m = environment_vm_->GetFogStartDistanceMeters();
   if (ImGui::DragFloat(
-        "Start Distance (m)", &start_distance_m, 1.0F, 0.0F, 0.0F, "%.1f")) {
+        "Start Distance (m)", &start_distance_m, 1.0F, 0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetFogStartDistanceMeters(
       std::max(start_distance_m, 0.0F));
   }
 
   float height_falloff_per_m = environment_vm_->GetFogHeightFalloffPerMeter();
   if (ImGui::DragFloat("Height Falloff (1/m)", &height_falloff_per_m, 0.0001F,
-        0.0F, 2.0F, "%.4f")) {
+        0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetFogHeightFalloffPerMeter(height_falloff_per_m);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
@@ -292,7 +296,7 @@ void EnvironmentDebugPanel::DrawFog()
 
   float height_offset_m = environment_vm_->GetFogHeightOffsetMeters();
   if (ImGui::DragFloat(
-        "Height Offset (m)", &height_offset_m, 0.25F, 0.0F, 0.0F, "%.1f")) {
+        "Height Offset (m)", &height_offset_m, 0.25F, -100000.0F, 100000.0F, "%.1f")) {
     environment_vm_->SetFogHeightOffsetMeters(height_offset_m);
   }
 

@@ -1,6 +1,6 @@
 # Vortex Renderer Implementation Status
 
-Status: `gaps_found — Phase 4 code exists on the current branch, but direct UAT and phase verification reject the visual/parity/composition closeout claim`
+Status: `gaps_found — Phase 4 code exists on the current branch, but direct UAT and phase verification still reject the remaining visual/parity closeout claim`
 
 This document is the **running resumability ledger** for the Vortex renderer.
 It records what is actually in the repo, what has been verified, what is still
@@ -140,6 +140,51 @@ Related:
 
 ## Phase Summary
 
+### 2026-04-19 — local fog parity claim corrected before rewrite
+
+- The current Vortex local-fog implementation is now explicitly treated as
+  **incomplete** against the UE5.7 local fog volume contract.
+- Previous planning language that framed local fog as an already-landed
+  first-wave feature that only needed hardening is superseded by the direct
+  parity requirement.
+- Required rewrite targets:
+  - UE-style authored defaults and base-volume scaling
+  - UE-style per-view translated packing, sort semantics, and capped instance
+    selection
+  - UE-style tiled culling resources and analytical splat path
+  - explicit parity evidence against the relevant UE5.7 source/shader files
+- Remaining parity blockers after the rewritten Stage 14/Stage 15 path:
+  - live runtime proof still reports `screen_hzb_published=false`, which keeps
+    `local_fog_hzb_consumed=false` in the capture-backed validator
+  - height-fog inline local-fog composition parity is not yet implemented
+  - volumetric-fog injection parity is blocked because Vortex does not yet have
+    the volumetric fog system that UE5.7 local fog integrates with
+  - sky-light scattering still uses the current Vortex environment products
+    rather than the exact UE5.7 view-side SH/volumetric-scattering contract
+- Until the rewrite lands and the required verification passes, do not report
+  local fog as shipped, hardened, or proof-backed.
+
+### 2026-04-19 — 04-18 closed with authorized local-fog interaction gaps
+
+- `04-18` is now closed for the hard v3 content cut plus the
+  scene/data/DemoShell local-fog vertical slice.
+- Verification completed for the non-renderer ownership surface:
+  - `Oxygen.Cooker.AsyncImportSceneDescriptor.Tests`
+  - `Oxygen.Data.All.Tests`
+  - `Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests`
+  - `Oxygen.Examples.DemoShell.SceneLoaderServicePhase4.Tests`
+  - `pytest src/Oxygen/Cooker/Tools/PakGen/tests/test_writer_scene_basic.py -q`
+- DemoShell height-fog authoring was tightened so the panel wording and control
+  ranges now match the Fog metadata contract it applies to.
+- User-authorized deferred gaps remain open and are carried forward:
+  - local fog / height fog inline composition parity
+  - local fog / volumetric fog injection parity
+  - capture-backed proof that still reports `screen_hzb_published=false` and
+    `local_fog_hzb_consumed=false`
+- This closes `04-18`, but it does **not** close local-fog UE5.7 parity as a
+  whole. That gate remains open for `04-21`, `04-22`, `04-23`, `04-25`, and
+  `04-29`.
+
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
@@ -180,6 +225,33 @@ implementation cannot begin until its design prerequisites are met.
 ---
 
 ## Documentation Sync Log
+
+### 2026-04-19 — direct user UAT closes the old Async overlay blocker, but Phase 4 still has open visual/parity gaps
+
+- **Scope**:
+  - reconciled the live tracking docs with the latest direct user UAT
+  - closed the stale "Async has no visible ImGui overlay" blocker in the
+    current Phase 4 failure-state documents
+  - kept the remaining active gaps explicit instead of overstating progress
+- **Changed files**:
+  - `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/04-VERIFICATION.md`
+  - `.planning/workstreams/vortex/phases/04-migration-critical-services-and-first-migration/.continue-here.md`
+  - `.planning/workstreams/vortex/STATE.md`
+  - `.planning/workstreams/vortex/ROADMAP.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- **Evidence used**:
+  - direct user UAT on 2026-04-19: "Async has ImGui now and there is no such problem anymore."
+  - existing retained harness/composition validation rows already recorded in `04-VERIFICATION.md`
+- **Result**:
+  - the old overlay/composition complaint is no longer treated as an active
+    Phase 4 blocker
+  - Phase 4 still remains `gaps_found`
+- **Remaining blockers**:
+  - poor sky quality
+  - over-exposed output
+  - tonemapping not yet visually confirmed
+  - non-credible PBR material output
+  - UE5.7 parity proof still not closed
 
 ### 2026-04-18 — 04-17 spotlight cone/runtime-light repair completed
 

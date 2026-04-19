@@ -14,6 +14,7 @@
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/Sun.h>
@@ -507,6 +508,88 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(0), 12.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(1), 36.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(2), 92.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  HeightFogPanelFacingServiceApiAppliesCorrectlyToSceneFogMetadata)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.HeightFogMetadata");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.SetFogEnabled(true);
+  service_.SetFogModel(static_cast<int>(scene::environment::FogModel::kVolumetric));
+  service_.SetFogExtinctionSigmaTPerMeter(0.5F);
+  service_.SetFogHeightFalloffPerMeter(1.25F);
+  service_.SetFogHeightOffsetMeters(18.0F);
+  service_.SetFogStartDistanceMeters(96.0F);
+  service_.SetFogMaxOpacity(0.55F);
+  service_.SetFogSingleScatteringAlbedoRgb({ 0.2F, 0.3F, 0.4F });
+
+  EXPECT_TRUE(service_.GetFogEnabled());
+  EXPECT_EQ(service_.GetFogModel(),
+    static_cast<int>(scene::environment::FogModel::kVolumetric));
+  EXPECT_FLOAT_EQ(service_.GetFogExtinctionSigmaTPerMeter(), 0.5F);
+  EXPECT_FLOAT_EQ(service_.GetFogHeightFalloffPerMeter(), 1.25F);
+  EXPECT_FLOAT_EQ(service_.GetFogHeightOffsetMeters(), 18.0F);
+  EXPECT_FLOAT_EQ(service_.GetFogStartDistanceMeters(), 96.0F);
+  EXPECT_FLOAT_EQ(service_.GetFogMaxOpacity(), 0.55F);
+  EXPECT_EQ(service_.GetFogSingleScatteringAlbedoRgb(),
+    glm::vec3(0.2F, 0.3F, 0.4F));
+
+  service_.ApplyPendingChanges();
+
+  auto* updated_fog
+    = scene->GetEnvironment()->TryGetSystem<scene::environment::Fog>().get();
+  ASSERT_NE(updated_fog, nullptr);
+  EXPECT_TRUE(updated_fog->IsEnabled());
+  EXPECT_EQ(updated_fog->GetModel(), scene::environment::FogModel::kVolumetric);
+  EXPECT_FLOAT_EQ(updated_fog->GetExtinctionSigmaTPerMeter(), 0.5F);
+  EXPECT_FLOAT_EQ(updated_fog->GetHeightFalloffPerMeter(), 1.25F);
+  EXPECT_FLOAT_EQ(updated_fog->GetHeightOffsetMeters(), 18.0F);
+  EXPECT_FLOAT_EQ(updated_fog->GetStartDistanceMeters(), 96.0F);
+  EXPECT_FLOAT_EQ(updated_fog->GetMaxOpacity(), 0.55F);
+  EXPECT_EQ(updated_fog->GetSingleScatteringAlbedoRgb(),
+    glm::vec3(0.2F, 0.3F, 0.4F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AddedLocalFogVolumeStartsFromSceneComponentDefaults)
+{
+  auto scene = MakeScene("DemoShell.LocalFogDefaults");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.AddLocalFogVolume();
+
+  EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
+  EXPECT_TRUE(service_.GetSelectedLocalFogVolumeEnabled());
+  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeRadialFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogFalloff(), 1000.0F);
+  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogOffset(), 0.0F);
+  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeFogPhaseG(), 0.2F);
+  EXPECT_EQ(service_.GetSelectedLocalFogVolumeFogAlbedo(), glm::vec3(1.0F, 1.0F, 1.0F));
+  EXPECT_EQ(service_.GetSelectedLocalFogVolumeFogEmissive(), glm::vec3(0.0F, 0.0F, 0.0F));
+  EXPECT_EQ(service_.GetSelectedLocalFogVolumeSortPriority(), 0);
+
+  service_.ApplyPendingChanges();
+
+  auto fog_nodes = CollectLocalFogVolumeNodes(*scene);
+  ASSERT_EQ(fog_nodes.size(), 1U);
+  const auto impl_opt = fog_nodes.front().GetImpl();
+  ASSERT_TRUE(impl_opt.has_value());
+  const auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  EXPECT_TRUE(local_fog.IsEnabled());
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 1000.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.2F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

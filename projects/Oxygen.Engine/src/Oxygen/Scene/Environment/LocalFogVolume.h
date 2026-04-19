@@ -18,6 +18,8 @@ class LocalFogVolume final : public Component {
   OXYGEN_COMPONENT_REQUIRES(detail::TransformComponent)
 
 public:
+  static constexpr float kBaseVolumeRadiusMeters = 5.0F;
+
   LocalFogVolume() = default;
   ~LocalFogVolume() override = default;
 
@@ -92,11 +94,11 @@ public:
 
 private:
   bool enabled_ { true };
-  float radial_fog_extinction_ { 0.0F };
-  float height_fog_extinction_ { 0.0F };
-  float height_fog_falloff_ { 0.0F };
+  float radial_fog_extinction_ { 1.0F };
+  float height_fog_extinction_ { 1.0F };
+  float height_fog_falloff_ { 1000.0F };
   float height_fog_offset_ { 0.0F };
-  float fog_phase_g_ { 0.0F };
+  float fog_phase_g_ { 0.2F };
   Vec3 fog_albedo_ { 1.0F, 1.0F, 1.0F };
   Vec3 fog_emissive_ { 0.0F, 0.0F, 0.0F };
   int sort_priority_ { 0 };

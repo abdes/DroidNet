@@ -39,6 +39,9 @@ class DemoAppContext {
 public:
   bool headless { false };
   bool fullscreen { false };
+  bool with_atmosphere { false };
+  bool with_height_fog { false };
+  bool with_local_fog { false };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };

@@ -193,7 +193,8 @@ SkyPass::~SkyPass() = default;
 auto SkyPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
-  const auto requested = ctx.current_view.view_id != kInvalidViewId;
+  const auto requested = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.with_atmosphere;
   auto state = RecordState {
     .requested = requested,
     .executed = requested

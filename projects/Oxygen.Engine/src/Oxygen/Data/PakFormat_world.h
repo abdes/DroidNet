@@ -201,11 +201,11 @@ struct LocalFogVolumeRecord {
   SceneNodeIndexT node_index = 0;
   uint32_t enabled = 1;
 
-  float radial_fog_extinction = 0.0F;
-  float height_fog_extinction = 0.0F;
-  float height_fog_falloff = 0.0F;
+  float radial_fog_extinction = 1.0F;
+  float height_fog_extinction = 1.0F;
+  float height_fog_falloff = 1000.0F;
   float height_fog_offset = 0.0F;
-  float fog_phase_g = 0.0F;
+  float fog_phase_g = 0.2F;
   float fog_albedo[3] = { 1.0F, 1.0F, 1.0F };
   float fog_emissive[3] = { 0.0F, 0.0F, 0.0F };
   int32_t sort_priority = 0;

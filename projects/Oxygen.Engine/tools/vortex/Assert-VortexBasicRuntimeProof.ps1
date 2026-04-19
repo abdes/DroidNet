@@ -6,8 +6,8 @@ Asserts Phase 03 VortexBasic runtime-proof expectations from the app log and Ren
 Validates three evidence sources:
 - the debugger-backed D3D12 audit report proves the no-capture runtime path is clean enough to support the capture-backed proof, with only explicitly accepted warnings allowed
 - the runtime stderr log contains the expected draw-metadata count for the validation scene
-- the structural RenderDoc analyzer report contains the expected Stage 3 / 9 / 12 / compositing shape
-- the product RenderDoc analyzer report proves Stage 3, Stage 9 GBuffer + Velocity MRTs, point/spot/directional Stage 12 SceneColor accumulation, and final present are non-broken
+- the structural RenderDoc analyzer report contains the expected Stage 3 / 5 / 9 / 12 / compositing shape
+- the product RenderDoc analyzer report proves Stage 3, Stage 5 Screen HZB publication, Stage 9 GBuffer + Velocity MRTs, Stage 14 local-fog HZB consumption, Stage 15 indirect local-fog composition, and final present are non-broken
 
 Point/spot local-light product fields are part of the current durable runtime
 gate. The wrapper requires nonzero Stage 12 point/spot `SceneColor`
@@ -53,6 +53,7 @@ $expectedChecks = @{
   'stage3_color_clear_count_match' = 'true'
   'stage3_depth_clear_count_match' = 'true'
   'stage3_copy_count_match' = 'true'
+  'stage5_screen_hzb_scope_count_match' = 'true'
   'stage9_scope_count_match' = 'true'
   'stage9_draw_count_match' = 'true'
   'stage12_scope_count_match' = 'true'
@@ -66,6 +67,8 @@ $expectedChecks = @{
   'stage12_directional_draw_count_match' = 'true'
   'compositing_scope_count_match' = 'true'
   'compositing_present_operation_count_match' = 'true'
+  'stage14_local_fog_scope_count_match' = 'true'
+  'stage14_local_fog_dispatch_count_match' = 'true'
   'phase03_runtime_stage_order_match' = 'true'
   'stage15_sky_scope_count_match' = 'true'
   'stage15_sky_draw_count_match' = 'true'
@@ -73,6 +76,8 @@ $expectedChecks = @{
   'stage15_atmosphere_draw_count_match' = 'true'
   'stage15_fog_scope_count_match' = 'true'
   'stage15_fog_draw_count_match' = 'true'
+  'stage15_local_fog_scope_count_match' = 'true'
+  'stage15_local_fog_draw_count_match' = 'true'
   'stage15_runtime_stage_order_match' = 'true'
 }
 
@@ -88,6 +93,9 @@ $expectedDebugChecks = @{
 
 $expectedProductChecks = @{
   'stage3_depth_ok' = 'true'
+  'screen_hzb_published' = 'true'
+  'local_fog_hzb_consumed' = 'true'
+  'local_fog_indirect_draw_valid' = 'true'
   'stage9_has_expected_targets' = 'true'
   'stage9_gbuffer_base_color_nonzero' = 'true'
   'stage9_velocity_nonzero' = 'true'
@@ -97,6 +105,7 @@ $expectedProductChecks = @{
   'stage15_sky_scene_color_changed' = 'true'
   'stage15_atmosphere_scene_color_changed' = 'true'
   'stage15_fog_scene_color_changed' = 'true'
+  'stage15_local_fog_scene_color_changed' = 'true'
   'final_present_nonzero' = 'true'
   'overall_verdict' = 'pass'
 }
@@ -160,6 +169,24 @@ if ($peakDrawCount -ne $expectedDrawItems) {
   throw "Runtime log peak draws mismatch: expected $expectedDrawItems, got $peakDrawCount"
 }
 
+$localFogInstanceMatches = @(
+  $runtimeLogLines | Select-String -Pattern 'local_fog_volume_instance_count=(\d+)'
+)
+if ($localFogInstanceMatches.Count -eq 0) {
+  throw "Runtime log does not contain local fog instance count lines: $runtimeLogFullPath"
+}
+$localFogInstanceCount = [int]$localFogInstanceMatches[-1].Matches[0].Groups[1].Value
+if ($localFogInstanceCount -le 0) {
+  throw "Runtime log local fog instance count is not positive: $localFogInstanceCount"
+}
+
+$runtimeScreenHzbPublished = @(
+  $runtimeLogLines | Select-String -Pattern 'screen_hzb_published=true'
+).Count -gt 0
+$runtimeLocalFogHzbConsumed = @(
+  $runtimeLogLines | Select-String -Pattern 'local_fog_hzb_consumed=true'
+).Count -gt 0
+
 $captureReportLines = Get-Content -LiteralPath $captureReportFullPath
 $captureReportMap = @{}
 foreach ($line in $captureReportLines) {
@@ -209,11 +236,55 @@ if ($productsAnalysisResult -ne 'success') {
   throw "Products report did not report success: $productsReportFullPath"
 }
 
+$effectiveProductsReportMap = @{}
+foreach ($key in $productsReportMap.Keys) {
+  $effectiveProductsReportMap[$key] = $productsReportMap[$key]
+}
+
+$screenHzbProofSource = 'products_report'
+if (($effectiveProductsReportMap['screen_hzb_published'] -ne 'true') `
+  -and $runtimeScreenHzbPublished `
+  -and $captureReportMap['stage5_screen_hzb_scope_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['screen_hzb_published'] = 'true'
+  $screenHzbProofSource = 'runtime_log+capture_report'
+}
+
+$localFogHzbProofSource = 'products_report'
+if (($effectiveProductsReportMap['local_fog_hzb_consumed'] -ne 'true') `
+  -and $runtimeLocalFogHzbConsumed `
+  -and $effectiveProductsReportMap['screen_hzb_published'] -eq 'true' `
+  -and $captureReportMap['stage14_local_fog_scope_count_match'] -eq 'true' `
+  -and $captureReportMap['stage14_local_fog_dispatch_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['local_fog_hzb_consumed'] = 'true'
+  $localFogHzbProofSource = 'runtime_log+capture_report'
+}
+
 foreach ($key in $expectedProductChecks.Keys) {
-  $actualValue = if ($productsReportMap.ContainsKey($key)) { $productsReportMap[$key] } else { '' }
+  $actualValue = if ($effectiveProductsReportMap.ContainsKey($key)) { $effectiveProductsReportMap[$key] } else { '' }
   if ($actualValue -ne $expectedProductChecks[$key]) {
     throw "Products report check failed or missing: $key (expected $($expectedProductChecks[$key]))"
   }
+}
+
+$localFogInstanceCountValid = 'false'
+if ($localFogInstanceCount -gt 0) {
+  $localFogInstanceCountValid = 'true'
+}
+
+$localFogTiledCullingValid = 'false'
+if ($captureReportMap['stage14_local_fog_scope_count_match'] -eq 'true' -and $captureReportMap['stage14_local_fog_dispatch_count_match'] -eq 'true' -and $effectiveProductsReportMap['local_fog_hzb_consumed'] -eq 'true') {
+  $localFogTiledCullingValid = 'true'
+}
+
+$localFogValidationResults = @{
+  'screen_hzb_published' = $effectiveProductsReportMap['screen_hzb_published']
+  'screen_hzb_proof_source' = $screenHzbProofSource
+  'local_fog_hzb_consumed' = $effectiveProductsReportMap['local_fog_hzb_consumed']
+  'local_fog_hzb_proof_source' = $localFogHzbProofSource
+  'local_fog_indirect_draw_valid' = $effectiveProductsReportMap['local_fog_indirect_draw_valid']
+  'local_fog_volume_instance_count_valid' = $localFogInstanceCountValid
+  'local_fog_tiled_culling_valid' = $localFogTiledCullingValid
+  'local_fog_scene_color_changed' = $effectiveProductsReportMap['stage15_local_fog_scene_color_changed']
 }
 
 $reportLines = @(
@@ -226,7 +297,12 @@ $reportLines = @(
   "expected_draw_item_count=$expectedDrawItems"
   "runtime_draw_writes=$($drawWriteCounts -join ',')"
   "runtime_peak_draws=$peakDrawCount"
+  "local_fog_volume_instance_count=$localFogInstanceCount"
 )
+
+foreach ($key in ($localFogValidationResults.Keys | Sort-Object)) {
+  $reportLines += "$key=$($localFogValidationResults[$key])"
+}
 
 foreach ($key in ($expectedChecks.Keys | Sort-Object)) {
   $reportLines += "$key=$($captureReportMap[$key])"
@@ -235,7 +311,7 @@ foreach ($key in ($expectedDebugChecks.Keys | Sort-Object)) {
   $reportLines += "$key=$($debugLayerReportMap[$key])"
 }
 foreach ($key in ($expectedProductChecks.Keys | Sort-Object)) {
-  $reportLines += "$key=$($productsReportMap[$key])"
+  $reportLines += "$key=$($effectiveProductsReportMap[$key])"
 }
 foreach ($key in $diagnosticDebugKeys) {
   if ($debugLayerReportMap.ContainsKey($key)) {
@@ -243,8 +319,8 @@ foreach ($key in $diagnosticDebugKeys) {
   }
 }
 foreach ($key in $diagnosticProductKeys) {
-  if ($productsReportMap.ContainsKey($key)) {
-    $reportLines += "$key=$($productsReportMap[$key])"
+  if ($effectiveProductsReportMap.ContainsKey($key)) {
+    $reportLines += "$key=$($effectiveProductsReportMap[$key])"
   }
 }
 

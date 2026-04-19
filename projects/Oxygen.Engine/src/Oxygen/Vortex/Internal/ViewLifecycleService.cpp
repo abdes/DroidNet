@@ -239,6 +239,8 @@ void ViewLifecycleService::PublishViews(engine::FrameContext& context)
       .purpose = has_scene ? "scene" : "overlay",
       .is_scene_view = has_scene,
       .with_atmosphere = view.GetDescriptor().with_atmosphere,
+      .with_height_fog = view.GetDescriptor().with_height_fog,
+      .with_local_fog = view.GetDescriptor().with_local_fog,
       .exposure_view_id = exposure_view_id };
     view_ctx.render_target = view.GetHdrFramebuffer()
       ? observer_ptr { view.GetHdrFramebuffer().get() }

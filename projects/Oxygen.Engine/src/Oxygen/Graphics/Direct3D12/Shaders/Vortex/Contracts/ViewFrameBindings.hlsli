@@ -63,12 +63,6 @@ static inline ViewFrameBindingsData LoadVortexViewFrameBindings(uint slot)
     return bindings_buffer[0];
 }
 
-// Keep the historical helper name for existing Vortex shader call sites.
-static inline ViewFrameBindingsData LoadViewFrameBindings(uint slot)
-{
-    return LoadVortexViewFrameBindings(slot);
-}
-
 static inline SceneTextureBindingData LoadSceneTextureBindings(uint view_frame_bindings_slot)
 {
     const ViewFrameBindingsData view_bindings = LoadVortexViewFrameBindings(view_frame_bindings_slot);

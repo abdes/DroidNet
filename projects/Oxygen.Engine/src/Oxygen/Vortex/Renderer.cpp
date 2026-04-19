@@ -17,6 +17,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -78,6 +80,26 @@ struct RendererPublicationState {
 };
 
 namespace {
+
+  constexpr auto kCVarVortexLocalFogEnabled = "vtx.local_fog.enable";
+  constexpr auto kCVarVortexLocalFogRenderDuringHeightFogPass
+    = "vtx.local_fog.render_during_height_fog_pass";
+  constexpr auto kCVarVortexLocalFogRenderIntoVolumetricFog
+    = "vtx.local_fog.render_into_volumetric_fog";
+  constexpr auto kCVarVortexLocalFogMaxDensityIntoVolumetricFog
+    = "vtx.local_fog.max_density_into_volumetric_fog";
+  constexpr auto kCVarVortexLocalFogTilePixelSize
+    = "vtx.local_fog.tile_pixel_size";
+  constexpr auto kCVarVortexLocalFogTileMaxInstanceCount
+    = "vtx.local_fog.tile_max_instance_count";
+  constexpr auto kCVarVortexLocalFogTileCullingUseAsync
+    = "vtx.local_fog.tile_culling_use_async";
+  constexpr auto kCVarVortexLocalFogTileDebug = "vtx.local_fog.tile_debug";
+  constexpr auto kCVarVortexLocalFogGlobalStartDistance
+    = "vtx.local_fog.global_start_distance_m";
+  constexpr auto kCVarVortexLocalFogUseHzb = "vtx.local_fog.use_hzb";
+  constexpr auto kCVarVortexLocalFogHalfResolution
+    = "vtx.local_fog.half_resolution";
 
   constexpr auto kRendererStagingAlignment
     = packing::kStructuredBufferAlignment;
@@ -341,6 +363,108 @@ auto Renderer::RegisterConsoleBindings(
   observer_ptr<console::Console> console) noexcept -> void
 {
   console_ = console;
+  if (console == nullptr) {
+    return;
+  }
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogEnabled),
+    .help = "Enable local fog volume rendering",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogRenderDuringHeightFogPass),
+    .help = "Compose local fog during the height fog pass when supported",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogRenderIntoVolumetricFog),
+    .help = "Inject local fog into volumetric fog when volumetric fog is enabled",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogMaxDensityIntoVolumetricFog),
+    .help = "Clamp local fog density when injecting into volumetric fog",
+    .default_value = 0.01,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.0,
+    .max_value = 1.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogTilePixelSize),
+    .help = "Screen-space local fog tile size in pixels",
+    .default_value = 128,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 8,
+    .max_value = 512,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogTileMaxInstanceCount),
+    .help = "Maximum local fog volumes retained per view/tile list",
+    .default_value = 32,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1,
+    .max_value = 256,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogTileCullingUseAsync),
+    .help = "Request async local fog tile culling when supported",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogTileDebug),
+    .help = "Local fog tile debug mode",
+    .default_value = 0,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0,
+    .max_value = 2,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogGlobalStartDistance),
+    .help = "Global local fog start distance in meters",
+    .default_value = 20.0,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.1,
+    .max_value = 1000.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogUseHzb),
+    .help = "Enable local fog HZB culling",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexLocalFogHalfResolution),
+    .help = "Render local fog at half resolution when supported",
+    .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
 }
 
 auto Renderer::EnsureImGuiRuntime() -> internal::ImGuiRuntime*
@@ -986,6 +1110,8 @@ auto Renderer::PublishRuntimeCompositionView(
     .purpose = composition_view.camera.has_value() ? "scene" : "overlay",
     .is_scene_view = composition_view.camera.has_value(),
     .with_atmosphere = composition_view.with_atmosphere,
+    .with_height_fog = composition_view.with_height_fog,
+    .with_local_fog = composition_view.with_local_fog,
     .exposure_view_id = composition_view.exposure_source_view_id,
   };
   view_context.render_target = render_target;
@@ -1249,6 +1375,77 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return gfx_weak_.lock();
 }
 
+auto Renderer::GetLocalFogEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(kCVarVortexLocalFogEnabled, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetLocalFogGlobalStartDistanceMeters() const noexcept -> float
+{
+  if (console_ != nullptr) {
+    double value = 20.0;
+    if (console_->TryGetCVarValue<double>(
+          kCVarVortexLocalFogGlobalStartDistance, value)) {
+      return static_cast<float>(std::max(0.1, value));
+    }
+  }
+  return 20.0F;
+}
+
+auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
+{
+  if (console_ != nullptr) {
+    double value = 0.01;
+    if (console_->TryGetCVarValue<double>(
+          kCVarVortexLocalFogMaxDensityIntoVolumetricFog, value)) {
+      return static_cast<float>(std::max(0.0, value));
+    }
+  }
+  return 0.01F;
+}
+
+auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 128 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexLocalFogTilePixelSize, value)) {
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 8, 512));
+    }
+  }
+  return 128U;
+}
+
+auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept
+  -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 32 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexLocalFogTileMaxInstanceCount, value)) {
+      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 1, 256));
+    }
+  }
+  return 32U;
+}
+
+auto Renderer::GetLocalFogUseHzb() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    bool value = true;
+    if (console_->TryGetCVarValue<bool>(kCVarVortexLocalFogUseHzb, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&
 {
   CHECK_NOTNULL_F(
@@ -1362,6 +1559,9 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
     = selected_view.metadata.exposure_view_id != kInvalidViewId
     ? selected_view.metadata.exposure_view_id
     : selection.view_id;
+  render_context.current_view.with_atmosphere = selected_view.metadata.with_atmosphere;
+  render_context.current_view.with_height_fog = selected_view.metadata.with_height_fog;
+  render_context.current_view.with_local_fog = selected_view.metadata.with_local_fog;
   render_context.current_view.composition_view = selection.composition_view;
   render_context.current_view.shading_mode_override
     = selection.shading_mode_override;

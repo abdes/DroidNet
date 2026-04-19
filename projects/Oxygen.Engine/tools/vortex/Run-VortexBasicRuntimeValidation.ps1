@@ -267,6 +267,9 @@ $debugAuditArguments = @(
   $vortexBasicExe,
   '--frames', "$RunFrames",
   '--fps', "$Fps",
+  '--with-atmosphere',
+  '--with-height-fog',
+  '--with-local-fog',
   '--debug-layer', 'true',
   '--capture-provider', 'off'
 )
@@ -332,6 +335,9 @@ Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyCo
 $appArguments = @(
   '--frames', "$RunFrames",
   '--fps', "$Fps",
+  '--with-atmosphere',
+  '--with-height-fog',
+  '--with-local-fog',
   '--capture-provider', 'renderdoc',
   '--capture-load', 'path',
   '--capture-library', $renderDocLibraryPath,

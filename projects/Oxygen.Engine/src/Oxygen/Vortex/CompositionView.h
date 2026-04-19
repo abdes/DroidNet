@@ -101,6 +101,14 @@ struct CompositionView {
   //! Default is false; apps must opt in per view.
   bool with_atmosphere { false };
 
+  //! Explicitly enable exponential/height fog processing for this view.
+  //! Default is false; apps must opt in per view.
+  bool with_height_fog { false };
+
+  //! Explicitly enable local fog volume processing for this view.
+  //! Default is false; apps must opt in per view.
+  bool with_local_fog { false };
+
   //! Optional intent id of another CompositionView whose exposure state should
   //! be consumed by this view.
   //!

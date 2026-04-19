@@ -56,6 +56,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from renderdoc_ui_analysis import (  # noqa: E402
     ReportWriter,
+    collect_resource_records_raw,
     collect_action_records,
     renderdoc_module,
     resource_id_to_name,
@@ -67,6 +68,7 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_vortexbasic_products_report.txt"
 DRAW_NAME = "ID3D12GraphicsCommandList::DrawInstanced()"
 COPY_NAME = "ID3D12GraphicsCommandList::CopyTextureRegion()"
+LOCAL_FOG_EXECUTE_INDIRECT_NAME = "ExecuteIndirect()"
 
 
 def records_with_name(action_records, name):
@@ -119,6 +121,19 @@ def texture_desc_map(controller):
             continue
         descriptions[str(resource_id)] = desc
     return descriptions
+
+
+def round_up_pow2(value):
+    value = max(int(value), 1)
+    return 1 << (value - 1).bit_length()
+
+
+def expected_screen_hzb_extent(value):
+    return max(round_up_pow2(value) >> 1, 1)
+
+
+def expected_screen_hzb_mip_count(width, height):
+    return max(max(int(width), int(height)).bit_length() - 1, 1)
 
 
 def resource_dims(texture_desc, descriptor):
@@ -221,6 +236,90 @@ def find_last_named_record_any(records, names):
     if not matches:
         return None
     return matches[-1]
+
+
+def collect_event_ids(scope_records, child_records):
+    event_ids = {record.event_id for record in child_records}
+    event_ids.update(record.event_id for record in scope_records)
+    return event_ids
+
+
+def resource_used_in_events(controller, resource_id, event_ids):
+    for usage in controller.GetUsage(resource_id):
+        if safe_getattr(usage, "eventId") in event_ids:
+            return True
+    return False
+
+
+def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
+    matches = []
+    for resource in resource_records:
+        resource_id = safe_getattr(resource, "resourceId")
+        name = safe_getattr(resource, "name", "")
+        if resource_id is None or not name:
+            continue
+        lower_name = name.lower()
+        if not all(token.lower() in lower_name for token in tokens):
+            continue
+        if resource_used_in_events(controller, resource_id, event_ids):
+            matches.append({"resource_id": resource_id, "name": name})
+    return matches
+
+
+def find_screen_hzb_resource(
+    controller,
+    resource_records,
+    resource_names,
+    texture_descs,
+    stage5_event_ids,
+    stage14_event_ids,
+    expected_width,
+    expected_height,
+    expected_mips,
+):
+    named_matches = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage14_event_ids,
+        "vortex.stage5.screenhzbbuild.view",
+        "furthest.history",
+    )
+    if named_matches:
+        return named_matches[0]
+
+    fallback_matches = []
+    for resource_key, texture_desc in texture_descs.items():
+        resource_id = safe_getattr(texture_desc, "resourceId")
+        if resource_id is None:
+            continue
+        width = int(safe_getattr(texture_desc, "width", 0) or 0)
+        height = int(safe_getattr(texture_desc, "height", 0) or 0)
+        mips = int(safe_getattr(texture_desc, "mips", 0) or 0)
+        if (
+            width != expected_width
+            or height != expected_height
+            or mips != expected_mips
+        ):
+            continue
+        if not resource_used_in_events(controller, resource_id, stage14_event_ids):
+            continue
+        if not resource_used_in_events(controller, resource_id, stage5_event_ids):
+            continue
+        name = resource_names.get(resource_key, str(resource_id))
+        fallback_matches.append({"resource_id": resource_id, "name": name})
+
+    if not fallback_matches:
+        return None
+
+    preferred_matches = [
+        match
+        for match in fallback_matches
+        if "furthest" in match["name"].lower()
+        or "screenhzb" in match["name"].lower()
+    ]
+    if preferred_matches:
+        return preferred_matches[0]
+    return fallback_matches[0]
 
 
 def find_texture_with_usage(controller, resource_names, texture_descs, event_id, exclude_ids):
@@ -367,22 +466,28 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b,
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
+    resource_records = collect_resource_records_raw(controller)
     resource_names = resource_id_to_name(controller)
     texture_descs = texture_desc_map(controller)
 
     stage3_name = "Vortex.Stage3.DepthPrepass"
+    stage5_name = "Vortex.Stage5.ScreenHzbBuild"
     stage9_name = "Vortex.Stage9.BasePass"
     stage9_main_pass_name = "Vortex.Stage9.BasePass.MainPass"
     stage12_name = "Vortex.Stage12.DeferredLighting"
     stage12_spot_name = "Vortex.Stage12.SpotLight"
     stage12_point_name = "Vortex.Stage12.PointLight"
     stage12_directional_name = "Vortex.Stage12.DirectionalLight"
+    stage14_local_fog_name = "Vortex.Stage14.LocalFogTiledCulling"
     stage15_sky_name = "Vortex.Stage15.Sky"
     stage15_atmosphere_name = "Vortex.Stage15.Atmosphere"
     stage15_fog_name = "Vortex.Stage15.Fog"
+    stage15_local_fog_name = "Vortex.Stage15.LocalFog"
     compositing_name = "Vortex.CompositingTask[label=Composite Copy View 1]"
 
     stage3_records = records_under_prefix(action_records, stage3_name)
+    stage5_scope = records_with_name(action_records, stage5_name)
+    stage5_records = records_under_prefix(action_records, stage5_name)
     stage9_main_pass_records = records_under_prefix(
         action_records, stage9_name + " > " + stage9_main_pass_name
     )
@@ -395,10 +500,19 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     spot_records = records_under_prefix(action_records, stage12_name + " > " + stage12_spot_name)
     point_records = records_under_prefix(action_records, stage12_name + " > " + stage12_point_name)
     directional_records = records_under_prefix(action_records, stage12_name + " > " + stage12_directional_name)
+    stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_name)
     stage15_sky_records = records_under_prefix(action_records, stage15_sky_name)
     stage15_atmosphere_records = records_under_prefix(action_records, stage15_atmosphere_name)
     stage15_fog_records = records_under_prefix(action_records, stage15_fog_name)
+    stage15_local_fog_records = records_under_prefix(action_records, stage15_local_fog_name)
     compositing_records = records_under_prefix(action_records, compositing_name)
+    stage5_event_ids = collect_event_ids(stage5_scope, stage5_records)
+    stage14_event_ids = collect_event_ids(
+        records_with_name(action_records, stage14_local_fog_name), stage14_local_fog_records
+    )
+    stage15_local_fog_event_ids = collect_event_ids(
+        records_with_name(action_records, stage15_local_fog_name), stage15_local_fog_records
+    )
 
     stage3_last_draw = find_last_named_record(stage3_records, DRAW_NAME)
     stage9_last_draw = find_last_named_record(stage9_records, DRAW_NAME)
@@ -408,6 +522,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_sky_last_draw = find_last_named_record(stage15_sky_records, DRAW_NAME)
     stage15_atmosphere_last_draw = find_last_named_record(stage15_atmosphere_records, DRAW_NAME)
     stage15_fog_last_draw = find_last_named_record(stage15_fog_records, DRAW_NAME)
+    stage15_local_fog_last_draw = find_last_named_record_any(
+        stage15_local_fog_records, {DRAW_NAME, LOCAL_FOG_EXECUTE_INDIRECT_NAME}
+    )
     compositing_draw = find_last_named_record_any(
         compositing_records, {DRAW_NAME, COPY_NAME}
     )
@@ -420,6 +537,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         or stage15_sky_last_draw is None
         or stage15_atmosphere_last_draw is None
         or stage15_fog_last_draw is None
+        or stage15_local_fog_last_draw is None
         or compositing_draw is None
     ):
         raise RuntimeError("Required VortexBasic stage events were not found in the capture.")
@@ -434,6 +552,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         controller, rd, resource_names, texture_descs, stage15_atmosphere_last_draw.event_id
     )
     stage15_fog = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id)
+    stage15_local_fog = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage15_local_fog_last_draw.event_id
+    )
 
     compositing = analyze_draw_event(controller, rd, resource_names, texture_descs, compositing_draw.event_id)
     final_present = compositing["outputs"][0] if compositing["outputs"] else None
@@ -481,6 +602,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_sky_scene_color = find_output_sample(stage15_sky, "SceneColor")
     stage15_atmosphere_scene_color = find_output_sample(stage15_atmosphere, "SceneColor")
     stage15_fog_scene_color = find_output_sample(stage15_fog, "SceneColor")
+    stage15_local_fog_scene_color = find_output_sample(stage15_local_fog, "SceneColor")
     stage15_sky_scene_color_delta = max_sample_delta(
         stage12_final_scene_color, stage15_sky_scene_color
     )
@@ -489,6 +611,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     stage15_fog_scene_color_delta = max_sample_delta(
         stage15_atmosphere_scene_color, stage15_fog_scene_color
+    )
+    stage15_local_fog_scene_color_delta = max_sample_delta(
+        stage15_fog_scene_color, stage15_local_fog_scene_color
     )
     stage15_sky_scene_color_dense_delta = dense_grid_delta(
         controller,
@@ -514,6 +639,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_fog_last_draw.event_id,
         stage15_fog_scene_color,
     )
+    stage15_local_fog_scene_color_dense_delta = dense_grid_delta(
+        controller,
+        rd,
+        stage15_fog_last_draw.event_id,
+        stage15_fog_scene_color,
+        stage15_local_fog_last_draw.event_id,
+        stage15_local_fog_scene_color,
+    )
     stage15_sky_scene_color_delta = max(
         stage15_sky_scene_color_delta, stage15_sky_scene_color_dense_delta
     )
@@ -524,12 +657,81 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage15_fog_scene_color_delta = max(
         stage15_fog_scene_color_delta, stage15_fog_scene_color_dense_delta
     )
+    stage15_local_fog_scene_color_delta = max(
+        stage15_local_fog_scene_color_delta,
+        stage15_local_fog_scene_color_dense_delta,
+    )
     stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
     stage15_atmosphere_scene_color_changed = (
         stage15_atmosphere_scene_color_delta > 1.0e-5
     )
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
+    stage15_local_fog_scene_color_changed = stage15_local_fog_scene_color_delta > 1.0e-5
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
+    stage3_depth_width = stage3["depth"]["width"] if stage3["depth"] is not None else 0
+    stage3_depth_height = stage3["depth"]["height"] if stage3["depth"] is not None else 0
+    expected_screen_hzb_width = (
+        expected_screen_hzb_extent(stage3_depth_width) if stage3_depth_width > 0 else 0
+    )
+    expected_screen_hzb_height = (
+        expected_screen_hzb_extent(stage3_depth_height) if stage3_depth_height > 0 else 0
+    )
+    expected_screen_hzb_mips = (
+        expected_screen_hzb_mip_count(expected_screen_hzb_width, expected_screen_hzb_height)
+        if expected_screen_hzb_width > 0 and expected_screen_hzb_height > 0
+        else 0
+    )
+
+    local_fog_hzb_resource = find_screen_hzb_resource(
+        controller,
+        resource_records,
+        resource_names,
+        texture_descs,
+        stage5_event_ids,
+        stage14_event_ids,
+        expected_screen_hzb_width,
+        expected_screen_hzb_height,
+        expected_screen_hzb_mips,
+    )
+    actual_screen_hzb_width = 0
+    actual_screen_hzb_height = 0
+    actual_screen_hzb_mips = 0
+    screen_hzb_written_in_stage5 = False
+    if local_fog_hzb_resource is not None:
+        texture_desc = texture_descs.get(str(local_fog_hzb_resource["resource_id"]))
+        if texture_desc is not None:
+            actual_screen_hzb_width = int(safe_getattr(texture_desc, "width", 0) or 0)
+            actual_screen_hzb_height = int(safe_getattr(texture_desc, "height", 0) or 0)
+            actual_screen_hzb_mips = int(safe_getattr(texture_desc, "mips", 0) or 0)
+        screen_hzb_written_in_stage5 = resource_used_in_events(
+            controller, local_fog_hzb_resource["resource_id"], stage5_event_ids
+        )
+
+    screen_hzb_published = (
+        len(stage5_scope) == 1
+        and local_fog_hzb_resource is not None
+        and screen_hzb_written_in_stage5
+        and actual_screen_hzb_width == expected_screen_hzb_width
+        and actual_screen_hzb_height == expected_screen_hzb_height
+        and actual_screen_hzb_mips == expected_screen_hzb_mips
+    )
+    local_fog_hzb_consumed = local_fog_hzb_resource is not None and screen_hzb_published
+
+    indirect_args_usage = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage15_local_fog_event_ids,
+        "vortex.environment.localfogtiledrawargs",
+    )
+    indirect_count_usage = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage15_local_fog_event_ids,
+        "vortex.environment.localfogtiledrawcount",
+    )
+    local_fog_indirect_draw_valid = (
+        len(indirect_args_usage) > 0 and len(indirect_count_usage) > 0
+    )
 
     report.append("analysis_profile=vortexbasic_stage_products")
     report.append("capture_path={}".format(capture_path))
@@ -546,6 +748,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "stage15_atmosphere_last_draw_event={}".format(stage15_atmosphere_last_draw.event_id)
     )
     report.append("stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id))
+    report.append(
+        "stage15_local_fog_last_draw_event={}".format(stage15_local_fog_last_draw.event_id)
+    )
     report.append("compositing_draw_event={}".format(compositing_draw.event_id))
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
     report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
@@ -581,6 +786,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append(
+        "stage15_local_fog_scene_color_delta_max={:.6f}".format(
+            stage15_local_fog_scene_color_delta
+        )
+    )
+    report.append(
+        "stage15_local_fog_scene_color_dense_delta_max={:.6f}".format(
+            stage15_local_fog_scene_color_dense_delta
+        )
+    )
+    report.append(
         "stage15_sky_scene_color_changed={}".format(
             str(stage15_sky_scene_color_changed).lower()
         )
@@ -595,6 +810,29 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             str(stage15_fog_scene_color_changed).lower()
         )
     )
+    report.append(
+        "stage15_local_fog_scene_color_changed={}".format(
+            str(stage15_local_fog_scene_color_changed).lower()
+        )
+    )
+    report.append("screen_hzb_expected_width={}".format(expected_screen_hzb_width))
+    report.append("screen_hzb_expected_height={}".format(expected_screen_hzb_height))
+    report.append("screen_hzb_expected_mips={}".format(expected_screen_hzb_mips))
+    report.append("screen_hzb_actual_width={}".format(actual_screen_hzb_width))
+    report.append("screen_hzb_actual_height={}".format(actual_screen_hzb_height))
+    report.append("screen_hzb_actual_mips={}".format(actual_screen_hzb_mips))
+    report.append(
+        "screen_hzb_resource_name={}".format(
+            local_fog_hzb_resource["name"] if local_fog_hzb_resource is not None else ""
+        )
+    )
+    report.append("screen_hzb_published={}".format(str(screen_hzb_published).lower()))
+    report.append("local_fog_hzb_consumed={}".format(str(local_fog_hzb_consumed).lower()))
+    report.append(
+        "local_fog_indirect_draw_valid={}".format(
+            str(local_fog_indirect_draw_valid).lower()
+        )
+    )
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     overall = (
         stage3_depth_ok
@@ -607,6 +845,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_sky_scene_color_changed
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
+        and stage15_local_fog_scene_color_changed
+        and screen_hzb_published
+        and local_fog_hzb_consumed
+        and local_fog_indirect_draw_valid
         and final_present_nonzero
     )
     report.append("overall_verdict={}".format("pass" if overall else "fail"))
@@ -629,6 +871,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         append_texture_sample(report, "stage15_atmosphere_output_{}".format(index), sample)
     for index, sample in enumerate(stage15_fog["outputs"]):
         append_texture_sample(report, "stage15_fog_output_{}".format(index), sample)
+    for index, sample in enumerate(stage15_local_fog["outputs"]):
+        append_texture_sample(report, "stage15_local_fog_output_{}".format(index), sample)
     append_texture_sample(report, "final_present", final_present)
 
 

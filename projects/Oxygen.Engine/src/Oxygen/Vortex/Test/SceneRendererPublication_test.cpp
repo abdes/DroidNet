@@ -995,10 +995,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto composition_view = CompositionView {};
   composition_view.id = view_id;
   composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
   render_context.frame_views.front().composition_view
     = oxygen::observer_ptr<const CompositionView> { &composition_view };
   render_context.current_view.composition_view
     = oxygen::observer_ptr<const CompositionView> { &composition_view };
+  render_context.current_view.with_atmosphere = composition_view.with_atmosphere;
+  render_context.current_view.with_height_fog = composition_view.with_height_fog;
+  render_context.current_view.with_local_fog = composition_view.with_local_fog;
 
   scene_renderer.OnFrameStart(frame_context);
   graphics_->draw_log_.draws.clear();

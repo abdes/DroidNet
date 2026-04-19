@@ -18,6 +18,8 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
@@ -86,12 +88,14 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
     DestroyRenderer };
 }
 
-auto MakeResolvedView(const float width, const float height) -> ResolvedView
+auto MakeResolvedView(const float width, const float height,
+  const float top_left_x = 0.0F, const float top_left_y = 0.0F)
+  -> ResolvedView
 {
   auto params = ResolvedView::Params {};
   params.view_config.viewport = ViewPort {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
+    .top_left_x = top_left_x,
+    .top_left_y = top_left_y,
     .width = width,
     .height = height,
     .min_depth = 0.0F,
@@ -130,6 +134,9 @@ auto MakeRenderContext(const ViewId view_id, const ResolvedView& resolved_view,
     };
   ctx.current_view.resolved_view
     = oxygen::observer_ptr<const ResolvedView> { &resolved_view };
+  ctx.current_view.with_atmosphere = composition_view.with_atmosphere;
+  ctx.current_view.with_height_fog = composition_view.with_height_fog;
+  ctx.current_view.with_local_fog = composition_view.with_local_fog;
   return ctx;
 }
 
@@ -204,19 +211,38 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 {
   const auto source_root = SourceRoot();
   const auto cmake_source = ReadTextFile(source_root / "Vortex/CMakeLists.txt");
+  const auto scene_renderer_header = ReadTextFile(
+    source_root / "Vortex/SceneRenderer/SceneRenderer.h");
+  const auto view_frame_bindings_header = ReadTextFile(
+    source_root / "Vortex/Types/ViewFrameBindings.h");
+  const auto view_frame_bindings_shader = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/ViewFrameBindings.hlsli");
 
   EXPECT_TRUE(cmake_source.contains("Environment/EnvironmentLightingService.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/EnvironmentLightingService.cpp"));
+  EXPECT_TRUE(cmake_source.contains(
+    "SceneRenderer/Stages/Hzb/ScreenHzbModule.h"));
+  EXPECT_TRUE(cmake_source.contains(
+    "SceneRenderer/Stages/Hzb/ScreenHzbModule.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Types/ScreenHzbFrameBindings.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/SkyRenderer.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/AtmosphereRenderer.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/FogRenderer.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/IblProcessor.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Internal/LocalFogVolumeState.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Internal/LocalFogVolumeState.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/SkyPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereComposePass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/FogPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/IblProbePass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/LocalFogVolumeTiledCullingPass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/LocalFogVolumeComposePass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Types/EnvironmentProbeState.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/Types/EnvironmentAmbientBridgeBindings.h"));
+  EXPECT_TRUE(scene_renderer_header.contains("ScreenHzbModule"));
+  EXPECT_TRUE(scene_renderer_header.contains("GetPublishedScreenHzbBindings"));
+  EXPECT_TRUE(view_frame_bindings_header.contains("screen_hzb_frame_slot"));
+  EXPECT_TRUE(view_frame_bindings_shader.contains("screen_hzb_frame_slot"));
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -238,6 +264,13 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereComposePS"));
   EXPECT_TRUE(catalog_source.contains("VortexFogPassVS"));
   EXPECT_TRUE(catalog_source.contains("VortexFogPassPS"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/LocalFogVolumeTiledCulling.hlsl"));
+  EXPECT_TRUE(catalog_source.contains("VortexLocalFogVolumeTiledCullingCS"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/LocalFogVolumeCompose.hlsl"));
+  EXPECT_TRUE(catalog_source.contains("VortexLocalFogVolumeComposeVS"));
+  EXPECT_TRUE(catalog_source.contains("VortexLocalFogVolumeComposePS"));
   EXPECT_TRUE(catalog_source.contains("VortexIblIrradianceCS"));
   EXPECT_TRUE(catalog_source.contains("VortexIblPrefilterCS"));
 }
@@ -252,6 +285,86 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(
     source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeTiledCulling.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCompose.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  LocalFogShadersUseTileListsAndRayIntegratedCompositionInsteadOfGlobalBruteForce)
+{
+  const auto source_root = SourceRoot();
+  const auto compose_pass_source = ReadTextFile(source_root
+    / "Vortex/Environment/Passes/LocalFogVolumeComposePass.cpp");
+  const auto screen_hzb_contract = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/ScreenHzbBindings.hlsli");
+  const auto culling_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeTiledCulling.hlsl");
+  const auto compose_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCompose.hlsl");
+  const auto common_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli");
+
+  EXPECT_TRUE(culling_source.contains("tile_data_texture_slot"));
+  EXPECT_TRUE(culling_source.contains("occupied_tile_buffer_slot"));
+  EXPECT_TRUE(culling_source.contains("indirect_args_buffer_slot"));
+  EXPECT_TRUE(culling_source.contains("indirect_count_buffer_slot"));
+  EXPECT_TRUE(culling_source.contains("RWTexture2DArray<uint> tile_data_texture"));
+  EXPECT_TRUE(culling_source.contains("RWStructuredBuffer<uint> occupied_tiles"));
+  EXPECT_TRUE(culling_source.contains("InterlockedAdd(indirect_count[0], 1u, write_index);"));
+  EXPECT_TRUE(culling_source.contains("pass.left_plane"));
+  EXPECT_TRUE(culling_source.contains("pass.right_plane"));
+  EXPECT_TRUE(culling_source.contains("pass.near_plane"));
+  EXPECT_TRUE(culling_source.contains("pass.view_to_tile_space_ratio"));
+  EXPECT_TRUE(culling_source.contains("LocalFogSphereOutsidePlane"));
+  EXPECT_TRUE(culling_source.contains("BuildLocalFogClipSphere"));
+  EXPECT_TRUE(culling_source.contains("LocalFogIsOccludedByHzb"));
+  EXPECT_TRUE(culling_source.contains("tile_data_texture[uint3(tile_coord, 0u)] = tile_count;"));
+  EXPECT_FALSE(culling_source.contains("scene_depth < -1.0f"));
+
+  EXPECT_TRUE(common_source.contains("PackLocalFogTile"));
+  EXPECT_TRUE(common_source.contains("UnpackLocalFogTile"));
+  EXPECT_TRUE(common_source.contains("LocalFogSphereOutsidePlane"));
+  EXPECT_TRUE(common_source.contains("RayIntersectUnitSphere"));
+  EXPECT_TRUE(common_source.contains("EvaluateLocalFogVolumeIntegral"));
+  EXPECT_TRUE(common_source.contains("GetLocalFogVolumeInstanceContribution"));
+  EXPECT_TRUE(common_source.contains("HenyeyGreensteinPhase"));
+  EXPECT_TRUE(common_source.contains("EvaluateLocalFogVolumeInScattering"));
+  EXPECT_TRUE(common_source.contains("LoadEnvironmentStaticData"));
+  EXPECT_TRUE(common_source.contains("GetSunLuminanceRGB"));
+  EXPECT_TRUE(screen_hzb_contract.contains("GetViewportUvToHzbBufferUv"));
+  EXPECT_TRUE(screen_hzb_contract.contains("GetHzbSize"));
+  EXPECT_TRUE(screen_hzb_contract.contains("GetHzbViewRect"));
+  EXPECT_TRUE(common_source.contains("GetViewportUvToHzbBufferUv(screen_hzb)"));
+  EXPECT_TRUE(common_source.contains("GetHzbSize(screen_hzb)"));
+  EXPECT_TRUE(common_source.contains("ProjectLocalFogClipSphereToHzb"));
+  EXPECT_TRUE(common_source.contains("ResolveLocalFogNearestDepth"));
+  EXPECT_TRUE(common_source.contains("LocalFogIsOccludedByHzb"));
+  EXPECT_TRUE(culling_source.contains("IsScreenHzbFurthestValid(screen_hzb)"));
+
+  EXPECT_TRUE(compose_source.contains("tile_data_texture_slot"));
+  EXPECT_TRUE(compose_source.contains("occupied_tile_buffer_slot"));
+  EXPECT_TRUE(compose_source.contains("GetLocalFogVolumeContribution"));
+  EXPECT_TRUE(compose_source.contains("Texture2DArray<uint> tile_data_texture"));
+  EXPECT_TRUE(compose_source.contains("SV_InstanceID"));
+  EXPECT_TRUE(compose_source.contains("tile_pixel_size"));
+  EXPECT_TRUE(compose_source.contains("view_width"));
+  EXPECT_TRUE(compose_source.contains("view_height"));
+  EXPECT_TRUE(compose_source.contains("pass.start_depth_z"));
+  EXPECT_TRUE(compose_source.contains("tile_min_pixel"));
+  EXPECT_TRUE(compose_source.contains("translated_world_position = world_position - camera_position;"));
+  EXPECT_FALSE(compose_source.contains("GenerateVortexFullscreenTriangle"));
+  EXPECT_FALSE(compose_source.contains(
+    "for (uint instance_index = 0u; instance_index < pass.instance_count; ++instance_index)"));
+  EXPECT_FALSE(compose_source.contains(
+    "float2(tile_coord)\n        / float2(pass.tile_resolution_x, pass.tile_resolution_y)"));
+  EXPECT_TRUE(compose_pass_source.contains("ExecuteIndirect("));
+  EXPECT_TRUE(compose_pass_source.contains("GetLocalFogGlobalStartDistanceMeters"));
+  EXPECT_TRUE(compose_pass_source.contains("ComputeLocalFogStartDepthZ"));
+  EXPECT_FALSE(compose_pass_source.contains("Draw(3U, 1U, 0U, 0U)"));
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -325,6 +438,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(fog_source.contains("SampleSceneDepth"));
   EXPECT_TRUE(fog_source.contains("ReconstructWorldPosition"));
   EXPECT_TRUE(fog_source.contains("fog_alpha"));
+  EXPECT_TRUE(fog_source.contains("world_position.z"));
+  EXPECT_FALSE(fog_source.contains("world_position.y + 4.0f"));
   EXPECT_FALSE(fog_source.contains("discard;"));
 }
 
@@ -345,10 +460,17 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
   EXPECT_TRUE(vortexbasic_capture.contains("compositing_present_operation_count"));
   EXPECT_TRUE(vortexbasic_capture.contains("ID3D12GraphicsCommandList::CopyTextureRegion()"));
+  EXPECT_TRUE(vortexbasic_capture.contains("Vortex.Stage14.LocalFogTiledCulling"));
+  EXPECT_TRUE(vortexbasic_capture.contains("Vortex.Stage5.ScreenHzbBuild"));
   EXPECT_TRUE(vortexbasic_products.contains("choose_latest_stage_sample"));
   EXPECT_TRUE(vortexbasic_products.contains("find_last_named_record_any"));
   EXPECT_TRUE(vortexbasic_products.contains("COPY_NAME"));
+  EXPECT_TRUE(vortexbasic_products.contains("screen_hzb_expected_width"));
+  EXPECT_TRUE(vortexbasic_products.contains("screen_hzb_published"));
+  EXPECT_TRUE(vortexbasic_products.contains("local_fog_hzb_consumed"));
+  EXPECT_TRUE(vortexbasic_products.contains("local_fog_indirect_draw_valid"));
   EXPECT_TRUE(vortexbasic_products.contains("stage12_final_last_draw_event"));
+  EXPECT_TRUE(vortexbasic_products.contains("stage15_local_fog_scene_color_changed"));
   EXPECT_FALSE(vortexbasic_products.contains("stage12_final_scene_color = find_output_sample(stage12_point, \"SceneColor\")"));
 
   EXPECT_TRUE(async_products.contains("stage15_async_scene_color_changed"));
@@ -359,7 +481,45 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(async_assert.contains("'stage15_far_background_mask_valid'"));
   EXPECT_TRUE(async_assert.contains("'stage15_sky_quality_ok'"));
   EXPECT_TRUE(vortexbasic_assert.contains("'compositing_present_operation_count_match'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'screen_hzb_published'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("screen_hzb_proof_source"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'local_fog_hzb_consumed'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("local_fog_hzb_proof_source"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'local_fog_indirect_draw_valid'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'local_fog_volume_instance_count_valid'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'local_fog_tiled_culling_valid'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'local_fog_scene_color_changed'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("runtime_log+capture_report"));
+  EXPECT_FALSE(vortexbasic_assert.contains("Runtime log does not contain screen_hzb_published=true"));
+  EXPECT_FALSE(vortexbasic_assert.contains("Runtime log does not contain local_fog_hzb_consumed=true"));
+  EXPECT_FALSE(vortexbasic_assert.contains("Runtime log does not contain local_fog_indirect_draw_valid=true"));
   EXPECT_FALSE(vortexbasic_assert.contains("'compositing_draw_count_match'"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  VortexBasicSurfaceUsesExplicitCliFlagsForAtmosphereHeightFogAndLocalFog)
+{
+  const auto repo_root = std::filesystem::path { __FILE__ }.parent_path()
+    .parent_path()
+    .parent_path()
+    .parent_path()
+    .parent_path();
+  const auto main_impl = ReadTextFile(repo_root / "Examples/VortexBasic/main_impl.cpp");
+  const auto main_module = ReadTextFile(repo_root / "Examples/VortexBasic/MainModule.cpp");
+  const auto runtime_validation = ReadTextFile(
+    repo_root / "tools/vortex/Run-VortexBasicRuntimeValidation.ps1");
+
+  EXPECT_TRUE(main_impl.contains(".Long(\"with-atmosphere\")"));
+  EXPECT_TRUE(main_impl.contains(".Long(\"with-height-fog\")"));
+  EXPECT_TRUE(main_impl.contains(".Long(\"with-local-fog\")"));
+  EXPECT_TRUE(main_impl.contains(".DefaultValue(false)"));
+  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_atmosphere = app_.with_atmosphere;"));
+  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_height_fog = app_.with_height_fog;"));
+  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_local_fog = app_.with_local_fog;"));
+  EXPECT_TRUE(main_module.contains("if (app_.with_local_fog) {"));
+  EXPECT_TRUE(runtime_validation.contains("'--with-atmosphere'"));
+  EXPECT_TRUE(runtime_validation.contains("'--with-height-fog'"));
+  EXPECT_TRUE(runtime_validation.contains("'--with-local-fog'"));
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -374,6 +534,31 @@ protected:
   std::shared_ptr<FakeGraphics> graphics_;
   std::shared_ptr<Renderer> renderer_;
 };
+
+auto MakeSceneWithLocalFog() -> std::shared_ptr<oxygen::scene::Scene>
+{
+  auto scene = std::make_shared<oxygen::scene::Scene>("LocalFogScene", 16U);
+  auto node = scene->CreateNode("LocalFog");
+  const auto impl = node.GetImpl();
+  EXPECT_TRUE(impl.has_value());
+  if (impl.has_value()) {
+    impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+    auto& fog = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+    fog.SetEnabled(true);
+    fog.SetRadialFogExtinction(0.45F);
+    fog.SetHeightFogExtinction(0.25F);
+    fog.SetHeightFogFalloff(0.2F);
+    fog.SetHeightFogOffset(0.0F);
+    fog.SetFogPhaseG(0.4F);
+    fog.SetFogAlbedo({ 0.7F, 0.8F, 0.9F });
+    fog.SetFogEmissive({ 0.1F, 0.2F, 0.3F });
+    fog.SetSortPriority(2);
+  }
+  node.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 0.5F });
+  node.GetTransform().SetLocalScale({ 2.0F, 2.0F, 2.0F });
+  scene->Update();
+  return scene;
+}
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ProbeRefreshKeepsBindingsPersistentAndUnboundUntilRealProbeDataExists)
@@ -433,6 +618,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto composition_view = oxygen::vortex::CompositionView {};
   composition_view.id = ViewId { 12U };
   composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
   auto ctx = MakeRenderContext(ViewId { 12U }, resolved_view, composition_view);
 
   graphics_->draw_log_.draws.clear();
@@ -474,6 +660,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto composition_view = oxygen::vortex::CompositionView {};
   composition_view.id = ViewId { 13U };
   composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
   auto ctx = MakeRenderContext(ViewId { 13U }, resolved_view, composition_view);
 
   graphics_->graphics_pipeline_log_.binds.clear();
@@ -548,6 +735,160 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->ambient_bridge.flags, 0U);
   EXPECT_EQ(service.GetLastPublicationState().published_view_count, 1U);
   EXPECT_EQ(service.GetLastPublicationState().ambient_bridge_view_count, 0U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogStage14AndStage15RunWhenSceneContainsLocalFogVolumes)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 9U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 15U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 15U }, resolved_view, composition_view);
+  ctx.current_view.screen_hzb_available = true;
+  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex { 17U };
+  ctx.current_view.screen_hzb_width = 32U;
+  ctx.current_view.screen_hzb_height = 32U;
+  ctx.current_view.screen_hzb_mip_count = 5U;
+  auto scene = MakeSceneWithLocalFog();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->dispatch_log_.dispatches.clear();
+  graphics_->indirect_log_.counted_draws.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_TRUE(stage14.requested);
+  EXPECT_TRUE(stage14.local_fog_requested);
+  EXPECT_TRUE(stage14.local_fog_executed);
+  EXPECT_TRUE(stage14.local_fog_hzb_consumed);
+  EXPECT_TRUE(stage14.local_fog_buffer_ready);
+  EXPECT_EQ(stage14.local_fog_instance_count, 1U);
+  EXPECT_GE(stage14.local_fog_dispatch_count_x, 1U);
+  EXPECT_GE(stage14.local_fog_dispatch_count_y, 1U);
+  EXPECT_EQ(stage14.local_fog_dispatch_count_z, 1U);
+
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_TRUE(stage15.local_fog_requested);
+  EXPECT_TRUE(stage15.local_fog_executed);
+  EXPECT_EQ(stage15.local_fog_draw_count, 1U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 3U);
+  ASSERT_EQ(graphics_->indirect_log_.counted_draws.size(), 1U);
+  EXPECT_EQ(graphics_->indirect_log_.counted_draws[0].command_desc.kind,
+    oxygen::graphics::CommandRecorder::IndirectCommandKind::kDraw);
+  EXPECT_NE(graphics_->indirect_log_.counted_draws[0].execution_desc.count_buffer,
+    nullptr);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogStage14UsesViewportTileResolutionForSubViewportViews)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 10U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 2048U, 128U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto resolved_view = MakeResolvedView(128.0F, 128.0F, 512.0F, 0.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 17U };
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 17U }, resolved_view, composition_view);
+  ctx.frame_sequence = oxygen::frame::SequenceNumber { 10U };
+  ctx.frame_slot = oxygen::frame::Slot { 2U };
+  ctx.current_view.screen_hzb_available = true;
+  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex { 27U };
+  ctx.current_view.screen_hzb_width = 64U;
+  ctx.current_view.screen_hzb_height = 64U;
+  ctx.current_view.screen_hzb_mip_count = 6U;
+  auto scene = MakeSceneWithLocalFog();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_TRUE(stage14.local_fog_requested);
+  EXPECT_TRUE(stage14.local_fog_executed);
+  EXPECT_TRUE(stage14.local_fog_hzb_consumed);
+  EXPECT_EQ(stage14.local_fog_dispatch_count_x, 1U);
+  EXPECT_EQ(stage14.local_fog_dispatch_count_y, 1U);
+  EXPECT_EQ(stage14.local_fog_dispatch_count_z, 1U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  OptionalFogLayersStayDisabledByDefaultEvenWhenSceneContainsLocalFogVolumes)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 10U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_, SceneTexturesConfig {
+    .extent = { 64U, 64U },
+    .enable_velocity = false,
+    .enable_custom_depth = false,
+    .gbuffer_count = 4U,
+    .msaa_sample_count = 1U,
+  });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 16U };
+  auto ctx = MakeRenderContext(ViewId { 16U }, resolved_view, composition_view);
+  ctx.current_view.screen_hzb_available = true;
+  ctx.current_view.screen_hzb_frame_slot = oxygen::ShaderVisibleIndex { 17U };
+  ctx.current_view.screen_hzb_width = 32U;
+  ctx.current_view.screen_hzb_height = 32U;
+  ctx.current_view.screen_hzb_mip_count = 5U;
+  auto scene = MakeSceneWithLocalFog();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->draw_log_.draws.clear();
+  graphics_->dispatch_log_.dispatches.clear();
+  graphics_->indirect_log_.counted_draws.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_FALSE(stage14.requested);
+  EXPECT_FALSE(stage14.local_fog_requested);
+  EXPECT_FALSE(stage14.local_fog_executed);
+
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_FALSE(stage15.sky_requested);
+  EXPECT_FALSE(stage15.sky_executed);
+  EXPECT_FALSE(stage15.atmosphere_requested);
+  EXPECT_FALSE(stage15.atmosphere_executed);
+  EXPECT_FALSE(stage15.fog_requested);
+  EXPECT_FALSE(stage15.fog_executed);
+  EXPECT_FALSE(stage15.local_fog_requested);
+  EXPECT_FALSE(stage15.local_fog_executed);
+  EXPECT_EQ(stage15.sky_draw_count, 0U);
+  EXPECT_EQ(stage15.atmosphere_draw_count, 0U);
+  EXPECT_EQ(stage15.fog_draw_count, 0U);
+  EXPECT_EQ(stage15.local_fog_draw_count, 0U);
+  EXPECT_EQ(stage15.total_draw_count, 0U);
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+  EXPECT_TRUE(graphics_->dispatch_log_.dispatches.empty());
+  EXPECT_TRUE(graphics_->indirect_log_.counted_draws.empty());
 }
 
 } // namespace

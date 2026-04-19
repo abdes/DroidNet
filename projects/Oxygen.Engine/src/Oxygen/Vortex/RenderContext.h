@@ -125,6 +125,9 @@ struct RenderContext {
     std::uint32_t screen_hzb_mip_count { 0U };
     bool screen_hzb_available { false };
     bool screen_hzb_has_previous { false };
+    bool with_atmosphere { false };
+    bool with_height_fog { false };
+    bool with_local_fog { false };
 
     [[nodiscard]] auto HasPlannedDepthPrePass() const noexcept -> bool
     {
