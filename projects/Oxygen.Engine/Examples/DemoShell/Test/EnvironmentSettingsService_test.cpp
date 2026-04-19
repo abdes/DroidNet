@@ -14,6 +14,7 @@
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -124,6 +125,40 @@ namespace {
       }
 
       return std::nullopt;
+    }
+
+    static auto CollectLocalFogVolumeNodes(scene::Scene& scene)
+      -> std::vector<scene::SceneNode>
+    {
+      std::vector<scene::SceneNode> result {};
+      auto roots = scene.GetRootNodes();
+      std::vector<scene::SceneNode> stack {};
+      stack.reserve(roots.size());
+      for (auto& root : roots) {
+        stack.push_back(root);
+      }
+
+      while (!stack.empty()) {
+        auto node = stack.back();
+        stack.pop_back();
+        if (!node.IsAlive()) {
+          continue;
+        }
+
+        const auto impl_opt = node.GetImpl();
+        if (impl_opt.has_value()
+          && impl_opt->get().HasComponent<scene::environment::LocalFogVolume>()) {
+          result.push_back(node);
+        }
+
+        auto child = node.GetFirstChild();
+        while (child.has_value()) {
+          stack.push_back(*child);
+          child = child->GetNextSibling();
+        }
+      }
+
+      return result;
     }
 
     static auto ResetDemoSettings() -> void
@@ -472,6 +507,53 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(0), 12.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(1), 36.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(2), 92.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  LocalFogVolumesAreCreatedEditedAndRemovedAsSceneNodeComponents)
+{
+  auto scene = MakeScene("DemoShell.LocalFogVolumes");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.AddLocalFogVolume();
+  EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
+  EXPECT_EQ(service_.GetSelectedLocalFogVolumeIndex(), 0);
+
+  service_.SetSelectedLocalFogVolumeEnabled(true);
+  service_.SetSelectedLocalFogVolumeRadialFogExtinction(0.3F);
+  service_.SetSelectedLocalFogVolumeHeightFogExtinction(0.2F);
+  service_.SetSelectedLocalFogVolumeHeightFogFalloff(0.15F);
+  service_.SetSelectedLocalFogVolumeHeightFogOffset(1.25F);
+  service_.SetSelectedLocalFogVolumeFogPhaseG(0.4F);
+  service_.SetSelectedLocalFogVolumeFogAlbedo({ 0.7F, 0.8F, 0.9F });
+  service_.SetSelectedLocalFogVolumeFogEmissive({ 0.1F, 0.2F, 0.3F });
+  service_.SetSelectedLocalFogVolumeSortPriority(2);
+  service_.ApplyPendingChanges();
+
+  auto fog_nodes = CollectLocalFogVolumeNodes(*scene);
+  ASSERT_EQ(fog_nodes.size(), 1U);
+
+  const auto impl_opt = fog_nodes.front().GetImpl();
+  ASSERT_TRUE(impl_opt.has_value());
+  const auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  EXPECT_TRUE(local_fog.IsEnabled());
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 0.3F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 0.2F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 0.15F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), 1.25F);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.4F);
+  EXPECT_EQ(local_fog.GetFogAlbedo(), glm::vec3(0.7F, 0.8F, 0.9F));
+  EXPECT_EQ(local_fog.GetFogEmissive(), glm::vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_EQ(local_fog.GetSortPriority(), 2);
+
+  service_.RemoveSelectedLocalFogVolume();
+  service_.ApplyPendingChanges();
+
+  EXPECT_EQ(service_.GetLocalFogVolumeCount(), 0);
+  EXPECT_TRUE(CollectLocalFogVolumeNodes(*scene).empty());
 }
 
 } // namespace oxygen::examples::testing

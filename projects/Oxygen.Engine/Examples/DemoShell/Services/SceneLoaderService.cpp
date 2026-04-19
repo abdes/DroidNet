@@ -56,6 +56,7 @@
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -2440,6 +2441,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   ApplyHierarchy(scene, asset);
   AttachRenderables(asset);
   AttachLights(asset);
+  AttachLocalFogVolumes(asset);
   AttachScripting(asset);
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
@@ -2543,6 +2545,7 @@ auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
 void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
 {
   using data::pak::world::DirectionalLightRecord;
+  using data::pak::world::LocalFogVolumeRecord;
   using data::pak::world::OrthographicCameraRecord;
   using data::pak::world::PerspectiveCameraRecord;
   using data::pak::world::PointLightRecord;
@@ -2554,13 +2557,15 @@ void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
   LOG_F(INFO,
     "SceneLoader: Scene summary: nodes={} renderables={} "
     "perspective_cameras={} orthographic_cameras={} "
-    "directional_lights={} point_lights={} spot_lights={}",
+    "directional_lights={} point_lights={} spot_lights={} "
+    "local_fog_volumes={}",
     nodes.size(), asset.GetComponents<RenderableRecord>().size(),
     asset.GetComponents<PerspectiveCameraRecord>().size(),
     asset.GetComponents<OrthographicCameraRecord>().size(),
     asset.GetComponents<DirectionalLightRecord>().size(),
     asset.GetComponents<PointLightRecord>().size(),
-    asset.GetComponents<SpotLightRecord>().size());
+    asset.GetComponents<SpotLightRecord>().size(),
+    asset.GetComponents<LocalFogVolumeRecord>().size());
 }
 
 void SceneLoaderService::InstantiateNodes(
@@ -2762,6 +2767,50 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
       "(total={})",
       attached_directional, attached_point, attached_spot,
       attached_directional + attached_point + attached_spot);
+  }
+}
+
+void SceneLoaderService::AttachLocalFogVolumes(const data::SceneAsset& asset)
+{
+  using data::pak::world::LocalFogVolumeRecord;
+
+  int attached_local_fog_volumes = 0;
+  for (const LocalFogVolumeRecord& rec :
+    asset.GetComponents<LocalFogVolumeRecord>()) {
+    const auto node_index = static_cast<size_t>(rec.node_index);
+    if (node_index >= runtime_nodes_.size()) {
+      continue;
+    }
+
+    const auto impl_opt = runtime_nodes_[node_index].GetImpl();
+    if (!impl_opt.has_value()) {
+      continue;
+    }
+
+    auto& node_impl = impl_opt->get();
+    if (!node_impl.HasComponent<scene::environment::LocalFogVolume>()) {
+      node_impl.AddComponent<scene::environment::LocalFogVolume>();
+    }
+
+    auto& local_fog
+      = node_impl.GetComponent<scene::environment::LocalFogVolume>();
+    local_fog.SetEnabled(rec.enabled != 0U);
+    local_fog.SetRadialFogExtinction(rec.radial_fog_extinction);
+    local_fog.SetHeightFogExtinction(rec.height_fog_extinction);
+    local_fog.SetHeightFogFalloff(rec.height_fog_falloff);
+    local_fog.SetHeightFogOffset(rec.height_fog_offset);
+    local_fog.SetFogPhaseG(rec.fog_phase_g);
+    local_fog.SetFogAlbedo(
+      { rec.fog_albedo[0], rec.fog_albedo[1], rec.fog_albedo[2] });
+    local_fog.SetFogEmissive(
+      { rec.fog_emissive[0], rec.fog_emissive[1], rec.fog_emissive[2] });
+    local_fog.SetSortPriority(rec.sort_priority);
+    attached_local_fog_volumes++;
+  }
+
+  if (attached_local_fog_volumes > 0) {
+    LOG_F(INFO, "SceneLoader: Attached {} local fog volume components.",
+      attached_local_fog_volumes);
   }
 }
 

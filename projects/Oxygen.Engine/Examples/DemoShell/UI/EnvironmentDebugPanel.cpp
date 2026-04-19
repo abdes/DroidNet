@@ -198,6 +198,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
   }
 
   DrawFog();
+  DrawLocalFogVolumes();
   // Environment system sections
   ImGui::SetNextItemOpen(sky_atmo_section_open_, ImGuiCond_Always);
   const bool sky_atmo_section_open = ImGui::CollapsingHeader("Sky Atmosphere");
@@ -308,6 +309,91 @@ void EnvironmentDebugPanel::DrawFog()
         "Single-Scattering Albedo", albedo_rgb, ImGuiColorEditFlags_Float)) {
     environment_vm_->SetFogSingleScatteringAlbedoRgb(
       glm::vec3(albedo_rgb[0], albedo_rgb[1], albedo_rgb[2]));
+  }
+}
+
+void EnvironmentDebugPanel::DrawLocalFogVolumes()
+{
+  if (!ImGui::CollapsingHeader("Local Fog Volumes")) {
+    return;
+  }
+
+  const int count = environment_vm_->GetLocalFogVolumeCount();
+  ImGui::Text("Count: %d", count);
+  if (ImGui::Button("Add Local Fog Volume")) {
+    environment_vm_->AddLocalFogVolume();
+  }
+  ImGui::SameLine();
+  const bool has_selection = count > 0;
+  ImGui::BeginDisabled(!has_selection);
+  if (ImGui::Button("Remove Selected")) {
+    environment_vm_->RemoveSelectedLocalFogVolume();
+  }
+  ImGui::EndDisabled();
+
+  if (!has_selection) {
+    return;
+  }
+
+  int selected_index = environment_vm_->GetSelectedLocalFogVolumeIndex();
+  if (ImGui::SliderInt(
+        "Selected", &selected_index, 0, std::max(count - 1, 0))) {
+    environment_vm_->SetSelectedLocalFogVolumeIndex(selected_index);
+  }
+
+  bool enabled = environment_vm_->GetSelectedLocalFogVolumeEnabled();
+  if (ImGui::Checkbox("Enabled##LocalFog", &enabled)) {
+    environment_vm_->SetSelectedLocalFogVolumeEnabled(enabled);
+  }
+
+  float radial_extinction
+    = environment_vm_->GetSelectedLocalFogVolumeRadialFogExtinction();
+  if (ImGui::DragFloat("Radial Extinction##LocalFog", &radial_extinction, 0.001F,
+        0.0F, 10.0F, "%.4f")) {
+    environment_vm_->SetSelectedLocalFogVolumeRadialFogExtinction(
+      radial_extinction);
+  }
+
+  float height_extinction
+    = environment_vm_->GetSelectedLocalFogVolumeHeightFogExtinction();
+  if (ImGui::DragFloat("Height Extinction##LocalFog", &height_extinction, 0.001F,
+        0.0F, 10.0F, "%.4f")) {
+    environment_vm_->SetSelectedLocalFogVolumeHeightFogExtinction(
+      height_extinction);
+  }
+
+  float height_falloff
+    = environment_vm_->GetSelectedLocalFogVolumeHeightFogFalloff();
+  if (ImGui::DragFloat("Height Falloff##LocalFog", &height_falloff, 0.001F,
+        0.0F, 10.0F, "%.4f")) {
+    environment_vm_->SetSelectedLocalFogVolumeHeightFogFalloff(height_falloff);
+  }
+
+  float height_offset = environment_vm_->GetSelectedLocalFogVolumeHeightFogOffset();
+  if (ImGui::DragFloat(
+        "Height Offset##LocalFog", &height_offset, 0.05F, -1000.0F, 1000.0F, "%.2f")) {
+    environment_vm_->SetSelectedLocalFogVolumeHeightFogOffset(height_offset);
+  }
+
+  float fog_phase_g = environment_vm_->GetSelectedLocalFogVolumeFogPhaseG();
+  if (ImGui::SliderFloat("Phase g##LocalFog", &fog_phase_g, -0.99F, 0.99F, "%.2f")) {
+    environment_vm_->SetSelectedLocalFogVolumeFogPhaseG(fog_phase_g);
+  }
+
+  auto fog_albedo = environment_vm_->GetSelectedLocalFogVolumeFogAlbedo();
+  if (ImGui::ColorEdit3("Albedo##LocalFog", &fog_albedo.x, ImGuiColorEditFlags_Float)) {
+    environment_vm_->SetSelectedLocalFogVolumeFogAlbedo(fog_albedo);
+  }
+
+  auto fog_emissive = environment_vm_->GetSelectedLocalFogVolumeFogEmissive();
+  if (ImGui::ColorEdit3(
+        "Emissive##LocalFog", &fog_emissive.x, ImGuiColorEditFlags_Float)) {
+    environment_vm_->SetSelectedLocalFogVolumeFogEmissive(fog_emissive);
+  }
+
+  int sort_priority = environment_vm_->GetSelectedLocalFogVolumeSortPriority();
+  if (ImGui::DragInt("Sort Priority##LocalFog", &sort_priority, 1, -128, 128)) {
+    environment_vm_->SetSelectedLocalFogVolumeSortPriority(sort_priority);
   }
 }
 
