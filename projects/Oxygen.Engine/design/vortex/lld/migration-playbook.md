@@ -4,6 +4,21 @@
 **Deliverable:** D.13
 **Status:** `ready`
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+   code. It is not production, not a reference implementation, not a fallback,
+   and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+   system that targets maximum parity with UE5.7, grounded in
+   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+   explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+   explicit human approval records the accepted gap and the reason the parity
+   gate cannot close.
+
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
@@ -13,7 +28,8 @@ the legacy `Oxygen.Renderer` path to `Oxygen.Vortex`.
 
 This is the PRD Section 6.1.1 first-success gate. The migrated example must:
 
-- produce correct visual output matching the legacy reference
+- produce correct visual and behavioral output that closes the owning UE5.7
+   parity gate
 - run through the real Vortex runtime seams
 - avoid long-lived compatibility clutter
 - prove that the Phase 4 service set is sufficient for one real Oxygen runtime
@@ -42,28 +58,29 @@ migration gate unless product intent is explicitly widened.
 - [IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md) - current truth
   ledger
 
-## 2. Pre-Migration Baseline
+## 2. UE5.7 Parity Evidence Pack
 
-### 2.1 Legacy Visual Baseline Capture
+### 2.1 Frame-10 Parity Capture
 
-Before any migration work:
+Before any migration completion claim:
 
-1. Build and run `Examples/Async` against legacy `Oxygen.Renderer`.
-2. Capture a RenderDoc frame at frame 10.
-3. Save baseline artifacts for:
+1. Capture `Examples/Async` on the real Vortex runtime path at frame 10.
+2. Derive the comparison checklist from the relevant UE5.7 runtime and shader
+   source for every in-scope feature family.
+3. Save parity evidence artifacts for:
    - final back buffer / presented image
    - depth visualization
    - any visible intermediate render targets that materially affect the scene
    - observable behavior notes for the async workflow
 
-### 2.2 Baseline Artifacts
+### 2.2 Evidence Artifacts
 
 | Artifact | Format | Purpose |
 | -------- | ------ | ------- |
-| `baseline_frame10.png` | screenshot | visual reference |
-| `baseline_depth.png` | screenshot | depth reference |
-| `baseline_renderdoc.rdc` | RenderDoc capture | pass / resource inspection |
-| `baseline_behaviors.md` | notes | observable workflow checklist |
+| `baseline_frame10.png` | screenshot | parity evidence image |
+| `baseline_depth.png` | screenshot | depth parity evidence |
+| `baseline_renderdoc.rdc` | RenderDoc capture | pass / resource inspection against the owning UE5.7 contract |
+| `baseline_behaviors.md` | notes | observable workflow checklist for the parity gate |
 
 ### 2.3 Truthful Phase 4 Feature Baseline
 
@@ -198,7 +215,7 @@ must remain regression-free against that expanded runtime baseline.
 ### 5.1 RenderDoc Comparison
 
 1. Capture `Examples/Async` on Vortex at frame 10.
-2. Compare against the legacy baseline:
+2. Compare against the relevant UE5.7-derived parity checklist:
    - final back buffer / presented image
    - stage-family ordering and discoverable names
    - major artifact boundaries and intermediate correctness
@@ -210,9 +227,9 @@ must remain regression-free against that expanded runtime baseline.
 | Criterion | Metric | Threshold |
 | --------- | ------ | --------- |
 | Phase 4 service set live in migrated run | design/runtime inspection | `LightingService`, `PostProcessService`, `ShadowService`, and `EnvironmentLightingService` all active as the seams under test |
-| Visual match | PSNR or perceptual diff | > 40 dB (near-identical) |
-| Depth accuracy | depth comparison | < 0.001 max error |
-| Async behavior | observable behavior match | all baseline behaviors preserved |
+| Visual match | parity evidence review plus optional image diff | must satisfy the owning UE5.7 parity gate |
+| Depth accuracy | depth comparison | must satisfy the owning UE5.7 parity gate |
+| Async behavior | observable behavior match | all required parity-gate behaviors preserved |
 | No compatibility clutter | code inspection | zero long-lived shims |
 
 ### 5.3 Known Acceptable Differences
@@ -234,7 +251,7 @@ The truthful Phase 4 runtime proof boundary is:
    under test
 3. real composition submission / presentation path in use
 4. RenderDoc frame-10 capture from that migrated example
-5. visual/behavior parity checked against the legacy baseline
+5. the owning UE5.7 parity gate closed with explicit visual/behavior evidence
 
 This document does **not** require `DemoShell` to become a separate standalone
 Phase 4 migration gate. DemoShell remains part of the example integration

@@ -14,6 +14,21 @@ Related:
 - [PLAN.md](./PLAN.md)
 - [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+   code. It is not production, not a reference implementation, not a fallback,
+   and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+   system that targets maximum parity with UE5.7, grounded in
+   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+   explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+   explicit human approval records the accepted gap and the reason the parity
+   gate cannot close.
+
 ## 1. Problem Statement
 
 Oxygen's current rendering layer (`Oxygen.Renderer`) is structurally
@@ -52,9 +67,10 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
 5. Preserves and reuses Oxygen's **architecture-neutral substrate**: render-graph
    coroutines, bindless descriptor model, uploaders, binders, frame/view
    lifecycle services, and composition infrastructure.
-6. Is built as the **eventual production successor** to `Oxygen.Renderer`, but
-   reaches that point through staged migration rather than immediate parity or
-   immediate replacement.
+6. Is the **only production target** for new renderer work. Legacy
+   `Oxygen.Renderer` code may remain in the tree temporarily as dead-code seam
+   inventory, but it must not guide design, fallback behavior, or completion
+   claims for Vortex.
 7. Defines Vortex as an **independent renderer architecture**, not a
    compatibility-shaped evolution of the legacy renderer.
 
@@ -169,7 +185,7 @@ The design assumes passes and pipelines are engine-authored production code.
 
 ### 6.1 Full Runtime Desktop Renderer
 
-The default production renderer:
+The target production renderer:
 
 - deferred-first opaque path with GBuffer base pass
 - shared clustered forward light data
@@ -195,10 +211,12 @@ Migration intent for `Examples/Async`:
 - preserve clean engine/renderer integration seams
 - avoid long-lived duplicate renderer paths or compatibility scaffolding inside
   the example
-- hold the first migrated result to strict near-parity rather than accepting a
-  visually correct but operationally degraded port
-- allow `Oxygen.Renderer` to remain supported temporarily after this migration
-  while additional examples and tests move over
+- hold the first migrated result to maximum parity proven against the relevant
+   UE5.7 source/shader references rather than accepting a visually plausible but
+   operationally degraded port
+- allow legacy code to remain in the tree temporarily only as migration
+   inventory while additional examples and tests move over; it is not a
+   supported production path, reference implementation, or fallback for Vortex
 
 ### 6.2 Single Pass Harness
 
@@ -368,11 +386,12 @@ The Vortex renderer is successful when:
 11. `Examples/Async` runs on Vortex after a clean migration.
 12. That migration preserves the important visible behavior of the example and
     occurs through stable engine/renderer seams.
-13. The migration achieves strict near-parity for the important visual,
-    workflow, and operational behavior of the example.
+13. The migration closes the owning UE5.7 parity gate for the important
+   visual, workflow, and operational behavior of the example.
 14. The migration does not introduce long-lived compatibility clutter.
-15. `Oxygen.Renderer` may remain as a supported parallel path after this first
-    migration while broader rollout continues.
+15. Legacy `Oxygen.Renderer` code may remain in the tree temporarily during
+   broader rollout, but it is not a supported parallel production path and it
+   does not relax any Vortex parity gate.
 16. The design and plan package explicitly shows which `SceneTextures`
     attachments and feature families activate in which phase, with the end
     target remaining the full intended desktop feature set.

@@ -1,4 +1,4 @@
-﻿# Vortex Renderer Implementation Status
+# Vortex Renderer Implementation Status
 
 Status: `gaps_found — Phase 4 code exists on the current branch, but direct UAT and phase verification reject the visual/parity/composition closeout claim`
 
@@ -13,6 +13,21 @@ Related:
 - [DESIGN.md](./DESIGN.md) — stable design entry point and cross-subsystem rationale
 - [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — authoritative file layout
 - [PLAN.md](./PLAN.md) — active execution plan
+
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+  explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
 
 ## Ledger Rules
 
@@ -110,7 +125,7 @@ implementation cannot begin until its design prerequisites are met.
   `04-15` lands the tooling infrastructure ahead of runtime fixes.
 - Changed files:
   - `tools/vortex/Capture-AsyncLegacyReference.ps1` (new) — dedicated
-    legacy/reference baseline capture for Async frame-10 proof
+    UE5.7 source/shader parity baseline capture for Async frame-10 proof
   - `tools/vortex/Run-AsyncRuntimeValidation.ps1` — added `-ReferenceRoot`
     parameter; current Vortex validation now consumes an external reference
     instead of self-initializing baseline artifacts
@@ -2499,10 +2514,11 @@ When implementation resumes, keep these baseline facts explicit:
   treating `DESIGN.md` as an incomplete substitute for them.
 - Each phase in PLAN.md identifies specific design deliverables that must be
   completed before implementation begins.
-- The current legacy renderer is still the live implementation and the current
-  source of reusable substrate.
+- Legacy `Oxygen.Renderer` code remains in the tree only as seam inventory and
+  must not be treated as production, fallback, or the source of completion
+  criteria for Vortex.
 - Referenced historical documents `vortex-initial-design.md` and
   `parity-analysis.md` do not exist in the repo; the current Vortex design
   package supersedes them.
-- The active production path is `Oxygen.Renderer` + `ForwardPipeline`.
+- The only production target recorded by this design package is Vortex.
 - Use frame 10 as the RenderDoc baseline capture point.

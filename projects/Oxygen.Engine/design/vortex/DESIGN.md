@@ -21,6 +21,21 @@ Related documents:
 | [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) | Tracker |
 | [lld/README.md](lld/README.md) | LLD package index and reserved future LLDs |
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+   code. It is not production, not a reference implementation, not a fallback,
+   and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+   system that targets maximum parity with UE5.7, grounded in
+   `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+   `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+   explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+   explicit human approval records the accepted gap and the reason the parity
+   gate cannot close.
+
 ## 1. Design Summary
 
 Vortex organizes around:
@@ -30,8 +45,9 @@ Vortex organizes around:
 - a `SceneTextures` product that carries GBuffer, depth, color, and velocity
   data across the frame
 - capability-family subsystem services that own domain-specific GPU work
-- inherited Renderer Core substrate (frame loop, views, composition, facades,
-  publication, upload) adapted mechanically from the legacy renderer
+- a Vortex-owned Renderer Core substrate (frame loop, views, composition,
+   facades, publication, upload) that may retain only architecture-neutral
+   concepts after they are requalified against the UE5.7 parity target
 - a shared forward light data service that lives inside the Lighting subsystem
 
 The design should be read through the scene-renderer mental model:

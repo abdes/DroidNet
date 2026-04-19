@@ -3,11 +3,26 @@
 **Phase:** 1 — Substrate Migration
 **Status:** `ready`
 
+## Mandatory Vortex Rule
+
+- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
+  code. It is not production, not a reference implementation, not a fallback,
+  and not a simplification path for any Vortex task.
+- Every Vortex task must be designed and implemented as a new Vortex-native
+  system that targets maximum parity with UE5.7, grounded in
+  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
+  `F:\Epic Games\UE_5.7\Engine\Shaders`.
+- No Vortex task may be marked complete until its parity gate is closed with
+  explicit evidence against the relevant UE5.7 source and shader references.
+- If maximum parity cannot yet be achieved, the task remains incomplete until
+  explicit human approval records the accepted gap and the reason the parity
+  gate cannot close.
+
 This guide covers the substrate migration from `Oxygen.Renderer` to
 `Oxygen.Vortex`. Phase 1 introduces no new rendering systems and no new shader
-code. The work is primarily copy + adapt, but it also includes a small set of
-architecture-prescribed restructuring decisions needed to realize the Vortex
-`Renderer Core` boundary without carrying forward the legacy renderer spine.
+code. The work may retain only architecture-neutral substrate concepts after
+they are requalified inside Vortex-owned contracts; it must not mechanically
+copy, clone, or preserve the legacy renderer spine.
 
 ## 1. Scope and Context
 
@@ -31,7 +46,8 @@ and compile independently. The substrate includes:
 - No new shader code
 - No SceneRenderer layer (Phase 2)
 - No subsystem services (Phase 3+)
-- Legacy `Oxygen.Renderer` remains intact and functional throughout
+- Legacy `Oxygen.Renderer` code may remain in the tree as seam inventory only;
+  it is not a production path, fallback, or implementation guide for Phase 1
 
 ### 1.2.1 Allowed Non-Mechanical Decisions Inside Phase 1
 
