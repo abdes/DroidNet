@@ -24,8 +24,12 @@ struct ViewHistoryFrameBindings
     float4x4 previous_inverse_view_projection_matrix;
     float2 current_pixel_jitter;
     float2 previous_pixel_jitter;
+    float4 current_view_rect_min_and_size;
+    float4 previous_view_rect_min_and_size;
     uint validity_flags;
     uint _pad_to_16_0;
+    uint _pad_to_16_1;
+    uint _pad_to_16_2;
 };
 
 static ViewHistoryFrameBindings LoadViewHistoryFrameBindings(uint slot)

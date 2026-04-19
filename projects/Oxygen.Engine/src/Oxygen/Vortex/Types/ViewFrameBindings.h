@@ -27,6 +27,7 @@ struct alignas(16) ViewFrameBindings {
   ShaderVisibleIndex view_color_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex scene_texture_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex scene_depth_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex screen_hzb_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex shadow_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex virtual_shadow_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex post_process_frame_slot { kInvalidShaderVisibleIndex };
@@ -35,7 +36,7 @@ struct alignas(16) ViewFrameBindings {
   ShaderVisibleIndex ray_tracing_frame_slot { kInvalidShaderVisibleIndex };
 };
 
-static_assert(sizeof(ViewFrameBindings) == 48);
+static_assert(sizeof(ViewFrameBindings) == 64);
 static_assert(alignof(ViewFrameBindings) == 16);
 static_assert(sizeof(ViewFrameBindings) % 16 == 0);
 

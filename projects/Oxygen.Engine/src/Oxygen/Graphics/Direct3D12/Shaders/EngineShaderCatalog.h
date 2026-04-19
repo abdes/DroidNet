@@ -289,6 +289,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
   },
   ShaderFileSpec {
+    .path="Vortex/Stages/Hzb/ScreenHzbBuild.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexScreenHzbBuildCS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Stages/BasePass/BasePassGBuffer.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassGBufferPS" }, EntryPoint { .type=kVertex, .name="BasePassGBufferVS" } },
     .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }

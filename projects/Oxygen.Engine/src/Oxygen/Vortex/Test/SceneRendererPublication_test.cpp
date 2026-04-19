@@ -31,6 +31,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 #include "Fakes/Graphics.h"
@@ -86,12 +87,14 @@ auto RunRenderAsync(std::shared_ptr<Renderer> renderer, FrameContext* frame_cont
     oxygen::observer_ptr<FrameContext> { frame_context });
 }
 
-auto MakeResolvedView(const float width, const float height) -> ResolvedView
+auto MakeResolvedView(const float width, const float height,
+  const float top_left_x = 0.0F, const float top_left_y = 0.0F)
+  -> ResolvedView
 {
   auto params = ResolvedView::Params {};
   params.view_config.viewport = ViewPort {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
+    .top_left_x = top_left_x,
+    .top_left_y = top_left_y,
     .width = width,
     .height = height,
     .min_depth = 0.0F,
@@ -711,6 +714,256 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_TRUE(render_context.GetActiveViewEntry()->is_scene_view);
   EXPECT_EQ(render_context.pass_target.get(),
     render_context.GetActiveViewEntry()->primary_target.get());
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage5PublishesRealScreenHzbProductsForDeferredViews)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 96U, 54U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage5ScreenHzb", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5ScreenHzb");
+  const auto view_id = ViewId { 11U };
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto render_context = MakeSceneRenderContext(
+    scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
+
+  scene_renderer.OnFrameStart(frame_context);
+  graphics_->dispatch_log_.dispatches.clear();
+  graphics_->compute_pipeline_log_.binds.clear();
+  graphics_->texture_copy_log_.copies.clear();
+  scene_renderer.OnRender(render_context);
+
+  const auto& screen_hzb = scene_renderer.GetPublishedScreenHzbBindings();
+  EXPECT_NE(scene_renderer.GetPublishedViewFrameBindings().screen_hzb_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagAvailable)
+    != 0U);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagClosestValid)
+    != 0U);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagFurthestValid)
+    != 0U);
+  EXPECT_TRUE(screen_hzb.closest_srv.IsValid());
+  EXPECT_TRUE(screen_hzb.furthest_srv.IsValid());
+  EXPECT_EQ(screen_hzb.width, 64U);
+  EXPECT_EQ(screen_hzb.height, 32U);
+  EXPECT_EQ(screen_hzb.mip_count, 6U);
+  EXPECT_TRUE(render_context.current_view.screen_hzb_available);
+  ASSERT_NE(render_context.current_view.screen_hzb_closest_texture.get(), nullptr);
+  ASSERT_NE(render_context.current_view.screen_hzb_furthest_texture.get(), nullptr);
+  EXPECT_EQ(render_context.current_view.screen_hzb_width, screen_hzb.width);
+  EXPECT_EQ(render_context.current_view.screen_hzb_height, screen_hzb.height);
+  EXPECT_EQ(render_context.current_view.screen_hzb_mip_count, screen_hzb.mip_count);
+  EXPECT_EQ(render_context.current_view.screen_hzb_closest_texture->GetDescriptor().width,
+    screen_hzb.width);
+  EXPECT_EQ(render_context.current_view.screen_hzb_closest_texture->GetDescriptor().height,
+    screen_hzb.height);
+  EXPECT_EQ(render_context.current_view.screen_hzb_closest_texture->GetDescriptor().mip_levels,
+    screen_hzb.mip_count);
+  EXPECT_EQ(render_context.current_view.screen_hzb_furthest_texture->GetDescriptor().width,
+    screen_hzb.width);
+  EXPECT_EQ(render_context.current_view.screen_hzb_furthest_texture->GetDescriptor().height,
+    screen_hzb.height);
+  EXPECT_EQ(render_context.current_view.screen_hzb_furthest_texture->GetDescriptor().mip_levels,
+    screen_hzb.mip_count);
+  EXPECT_GE(graphics_->dispatch_log_.dispatches.size(), screen_hzb.mip_count);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.Stage5.ScreenHzbBuild"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Stages/Hzb/ScreenHzbBuild.hlsl"
+        && bind.desc.ComputeShader().entry_point == "VortexScreenHzbBuildCS";
+    }));
+  EXPECT_GE(graphics_->texture_copy_log_.copies.size(), screen_hzb.mip_count * 2U);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage5SubViewportHzbCarriesViewRectMapping)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 192U, 108U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage5SubViewport", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5SubViewport");
+  const auto view_id = ViewId { 21U };
+  auto resolved_view = MakeResolvedView(128.0F, 72.0F, 32.0F, 16.0F);
+  auto render_context = MakeSceneRenderContext(
+    scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
+  render_context.frame_sequence = oxygen::frame::SequenceNumber { 3U };
+  render_context.frame_slot = oxygen::frame::Slot { 0U };
+
+  scene_renderer.OnFrameStart(frame_context);
+  scene_renderer.OnRender(render_context);
+
+  const auto& screen_hzb = scene_renderer.GetPublishedScreenHzbBindings();
+  EXPECT_TRUE(render_context.current_view.screen_hzb_available);
+  EXPECT_EQ(screen_hzb.width, 64U);
+  EXPECT_EQ(screen_hzb.height, 64U);
+  EXPECT_EQ(screen_hzb.mip_count, 6U);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagAvailable)
+    != 0U);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagClosestValid)
+    != 0U);
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagFurthestValid)
+    != 0U);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_size_x, 64.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_size_y, 64.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_view_size_x, 128.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_view_size_y, 72.0F);
+  EXPECT_EQ(screen_hzb.hzb_view_rect_min_x, 0);
+  EXPECT_EQ(screen_hzb.hzb_view_rect_min_y, 0);
+  EXPECT_EQ(screen_hzb.hzb_view_rect_width, 128);
+  EXPECT_EQ(screen_hzb.hzb_view_rect_height, 72);
+  EXPECT_FLOAT_EQ(screen_hzb.viewport_uv_to_hzb_buffer_uv_x, 1.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.viewport_uv_to_hzb_buffer_uv_y, 72.0F / 128.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_uv_factor_x, 1.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_uv_factor_y, 72.0F / 128.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_uv_inv_factor_x, 1.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_uv_inv_factor_y, 16.0F / 9.0F);
+  EXPECT_NEAR(screen_hzb.hzb_uv_to_screen_uv_scale_x, 2.0F / 3.0F, 1.0e-6F);
+  EXPECT_NEAR(screen_hzb.hzb_uv_to_screen_uv_scale_y, 32.0F / 27.0F, 1.0e-6F);
+  EXPECT_NEAR(screen_hzb.hzb_uv_to_screen_uv_bias_x, 1.0F / 6.0F, 1.0e-6F);
+  EXPECT_NEAR(screen_hzb.hzb_uv_to_screen_uv_bias_y, 4.0F / 27.0F, 1.0e-6F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_base_texel_size_x, 1.0F / 64.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.hzb_base_texel_size_y, 1.0F / 64.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.sample_pixel_to_hzb_uv_x, 1.0F / 128.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.sample_pixel_to_hzb_uv_y, 1.0F / 128.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.screen_pos_to_hzb_uv_scale_x, 0.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.screen_pos_to_hzb_uv_scale_y, 0.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.screen_pos_to_hzb_uv_bias_x, 0.0F);
+  EXPECT_FLOAT_EQ(screen_hzb.screen_pos_to_hzb_uv_bias_y, 0.0F);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage5BuildsFromValidIncompleteDepthProducts)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 0U });
+
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5IncompleteDepth");
+  const auto view_id = ViewId { 22U };
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto render_context = MakeSceneRenderContext(std::shared_ptr<Scene> {}, view_id,
+    resolved_view, oxygen::observer_ptr { framebuffer.get() });
+  render_context.frame_sequence = oxygen::frame::SequenceNumber { 4U };
+  render_context.frame_slot = oxygen::frame::Slot { 0U };
+
+  scene_renderer.OnFrameStart(frame_context);
+  scene_renderer.OnRender(render_context);
+
+  const auto& screen_hzb = scene_renderer.GetPublishedScreenHzbBindings();
+  EXPECT_EQ(render_context.current_view.depth_prepass_completeness,
+    oxygen::vortex::DepthPrePassCompleteness::kIncomplete);
+  EXPECT_TRUE(render_context.current_view.scene_depth_product_valid);
+  EXPECT_TRUE(render_context.current_view.CanBuildScreenHzb());
+  EXPECT_TRUE(render_context.current_view.screen_hzb_available);
+  EXPECT_TRUE(screen_hzb.furthest_srv.IsValid());
+  EXPECT_TRUE((screen_hzb.flags
+                 & oxygen::vortex::kScreenHzbFrameBindingsFlagAvailable)
+    != 0U);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage5PreviousFrameHzbIsPublishedAfterTheSecondFrame)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 96U, 54U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage5PreviousFrame", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5PreviousFrame");
+  const auto view_id = ViewId { 23U };
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto render_context = MakeSceneRenderContext(
+    scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
+
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 5U }, oxygen::frame::Slot { 0U });
+  render_context.frame_sequence = oxygen::frame::SequenceNumber { 5U };
+  render_context.frame_slot = oxygen::frame::Slot { 0U };
+  scene_renderer.OnFrameStart(frame_context);
+  scene_renderer.OnRender(render_context);
+
+  const auto* first_current
+    = render_context.current_view.screen_hzb_furthest_texture.get();
+  ASSERT_NE(first_current, nullptr);
+  EXPECT_FALSE(render_context.current_view.screen_hzb_has_previous);
+  EXPECT_EQ(render_context.current_view.screen_hzb_previous_furthest_texture.get(),
+    nullptr);
+
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  render_context.frame_sequence = oxygen::frame::SequenceNumber { 6U };
+  render_context.frame_slot = oxygen::frame::Slot { 1U };
+  scene_renderer.OnFrameStart(frame_context);
+  scene_renderer.OnRender(render_context);
+
+  ASSERT_NE(render_context.current_view.screen_hzb_furthest_texture.get(), nullptr);
+  EXPECT_TRUE(render_context.current_view.screen_hzb_available);
+  EXPECT_TRUE(render_context.current_view.screen_hzb_has_previous);
+  EXPECT_NE(render_context.current_view.screen_hzb_previous_furthest_texture.get(),
+    nullptr);
+  EXPECT_TRUE(render_context.current_view.screen_hzb_previous_furthest_srv.IsValid());
+  EXPECT_NE(render_context.current_view.screen_hzb_furthest_texture.get(), first_current);
+  EXPECT_EQ(render_context.current_view.screen_hzb_previous_furthest_texture.get(),
+    first_current);
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,

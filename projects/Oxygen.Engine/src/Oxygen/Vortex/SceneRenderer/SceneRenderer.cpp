@@ -50,6 +50,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -263,6 +264,29 @@ namespace {
   {
     return ctx.current_view.resolved_view == nullptr
       || ctx.current_view.resolved_view->ReverseZ();
+  }
+
+  auto ResolveScreenHzbRequest(
+    const RenderContext& ctx, const ShadingMode shading_mode)
+    -> RenderContext::ScreenHzbRequest
+  {
+    auto request = RenderContext::ScreenHzbRequest {};
+    const auto* active_view = ctx.GetActiveViewEntry();
+    const auto is_scene_view
+      = active_view != nullptr ? active_view->is_scene_view
+                               : ctx.current_view.resolved_view != nullptr;
+    if (!is_scene_view) {
+      return request;
+    }
+
+    if (shading_mode == ShadingMode::kDeferred) {
+      request.current_closest = true;
+    }
+    if (shading_mode == ShadingMode::kDeferred) {
+      request.current_furthest = true;
+      request.publish_previous_furthest = true;
+    }
+    return request;
   }
 
   auto ResolveWorldRotation(
@@ -1070,6 +1094,11 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
     && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
+    screen_hzb_ = std::make_unique<ScreenHzbModule>(
+      renderer_, scene_textures_.GetConfig());
+  }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kScenePreparation)
+    && renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     base_pass_ = std::make_unique<BasePassModule>(
       renderer_, scene_textures_.GetConfig());
   }
@@ -1146,8 +1175,9 @@ void SceneRenderer::PrimePreparedView(RenderContext& ctx)
 void SceneRenderer::OnRender(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
-  [[maybe_unused]] const auto shading_mode
-    = ResolveShadingModeForCurrentView(ctx);
+  const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
+  ctx.current_view.screen_hzb_request = ResolveScreenHzbRequest(ctx, shading_mode);
+  ctx.current_view.scene_depth_product_valid = false;
   // Renderer Core materializes the eligible views and selects the current
   // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
   // that selected current view only.
@@ -1193,9 +1223,12 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     depth_prepass_->Execute(ctx, scene_textures_);
     ctx.current_view.depth_prepass_completeness
       = depth_prepass_->GetCompleteness();
+    ctx.current_view.scene_depth_product_valid
+      = depth_prepass_->HasValidDepthProduct();
   } else {
     ctx.current_view.depth_prepass_completeness
       = DepthPrePassCompleteness::kDisabled;
+    ctx.current_view.scene_depth_product_valid = false;
   }
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
@@ -1205,6 +1238,57 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 4: reserved - GeometryVirtualizationService
 
   // Stage 5: Occlusion / HZB
+  published_screen_hzb_bindings_ = {};
+  ctx.current_view.screen_hzb_closest_texture.reset(nullptr);
+  ctx.current_view.screen_hzb_furthest_texture.reset(nullptr);
+  ctx.current_view.screen_hzb_previous_furthest_texture.reset(nullptr);
+  ctx.current_view.screen_hzb_frame_slot = kInvalidShaderVisibleIndex;
+  ctx.current_view.screen_hzb_previous_furthest_srv
+    = kInvalidShaderVisibleIndex;
+  ctx.current_view.screen_hzb_width = 0U;
+  ctx.current_view.screen_hzb_height = 0U;
+  ctx.current_view.screen_hzb_mip_count = 0U;
+  ctx.current_view.screen_hzb_available = false;
+  ctx.current_view.screen_hzb_has_previous = false;
+  if (screen_hzb_ != nullptr && ctx.current_view.CanBuildScreenHzb()) {
+    screen_hzb_->Execute(ctx, scene_textures_);
+    const auto& screen_hzb_output = screen_hzb_->GetCurrentOutput();
+    published_screen_hzb_bindings_ = screen_hzb_output.bindings;
+    if (screen_hzb_output.closest_texture != nullptr) {
+      ctx.current_view.screen_hzb_closest_texture
+        = observer_ptr<const graphics::Texture> {
+          screen_hzb_output.closest_texture.get()
+        };
+    }
+    if (screen_hzb_output.furthest_texture != nullptr) {
+      ctx.current_view.screen_hzb_furthest_texture
+        = observer_ptr<const graphics::Texture> {
+          screen_hzb_output.furthest_texture.get()
+        };
+    }
+    ctx.current_view.screen_hzb_width
+      = static_cast<std::uint32_t>(screen_hzb_output.bindings.hzb_size_x);
+    ctx.current_view.screen_hzb_height
+      = static_cast<std::uint32_t>(screen_hzb_output.bindings.hzb_size_y);
+    ctx.current_view.screen_hzb_mip_count = screen_hzb_output.bindings.mip_count;
+    ctx.current_view.screen_hzb_available = screen_hzb_output.available;
+    if (ctx.current_view.screen_hzb_request.WantsPreviousFurthest()) {
+      const auto& screen_hzb_previous = screen_hzb_->GetPreviousOutput();
+      if (screen_hzb_previous.available
+        && screen_hzb_previous.furthest_texture != nullptr) {
+        ctx.current_view.screen_hzb_previous_furthest_texture
+          = observer_ptr<const graphics::Texture> {
+            screen_hzb_previous.furthest_texture.get()
+          };
+        ctx.current_view.screen_hzb_previous_furthest_srv
+          = screen_hzb_previous.bindings.furthest_srv;
+        ctx.current_view.screen_hzb_has_previous = true;
+      }
+    }
+    if (screen_hzb_output.available) {
+      PublishScreenHzbProducts(ctx);
+    }
+  }
 
   // Stage 6: Forward light data / light grid
 
@@ -1264,6 +1348,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     }
     if (base_pass_result.published_base_pass_products) {
       PublishDeferredBasePassSceneTextures(ctx);
+      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
     }
   }
 
@@ -1403,6 +1488,17 @@ void SceneRenderer::PublishDepthPrepassProducts()
   RefreshSceneTextureBindings();
 }
 
+void SceneRenderer::PublishScreenHzbProducts(RenderContext& ctx)
+{
+  CHECK_F(ctx.current_view.view_id != kInvalidViewId,
+    "SceneRenderer: PublishScreenHzbProducts requires a valid current view");
+  CHECK_F(ctx.frame_slot != frame::kInvalidSlot,
+    "SceneRenderer: PublishScreenHzbProducts requires a valid frame slot");
+  renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  ctx.current_view.screen_hzb_frame_slot
+    = published_view_frame_bindings_.screen_hzb_frame_slot;
+}
+
 void SceneRenderer::PublishBasePassVelocity()
 {
   // Stage 9 owns the raw attachment writes, but Stage 10 remains the first
@@ -1511,6 +1607,12 @@ auto SceneRenderer::GetPublishedViewFrameBindings() const
   return published_view_frame_bindings_;
 }
 
+auto SceneRenderer::GetPublishedScreenHzbBindings() const
+  -> const ScreenHzbFrameBindings&
+{
+  return published_screen_hzb_bindings_;
+}
+
 auto SceneRenderer::GetPublishedViewFrameBindingsSlot() const
   -> ShaderVisibleIndex
 {
@@ -1546,6 +1648,7 @@ void SceneRenderer::InvalidatePublishedViewFrameBindings()
 {
   published_view_id_ = kInvalidViewId;
   published_view_frame_bindings_ = {};
+  published_screen_hzb_bindings_ = {};
   published_view_frame_bindings_slot_ = kInvalidShaderVisibleIndex;
 }
 
@@ -1902,6 +2005,7 @@ void SceneRenderer::RenderDeferredLighting(
   std::copy_n(scene_texture_bindings_.gbuffer_srvs.begin(),
     deferred_lighting_state_.consumed_gbuffer_srvs.size(),
     deferred_lighting_state_.consumed_gbuffer_srvs.begin());
+
   if (lighting_ == nullptr) {
     return;
   }

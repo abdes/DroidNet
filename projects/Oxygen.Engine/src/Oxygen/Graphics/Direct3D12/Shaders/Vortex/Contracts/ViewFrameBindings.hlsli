@@ -19,15 +19,19 @@ struct ViewFrameBindingsData
     uint view_color_frame_slot;
     uint scene_texture_frame_slot;
     uint scene_depth_slot;
+    uint screen_hzb_frame_slot;
     uint shadow_frame_slot;
     uint virtual_shadow_frame_slot;
     uint post_process_frame_slot;
     uint debug_frame_slot;
     uint history_frame_slot;
     uint ray_tracing_frame_slot;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
-static inline ViewFrameBindingsData MakeInvalidViewFrameBindings()
+static inline ViewFrameBindingsData MakeInvalidVortexViewFrameBindings()
 {
     ViewFrameBindingsData bindings;
     bindings.draw_frame_slot = INVALID_BINDLESS_INDEX;
@@ -36,28 +40,38 @@ static inline ViewFrameBindingsData MakeInvalidViewFrameBindings()
     bindings.view_color_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.scene_texture_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.scene_depth_slot = INVALID_BINDLESS_INDEX;
+    bindings.screen_hzb_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.shadow_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.virtual_shadow_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.post_process_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.debug_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.history_frame_slot = INVALID_BINDLESS_INDEX;
     bindings.ray_tracing_frame_slot = INVALID_BINDLESS_INDEX;
+    bindings._pad0 = 0u;
+    bindings._pad1 = 0u;
+    bindings._pad2 = 0u;
     return bindings;
 }
 
-static inline ViewFrameBindingsData LoadViewFrameBindings(uint slot)
+static inline ViewFrameBindingsData LoadVortexViewFrameBindings(uint slot)
 {
     if (slot == INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
-        return MakeInvalidViewFrameBindings();
+        return MakeInvalidVortexViewFrameBindings();
     }
 
     StructuredBuffer<ViewFrameBindingsData> bindings_buffer = ResourceDescriptorHeap[slot];
     return bindings_buffer[0];
 }
 
+// Keep the historical helper name for existing Vortex shader call sites.
+static inline ViewFrameBindingsData LoadViewFrameBindings(uint slot)
+{
+    return LoadVortexViewFrameBindings(slot);
+}
+
 static inline SceneTextureBindingData LoadSceneTextureBindings(uint view_frame_bindings_slot)
 {
-    const ViewFrameBindingsData view_bindings = LoadViewFrameBindings(view_frame_bindings_slot);
+    const ViewFrameBindingsData view_bindings = LoadVortexViewFrameBindings(view_frame_bindings_slot);
     if (view_bindings.scene_texture_frame_slot == INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(view_bindings.scene_texture_frame_slot)) {
         return MakeInvalidSceneTextureBindings();

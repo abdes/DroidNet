@@ -418,6 +418,24 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
 }
 
+NOLINT_TEST(SceneRendererDeferredCoreSurfaceTest,
+  ScreenHzbEligibilityDependsOnRequestAndValidDepthInsteadOfCompleteness)
+{
+  auto view = RenderContext::ViewSpecific {};
+  view.depth_prepass_completeness
+    = oxygen::vortex::DepthPrePassCompleteness::kIncomplete;
+  view.screen_hzb_request.current_furthest = true;
+
+  EXPECT_FALSE(view.CanBuildScreenHzb());
+
+  view.scene_depth_product_valid = true;
+  EXPECT_TRUE(view.CanBuildScreenHzb());
+
+  view.screen_hzb_request.current_furthest = false;
+  view.screen_hzb_request.current_closest = false;
+  EXPECT_FALSE(view.CanBuildScreenHzb());
+}
+
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DepthPrepassRecordsRealDrawWorkFromPreparedMetadata)
 {
