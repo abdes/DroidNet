@@ -6,11 +6,19 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Scene/Environment/EnvironmentSystem.h>
 
 namespace oxygen::scene::environment {
+
+enum class SkyAtmosphereTransformMode : std::uint8_t {
+  kPlanetTopAtAbsoluteWorldOrigin,
+  kPlanetTopAtComponentTransform,
+  kPlanetCenterAtComponentTransform,
+};
 
 //! Physically-inspired atmospheric scattering sky model.
 /*!
@@ -32,6 +40,16 @@ public:
 
   OXYGEN_DEFAULT_COPYABLE(SkyAtmosphere)
   OXYGEN_DEFAULT_MOVABLE(SkyAtmosphere)
+
+  auto SetTransformMode(const SkyAtmosphereTransformMode mode) noexcept -> void
+  {
+    transform_mode_ = mode;
+  }
+  [[nodiscard]] auto GetTransformMode() const noexcept
+    -> SkyAtmosphereTransformMode
+  {
+    return transform_mode_;
+  }
 
   //! Sets the planet radius (meters).
   auto SetPlanetRadiusMeters(const float meters) noexcept -> void
@@ -180,6 +198,26 @@ public:
     return multi_scattering_factor_;
   }
 
+  auto SetSkyLuminanceFactorRgb(const Vec3& rgb) noexcept -> void
+  {
+    sky_luminance_factor_rgb_ = rgb;
+  }
+  [[nodiscard]] auto GetSkyLuminanceFactorRgb() const noexcept -> const Vec3&
+  {
+    return sky_luminance_factor_rgb_;
+  }
+
+  auto SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+    const Vec3& rgb) noexcept -> void
+  {
+    sky_and_aerial_perspective_luminance_factor_rgb_ = rgb;
+  }
+  [[nodiscard]] auto GetSkyAndAerialPerspectiveLuminanceFactorRgb() const
+    noexcept -> const Vec3&
+  {
+    return sky_and_aerial_perspective_luminance_factor_rgb_;
+  }
+
   //! Enables or disables rendering a sun disk in the sky model.
   auto SetSunDiskEnabled(const bool enabled) noexcept -> void
   {
@@ -204,6 +242,16 @@ public:
     return aerial_perspective_distance_scale_;
   }
 
+  auto SetAerialPerspectiveStartDepthMeters(const float value) noexcept -> void
+  {
+    aerial_perspective_start_depth_m_ = value;
+  }
+  [[nodiscard]] auto GetAerialPerspectiveStartDepthMeters() const noexcept
+    -> float
+  {
+    return aerial_perspective_start_depth_m_;
+  }
+
   //! Sets aerial perspective scattering strength (unitless).
   /*!
    Controls the strength of LUT-based aerial perspective applied to scene
@@ -221,7 +269,49 @@ public:
     return aerial_scattering_strength_;
   }
 
+  auto SetHeightFogContribution(const float value) noexcept -> void
+  {
+    height_fog_contribution_ = value;
+  }
+  [[nodiscard]] auto GetHeightFogContribution() const noexcept -> float
+  {
+    return height_fog_contribution_;
+  }
+
+  auto SetTraceSampleCountScale(const float value) noexcept -> void
+  {
+    trace_sample_count_scale_ = value;
+  }
+  [[nodiscard]] auto GetTraceSampleCountScale() const noexcept -> float
+  {
+    return trace_sample_count_scale_;
+  }
+
+  auto SetTransmittanceMinLightElevationDeg(const float value) noexcept -> void
+  {
+    transmittance_min_light_elevation_deg_ = value;
+  }
+  [[nodiscard]] auto GetTransmittanceMinLightElevationDeg() const noexcept
+    -> float
+  {
+    return transmittance_min_light_elevation_deg_;
+  }
+
+  auto SetHoldout(const bool value) noexcept -> void { holdout_ = value; }
+  [[nodiscard]] auto GetHoldout() const noexcept -> bool { return holdout_; }
+
+  auto SetRenderInMainPass(const bool value) noexcept -> void
+  {
+    render_in_main_pass_ = value;
+  }
+  [[nodiscard]] auto GetRenderInMainPass() const noexcept -> bool
+  {
+    return render_in_main_pass_;
+  }
+
 private:
+  SkyAtmosphereTransformMode transform_mode_
+    = SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin;
   float planet_radius_m_ = engine::atmos::kDefaultPlanetRadiusM;
   float atmosphere_height_m_ = engine::atmos::kDefaultAtmosphereHeightM;
 
@@ -243,12 +333,23 @@ private:
     = engine::atmos::kDefaultOzoneDensityProfile;
 
   float multi_scattering_factor_ = 1.0F;
+  Vec3 sky_luminance_factor_rgb_ { 1.0F, 1.0F, 1.0F };
+  Vec3 sky_and_aerial_perspective_luminance_factor_rgb_ {
+    1.0F,
+    1.0F,
+    1.0F,
+  };
 
   bool sun_disk_enabled_ = true;
 
   float aerial_perspective_distance_scale_ = 1.0F;
-
+  float aerial_perspective_start_depth_m_ = 100.0F;
   float aerial_scattering_strength_ = 1.0F;
+  float height_fog_contribution_ = 1.0F;
+  float trace_sample_count_scale_ = 1.0F;
+  float transmittance_min_light_elevation_deg_ = -6.0F;
+  bool holdout_ = false;
+  bool render_in_main_pass_ = true;
 };
 
 } // namespace oxygen::scene::environment

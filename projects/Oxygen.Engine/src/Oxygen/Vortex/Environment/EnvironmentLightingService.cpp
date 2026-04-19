@@ -111,6 +111,12 @@ auto EnvironmentLightingService::BuildBindings(
   auto bindings = EnvironmentFrameBindings {
     .environment_static_slot = environment_static_slot,
     .environment_view_slot = environment_view_slot,
+    .atmosphere_model_slot = kInvalidShaderVisibleIndex,
+    .height_fog_model_slot = kInvalidShaderVisibleIndex,
+    .sky_light_model_slot = kInvalidShaderVisibleIndex,
+    .volumetric_fog_model_slot = kInvalidShaderVisibleIndex,
+    .environment_view_products_slot = kInvalidShaderVisibleIndex,
+    .contract_flags = 0U,
     .probes = probe_state_.probes,
     .evaluation = EnvironmentEvaluationParameters {},
     .ambient_bridge = EnvironmentAmbientBridgeBindings {},

@@ -15,6 +15,8 @@
 
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/Sun.h>
@@ -475,6 +477,59 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AppliesAtmosphereLightMetadataToAuthoredSceneSunLight)
+{
+  auto scene = MakeScene("DemoShell.SceneSunAtmosphereLightMetadata");
+  auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
+  ASSERT_TRUE(authored_sun.IsAlive());
+  AttachSceneSunSystem(*scene, authored_sun);
+
+  service_.OnSceneActivated(*scene);
+  ASSERT_EQ(service_.GetSunSource(), 0);
+
+  service_.SetSunAtmosphereLightSlot(
+    static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
+  service_.SetSunUsePerPixelAtmosphereTransmittance(true);
+  service_.SetSunAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F });
+  service_.ApplyPendingChanges();
+
+  auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+  EXPECT_EQ(
+    light->get().GetAtmosphereLightSlot(),
+    oxygen::scene::AtmosphereLightSlot::kSecondary);
+  EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
+  EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
+    glm::vec3(1.2F, 0.9F, 0.8F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AppliesAtmosphereLightMetadataToSyntheticSunLight)
+{
+  auto scene = MakeScene("DemoShell.SyntheticSunAtmosphereLightMetadata");
+
+  service_.OnSceneActivated(*scene);
+  ASSERT_EQ(service_.GetSunSource(), 1);
+
+  service_.SetSunAtmosphereLightSlot(
+    static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
+  service_.SetSunUsePerPixelAtmosphereTransmittance(true);
+  service_.SetSunAtmosphereDiskLuminanceScale({ 0.6F, 0.7F, 0.8F });
+  service_.ApplyPendingChanges();
+
+  auto synthetic_node = FindNodeByName(*scene, "Synthetic Sun");
+  ASSERT_TRUE(synthetic_node.has_value());
+  auto light = synthetic_node->GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+  EXPECT_EQ(
+    light->get().GetAtmosphereLightSlot(),
+    oxygen::scene::AtmosphereLightSlot::kSecondary);
+  EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
+  EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
+    glm::vec3(0.6F, 0.7F, 0.8F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   LoadSettings_ReadsLegacyCsmKeysAfterNamespaceMigration)
 {
   ResetDemoSettings();
@@ -508,6 +563,35 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(0), 12.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(1), 36.0F);
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(2), 92.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  LoadSettings_ReadsSunAtmosphereLightMetadataKeys)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.settings.schema_version", 4.0F);
+  settings->SetFloat("env.sun.atmosphere_light_slot",
+    static_cast<float>(oxygen::scene::AtmosphereLightSlot::kSecondary));
+  settings->SetBool("env.sun.per_pixel_atmosphere_transmittance", true);
+  settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.x", 1.4F);
+  settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.y", 1.1F);
+  settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.z", 0.7F);
+
+  auto scene = MakeScene("DemoShell.LoadSunAtmosphereLightMetadata");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
+    static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
+  EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
+  EXPECT_EQ(service_.GetSunAtmosphereDiskLuminanceScale(),
+    glm::vec3(1.4F, 1.1F, 0.7F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -553,6 +637,150 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(updated_fog->GetMaxOpacity(), 0.55F);
   EXPECT_EQ(updated_fog->GetSingleScatteringAlbedoRgb(),
     glm::vec3(0.2F, 0.3F, 0.4F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  WidenedFogMetadataAppliesThroughPanelFacingServiceApi)
+{
+  auto scene = MakeScene("DemoShell.WidenedFogMetadata");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.SetFogEnabled(true);
+  service_.SetFogModel(static_cast<int>(scene::environment::FogModel::kVolumetric));
+  service_.SetSecondFogDensity(0.02F);
+  service_.SetSecondFogHeightFalloff(0.03F);
+  service_.SetSecondFogHeightOffset(4.0F);
+  service_.SetFogInscatteringLuminance({ 0.3F, 0.4F, 0.5F });
+  service_.SetSkyAtmosphereAmbientContributionColorScale({ 0.6F, 0.7F, 0.8F });
+  service_.SetInscatteringColorCubemapAngle(25.0F);
+  service_.SetInscatteringTextureTint({ 0.9F, 0.8F, 0.7F });
+  service_.SetFullyDirectionalInscatteringColorDistance(1000.0F);
+  service_.SetNonDirectionalInscatteringColorDistance(2000.0F);
+  service_.SetDirectionalInscatteringLuminance({ 0.4F, 0.5F, 0.6F });
+  service_.SetDirectionalInscatteringExponent(12.0F);
+  service_.SetDirectionalInscatteringStartDistance(32.0F);
+  service_.SetFogEndDistanceMeters(500.0F);
+  service_.SetFogCutoffDistanceMeters(1200.0F);
+  service_.SetVolumetricFogScatteringDistribution(0.25F);
+  service_.SetVolumetricFogAlbedo({ 0.7F, 0.8F, 0.9F });
+  service_.SetVolumetricFogEmissive({ 0.1F, 0.2F, 0.3F });
+  service_.SetVolumetricFogExtinctionScale(1.5F);
+  service_.SetVolumetricFogDistanceMeters(6000.0F);
+  service_.SetVolumetricFogStartDistanceMeters(100.0F);
+  service_.SetVolumetricFogNearFadeInDistanceMeters(25.0F);
+  service_.SetVolumetricFogStaticLightingScatteringIntensity(0.5F);
+  service_.SetOverrideLightColorsWithFogInscatteringColors(true);
+  service_.SetFogHoldout(true);
+  service_.SetFogRenderInMainPass(false);
+  service_.SetFogVisibleInReflectionCaptures(false);
+  service_.SetFogVisibleInRealTimeSkyCaptures(false);
+  service_.ApplyPendingChanges();
+
+  auto env = scene->GetEnvironment();
+  ASSERT_NE(env.get(), nullptr);
+  auto fog = env->TryGetSystem<scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  EXPECT_TRUE(fog->GetEnableVolumetricFog());
+  EXPECT_FLOAT_EQ(fog->GetSecondFogDensity(), 0.02F);
+  EXPECT_FLOAT_EQ(fog->GetSecondFogHeightFalloff(), 0.03F);
+  EXPECT_FLOAT_EQ(fog->GetSecondFogHeightOffset(), 4.0F);
+  EXPECT_EQ(fog->GetFogInscatteringLuminance(), glm::vec3(0.3F, 0.4F, 0.5F));
+  EXPECT_EQ(fog->GetSkyAtmosphereAmbientContributionColorScale(),
+    glm::vec3(0.6F, 0.7F, 0.8F));
+  EXPECT_FLOAT_EQ(fog->GetInscatteringColorCubemapAngle(), 25.0F);
+  EXPECT_EQ(fog->GetInscatteringTextureTint(), glm::vec3(0.9F, 0.8F, 0.7F));
+  EXPECT_FLOAT_EQ(fog->GetFullyDirectionalInscatteringColorDistance(), 1000.0F);
+  EXPECT_FLOAT_EQ(fog->GetNonDirectionalInscatteringColorDistance(), 2000.0F);
+  EXPECT_EQ(fog->GetDirectionalInscatteringLuminance(),
+    glm::vec3(0.4F, 0.5F, 0.6F));
+  EXPECT_FLOAT_EQ(fog->GetDirectionalInscatteringExponent(), 12.0F);
+  EXPECT_FLOAT_EQ(fog->GetDirectionalInscatteringStartDistance(), 32.0F);
+  EXPECT_FLOAT_EQ(fog->GetEndDistanceMeters(), 500.0F);
+  EXPECT_FLOAT_EQ(fog->GetFogCutoffDistanceMeters(), 1200.0F);
+  EXPECT_FLOAT_EQ(fog->GetVolumetricFogScatteringDistribution(), 0.25F);
+  EXPECT_EQ(fog->GetVolumetricFogAlbedo(), glm::vec3(0.7F, 0.8F, 0.9F));
+  EXPECT_EQ(fog->GetVolumetricFogEmissive(), glm::vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_FLOAT_EQ(fog->GetVolumetricFogExtinctionScale(), 1.5F);
+  EXPECT_FLOAT_EQ(fog->GetVolumetricFogDistance(), 6000.0F);
+  EXPECT_FLOAT_EQ(fog->GetVolumetricFogStartDistance(), 100.0F);
+  EXPECT_FLOAT_EQ(fog->GetVolumetricFogNearFadeInDistance(), 25.0F);
+  EXPECT_FLOAT_EQ(
+    fog->GetVolumetricFogStaticLightingScatteringIntensity(), 0.5F);
+  EXPECT_TRUE(fog->GetOverrideLightColorsWithFogInscatteringColors());
+  EXPECT_TRUE(fog->GetHoldout());
+  EXPECT_FALSE(fog->GetRenderInMainPass());
+  EXPECT_FALSE(fog->GetVisibleInReflectionCaptures());
+  EXPECT_FALSE(fog->GetVisibleInRealTimeSkyCaptures());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AtmosphereAndSkyLightWidenedMetadataApplyThroughPanelFacingServiceApi)
+{
+  auto scene = MakeScene("DemoShell.AtmosphereSkyLightMetadata");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.SetSkyAtmosphereEnabled(true);
+  service_.SetSkyAtmosphereTransformMode(2);
+  service_.SetPlanetRadiusKm(7000.0F);
+  service_.SetAtmosphereHeightKm(120.0F);
+  service_.SetSkyLuminanceFactor({ 1.1F, 1.2F, 1.3F });
+  service_.SetSkyAndAerialPerspectiveLuminanceFactor(
+    { 0.8F, 0.9F, 1.0F });
+  service_.SetAerialPerspectiveStartDepthMeters(250.0F);
+  service_.SetHeightFogContribution(0.4F);
+  service_.SetTraceSampleCountScale(2.0F);
+  service_.SetTransmittanceMinLightElevationDeg(-8.0F);
+  service_.SetAtmosphereHoldout(true);
+  service_.SetAtmosphereRenderInMainPass(false);
+
+  service_.SetSkyLightEnabled(true);
+  service_.SetSkyLightSource(1);
+  service_.SetSkyLightIntensityMul(1.5F);
+  service_.SetSkyLightDiffuse(0.7F);
+  service_.SetSkyLightSpecular(0.9F);
+  service_.SetSkyLightRealTimeCaptureEnabled(true);
+  service_.SetSkyLightLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
+  service_.SetSkyLightVolumetricScatteringIntensity(0.6F);
+  service_.SetSkyLightAffectReflections(false);
+  service_.SetSkyLightAffectGlobalIllumination(false);
+  service_.ApplyPendingChanges();
+
+  auto env = scene->GetEnvironment();
+  ASSERT_NE(env.get(), nullptr);
+
+  auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+  ASSERT_NE(atmo.get(), nullptr);
+  EXPECT_EQ(atmo->GetTransformMode(),
+    scene::environment::SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
+  EXPECT_FLOAT_EQ(atmo->GetPlanetRadiusMeters(), 7000000.0F);
+  EXPECT_FLOAT_EQ(atmo->GetAtmosphereHeightMeters(), 120000.0F);
+  EXPECT_EQ(atmo->GetSkyLuminanceFactorRgb(), glm::vec3(1.1F, 1.2F, 1.3F));
+  EXPECT_EQ(atmo->GetSkyAndAerialPerspectiveLuminanceFactorRgb(),
+    glm::vec3(0.8F, 0.9F, 1.0F));
+  EXPECT_FLOAT_EQ(atmo->GetAerialPerspectiveStartDepthMeters(), 250.0F);
+  EXPECT_FLOAT_EQ(atmo->GetHeightFogContribution(), 0.4F);
+  EXPECT_FLOAT_EQ(atmo->GetTraceSampleCountScale(), 2.0F);
+  EXPECT_FLOAT_EQ(atmo->GetTransmittanceMinLightElevationDeg(), -8.0F);
+  EXPECT_TRUE(atmo->GetHoldout());
+  EXPECT_FALSE(atmo->GetRenderInMainPass());
+
+  auto sky_light = env->TryGetSystem<scene::environment::SkyLight>();
+  ASSERT_NE(sky_light.get(), nullptr);
+  EXPECT_EQ(sky_light->GetSource(),
+    scene::environment::SkyLightSource::kSpecifiedCubemap);
+  EXPECT_FLOAT_EQ(sky_light->GetIntensityMul(), 1.5F);
+  EXPECT_FLOAT_EQ(sky_light->GetDiffuseIntensity(), 0.7F);
+  EXPECT_FLOAT_EQ(sky_light->GetSpecularIntensity(), 0.9F);
+  EXPECT_TRUE(sky_light->GetRealTimeCaptureEnabled());
+  EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_FLOAT_EQ(
+    sky_light->GetVolumetricScatteringIntensity(), 0.6F);
+  EXPECT_FALSE(sky_light->GetAffectReflections());
+  EXPECT_FALSE(sky_light->GetAffectGlobalIllumination());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

@@ -12,6 +12,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
@@ -454,6 +455,10 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSunUseTemperature(preset.sun_use_temperature);
   SetSunTemperatureKelvin(preset.sun_temperature_kelvin);
   SetSunDiskRadiusDeg(preset.sun_disk_radius_deg);
+  SetSunAtmosphereLightSlot(
+    static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
+  SetSunUsePerPixelAtmosphereTransmittance(false);
+  SetSunAtmosphereDiskLuminanceScale({ 1.0F, 1.0F, 1.0F });
 
   // Sky Atmosphere
   SetSunDiskEnabled(preset.sky_atmo_sun_disk_enabled);
@@ -584,6 +589,16 @@ auto EnvironmentVm::SetSkyAtmosphereEnabled(bool enabled) -> void
   service_->SetSkyAtmosphereEnabled(enabled);
 }
 
+auto EnvironmentVm::GetSkyAtmosphereTransformMode() const -> int
+{
+  return service_->GetSkyAtmosphereTransformMode();
+}
+
+auto EnvironmentVm::SetSkyAtmosphereTransformMode(int value) -> void
+{
+  service_->SetSkyAtmosphereTransformMode(value);
+}
+
 auto EnvironmentVm::GetPlanetRadiusKm() const -> float
 {
   return service_->GetPlanetRadiusKm();
@@ -674,6 +689,28 @@ auto EnvironmentVm::SetMultiScattering(float value) -> void
   service_->SetMultiScattering(value);
 }
 
+auto EnvironmentVm::GetSkyLuminanceFactor() const -> glm::vec3
+{
+  return service_->GetSkyLuminanceFactor();
+}
+
+auto EnvironmentVm::SetSkyLuminanceFactor(const glm::vec3& value) -> void
+{
+  service_->SetSkyLuminanceFactor(value);
+}
+
+auto EnvironmentVm::GetSkyAndAerialPerspectiveLuminanceFactor() const
+  -> glm::vec3
+{
+  return service_->GetSkyAndAerialPerspectiveLuminanceFactor();
+}
+
+auto EnvironmentVm::SetSkyAndAerialPerspectiveLuminanceFactor(
+  const glm::vec3& value) -> void
+{
+  service_->SetSkyAndAerialPerspectiveLuminanceFactor(value);
+}
+
 auto EnvironmentVm::GetSunDiskEnabled() const -> bool
 {
   return service_->GetSunDiskEnabled();
@@ -694,6 +731,16 @@ auto EnvironmentVm::SetAerialPerspectiveScale(float value) -> void
   service_->SetAerialPerspectiveScale(value);
 }
 
+auto EnvironmentVm::GetAerialPerspectiveStartDepthMeters() const -> float
+{
+  return service_->GetAerialPerspectiveStartDepthMeters();
+}
+
+auto EnvironmentVm::SetAerialPerspectiveStartDepthMeters(float value) -> void
+{
+  service_->SetAerialPerspectiveStartDepthMeters(value);
+}
+
 auto EnvironmentVm::GetAerialScatteringStrength() const -> float
 {
   return service_->GetAerialScatteringStrength();
@@ -702,6 +749,56 @@ auto EnvironmentVm::GetAerialScatteringStrength() const -> float
 auto EnvironmentVm::SetAerialScatteringStrength(float value) -> void
 {
   service_->SetAerialScatteringStrength(value);
+}
+
+auto EnvironmentVm::GetHeightFogContribution() const -> float
+{
+  return service_->GetHeightFogContribution();
+}
+
+auto EnvironmentVm::SetHeightFogContribution(float value) -> void
+{
+  service_->SetHeightFogContribution(value);
+}
+
+auto EnvironmentVm::GetTraceSampleCountScale() const -> float
+{
+  return service_->GetTraceSampleCountScale();
+}
+
+auto EnvironmentVm::SetTraceSampleCountScale(float value) -> void
+{
+  service_->SetTraceSampleCountScale(value);
+}
+
+auto EnvironmentVm::GetTransmittanceMinLightElevationDeg() const -> float
+{
+  return service_->GetTransmittanceMinLightElevationDeg();
+}
+
+auto EnvironmentVm::SetTransmittanceMinLightElevationDeg(float value) -> void
+{
+  service_->SetTransmittanceMinLightElevationDeg(value);
+}
+
+auto EnvironmentVm::GetAtmosphereHoldout() const -> bool
+{
+  return service_->GetAtmosphereHoldout();
+}
+
+auto EnvironmentVm::SetAtmosphereHoldout(bool enabled) -> void
+{
+  service_->SetAtmosphereHoldout(enabled);
+}
+
+auto EnvironmentVm::GetAtmosphereRenderInMainPass() const -> bool
+{
+  return service_->GetAtmosphereRenderInMainPass();
+}
+
+auto EnvironmentVm::SetAtmosphereRenderInMainPass(bool enabled) -> void
+{
+  service_->SetAtmosphereRenderInMainPass(enabled);
 }
 
 auto EnvironmentVm::GetOzoneDensityProfile() const
@@ -986,6 +1083,58 @@ auto EnvironmentVm::SetSkyLightSpecular(float value) -> void
   service_->SetSkyLightSpecular(value);
 }
 
+auto EnvironmentVm::GetSkyLightRealTimeCaptureEnabled() const -> bool
+{
+  return service_->GetSkyLightRealTimeCaptureEnabled();
+}
+
+auto EnvironmentVm::SetSkyLightRealTimeCaptureEnabled(bool enabled) -> void
+{
+  service_->SetSkyLightRealTimeCaptureEnabled(enabled);
+}
+
+auto EnvironmentVm::GetSkyLightLowerHemisphereColor() const -> glm::vec3
+{
+  return service_->GetSkyLightLowerHemisphereColor();
+}
+
+auto EnvironmentVm::SetSkyLightLowerHemisphereColor(const glm::vec3& value)
+  -> void
+{
+  service_->SetSkyLightLowerHemisphereColor(value);
+}
+
+auto EnvironmentVm::GetSkyLightVolumetricScatteringIntensity() const -> float
+{
+  return service_->GetSkyLightVolumetricScatteringIntensity();
+}
+
+auto EnvironmentVm::SetSkyLightVolumetricScatteringIntensity(float value)
+  -> void
+{
+  service_->SetSkyLightVolumetricScatteringIntensity(value);
+}
+
+auto EnvironmentVm::GetSkyLightAffectReflections() const -> bool
+{
+  return service_->GetSkyLightAffectReflections();
+}
+
+auto EnvironmentVm::SetSkyLightAffectReflections(bool enabled) -> void
+{
+  service_->SetSkyLightAffectReflections(enabled);
+}
+
+auto EnvironmentVm::GetSkyLightAffectGlobalIllumination() const -> bool
+{
+  return service_->GetSkyLightAffectGlobalIllumination();
+}
+
+auto EnvironmentVm::SetSkyLightAffectGlobalIllumination(bool enabled) -> void
+{
+  service_->SetSkyLightAffectGlobalIllumination(enabled);
+}
+
 auto EnvironmentVm::GetFogEnabled() const -> bool
 {
   return service_->GetFogEnabled();
@@ -1046,6 +1195,36 @@ auto EnvironmentVm::SetFogStartDistanceMeters(const float value) -> void
   service_->SetFogStartDistanceMeters(value);
 }
 
+auto EnvironmentVm::GetSecondFogDensity() const -> float
+{
+  return service_->GetSecondFogDensity();
+}
+
+auto EnvironmentVm::SetSecondFogDensity(const float value) -> void
+{
+  service_->SetSecondFogDensity(value);
+}
+
+auto EnvironmentVm::GetSecondFogHeightFalloff() const -> float
+{
+  return service_->GetSecondFogHeightFalloff();
+}
+
+auto EnvironmentVm::SetSecondFogHeightFalloff(const float value) -> void
+{
+  service_->SetSecondFogHeightFalloff(value);
+}
+
+auto EnvironmentVm::GetSecondFogHeightOffset() const -> float
+{
+  return service_->GetSecondFogHeightOffset();
+}
+
+auto EnvironmentVm::SetSecondFogHeightOffset(const float value) -> void
+{
+  service_->SetSecondFogHeightOffset(value);
+}
+
 auto EnvironmentVm::GetFogMaxOpacity() const -> float
 {
   return service_->GetFogMaxOpacity();
@@ -1065,6 +1244,268 @@ auto EnvironmentVm::SetFogSingleScatteringAlbedoRgb(const glm::vec3& value)
   -> void
 {
   service_->SetFogSingleScatteringAlbedoRgb(value);
+}
+
+auto EnvironmentVm::GetFogInscatteringLuminance() const -> glm::vec3
+{
+  return service_->GetFogInscatteringLuminance();
+}
+
+auto EnvironmentVm::SetFogInscatteringLuminance(const glm::vec3& value)
+  -> void
+{
+  service_->SetFogInscatteringLuminance(value);
+}
+
+auto EnvironmentVm::GetSkyAtmosphereAmbientContributionColorScale() const
+  -> glm::vec3
+{
+  return service_->GetSkyAtmosphereAmbientContributionColorScale();
+}
+
+auto EnvironmentVm::SetSkyAtmosphereAmbientContributionColorScale(
+  const glm::vec3& value) -> void
+{
+  service_->SetSkyAtmosphereAmbientContributionColorScale(value);
+}
+
+auto EnvironmentVm::GetInscatteringColorCubemapAngle() const -> float
+{
+  return service_->GetInscatteringColorCubemapAngle();
+}
+
+auto EnvironmentVm::SetInscatteringColorCubemapAngle(const float value)
+  -> void
+{
+  service_->SetInscatteringColorCubemapAngle(value);
+}
+
+auto EnvironmentVm::GetInscatteringTextureTint() const -> glm::vec3
+{
+  return service_->GetInscatteringTextureTint();
+}
+
+auto EnvironmentVm::SetInscatteringTextureTint(const glm::vec3& value)
+  -> void
+{
+  service_->SetInscatteringTextureTint(value);
+}
+
+auto EnvironmentVm::GetFullyDirectionalInscatteringColorDistance() const
+  -> float
+{
+  return service_->GetFullyDirectionalInscatteringColorDistance();
+}
+
+auto EnvironmentVm::SetFullyDirectionalInscatteringColorDistance(
+  const float value) -> void
+{
+  service_->SetFullyDirectionalInscatteringColorDistance(value);
+}
+
+auto EnvironmentVm::GetNonDirectionalInscatteringColorDistance() const
+  -> float
+{
+  return service_->GetNonDirectionalInscatteringColorDistance();
+}
+
+auto EnvironmentVm::SetNonDirectionalInscatteringColorDistance(
+  const float value) -> void
+{
+  service_->SetNonDirectionalInscatteringColorDistance(value);
+}
+
+auto EnvironmentVm::GetDirectionalInscatteringLuminance() const -> glm::vec3
+{
+  return service_->GetDirectionalInscatteringLuminance();
+}
+
+auto EnvironmentVm::SetDirectionalInscatteringLuminance(
+  const glm::vec3& value) -> void
+{
+  service_->SetDirectionalInscatteringLuminance(value);
+}
+
+auto EnvironmentVm::GetDirectionalInscatteringExponent() const -> float
+{
+  return service_->GetDirectionalInscatteringExponent();
+}
+
+auto EnvironmentVm::SetDirectionalInscatteringExponent(const float value)
+  -> void
+{
+  service_->SetDirectionalInscatteringExponent(value);
+}
+
+auto EnvironmentVm::GetDirectionalInscatteringStartDistance() const -> float
+{
+  return service_->GetDirectionalInscatteringStartDistance();
+}
+
+auto EnvironmentVm::SetDirectionalInscatteringStartDistance(const float value)
+  -> void
+{
+  service_->SetDirectionalInscatteringStartDistance(value);
+}
+
+auto EnvironmentVm::GetFogEndDistanceMeters() const -> float
+{
+  return service_->GetFogEndDistanceMeters();
+}
+
+auto EnvironmentVm::SetFogEndDistanceMeters(const float value) -> void
+{
+  service_->SetFogEndDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetFogCutoffDistanceMeters() const -> float
+{
+  return service_->GetFogCutoffDistanceMeters();
+}
+
+auto EnvironmentVm::SetFogCutoffDistanceMeters(const float value) -> void
+{
+  service_->SetFogCutoffDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogScatteringDistribution() const -> float
+{
+  return service_->GetVolumetricFogScatteringDistribution();
+}
+
+auto EnvironmentVm::SetVolumetricFogScatteringDistribution(
+  const float value) -> void
+{
+  service_->SetVolumetricFogScatteringDistribution(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogAlbedo() const -> glm::vec3
+{
+  return service_->GetVolumetricFogAlbedo();
+}
+
+auto EnvironmentVm::SetVolumetricFogAlbedo(const glm::vec3& value) -> void
+{
+  service_->SetVolumetricFogAlbedo(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogEmissive() const -> glm::vec3
+{
+  return service_->GetVolumetricFogEmissive();
+}
+
+auto EnvironmentVm::SetVolumetricFogEmissive(const glm::vec3& value) -> void
+{
+  service_->SetVolumetricFogEmissive(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogExtinctionScale() const -> float
+{
+  return service_->GetVolumetricFogExtinctionScale();
+}
+
+auto EnvironmentVm::SetVolumetricFogExtinctionScale(const float value)
+  -> void
+{
+  service_->SetVolumetricFogExtinctionScale(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogDistanceMeters() const -> float
+{
+  return service_->GetVolumetricFogDistanceMeters();
+}
+
+auto EnvironmentVm::SetVolumetricFogDistanceMeters(const float value) -> void
+{
+  service_->SetVolumetricFogDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogStartDistanceMeters() const -> float
+{
+  return service_->GetVolumetricFogStartDistanceMeters();
+}
+
+auto EnvironmentVm::SetVolumetricFogStartDistanceMeters(const float value)
+  -> void
+{
+  service_->SetVolumetricFogStartDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogNearFadeInDistanceMeters() const -> float
+{
+  return service_->GetVolumetricFogNearFadeInDistanceMeters();
+}
+
+auto EnvironmentVm::SetVolumetricFogNearFadeInDistanceMeters(
+  const float value) -> void
+{
+  service_->SetVolumetricFogNearFadeInDistanceMeters(value);
+}
+
+auto EnvironmentVm::GetVolumetricFogStaticLightingScatteringIntensity() const
+  -> float
+{
+  return service_->GetVolumetricFogStaticLightingScatteringIntensity();
+}
+
+auto EnvironmentVm::SetVolumetricFogStaticLightingScatteringIntensity(
+  const float value) -> void
+{
+  service_->SetVolumetricFogStaticLightingScatteringIntensity(value);
+}
+
+auto EnvironmentVm::GetOverrideLightColorsWithFogInscatteringColors() const
+  -> bool
+{
+  return service_->GetOverrideLightColorsWithFogInscatteringColors();
+}
+
+auto EnvironmentVm::SetOverrideLightColorsWithFogInscatteringColors(
+  const bool enabled) -> void
+{
+  service_->SetOverrideLightColorsWithFogInscatteringColors(enabled);
+}
+
+auto EnvironmentVm::GetFogHoldout() const -> bool
+{
+  return service_->GetFogHoldout();
+}
+
+auto EnvironmentVm::SetFogHoldout(const bool enabled) -> void
+{
+  service_->SetFogHoldout(enabled);
+}
+
+auto EnvironmentVm::GetFogRenderInMainPass() const -> bool
+{
+  return service_->GetFogRenderInMainPass();
+}
+
+auto EnvironmentVm::SetFogRenderInMainPass(const bool enabled) -> void
+{
+  service_->SetFogRenderInMainPass(enabled);
+}
+
+auto EnvironmentVm::GetFogVisibleInReflectionCaptures() const -> bool
+{
+  return service_->GetFogVisibleInReflectionCaptures();
+}
+
+auto EnvironmentVm::SetFogVisibleInReflectionCaptures(const bool enabled)
+  -> void
+{
+  service_->SetFogVisibleInReflectionCaptures(enabled);
+}
+
+auto EnvironmentVm::GetFogVisibleInRealTimeSkyCaptures() const -> bool
+{
+  return service_->GetFogVisibleInRealTimeSkyCaptures();
+}
+
+auto EnvironmentVm::SetFogVisibleInRealTimeSkyCaptures(const bool enabled)
+  -> void
+{
+  service_->SetFogVisibleInRealTimeSkyCaptures(enabled);
 }
 
 auto EnvironmentVm::GetLocalFogVolumeCount() const -> int
@@ -1285,6 +1726,38 @@ auto EnvironmentVm::GetSunDiskRadiusDeg() const -> float
 auto EnvironmentVm::SetSunDiskRadiusDeg(float value) -> void
 {
   service_->SetSunDiskRadiusDeg(value);
+}
+
+auto EnvironmentVm::GetSunAtmosphereLightSlot() const -> int
+{
+  return service_->GetSunAtmosphereLightSlot();
+}
+
+auto EnvironmentVm::SetSunAtmosphereLightSlot(int value) -> void
+{
+  service_->SetSunAtmosphereLightSlot(value);
+}
+
+auto EnvironmentVm::GetSunUsePerPixelAtmosphereTransmittance() const -> bool
+{
+  return service_->GetSunUsePerPixelAtmosphereTransmittance();
+}
+
+auto EnvironmentVm::SetSunUsePerPixelAtmosphereTransmittance(bool enabled)
+  -> void
+{
+  service_->SetSunUsePerPixelAtmosphereTransmittance(enabled);
+}
+
+auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3
+{
+  return service_->GetSunAtmosphereDiskLuminanceScale();
+}
+
+auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(
+  const glm::vec3& value) -> void
+{
+  service_->SetSunAtmosphereDiskLuminanceScale(value);
 }
 
 auto EnvironmentVm::GetSunShadowBias() const -> float

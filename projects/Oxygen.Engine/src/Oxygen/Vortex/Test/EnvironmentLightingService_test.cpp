@@ -23,6 +23,11 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
+#include <Oxygen/Vortex/Environment/Types/HeightFogModel.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/VolumetricFogModel.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
@@ -48,6 +53,11 @@ using oxygen::vortex::EnvironmentFrameBindings;
 using oxygen::vortex::EnvironmentLightingService;
 using oxygen::vortex::EnvironmentProbeBindings;
 using oxygen::vortex::EnvironmentProbeState;
+using oxygen::vortex::environment::AtmosphereModel;
+using oxygen::vortex::environment::EnvironmentViewProducts;
+using oxygen::vortex::environment::HeightFogModel;
+using oxygen::vortex::environment::SkyLightEnvironmentModel;
+using oxygen::vortex::environment::VolumetricFogModel;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -147,6 +157,11 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
   EXPECT_EQ(bindings.environment_static_slot, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.environment_view_slot, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.atmosphere_model_slot, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.height_fog_model_slot, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.sky_light_model_slot, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.volumetric_fog_model_slot, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.environment_view_products_slot, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.environment_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
@@ -207,6 +222,26 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  VortexEnvironmentContractsExposeFutureAtmosphereFogAndSkyLightModelTypes)
+{
+  const auto atmosphere = AtmosphereModel {};
+  const auto height_fog = HeightFogModel {};
+  const auto sky_light = SkyLightEnvironmentModel {};
+  const auto volumetric_fog = VolumetricFogModel {};
+  const auto view_products = EnvironmentViewProducts {};
+
+  EXPECT_FALSE(atmosphere.enabled);
+  EXPECT_TRUE(height_fog.enable_height_fog);
+  EXPECT_FALSE(height_fog.enable_volumetric_fog);
+  EXPECT_FALSE(sky_light.enabled);
+  EXPECT_FALSE(volumetric_fog.enabled);
+  EXPECT_EQ(view_products.sky_view_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(view_products.camera_aerial_perspective_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(view_products.distant_sky_light_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(view_products.integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   VortexModuleRegistersEnvironmentServiceFamilySourcesAndHeaders)
 {
   const auto source_root = SourceRoot();
@@ -239,6 +274,11 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/LocalFogVolumeComposePass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Types/EnvironmentProbeState.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/Types/EnvironmentAmbientBridgeBindings.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Types/AtmosphereModel.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Types/HeightFogModel.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Types/SkyLightEnvironmentModel.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Types/VolumetricFogModel.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Types/EnvironmentViewProducts.h"));
   EXPECT_TRUE(scene_renderer_header.contains("ScreenHzbModule"));
   EXPECT_TRUE(scene_renderer_header.contains("GetPublishedScreenHzbBindings"));
   EXPECT_TRUE(view_frame_bindings_header.contains("screen_hzb_frame_slot"));

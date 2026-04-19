@@ -185,6 +185,33 @@ Related:
   whole. That gate remains open for `04-21`, `04-22`, `04-23`, `04-25`, and
   `04-29`.
 
+### 2026-04-19 — 04-26 closed with widened non-localfog environment contracts
+
+- `04-26` is now closed for the contract-widening lane.
+- Landed scope:
+  - widened non-localfog authored fields in `SkyAtmosphere`, `Fog`,
+    `SkyLight`, and `DirectionalLight`
+  - widened Vortex environment contract types plus CPU/HLSL mirror fields
+  - DemoShell dirty-domain split for atmosphere model, atmosphere lights,
+    height fog, volumetric fog, sky light, and presets
+  - DemoShell UI/service/VM support for the widened atmosphere, sky-light,
+    fog, and atmosphere-light-slot authoring surface
+  - widened persistence schema and load/save coverage for sun
+    atmosphere-light metadata
+- New verification evidence:
+  - `cmake --build --preset windows-debug --target oxygen-examples-demoshell Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "EnvironmentSettingsService"`
+  - `out\build-ninja\bin\Debug\Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests.exe --gtest_filter=EnvironmentSettingsServiceTest.AppliesAtmosphereLightMetadataToAuthoredSceneSunLight:EnvironmentSettingsServiceTest.AppliesAtmosphereLightMetadataToSyntheticSunLight:EnvironmentSettingsServiceTest.LoadSettings_ReadsSunAtmosphereLightMetadataKeys`
+  - `cmake --build --preset windows-debug --target oxygen-scene Oxygen.Scene.EnvironmentComponents.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "EnvironmentComponents"`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4`
+  - `ctest --preset test-debug --output-on-failure -R "EnvironmentLightingService"`
+- Remaining truth:
+  - `04-26` closes the widened contract lane only
+  - it does **not** close the later runtime/parity/proof lanes:
+    `04-19`, `04-27`, `04-20`, `04-28`, `04-21`, `04-22`, `04-23`, `04-29`,
+    `04-24`, `04-30`, `04-25`, and `04-15`
+
 | Phase | Name | Status | Blocker |
 | ----- | ---- | ------ | ------- |
 | 0 | Scaffold and Build Integration | `done` | — |
