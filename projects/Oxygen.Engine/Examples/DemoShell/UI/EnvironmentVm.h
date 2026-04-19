@@ -168,6 +168,34 @@ public:
   [[nodiscard]] auto GetFogSingleScatteringAlbedoRgb() const -> glm::vec3;
   auto SetFogSingleScatteringAlbedoRgb(const glm::vec3& value) -> void;
 
+  // Local fog volumes
+  [[nodiscard]] auto GetLocalFogVolumeCount() const -> int;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeIndex() const -> int;
+  auto SetSelectedLocalFogVolumeIndex(int index) -> void;
+  auto AddLocalFogVolume() -> void;
+  auto RemoveSelectedLocalFogVolume() -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeEnabled() const -> bool;
+  auto SetSelectedLocalFogVolumeEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeRadialFogExtinction() const
+    -> float;
+  auto SetSelectedLocalFogVolumeRadialFogExtinction(float value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeHeightFogExtinction() const
+    -> float;
+  auto SetSelectedLocalFogVolumeHeightFogExtinction(float value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeHeightFogFalloff() const -> float;
+  auto SetSelectedLocalFogVolumeHeightFogFalloff(float value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeHeightFogOffset() const -> float;
+  auto SetSelectedLocalFogVolumeHeightFogOffset(float value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeFogPhaseG() const -> float;
+  auto SetSelectedLocalFogVolumeFogPhaseG(float value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeFogAlbedo() const -> glm::vec3;
+  auto SetSelectedLocalFogVolumeFogAlbedo(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeFogEmissive() const
+    -> glm::vec3;
+  auto SetSelectedLocalFogVolumeFogEmissive(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeSortPriority() const -> int;
+  auto SetSelectedLocalFogVolumeSortPriority(int value) -> void;
+
   // Sun
   [[nodiscard]] auto GetSunPresent() const -> bool;
   [[nodiscard]] auto GetSunEnabled() const -> bool;

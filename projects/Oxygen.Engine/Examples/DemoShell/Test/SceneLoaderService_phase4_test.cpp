@@ -37,6 +37,10 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::examples::testing {
 
@@ -77,6 +81,105 @@ namespace {
 
     bytes[desc.scene_strings.offset] = std::byte { 0 };
     return bytes;
+  }
+
+  auto BuildSceneDescriptorBytesWithLocalFog() -> std::vector<std::byte>
+  {
+    auto desc = pakw::SceneAssetDesc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+    desc.header.version = pakw::kSceneAssetVersion;
+    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
+    desc.nodes.count = 2U;
+    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
+
+    auto root = pakw::NodeRecord {};
+    root.parent_index = 0U;
+    root.scene_name_offset = 1U;
+
+    auto fog_node = pakw::NodeRecord {};
+    fog_node.parent_index = 0U;
+    fog_node.scene_name_offset = 6U;
+
+    const auto strings = std::string("\0Root\0FogNode\0", 14);
+    const auto nodes_bytes = sizeof(root) + sizeof(fog_node);
+    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
+      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.size
+      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
+    desc.component_table_directory_offset
+      = desc.scene_strings.offset + desc.scene_strings.size;
+    desc.component_table_count = 1U;
+
+    auto table_desc = pakw::SceneComponentTableDesc {};
+    table_desc.component_type
+      = static_cast<uint32_t>(data::ComponentType::kLocalFogVolume);
+    table_desc.table.offset = desc.component_table_directory_offset
+      + static_cast<data::pak::core::OffsetT>(sizeof(table_desc));
+    table_desc.table.count = 1U;
+    table_desc.table.entry_size = sizeof(pakw::LocalFogVolumeRecord);
+
+    auto local_fog = pakw::LocalFogVolumeRecord {};
+    local_fog.node_index = 1U;
+    local_fog.enabled = 1U;
+    local_fog.radial_fog_extinction = 0.3F;
+    local_fog.height_fog_extinction = 0.2F;
+    local_fog.height_fog_falloff = 0.15F;
+    local_fog.height_fog_offset = 1.25F;
+    local_fog.fog_phase_g = 0.4F;
+    local_fog.fog_albedo[0] = 0.7F;
+    local_fog.fog_albedo[1] = 0.8F;
+    local_fog.fog_albedo[2] = 0.9F;
+    local_fog.fog_emissive[0] = 0.1F;
+    local_fog.fog_emissive[1] = 0.2F;
+    local_fog.fog_emissive[2] = 0.3F;
+    local_fog.sort_priority = 2;
+
+    auto bytes = std::vector<std::byte> {};
+    bytes.resize(sizeof(desc) + nodes_bytes + strings.size()
+      + sizeof(table_desc) + sizeof(local_fog));
+
+    auto* cursor = bytes.data();
+    std::memcpy(cursor, &desc, sizeof(desc));
+    cursor += sizeof(desc);
+    std::memcpy(cursor, &root, sizeof(root));
+    cursor += sizeof(root);
+    std::memcpy(cursor, &fog_node, sizeof(fog_node));
+    cursor += sizeof(fog_node);
+    std::memcpy(cursor, strings.data(), strings.size());
+    cursor += strings.size();
+    std::memcpy(cursor, &table_desc, sizeof(table_desc));
+    cursor += sizeof(table_desc);
+    std::memcpy(cursor, &local_fog, sizeof(local_fog));
+    return bytes;
+  }
+
+  auto FindNodeByName(scene::Scene& scene, std::string_view name)
+    -> std::optional<scene::SceneNode>
+  {
+    auto roots = scene.GetRootNodes();
+    std::vector<scene::SceneNode> stack {};
+    stack.reserve(roots.size());
+    for (auto& root : roots) {
+      stack.push_back(root);
+    }
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+      if (node.GetName() == name) {
+        return node;
+      }
+      auto child = node.GetFirstChild();
+      while (child.has_value()) {
+        stack.push_back(*child);
+        child = child->GetNextSibling();
+      }
+    }
+
+    return std::nullopt;
   }
 
   auto BuildMinimalPhysicsSidecarDescriptorBytes(
@@ -620,6 +723,49 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_EQ(result.scene_key, scene_key);
   EXPECT_THAT(result.asset, ::testing::NotNull());
   EXPECT_THAT(result.physics_asset, ::testing::NotNull());
+}
+
+NOLINT_TEST(SceneLoaderServicePhase4Test,
+  BuildSceneAsyncHydratesLocalFogVolumeComponents)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+  const auto scene_key
+    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/local_fog.oscene");
+  auto scene_asset = std::make_shared<data::SceneAsset>(
+    scene_key, BuildSceneDescriptorBytesWithLocalFog());
+  loader.PutScene(scene_key, scene_asset);
+
+  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
+    std::filesystem::current_path());
+  auto service = std::make_shared<SceneLoaderService>(loader,
+    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
+    nullptr, nullptr, std::move(path_finder));
+
+  auto runtime_scene
+    = std::make_shared<scene::Scene>("DemoShell.LocalFogHydration", 64U);
+  oxygen::co::testing::TestEventLoop loop;
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
+  });
+
+  auto fog_node = FindNodeByName(*runtime_scene, "FogNode");
+  ASSERT_TRUE(fog_node.has_value());
+  const auto impl_opt = fog_node->GetImpl();
+  ASSERT_TRUE(impl_opt.has_value());
+  ASSERT_TRUE(
+    impl_opt->get().HasComponent<scene::environment::LocalFogVolume>());
+
+  const auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  EXPECT_TRUE(local_fog.IsEnabled());
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 0.3F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 0.2F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 0.15F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), 1.25F);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.4F);
+  EXPECT_EQ(local_fog.GetFogAlbedo(), glm::vec3(0.7F, 0.8F, 0.9F));
+  EXPECT_EQ(local_fog.GetFogEmissive(), glm::vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_EQ(local_fog.GetSortPriority(), 2);
 }
 
 } // namespace oxygen::examples::testing

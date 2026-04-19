@@ -23,6 +23,7 @@
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -168,6 +169,44 @@ namespace {
   auto IsEnabled(const std::optional<Record>& record) -> bool
   {
     return record.has_value() && record->enabled != 0U;
+  }
+
+  auto CollectLocalFogVolumeNodes(scene::Scene& scene)
+    -> std::vector<scene::SceneNode>
+  {
+    auto result = std::vector<scene::SceneNode> {};
+    auto roots = scene.GetRootNodes();
+    auto stack = std::vector<scene::SceneNode> {};
+    stack.reserve(roots.size());
+    for (auto& root : roots) {
+      stack.push_back(root);
+    }
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      if (const auto impl_opt = node.GetImpl();
+        impl_opt.has_value()
+        && impl_opt->get().HasComponent<scene::environment::LocalFogVolume>()) {
+        result.push_back(node);
+      }
+
+      auto child = node.GetFirstChild();
+      while (child.has_value()) {
+        stack.push_back(*child);
+        child = child->GetNextSibling();
+      }
+    }
+
+    std::ranges::sort(result, [](const scene::SceneNode& lhs,
+                             const scene::SceneNode& rhs) {
+      return lhs.GetName() < rhs.GetName();
+    });
+    return result;
   }
 
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
@@ -1554,6 +1593,235 @@ auto EnvironmentSettingsService::SetFogSingleScatteringAlbedoRgb(
   MarkDirty(ToMask(DirtyDomain::kFog));
 }
 
+auto EnvironmentSettingsService::GetLocalFogVolumeCount() const -> int
+{
+  return static_cast<int>(local_fog_volumes_.size());
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeIndex() const -> int
+{
+  return selected_local_fog_volume_index_;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeIndex(const int index)
+  -> void
+{
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+    return;
+  }
+  selected_local_fog_volume_index_
+    = std::clamp(index, 0, static_cast<int>(local_fog_volumes_.size()) - 1);
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeMutable()
+  -> LocalFogVolumeUiState*
+{
+  if (selected_local_fog_volume_index_ < 0
+    || selected_local_fog_volume_index_
+      >= static_cast<int>(local_fog_volumes_.size())) {
+    return nullptr;
+  }
+  return &local_fog_volumes_[static_cast<size_t>(selected_local_fog_volume_index_)];
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolume() const
+  -> const LocalFogVolumeUiState*
+{
+  if (selected_local_fog_volume_index_ < 0
+    || selected_local_fog_volume_index_
+      >= static_cast<int>(local_fog_volumes_.size())) {
+    return nullptr;
+  }
+  return &local_fog_volumes_[static_cast<size_t>(selected_local_fog_volume_index_)];
+}
+
+auto EnvironmentSettingsService::AddLocalFogVolume() -> void
+{
+  if (!config_.scene) {
+    return;
+  }
+
+  auto node = config_.scene->CreateNode(
+    "Local Fog Volume " + std::to_string(local_fog_volumes_.size() + 1));
+  const auto impl_opt = node.GetImpl();
+  if (!impl_opt.has_value()) {
+    return;
+  }
+
+  impl_opt->get().AddComponent<scene::environment::LocalFogVolume>();
+  local_fog_volumes_.push_back(LocalFogVolumeUiState { .node = node });
+  selected_local_fog_volume_index_
+    = static_cast<int>(local_fog_volumes_.size()) - 1;
+  MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+}
+
+auto EnvironmentSettingsService::RemoveSelectedLocalFogVolume() -> void
+{
+  auto* selected = GetSelectedLocalFogVolumeMutable();
+  if (selected == nullptr) {
+    return;
+  }
+  if (selected->node.IsAlive()) {
+    removed_local_fog_nodes_.push_back(selected->node.GetHandle());
+  }
+
+  local_fog_volumes_.erase(local_fog_volumes_.begin()
+    + static_cast<std::ptrdiff_t>(selected_local_fog_volume_index_));
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+  } else {
+    selected_local_fog_volume_index_ = std::clamp(
+      selected_local_fog_volume_index_, 0,
+      static_cast<int>(local_fog_volumes_.size()) - 1);
+  }
+  MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeEnabled() const
+  -> bool
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->enabled : false;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeEnabled(
+  const bool enabled) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->enabled = enabled;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeRadialFogExtinction() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->radial_fog_extinction : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeRadialFogExtinction(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->radial_fog_extinction = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogExtinction() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_extinction : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogExtinction(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_extinction = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogFalloff() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_falloff : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogFalloff(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_falloff = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogOffset() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_offset : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogOffset(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_offset = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogPhaseG() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_phase_g : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogPhaseG(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_phase_g = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogAlbedo() const
+  -> glm::vec3
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_albedo : glm::vec3 { 1.0F };
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogAlbedo(
+  const glm::vec3& value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_albedo = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogEmissive() const
+  -> glm::vec3
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_emissive : glm::vec3 { 0.0F };
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogEmissive(
+  const glm::vec3& value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_emissive = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeSortPriority() const
+  -> int
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->sort_priority : 0;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeSortPriority(
+  const int value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->sort_priority = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
 auto EnvironmentSettingsService::GetSunPresent() const -> bool
 {
   return sun_present_;
@@ -1947,6 +2215,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     = HasDirty(dirty_domains_, DirtyDomain::kAtmosphere);
   const bool apply_sun = HasDirty(dirty_domains_, DirtyDomain::kSun);
   const bool apply_fog = HasDirty(dirty_domains_, DirtyDomain::kFog);
+  const bool apply_local_fog
+    = HasDirty(dirty_domains_, DirtyDomain::kLocalFogVolumes);
   const bool apply_sky_sphere
     = HasDirty(dirty_domains_, DirtyDomain::kSkySphere);
   const bool apply_sky_light = HasDirty(dirty_domains_, DirtyDomain::kSkyLight);
@@ -2183,6 +2453,44 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     fog->SetSingleScatteringAlbedoRgb(fog_single_scattering_albedo_rgb_);
   }
 
+  if (apply_local_fog && config_.scene) {
+    for (const auto& removed_handle : removed_local_fog_nodes_) {
+      if (auto* node_impl = config_.scene->TryGetNodeImpl(removed_handle)) {
+        if (node_impl->HasComponent<scene::environment::LocalFogVolume>()) {
+          node_impl->RemoveComponent<scene::environment::LocalFogVolume>();
+        }
+      }
+    }
+    removed_local_fog_nodes_.clear();
+
+    for (auto& entry : local_fog_volumes_) {
+      if (!entry.node.IsAlive()) {
+        continue;
+      }
+      const auto impl_opt = entry.node.GetImpl();
+      if (!impl_opt.has_value()) {
+        continue;
+      }
+
+      auto& node_impl = impl_opt->get();
+      if (!node_impl.HasComponent<scene::environment::LocalFogVolume>()) {
+        node_impl.AddComponent<scene::environment::LocalFogVolume>();
+      }
+
+      auto& local_fog
+        = node_impl.GetComponent<scene::environment::LocalFogVolume>();
+      local_fog.SetEnabled(entry.enabled);
+      local_fog.SetRadialFogExtinction(entry.radial_fog_extinction);
+      local_fog.SetHeightFogExtinction(entry.height_fog_extinction);
+      local_fog.SetHeightFogFalloff(entry.height_fog_falloff);
+      local_fog.SetHeightFogOffset(entry.height_fog_offset);
+      local_fog.SetFogPhaseG(entry.fog_phase_g);
+      local_fog.SetFogAlbedo(entry.fog_albedo);
+      local_fog.SetFogEmissive(entry.fog_emissive);
+      local_fog.SetSortPriority(entry.sort_priority);
+    }
+  }
+
   auto sky = env->TryGetSystem<scene::environment::SkySphere>();
   if (apply_sky_sphere && sky_sphere_enabled_ && !sky) {
     sky = observer_ptr { &env->AddSystem<scene::environment::SkySphere>() };
@@ -2278,6 +2586,8 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     fog_enabled_ = false;
   }
 
+  SyncLocalFogVolumesFromScene();
+
   // Sync LUT slice configuration from the renderer's LUT manager.
   if (config_.renderer && main_view_id_.has_value()) {
     if (auto lut_mgr
@@ -2362,6 +2672,45 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
+}
+
+auto EnvironmentSettingsService::SyncLocalFogVolumesFromScene() -> void
+{
+  local_fog_volumes_.clear();
+  removed_local_fog_nodes_.clear();
+  if (!config_.scene) {
+    selected_local_fog_volume_index_ = -1;
+    return;
+  }
+
+  for (auto& node : CollectLocalFogVolumeNodes(*config_.scene)) {
+    const auto impl_opt = node.GetImpl();
+    if (!impl_opt.has_value()) {
+      continue;
+    }
+    const auto& local_fog
+      = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+    local_fog_volumes_.push_back(LocalFogVolumeUiState {
+      .node = node,
+      .enabled = local_fog.IsEnabled(),
+      .radial_fog_extinction = local_fog.GetRadialFogExtinction(),
+      .height_fog_extinction = local_fog.GetHeightFogExtinction(),
+      .height_fog_falloff = local_fog.GetHeightFogFalloff(),
+      .height_fog_offset = local_fog.GetHeightFogOffset(),
+      .fog_phase_g = local_fog.GetFogPhaseG(),
+      .fog_albedo = local_fog.GetFogAlbedo(),
+      .fog_emissive = local_fog.GetFogEmissive(),
+      .sort_priority = local_fog.GetSortPriority(),
+    });
+  }
+
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+  } else {
+    selected_local_fog_volume_index_ = std::clamp(
+      selected_local_fog_volume_index_, 0,
+      static_cast<int>(local_fog_volumes_.size()) - 1);
+  }
 }
 
 auto EnvironmentSettingsService::NormalizeSkySystems() -> void

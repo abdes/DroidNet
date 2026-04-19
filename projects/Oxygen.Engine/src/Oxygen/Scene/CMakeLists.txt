@@ -74,6 +74,7 @@ set(
   "Camera/Perspective.h"
   "Environment/EnvironmentSystem.h"
   "Environment/Fog.h"
+  "Environment/LocalFogVolume.h"
   "Environment/PostProcessVolume.h"
   "Environment/SceneEnvironment.h"
   "Environment/Sun.h"
@@ -137,6 +138,7 @@ set(
   "Internal/ScriptSlotMutationProcessor.cpp"
   "Internal/ScriptSlotMutationProcessor.h"
   "Environment/Sun.cpp"
+  "Environment/LocalFogVolume.cpp"
 )
 
 target_sources(

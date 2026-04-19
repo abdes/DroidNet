@@ -68,6 +68,7 @@ private:
   void DrawSkySphereSection();
   void DrawSkyLightSection();
   void DrawFog();
+  void DrawLocalFogVolumes();
   void DrawSunSection();
   void DrawRendererDebugSection();
   void HandleSkyboxAutoLoad();

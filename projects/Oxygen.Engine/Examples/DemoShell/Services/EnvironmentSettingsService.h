@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -281,6 +282,41 @@ public:
     -> glm::vec3;
   virtual auto SetFogSingleScatteringAlbedoRgb(const glm::vec3& value) -> void;
 
+  // Local fog volumes
+  [[nodiscard]] virtual auto GetLocalFogVolumeCount() const -> int;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeIndex() const -> int;
+  virtual auto SetSelectedLocalFogVolumeIndex(int index) -> void;
+  virtual auto AddLocalFogVolume() -> void;
+  virtual auto RemoveSelectedLocalFogVolume() -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeEnabled() const -> bool;
+  virtual auto SetSelectedLocalFogVolumeEnabled(bool enabled) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeRadialFogExtinction() const
+    -> float;
+  virtual auto SetSelectedLocalFogVolumeRadialFogExtinction(float value) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeHeightFogExtinction() const
+    -> float;
+  virtual auto SetSelectedLocalFogVolumeHeightFogExtinction(float value) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeHeightFogFalloff() const
+    -> float;
+  virtual auto SetSelectedLocalFogVolumeHeightFogFalloff(float value) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeHeightFogOffset() const
+    -> float;
+  virtual auto SetSelectedLocalFogVolumeHeightFogOffset(float value) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeFogPhaseG() const
+    -> float;
+  virtual auto SetSelectedLocalFogVolumeFogPhaseG(float value) -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeFogAlbedo() const
+    -> glm::vec3;
+  virtual auto SetSelectedLocalFogVolumeFogAlbedo(const glm::vec3& value)
+    -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeFogEmissive() const
+    -> glm::vec3;
+  virtual auto SetSelectedLocalFogVolumeFogEmissive(const glm::vec3& value)
+    -> void;
+  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeSortPriority() const
+    -> int;
+  virtual auto SetSelectedLocalFogVolumeSortPriority(int value) -> void;
+
   // Sun
   [[nodiscard]] virtual auto GetSunPresent() const -> bool;
   [[nodiscard]] virtual auto GetSunEnabled() const -> bool;
@@ -369,6 +405,19 @@ private:
     float aerial_scattering_strength { 0.0F };
   };
 
+  struct LocalFogVolumeUiState {
+    scene::SceneNode node {};
+    bool enabled { true };
+    float radial_fog_extinction { 0.0F };
+    float height_fog_extinction { 0.0F };
+    float height_fog_falloff { 0.0F };
+    float height_fog_offset { 0.0F };
+    float fog_phase_g { 0.0F };
+    glm::vec3 fog_albedo { 1.0F, 1.0F, 1.0F };
+    glm::vec3 fog_emissive { 0.0F, 0.0F, 0.0F };
+    int sort_priority { 0 };
+  };
+
   enum class DirtyDomain : uint32_t {
     kNone = 0u,
     kAtmosphere = 1u << 0u,
@@ -376,9 +425,10 @@ private:
     kSkybox = 1u << 2u,
     kSkyLight = 1u << 3u,
     kFog = 1u << 4u,
-    kSun = 1u << 5u,
-    kRendererFlags = 1u << 6u,
-    kPreset = 1u << 7u,
+    kLocalFogVolumes = 1u << 5u,
+    kSun = 1u << 6u,
+    kRendererFlags = 1u << 7u,
+    kPreset = 1u << 8u,
     kAll = 0xFFFFFFFFu,
   };
 
@@ -433,6 +483,10 @@ private:
   auto MarkDirty(uint32_t dirty_domains = ToMask(DirtyDomain::kAll)) -> void;
   auto NormalizeSkySystems() -> void;
   auto MaybeAutoLoadSkybox() -> void;
+  auto SyncLocalFogVolumesFromScene() -> void;
+  auto GetSelectedLocalFogVolumeMutable() -> LocalFogVolumeUiState*;
+  [[nodiscard]] auto GetSelectedLocalFogVolume() const
+    -> const LocalFogVolumeUiState*;
   auto ApplySavedSunSourcePreference() -> void;
   auto ResetSunUiToDefaults() -> void;
   auto EnsureSceneHasSunAtActivation() -> void;
@@ -547,6 +601,9 @@ private:
   float fog_start_distance_m_ { 0.0F };
   float fog_max_opacity_ { 1.0F };
   glm::vec3 fog_single_scattering_albedo_rgb_ { 1.0F, 1.0F, 1.0F };
+  std::vector<LocalFogVolumeUiState> local_fog_volumes_ {};
+  std::vector<scene::NodeHandle> removed_local_fog_nodes_ {};
+  int selected_local_fog_volume_index_ { -1 };
 
   // Sun component
   bool sun_present_ { false };

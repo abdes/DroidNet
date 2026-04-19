@@ -1067,6 +1067,131 @@ auto EnvironmentVm::SetFogSingleScatteringAlbedoRgb(const glm::vec3& value)
   service_->SetFogSingleScatteringAlbedoRgb(value);
 }
 
+auto EnvironmentVm::GetLocalFogVolumeCount() const -> int
+{
+  return service_->GetLocalFogVolumeCount();
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeIndex() const -> int
+{
+  return service_->GetSelectedLocalFogVolumeIndex();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeIndex(const int index) -> void
+{
+  service_->SetSelectedLocalFogVolumeIndex(index);
+}
+
+auto EnvironmentVm::AddLocalFogVolume() -> void
+{
+  service_->AddLocalFogVolume();
+}
+
+auto EnvironmentVm::RemoveSelectedLocalFogVolume() -> void
+{
+  service_->RemoveSelectedLocalFogVolume();
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeEnabled() const -> bool
+{
+  return service_->GetSelectedLocalFogVolumeEnabled();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeEnabled(const bool enabled) -> void
+{
+  service_->SetSelectedLocalFogVolumeEnabled(enabled);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeRadialFogExtinction() const
+  -> float
+{
+  return service_->GetSelectedLocalFogVolumeRadialFogExtinction();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeRadialFogExtinction(
+  const float value) -> void
+{
+  service_->SetSelectedLocalFogVolumeRadialFogExtinction(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeHeightFogExtinction() const
+  -> float
+{
+  return service_->GetSelectedLocalFogVolumeHeightFogExtinction();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogExtinction(
+  const float value) -> void
+{
+  service_->SetSelectedLocalFogVolumeHeightFogExtinction(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeHeightFogFalloff() const -> float
+{
+  return service_->GetSelectedLocalFogVolumeHeightFogFalloff();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogFalloff(
+  const float value) -> void
+{
+  service_->SetSelectedLocalFogVolumeHeightFogFalloff(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeHeightFogOffset() const -> float
+{
+  return service_->GetSelectedLocalFogVolumeHeightFogOffset();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogOffset(
+  const float value) -> void
+{
+  service_->SetSelectedLocalFogVolumeHeightFogOffset(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeFogPhaseG() const -> float
+{
+  return service_->GetSelectedLocalFogVolumeFogPhaseG();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeFogPhaseG(const float value)
+  -> void
+{
+  service_->SetSelectedLocalFogVolumeFogPhaseG(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeFogAlbedo() const -> glm::vec3
+{
+  return service_->GetSelectedLocalFogVolumeFogAlbedo();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeFogAlbedo(
+  const glm::vec3& value) -> void
+{
+  service_->SetSelectedLocalFogVolumeFogAlbedo(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeFogEmissive() const -> glm::vec3
+{
+  return service_->GetSelectedLocalFogVolumeFogEmissive();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeFogEmissive(
+  const glm::vec3& value) -> void
+{
+  service_->SetSelectedLocalFogVolumeFogEmissive(value);
+}
+
+auto EnvironmentVm::GetSelectedLocalFogVolumeSortPriority() const -> int
+{
+  return service_->GetSelectedLocalFogVolumeSortPriority();
+}
+
+auto EnvironmentVm::SetSelectedLocalFogVolumeSortPriority(const int value)
+  -> void
+{
+  service_->SetSelectedLocalFogVolumeSortPriority(value);
+}
+
 auto EnvironmentVm::GetSunPresent() const -> bool
 {
   return service_->GetSunPresent();
