@@ -15,6 +15,12 @@
 
 namespace oxygen::scene {
 
+enum class AtmosphereLightSlot : std::uint8_t {
+  kNone,
+  kPrimary,
+  kSecondary,
+};
+
 //! Directional light component for scene nodes.
 /*!
  Represents a light at infinity (e.g. sun/moon). The light direction is derived
@@ -104,6 +110,37 @@ public:
     return is_sun_light_;
   }
 
+  auto SetAtmosphereLightSlot(const AtmosphereLightSlot slot) noexcept -> void
+  {
+    atmosphere_light_slot_ = slot;
+  }
+  [[nodiscard]] auto GetAtmosphereLightSlot() const noexcept
+    -> AtmosphereLightSlot
+  {
+    return atmosphere_light_slot_;
+  }
+
+  auto SetUsePerPixelAtmosphereTransmittance(const bool enabled) noexcept
+    -> void
+  {
+    use_per_pixel_atmosphere_transmittance_ = enabled;
+  }
+  [[nodiscard]] auto GetUsePerPixelAtmosphereTransmittance() const noexcept
+    -> bool
+  {
+    return use_per_pixel_atmosphere_transmittance_;
+  }
+
+  auto SetAtmosphereDiskLuminanceScale(const Vec3& rgb) noexcept -> void
+  {
+    atmosphere_disk_luminance_scale_ = rgb;
+  }
+  [[nodiscard]] auto GetAtmosphereDiskLuminanceScale() const noexcept
+    -> const Vec3&
+  {
+    return atmosphere_disk_luminance_scale_;
+  }
+
   //! Gets the cascaded shadow settings.
   OXGN_SCN_NDAPI auto CascadedShadows() noexcept -> CascadedShadowSettings&
   {
@@ -139,6 +176,9 @@ private:
 
   bool environment_contribution_ = false;
   bool is_sun_light_ = false;
+  AtmosphereLightSlot atmosphere_light_slot_ = AtmosphereLightSlot::kNone;
+  bool use_per_pixel_atmosphere_transmittance_ = false;
+  Vec3 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
   CascadedShadowSettings csm_ {};
   detail::TransformComponent* transform_ { nullptr };
 };

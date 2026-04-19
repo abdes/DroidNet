@@ -13,6 +13,12 @@ struct EnvironmentFrameBindings
 {
     uint environment_static_slot;
     uint environment_view_slot;
+    uint atmosphere_model_slot;
+    uint height_fog_model_slot;
+    uint sky_light_model_slot;
+    uint volumetric_fog_model_slot;
+    uint environment_view_products_slot;
+    uint contract_flags;
     uint environment_map_srv;
     uint irradiance_map_srv;
     uint prefiltered_map_srv;
@@ -34,6 +40,11 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     EnvironmentFrameBindings invalid_bindings = (EnvironmentFrameBindings)0;
     invalid_bindings.environment_static_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_view_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.atmosphere_model_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.height_fog_model_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.sky_light_model_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.volumetric_fog_model_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.environment_view_products_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;

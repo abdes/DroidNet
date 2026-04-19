@@ -21,12 +21,18 @@ namespace oxygen::vortex {
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   ShaderVisibleIndex environment_static_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex environment_view_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex atmosphere_model_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex height_fog_model_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex sky_light_model_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex volumetric_fog_model_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex environment_view_products_slot { kInvalidShaderVisibleIndex };
+  std::uint32_t contract_flags { 0U };
   EnvironmentProbeBindings probes {};
   EnvironmentEvaluationParameters evaluation {};
   EnvironmentAmbientBridgeBindings ambient_bridge {};
 };
 
-static_assert(sizeof(EnvironmentFrameBindings) == 64);
+static_assert(sizeof(EnvironmentFrameBindings) == 96);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(sizeof(EnvironmentFrameBindings) % 16 == 0);

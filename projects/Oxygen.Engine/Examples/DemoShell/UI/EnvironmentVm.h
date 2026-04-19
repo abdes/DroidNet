@@ -62,6 +62,8 @@ public:
   // SkyAtmosphere
   [[nodiscard]] auto GetSkyAtmosphereEnabled() const -> bool;
   auto SetSkyAtmosphereEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetSkyAtmosphereTransformMode() const -> int;
+  auto SetSkyAtmosphereTransformMode(int value) -> void;
   [[nodiscard]] auto GetPlanetRadiusKm() const -> float;
   auto SetPlanetRadiusKm(float value) -> void;
   [[nodiscard]] auto GetAtmosphereHeightKm() const -> float;
@@ -80,12 +82,30 @@ public:
   auto SetOzoneRgb(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetMultiScattering() const -> float;
   auto SetMultiScattering(float value) -> void;
+  [[nodiscard]] auto GetSkyLuminanceFactor() const -> glm::vec3;
+  auto SetSkyLuminanceFactor(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSkyAndAerialPerspectiveLuminanceFactor() const
+    -> glm::vec3;
+  auto SetSkyAndAerialPerspectiveLuminanceFactor(const glm::vec3& value)
+    -> void;
   [[nodiscard]] auto GetSunDiskEnabled() const -> bool;
   auto SetSunDiskEnabled(bool enabled) -> void;
   [[nodiscard]] auto GetAerialPerspectiveScale() const -> float;
   auto SetAerialPerspectiveScale(float value) -> void;
+  [[nodiscard]] auto GetAerialPerspectiveStartDepthMeters() const -> float;
+  auto SetAerialPerspectiveStartDepthMeters(float value) -> void;
   [[nodiscard]] auto GetAerialScatteringStrength() const -> float;
   auto SetAerialScatteringStrength(float value) -> void;
+  [[nodiscard]] auto GetHeightFogContribution() const -> float;
+  auto SetHeightFogContribution(float value) -> void;
+  [[nodiscard]] auto GetTraceSampleCountScale() const -> float;
+  auto SetTraceSampleCountScale(float value) -> void;
+  [[nodiscard]] auto GetTransmittanceMinLightElevationDeg() const -> float;
+  auto SetTransmittanceMinLightElevationDeg(float value) -> void;
+  [[nodiscard]] auto GetAtmosphereHoldout() const -> bool;
+  auto SetAtmosphereHoldout(bool enabled) -> void;
+  [[nodiscard]] auto GetAtmosphereRenderInMainPass() const -> bool;
+  auto SetAtmosphereRenderInMainPass(bool enabled) -> void;
 
   [[nodiscard]] auto GetOzoneDensityProfile() const
     -> engine::atmos::DensityProfile;
@@ -149,6 +169,16 @@ public:
   auto SetSkyLightDiffuse(float value) -> void;
   [[nodiscard]] auto GetSkyLightSpecular() const -> float;
   auto SetSkyLightSpecular(float value) -> void;
+  [[nodiscard]] auto GetSkyLightRealTimeCaptureEnabled() const -> bool;
+  auto SetSkyLightRealTimeCaptureEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetSkyLightLowerHemisphereColor() const -> glm::vec3;
+  auto SetSkyLightLowerHemisphereColor(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSkyLightVolumetricScatteringIntensity() const -> float;
+  auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
+  [[nodiscard]] auto GetSkyLightAffectReflections() const -> bool;
+  auto SetSkyLightAffectReflections(bool enabled) -> void;
+  [[nodiscard]] auto GetSkyLightAffectGlobalIllumination() const -> bool;
+  auto SetSkyLightAffectGlobalIllumination(bool enabled) -> void;
 
   // Fog
   [[nodiscard]] auto GetFogEnabled() const -> bool;
@@ -163,10 +193,70 @@ public:
   auto SetFogHeightOffsetMeters(float value) -> void;
   [[nodiscard]] auto GetFogStartDistanceMeters() const -> float;
   auto SetFogStartDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetSecondFogDensity() const -> float;
+  auto SetSecondFogDensity(float value) -> void;
+  [[nodiscard]] auto GetSecondFogHeightFalloff() const -> float;
+  auto SetSecondFogHeightFalloff(float value) -> void;
+  [[nodiscard]] auto GetSecondFogHeightOffset() const -> float;
+  auto SetSecondFogHeightOffset(float value) -> void;
   [[nodiscard]] auto GetFogMaxOpacity() const -> float;
   auto SetFogMaxOpacity(float value) -> void;
   [[nodiscard]] auto GetFogSingleScatteringAlbedoRgb() const -> glm::vec3;
   auto SetFogSingleScatteringAlbedoRgb(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetFogInscatteringLuminance() const -> glm::vec3;
+  auto SetFogInscatteringLuminance(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSkyAtmosphereAmbientContributionColorScale() const
+    -> glm::vec3;
+  auto SetSkyAtmosphereAmbientContributionColorScale(const glm::vec3& value)
+    -> void;
+  [[nodiscard]] auto GetInscatteringColorCubemapAngle() const -> float;
+  auto SetInscatteringColorCubemapAngle(float value) -> void;
+  [[nodiscard]] auto GetInscatteringTextureTint() const -> glm::vec3;
+  auto SetInscatteringTextureTint(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetFullyDirectionalInscatteringColorDistance() const
+    -> float;
+  auto SetFullyDirectionalInscatteringColorDistance(float value) -> void;
+  [[nodiscard]] auto GetNonDirectionalInscatteringColorDistance() const
+    -> float;
+  auto SetNonDirectionalInscatteringColorDistance(float value) -> void;
+  [[nodiscard]] auto GetDirectionalInscatteringLuminance() const -> glm::vec3;
+  auto SetDirectionalInscatteringLuminance(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetDirectionalInscatteringExponent() const -> float;
+  auto SetDirectionalInscatteringExponent(float value) -> void;
+  [[nodiscard]] auto GetDirectionalInscatteringStartDistance() const -> float;
+  auto SetDirectionalInscatteringStartDistance(float value) -> void;
+  [[nodiscard]] auto GetFogEndDistanceMeters() const -> float;
+  auto SetFogEndDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetFogCutoffDistanceMeters() const -> float;
+  auto SetFogCutoffDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogScatteringDistribution() const -> float;
+  auto SetVolumetricFogScatteringDistribution(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogAlbedo() const -> glm::vec3;
+  auto SetVolumetricFogAlbedo(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetVolumetricFogEmissive() const -> glm::vec3;
+  auto SetVolumetricFogEmissive(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetVolumetricFogExtinctionScale() const -> float;
+  auto SetVolumetricFogExtinctionScale(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogDistanceMeters() const -> float;
+  auto SetVolumetricFogDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogStartDistanceMeters() const -> float;
+  auto SetVolumetricFogStartDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogNearFadeInDistanceMeters() const -> float;
+  auto SetVolumetricFogNearFadeInDistanceMeters(float value) -> void;
+  [[nodiscard]] auto GetVolumetricFogStaticLightingScatteringIntensity() const
+    -> float;
+  auto SetVolumetricFogStaticLightingScatteringIntensity(float value) -> void;
+  [[nodiscard]] auto GetOverrideLightColorsWithFogInscatteringColors() const
+    -> bool;
+  auto SetOverrideLightColorsWithFogInscatteringColors(bool enabled) -> void;
+  [[nodiscard]] auto GetFogHoldout() const -> bool;
+  auto SetFogHoldout(bool enabled) -> void;
+  [[nodiscard]] auto GetFogRenderInMainPass() const -> bool;
+  auto SetFogRenderInMainPass(bool enabled) -> void;
+  [[nodiscard]] auto GetFogVisibleInReflectionCaptures() const -> bool;
+  auto SetFogVisibleInReflectionCaptures(bool enabled) -> void;
+  [[nodiscard]] auto GetFogVisibleInRealTimeSkyCaptures() const -> bool;
+  auto SetFogVisibleInRealTimeSkyCaptures(bool enabled) -> void;
 
   // Local fog volumes
   [[nodiscard]] auto GetLocalFogVolumeCount() const -> int;
@@ -216,6 +306,12 @@ public:
   auto SetSunTemperatureKelvin(float value) -> void;
   [[nodiscard]] auto GetSunDiskRadiusDeg() const -> float;
   auto SetSunDiskRadiusDeg(float value) -> void;
+  [[nodiscard]] auto GetSunAtmosphereLightSlot() const -> int;
+  auto SetSunAtmosphereLightSlot(int value) -> void;
+  [[nodiscard]] auto GetSunUsePerPixelAtmosphereTransmittance() const -> bool;
+  auto SetSunUsePerPixelAtmosphereTransmittance(bool enabled) -> void;
+  [[nodiscard]] auto GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3;
+  auto SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSunShadowBias() const -> float;
   auto SetSunShadowBias(float value) -> void;
   [[nodiscard]] auto GetSunShadowNormalBias() const -> float;
