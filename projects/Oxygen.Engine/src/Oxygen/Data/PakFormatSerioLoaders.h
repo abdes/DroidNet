@@ -262,6 +262,29 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
 }
 
 inline auto Load(AnyReader& reader,
+  data::pak::world::LocalFogVolumeRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.enabled));
+  CHECK_RESULT(reader.ReadInto(record.radial_fog_extinction));
+  CHECK_RESULT(reader.ReadInto(record.height_fog_extinction));
+  CHECK_RESULT(reader.ReadInto(record.height_fog_falloff));
+  CHECK_RESULT(reader.ReadInto(record.height_fog_offset));
+  CHECK_RESULT(reader.ReadInto(record.fog_phase_g));
+  for (auto& v : record.fog_albedo) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : record.fog_emissive) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(record.sort_priority));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
   data::pak::world::PerspectiveCameraRecord& record) -> Result<void>
 {
   auto pack = reader.ScopedAlignment(1);
@@ -346,17 +369,35 @@ inline auto Load(AnyReader& reader,
   for (auto& v : r.mie_scattering_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
+  for (auto& v : r.mie_absorption_rgb) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
   CHECK_RESULT(reader.ReadInto(r.mie_scale_height_m));
   CHECK_RESULT(reader.ReadInto(r.mie_g));
 
   for (auto& v : r.absorption_rgb) {
     CHECK_RESULT(reader.ReadInto(v));
   }
-  CHECK_RESULT(reader.ReadInto(r.absorption_scale_height_m));
+  for (auto& v : r.ozone_density_profile) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
 
   CHECK_RESULT(reader.ReadInto(r.multi_scattering_factor));
-  CHECK_RESULT(reader.ReadInto(r.sun_disk_enabled));
+  for (auto& v : r.sky_luminance_factor_rgb) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : r.sky_and_aerial_perspective_luminance_factor_rgb) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
   CHECK_RESULT(reader.ReadInto(r.aerial_perspective_distance_scale));
+  CHECK_RESULT(reader.ReadInto(r.aerial_scattering_strength));
+  CHECK_RESULT(reader.ReadInto(r.aerial_perspective_start_depth_m));
+  CHECK_RESULT(reader.ReadInto(r.height_fog_contribution));
+  CHECK_RESULT(reader.ReadInto(r.trace_sample_count_scale));
+  CHECK_RESULT(reader.ReadInto(r.transmittance_min_light_elevation_deg));
+  CHECK_RESULT(reader.ReadInto(r.sun_disk_enabled));
+  CHECK_RESULT(reader.ReadInto(r.holdout));
+  CHECK_RESULT(reader.ReadInto(r.render_in_main_pass));
 
   return {};
 }
@@ -404,6 +445,50 @@ inline auto Load(AnyReader& reader, data::pak::world::FogEnvironmentRecord& r)
     CHECK_RESULT(reader.ReadInto(v));
   }
   CHECK_RESULT(reader.ReadInto(r.anisotropy_g));
+  CHECK_RESULT(reader.ReadInto(r.enable_height_fog));
+  CHECK_RESULT(reader.ReadInto(r.enable_volumetric_fog));
+  CHECK_RESULT(reader.ReadInto(r.second_fog_density));
+  CHECK_RESULT(reader.ReadInto(r.second_fog_height_falloff));
+  CHECK_RESULT(reader.ReadInto(r.second_fog_height_offset));
+  for (auto& v : r.fog_inscattering_luminance) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : r.sky_atmosphere_ambient_contribution_color_scale) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.inscattering_color_cubemap_asset));
+  CHECK_RESULT(reader.ReadInto(r.inscattering_color_cubemap_angle));
+  for (auto& v : r.inscattering_texture_tint) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.fully_directional_inscattering_color_distance));
+  CHECK_RESULT(reader.ReadInto(r.non_directional_inscattering_color_distance));
+  for (auto& v : r.directional_inscattering_luminance) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.directional_inscattering_exponent));
+  CHECK_RESULT(reader.ReadInto(r.directional_inscattering_start_distance));
+  CHECK_RESULT(reader.ReadInto(r.end_distance_m));
+  CHECK_RESULT(reader.ReadInto(r.fog_cutoff_distance_m));
+  CHECK_RESULT(reader.ReadInto(r.volumetric_fog_scattering_distribution));
+  for (auto& v : r.volumetric_fog_albedo) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  for (auto& v : r.volumetric_fog_emissive) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.volumetric_fog_extinction_scale));
+  CHECK_RESULT(reader.ReadInto(r.volumetric_fog_distance));
+  CHECK_RESULT(reader.ReadInto(r.volumetric_fog_start_distance));
+  CHECK_RESULT(reader.ReadInto(r.volumetric_fog_near_fade_in_distance));
+  CHECK_RESULT(
+    reader.ReadInto(r.volumetric_fog_static_lighting_scattering_intensity));
+  CHECK_RESULT(
+    reader.ReadInto(r.override_light_colors_with_fog_inscattering_colors));
+  CHECK_RESULT(reader.ReadInto(r.holdout));
+  CHECK_RESULT(reader.ReadInto(r.render_in_main_pass));
+  CHECK_RESULT(reader.ReadInto(r.visible_in_reflection_captures));
+  CHECK_RESULT(reader.ReadInto(r.visible_in_real_time_sky_captures));
 
   return {};
 }
@@ -425,6 +510,13 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.diffuse_intensity));
   CHECK_RESULT(reader.ReadInto(r.specular_intensity));
+  CHECK_RESULT(reader.ReadInto(r.real_time_capture_enabled));
+  for (auto& v : r.lower_hemisphere_color) {
+    CHECK_RESULT(reader.ReadInto(v));
+  }
+  CHECK_RESULT(reader.ReadInto(r.volumetric_scattering_intensity));
+  CHECK_RESULT(reader.ReadInto(r.affect_reflections));
+  CHECK_RESULT(reader.ReadInto(r.affect_global_illumination));
 
   return {};
 }

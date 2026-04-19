@@ -34,7 +34,7 @@ namespace oxygen::data::pak::world {
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 2;
+[[maybe_unused]] constexpr uint8_t kSceneAssetVersion = 3;
 
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
@@ -196,6 +196,25 @@ static_assert(sizeof(RenderableRecord) == 24);
 
 #pragma pack(push, 1)
 
+//! Node-attached local fog volume component record.
+struct LocalFogVolumeRecord {
+  SceneNodeIndexT node_index = 0;
+  uint32_t enabled = 1;
+
+  float radial_fog_extinction = 0.0F;
+  float height_fog_extinction = 0.0F;
+  float height_fog_falloff = 0.0F;
+  float height_fog_offset = 0.0F;
+  float fog_phase_g = 0.0F;
+  float fog_albedo[3] = { 1.0F, 1.0F, 1.0F };
+  float fog_emissive[3] = { 0.0F, 0.0F, 0.0F };
+  int32_t sort_priority = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(LocalFogVolumeRecord) == 56);
+
+#pragma pack(push, 1)
+
 //! Perspective camera component record.
 /*!
   Attaches a perspective camera to a scene node.
@@ -298,20 +317,31 @@ struct SkyAtmosphereEnvironmentRecord {
   float rayleigh_scale_height_m = 8000.0F;
 
   float mie_scattering_rgb[3] = { 21.0e-6F, 21.0e-6F, 21.0e-6F };
+  float mie_absorption_rgb[3] = { 0.0F, 0.0F, 0.0F };
   float mie_scale_height_m = 1200.0F;
   float mie_g = 0.8F;
 
   float absorption_rgb[3] = { 0.0F, 0.0F, 0.0F };
-  float absorption_scale_height_m = 25000.0F;
+  float ozone_density_profile[3] = { 25000.0F, 0.0F, 0.0F };
 
   float multi_scattering_factor = 1.0F;
-
-  uint32_t sun_disk_enabled = 1;
+  float sky_luminance_factor_rgb[3] = { 1.0F, 1.0F, 1.0F };
+  float sky_and_aerial_perspective_luminance_factor_rgb[3]
+    = { 1.0F, 1.0F, 1.0F };
 
   float aerial_perspective_distance_scale = 1.0F;
+  float aerial_scattering_strength = 1.0F;
+  float aerial_perspective_start_depth_m = 0.0F;
+  float height_fog_contribution = 1.0F;
+  float trace_sample_count_scale = 1.0F;
+  float transmittance_min_light_elevation_deg = -6.0F;
+
+  uint32_t sun_disk_enabled = 1;
+  uint32_t holdout = 0;
+  uint32_t render_in_main_pass = 1;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 96);
+static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 168);
 
 //! Packed VolumetricClouds environment record.
 #pragma pack(push, 1)
@@ -359,9 +389,45 @@ struct FogEnvironmentRecord {
   float max_opacity = 1.0F;
   float single_scattering_albedo_rgb[3] = { 1.0F, 1.0F, 1.0F };
   float anisotropy_g = 0.0F;
+
+  uint32_t enable_height_fog = 1;
+  uint32_t enable_volumetric_fog = 0;
+
+  float second_fog_density = 0.0F;
+  float second_fog_height_falloff = 0.0F;
+  float second_fog_height_offset = 0.0F;
+
+  float fog_inscattering_luminance[3] = { 1.0F, 1.0F, 1.0F };
+  float sky_atmosphere_ambient_contribution_color_scale[3]
+    = { 1.0F, 1.0F, 1.0F };
+  AssetKey inscattering_color_cubemap_asset;
+  float inscattering_color_cubemap_angle = 0.0F;
+  float inscattering_texture_tint[3] = { 1.0F, 1.0F, 1.0F };
+  float fully_directional_inscattering_color_distance = 0.0F;
+  float non_directional_inscattering_color_distance = 0.0F;
+  float directional_inscattering_luminance[3] = { 1.0F, 1.0F, 1.0F };
+  float directional_inscattering_exponent = 0.0F;
+  float directional_inscattering_start_distance = 0.0F;
+  float end_distance_m = 0.0F;
+  float fog_cutoff_distance_m = 0.0F;
+
+  float volumetric_fog_scattering_distribution = 0.0F;
+  float volumetric_fog_albedo[3] = { 1.0F, 1.0F, 1.0F };
+  float volumetric_fog_emissive[3] = { 0.0F, 0.0F, 0.0F };
+  float volumetric_fog_extinction_scale = 1.0F;
+  float volumetric_fog_distance = 0.0F;
+  float volumetric_fog_start_distance = 0.0F;
+  float volumetric_fog_near_fade_in_distance = 0.0F;
+  float volumetric_fog_static_lighting_scattering_intensity = 1.0F;
+  uint32_t override_light_colors_with_fog_inscattering_colors = 0;
+
+  uint32_t holdout = 0;
+  uint32_t render_in_main_pass = 1;
+  uint32_t visible_in_reflection_captures = 1;
+  uint32_t visible_in_real_time_sky_captures = 1;
 };
 #pragma pack(pop)
-static_assert(sizeof(FogEnvironmentRecord) == 52);
+static_assert(sizeof(FogEnvironmentRecord) == 232);
 
 //! Packed SkyLight (IBL) environment record.
 #pragma pack(push, 1)
@@ -375,16 +441,21 @@ struct SkyLightEnvironmentRecord {
 
   uint32_t source = 0; // SkyLightSource
 
-  AssetKey cubemap_asset = {};
+  AssetKey cubemap_asset;
 
   float intensity = 1.0F;
   float tint_rgb[3] = { 1.0F, 1.0F, 1.0F };
 
   float diffuse_intensity = 1.0F;
   float specular_intensity = 1.0F;
+  uint32_t real_time_capture_enabled = 0;
+  float lower_hemisphere_color[3] = { 0.0F, 0.0F, 0.0F };
+  float volumetric_scattering_intensity = 1.0F;
+  uint32_t affect_reflections = 1;
+  uint32_t affect_global_illumination = 1;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 56);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 84);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -398,7 +469,7 @@ struct SkySphereEnvironmentRecord {
 
   uint32_t source = 0; // SkySphereSource
 
-  AssetKey cubemap_asset = {};
+  AssetKey cubemap_asset;
 
   float solid_color_rgb[3] = { 0.0F, 0.0F, 0.0F };
   float intensity = 1.0F;

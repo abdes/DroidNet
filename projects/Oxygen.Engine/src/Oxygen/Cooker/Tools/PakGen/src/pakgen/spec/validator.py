@@ -28,6 +28,7 @@ from ..packing.constants import (
     VALID_MESH_TYPES,
     YAML_SCHEMA_VERSION_CURRENT,
     YAML_SCHEMA_VERSION_MIN,
+    SCENE_ASSET_VERSION_CURRENT,
 )
 
 
@@ -1086,6 +1087,14 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     ):
         if not isinstance(s, dict):
             continue
+        scene_version = s.get("version", SCENE_ASSET_VERSION_CURRENT)
+        if not isinstance(scene_version, int) or scene_version != SCENE_ASSET_VERSION_CURRENT:
+            _err(
+                errors,
+                "E_VERSION",
+                "Scene asset version 3 is required; re-cook authored scene content",
+                f"scenes[{si}].version",
+            )
         nodes = s.get("nodes", []) or []
         if not isinstance(nodes, list):
             continue
@@ -1235,6 +1244,65 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
             si,
             node_count,
         )
+
+        environment = s.get("environment")
+        if environment is not None and not isinstance(environment, dict):
+            _err(
+                errors,
+                "E_TYPE",
+                "environment must be an object",
+                f"scenes[{si}].environment",
+            )
+
+        local_fog_volumes = s.get("local_fog_volumes", []) or []
+        if not isinstance(local_fog_volumes, list):
+            _err(
+                errors,
+                "E_TYPE",
+                "local_fog_volumes must be a list",
+                f"scenes[{si}].local_fog_volumes",
+            )
+        else:
+            for lfi, volume in enumerate(local_fog_volumes):
+                lf_path = f"scenes[{si}].local_fog_volumes[{lfi}]"
+                if not isinstance(volume, dict):
+                    _err(errors, "E_TYPE", "Local fog volume must be object", lf_path)
+                    continue
+                for key in (
+                    "node_index",
+                    "enabled",
+                    "radial_fog_extinction",
+                    "height_fog_extinction",
+                    "height_fog_falloff",
+                    "height_fog_offset",
+                    "fog_phase_g",
+                    "fog_albedo",
+                    "fog_emissive",
+                    "sort_priority",
+                ):
+                    if key not in volume:
+                        _err(
+                            errors,
+                            "E_REQUIRED",
+                            f"Missing local fog field '{key}'",
+                            lf_path,
+                        )
+                node_index = volume.get("node_index")
+                if isinstance(node_index, int):
+                    if node_index < 0 or node_index >= node_count:
+                        _err(
+                            errors,
+                            "E_RANGE",
+                            "node_index out of range",
+                            f"{lf_path}.node_index",
+                        )
+                else:
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        "node_index must be an integer",
+                        f"{lf_path}.node_index",
+                    )
     return errors
 
 

@@ -98,6 +98,10 @@ auto SceneAsset::ParseAndValidate() -> void
 
   std::memcpy(&desc_, data_.data(), sizeof(pak::world::SceneAssetDesc));
 
+  if (desc_.header.version != pak::world::kSceneAssetVersion) {
+    throw std::runtime_error("SceneAsset unsupported descriptor version");
+  }
+
   auto range_ok
     = [](const size_t offset, const size_t size, const size_t total) {
         return offset <= total && size <= (total - offset);
@@ -183,6 +187,11 @@ auto SceneAsset::ParseAndValidate() -> void
       if (type == ComponentType::kRenderable
         && entry.table.entry_size != sizeof(pak::world::RenderableRecord)) {
         throw std::runtime_error("SceneAsset renderable record size mismatch");
+      }
+      if (type == ComponentType::kLocalFogVolume
+        && entry.table.entry_size != sizeof(pak::world::LocalFogVolumeRecord)) {
+        throw std::runtime_error(
+          "SceneAsset local fog volume record size mismatch");
       }
       if (type == ComponentType::kPerspectiveCamera
         && entry.table.entry_size
@@ -297,6 +306,12 @@ auto SceneAsset::ParseAndValidate() -> void
           != sizeof(pak::world::VolumetricCloudsEnvironmentRecord)) {
           throw std::runtime_error(
             "SceneAsset VolumetricClouds record size mismatch");
+        }
+        break;
+      case pak::world::EnvironmentComponentType::kFog:
+        if (record_header.record_size
+          != sizeof(pak::world::FogEnvironmentRecord)) {
+          throw std::runtime_error("SceneAsset Fog record size mismatch");
         }
         break;
       case pak::world::EnvironmentComponentType::kSkyLight:

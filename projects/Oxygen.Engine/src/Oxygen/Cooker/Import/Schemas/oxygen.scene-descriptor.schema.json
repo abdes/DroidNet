@@ -7,6 +7,10 @@
         "$schema": {
             "type": "string"
         },
+        "version": {
+            "type": "integer",
+            "const": 3
+        },
         "name": {
             "$ref": "#/definitions/identifier"
         },
@@ -33,11 +37,21 @@
         "lights": {
             "$ref": "#/definitions/lights"
         },
+        "environment": {
+            "$ref": "#/definitions/environment"
+        },
+        "local_fog_volumes": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/local_fog_volume"
+            }
+        },
         "references": {
             "$ref": "#/definitions/references"
         }
     },
     "required": [
+        "version",
         "name",
         "nodes"
     ],
@@ -106,6 +120,11 @@
             "type": "string",
             "minLength": 1,
             "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.opscene$"
+        },
+        "canonical_otex_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.otex$"
         },
         "node_flags": {
             "type": "object",
@@ -481,6 +500,246 @@
                     "items": {
                         "$ref": "#/definitions/spot_light"
                     }
+                }
+            }
+        },
+        "sky_atmosphere_environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "enabled",
+                "planet_radius_m",
+                "atmosphere_height_m",
+                "ground_albedo_rgb",
+                "rayleigh_scattering_rgb",
+                "rayleigh_scale_height_m",
+                "mie_scattering_rgb",
+                "mie_absorption_rgb",
+                "mie_scale_height_m",
+                "mie_anisotropy",
+                "ozone_absorption_rgb",
+                "ozone_density_profile",
+                "multi_scattering_factor",
+                "sky_luminance_factor_rgb",
+                "sky_and_aerial_perspective_luminance_factor_rgb",
+                "aerial_perspective_distance_scale",
+                "aerial_scattering_strength",
+                "aerial_perspective_start_depth_m",
+                "height_fog_contribution",
+                "trace_sample_count_scale",
+                "transmittance_min_light_elevation_deg",
+                "sun_disk_enabled",
+                "holdout",
+                "render_in_main_pass"
+            ],
+            "properties": {
+                "enabled": { "type": "boolean" },
+                "planet_radius_m": { "type": "number", "exclusiveMinimum": 0.0 },
+                "atmosphere_height_m": { "type": "number", "exclusiveMinimum": 0.0 },
+                "ground_albedo_rgb": { "$ref": "#/definitions/vec3" },
+                "rayleigh_scattering_rgb": { "$ref": "#/definitions/vec3" },
+                "rayleigh_scale_height_m": { "type": "number", "exclusiveMinimum": 0.0 },
+                "mie_scattering_rgb": { "$ref": "#/definitions/vec3" },
+                "mie_absorption_rgb": { "$ref": "#/definitions/vec3" },
+                "mie_scale_height_m": { "type": "number", "exclusiveMinimum": 0.0 },
+                "mie_anisotropy": { "type": "number" },
+                "ozone_absorption_rgb": { "$ref": "#/definitions/vec3" },
+                "ozone_density_profile": { "$ref": "#/definitions/vec3" },
+                "multi_scattering_factor": { "type": "number" },
+                "sky_luminance_factor_rgb": { "$ref": "#/definitions/vec3" },
+                "sky_and_aerial_perspective_luminance_factor_rgb": { "$ref": "#/definitions/vec3" },
+                "aerial_perspective_distance_scale": { "type": "number" },
+                "aerial_scattering_strength": { "type": "number" },
+                "aerial_perspective_start_depth_m": { "type": "number", "minimum": 0.0 },
+                "height_fog_contribution": { "type": "number" },
+                "trace_sample_count_scale": { "type": "number", "exclusiveMinimum": 0.0 },
+                "transmittance_min_light_elevation_deg": { "type": "number" },
+                "sun_disk_enabled": { "type": "boolean" },
+                "holdout": { "type": "boolean" },
+                "render_in_main_pass": { "type": "boolean" }
+            }
+        },
+        "fog_environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "enabled",
+                "model",
+                "extinction_sigma_t_per_m",
+                "height_falloff_per_m",
+                "height_offset_m",
+                "start_distance_m",
+                "max_opacity",
+                "single_scattering_albedo_rgb",
+                "anisotropy_g",
+                "enable_height_fog",
+                "enable_volumetric_fog",
+                "second_fog_density",
+                "second_fog_height_falloff",
+                "second_fog_height_offset",
+                "fog_inscattering_luminance",
+                "sky_atmosphere_ambient_contribution_color_scale",
+                "inscattering_color_cubemap_ref",
+                "inscattering_color_cubemap_angle",
+                "inscattering_texture_tint",
+                "fully_directional_inscattering_color_distance",
+                "non_directional_inscattering_color_distance",
+                "directional_inscattering_luminance",
+                "directional_inscattering_exponent",
+                "directional_inscattering_start_distance",
+                "end_distance_m",
+                "fog_cutoff_distance_m",
+                "volumetric_fog_scattering_distribution",
+                "volumetric_fog_albedo",
+                "volumetric_fog_emissive",
+                "volumetric_fog_extinction_scale",
+                "volumetric_fog_distance",
+                "volumetric_fog_start_distance",
+                "volumetric_fog_near_fade_in_distance",
+                "volumetric_fog_static_lighting_scattering_intensity",
+                "override_light_colors_with_fog_inscattering_colors",
+                "holdout",
+                "render_in_main_pass",
+                "visible_in_reflection_captures",
+                "visible_in_real_time_sky_captures"
+            ],
+            "properties": {
+                "enabled": { "type": "boolean" },
+                "model": { "type": "integer", "minimum": 0 },
+                "extinction_sigma_t_per_m": { "type": "number", "minimum": 0.0 },
+                "height_falloff_per_m": { "type": "number" },
+                "height_offset_m": { "type": "number" },
+                "start_distance_m": { "type": "number", "minimum": 0.0 },
+                "max_opacity": { "type": "number", "minimum": 0.0 },
+                "single_scattering_albedo_rgb": { "$ref": "#/definitions/vec3" },
+                "anisotropy_g": { "type": "number" },
+                "enable_height_fog": { "type": "boolean" },
+                "enable_volumetric_fog": { "type": "boolean" },
+                "second_fog_density": { "type": "number", "minimum": 0.0 },
+                "second_fog_height_falloff": { "type": "number" },
+                "second_fog_height_offset": { "type": "number" },
+                "fog_inscattering_luminance": { "$ref": "#/definitions/vec3" },
+                "sky_atmosphere_ambient_contribution_color_scale": { "$ref": "#/definitions/vec3" },
+                "inscattering_color_cubemap_ref": { "$ref": "#/definitions/canonical_otex_path" },
+                "inscattering_color_cubemap_angle": { "type": "number" },
+                "inscattering_texture_tint": { "$ref": "#/definitions/vec3" },
+                "fully_directional_inscattering_color_distance": { "type": "number", "minimum": 0.0 },
+                "non_directional_inscattering_color_distance": { "type": "number", "minimum": 0.0 },
+                "directional_inscattering_luminance": { "$ref": "#/definitions/vec3" },
+                "directional_inscattering_exponent": { "type": "number" },
+                "directional_inscattering_start_distance": { "type": "number", "minimum": 0.0 },
+                "end_distance_m": { "type": "number", "minimum": 0.0 },
+                "fog_cutoff_distance_m": { "type": "number", "minimum": 0.0 },
+                "volumetric_fog_scattering_distribution": { "type": "number" },
+                "volumetric_fog_albedo": { "$ref": "#/definitions/vec3" },
+                "volumetric_fog_emissive": { "$ref": "#/definitions/vec3" },
+                "volumetric_fog_extinction_scale": { "type": "number", "minimum": 0.0 },
+                "volumetric_fog_distance": { "type": "number", "minimum": 0.0 },
+                "volumetric_fog_start_distance": { "type": "number", "minimum": 0.0 },
+                "volumetric_fog_near_fade_in_distance": { "type": "number", "minimum": 0.0 },
+                "volumetric_fog_static_lighting_scattering_intensity": { "type": "number", "minimum": 0.0 },
+                "override_light_colors_with_fog_inscattering_colors": { "type": "boolean" },
+                "holdout": { "type": "boolean" },
+                "render_in_main_pass": { "type": "boolean" },
+                "visible_in_reflection_captures": { "type": "boolean" },
+                "visible_in_real_time_sky_captures": { "type": "boolean" }
+            }
+        },
+        "sky_light_environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "enabled",
+                "source",
+                "cubemap_ref",
+                "intensity",
+                "tint_rgb",
+                "diffuse_intensity",
+                "specular_intensity",
+                "real_time_capture_enabled",
+                "lower_hemisphere_color",
+                "volumetric_scattering_intensity",
+                "affect_reflections",
+                "affect_global_illumination"
+            ],
+            "properties": {
+                "enabled": { "type": "boolean" },
+                "source": { "type": "integer", "minimum": 0 },
+                "cubemap_ref": { "$ref": "#/definitions/canonical_otex_path" },
+                "intensity": { "type": "number", "minimum": 0.0 },
+                "tint_rgb": { "$ref": "#/definitions/vec3" },
+                "diffuse_intensity": { "type": "number", "minimum": 0.0 },
+                "specular_intensity": { "type": "number", "minimum": 0.0 },
+                "real_time_capture_enabled": { "type": "boolean" },
+                "lower_hemisphere_color": { "$ref": "#/definitions/vec3" },
+                "volumetric_scattering_intensity": { "type": "number", "minimum": 0.0 },
+                "affect_reflections": { "type": "boolean" },
+                "affect_global_illumination": { "type": "boolean" }
+            }
+        },
+        "environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "sky_atmosphere": {
+                    "$ref": "#/definitions/sky_atmosphere_environment"
+                },
+                "fog": {
+                    "$ref": "#/definitions/fog_environment"
+                },
+                "sky_light": {
+                    "$ref": "#/definitions/sky_light_environment"
+                }
+            }
+        },
+        "local_fog_volume": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node",
+                "enabled",
+                "radial_fog_extinction",
+                "height_fog_extinction",
+                "height_fog_falloff",
+                "height_fog_offset",
+                "fog_phase_g",
+                "fog_albedo",
+                "fog_emissive",
+                "sort_priority"
+            ],
+            "properties": {
+                "node": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "radial_fog_extinction": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "height_fog_extinction": {
+                    "type": "number",
+                    "minimum": 0.0
+                },
+                "height_fog_falloff": {
+                    "type": "number"
+                },
+                "height_fog_offset": {
+                    "type": "number"
+                },
+                "fog_phase_g": {
+                    "type": "number"
+                },
+                "fog_albedo": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "fog_emissive": {
+                    "$ref": "#/definitions/vec3"
+                },
+                "sort_priority": {
+                    "type": "integer"
                 }
             }
         },

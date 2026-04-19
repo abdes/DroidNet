@@ -39,6 +39,10 @@ template <> struct ComponentTraits<pak::world::RenderableRecord> {
   static constexpr ComponentType kType = ComponentType::kRenderable;
 };
 
+template <> struct ComponentTraits<pak::world::LocalFogVolumeRecord> {
+  static constexpr ComponentType kType = ComponentType::kLocalFogVolume;
+};
+
 template <> struct ComponentTraits<pak::world::PerspectiveCameraRecord> {
   static constexpr ComponentType kType = ComponentType::kPerspectiveCamera;
 };

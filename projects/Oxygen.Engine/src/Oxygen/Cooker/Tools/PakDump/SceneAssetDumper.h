@@ -40,6 +40,8 @@ public:
     using oxygen::data::pak::scripting::ScriptingComponentRecord;
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
+    using oxygen::data::pak::world::FogEnvironmentRecord;
+    using oxygen::data::pak::world::LocalFogVolumeRecord;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::OrthographicCameraRecord;
     using oxygen::data::pak::world::PerspectiveCameraRecord;
@@ -185,6 +187,8 @@ public:
     std::cout << "    Component Tables:\n";
     DumpComponentTableHeader(ComponentType::kRenderable,
       scene->GetComponents<RenderableRecord>().size());
+    DumpComponentTableHeader(ComponentType::kLocalFogVolume,
+      scene->GetComponents<LocalFogVolumeRecord>().size());
     DumpComponentTableHeader(ComponentType::kPerspectiveCamera,
       scene->GetComponents<PerspectiveCameraRecord>().size());
     DumpComponentTableHeader(ComponentType::kOrthographicCamera,
@@ -283,9 +287,37 @@ public:
       std::cout << "\n";
     };
 
+    const auto DumpLocalFogVolumes = [&]() -> void {
+      const auto volumes = scene->GetComponents<LocalFogVolumeRecord>();
+      if (volumes.empty()) {
+        return;
+      }
+
+      std::cout << "    Local Fog Volumes (" << volumes.size() << "):\n";
+      for (size_t i = 0; i < volumes.size(); ++i) {
+        const auto& rec = volumes[i];
+        std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
+        PrintUtils::Field("Enabled", rec.enabled != 0U, 10);
+        PrintUtils::Field(
+          "Radial Extinction", rec.radial_fog_extinction, 10);
+        PrintUtils::Field(
+          "Height Extinction", rec.height_fog_extinction, 10);
+        PrintUtils::Field("Height Falloff", rec.height_fog_falloff, 10);
+        PrintUtils::Field("Height Offset", rec.height_fog_offset, 10);
+        PrintUtils::Field("Phase g", rec.fog_phase_g, 10);
+        PrintUtils::Field(
+          "Albedo", asset_dump_helpers::FormatVec3(rec.fog_albedo), 10);
+        PrintUtils::Field(
+          "Emissive", asset_dump_helpers::FormatVec3(rec.fog_emissive), 10);
+        PrintUtils::Field("Sort Priority", rec.sort_priority, 10);
+      }
+      std::cout << "\n";
+    };
+
     DumpDirectionalLights();
     DumpPointLights();
     DumpSpotLights();
+    DumpLocalFogVolumes();
 
     // v3+ scenes: validated trailing SceneEnvironment block.
     if (!scene->HasEnvironmentBlock()) {
@@ -369,6 +401,24 @@ public:
         return decoded;
       };
 
+      const auto TryReadFog = [&](const std::span<const std::byte> bytes)
+        -> std::optional<FogEnvironmentRecord> {
+        if (bytes.size() != sizeof(FogEnvironmentRecord)) {
+          return std::nullopt;
+        }
+        std::vector<std::byte> buffer;
+        buffer.assign(bytes.begin(), bytes.end());
+        oxygen::serio::MemoryStream stream { std::span<std::byte>(buffer) };
+        oxygen::serio::Reader<oxygen::serio::MemoryStream> reader(stream);
+        auto packed = reader.ScopedAlignment(1);
+        FogEnvironmentRecord decoded {};
+        const auto res = reader.ReadInto(decoded);
+        if (!res) {
+          return std::nullopt;
+        }
+        return decoded;
+      };
+
       const auto TryReadSkyLight = [&](const std::span<const std::byte> bytes)
         -> std::optional<SkyLightEnvironmentRecord> {
         if (bytes.size() != sizeof(SkyLightEnvironmentRecord)) {
@@ -443,18 +493,39 @@ public:
           "Rayleigh Scale Height (m)", rec->rayleigh_scale_height_m, 10);
         PrintUtils::Field("Mie Scattering",
           asset_dump_helpers::FormatVec3(rec->mie_scattering_rgb), 10);
+        PrintUtils::Field("Mie Absorption",
+          asset_dump_helpers::FormatVec3(rec->mie_absorption_rgb), 10);
         PrintUtils::Field("Mie Scale Height (m)", rec->mie_scale_height_m, 10);
         PrintUtils::Field("Mie g", rec->mie_g, 10);
-        PrintUtils::Field("Absorption",
+        PrintUtils::Field("Ozone Absorption",
           asset_dump_helpers::FormatVec3(rec->absorption_rgb), 10);
-        PrintUtils::Field(
-          "Absorption Scale Height (m)", rec->absorption_scale_height_m, 10);
+        PrintUtils::Field("Ozone Density Profile",
+          asset_dump_helpers::FormatVec3(rec->ozone_density_profile), 10);
         PrintUtils::Field(
           "Multi Scattering Factor", rec->multi_scattering_factor, 10);
+        PrintUtils::Field("Sky Luminance",
+          asset_dump_helpers::FormatVec3(rec->sky_luminance_factor_rgb), 10);
+        PrintUtils::Field("Sky+Aerial Luminance",
+          asset_dump_helpers::FormatVec3(
+            rec->sky_and_aerial_perspective_luminance_factor_rgb),
+          10);
         PrintUtils::Field(
           "Sun Disk Enabled", static_cast<int>(rec->sun_disk_enabled), 10);
         PrintUtils::Field("Aerial Perspective Distance Scale",
           rec->aerial_perspective_distance_scale, 10);
+        PrintUtils::Field(
+          "Aerial Scattering Strength", rec->aerial_scattering_strength, 10);
+        PrintUtils::Field("Aerial Start Depth (m)",
+          rec->aerial_perspective_start_depth_m, 10);
+        PrintUtils::Field(
+          "Height Fog Contribution", rec->height_fog_contribution, 10);
+        PrintUtils::Field(
+          "Trace Sample Count Scale", rec->trace_sample_count_scale, 10);
+        PrintUtils::Field("Min Light Elevation (deg)",
+          rec->transmittance_min_light_elevation_deg, 10);
+        PrintUtils::Field("Holdout", rec->holdout != 0U, 10);
+        PrintUtils::Field(
+          "Render In Main Pass", rec->render_in_main_pass != 0U, 10);
         break;
       }
       case EnvironmentComponentType::kVolumetricClouds: {
@@ -479,6 +550,89 @@ public:
         PrintUtils::Field("Shadow Strength", rec->shadow_strength, 10);
         break;
       }
+      case EnvironmentComponentType::kFog: {
+        const auto rec = TryReadFog(record.bytes);
+        if (!rec) {
+          fmt::print("        (failed to decode)\n");
+          break;
+        }
+
+        PrintUtils::Field("Enabled", rec->enabled != 0U, 10);
+        PrintUtils::Field("Model", rec->model, 10);
+        PrintUtils::Field(
+          "Extinction σt (1/m)", rec->extinction_sigma_t_per_m, 10);
+        PrintUtils::Field(
+          "Height Falloff (1/m)", rec->height_falloff_per_m, 10);
+        PrintUtils::Field("Height Offset (m)", rec->height_offset_m, 10);
+        PrintUtils::Field("Start Distance (m)", rec->start_distance_m, 10);
+        PrintUtils::Field("Max Opacity", rec->max_opacity, 10);
+        PrintUtils::Field("Albedo",
+          asset_dump_helpers::FormatVec3(rec->single_scattering_albedo_rgb),
+          10);
+        PrintUtils::Field("Anisotropy g", rec->anisotropy_g, 10);
+        PrintUtils::Field(
+          "Enable Height Fog", rec->enable_height_fog != 0U, 10);
+        PrintUtils::Field(
+          "Enable Volumetric Fog", rec->enable_volumetric_fog != 0U, 10);
+        PrintUtils::Field("Second Fog Density", rec->second_fog_density, 10);
+        PrintUtils::Field("Second Fog Falloff",
+          rec->second_fog_height_falloff, 10);
+        PrintUtils::Field("Second Fog Offset",
+          rec->second_fog_height_offset, 10);
+        PrintUtils::Field("Inscattering Luminance",
+          asset_dump_helpers::FormatVec3(rec->fog_inscattering_luminance), 10);
+        PrintUtils::Field("Ambient Contribution",
+          asset_dump_helpers::FormatVec3(
+            rec->sky_atmosphere_ambient_contribution_color_scale),
+          10);
+        PrintUtils::Field("Inscattering Cubemap",
+          oxygen::data::to_string(rec->inscattering_color_cubemap_asset), 10);
+        PrintUtils::Field("Cubemap Angle",
+          rec->inscattering_color_cubemap_angle, 10);
+        PrintUtils::Field("Texture Tint",
+          asset_dump_helpers::FormatVec3(rec->inscattering_texture_tint), 10);
+        PrintUtils::Field("Full Directional Distance",
+          rec->fully_directional_inscattering_color_distance, 10);
+        PrintUtils::Field("Non-Directional Distance",
+          rec->non_directional_inscattering_color_distance, 10);
+        PrintUtils::Field("Directional Luminance",
+          asset_dump_helpers::FormatVec3(
+            rec->directional_inscattering_luminance),
+          10);
+        PrintUtils::Field("Directional Exponent",
+          rec->directional_inscattering_exponent, 10);
+        PrintUtils::Field("Directional Start Distance",
+          rec->directional_inscattering_start_distance, 10);
+        PrintUtils::Field("End Distance (m)", rec->end_distance_m, 10);
+        PrintUtils::Field(
+          "Fog Cutoff Distance (m)", rec->fog_cutoff_distance_m, 10);
+        PrintUtils::Field("Volumetric Distribution",
+          rec->volumetric_fog_scattering_distribution, 10);
+        PrintUtils::Field("Volumetric Albedo",
+          asset_dump_helpers::FormatVec3(rec->volumetric_fog_albedo), 10);
+        PrintUtils::Field("Volumetric Emissive",
+          asset_dump_helpers::FormatVec3(rec->volumetric_fog_emissive), 10);
+        PrintUtils::Field("Volumetric Extinction Scale",
+          rec->volumetric_fog_extinction_scale, 10);
+        PrintUtils::Field(
+          "Volumetric Distance", rec->volumetric_fog_distance, 10);
+        PrintUtils::Field("Volumetric Start Distance",
+          rec->volumetric_fog_start_distance, 10);
+        PrintUtils::Field("Volumetric Near Fade",
+          rec->volumetric_fog_near_fade_in_distance, 10);
+        PrintUtils::Field("Volumetric Static Lighting",
+          rec->volumetric_fog_static_lighting_scattering_intensity, 10);
+        PrintUtils::Field("Override Light Colors",
+          rec->override_light_colors_with_fog_inscattering_colors != 0U, 10);
+        PrintUtils::Field("Holdout", rec->holdout != 0U, 10);
+        PrintUtils::Field(
+          "Render In Main Pass", rec->render_in_main_pass != 0U, 10);
+        PrintUtils::Field("Visible In Reflection Captures",
+          rec->visible_in_reflection_captures != 0U, 10);
+        PrintUtils::Field("Visible In Real-Time Sky Captures",
+          rec->visible_in_real_time_sky_captures != 0U, 10);
+        break;
+      }
       case EnvironmentComponentType::kSkyLight: {
         const auto rec = TryReadSkyLight(record.bytes);
         if (!rec) {
@@ -494,6 +648,16 @@ public:
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
         PrintUtils::Field("Diffuse Intensity", rec->diffuse_intensity, 10);
         PrintUtils::Field("Specular Intensity", rec->specular_intensity, 10);
+        PrintUtils::Field("Real-Time Capture",
+          rec->real_time_capture_enabled != 0U, 10);
+        PrintUtils::Field("Lower Hemisphere Color",
+          asset_dump_helpers::FormatVec3(rec->lower_hemisphere_color), 10);
+        PrintUtils::Field("Volumetric Scattering",
+          rec->volumetric_scattering_intensity, 10);
+        PrintUtils::Field(
+          "Affect Reflections", rec->affect_reflections != 0U, 10);
+        PrintUtils::Field("Affect GI",
+          rec->affect_global_illumination != 0U, 10);
         break;
       }
       case EnvironmentComponentType::kSkySphere: {
