@@ -21,35 +21,71 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-struct AtmosphereCameraAerialPerspectivePassConstants
+struct CameraAerialOutputHeader
 {
     uint output_texture_uav;
     uint output_width;
     uint output_height;
     uint output_depth;
+};
+
+struct CameraAerialLutHeader0
+{
     uint transmittance_lut_srv;
     uint multi_scattering_lut_srv;
     uint transmittance_width;
     uint transmittance_height;
+};
+
+struct CameraAerialLutHeader1
+{
     uint multi_scattering_width;
     uint multi_scattering_height;
     uint active_light_count;
     uint depth_resolution;
+};
+
+struct CameraAerialDepthControl0
+{
     float fog_show_flag_factor;
     float real_time_reflection_360_mode;
     float depth_resolution_inv;
     float depth_slice_length_km;
+};
+
+struct CameraAerialDepthControl1
+{
     float depth_slice_length_km_inv;
     float sample_count_per_slice;
     float start_depth_km;
     float planet_radius_m;
+};
+
+struct CameraAerialAtmosphereScales0
+{
     float atmosphere_height_m;
     float aerial_perspective_distance_scale;
     float aerial_scattering_strength;
     float rayleigh_scale_height_m;
+};
+
+struct CameraAerialAtmosphereScales1
+{
     float mie_scale_height_m;
     float multi_scattering_factor;
     float mie_anisotropy;
+    float _pad0;
+};
+
+struct AtmosphereCameraAerialPerspectivePassConstants
+{
+    CameraAerialOutputHeader output_header;
+    CameraAerialLutHeader0 lut_header0;
+    CameraAerialLutHeader1 lut_header1;
+    CameraAerialDepthControl0 depth_control0;
+    CameraAerialDepthControl1 depth_control1;
+    CameraAerialAtmosphereScales0 atmosphere_scales0;
+    CameraAerialAtmosphereScales1 atmosphere_scales1;
     float4 ground_albedo_rgb;
     float4 rayleigh_scattering_rgb;
     float4 mie_scattering_rgb;
@@ -65,6 +101,34 @@ struct AtmosphereCameraAerialPerspectivePassConstants
     float4 light1_illuminance_rgb;
 };
 
+static uint PassOutputTextureUav(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_texture_uav; }
+static uint PassOutputWidth(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_width; }
+static uint PassOutputHeight(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_height; }
+static uint PassOutputDepth(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_depth; }
+static uint PassTransmittanceLutSrv(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header0.transmittance_lut_srv; }
+static uint PassMultiScatteringLutSrv(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header0.multi_scattering_lut_srv; }
+static uint PassTransmittanceWidth(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header0.transmittance_width; }
+static uint PassTransmittanceHeight(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header0.transmittance_height; }
+static uint PassMultiScatteringWidth(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header1.multi_scattering_width; }
+static uint PassMultiScatteringHeight(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header1.multi_scattering_height; }
+static uint PassActiveLightCount(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header1.active_light_count; }
+static uint PassDepthResolution(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.lut_header1.depth_resolution; }
+static float PassFogShowFlagFactor(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control0.fog_show_flag_factor; }
+static float PassRealTimeReflection360Mode(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control0.real_time_reflection_360_mode; }
+static float PassDepthResolutionInv(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control0.depth_resolution_inv; }
+static float PassDepthSliceLengthKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control0.depth_slice_length_km; }
+static float PassDepthSliceLengthKmInv(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.depth_slice_length_km_inv; }
+static float PassSampleCountPerSlice(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.sample_count_per_slice; }
+static float PassStartDepthKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.start_depth_km; }
+static float PassPlanetRadiusM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.planet_radius_m; }
+static float PassAtmosphereHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.atmosphere_height_m; }
+static float PassAerialPerspectiveDistanceScale(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_perspective_distance_scale; }
+static float PassAerialScatteringStrength(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_scattering_strength; }
+static float PassRayleighScaleHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.rayleigh_scale_height_m; }
+static float PassMieScaleHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_scale_height_m; }
+static float PassMultiScatteringFactor(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.multi_scattering_factor; }
+static float PassMieAnisotropy(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_anisotropy; }
+
 static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereCameraAerialPerspectivePassConstants pass)
 {
@@ -79,13 +143,13 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
     ozone_density.layers[1].constant_term = pass.ozone_density_layer1.w;
 
     return BuildVortexAtmosphereParams(
-        pass.planet_radius_m,
-        pass.atmosphere_height_m,
-        pass.multi_scattering_factor,
-        pass.aerial_perspective_distance_scale,
-        pass.rayleigh_scale_height_m,
-        pass.mie_scale_height_m,
-        pass.mie_anisotropy,
+        PassPlanetRadiusM(pass),
+        PassAtmosphereHeightM(pass),
+        PassMultiScatteringFactor(pass),
+        PassAerialPerspectiveDistanceScale(pass),
+        PassRayleighScaleHeightM(pass),
+        PassMieScaleHeightM(pass),
+        PassMieAnisotropy(pass),
         pass.ground_albedo_rgb.xyz,
         0.0f,
         pass.rayleigh_scattering_rgb.xyz,
@@ -94,10 +158,10 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         pass.ozone_absorption_rgb.xyz,
         ozone_density,
         0u,
-        pass.transmittance_lut_srv,
-        (float)pass.transmittance_width,
-        (float)pass.transmittance_height,
-        pass.multi_scattering_lut_srv);
+        PassTransmittanceLutSrv(pass),
+        (float)PassTransmittanceWidth(pass),
+        (float)PassTransmittanceHeight(pass),
+        PassMultiScatteringLutSrv(pass));
 }
 
 static float GetVortexExposure()
@@ -182,7 +246,7 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
     float ray_length,
     float sample_count)
 {
-    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
+    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
@@ -205,11 +269,11 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
         pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         output_pre_exposure,
-        pass.aerial_perspective_distance_scale,
+        PassAerialPerspectiveDistanceScale(pass),
         atmosphere,
-        pass.transmittance_lut_srv,
-        (float)pass.transmittance_width,
-        (float)pass.transmittance_height,
+        PassTransmittanceLutSrv(pass),
+        (float)PassTransmittanceWidth(pass),
+        (float)PassTransmittanceHeight(pass),
         multi_scat_lut,
         linear_sampler,
         ray_length);
@@ -227,29 +291,29 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     StructuredBuffer<AtmosphereCameraAerialPerspectivePassConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     const AtmosphereCameraAerialPerspectivePassConstants pass = pass_buffer[0];
-    if (pass.output_texture_uav == K_INVALID_BINDLESS_INDEX
-        || pass.transmittance_lut_srv == K_INVALID_BINDLESS_INDEX
-        || pass.multi_scattering_lut_srv == K_INVALID_BINDLESS_INDEX
-        || dispatch_id.x >= pass.output_width
-        || dispatch_id.y >= pass.output_height
-        || dispatch_id.z >= pass.output_depth)
+    if (PassOutputTextureUav(pass) == K_INVALID_BINDLESS_INDEX
+        || PassTransmittanceLutSrv(pass) == K_INVALID_BINDLESS_INDEX
+        || PassMultiScatteringLutSrv(pass) == K_INVALID_BINDLESS_INDEX
+        || dispatch_id.x >= PassOutputWidth(pass)
+        || dispatch_id.y >= PassOutputHeight(pass)
+        || dispatch_id.z >= PassOutputDepth(pass))
     {
         return;
     }
 
-    RWTexture3D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
+    RWTexture3D<float4> output_texture = ResourceDescriptorHeap[PassOutputTextureUav(pass)];
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
     const EnvironmentViewData environment_view = LoadVortexEnvironmentViewData();
-    if (pass.fog_show_flag_factor <= 0.0f)
+    if (PassFogShowFlagFactor(pass) <= 0.0f)
     {
         output_texture[dispatch_id] = float4(0.0f, 0.0f, 0.0f, 1.0f);
         return;
     }
     const float2 uv = (float2(dispatch_id.xy) + 0.5f)
-        / float2(pass.output_width, pass.output_height);
+        / float2(PassOutputWidth(pass), PassOutputHeight(pass));
     const float2 sv_pos = MakeSvPosFromUv(
         uv,
-        float2(pass.output_width, pass.output_height));
+        float2(PassOutputWidth(pass), PassOutputHeight(pass)));
     const float2 screen_uv = ScreenUvFromSvPos(sv_pos, uv);
     const float far_depth = ResolveFarDepthReference();
     float3 far_world_position = ReconstructWorldPosition(
@@ -268,12 +332,12 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         camera_planet_position += near_world_position - camera_position;
     }
 
-    if (pass.real_time_reflection_360_mode > 0.5f)
+    if (PassRealTimeReflection360Mode(pass) > 0.5f)
     {
         const float2 unit_uv = FromSubUvsToUnit(
             uv,
-            float2(pass.output_width, pass.output_height),
-            float2(1.0f / pass.output_width, 1.0f / pass.output_height));
+            float2(PassOutputWidth(pass), PassOutputHeight(pass)),
+            float2(1.0f / PassOutputWidth(pass), 1.0f / PassOutputHeight(pass)));
         const float sin_phi = 2.0f * unit_uv.y - 1.0f;
         const float cos_phi = sqrt(saturate(1.0f - sin_phi * sin_phi));
         const float theta = 2.0f * PI * unit_uv.x;
@@ -286,14 +350,14 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
             sin_phi));
     }
 
-    const float slice = ((float(dispatch_id.z) + 0.5f) * pass.depth_resolution_inv);
+    const float slice = ((float(dispatch_id.z) + 0.5f) * PassDepthResolutionInv(pass));
     float non_linear_slice = slice;
     non_linear_slice *= non_linear_slice;
-    non_linear_slice *= pass.depth_resolution;
+    non_linear_slice *= PassDepthResolution(pass);
 
-    const float start_depth_m = pass.start_depth_km * 1000.0f;
+    const float start_depth_m = PassStartDepthKm(pass) * 1000.0f;
     float3 ray_origin = camera_planet_position + world_direction * start_depth_m;
-    float t_max_max = non_linear_slice * pass.depth_slice_length_km * 1000.0f;
+    float t_max_max = non_linear_slice * PassDepthSliceLengthKm(pass) * 1000.0f;
     if (t_max_max <= 1.0e-4f)
     {
         output_texture[dispatch_id] = float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -367,7 +431,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
 
     const float sample_count = max(
         1.0f,
-        (float(dispatch_id.z) + 1.0f) * max(pass.sample_count_per_slice, 1.0f));
+        (float(dispatch_id.z) + 1.0f) * max(PassSampleCountPerSlice(pass), 1.0f));
 
     const VortexSingleScatteringResult scattering = IntegrateCameraAerialLight(
         atmosphere,
@@ -385,6 +449,6 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     output_texture[dispatch_id] = float4(
-        max(luminance * pass.aerial_scattering_strength, 0.0f.xxx),
+        max(luminance * PassAerialScatteringStrength(pass), 0.0f.xxx),
         saturate(transmittance));
 }

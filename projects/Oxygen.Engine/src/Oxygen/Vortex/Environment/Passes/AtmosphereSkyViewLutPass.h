@@ -63,28 +63,55 @@ namespace environment {
       const internal::AtmosphereLutCache& cache) -> RecordState;
 
   private:
-    struct alignas(16) PassConstants {
+    struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
       std::uint32_t output_width { 0U };
       std::uint32_t output_height { 0U };
       std::uint32_t transmittance_lut_srv { 0U };
+    };
+
+    struct alignas(16) LutHeader {
       std::uint32_t multi_scattering_lut_srv { 0U };
       std::uint32_t transmittance_width { 0U };
       std::uint32_t transmittance_height { 0U };
       std::uint32_t multi_scattering_width { 0U };
+    };
+
+    struct alignas(16) DispatchHeader {
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
       std::uint32_t _pad0 { 0U };
+      std::uint32_t _pad1 { 0U };
+    };
+
+    struct alignas(16) SamplingAtmosphere0 {
       float sample_count_min { 4.0F };
       float sample_count_max { 32.0F };
       float distance_to_sample_count_max_inv { 1.0F / 150000.0F };
       float planet_radius_m { 6360000.0F };
+    };
+
+    struct alignas(16) SamplingAtmosphere1 {
       float atmosphere_height_m { 100000.0F };
       float camera_altitude_m { 0.0F };
       float rayleigh_scale_height_m { 8000.0F };
       float mie_scale_height_m { 1200.0F };
+    };
+
+    struct alignas(16) PhaseFactors0 {
       float multi_scattering_factor { 1.0F };
       float mie_anisotropy { 0.8F };
+      float _pad0 { 0.0F };
+      float _pad1 { 0.0F };
+    };
+
+    struct alignas(16) PassConstants {
+      OutputHeader output_header {};
+      LutHeader lut_header {};
+      DispatchHeader dispatch_header {};
+      SamplingAtmosphere0 sampling_atmosphere0 {};
+      SamplingAtmosphere1 sampling_atmosphere1 {};
+      PhaseFactors0 phase_factors0 {};
       float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
       float rayleigh_scattering_rgb[4] { 5.8e-6F, 13.5e-6F, 33.1e-6F, 0.0F };
       float mie_scattering_rgb[4] { 2.0e-5F, 2.0e-5F, 2.0e-5F, 0.0F };

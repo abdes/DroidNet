@@ -303,49 +303,55 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   auto constants = PassConstants {};
-  constants.output_texture_uav = aerial_uav.get();
-  constants.output_width = width;
-  constants.output_height = height;
-  constants.output_depth = depth;
-  constants.transmittance_lut_srv = cache_state.transmittance_lut_srv.get();
-  constants.multi_scattering_lut_srv
+  constants.output_header.output_texture_uav = aerial_uav.get();
+  constants.output_header.output_width = width;
+  constants.output_header.output_height = height;
+  constants.output_header.output_depth = depth;
+  constants.lut_header0.transmittance_lut_srv
+    = cache_state.transmittance_lut_srv.get();
+  constants.lut_header0.multi_scattering_lut_srv
     = cache_state.multi_scattering_lut_srv.get();
-  constants.transmittance_width
+  constants.lut_header0.transmittance_width
     = cache_state.internal_parameters.transmittance_width;
-  constants.transmittance_height
+  constants.lut_header0.transmittance_height
     = cache_state.internal_parameters.transmittance_height;
-  constants.multi_scattering_width
+  constants.lut_header1.multi_scattering_width
     = cache_state.internal_parameters.multi_scattering_width;
-  constants.multi_scattering_height
+  constants.lut_header1.multi_scattering_height
     = cache_state.internal_parameters.multi_scattering_height;
-  constants.active_light_count
+  constants.lut_header1.active_light_count
     = stable_state.view_products.atmosphere_light_count;
-  constants.depth_resolution = depth;
-  constants.fog_show_flag_factor
+  constants.lut_header1.depth_resolution = depth;
+  constants.depth_control0.fog_show_flag_factor
     = ctx.current_view.with_atmosphere ? 1.0F : 0.0F;
-  constants.real_time_reflection_360_mode = 0.0F;
-  constants.depth_resolution_inv
+  constants.depth_control0.real_time_reflection_360_mode = 0.0F;
+  constants.depth_control0.depth_resolution_inv
     = depth > 0U ? 1.0F / static_cast<float>(depth) : 0.0F;
-  constants.depth_slice_length_km
+  constants.depth_control0.depth_slice_length_km
     = cache_state.internal_parameters.camera_aerial_depth_slice_length_km;
-  constants.depth_slice_length_km_inv
-    = constants.depth_slice_length_km > 1.0e-6F
-    ? 1.0F / constants.depth_slice_length_km
+  constants.depth_control1.depth_slice_length_km_inv
+    = constants.depth_control0.depth_slice_length_km > 1.0e-6F
+    ? 1.0F / constants.depth_control0.depth_slice_length_km
     : 0.0F;
-  constants.sample_count_per_slice
+  constants.depth_control1.sample_count_per_slice
     = cache_state.internal_parameters.camera_aerial_sample_count_per_slice;
-  constants.start_depth_km
+  constants.depth_control1.start_depth_km
     = std::max(view_data.sky_aerial_luminance_aerial_start_depth_m.w, 0.0F)
     / 1000.0F;
-  constants.planet_radius_m = atmosphere.planet_radius_m;
-  constants.atmosphere_height_m = atmosphere.atmosphere_height_m;
-  constants.aerial_perspective_distance_scale
+  constants.depth_control1.planet_radius_m = atmosphere.planet_radius_m;
+  constants.atmosphere_scales0.atmosphere_height_m
+    = atmosphere.atmosphere_height_m;
+  constants.atmosphere_scales0.aerial_perspective_distance_scale
     = view_data.aerial_perspective_distance_scale;
-  constants.aerial_scattering_strength = view_data.aerial_scattering_strength;
-  constants.rayleigh_scale_height_m = atmosphere.rayleigh_scale_height_m;
-  constants.mie_scale_height_m = atmosphere.mie_scale_height_m;
-  constants.multi_scattering_factor = atmosphere.multi_scattering_factor;
-  constants.mie_anisotropy = atmosphere.mie_anisotropy;
+  constants.atmosphere_scales0.aerial_scattering_strength
+    = view_data.aerial_scattering_strength;
+  constants.atmosphere_scales0.rayleigh_scale_height_m
+    = atmosphere.rayleigh_scale_height_m;
+  constants.atmosphere_scales1.mie_scale_height_m
+    = atmosphere.mie_scale_height_m;
+  constants.atmosphere_scales1.multi_scattering_factor
+    = atmosphere.multi_scattering_factor;
+  constants.atmosphere_scales1.mie_anisotropy = atmosphere.mie_anisotropy;
   SetVec4(constants.ground_albedo_rgb, atmosphere.ground_albedo_rgb);
   SetVec4(
     constants.rayleigh_scattering_rgb, atmosphere.rayleigh_scattering_rgb);

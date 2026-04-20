@@ -63,10 +63,12 @@ static float2 UvToAtmosphereParamsBruneton(
     float planet_radius,
     float atmosphere_height)
 {
-    float top_radius = planet_radius + atmosphere_height;
-    float H = sqrt(max(0.0, top_radius * top_radius - planet_radius * planet_radius));
+    const float kMetersToSkyUnit = 0.001f;
+    const float bottom_radius = planet_radius * kMetersToSkyUnit;
+    const float top_radius = (planet_radius + atmosphere_height) * kMetersToSkyUnit;
+    const float H = sqrt(max(0.0, top_radius * top_radius - bottom_radius * bottom_radius));
     float rho = uv.y * H;
-    float view_height = sqrt(rho * rho + planet_radius * planet_radius);
+    float view_height = sqrt(rho * rho + bottom_radius * bottom_radius);
     float d_min = top_radius - view_height;
     float d_max = rho + H;
     float d = uv.x * (d_max - d_min) + d_min;
@@ -79,10 +81,10 @@ static float2 UvToAtmosphereParamsBruneton(
     }
     else
     {
-        cos_zenith = (top_radius * top_radius - view_height * view_height - d * d) / denom;
+        cos_zenith = (H * H - rho * rho - d * d) / denom;
     }
 
-    return float2(view_height - planet_radius, clamp(cos_zenith, -1.0, 1.0));
+    return float2((view_height - bottom_radius) / kMetersToSkyUnit, clamp(cos_zenith, -1.0, 1.0));
 }
 
 static float3 IntegrateOpticalDepth(

@@ -298,42 +298,47 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   auto constants = PassConstants {};
-  constants.output_texture_uav = sky_view_uav.get();
-  constants.output_width = width;
-  constants.output_height = height;
-  constants.transmittance_lut_srv = cache_state.transmittance_lut_srv.get();
-  constants.multi_scattering_lut_srv
+  constants.output_header.output_texture_uav = sky_view_uav.get();
+  constants.output_header.output_width = width;
+  constants.output_header.output_height = height;
+  constants.output_header.transmittance_lut_srv
+    = cache_state.transmittance_lut_srv.get();
+  constants.lut_header.multi_scattering_lut_srv
     = cache_state.multi_scattering_lut_srv.get();
-  constants.transmittance_width
+  constants.lut_header.transmittance_width
     = cache_state.internal_parameters.transmittance_width;
-  constants.transmittance_height
+  constants.lut_header.transmittance_height
     = cache_state.internal_parameters.transmittance_height;
-  constants.multi_scattering_width
+  constants.lut_header.multi_scattering_width
     = cache_state.internal_parameters.multi_scattering_width;
-  constants.multi_scattering_height
+  constants.dispatch_header.multi_scattering_height
     = cache_state.internal_parameters.multi_scattering_height;
-  constants.active_light_count
+  constants.dispatch_header.active_light_count
     = stable_state.view_products.atmosphere_light_count;
-  constants.sample_count_min
+  constants.sampling_atmosphere0.sample_count_min
     = cache_state.internal_parameters.sky_view_sample_count_min;
-  constants.sample_count_max
+  constants.sampling_atmosphere0.sample_count_max
     = cache_state.internal_parameters.sky_view_sample_count_max;
-  constants.distance_to_sample_count_max_inv
+  constants.sampling_atmosphere0.distance_to_sample_count_max_inv
     = cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
       > 1.0e-6F
     ? 1.0F
       / cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
     : 0.0F;
-  constants.planet_radius_m = atmosphere.planet_radius_m;
-  constants.atmosphere_height_m = atmosphere.atmosphere_height_m;
-  constants.camera_altitude_m = std::max(
+  constants.sampling_atmosphere0.planet_radius_m = atmosphere.planet_radius_m;
+  constants.sampling_atmosphere1.atmosphere_height_m
+    = atmosphere.atmosphere_height_m;
+  constants.sampling_atmosphere1.camera_altitude_m = std::max(
     view_data.sky_planet_translated_world_center_and_view_height.w
       - atmosphere.planet_radius_m,
     0.0F);
-  constants.rayleigh_scale_height_m = atmosphere.rayleigh_scale_height_m;
-  constants.mie_scale_height_m = atmosphere.mie_scale_height_m;
-  constants.multi_scattering_factor = atmosphere.multi_scattering_factor;
-  constants.mie_anisotropy = atmosphere.mie_anisotropy;
+  constants.sampling_atmosphere1.rayleigh_scale_height_m
+    = atmosphere.rayleigh_scale_height_m;
+  constants.sampling_atmosphere1.mie_scale_height_m
+    = atmosphere.mie_scale_height_m;
+  constants.phase_factors0.multi_scattering_factor
+    = atmosphere.multi_scattering_factor;
+  constants.phase_factors0.mie_anisotropy = atmosphere.mie_anisotropy;
   SetVec4(constants.ground_albedo_rgb, atmosphere.ground_albedo_rgb);
   SetVec4(
     constants.rayleigh_scattering_rgb, atmosphere.rayleigh_scattering_rgb);

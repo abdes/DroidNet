@@ -1,4 +1,4 @@
-"""Dump EnvironmentStaticData bytes for the Stage 15 sky draw."""
+"""Dump EnvironmentFrameBindings bytes for the Stage 15 sky draw."""
 
 import builtins
 import struct
@@ -63,7 +63,7 @@ from renderdoc_ui_analysis import (  # noqa: E402
 )
 
 
-REPORT_SUFFIX = "_environment_static_data_probe.txt"
+REPORT_SUFFIX = "_environment_frame_bindings_data_probe.txt"
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -82,14 +82,15 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     controller.SetFrameEvent(target.event_id, True)
     state = controller.GetPipelineState()
     readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+
     descriptor = None
     for binding in readonly:
         candidate = binding.descriptor
-        if int(safe_getattr(candidate, "byteSize", 0) or 0) == 496:
+        if int(safe_getattr(candidate, "byteSize", 0) or 0) == 176:
             descriptor = candidate
             break
     if descriptor is None:
-        raise RuntimeError("Could not locate the 496-byte EnvironmentStaticData buffer")
+        raise RuntimeError("Could not locate the 176-byte EnvironmentFrameBindings buffer")
 
     resource = safe_getattr(descriptor, "resource")
     byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)

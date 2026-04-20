@@ -17,29 +17,62 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-struct AtmosphereSkyViewLutPassConstants
+struct SkyViewOutputHeader
 {
     uint output_texture_uav;
     uint output_width;
     uint output_height;
     uint transmittance_lut_srv;
+};
+
+struct SkyViewLutHeader
+{
     uint multi_scattering_lut_srv;
     uint transmittance_width;
     uint transmittance_height;
     uint multi_scattering_width;
+};
+
+struct SkyViewDispatchHeader
+{
     uint multi_scattering_height;
     uint active_light_count;
     uint _pad0;
+    uint _pad1;
+};
+
+struct SkyViewSamplingAtmosphere0
+{
     float sample_count_min;
     float sample_count_max;
     float distance_to_sample_count_max_inv;
     float planet_radius_m;
+};
+
+struct SkyViewSamplingAtmosphere1
+{
     float atmosphere_height_m;
     float camera_altitude_m;
     float rayleigh_scale_height_m;
     float mie_scale_height_m;
+};
+
+struct SkyViewPhaseFactors0
+{
     float multi_scattering_factor;
     float mie_anisotropy;
+    float _pad0;
+    float _pad1;
+};
+
+struct AtmosphereSkyViewLutPassConstants
+{
+    SkyViewOutputHeader output_header;
+    SkyViewLutHeader lut_header;
+    SkyViewDispatchHeader dispatch_header;
+    SkyViewSamplingAtmosphere0 sampling_atmosphere0;
+    SkyViewSamplingAtmosphere1 sampling_atmosphere1;
+    SkyViewPhaseFactors0 phase_factors0;
     float4 ground_albedo_rgb;
     float4 rayleigh_scattering_rgb;
     float4 mie_scattering_rgb;
@@ -58,6 +91,27 @@ struct AtmosphereSkyViewLutPassConstants
     float4 light1_illuminance_rgb;
 };
 
+static uint PassOutputTextureUav(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.output_texture_uav; }
+static uint PassOutputWidth(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.output_width; }
+static uint PassOutputHeight(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.output_height; }
+static uint PassTransmittanceLutSrv(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.transmittance_lut_srv; }
+static uint PassMultiScatteringLutSrv(AtmosphereSkyViewLutPassConstants pass) { return pass.lut_header.multi_scattering_lut_srv; }
+static uint PassTransmittanceWidth(AtmosphereSkyViewLutPassConstants pass) { return pass.lut_header.transmittance_width; }
+static uint PassTransmittanceHeight(AtmosphereSkyViewLutPassConstants pass) { return pass.lut_header.transmittance_height; }
+static uint PassMultiScatteringWidth(AtmosphereSkyViewLutPassConstants pass) { return pass.lut_header.multi_scattering_width; }
+static uint PassMultiScatteringHeight(AtmosphereSkyViewLutPassConstants pass) { return pass.dispatch_header.multi_scattering_height; }
+static uint PassActiveLightCount(AtmosphereSkyViewLutPassConstants pass) { return pass.dispatch_header.active_light_count; }
+static float PassSampleCountMin(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.sample_count_min; }
+static float PassSampleCountMax(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.sample_count_max; }
+static float PassDistanceToSampleCountMaxInv(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.distance_to_sample_count_max_inv; }
+static float PassPlanetRadiusM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.planet_radius_m; }
+static float PassAtmosphereHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.atmosphere_height_m; }
+static float PassCameraAltitudeM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.camera_altitude_m; }
+static float PassRayleighScaleHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.rayleigh_scale_height_m; }
+static float PassMieScaleHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.mie_scale_height_m; }
+static float PassMultiScatteringFactor(AtmosphereSkyViewLutPassConstants pass) { return pass.phase_factors0.multi_scattering_factor; }
+static float PassMieAnisotropy(AtmosphereSkyViewLutPassConstants pass) { return pass.phase_factors0.mie_anisotropy; }
+
 static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereSkyViewLutPassConstants pass)
 {
@@ -72,13 +126,13 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
     ozone_density.layers[1].constant_term = pass.ozone_density_layer1.w;
 
     return BuildVortexAtmosphereParams(
-        pass.planet_radius_m,
-        pass.atmosphere_height_m,
-        pass.multi_scattering_factor,
+        PassPlanetRadiusM(pass),
+        PassAtmosphereHeightM(pass),
+        PassMultiScatteringFactor(pass),
         1.0f,
-        pass.rayleigh_scale_height_m,
-        pass.mie_scale_height_m,
-        pass.mie_anisotropy,
+        PassRayleighScaleHeightM(pass),
+        PassMieScaleHeightM(pass),
+        PassMieAnisotropy(pass),
         pass.ground_albedo_rgb.xyz,
         0.0f,
         pass.rayleigh_scattering_rgb.xyz,
@@ -87,10 +141,10 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         pass.ozone_absorption_rgb.xyz,
         ozone_density,
         0u,
-        pass.transmittance_lut_srv,
-        (float)pass.transmittance_width,
-        (float)pass.transmittance_height,
-        pass.multi_scattering_lut_srv);
+        PassTransmittanceLutSrv(pass),
+        (float)PassTransmittanceWidth(pass),
+        (float)PassTransmittanceHeight(pass),
+        PassMultiScatteringLutSrv(pass));
 }
 
 static float GetVortexExposure()
@@ -106,6 +160,16 @@ static float GetVortexExposure()
     return 1.0f;
 }
 
+static float3 ApplyPassSkyViewReferential(
+    AtmosphereSkyViewLutPassConstants pass,
+    float3 world_direction)
+{
+    return float3(
+        dot(pass.sky_view_lut_referential_row0.xyz, world_direction),
+        dot(pass.sky_view_lut_referential_row1.xyz, world_direction),
+        dot(pass.sky_view_lut_referential_row2.xyz, world_direction));
+}
+
 static VortexSingleScatteringResult IntegrateSkyLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereSkyViewLutPassConstants pass,
@@ -113,19 +177,15 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     float3 ray_direction,
     float ray_length)
 {
-    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
+    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
-    const float3x3 local_referential = float3x3(
-        pass.sky_view_lut_referential_row0.xyz,
-        pass.sky_view_lut_referential_row1.xyz,
-        pass.sky_view_lut_referential_row2.xyz);
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = true;
     sampling.SampleCountIni = 0.0f;
-    sampling.MinSampleCount = max(pass.sample_count_min, 1.0f);
-    sampling.MaxSampleCount = max(pass.sample_count_max, pass.sample_count_min);
-    sampling.DistanceToSampleCountMaxInv = pass.distance_to_sample_count_max_inv;
+    sampling.MinSampleCount = max(PassSampleCountMin(pass), 1.0f);
+    sampling.MaxSampleCount = max(PassSampleCountMax(pass), PassSampleCountMin(pass));
+    sampling.DistanceToSampleCountMaxInv = PassDistanceToSampleCountMaxInv(pass);
     return VortexIntegrateSingleScatteredLuminance(
         0.0f.xx,
         ray_origin,
@@ -136,19 +196,19 @@ static VortexSingleScatteringResult IntegrateSkyLight(
         true,
         true,
         pass.light0_direction_enabled.w > 0.5f
-            ? VortexSafeNormalize(mul(local_referential, pass.light0_direction_enabled.xyz))
+            ? VortexSafeNormalize(ApplyPassSkyViewReferential(pass, pass.light0_direction_enabled.xyz))
             : float3(0.0f, 0.0f, 1.0f),
         pass.light1_direction_enabled.w > 0.5f
-            ? VortexSafeNormalize(mul(local_referential, pass.light1_direction_enabled.xyz))
+            ? VortexSafeNormalize(ApplyPassSkyViewReferential(pass, pass.light1_direction_enabled.xyz))
             : float3(0.0f, 0.0f, 1.0f),
         pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         output_pre_exposure,
         1.0f,
         atmosphere,
-        pass.transmittance_lut_srv,
-        (float)pass.transmittance_width,
-        (float)pass.transmittance_height,
+        PassTransmittanceLutSrv(pass),
+        (float)PassTransmittanceWidth(pass),
+        (float)PassTransmittanceHeight(pass),
         multi_scat_lut,
         linear_sampler,
         ray_length);
@@ -166,30 +226,33 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     StructuredBuffer<AtmosphereSkyViewLutPassConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     const AtmosphereSkyViewLutPassConstants pass = pass_buffer[0];
-    if (pass.output_texture_uav == K_INVALID_BINDLESS_INDEX
-        || pass.transmittance_lut_srv == K_INVALID_BINDLESS_INDEX
-        || pass.multi_scattering_lut_srv == K_INVALID_BINDLESS_INDEX
-        || dispatch_id.x >= pass.output_width
-        || dispatch_id.y >= pass.output_height)
+    const uint output_texture_uav = PassOutputTextureUav(pass);
+    const uint output_width = PassOutputWidth(pass);
+    const uint output_height = PassOutputHeight(pass);
+    const uint transmittance_lut_srv = PassTransmittanceLutSrv(pass);
+    if (output_texture_uav == K_INVALID_BINDLESS_INDEX
+        || transmittance_lut_srv == K_INVALID_BINDLESS_INDEX
+        || PassMultiScatteringLutSrv(pass) == K_INVALID_BINDLESS_INDEX
+        || dispatch_id.x >= output_width
+        || dispatch_id.y >= output_height)
     {
         return;
     }
 
-    RWTexture2D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
-
+    RWTexture2D<float4> output_texture = ResourceDescriptorHeap[output_texture_uav];
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
-    const float2 lut_size = float2(pass.output_width, pass.output_height);
+    const float2 lut_size = float2(output_width, output_height);
     const float2 lut_inv_size = 1.0f.xx / lut_size;
     float2 uv = (float2(dispatch_id.xy) + 0.5f) / lut_size;
     uv = saturate(VortexFromSubUvsToUnit(uv, lut_size, lut_inv_size));
 
-    const float view_height = atmosphere.planet_radius_m + max(pass.camera_altitude_m, 0.0f);
+    const float view_height = PassPlanetRadiusM(pass) + max(PassCameraAltitudeM(pass), 0.0f);
     float3 ray_origin = float3(0.0f, 0.0f, view_height);
     float3 ray_direction = 0.0f.xxx;
-    UvToSkyViewLutParams(ray_direction, view_height, atmosphere.planet_radius_m, uv);
+    UvToSkyViewLutParams(ray_direction, view_height, PassPlanetRadiusM(pass), uv);
     ray_direction = VortexSafeNormalize(ray_direction);
 
-    const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
+    const float atmosphere_radius = PassPlanetRadiusM(pass) + PassAtmosphereHeightM(pass);
     if (!MoveToTopAtmosphere(ray_origin, ray_direction, atmosphere_radius))
     {
         output_texture[dispatch_id.xy] = 0.0f.xxxx;
@@ -202,8 +265,10 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         ray_origin,
         ray_direction,
         9000000.0f);
-    const float3 luminance = max(scattering.L, 0.0f.xxx);
-    const float3 throughput = scattering.Transmittance;
-    const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    output_texture[dispatch_id.xy] = float4(luminance, saturate(transmittance));
+    const float transmittance = dot(
+        scattering.Transmittance,
+        float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+    output_texture[dispatch_id.xy] = float4(
+        max(scattering.L, 0.0f.xxx),
+        saturate(transmittance));
 }
