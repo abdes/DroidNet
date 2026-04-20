@@ -99,31 +99,41 @@ static float ResolveFarDepthReference()
     return reverse_z != 0u ? 0.0f : 1.0f;
 }
 
-static float3 IntegrateCameraAerialLight(
+static float ResolveNearDepthReference()
+{
+    return reverse_z != 0u ? 1.0f : 0.0f;
+}
+
+static bool IsOrthoProjection()
+{
+    return is_orthographic != 0u;
+}
+
+static VortexSingleScatteringResult IntegrateCameraAerialLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereCameraAerialPerspectivePassConstants pass,
     float3 ray_origin,
     float3 ray_direction,
     float ray_length,
-    float sample_count,
-    float3 light_direction,
-    float3 light_illuminance,
-    out float3 throughput)
+    float sample_count)
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
+    return VortexIntegrateSingleScatteredLuminance(
         ray_origin,
         ray_direction,
+        false,
+        true,
+        true,
         false,
         max(1.0f, sample_count),
         1.0f,
         1.0f,
         0.0f,
-        light_direction,
-        float3(0.0f, 0.0f, 1.0f),
-        light_illuminance,
-        0.0f.xxx,
+        pass.light0_direction_enabled.w > 0.5f ? VortexSafeNormalize(pass.light0_direction_enabled.xyz) : float3(0.0f, 0.0f, 1.0f),
+        pass.light1_direction_enabled.w > 0.5f ? VortexSafeNormalize(pass.light1_direction_enabled.xyz) : float3(0.0f, 0.0f, 1.0f),
+        pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
+        pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         pass.aerial_perspective_distance_scale,
         atmosphere,
         pass.transmittance_lut_srv,
@@ -132,8 +142,6 @@ static float3 IntegrateCameraAerialLight(
         multi_scat_lut,
         linear_sampler,
         ray_length);
-    throughput = scattering.Transmittance;
-    return scattering.L;
 }
 
 [shader("compute")]
@@ -163,17 +171,29 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float2 uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass.output_width, pass.output_height);
     const float far_depth = ResolveFarDepthReference();
-    const float3 far_world_position = ReconstructWorldPosition(
+    float3 far_world_position = ReconstructWorldPosition(
         uv,
         far_depth,
         inverse_view_projection_matrix);
     float3 world_direction = VortexSafeNormalize(far_world_position - camera_position);
+    float3 camera_planet_position = pass.camera_planet_position.xyz;
+    if (IsOrthoProjection())
+    {
+        const float3 near_world_position = ReconstructWorldPosition(
+            uv,
+            ResolveNearDepthReference(),
+            inverse_view_projection_matrix);
+        world_direction = VortexSafeNormalize(far_world_position - near_world_position);
+        camera_planet_position += near_world_position - camera_position;
+    }
 
     const float slice = ((float(dispatch_id.z) + 0.5f) * pass.depth_resolution_inv);
     float non_linear_slice = slice;
     non_linear_slice *= non_linear_slice;
     non_linear_slice *= pass.depth_resolution;
 
+    const float start_depth_m = pass.start_depth_km * 1000.0f;
+    float3 ray_origin = camera_planet_position + world_direction * start_depth_m;
     float t_max_max = non_linear_slice * pass.depth_slice_length_km * 1000.0f;
     if (t_max_max <= 1.0e-4f)
     {
@@ -181,9 +201,45 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         return;
     }
 
-    const float3 camera_planet_position = pass.camera_planet_position.xyz;
-    float3 ray_origin = camera_planet_position
-        + world_direction * (pass.start_depth_km * 1000.0f);
+    float3 voxel_world_pos = ray_origin + t_max_max * world_direction;
+    const float voxel_height = length(voxel_world_pos);
+    const bool underground = voxel_height < atmosphere.planet_radius_m;
+
+    const float3 camera_to_voxel = voxel_world_pos - camera_planet_position;
+    const float camera_to_voxel_len = length(camera_to_voxel);
+    const float3 camera_to_voxel_dir = camera_to_voxel_len > 1.0e-6f
+        ? camera_to_voxel / camera_to_voxel_len
+        : world_direction;
+    const float planet_near_t = RaySphereIntersectNearest(
+        camera_planet_position,
+        camera_to_voxel_dir,
+        atmosphere.planet_radius_m);
+    const bool below_horizon = planet_near_t > 0.0f && camera_to_voxel_len > planet_near_t;
+
+    if (below_horizon || underground)
+    {
+        camera_planet_position += normalize(camera_planet_position) * 20.0f;
+
+        const float3 voxel_world_pos_norm = normalize(voxel_world_pos);
+        const float3 camera_proj_on_ground = normalize(camera_planet_position) * atmosphere.planet_radius_m;
+        const float3 voxel_proj_on_ground = voxel_world_pos_norm * atmosphere.planet_radius_m;
+        const float3 voxel_ground_to_ray_start = camera_planet_position - voxel_proj_on_ground;
+        if (below_horizon && dot(normalize(voxel_ground_to_ray_start), voxel_world_pos_norm) < 0.0001f)
+        {
+            const float3 middle_point = 0.5f * (camera_proj_on_ground + voxel_proj_on_ground);
+            const float3 middle_point_on_ground = normalize(middle_point) * atmosphere.planet_radius_m;
+            voxel_world_pos = camera_planet_position + 2.0f * (middle_point_on_ground - camera_planet_position);
+        }
+        else if (underground)
+        {
+            voxel_world_pos = normalize(voxel_world_pos) * atmosphere.planet_radius_m;
+        }
+
+        world_direction = VortexSafeNormalize(voxel_world_pos - camera_planet_position);
+        ray_origin = camera_planet_position + start_depth_m * world_direction;
+        t_max_max = length(voxel_world_pos - ray_origin);
+    }
+
     const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
     const float view_height = length(ray_origin);
     if (view_height >= atmosphere_radius)
@@ -210,47 +266,19 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         return;
     }
 
-    const float3 light0_direction = VortexSafeNormalize(pass.light0_direction_enabled.xyz);
-    const float3 light1_direction = VortexSafeNormalize(pass.light1_direction_enabled.xyz);
     const float sample_count = max(
         1.0f,
         (float(dispatch_id.z) + 1.0f) * max(pass.sample_count_per_slice, 1.0f));
 
-    float3 throughput = 1.0f.xxx;
-    float3 luminance = 0.0f.xxx;
-
-    if (pass.light0_direction_enabled.w > 0.5f)
-    {
-        float3 local_throughput = 1.0f.xxx;
-        luminance += IntegrateCameraAerialLight(
-            atmosphere,
-            pass,
-            ray_origin,
-            world_direction,
-            t_max_max,
-            sample_count,
-            light0_direction,
-            pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
-            local_throughput);
-        throughput = local_throughput;
-    }
-
-    if (pass.light1_direction_enabled.w > 0.5f)
-    {
-        float3 local_throughput = 1.0f.xxx;
-        luminance += IntegrateCameraAerialLight(
-            atmosphere,
-            pass,
-            ray_origin,
-            world_direction,
-            t_max_max,
-            sample_count,
-            light1_direction,
-            pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
-            local_throughput);
-        throughput = local_throughput;
-    }
-
+    const VortexSingleScatteringResult scattering = IntegrateCameraAerialLight(
+        atmosphere,
+        pass,
+        ray_origin,
+        world_direction,
+        t_max_max,
+        sample_count);
+    const float3 luminance = scattering.L;
+    const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     output_texture[dispatch_id] = float4(
         max(luminance * pass.aerial_scattering_strength, 0.0f.xxx),

@@ -90,13 +90,11 @@ static void ComputeUniformSphereDirection(
 
 groupshared float3 GroupSkyLuminanceSamples[64];
 
-static float3 IntegrateSkyLuminanceForAtmosphereLight(
+static float3 IntegrateSkyLuminanceForAtmosphereLights(
     GpuSkyAtmosphereParams atmosphere_parameters,
     DistantSkyLightLutPassConstants pass_constants,
     float3 sample_origin,
     float3 integration_direction,
-    float3 atmosphere_light_direction,
-    float3 atmosphere_light_illuminance,
     uint transmittance_lut_srv,
     float transmittance_lut_width,
     float transmittance_lut_height,
@@ -123,19 +121,21 @@ static float3 IntegrateSkyLuminanceForAtmosphereLight(
         ray_length = ground_distance;
     }
 
-    float3 final_transmittance;
     const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
         sample_origin,
         integration_direction,
         false,
-        ray_length,
-        max(1.0f, float(pass_constants.integration_sample_count)),
-        1.0f,
-        1.0f,
+        false,
+        true,
+        false,
+        10.0f,
+        10.0f,
+        10.0f,
         0.0f,
-        atmosphere_light_direction,
-        atmosphere_light_illuminance,
-        0.0f.xxx,
+        pass_constants.active_light_count > 0u ? normalize(pass_constants.light0_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
+        pass_constants.active_light_count > 1u ? normalize(pass_constants.light1_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
+        pass_constants.active_light_count > 0u ? pass_constants.light0_illuminance_rgb.xyz : 0.0f.xxx,
+        pass_constants.active_light_count > 1u ? pass_constants.light1_illuminance_rgb.xyz : 0.0f.xxx,
         1.0f,
         atmosphere_parameters,
         transmittance_lut_srv,
@@ -144,7 +144,6 @@ static float3 IntegrateSkyLuminanceForAtmosphereLight(
         multi_scattering_lut,
         linear_sampler,
         ray_length);
-    final_transmittance = scattering.Transmittance;
     return scattering.L;
 }
 
@@ -187,28 +186,11 @@ void VortexDistantSkyLightLutCS(
     float3 sampled_sky_luminance = 0.0.xxx;
     if (pass_constants.active_light_count > 0u)
     {
-        sampled_sky_luminance += IntegrateSkyLuminanceForAtmosphereLight(
+        sampled_sky_luminance = IntegrateSkyLuminanceForAtmosphereLights(
             atmosphere_parameters,
             pass_constants,
             sample_origin,
             integration_direction,
-            normalize(pass_constants.light0_direction_ws.xyz),
-            pass_constants.light0_illuminance_rgb.xyz,
-            pass_constants.transmittance_lut_srv,
-            float(pass_constants.transmittance_width),
-            float(pass_constants.transmittance_height),
-            multi_scattering_lut,
-            linear_sampler);
-    }
-    if (pass_constants.active_light_count > 1u)
-    {
-        sampled_sky_luminance += IntegrateSkyLuminanceForAtmosphereLight(
-            atmosphere_parameters,
-            pass_constants,
-            sample_origin,
-            integration_direction,
-            normalize(pass_constants.light1_direction_ws.xyz),
-            pass_constants.light1_illuminance_rgb.xyz,
             pass_constants.transmittance_lut_srv,
             float(pass_constants.transmittance_width),
             float(pass_constants.transmittance_height),

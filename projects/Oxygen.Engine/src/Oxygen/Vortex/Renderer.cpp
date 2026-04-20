@@ -109,6 +109,11 @@ namespace {
     return std::max(1U, static_cast<std::uint32_t>(value));
   }
 
+  auto IsPerspectiveProjection(const ResolvedView& view) -> bool
+  {
+    return std::abs(view.ProjectionMatrix()[2][3]) > 0.5F;
+  }
+
   auto ResolveBootstrapExtent(const CompositionView* composition_view)
     -> glm::uvec2
   {
@@ -1649,7 +1654,8 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
     .SetProjectionMatrix(view.ProjectionMatrix())
     .SetStableProjectionMatrix(view.StableProjectionMatrix())
     .SetCameraPosition(view.CameraPosition())
-    .SetReverseZ(view.ReverseZ(), ViewConstants::kRenderer);
+    .SetReverseZ(view.ReverseZ(), ViewConstants::kRenderer)
+    .SetOrthographic(!IsPerspectiveProjection(view), ViewConstants::kRenderer);
 }
 
 auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,

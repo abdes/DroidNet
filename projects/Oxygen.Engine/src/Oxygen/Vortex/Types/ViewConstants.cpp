@@ -124,6 +124,16 @@ auto ViewConstants::SetReverseZ(
   return *this;
 }
 
+auto ViewConstants::SetOrthographic(
+  const bool orthographic, RendererTag /*tag*/) noexcept -> ViewConstants&
+{
+  if (orthographic_ != orthographic) {
+    orthographic_ = orthographic;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
 auto ViewConstants::GetSnapshot() const noexcept -> const GpuData&
 {
   if (cached_version_ != version_) {
