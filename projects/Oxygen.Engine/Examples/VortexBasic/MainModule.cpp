@@ -634,8 +634,8 @@ auto MainModule::EnsureScene() -> void
     if (fog == nullptr) {
       fog = &environment->AddSystem<scene::environment::Fog>();
     }
-    fog->SetEnabled(true);
-    fog->SetEnableHeightFog(true);
+    fog->SetEnabled(false);
+    fog->SetEnableHeightFog(false);
     fog->SetEnableVolumetricFog(false);
     fog->SetRenderInMainPass(true);
     fog->SetVisibleInReflectionCaptures(true);

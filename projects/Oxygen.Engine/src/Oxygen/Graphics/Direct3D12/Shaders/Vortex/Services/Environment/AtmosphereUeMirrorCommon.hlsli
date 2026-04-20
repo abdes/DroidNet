@@ -91,10 +91,12 @@ static float2 VortexGetTransmittanceLutUv(
     float planet_radius_m,
     float atmosphere_height_m)
 {
-    const float view_height = planet_radius_m + altitude_m;
-    const float top_radius = planet_radius_m + atmosphere_height_m;
-    const float H = sqrt(max(0.0f, top_radius * top_radius - planet_radius_m * planet_radius_m));
-    const float rho = sqrt(max(0.0f, view_height * view_height - planet_radius_m * planet_radius_m));
+    const float kMetersToSkyUnit = 0.001f;
+    const float bottom_radius = planet_radius_m * kMetersToSkyUnit;
+    const float top_radius = (planet_radius_m + atmosphere_height_m) * kMetersToSkyUnit;
+    const float view_height = (planet_radius_m + altitude_m) * kMetersToSkyUnit;
+    const float H = sqrt(max(0.0f, top_radius * top_radius - bottom_radius * bottom_radius));
+    const float rho = sqrt(max(0.0f, view_height * view_height - bottom_radius * bottom_radius));
 
     const float discriminant = view_height * view_height * (cos_zenith * cos_zenith - 1.0f)
         + top_radius * top_radius;
@@ -104,13 +106,6 @@ static float2 VortexGetTransmittanceLutUv(
     const float x_mu = (d - d_min) / max(d_max - d_min, 1.0e-4f);
     const float x_r = rho / max(H, 1.0e-4f);
     return saturate(float2(x_mu, x_r));
-}
-
-static float2 VortexApplyHalfTexelOffset(float2 uv, float lut_width, float lut_height)
-{
-    uv = uv * float2((lut_width - 1.0f) / lut_width, (lut_height - 1.0f) / lut_height);
-    uv += float2(0.5f / lut_width, 0.5f / lut_height);
-    return uv;
 }
 
 static float VortexRaySphereIntersectNearestOffset(
@@ -151,8 +146,10 @@ static float3 VortexSampleTransmittanceLut(
         return 0.0f.xxx;
     }
 
-    float2 uv = VortexGetTransmittanceLutUv(cos_zenith, altitude_m, planet_radius_m, atmosphere_height_m);
-    uv = VortexApplyHalfTexelOffset(uv, lut_width, lut_height);
+    // Match UE5.7 GetTransmittance(): sample the transmittance LUT with the raw
+    // getTransmittanceLutUvs() result. UE explicitly leaves the sub-texel remap off here.
+    const float2 uv = VortexGetTransmittanceLutUv(
+        cos_zenith, altitude_m, planet_radius_m, atmosphere_height_m);
 
     Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];

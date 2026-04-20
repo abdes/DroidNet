@@ -73,34 +73,63 @@ namespace environment {
       const internal::AtmosphereLutCache& cache) -> RecordState;
 
   private:
-    struct alignas(16) PassConstants {
+    struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
       std::uint32_t output_width { 0U };
       std::uint32_t output_height { 0U };
       std::uint32_t output_depth { 0U };
+    };
+
+    struct alignas(16) LutHeader0 {
       std::uint32_t transmittance_lut_srv { 0U };
       std::uint32_t multi_scattering_lut_srv { 0U };
       std::uint32_t transmittance_width { 0U };
       std::uint32_t transmittance_height { 0U };
+    };
+
+    struct alignas(16) LutHeader1 {
       std::uint32_t multi_scattering_width { 0U };
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
       std::uint32_t depth_resolution { 0U };
+    };
+
+    struct alignas(16) DepthControl0 {
       float fog_show_flag_factor { 1.0F };
       float real_time_reflection_360_mode { 0.0F };
       float depth_resolution_inv { 0.0F };
       float depth_slice_length_km { 0.0F };
+    };
+
+    struct alignas(16) DepthControl1 {
       float depth_slice_length_km_inv { 0.0F };
       float sample_count_per_slice { 2.0F };
       float start_depth_km { 0.0F };
       float planet_radius_m { 6360000.0F };
+    };
+
+    struct alignas(16) AtmosphereScales0 {
       float atmosphere_height_m { 100000.0F };
       float aerial_perspective_distance_scale { 1.0F };
       float aerial_scattering_strength { 1.0F };
       float rayleigh_scale_height_m { 8000.0F };
+    };
+
+    struct alignas(16) AtmosphereScales1 {
       float mie_scale_height_m { 1200.0F };
       float multi_scattering_factor { 1.0F };
       float mie_anisotropy { 0.8F };
+      float _pad0 { 0.0F };
+    };
+
+    struct alignas(16) PassConstants {
+      OutputHeader output_header {};
+      LutHeader0 lut_header0 {};
+      LutHeader1 lut_header1 {};
+      DepthControl0 depth_control0 {};
+      DepthControl1 depth_control1 {};
+      AtmosphereScales0 atmosphere_scales0 {};
+      AtmosphereScales1 atmosphere_scales1 {};
       float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
       float rayleigh_scattering_rgb[4] { 5.8e-6F, 13.5e-6F, 33.1e-6F, 0.0F };
       float mie_scattering_rgb[4] { 2.0e-5F, 2.0e-5F, 2.0e-5F, 0.0F };

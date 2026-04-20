@@ -654,20 +654,6 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
 
   const auto& cache_state = atmosphere_lut_cache_->GetState();
   const auto atmosphere_lut_cache_valid = atmosphere_lut_cache_->IsFullyValid();
-  LOG_F(INFO, "atmosphere_lut_cache_valid={}",
-    atmosphere_lut_cache_valid ? "true" : "false");
-  LOG_F(INFO, "transmittance_lut_published={}",
-    products.transmittance_lut_srv.IsValid() ? "true" : "false");
-  LOG_F(INFO, "multi_scattering_lut_published={}",
-    products.multi_scattering_lut_srv.IsValid() ? "true" : "false");
-  LOG_F(INFO, "distant_sky_light_lut_published={}",
-    products.distant_sky_light_lut_srv.IsValid() ? "true" : "false");
-  LOG_F(INFO, "sky_view_lut_published={}",
-    products.sky_view_lut_srv.IsValid() ? "true" : "false");
-  LOG_F(INFO, "camera_aerial_perspective_published={}",
-    products.camera_aerial_perspective_srv.IsValid() ? "true" : "false");
-  LOG_F(INFO, "dual_atmosphere_lights_participating={}",
-    cache_state.dual_light_participating ? "true" : "false");
 
   last_view_product_generation_state_ = {
     .view_id = ctx.current_view.view_id,
