@@ -63,7 +63,8 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
   }
   if (light_view_data_buffer_ == nullptr) {
     light_view_data_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, staging, sizeof(std::uint32_t), inline_transfers,
+      observer_ptr { gfx.get() }, staging,
+      static_cast<std::uint32_t>(sizeof(std::uint32_t)), inline_transfers,
       "LightingService.LightViewData");
   }
   if (grid_metadata_buffer_ == nullptr) {
@@ -81,7 +82,8 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
   if (directional_light_indices_buffer_ == nullptr) {
     directional_light_indices_buffer_
       = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging, sizeof(std::uint32_t),
+        observer_ptr { gfx.get() }, staging,
+        static_cast<std::uint32_t>(sizeof(std::uint32_t)),
         inline_transfers, "LightingService.DirectionalIndices");
   }
   return true;
