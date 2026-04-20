@@ -74,12 +74,13 @@ namespace environment {
       std::uint32_t multi_scattering_width { 0U };
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
-      std::uint32_t integration_sample_count { 0U };
       std::uint32_t _pad0 { 0U };
+      float sample_count_min { 4.0F };
+      float sample_count_max { 32.0F };
+      float distance_to_sample_count_max_inv { 1.0F / 150000.0F };
       float planet_radius_m { 6360000.0F };
       float atmosphere_height_m { 100000.0F };
       float camera_altitude_m { 0.0F };
-      float trace_sample_count_scale { 1.0F };
       float rayleigh_scale_height_m { 8000.0F };
       float mie_scale_height_m { 1200.0F };
       float multi_scattering_factor { 1.0F };

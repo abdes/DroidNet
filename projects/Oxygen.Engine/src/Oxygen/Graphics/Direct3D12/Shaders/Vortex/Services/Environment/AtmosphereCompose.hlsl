@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "Renderer/EnvironmentFrameBindings.hlsli"
+#include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
+#include "Renderer/LightingHelpers.hlsli"
 
+#include "Atmosphere/AerialPerspective.hlsli"
 #include "Vortex/Contracts/SceneTextures.hlsli"
 #include "Vortex/Contracts/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
@@ -16,7 +19,7 @@
 
 static inline bool IsReverseZProjection()
 {
-    return projection_matrix._33 > 0.0f;
+    return reverse_z != 0u;
 }
 
 static inline float ResolveFarDepthReference()
@@ -63,9 +66,16 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
     const float far_background = EvaluateFarBackgroundMask(raw_depth);
-    const float reconstruct_depth = far_background > 0.0f
-        ? ResolveFarDepthReference()
-        : raw_depth;
+    // Far-background (sky-dome) pixels are produced by the dedicated sky pass
+    // using the full SkyView LUT. The camera aerial-perspective volume only
+    // covers a finite near-camera range (tens of km); sampling its far slice
+    // for sky rays would overwrite the real sky color with near-zero aerial
+    // inscatter. Match UE5 by restricting AP composition to in-atmosphere
+    // geometry.
+    if (far_background > 0.0f) {
+        discard;
+    }
+    const float reconstruct_depth = raw_depth;
     const float3 world_position = ReconstructWorldPosition(
         input.uv,
         reconstruct_depth,
@@ -77,25 +87,26 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
         : ResolveViewDirection(input.uv, raw_depth);
 
     const EnvironmentFrameBindings environment_bindings = LoadResolvedEnvironmentBindings();
+    (void)environment_bindings;
     const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
+    (void)environment_view;
 
-    float3 inscatter = 0.0f.xxx;
-    float transmittance = 1.0f;
-
-    if (environment_bindings.camera_aerial_perspective_srv != K_INVALID_BINDLESS_INDEX)
+    EnvironmentStaticData env_data = (EnvironmentStaticData)0;
+    if (!LoadEnvironmentStaticData(env_data))
     {
-        const float4 aerial_sample = SampleVortexCameraAerialPerspective(
-            environment_bindings.camera_aerial_perspective_srv,
-            input.uv,
-            distance_to_sample,
-            environment_view.sky_aerial_luminance_aerial_start_depth_m.w,
-            environment_view.camera_aerial_volume_depth_params.x,
-            environment_view.camera_aerial_volume_depth_params.y,
-            environment_view.camera_aerial_volume_depth_params.z,
-            environment_view.camera_aerial_volume_depth_params.w);
-        inscatter += aerial_sample.rgb;
-        transmittance *= saturate(aerial_sample.a);
+        discard;
     }
+
+    const float3 sun_dir = GetSunDirectionWS();
+    const AerialPerspectiveResult aerial = ComputeAerialPerspectiveLut(
+        env_data.atmosphere,
+        world_position,
+        camera_position,
+        sun_dir,
+        distance_to_sample);
+
+    const float3 inscatter = aerial.inscatter;
+    const float transmittance = saturate(dot(aerial.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f)));
 
     const float atmosphere_alpha = saturate(1.0f - transmittance);
     const float3 atmosphere_color = atmosphere_alpha > 1.0e-5f

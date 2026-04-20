@@ -329,6 +329,8 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     = constants.depth_slice_length_km > 1.0e-6F
     ? 1.0F / constants.depth_slice_length_km
     : 0.0F;
+  constants.sample_count_per_slice
+    = cache_state.internal_parameters.camera_aerial_sample_count_per_slice;
   constants.start_depth_km
     = std::max(view_data.sky_aerial_luminance_aerial_start_depth_m.w, 0.0F)
     / 1000.0F;

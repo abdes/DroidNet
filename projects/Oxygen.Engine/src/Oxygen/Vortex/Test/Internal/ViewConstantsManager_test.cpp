@@ -97,4 +97,16 @@ NOLINT_TEST_F(
   EXPECT_EQ(buffer_again.get(), buffer.get());
 }
 
+NOLINT_TEST_F(ViewConstantsManagerTest,
+  SnapshotCarriesExplicitReverseZFlagFromRendererOwnedState)
+{
+  ViewConstants constants {};
+
+  constants.SetReverseZ(false, ViewConstants::kRenderer);
+  EXPECT_EQ(constants.GetSnapshot().reverse_z, 0U);
+
+  constants.SetReverseZ(true, ViewConstants::kRenderer);
+  EXPECT_EQ(constants.GetSnapshot().reverse_z, 1U);
+}
+
 } // namespace

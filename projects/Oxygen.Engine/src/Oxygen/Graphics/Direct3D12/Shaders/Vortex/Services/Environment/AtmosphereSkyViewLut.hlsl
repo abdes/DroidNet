@@ -28,12 +28,13 @@ struct AtmosphereSkyViewLutPassConstants
     uint multi_scattering_width;
     uint multi_scattering_height;
     uint active_light_count;
-    uint integration_sample_count;
     uint _pad0;
+    float sample_count_min;
+    float sample_count_max;
+    float distance_to_sample_count_max_inv;
     float planet_radius_m;
     float atmosphere_height_m;
     float camera_altitude_m;
-    float trace_sample_count_scale;
     float rayleigh_scale_height_m;
     float mie_scale_height_m;
     float multi_scattering_factor;
@@ -73,15 +74,18 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         pass.planet_radius_m,
         pass.atmosphere_height_m,
         pass.multi_scattering_factor,
+        1.0f,
         pass.rayleigh_scale_height_m,
         pass.mie_scale_height_m,
         pass.mie_anisotropy,
         pass.ground_albedo_rgb.xyz,
+        0.0f,
         pass.rayleigh_scattering_rgb.xyz,
         pass.mie_scattering_rgb.xyz,
         pass.mie_absorption_rgb.xyz,
         pass.ozone_absorption_rgb.xyz,
         ozone_density,
+        0u,
         pass.transmittance_lut_srv,
         (float)pass.transmittance_width,
         (float)pass.transmittance_height,
@@ -105,9 +109,9 @@ static float3 IntegrateSkyLight(
         ray_direction,
         true,
         0.0f,
-        max(1.0f, 4.0f * pass.trace_sample_count_scale),
-        max((float)pass.integration_sample_count, 4.0f),
-        1.0f / 150000.0f,
+        max(pass.sample_count_min, 1.0f),
+        max(pass.sample_count_max, pass.sample_count_min),
+        pass.distance_to_sample_count_max_inv,
         light_direction,
         float3(0.0f, 0.0f, 1.0f),
         light_illuminance,

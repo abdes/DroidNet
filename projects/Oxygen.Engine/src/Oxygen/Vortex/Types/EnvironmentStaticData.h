@@ -64,13 +64,13 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
 
   std::uint32_t sun_disk_enabled { 0U };
   std::uint32_t enabled { 0U };
-  std::uint32_t transmittance_lut_slot { 0U };
-  std::uint32_t sky_view_lut_slot { 0U };
+  std::uint32_t transmittance_lut_slot { kInvalidBindlessIndex };
+  std::uint32_t sky_view_lut_slot { kInvalidBindlessIndex };
 
-  std::uint32_t sky_irradiance_lut_slot { 0U };
-  std::uint32_t multi_scat_lut_slot { 0U };
-  std::uint32_t camera_volume_lut_slot { 0U };
-  std::uint32_t blue_noise_slot { 0U };
+  std::uint32_t sky_irradiance_lut_slot { kInvalidBindlessIndex };
+  std::uint32_t multi_scat_lut_slot { kInvalidBindlessIndex };
+  std::uint32_t camera_volume_lut_slot { kInvalidBindlessIndex };
+  std::uint32_t blue_noise_slot { kInvalidBindlessIndex };
 
   float transmittance_lut_width { 0.0F };
   float transmittance_lut_height { 0.0F };

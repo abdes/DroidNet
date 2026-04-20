@@ -6,6 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -589,9 +590,12 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(
     sky_source.contains("const float far_depth = ResolveFarDepthReference();"));
   EXPECT_TRUE(sky_source.contains("abs(scene_depth - far_depth)"));
-  EXPECT_TRUE(sky_source.contains("projection_matrix._33 > 0.0f"));
-  EXPECT_TRUE(atmosphere_source.contains("projection_matrix._33 > 0.0f"));
-  EXPECT_TRUE(fog_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_TRUE(sky_source.contains("return reverse_z != 0u;"));
+  EXPECT_TRUE(atmosphere_source.contains("return reverse_z != 0u;"));
+  EXPECT_TRUE(fog_source.contains("return reverse_z != 0u;"));
+  EXPECT_FALSE(sky_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_FALSE(atmosphere_source.contains("projection_matrix._33 > 0.0f"));
+  EXPECT_FALSE(fog_source.contains("projection_matrix._33 > 0.0f"));
   EXPECT_FALSE(sky_source.contains("reverse_z_far"));
   EXPECT_FALSE(sky_source.contains("forward_z_far"));
   EXPECT_FALSE(sky_source.contains("max(reverse_z_far, forward_z_far)"));
@@ -984,6 +988,25 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_NE(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagShadowAuthoritySlot0Only,
     0U);
+
+  constexpr auto kPi = 3.14159265358979323846F;
+  const auto primary_half_apex = 0.5F * light_state.atmosphere_lights[0].angular_size_radians;
+  const auto primary_solid_angle
+    = 2.0F * kPi * (1.0F - std::cos(primary_half_apex));
+  const auto expected_primary_disk_luminance = glm::vec3(
+    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.x
+      * light_state.atmosphere_lights[0].illuminance_rgb_lux.x,
+    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.y
+      * light_state.atmosphere_lights[0].illuminance_rgb_lux.y,
+    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.z
+      * light_state.atmosphere_lights[0].illuminance_rgb_lux.z)
+    / primary_solid_angle;
+  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[0],
+    expected_primary_disk_luminance.x, 1.0e-2F);
+  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[1],
+    expected_primary_disk_luminance.y, 1.0e-2F);
+  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[2],
+    expected_primary_disk_luminance.z, 1.0e-2F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

@@ -15,7 +15,7 @@ static const float kStandardSkyLuminance = 5000.0f;
 
 static inline bool IsReverseZProjection()
 {
-    return projection_matrix._33 > 0.0f;
+    return reverse_z != 0u;
 }
 
 static inline float ResolveFarDepthReference()

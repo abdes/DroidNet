@@ -40,6 +40,7 @@
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -59,19 +60,15 @@ using oxygen::scene::PerspectiveCamera;
 
 namespace {
 
-constexpr uint32_t kDefaultOffscreenWidth = 1280U;
-constexpr uint32_t kDefaultOffscreenHeight = 720U;
+constexpr uint32_t kDefaultOffscreenWidth = 1920U;
+constexpr uint32_t kDefaultOffscreenHeight = 1440U;
 constexpr glm::vec3 kFloorCenter { 0.0F, 0.0F, -0.125F };
 constexpr glm::vec3 kFloorScale { 20.0F, 20.0F, 0.25F };
 constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
 constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
 constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
-constexpr float kDirectionalLightOrbitPeriodSeconds = 10.0F;
-constexpr float kDirectionalLightOrbitRadiusX = 18.0F;
-constexpr float kDirectionalLightOrbitRadiusY = 12.0F;
-constexpr float kDirectionalLightBaseHeight = 12.0F;
-constexpr float kDirectionalLightHeightVariation = 6.0F;
+constexpr glm::vec3 kSunPosition { 14.0F, -18.0F, 22.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
 constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
 constexpr float kSpotlightOscillationAmplitude = 3.0F;
@@ -282,8 +279,8 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
     DCHECK_NOTNULL_F(app_window_);
 
     platform::window::Properties props("Vortex Basic Example");
-    constexpr uint32_t kWidth = 1280U;
-    constexpr uint32_t kHeight = 720U;
+    constexpr uint32_t kWidth = 1920U;
+    constexpr uint32_t kHeight = 1440U;
     props.extent = { .width = kWidth, .height = kHeight };
     props.flags = {
       .hidden = false,
@@ -497,8 +494,8 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.name = "MainView";
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
-  view_ctx.metadata.with_atmosphere = app_.with_atmosphere;
-  view_ctx.metadata.with_height_fog = app_.with_height_fog;
+  view_ctx.metadata.with_atmosphere = true;
+  view_ctx.metadata.with_height_fog = false;
   view_ctx.metadata.with_local_fog = app_.with_local_fog;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
@@ -579,40 +576,80 @@ auto MainModule::EnsureScene() -> void
 
   if (const auto environment = scene_->GetEnvironment();
     environment != nullptr) {
-    if (!environment->HasSystem<scene::environment::SkyAtmosphere>()) {
-      auto& atmosphere
-        = environment->AddSystem<scene::environment::SkyAtmosphere>();
-      atmosphere.SetEnabled(true);
-      atmosphere.SetTransformMode(scene::environment::
-          SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
-      atmosphere.SetRenderInMainPass(true);
-      atmosphere.SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
-      atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
-        { 1.0F, 1.0F, 1.0F });
-      atmosphere.SetAerialPerspectiveDistanceScale(1.0F);
-      atmosphere.SetAerialScatteringStrength(1.0F);
-      atmosphere.SetAerialPerspectiveStartDepthMeters(100.0F);
-      atmosphere.SetHeightFogContribution(1.0F);
-      atmosphere.SetTraceSampleCountScale(1.0F);
-      atmosphere.SetSunDiskEnabled(true);
+    auto* atmosphere
+      = environment->TryGetSystem<scene::environment::SkyAtmosphere>().get();
+    if (atmosphere == nullptr) {
+      atmosphere = &environment->AddSystem<scene::environment::SkyAtmosphere>();
     }
-    if (app_.with_height_fog
-      && !environment->HasSystem<scene::environment::Fog>()) {
-      auto& fog = environment->AddSystem<scene::environment::Fog>();
-      fog.SetEnabled(true);
-      fog.SetEnableHeightFog(true);
-      fog.SetEnableVolumetricFog(false);
-      fog.SetExtinctionSigmaTPerMeter(0.0015F);
-      fog.SetHeightFalloffPerMeter(0.12F);
-      fog.SetHeightOffsetMeters(0.0F);
-      fog.SetStartDistanceMeters(0.0F);
-      fog.SetMaxOpacity(1.0F);
-      fog.SetFogInscatteringLuminance({ 0.3F, 0.38F, 0.48F });
-      fog.SetSkyAtmosphereAmbientContributionColorScale({ 1.0F, 1.0F, 1.0F });
-      fog.SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.9F });
-      fog.SetDirectionalInscatteringExponent(8.0F);
-      fog.SetDirectionalInscatteringStartDistance(0.0F);
+    atmosphere->SetEnabled(true);
+    atmosphere->SetTransformMode(scene::environment::
+        SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+    atmosphere->SetRenderInMainPass(true);
+    atmosphere->SetPlanetRadiusMeters(engine::atmos::kDefaultPlanetRadiusM);
+    atmosphere->SetAtmosphereHeightMeters(
+      engine::atmos::kDefaultAtmosphereHeightM);
+    atmosphere->SetGroundAlbedoRgb({ 0.4F, 0.4F, 0.4F });
+    atmosphere->SetRayleighScatteringRgb(
+      engine::atmos::kDefaultRayleighScatteringRgb);
+    atmosphere->SetRayleighScaleHeightMeters(
+      engine::atmos::kDefaultRayleighScaleHeightM);
+    atmosphere->SetMieScatteringRgb(engine::atmos::kDefaultMieScatteringRgb);
+    atmosphere->SetMieAbsorptionRgb(engine::atmos::kDefaultMieAbsorptionRgb);
+    atmosphere->SetMieScaleHeightMeters(engine::atmos::kDefaultMieScaleHeightM);
+    atmosphere->SetMieAnisotropy(engine::atmos::kDefaultMieAnisotropyG);
+    atmosphere->SetOzoneAbsorptionRgb(
+      engine::atmos::kDefaultOzoneAbsorptionRgb);
+    atmosphere->SetOzoneDensityProfile(
+      engine::atmos::kDefaultOzoneDensityProfile);
+    atmosphere->SetMultiScatteringFactor(1.0F);
+    atmosphere->SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
+    atmosphere->SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+      { 1.0F, 1.0F, 1.0F });
+    atmosphere->SetSunDiskEnabled(true);
+    atmosphere->SetAerialPerspectiveDistanceScale(1.0F);
+    atmosphere->SetAerialPerspectiveStartDepthMeters(100.0F);
+    atmosphere->SetAerialScatteringStrength(1.0F);
+    atmosphere->SetHeightFogContribution(1.0F);
+    atmosphere->SetTraceSampleCountScale(1.0F);
+    atmosphere->SetTransmittanceMinLightElevationDeg(-6.0F);
+
+    auto* sky_light
+      = environment->TryGetSystem<scene::environment::SkyLight>().get();
+    if (sky_light == nullptr) {
+      sky_light = &environment->AddSystem<scene::environment::SkyLight>();
     }
+    sky_light->SetEnabled(true);
+    sky_light->SetSource(scene::environment::SkyLightSource::kCapturedScene);
+    sky_light->SetIntensityMul(1.0F);
+    sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
+    sky_light->SetDiffuseIntensity(1.0F);
+    sky_light->SetSpecularIntensity(1.0F);
+    sky_light->SetRealTimeCaptureEnabled(true);
+    sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
+    sky_light->SetVolumetricScatteringIntensity(1.0F);
+    sky_light->SetAffectReflections(true);
+    sky_light->SetAffectGlobalIllumination(true);
+
+    auto* fog = environment->TryGetSystem<scene::environment::Fog>().get();
+    if (fog == nullptr) {
+      fog = &environment->AddSystem<scene::environment::Fog>();
+    }
+    fog->SetEnabled(true);
+    fog->SetEnableHeightFog(true);
+    fog->SetEnableVolumetricFog(false);
+    fog->SetRenderInMainPass(true);
+    fog->SetVisibleInReflectionCaptures(true);
+    fog->SetVisibleInRealTimeSkyCaptures(true);
+    fog->SetExtinctionSigmaTPerMeter(0.0012F);
+    fog->SetHeightFalloffPerMeter(0.12F);
+    fog->SetHeightOffsetMeters(0.0F);
+    fog->SetStartDistanceMeters(0.0F);
+    fog->SetMaxOpacity(1.0F);
+    fog->SetFogInscatteringLuminance({ 0.30F, 0.38F, 0.48F });
+    fog->SetSkyAtmosphereAmbientContributionColorScale({ 1.0F, 1.0F, 1.0F });
+    fog->SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.9F });
+    fog->SetDirectionalInscatteringExponent(8.0F);
+    fog->SetDirectionalInscatteringStartDistance(0.0F);
   }
 
   auto cube_geo = BuildCubeGeometry(
@@ -676,29 +713,9 @@ auto MainModule::EnsureLighting() -> void
       "Failed to attach DirectionalLight to SunLight");
   }
 
-  if (!point_light_node_.IsAlive()) {
-    point_light_node_ = scene_->CreateNode("PointFill");
-    auto light = std::make_unique<scene::PointLight>();
-    light->Common().affects_world = true;
-    light->Common().color_rgb = { 0.30F, 0.56F, 1.0F };
-    light->SetLuminousFluxLm(1200.0F);
-    light->SetRange(3.0F);
-    CHECK_F(point_light_node_.AttachLight(std::move(light)),
-      "Failed to attach PointLight to PointFill");
-  }
-
-  if (!spot_light_node_.IsAlive()) {
-    spot_light_node_ = scene_->CreateNode("SpotRim");
-    auto light = std::make_unique<scene::SpotLight>();
-    light->Common().affects_world = true;
-    light->Common().color_rgb = { 1.0F, 0.15F, 0.1F };
-    light->SetLuminousFluxLm(12000.0F);
-    light->SetRange(10.0F);
-    light->SetInnerConeAngleRadians(glm::radians(40.0F));
-    light->SetOuterConeAngleRadians(glm::radians(55.0F));
-    CHECK_F(spot_light_node_.AttachLight(std::move(light)),
-      "Failed to attach SpotLight to SpotRim");
-  }
+  directional_light_node_.GetTransform().SetLocalPosition(kSunPosition);
+  directional_light_node_.GetTransform().SetLocalRotation(
+    LookRotation(kSunPosition, kSceneFocusPoint));
 }
 
 auto MainModule::UpdateValidationScene(
@@ -720,43 +737,10 @@ auto MainModule::UpdateValidationScene(
     cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
   }
 
-  if (point_light_node_.IsAlive()) {
-    const auto orbit_angle = animation_time_seconds_
-      * (oxygen::math::TwoPi / kPointLightOrbitPeriodSeconds);
-    const auto point_light_offset = oxygen::space::move::Right
-        * (std::cos(orbit_angle) * kPointLightOrbitRadius)
-      + oxygen::space::move::Back
-        * (std::sin(orbit_angle) * kPointLightOrbitRadius);
-    point_light_node_.GetTransform().SetLocalPosition(
-      kCubeCenter + point_light_offset);
-  }
-
-  if (spot_light_node_.IsAlive()) {
-    const auto oscillation_angle = animation_time_seconds_
-      * (oxygen::math::TwoPi / kSpotlightOscillationPeriodSeconds);
-    const auto position = glm::vec3 {
-      std::sin(oscillation_angle) * kSpotlightOscillationAmplitude,
-      4.0F,
-      4.0F,
-    };
-    spot_light_node_.GetTransform().SetLocalPosition(position);
-    spot_light_node_.GetTransform().SetLocalRotation(
-      LookRotation(position, kCubeCenter));
-  }
-
   if (directional_light_node_.IsAlive()) {
-    const auto orbit_angle = animation_time_seconds_
-      * (oxygen::math::TwoPi / kDirectionalLightOrbitPeriodSeconds);
-    const auto sun_position = oxygen::space::move::Right
-        * (std::cos(orbit_angle) * kDirectionalLightOrbitRadiusX)
-      + oxygen::space::move::Back
-        * (std::sin(orbit_angle) * kDirectionalLightOrbitRadiusY)
-      + oxygen::space::move::Up
-        * (kDirectionalLightBaseHeight
-          + std::sin(orbit_angle) * kDirectionalLightHeightVariation);
-    directional_light_node_.GetTransform().SetLocalPosition(sun_position);
+    directional_light_node_.GetTransform().SetLocalPosition(kSunPosition);
     directional_light_node_.GetTransform().SetLocalRotation(
-      LookRotation(sun_position, kSceneFocusPoint));
+      LookRotation(kSunPosition, kSceneFocusPoint));
   }
 }
 

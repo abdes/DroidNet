@@ -70,19 +70,13 @@ def float4_values(pixel_value):
 
 
 def sample_texture(controller, resource, subresource, width, height):
+    del width
+    del height
     rd = renderdoc_module()
     min_value, max_value = controller.GetMinMax(resource, subresource, rd.CompType.Typeless)
-    center = controller.PickPixel(
-        resource,
-        max(0, min(width - 1, width // 2)),
-        max(0, min(height - 1, height // 2)),
-        subresource,
-        rd.CompType.Typeless,
-    )
     return {
         "min": float4_values(min_value),
         "max": float4_values(max_value),
-        "center": float4_values(center),
     }
 
 
@@ -155,7 +149,6 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             key = f"{label}_{name}"
             report.append(f"{key}_min={sample['min']}")
             report.append(f"{key}_max={sample['max']}")
-            report.append(f"{key}_center={sample['center']}")
 
 
 def main():

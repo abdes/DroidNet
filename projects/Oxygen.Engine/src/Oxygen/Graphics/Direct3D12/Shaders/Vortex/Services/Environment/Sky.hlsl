@@ -18,7 +18,7 @@
 
 static inline bool IsReverseZProjection()
 {
-    return projection_matrix._33 > 0.0f;
+    return reverse_z != 0u;
 }
 
 static inline float ResolveFarDepthReference()
@@ -31,6 +31,11 @@ static inline float EvaluateFarBackgroundMask(float scene_depth)
     const float far_depth = ResolveFarDepthReference();
     const float epsilon = 1.0e-3f;
     return saturate(1.0f - abs(scene_depth - far_depth) / epsilon);
+}
+
+static inline bool IsFarBackgroundPixel(float scene_depth)
+{
+    return scene_depth == ResolveFarDepthReference();
 }
 
 static inline EnvironmentFrameBindings LoadResolvedEnvironmentBindings()
@@ -49,6 +54,12 @@ static inline float3 ReconstructViewDirection(float2 uv)
     return distance_to_sample > 1.0e-4f
         ? view_vector / distance_to_sample
         : normalize(float3(uv - 0.5f, 1.0f));
+}
+
+static inline bool IsAtmosphereRenderedInMain(EnvironmentViewData environment_view)
+{
+    return environment_view
+        .trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.w > 0.5f;
 }
 
 static inline float2 ResolveSkyViewUv(
@@ -70,13 +81,20 @@ static inline float2 ResolveSkyViewUv(
         float3(0.0f, 0.0f, view_height),
         view_direction_local,
         bottom_radius) >= 0.0f;
+    const float2 sky_view_lut_inv_size = float2(
+        env_data.atmosphere.sky_view_lut_width > 0.0f
+            ? rcp(env_data.atmosphere.sky_view_lut_width)
+            : 0.0f,
+        env_data.atmosphere.sky_view_lut_height > 0.0f
+            ? rcp(env_data.atmosphere.sky_view_lut_height)
+            : 0.0f);
     return SkyViewLutParamsToUv(
         intersect_ground,
         view_zenith_cos_angle,
         view_direction_local,
         view_height,
         bottom_radius,
-        float2(1.0f / 192.0f, 1.0f / 104.0f));
+        sky_view_lut_inv_size);
 }
 
 static float3 GetAtmosphereTransmittance(
@@ -99,7 +117,7 @@ static float3 GetAtmosphereTransmittance(
     const float light_zenith_cos_angle = dot(world_dir, up_vector);
     const float altitude_m = max(p_height - atmo.planet_radius_m, 0.0f);
 
-    const float3 optical_depth = VortexSampleTransmittanceOpticalDepthLut(
+    const float3 transmittance_to_light = VortexSampleTransmittanceLut(
         transmittance_lut_srv,
         atmo.transmittance_lut_width,
         atmo.transmittance_lut_height,
@@ -107,7 +125,7 @@ static float3 GetAtmosphereTransmittance(
         altitude_m,
         atmo.planet_radius_m,
         atmo.atmosphere_height_m);
-    return VortexTransmittanceFromOpticalDepth(optical_depth, atmo);
+    return transmittance_to_light;
 }
 
 static float3 GetLightDiskLuminance(
@@ -138,19 +156,14 @@ static float3 GetLightDiskLuminance(
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexSkyPassVS(uint vertex_id : SV_VertexID)
 {
-    return GenerateVortexFullscreenTriangle(vertex_id);
+    VortexFullscreenTriangleOutput output = GenerateVortexFullscreenTriangle(vertex_id);
+    output.position.z = ResolveFarDepthReference();
+    return output;
 }
 
 [shader("pixel")]
 float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
-    const SceneTextureBindingData bindings
-        = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
-    const float scene_depth = SampleSceneDepth(input.uv, bindings);
-    if (EvaluateFarBackgroundMask(scene_depth) <= 0.0f) {
-        discard;
-    }
-
     const EnvironmentFrameBindings environment_bindings = LoadResolvedEnvironmentBindings();
     if (environment_bindings.sky_view_lut_srv == K_INVALID_BINDLESS_INDEX)
     {
@@ -164,6 +177,10 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
 
     const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
+    if (!IsAtmosphereRenderedInMain(environment_view))
+    {
+        discard;
+    }
     const float3 view_direction = ReconstructViewDirection(input.uv);
 
     float3 view_direction_local = 0.0f.xxx;
@@ -190,24 +207,30 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     if (environment_bindings.atmosphere_light0_disk_luminance_rgb.w > 0.5f)
     {
         const float cos_half_apex = cos(0.5f * environment_bindings.atmosphere_light0_direction_angular_size.w);
+        const float3 light_direction_local = ApplySkyViewLutReferential(
+            environment_view,
+            VortexSafeNormalize(environment_bindings.atmosphere_light0_direction_angular_size.xyz));
         sky_color += GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             environment_bindings.transmittance_lut_srv,
-            VortexSafeNormalize(environment_bindings.atmosphere_light0_direction_angular_size.xyz),
+            light_direction_local,
             cos_half_apex,
             environment_bindings.atmosphere_light0_disk_luminance_rgb.xyz);
     }
     if (environment_bindings.atmosphere_light1_disk_luminance_rgb.w > 0.5f)
     {
         const float cos_half_apex = cos(0.5f * environment_bindings.atmosphere_light1_direction_angular_size.w);
+        const float3 light_direction_local = ApplySkyViewLutReferential(
+            environment_view,
+            VortexSafeNormalize(environment_bindings.atmosphere_light1_direction_angular_size.xyz));
         sky_color += GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             environment_bindings.transmittance_lut_srv,
-            VortexSafeNormalize(environment_bindings.atmosphere_light1_direction_angular_size.xyz),
+            light_direction_local,
             cos_half_apex,
             environment_bindings.atmosphere_light1_disk_luminance_rgb.xyz);
     }

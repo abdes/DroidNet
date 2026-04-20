@@ -34,6 +34,9 @@ public:
     std::uint32_t multi_scattering_height { 32U };
     std::uint32_t sky_view_width { 192U };
     std::uint32_t sky_view_height { 104U };
+    float sky_view_sample_count_min { 4.0F };
+    float sky_view_sample_count_max { 32.0F };
+    float sky_view_distance_to_sample_count_max_m { 150000.0F };
     std::uint32_t camera_aerial_width { 32U };
     std::uint32_t camera_aerial_height { 32U };
     std::uint32_t camera_aerial_depth_resolution { 16U };
