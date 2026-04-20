@@ -16,6 +16,16 @@
 
 static const float kVortexPi = 3.14159265359f;
 
+static float2 VortexFromUnitToSubUvs(float2 uv, float2 size, float2 inv_size)
+{
+    return (uv + 0.5f * inv_size) * (size / max(size + 1.0f.xx, 1.0f.xx));
+}
+
+static float2 VortexFromSubUvsToUnit(float2 uv, float2 size, float2 inv_size)
+{
+    return (uv - 0.5f * inv_size) * (size / max(size - 1.0f.xx, 1.0f.xx));
+}
+
 static float3 VortexSafeNormalize(float3 value)
 {
     const float length_sq = dot(value, value);
@@ -151,6 +161,7 @@ static float2 SkyViewLutParamsToUv(
     float3 view_direction,
     float view_height,
     float bottom_radius,
+    float2 lut_size,
     float2 lut_inv_size)
 {
     const float horizon_distance = sqrt(max(
@@ -180,8 +191,7 @@ static float2 SkyViewLutParamsToUv(
     uv.x = (atan2(-view_direction.y, -view_direction.x) + kVortexPi)
         / (2.0f * kVortexPi);
     uv = saturate(uv);
-    uv = (uv * (1.0f - lut_inv_size)) + lut_inv_size * 0.5f;
-    return uv;
+    return VortexFromUnitToSubUvs(uv, lut_size, lut_inv_size);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_ATMOSPHEREPARITYCOMMON_HLSLI
