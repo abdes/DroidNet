@@ -112,12 +112,14 @@ float4 SampleCameraVolumeLut(
         const float2 sv_pos_xy =
             screen_uv * view_history.current_view_rect_min_and_size.zw
             + view_history.current_view_rect_min_and_size.xy;
+        screen_uv =
+            (sv_pos_xy - view_history.current_view_rect_min_and_size.xy)
+            / view_history.current_view_rect_min_and_size.zw;
         const float3 near_world_position = ReconstructWorldPosition(
             screen_uv,
             ResolveNearDepthReference(),
             inverse_view_projection_matrix);
         const float3 ortho_camera_offset = near_world_position - camera_pos;
-        (void)sv_pos_xy;
         view_distance = max(0.0f, length((world_pos - camera_pos) + ortho_camera_offset) - 0.0f);
         t_depth = max(0.0f, (view_distance * distance_scale) / 1000.0f - start_depth_km);
         linear_slice = t_depth * depth_slice_length_km_inv;

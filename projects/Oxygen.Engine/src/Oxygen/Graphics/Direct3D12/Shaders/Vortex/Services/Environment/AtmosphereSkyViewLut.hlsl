@@ -8,7 +8,6 @@
 
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
-#include "Vortex/Shared/ViewConstants.hlsli"
 #include "Renderer/ViewColorData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
@@ -128,8 +127,10 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     sampling.MaxSampleCount = max(pass.sample_count_max, pass.sample_count_min);
     sampling.DistanceToSampleCountMaxInv = pass.distance_to_sample_count_max_inv;
     return VortexIntegrateSingleScatteredLuminance(
+        0.0f.xx,
         ray_origin,
         ray_direction,
+        VortexResolveFarDepthReference(),
         false,
         sampling,
         true,

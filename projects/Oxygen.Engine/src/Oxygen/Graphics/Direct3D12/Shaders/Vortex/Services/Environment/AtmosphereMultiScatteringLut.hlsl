@@ -93,7 +93,12 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
 
     GpuSkyAtmosphereParams atmosphere_parameters = BuildAtmosphereParameters(pass_constants);
     RWTexture2D<float4> output_texture = ResourceDescriptorHeap[pass_constants.output_texture_uav];
-    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass_constants.output_texture_uav];
+    // This path does not sample the multi-scattering LUT while building it
+    // (`multi_scattering_approx_sampling_enabled = false` below), but the
+    // shared integrator signature still carries a Texture2D parameter.
+    // Bind a real SRV, never the output UAV index. Using the UAV bindless slot
+    // here is an invalid descriptor-type mismatch and can trigger device removal.
+    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass_constants.transmittance_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
 
     float2 texel_center_uv = (float2(dispatch_id.xy) + 0.5f)
@@ -122,8 +127,10 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
     sampling.DistanceToSampleCountMaxInv = 0.0f;
 
     const VortexSingleScatteringResult r0 = VortexIntegrateSingleScatteredLuminance(
+        0.0f.xx,
         sample_origin,
         world_dir,
+        VortexResolveFarDepthReference(),
         true,
         sampling,
         false,
@@ -142,8 +149,10 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
         linear_sampler,
         9000000.0f);
     const VortexSingleScatteringResult r1 = VortexIntegrateSingleScatteredLuminance(
+        0.0f.xx,
         sample_origin,
         -world_dir,
+        VortexResolveFarDepthReference(),
         true,
         sampling,
         false,

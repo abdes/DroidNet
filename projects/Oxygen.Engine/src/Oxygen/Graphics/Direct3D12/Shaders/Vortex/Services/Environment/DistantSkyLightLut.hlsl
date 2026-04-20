@@ -118,8 +118,10 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
     sampling.MaxSampleCount = 1.0f;
     sampling.DistanceToSampleCountMaxInv = 0.0f;
     const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
+        0.0f.xx,
         sample_origin,
         integration_direction,
+        VortexResolveFarDepthReference(),
         false,
         sampling,
         false,
