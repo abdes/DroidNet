@@ -214,6 +214,12 @@ AerialPerspectiveResult ComputeAerialPerspective(
     result.inscatter = float3(0.0, 0.0, 0.0);
     result.transmittance = float3(1.0, 1.0, 1.0);
 
+    const EnvironmentViewData view_data = LoadResolvedEnvironmentViewData();
+    if (view_data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.w <= 0.5f)
+    {
+        return result;
+    }
+
     float3 view_vec = world_pos - camera_pos;
     float view_distance = length(view_vec);
 

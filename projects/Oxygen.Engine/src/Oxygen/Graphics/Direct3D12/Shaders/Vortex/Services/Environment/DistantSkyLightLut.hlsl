@@ -103,35 +103,27 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
 {
     float atmosphere_radius = atmosphere_parameters.planet_radius_m
         + atmosphere_parameters.atmosphere_height_m;
-    float ray_length = RaySphereIntersectNearest(
+    if (RaySphereIntersectNearest(
         sample_origin,
         integration_direction,
-        atmosphere_radius);
-    if (ray_length <= 0.0f)
+        atmosphere_radius) <= 0.0f)
     {
         return 0.0.xxx;
     }
 
-    float ground_distance = RaySphereIntersectNearest(
-        sample_origin,
-        integration_direction,
-        atmosphere_parameters.planet_radius_m);
-    if (ground_distance > 0.0f && ground_distance < ray_length)
-    {
-        ray_length = ground_distance;
-    }
-
+    VortexSamplingSetup sampling = (VortexSamplingSetup)0;
+    sampling.VariableSampleCount = false;
+    sampling.SampleCountIni = 10.0f;
+    sampling.MinSampleCount = 1.0f;
+    sampling.MaxSampleCount = 1.0f;
+    sampling.DistanceToSampleCountMaxInv = 0.0f;
     const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
         sample_origin,
         integration_direction,
         false,
+        sampling,
         false,
         true,
-        false,
-        10.0f,
-        10.0f,
-        10.0f,
-        0.0f,
         pass_constants.active_light_count > 0u ? normalize(pass_constants.light0_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
         pass_constants.active_light_count > 1u ? normalize(pass_constants.light1_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
         pass_constants.active_light_count > 0u ? pass_constants.light0_illuminance_rgb.xyz : 0.0f.xxx,
@@ -144,7 +136,7 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
         transmittance_lut_height,
         multi_scattering_lut,
         linear_sampler,
-        ray_length);
+        9000000.0f);
     return scattering.L;
 }
 

@@ -86,6 +86,8 @@ namespace environment {
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
       std::uint32_t depth_resolution { 0U };
+      float fog_show_flag_factor { 1.0F };
+      float real_time_reflection_360_mode { 0.0F };
       float depth_resolution_inv { 0.0F };
       float depth_slice_length_km { 0.0F };
       float depth_slice_length_km_inv { 0.0F };

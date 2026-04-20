@@ -117,25 +117,29 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
+    const float3x3 local_referential = float3x3(
+        pass.sky_view_lut_referential_row0.xyz,
+        pass.sky_view_lut_referential_row1.xyz,
+        pass.sky_view_lut_referential_row2.xyz);
+    VortexSamplingSetup sampling = (VortexSamplingSetup)0;
+    sampling.VariableSampleCount = true;
+    sampling.SampleCountIni = 0.0f;
+    sampling.MinSampleCount = max(pass.sample_count_min, 1.0f);
+    sampling.MaxSampleCount = max(pass.sample_count_max, pass.sample_count_min);
+    sampling.DistanceToSampleCountMaxInv = pass.distance_to_sample_count_max_inv;
     return VortexIntegrateSingleScatteredLuminance(
         ray_origin,
         ray_direction,
         false,
+        sampling,
         true,
         true,
-        true,
-        0.0f,
-        max(pass.sample_count_min, 1.0f),
-        max(pass.sample_count_max, pass.sample_count_min),
-        pass.distance_to_sample_count_max_inv,
-        pass.light0_direction_enabled.w > 0.5f ? VortexSafeNormalize(float3(
-            dot(pass.sky_view_lut_referential_row0.xyz, pass.light0_direction_enabled.xyz),
-            dot(pass.sky_view_lut_referential_row1.xyz, pass.light0_direction_enabled.xyz),
-            dot(pass.sky_view_lut_referential_row2.xyz, pass.light0_direction_enabled.xyz))) : float3(0.0f, 0.0f, 1.0f),
-        pass.light1_direction_enabled.w > 0.5f ? VortexSafeNormalize(float3(
-            dot(pass.sky_view_lut_referential_row0.xyz, pass.light1_direction_enabled.xyz),
-            dot(pass.sky_view_lut_referential_row1.xyz, pass.light1_direction_enabled.xyz),
-            dot(pass.sky_view_lut_referential_row2.xyz, pass.light1_direction_enabled.xyz))) : float3(0.0f, 0.0f, 1.0f),
+        pass.light0_direction_enabled.w > 0.5f
+            ? VortexSafeNormalize(mul(local_referential, pass.light0_direction_enabled.xyz))
+            : float3(0.0f, 0.0f, 1.0f),
+        pass.light1_direction_enabled.w > 0.5f
+            ? VortexSafeNormalize(mul(local_referential, pass.light1_direction_enabled.xyz))
+            : float3(0.0f, 0.0f, 1.0f),
         pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
         output_pre_exposure,
@@ -190,36 +194,7 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
     if (!MoveToTopAtmosphere(ray_origin, ray_direction, atmosphere_radius))
     {
-        output_texture[dispatch_id.xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
-        return;
-    }
-
-    float ray_length = 0.0f;
-    const float2 top_hits = RayIntersectSphere(
-        ray_origin,
-        ray_direction,
-        float4(0.0f, 0.0f, 0.0f, atmosphere_radius));
-    const float2 bottom_hits = RayIntersectSphere(
-        ray_origin,
-        ray_direction,
-        float4(0.0f, 0.0f, 0.0f, atmosphere.planet_radius_m));
-    const bool no_top_intersection = all(top_hits < 0.0f);
-    const bool no_bottom_intersection = all(bottom_hits < 0.0f);
-    if (no_top_intersection)
-    {
-        ray_length = 0.0f;
-    }
-    else if (no_bottom_intersection)
-    {
-        ray_length = max(top_hits.x, top_hits.y);
-    }
-    else
-    {
-        ray_length = max(0.0f, min(bottom_hits.x, bottom_hits.y));
-    }
-    if (ray_length <= 0.0f)
-    {
-        output_texture[dispatch_id.xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        output_texture[dispatch_id.xy] = 0.0f.xxxx;
         return;
     }
 
@@ -228,7 +203,7 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         pass,
         ray_origin,
         ray_direction,
-        ray_length);
+        9000000.0f);
     const float3 luminance = max(scattering.L, 0.0f.xxx);
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
