@@ -378,6 +378,11 @@ auto AtmosphereLutCache::BuildInternalParameters(
     = std::clamp(10.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
   params.multi_scattering_sample_count
     = std::clamp(15.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
+  params.sky_view_sample_count_min
+    = std::clamp(4.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
+  params.sky_view_sample_count_max
+    = std::clamp(32.0F * atmosphere.trace_sample_count_scale,
+      params.sky_view_sample_count_min + 1.0F, 128.0F);
   params.camera_aerial_sample_count_per_slice
     = std::clamp(2.0F * atmosphere.trace_sample_count_scale, 1.0F, 8.0F);
   params.camera_aerial_depth_slice_length_km = params.camera_aerial_depth_km
@@ -395,6 +400,10 @@ auto AtmosphereLutCache::HashInternalParameters(
   seed = CombineHashU64(seed, params.multi_scattering_height);
   seed = CombineHashU64(seed, params.sky_view_width);
   seed = CombineHashU64(seed, params.sky_view_height);
+  seed = CombineHashU64(seed, FloatBits(params.sky_view_sample_count_min));
+  seed = CombineHashU64(seed, FloatBits(params.sky_view_sample_count_max));
+  seed = CombineHashU64(
+    seed, FloatBits(params.sky_view_distance_to_sample_count_max_m));
   seed = CombineHashU64(seed, params.camera_aerial_width);
   seed = CombineHashU64(seed, params.camera_aerial_height);
   seed = CombineHashU64(seed, params.camera_aerial_depth_resolution);

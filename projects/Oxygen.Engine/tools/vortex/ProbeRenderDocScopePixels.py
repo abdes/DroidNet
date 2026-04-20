@@ -1,4 +1,8 @@
-"""Sample a few fixed pixels from SceneColor for a named scope draw."""
+"""Sample output ranges from SceneColor for a named scope draw.
+
+This probe intentionally avoids PickPixel() because that API has been unstable
+for this repository's large HDR captures inside RenderDoc UI replay.
+"""
 
 import builtins
 import os
@@ -109,19 +113,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     sub.slice = 0
     sub.sample = 0
 
-    probes = {
-        "top_left": (width // 8, height // 8),
-        "top_center": (width // 2, height // 8),
-        "top_right": (width * 7 // 8, height // 8),
-        "mid_center": (width // 2, height // 2),
-    }
     report.append(f"scope_name={scope_name}")
     report.append(f"event_id={target.event_id}")
     report.append(f"scene_color_dims={width}x{height}")
-    for label, (x, y) in probes.items():
-        sample = controller.PickPixel(scene_color, x, y, sub, rd.CompType.Typeless)
-        report.append(f"{label}_xy={x},{y}")
-        report.append(f"{label}_rgba={float4_values(sample)}")
+    min_value, max_value = controller.GetMinMax(scene_color, sub, rd.CompType.Typeless)
+    report.append(f"scene_color_min={float4_values(min_value)}")
+    report.append(f"scene_color_max={float4_values(max_value)}")
 
 
 def main():

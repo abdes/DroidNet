@@ -114,6 +114,16 @@ auto ViewConstants::SetBindlessViewFrameBindingsSlot(
   return *this;
 }
 
+auto ViewConstants::SetReverseZ(
+  const bool reverse_z, RendererTag /*tag*/) noexcept -> ViewConstants&
+{
+  if (reverse_z_ != reverse_z) {
+    reverse_z_ = reverse_z;
+    version_ = version_.Next();
+  }
+  return *this;
+}
+
 auto ViewConstants::GetSnapshot() const noexcept -> const GpuData&
 {
   if (cached_version_ != version_) {

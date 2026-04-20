@@ -71,6 +71,32 @@ static GpuSkyAtmosphereParams BuildAtmosphereParameters(
     return atmosphere_parameters;
 }
 
+static float3 SampleTransmittanceLutDirect(
+    uint lut_slot,
+    float lut_width,
+    float lut_height,
+    float cos_zenith,
+    float altitude_m,
+    GpuSkyAtmosphereParams atmosphere_parameters)
+{
+    if (lut_slot == K_INVALID_BINDLESS_INDEX)
+    {
+        return 1.0f.xxx;
+    }
+
+    const float2 uv = ApplyHalfTexelOffset(
+        GetTransmittanceLutUv(
+            cos_zenith,
+            altitude_m,
+            atmosphere_parameters.planet_radius_m,
+            atmosphere_parameters.atmosphere_height_m),
+        lut_width,
+        lut_height);
+    Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    return lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
+}
+
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadID)
@@ -163,16 +189,12 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
 
             float3 sample_up_direction = normalize(sample_position);
             float cosine_sun_zenith = dot(sample_up_direction, light_direction);
-            float3 sun_optical_depth = SampleTransmittanceOpticalDepthLut(
+            float3 sun_transmittance = SampleTransmittanceLutDirect(
                 pass_constants.transmittance_lut_srv,
                 float(pass_constants.transmittance_width),
                 float(pass_constants.transmittance_height),
                 cosine_sun_zenith,
                 altitude_m,
-                atmosphere_parameters.planet_radius_m,
-                atmosphere_parameters.atmosphere_height_m);
-            float3 sun_transmittance = TransmittanceFromOpticalDepth(
-                sun_optical_depth,
                 atmosphere_parameters);
 
             float3 scattering_extinction = atmosphere_parameters.rayleigh_scattering_rgb * rayleigh_density
@@ -189,16 +211,12 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
             float3 ground_position = sample_origin + integration_direction * ground_distance;
             float3 ground_normal = normalize(ground_position);
             float ground_light_cosine = max(0.0f, dot(ground_normal, light_direction));
-            float3 ground_sun_optical_depth = SampleTransmittanceOpticalDepthLut(
+            float3 ground_sun_transmittance = SampleTransmittanceLutDirect(
                 pass_constants.transmittance_lut_srv,
                 float(pass_constants.transmittance_width),
                 float(pass_constants.transmittance_height),
                 ground_light_cosine,
                 0.0f,
-                atmosphere_parameters.planet_radius_m,
-                atmosphere_parameters.atmosphere_height_m);
-            float3 ground_sun_transmittance = TransmittanceFromOpticalDepth(
-                ground_sun_optical_depth,
                 atmosphere_parameters);
             float3 ground_view_transmittance = TransmittanceFromOpticalDepth(
                 accumulated_optical_depth,

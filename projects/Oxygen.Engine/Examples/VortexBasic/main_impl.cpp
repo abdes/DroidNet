@@ -238,7 +238,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .About("Enable the atmosphere/aerial-perspective view layer")
         .Long("with-atmosphere")
         .WithValue<bool>()
-        .DefaultValue(false)
+        .DefaultValue(true)
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_atmosphere)
         .Build());
@@ -246,7 +246,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .About("Enable the height-fog view layer")
         .Long("with-height-fog")
         .WithValue<bool>()
-        .DefaultValue(false)
+        .DefaultValue(true)
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_height_fog)
         .Build());

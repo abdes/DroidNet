@@ -56,14 +56,13 @@ float3 ComputeSunTransmittance(
     // but for typical camera altitudes (meters) vs planet radius (millions of meters),
     // treating up as +Z is accurate enough.
 
-    float altitude = max(world_pos.z, 0.0);
-
     // Local up direction at this point on the planet surface.
     // For small altitudes compared to planet radius, this is effectively +Z.
     // For high altitudes or precision, use the radial direction from planet center.
     float3 planet_center = GetPlanetCenterWS();
     float3 to_surface = world_pos - planet_center;
     float height = length(to_surface);
+    float altitude = max(height - atmo.planet_radius_m, 0.0);
     float3 local_up = to_surface / max(height, 1e-6);
 
     // Compute cosine of sun zenith from the local up direction
@@ -82,19 +81,16 @@ float3 ComputeSunTransmittance(
         return float3(1.0, 1.0, 1.0);
     }
 
-    // Sample transmittance LUT
-    // The LUT returns high optical depth (zero transmittance) when sun is below horizon
-    float3 optical_depth = SampleTransmittanceOpticalDepthLut(
+    // Sample transmittance LUT directly. The LUT now stores transmittance.
+    float3 transmittance = SampleTransmittanceLut(
+        atmo,
         atmo.transmittance_lut_slot,
         atmo.transmittance_lut_width,
         atmo.transmittance_lut_height,
         cos_sun_zenith,
         altitude,
-        atmo.planet_radius_m,
         atmo.atmosphere_height_m);
-
-    // Convert optical depth to transmittance
-    return TransmittanceFromOpticalDepth(optical_depth, atmo);
+    return transmittance;
 }
 
 struct DirectionalLightDiagnosticTerms

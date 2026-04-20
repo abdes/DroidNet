@@ -42,7 +42,7 @@ struct AerialPerspectiveResult
 
 //! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
 //!
-//! Returns float4 where rgb = inscatter, a = opacity (1 - transmittance).
+//! Returns float4 where rgb = inscatter, a = transmittance.
 float4 SampleCameraVolumeLut(
     GpuSkyAtmosphereParams atmo,
     float3 world_pos,
@@ -51,7 +51,7 @@ float4 SampleCameraVolumeLut(
 {
     if (view_distance < 0.1 || atmo.camera_volume_lut_slot == K_INVALID_BINDLESS_INDEX)
     {
-        return float4(0.0, 0.0, 0.0, 0.0);
+        return float4(0.0, 0.0, 0.0, 1.0);
     }
 
     // User controls from resolved environment view data.
@@ -63,20 +63,28 @@ float4 SampleCameraVolumeLut(
     float effective_distance = view_distance * distance_scale;
     float view_distance_km = effective_distance / 1000.0;
 
-    // Camera volume froxel parameterization (UE tuned parameters).
-    const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
-    const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
+    const EnvironmentViewData view_data = LoadResolvedEnvironmentViewData();
+    const float depth_resolution = view_data.camera_aerial_volume_depth_params.x;
+    const float depth_resolution_inv = view_data.camera_aerial_volume_depth_params.y;
+    const float depth_slice_length_km = view_data.camera_aerial_volume_depth_params.z;
+    const float depth_slice_length_km_inv = view_data.camera_aerial_volume_depth_params.w;
+    const float start_depth_km
+        = view_data.sky_aerial_luminance_aerial_start_depth_m.w / 1000.0;
 
-    float slice = view_distance_km / AP_KM_PER_SLICE;
-    slice = clamp(slice, 0.0, AP_SLICE_COUNT);
+    float t_depth = max(0.0, view_distance_km - start_depth_km);
+    float linear_slice = t_depth * depth_slice_length_km_inv;
+    float linear_w = linear_slice * depth_resolution_inv;
+    float non_linear_w = sqrt(saturate(linear_w));
+    float non_linear_slice = non_linear_w * depth_resolution;
 
-    // Fade near camera to avoid quantization artifacts in the first few froxels.
-    if (slice < 0.5)
+    const float half_slice_depth = 0.70710678118654752440084436210485f;
+    float weight = 1.0;
+    if (non_linear_slice < half_slice_depth)
     {
-        slice = 0.5;
+        weight = saturate(non_linear_slice * non_linear_slice * 2.0);
     }
-
-    float w = sqrt(saturate(slice / AP_SLICE_COUNT));
+    const float near_fade_out_range_inv_depth_km = 1.0 / 0.00001;
+    weight *= saturate(t_depth * near_fade_out_range_inv_depth_km);
 
     // Screen UV from world position
     float4 view_pos = mul(view_matrix, float4(world_pos, 1.0));
@@ -88,7 +96,11 @@ float4 SampleCameraVolumeLut(
 
     Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return camera_volume.SampleLevel(linear_sampler, float3(screen_uv, w), 0);
+    float4 aerial = camera_volume.SampleLevel(
+        linear_sampler, float3(screen_uv, non_linear_w), 0);
+    aerial.rgb *= weight;
+    aerial.a = 1.0 - (weight * (1.0 - aerial.a));
+    return aerial;
 }
 
 float RaySphereIntersectFarthest(float3 origin, float3 dir, float radius)
@@ -145,26 +157,15 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
         return result;
     }
 
-    // Fade near camera to avoid quantization artifacts in the first few froxels.
-    // This matches the UE reference behavior (weight is linear in slice).
-    // Note: the LUT sampler clamps slice >= 0.5, so we mirror the weight logic here.
-    const float AP_SLICE_COUNT = (float)kAerialPerspectiveSliceCount;
-    const float AP_KM_PER_SLICE = kAerialPerspectiveKmPerSlice;
-    float distance_scale = max(GetAerialPerspectiveDistanceScale(), 0.0);
-    float view_distance_km = (view_distance * distance_scale) / 1000.0;
-    float slice = clamp(view_distance_km / AP_KM_PER_SLICE, 0.0, AP_SLICE_COUNT);
-    float weight = (slice < 0.5) ? saturate(slice * 2.0) : 1.0;
-
     float4 ap_sample = SampleCameraVolumeLut(atmo, world_pos, camera_pos, view_distance);
 
     // Apply user scattering strength
-    result.inscatter = ap_sample.rgb * scattering_strength * weight;
+    result.inscatter = ap_sample.rgb * scattering_strength;
 
-    // Opacity = ap_sample.a; Transmittance = 1 - Opacity.
+    // Camera-volume alpha stores transmittance, matching the producer contract.
     // Keep transmittance independent of the artistic scattering strength control;
-    // strength scales the added inscatter term only.
-    float opacity = saturate(ap_sample.a) * weight;
-    result.transmittance = 1.0 - opacity;
+    // strength scales only the added inscatter term.
+    result.transmittance = saturate(ap_sample.a);
 
     return result;
 }

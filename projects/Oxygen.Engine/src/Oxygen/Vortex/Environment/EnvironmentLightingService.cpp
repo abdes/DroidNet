@@ -7,6 +7,7 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 #include <glm/geometric.hpp>
@@ -94,6 +95,22 @@ auto BuildSkyViewReferentialRows(
     glm::vec4(left, 0.0F),
     glm::vec4(safe_up, 0.0F),
   };
+}
+
+auto ComputeSunDiskLuminanceRgb(
+  const environment::AtmosphereLightModel& light) -> glm::vec3
+{
+  constexpr auto kPi = 3.14159265358979323846F;
+  const auto half_apex_radians
+    = std::max(0.0F, 0.5F * light.angular_size_radians);
+  const auto solid_angle
+    = 2.0F * kPi * (1.0F - std::cos(half_apex_radians));
+  const auto safe_solid_angle = std::max(solid_angle, 1.0e-6F);
+  return glm::vec3(
+    light.disk_luminance_scale_rgb.x * light.illuminance_rgb_lux.x,
+    light.disk_luminance_scale_rgb.y * light.illuminance_rgb_lux.y,
+    light.disk_luminance_scale_rgb.z * light.illuminance_rgb_lux.z)
+    / safe_solid_angle;
 }
 
 } // namespace
@@ -270,12 +287,9 @@ auto EnvironmentLightingService::BuildBindings(
       view_products.atmosphere_lights[0].angular_size_radians,
     },
     .atmosphere_light0_disk_luminance_rgb = {
-      view_products.atmosphere_lights[0].illuminance_rgb_lux.x
-        * view_products.atmosphere_lights[0].disk_luminance_scale_rgb.x,
-      view_products.atmosphere_lights[0].illuminance_rgb_lux.y
-        * view_products.atmosphere_lights[0].disk_luminance_scale_rgb.y,
-      view_products.atmosphere_lights[0].illuminance_rgb_lux.z
-        * view_products.atmosphere_lights[0].disk_luminance_scale_rgb.z,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).x,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).y,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).z,
       view_products.atmosphere_lights[0].enabled ? 1.0F : 0.0F,
     },
     .atmosphere_light1_direction_angular_size = {
@@ -285,12 +299,9 @@ auto EnvironmentLightingService::BuildBindings(
       view_products.atmosphere_lights[1].angular_size_radians,
     },
     .atmosphere_light1_disk_luminance_rgb = {
-      view_products.atmosphere_lights[1].illuminance_rgb_lux.x
-        * view_products.atmosphere_lights[1].disk_luminance_scale_rgb.x,
-      view_products.atmosphere_lights[1].illuminance_rgb_lux.y
-        * view_products.atmosphere_lights[1].disk_luminance_scale_rgb.y,
-      view_products.atmosphere_lights[1].illuminance_rgb_lux.z
-        * view_products.atmosphere_lights[1].disk_luminance_scale_rgb.z,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).x,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).y,
+      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).z,
       view_products.atmosphere_lights[1].enabled ? 1.0F : 0.0F,
     },
     .probes = probe_state_.probes,
@@ -299,6 +310,8 @@ auto EnvironmentLightingService::BuildBindings(
   };
 
   if (stable_state.view_products.atmosphere_lights[0].enabled) {
+    const auto disk_luminance
+      = ComputeSunDiskLuminanceRgb(stable_state.view_products.atmosphere_lights[0]);
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight0Enabled;
     bindings.atmosphere_light0_direction_angular_size[0]
       = stable_state.view_products.atmosphere_lights[0].direction_to_light_ws.x;
@@ -308,21 +321,14 @@ auto EnvironmentLightingService::BuildBindings(
       = stable_state.view_products.atmosphere_lights[0].direction_to_light_ws.z;
     bindings.atmosphere_light0_direction_angular_size[3]
       = stable_state.view_products.atmosphere_lights[0].angular_size_radians;
-    bindings.atmosphere_light0_disk_luminance_rgb[0]
-      = stable_state.view_products.atmosphere_lights[0].illuminance_rgb_lux.x
-      * stable_state.view_products.atmosphere_lights[0]
-          .disk_luminance_scale_rgb.x;
-    bindings.atmosphere_light0_disk_luminance_rgb[1]
-      = stable_state.view_products.atmosphere_lights[0].illuminance_rgb_lux.y
-      * stable_state.view_products.atmosphere_lights[0]
-          .disk_luminance_scale_rgb.y;
-    bindings.atmosphere_light0_disk_luminance_rgb[2]
-      = stable_state.view_products.atmosphere_lights[0].illuminance_rgb_lux.z
-      * stable_state.view_products.atmosphere_lights[0]
-          .disk_luminance_scale_rgb.z;
+    bindings.atmosphere_light0_disk_luminance_rgb[0] = disk_luminance.x;
+    bindings.atmosphere_light0_disk_luminance_rgb[1] = disk_luminance.y;
+    bindings.atmosphere_light0_disk_luminance_rgb[2] = disk_luminance.z;
     bindings.atmosphere_light0_disk_luminance_rgb[3] = 1.0F;
   }
   if (stable_state.view_products.atmosphere_lights[1].enabled) {
+    const auto disk_luminance
+      = ComputeSunDiskLuminanceRgb(stable_state.view_products.atmosphere_lights[1]);
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight1Enabled;
     bindings.atmosphere_light1_direction_angular_size[0]
       = stable_state.view_products.atmosphere_lights[1].direction_to_light_ws.x;
@@ -332,18 +338,9 @@ auto EnvironmentLightingService::BuildBindings(
       = stable_state.view_products.atmosphere_lights[1].direction_to_light_ws.z;
     bindings.atmosphere_light1_direction_angular_size[3]
       = stable_state.view_products.atmosphere_lights[1].angular_size_radians;
-    bindings.atmosphere_light1_disk_luminance_rgb[0]
-      = stable_state.view_products.atmosphere_lights[1].illuminance_rgb_lux.x
-      * stable_state.view_products.atmosphere_lights[1]
-          .disk_luminance_scale_rgb.x;
-    bindings.atmosphere_light1_disk_luminance_rgb[1]
-      = stable_state.view_products.atmosphere_lights[1].illuminance_rgb_lux.y
-      * stable_state.view_products.atmosphere_lights[1]
-          .disk_luminance_scale_rgb.y;
-    bindings.atmosphere_light1_disk_luminance_rgb[2]
-      = stable_state.view_products.atmosphere_lights[1].illuminance_rgb_lux.z
-      * stable_state.view_products.atmosphere_lights[1]
-          .disk_luminance_scale_rgb.z;
+    bindings.atmosphere_light1_disk_luminance_rgb[0] = disk_luminance.x;
+    bindings.atmosphere_light1_disk_luminance_rgb[1] = disk_luminance.y;
+    bindings.atmosphere_light1_disk_luminance_rgb[2] = disk_luminance.z;
     bindings.atmosphere_light1_disk_luminance_rgb[3] = 1.0F;
   }
   if (stable_state.conventional_shadow_authority_slot0_only) {
@@ -533,15 +530,20 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.atmosphere.enabled = atmo.enabled ? 1U : 0U;
   data.atmosphere.transmittance_lut_slot = view_products.transmittance_lut_srv.get();
   data.atmosphere.sky_view_lut_slot = view_products.sky_view_lut_srv.get();
-  data.atmosphere.sky_irradiance_lut_slot = 0U;
+  data.atmosphere.sky_irradiance_lut_slot = kInvalidBindlessIndex;
   data.atmosphere.multi_scat_lut_slot = view_products.multi_scattering_lut_srv.get();
   data.atmosphere.camera_volume_lut_slot
     = view_products.camera_aerial_perspective_srv.get();
-  data.atmosphere.blue_noise_slot = 0U;
-  data.atmosphere.transmittance_lut_width = 256.0F;
-  data.atmosphere.transmittance_lut_height = 64.0F;
-  data.atmosphere.sky_view_lut_width = 192.0F;
-  data.atmosphere.sky_view_lut_height = 104.0F;
+  data.atmosphere.blue_noise_slot = kInvalidBindlessIndex;
+  const auto& internal_params = atmosphere_lut_cache_->GetState().internal_parameters;
+  data.atmosphere.transmittance_lut_width
+    = static_cast<float>(internal_params.transmittance_width);
+  data.atmosphere.transmittance_lut_height
+    = static_cast<float>(internal_params.transmittance_height);
+  data.atmosphere.sky_view_lut_width
+    = static_cast<float>(internal_params.sky_view_width);
+  data.atmosphere.sky_view_lut_height
+    = static_cast<float>(internal_params.sky_view_height);
   data.atmosphere.sky_irradiance_lut_width = 0.0F;
   data.atmosphere.sky_irradiance_lut_height = 0.0F;
   data.atmosphere.sky_view_lut_slices = 1U;

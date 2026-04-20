@@ -1648,7 +1648,8 @@ auto Renderer::UpdateViewConstantsFromView(const ResolvedView& view) -> void
   view_const_cpu_.SetViewMatrix(view.ViewMatrix())
     .SetProjectionMatrix(view.ProjectionMatrix())
     .SetStableProjectionMatrix(view.StableProjectionMatrix())
-    .SetCameraPosition(view.CameraPosition());
+    .SetCameraPosition(view.CameraPosition())
+    .SetReverseZ(view.ReverseZ(), ViewConstants::kRenderer);
 }
 
 auto Renderer::BuildViewHistoryFrameBindings(const ViewId view_id,

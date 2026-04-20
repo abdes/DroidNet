@@ -118,7 +118,7 @@ public:
 
     // Aligned at 16 bytes here
     BindlessViewFrameBindingsSlot view_frame_bindings_bslot;
-    std::uint32_t _pad1 { 0 };
+    std::uint32_t reverse_z { 1 };
     std::uint32_t _pad2 { 0 };
     std::uint32_t _pad3 { 0 };
     glm::vec4 _pad_to_256_1 { 0.0F };
@@ -163,6 +163,8 @@ public:
 
   OXGN_VRTX_API auto SetBindlessViewFrameBindingsSlot(
     BindlessViewFrameBindingsSlot slot, RendererTag) noexcept -> ViewConstants&;
+  OXGN_VRTX_API auto SetReverseZ(bool reverse_z, RendererTag) noexcept
+    -> ViewConstants&;
 
   // Getters use GetXXX to avoid conflicts with strong types
   [[nodiscard]] auto GetViewMatrix() const noexcept { return view_matrix_; }
@@ -212,6 +214,7 @@ private:
       = glm::inverse(projection_matrix_ * view_matrix_),
       .camera_position = camera_position_,
       .view_frame_bindings_bslot = view_frame_bindings_bslot_,
+      .reverse_z = reverse_z_ ? 1U : 0U,
     };
   }
 
@@ -227,6 +230,7 @@ private:
   frame::Slot frame_slot_;
   frame::SequenceNumber frame_seq_num_;
   BindlessViewFrameBindingsSlot view_frame_bindings_bslot_;
+  bool reverse_z_ { true };
 
   // Versioning + cache
   MonotonicVersion version_ { 0 };

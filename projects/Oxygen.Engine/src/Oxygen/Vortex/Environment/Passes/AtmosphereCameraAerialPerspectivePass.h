@@ -89,6 +89,7 @@ namespace environment {
       float depth_resolution_inv { 0.0F };
       float depth_slice_length_km { 0.0F };
       float depth_slice_length_km_inv { 0.0F };
+      float sample_count_per_slice { 2.0F };
       float start_depth_km { 0.0F };
       float planet_radius_m { 6360000.0F };
       float atmosphere_height_m { 100000.0F };

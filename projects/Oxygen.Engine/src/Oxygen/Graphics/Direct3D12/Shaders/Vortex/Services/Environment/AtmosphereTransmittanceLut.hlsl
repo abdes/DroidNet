@@ -155,5 +155,9 @@ void VortexAtmosphereTransmittanceLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         optical_depth = IntegrateOpticalDepth(origin, dir, integrate_length, atmo, pass.integration_sample_count);
     }
 
-    output_texture[dispatch_id.xy] = float4(optical_depth, 0.0f);
+    const float3 extinction = (atmo.rayleigh_scattering_rgb * optical_depth.x)
+        + (atmo.mie_extinction_rgb * optical_depth.y)
+        + (atmo.absorption_rgb * optical_depth.z);
+    const float3 transmittance = exp(-extinction);
+    output_texture[dispatch_id.xy] = float4(transmittance, 0.0f);
 }

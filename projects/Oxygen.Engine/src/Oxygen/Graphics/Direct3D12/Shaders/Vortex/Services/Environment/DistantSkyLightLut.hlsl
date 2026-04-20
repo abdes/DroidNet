@@ -6,9 +6,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
-#include "Atmosphere/AtmosphereConstants.hlsli"
-#include "Atmosphere/AtmosphereMedium.hlsli"
-#include "Atmosphere/IntegrateScatteredLuminance.hlsli"
+#include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
+#include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"
 
@@ -93,6 +92,7 @@ groupshared float3 GroupSkyLuminanceSamples[64];
 
 static float3 IntegrateSkyLuminanceForAtmosphereLight(
     GpuSkyAtmosphereParams atmosphere_parameters,
+    DistantSkyLightLutPassConstants pass_constants,
     float3 sample_origin,
     float3 integration_direction,
     float3 atmosphere_light_direction,
@@ -124,20 +124,28 @@ static float3 IntegrateSkyLuminanceForAtmosphereLight(
     }
 
     float3 final_transmittance;
-    return IntegrateScatteredLuminanceUniform(
+    const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
         sample_origin,
         integration_direction,
+        false,
         ray_length,
-        16u,
-        atmosphere_parameters,
+        max(1.0f, float(pass_constants.integration_sample_count)),
+        1.0f,
+        1.0f,
+        0.0f,
         atmosphere_light_direction,
         atmosphere_light_illuminance,
+        0.0f.xxx,
+        1.0f,
+        atmosphere_parameters,
         transmittance_lut_srv,
         transmittance_lut_width,
         transmittance_lut_height,
         multi_scattering_lut,
         linear_sampler,
-        final_transmittance);
+        ray_length);
+    final_transmittance = scattering.Transmittance;
+    return scattering.L;
 }
 
 [shader("compute")]
@@ -181,6 +189,7 @@ void VortexDistantSkyLightLutCS(
     {
         sampled_sky_luminance += IntegrateSkyLuminanceForAtmosphereLight(
             atmosphere_parameters,
+            pass_constants,
             sample_origin,
             integration_direction,
             normalize(pass_constants.light0_direction_ws.xyz),
@@ -195,6 +204,7 @@ void VortexDistantSkyLightLutCS(
     {
         sampled_sky_luminance += IntegrateSkyLuminanceForAtmosphereLight(
             atmosphere_parameters,
+            pass_constants,
             sample_origin,
             integration_direction,
             normalize(pass_constants.light1_direction_ws.xyz),

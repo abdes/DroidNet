@@ -171,7 +171,11 @@ auto BuildSkyPipelineDesc(const SceneTextures& scene_textures)
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
-    .SetDepthStencilState(graphics::DepthStencilStateDesc::Disabled())
+    .SetDepthStencilState(graphics::DepthStencilStateDesc {
+      .depth_test_enable = true,
+      .depth_write_enable = false,
+      .depth_func = graphics::CompareOp::kEqual,
+    })
     .SetBlendState({})
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {

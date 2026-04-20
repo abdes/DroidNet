@@ -1,7 +1,10 @@
-"""Dump EnvironmentFrameBindings bytes for the Stage 15 sky draw."""
+"""Safely inspect Stage 15 sky-pass binding metadata.
+
+This intentionally avoids raw buffer reads and pixel/min-max sampling because
+those replay paths have been unstable in RenderDoc for this repository.
+"""
 
 import builtins
-import struct
 import sys
 from pathlib import Path
 
@@ -66,7 +69,28 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_environment_frame_bindings_probe.txt"
 
 
+def describe_resource(resources, descriptor):
+    resource = safe_getattr(descriptor, "resource")
+    return resources.get(str(resource), str(resource))
+
+
+def append_descriptor_fields(report, prefix, descriptor):
+    for field in (
+        "byteOffset",
+        "byteSize",
+        "firstElement",
+        "numElements",
+        "elementByteSize",
+        "firstMip",
+        "firstSlice",
+        "type",
+    ):
+        report.append(f"{prefix}_{field}={safe_getattr(descriptor, field, None)}")
+
+
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+    del capture_path
+    del report_path
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
@@ -81,26 +105,31 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     controller.SetFrameEvent(target.event_id, True)
     state = controller.GetPipelineState()
-    readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
-    if len(readonly) < 1:
-        raise RuntimeError("No pixel read-only resources found")
-
-    descriptor = readonly[0].descriptor
-    resource = safe_getattr(descriptor, "resource")
-    byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)
-    byte_size = int(safe_getattr(descriptor, "byteSize", 0) or 0)
-    raw = controller.GetBufferData(resource, byte_offset, byte_size)
-    blob = bytes(raw)
-
     report.append(f"event_id={target.event_id}")
-    report.append(f"resource_name={resources.get(str(resource), str(resource))}")
-    report.append(f"byte_offset={byte_offset}")
-    report.append(f"byte_size={byte_size}")
-    report.append(f"u32_count={len(blob) // 4}")
 
-    values = struct.unpack("<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
-    for index, value in enumerate(values):
-      report.append(f"u32_{index}={value}")
+    blocks = state.GetConstantBlocks(rd.ShaderStage.Pixel)
+    report.append(f"pixel_constant_block_count={len(blocks)}")
+    for index, block in enumerate(blocks):
+        descriptor = block.descriptor
+        report.append(f"cb_{index}_resource={describe_resource(resources, descriptor)}")
+        report.append(f"cb_{index}_bind={block.access.index}")
+        report.append(f"cb_{index}_array={block.access.arrayElement}")
+        append_descriptor_fields(report, f"cb_{index}", descriptor)
+
+    readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+    report.append(f"pixel_ro_count={len(readonly)}")
+    for index, binding in enumerate(readonly):
+        descriptor = binding.descriptor
+        report.append(f"ro_{index}_resource={describe_resource(resources, descriptor)}")
+        report.append(f"ro_{index}_bind={binding.access.index}")
+        report.append(f"ro_{index}_array={binding.access.arrayElement}")
+        append_descriptor_fields(report, f"ro_{index}", descriptor)
+
+    outputs = state.GetOutputTargets()
+    report.append(f"output_count={len(outputs)}")
+    for index, descriptor in enumerate(outputs):
+        report.append(f"output_{index}_resource={describe_resource(resources, descriptor)}")
+        append_descriptor_fields(report, f"output_{index}", descriptor)
 
 
 def main():

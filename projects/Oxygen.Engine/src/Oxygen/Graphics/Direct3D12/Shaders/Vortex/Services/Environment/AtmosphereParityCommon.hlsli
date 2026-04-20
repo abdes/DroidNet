@@ -30,15 +30,18 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     float planet_radius_m,
     float atmosphere_height_m,
     float multi_scattering_factor,
+    float aerial_perspective_distance_scale,
     float rayleigh_scale_height_m,
     float mie_scale_height_m,
     float mie_anisotropy,
     float3 ground_albedo_rgb,
+    float sun_disk_angular_radius_radians,
     float3 rayleigh_scattering_rgb,
     float3 mie_scattering_rgb,
     float3 mie_absorption_rgb,
     float3 ozone_absorption_rgb,
     AtmosphereDensityProfile ozone_density_profile,
+    uint sun_disk_enabled,
     uint transmittance_lut_srv,
     float transmittance_width,
     float transmittance_height,
@@ -48,9 +51,9 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     atmosphere.planet_radius_m = planet_radius_m;
     atmosphere.atmosphere_height_m = atmosphere_height_m;
     atmosphere.multi_scattering_factor = multi_scattering_factor;
-    atmosphere.aerial_perspective_distance_scale = 1.0f;
+    atmosphere.aerial_perspective_distance_scale = aerial_perspective_distance_scale;
     atmosphere.ground_albedo_rgb = ground_albedo_rgb;
-    atmosphere.sun_disk_angular_radius_radians = 0.0f;
+    atmosphere.sun_disk_angular_radius_radians = sun_disk_angular_radius_radians;
     atmosphere.rayleigh_scattering_rgb = rayleigh_scattering_rgb;
     atmosphere.rayleigh_scale_height_m = rayleigh_scale_height_m;
     atmosphere.mie_scattering_rgb = mie_scattering_rgb;
@@ -59,7 +62,7 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     atmosphere.mie_g = mie_anisotropy;
     atmosphere.absorption_rgb = ozone_absorption_rgb;
     atmosphere.absorption_density = ozone_density_profile;
-    atmosphere.sun_disk_enabled = 0u;
+    atmosphere.sun_disk_enabled = sun_disk_enabled;
     atmosphere.enabled = 1u;
     atmosphere.transmittance_lut_slot = transmittance_lut_srv;
     atmosphere.multi_scat_lut_slot = multi_scattering_lut_srv;
@@ -68,33 +71,12 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     return atmosphere;
 }
 
-static float3x3 BuildSkyLocalReferential(float3 planet_up_ws)
-{
-    const float3 local_z = VortexSafeNormalize(planet_up_ws);
-
-    float3 reference_y = float3(0.0f, 1.0f, 0.0f);
-    if (abs(dot(reference_y, local_z)) > 0.999f)
-    {
-        reference_y = float3(1.0f, 0.0f, 0.0f);
-    }
-
-    const float3 local_x = VortexSafeNormalize(cross(reference_y, local_z));
-    const float3 local_y = VortexSafeNormalize(cross(local_z, local_x));
-    return float3x3(local_x, local_y, local_z);
-}
-
 static float3 ApplySkyViewLutReferential(EnvironmentViewData view_data, float3 world_direction)
 {
     return float3(
         dot(view_data.sky_view_lut_referential_row0.xyz, world_direction),
         dot(view_data.sky_view_lut_referential_row1.xyz, world_direction),
         dot(view_data.sky_view_lut_referential_row2.xyz, world_direction));
-}
-
-static float3 GetSkyTranslatedCameraPlanetPos(EnvironmentViewData view_data)
-{
-    return view_data.sky_camera_translated_world_origin_pad.xyz
-        - view_data.sky_planet_translated_world_center_and_view_height.xyz;
 }
 
 static bool MoveToTopAtmosphere(
@@ -199,46 +181,6 @@ static float2 SkyViewLutParamsToUv(
     uv = saturate(uv);
     uv = (uv * (1.0f - lut_inv_size)) + lut_inv_size * 0.5f;
     return uv;
-}
-
-static float4 SampleVortexCameraAerialPerspective(
-    uint camera_aerial_srv,
-    float2 screen_uv,
-    float view_distance_m,
-    float start_depth_m,
-    float depth_resolution,
-    float depth_resolution_inv,
-    float depth_slice_length_km,
-    float depth_slice_length_km_inv)
-{
-    if (camera_aerial_srv == K_INVALID_BINDLESS_INDEX)
-    {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
-
-    const float t_depth_km = max(0.0f, (view_distance_m - start_depth_m) / 1000.0f);
-    const float linear_slice = t_depth_km * depth_slice_length_km_inv;
-    const float linear_w = linear_slice * depth_resolution_inv;
-    const float non_linear_w = sqrt(saturate(linear_w));
-    const float non_linear_slice = non_linear_w * depth_resolution;
-    const float half_slice_depth = 0.70710678118654752440f;
-
-    float weight = 1.0f;
-    if (non_linear_slice < half_slice_depth)
-    {
-        weight = saturate(non_linear_slice * non_linear_slice * 2.0f);
-    }
-    weight *= saturate(t_depth_km * 100000.0f);
-
-    Texture3D<float4> aerial_volume = ResourceDescriptorHeap[camera_aerial_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    float4 aerial = aerial_volume.SampleLevel(
-        linear_sampler,
-        float3(screen_uv, non_linear_w),
-        0.0f);
-    aerial.rgb *= weight;
-    aerial.a = 1.0f - (weight * (1.0f - aerial.a));
-    return aerial;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_ATMOSPHEREPARITYCOMMON_HLSLI

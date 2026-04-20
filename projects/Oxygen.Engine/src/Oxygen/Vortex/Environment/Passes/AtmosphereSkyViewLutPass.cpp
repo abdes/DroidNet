@@ -314,13 +314,19 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     = cache_state.internal_parameters.multi_scattering_height;
   constants.active_light_count
     = stable_state.view_products.atmosphere_light_count;
-  constants.integration_sample_count = std::clamp(
-    static_cast<std::uint32_t>(16.0F * atmosphere.trace_sample_count_scale), 4U,
-    64U);
+  constants.sample_count_min
+    = cache_state.internal_parameters.sky_view_sample_count_min;
+  constants.sample_count_max
+    = cache_state.internal_parameters.sky_view_sample_count_max;
+  constants.distance_to_sample_count_max_inv
+    = cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
+      > 1.0e-6F
+    ? 1.0F
+      / cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
+    : 0.0F;
   constants.planet_radius_m = atmosphere.planet_radius_m;
   constants.atmosphere_height_m = atmosphere.atmosphere_height_m;
   constants.camera_altitude_m = view_data.planet_up_ws_camera_altitude_m.w;
-  constants.trace_sample_count_scale = atmosphere.trace_sample_count_scale;
   constants.rayleigh_scale_height_m = atmosphere.rayleigh_scale_height_m;
   constants.mie_scale_height_m = atmosphere.mie_scale_height_m;
   constants.multi_scattering_factor = atmosphere.multi_scattering_factor;
