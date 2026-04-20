@@ -34,8 +34,8 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 #include "Common/DemoCli.h"
 #include "Common/FrameCaptureCliOptions.h"
@@ -115,29 +115,22 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
 
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
+      .enable_imgui = !app.headless,
     };
-    // Create the Renderer - we need unique_ptr for registration and
-    // observer_ptr for MainModule
-    auto renderer_unique
-      = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
-
-    // Graphics main module (replaces RenderController/RenderThread pattern)
-    app.renderer = observer_ptr { renderer_unique.get() };
+    constexpr auto kInputSystemVortexCapabilities
+      = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
+      | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
+      | oxygen::vortex::RendererCapabilityFamily::kLightingData
+      | oxygen::vortex::RendererCapabilityFamily::kShadowing
+      | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
+      | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
+      | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling
+      | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
     register_module(
       std::make_unique<oxygen::examples::input_system::MainModule>(app));
 
-    // Register as module
-    register_module(std::move(renderer_unique));
-
-    // ImGui module (last): only when not headless and when a graphics backend
-    // exists
-    if (!app.headless) {
-      auto imgui_backend = std::make_unique<
-        oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
-      auto imgui_module = std::make_unique<oxygen::engine::imgui::ImGuiModule>(
-        app.platform, std::move(imgui_backend));
-      register_module(std::move(imgui_module));
-    }
+    register_module(std::make_unique<oxygen::vortex::Renderer>(
+      app.gfx_weak, renderer_config, kInputSystemVortexCapabilities));
   }
 }
 

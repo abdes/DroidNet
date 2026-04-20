@@ -19,11 +19,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/CompositingTask.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -34,6 +30,7 @@
 namespace oxygen::examples::multiview {
 
 namespace {
+  constexpr size_t kDefaultSceneCapacity = 128;
 
   auto HasPositiveExtent(const platform::window::ExtentT& extent) -> bool
   {
@@ -100,17 +97,30 @@ MainModule::MainModule(
   pip_view_id_ = this->GetOrCreateViewId("PipView");
 }
 
+auto MainModule::BuildDefaultWindowProperties() const
+  -> platform::window::Properties
+{
+  constexpr uint32_t kDefaultWidth = 2560;
+  constexpr uint32_t kDefaultHeight = 1400;
+
+  platform::window::Properties props("Oxygen :: Examples :: MultiView");
+  props.extent = platform::window::ExtentT { .width = kDefaultWidth,
+    .height = kDefaultHeight };
+  props.flags = { .hidden = false,
+    .always_on_top = false,
+    .full_screen = app_.fullscreen,
+    .maximized = false,
+    .minimized = false,
+    .resizable = true,
+    .borderless = false };
+  return props;
+}
+
 auto MainModule::OnAttachedImpl(
   oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   CHECK_F(static_cast<bool>(engine), "MultiView requires a valid engine");
-
-  // Initialize the pipeline if it hasn't been already.
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(engine);
-  CHECK_NOTNULL_F(pipeline_, "Failed to create ForwardPipeline");
-  // Boost exposure to compensate for lower light intensity
-  pipeline_->SetExposureValue(2.5F);
 
   // Initialize DemoShell with camera controls enabled.
   auto shell = std::make_unique<DemoShell>();
@@ -125,13 +135,39 @@ auto MainModule::OnAttachedImpl(
     .post_process = true,
   };
   shell_config.enable_camera_rig = true;
-  shell_config.get_active_pipeline = [this]() {
-    return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
-  };
+  shell_config.enable_renderer_bound_panels = false;
 
   CHECK_F(shell->Initialize(shell_config),
     "MultiView: DemoShell initialization failed");
   LOG_F(INFO, "[MultiView] DemoShell initialized (camera controls enabled)");
+
+  shell->StageScene(
+    std::make_unique<scene::Scene>("MultiViewScene", kDefaultSceneCapacity));
+  const auto staged_scene = shell->GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
+
+  main_camera_node_ = staged_scene->CreateNode("MainCamera");
+  {
+    const bool attached = main_camera_node_.AttachCamera(
+      std::make_unique<scene::PerspectiveCamera>());
+    CHECK_F(attached, "Failed to attach MainCamera");
+  }
+
+  pip_camera_node_ = staged_scene->CreateNode("PipCamera");
+  {
+    const bool attached = pip_camera_node_.AttachCamera(
+      std::make_unique<scene::PerspectiveCamera>());
+    CHECK_F(attached, "Failed to attach PipCamera");
+  }
+
+  shell->SetStagedMainCamera(main_camera_node_);
+  scene_bootstrapper_.BindToScene(staged_scene);
+  (void)scene_bootstrapper_.EnsureSceneWithContent();
+  const auto extent = ResolveRenderExtent();
+  if (HasPositiveExtent(extent)) {
+    UpdateCameras(extent);
+    last_viewport_ = extent;
+  }
 
   return shell;
 }
@@ -377,14 +413,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
-  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
   co_await Base::OnPreRender(context);
   co_return;
 }
@@ -471,13 +499,10 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         renderer::CompositionView::kZOrderScene.get() + 1 },
       pip_view, pip_camera_node_);
 
-    // Match legacy PiP clear color (dark gray, half transparent)
     const graphics::Color kPipClearColor { 0.1F, 0.1F, 0.1F, 0.5F };
     pip_comp.clear_color = kPipClearColor;
     pip_comp.opacity = 1.0F;
     pip_comp.force_wireframe = config_.pip_force_wireframe;
-    // PiP should meter only its own HDR target. Sharing the main-view
-    // exposure couples the inset to unrelated luminance outside its view.
 
     views.push_back(std::move(pip_comp));
   }
@@ -488,19 +513,6 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
-}
-
-auto MainModule::BuildDefaultWindowProperties() const
-  -> oxygen::platform::window::Properties
-{
-  auto props = Base::BuildDefaultWindowProperties();
-  props.title = "Oxygen Engine - MultiView Example";
-  return props;
-}
+auto MainModule::ClearBackbufferReferences() -> void { }
 
 } // namespace oxygen::examples::multiview

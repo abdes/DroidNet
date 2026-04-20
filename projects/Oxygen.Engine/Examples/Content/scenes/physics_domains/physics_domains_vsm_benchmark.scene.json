@@ -1,4 +1,5 @@
 {
+    "version": 3,
     "name": "physics_domains_vsm_benchmark",
     "nodes": [
         {

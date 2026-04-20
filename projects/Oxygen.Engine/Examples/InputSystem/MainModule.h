@@ -109,6 +109,7 @@ protected:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
+  auto StageInitialScene(DemoShell& shell) -> void;
   auto InitInputBindings() noexcept -> bool;
   auto UpdateInputDebugPanelConfig(
     observer_ptr<ui::CameraRigController> camera_rig) -> void;

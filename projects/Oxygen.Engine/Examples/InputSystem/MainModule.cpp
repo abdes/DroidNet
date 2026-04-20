@@ -34,10 +34,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -48,20 +45,18 @@ namespace {
 
 constexpr std::uint32_t kWindowWidth = 2400;
 constexpr std::uint32_t kWindowHeight = 1400;
+constexpr size_t kDefaultSceneCapacity = 128;
 
-// Helper: make a solid-color material asset snapshot (opaque by default)
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
-  // NOLINTBEGIN(*-magic-numbers)
   namespace d = oxygen::data;
   namespace pak = oxygen::data::pak;
 
   pak::render::MaterialAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(
-    oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
-  // Safe copy name
+  desc.header.asset_type
+    = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, std::strlen(name));
   std::memcpy(desc.header.name, name, n);
@@ -79,12 +74,10 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.metalness = d::Unorm16 { 0.0F };
   desc.roughness = d::Unorm16 { 0.6F };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
-  // Leave texture indices invalid (no textures)
   const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/InputSystem/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(
     asset_key, desc, std::vector<d::ShaderReference> {});
-  // NOLINTEND(*-magic-numbers)
 }
 
 } // namespace
@@ -113,15 +106,26 @@ auto MainModule::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
+auto MainModule::ClearBackbufferReferences() -> void { }
+
+auto MainModule::StageInitialScene(DemoShell& shell) -> void
 {
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
+  shell.StageScene(
+    std::make_unique<scene::Scene>("InputSystem-Scene", kDefaultSceneCapacity));
+  const auto staged_scene = shell.GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "InputSystem staged scene is null");
+
+  main_camera_ = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const bool attached = main_camera_.AttachCamera(std::move(camera));
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = main_camera_.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  shell.SetStagedMainCamera(main_camera_);
 }
 
-auto MainModule::OnAttachedImpl(
-  oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
+auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
@@ -130,33 +134,26 @@ auto MainModule::OnAttachedImpl(
     return nullptr;
   }
 
-  // Create Pipeline
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
-
-  // Initialize Shell
   auto shell = std::make_unique<DemoShell>();
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
   DemoShellConfig shell_config {
     .engine = observer_ptr { app_.engine.get() },
-    .enable_camera_rig = true, // Use DemoShell's camera rig for camera controls
+    .enable_camera_rig = true,
+    .enable_renderer_bound_panels = false,
     .content_roots = {
       .content_root = demo_root.parent_path() / "Content",
       .cooked_root = demo_root / ".cooked",
     },
     .panel_config = {
       .content_loader = false,
-      .camera_controls = true, // Enable the camera controls panel
+      .camera_controls = true,
       .environment = true,
       .lighting = false,
       .rendering = false,
       .post_process = true,
       .ground_grid = true,
-    },
-    .get_active_pipeline = [this]() -> observer_ptr<renderer::RenderingPipeline> {
-      return observer_ptr { pipeline_.get() };
     },
   };
 
@@ -165,7 +162,6 @@ auto MainModule::OnAttachedImpl(
     return nullptr;
   }
 
-  // Register the InputDebugPanel
   input_debug_panel_ = std::make_shared<InputDebugPanel>();
   UpdateInputDebugPanelConfig(shell->GetCameraRig());
   if (!shell->RegisterPanel(input_debug_panel_)) {
@@ -173,9 +169,9 @@ auto MainModule::OnAttachedImpl(
     return nullptr;
   }
 
-  // Create Main View ID
-  main_view_id_ = GetOrCreateViewId("MainView");
+  StageInitialScene(*shell);
 
+  main_view_id_ = GetOrCreateViewId("MainView");
   LOG_F(INFO, "InputSystem: Module initialized");
   return shell;
 }
@@ -183,10 +179,7 @@ auto MainModule::OnAttachedImpl(
 void MainModule::OnShutdown() noexcept
 {
   auto& shell = GetShell();
-
-  // Clear scene from shell first to ensure controlled destruction
   shell.SetScene(nullptr);
-
   input_debug_panel_.reset();
   Base::OnShutdown();
 }
@@ -209,14 +202,11 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
-
   frame_context.SetScene(shell.TryGetScene());
 
-  // Ensure drone is configured once the rig is available
   const auto rig = shell.GetCameraRig();
   if (rig != last_camera_rig_) {
     last_camera_rig_ = rig;
-    // Note: configure drone if needed, depends on demo specifics
   }
 }
 
@@ -229,13 +219,10 @@ auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  // Check input edges during gameplay. InputSystem finalized edges during
-  // kInput earlier in the frame; they remain valid until next frame start.
   namespace c = std::chrono;
-  const auto u_game_dt = context->GetGameDeltaTime().get(); // nanoseconds
-  const float dt = c::duration<float>(u_game_dt).count(); // seconds
+  const auto u_game_dt = context->GetGameDeltaTime().get();
+  const float dt = c::duration<float>(u_game_dt).count();
 
-  // Apply any pending sphere reset requested by UI toggles
   if (pending_ground_reset_) {
     pending_ground_reset_ = false;
     if (sphere_node_.IsAlive()) {
@@ -246,7 +233,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     sphere_in_air_ = false;
   }
 
-  // Movement: ground vs swimming (Z is up in Oxygen)
   if (swimming_mode_) {
     if (swim_up_action_ && swim_up_action_->IsOngoing()) {
       if (sphere_node_.IsAlive()) {
@@ -259,7 +245,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     sphere_in_air_ = false;
     sphere_vel_z_ = 0.0F;
   } else {
-    // Ground mode: jump actions
     if (jump_higher_action_ && jump_higher_action_->WasTriggeredThisFrame()) {
       if (!sphere_in_air_) {
         sphere_in_air_ = true;
@@ -273,12 +258,10 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  // Integrate simple vertical physics when sphere is in air (Z is up)
   if (!swimming_mode_ && sphere_in_air_ && sphere_node_.IsAlive()) {
     sphere_vel_z_ += gravity_ * dt;
     auto tf = sphere_node_.GetTransform();
-    const auto opt_pos = tf.GetLocalPosition();
-    auto pos = opt_pos.value_or(sphere_base_pos_);
+    auto pos = tf.GetLocalPosition().value_or(sphere_base_pos_);
     pos.z += sphere_vel_z_ * dt;
     if (pos.z <= sphere_base_pos_.z) {
       pos.z = sphere_base_pos_.z;
@@ -297,54 +280,23 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnPreRender: no valid window - skipping");
     co_return;
   }
 
-  // Set ImGui context before making ImGui calls
-  auto imgui_module_ref = app_.engine
-    ? app_.engine->GetModule<engine::imgui::ImGuiModule>()
-    : std::nullopt;
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
-  // Delegate to pipeline
   co_await Base::OnPreRender(context);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  constexpr size_t kDefaultSceneCapacity = 128;
-
   DCHECK_NOTNULL_F(app_window_);
   auto& shell = GetShell();
 
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
     co_return;
-  }
-
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(std::make_unique<scene::Scene>(
-      "InputSystem-Scene", kDefaultSceneCapacity));
-    const auto staged_scene = shell.GetStagedScene();
-    CHECK_NOTNULL_F(staged_scene, "InputSystem staged scene is null");
-
-    auto camera_node = staged_scene->CreateNode("MainCamera");
-    auto camera = std::make_unique<scene::PerspectiveCamera>();
-    const bool attached = camera_node.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    auto tf = camera_node.GetTransform();
-    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-    shell.SetStagedMainCamera(std::move(camera_node));
   }
 
   if (!active_scene_.IsValid()) {
@@ -357,10 +309,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
   auto* scene = scene_ptr.get();
 
-  // Note: View camera is now updated via UpdateComposition
-
-  // Build sphere mesh if not present
-  using oxygen::data::MaterialAsset;
   using oxygen::data::MeshBuilder;
   using oxygen::data::pak::geometry::GeometryAssetDesc;
   using oxygen::data::pak::geometry::MeshViewDesc;
@@ -385,7 +333,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             .EndSubMesh()
             .Build();
 
-      // Geometry asset descriptor using mesh bounds
       GeometryAssetDesc geo_desc {};
       geo_desc.lod_count = 1;
       const auto bb_min = mesh->BoundingBoxMin();
@@ -403,14 +350,12 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         geo_desc,
         std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 
-      // Create a node and attach the geometry
       sphere_node_ = scene->CreateNode("Sphere");
       sphere_node_.GetRenderable().SetGeometry(std::move(sphere_geo));
       sphere_node_.GetTransform().SetLocalPosition(sphere_base_pos_);
     }
   }
 
-  // Delegate to base class / pipeline for view registration
   co_await Base::OnSceneMutation(context);
 }
 
@@ -425,7 +370,6 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  // Update panel config once when camera rig becomes available
   static bool camera_rig_bound = false;
   if (!camera_rig_bound && shell.GetCameraRig()) {
     UpdateInputDebugPanelConfig(shell.GetCameraRig());
@@ -433,21 +377,17 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   }
 
   shell.Draw(context);
-
   co_return;
 }
 
 auto MainModule::InitInputBindings() noexcept -> bool
 {
-  // NOLINTBEGIN(*-magic-numbers)
   using oxygen::input::Action;
   using oxygen::input::ActionTriggerDown;
-  using oxygen::input::ActionTriggerPressed;
   using oxygen::input::ActionTriggerTap;
   using oxygen::input::ActionValueType;
   using oxygen::input::InputActionMapping;
   using oxygen::input::InputMappingContext;
-
   using platform::InputSlots;
 
   if (!app_.input_system) {
@@ -455,7 +395,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
     return false;
   }
 
-  // Create and register actions we keep for later queries
   shift_action_ = std::make_shared<Action>("shift", ActionValueType::kBool);
   app_.input_system->AddAction(shift_action_);
   modifier_keys_ctx_ = std::make_shared<InputMappingContext>("modifier keys");
@@ -469,7 +408,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
   }
   app_.input_system->AddMappingContext(modifier_keys_ctx_, 1000);
 
-  // Example actions setup
   jump_action_ = std::make_shared<Action>("jump", ActionValueType::kBool);
   app_.input_system->AddAction(jump_action_);
 
@@ -481,7 +419,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
   swim_up_action_ = std::make_shared<Action>("swim up", ActionValueType::kBool);
   app_.input_system->AddAction(swim_up_action_);
 
-  // Setup mapping context when moving on the ground
   ground_movement_ctx_
     = std::make_shared<InputMappingContext>("ground movement");
   {
@@ -498,7 +435,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
       shift_trigger->SetLinkedAction(shift_action_);
       shift_trigger->MakeImplicit();
       mapping->AddTrigger(shift_trigger);
-
       ground_movement_ctx_->AddMapping(mapping);
     }
     {
@@ -508,14 +444,11 @@ auto MainModule::InitInputBindings() noexcept -> bool
       const auto mapping
         = std::make_shared<InputActionMapping>(jump_action_, InputSlots::Space);
       mapping->AddTrigger(trigger);
-
       ground_movement_ctx_->AddMapping(mapping);
     }
-
     app_.input_system->AddMappingContext(ground_movement_ctx_, 0);
   }
 
-  // Setup mapping context when swimming
   swimming_ctx_ = std::make_shared<InputMappingContext>("swimming");
   {
     auto trig_down = std::make_shared<ActionTriggerDown>();
@@ -528,15 +461,11 @@ auto MainModule::InitInputBindings() noexcept -> bool
     app_.input_system->AddMappingContext(swimming_ctx_, 0);
   }
 
-  // Now the player is moving on the ground
   app_.input_system->ActivateMappingContext(modifier_keys_ctx_);
   app_.input_system->ActivateMappingContext(ground_movement_ctx_);
-  // Camera controls are handled by DemoShell's camera rig
-
   return true;
 }
 
-//! Update the Input Debug panel configuration from current demo state.
 auto MainModule::UpdateInputDebugPanelConfig(
   observer_ptr<ui::CameraRigController> camera_rig) -> void
 {
@@ -555,7 +484,6 @@ auto MainModule::UpdateInputDebugPanelConfig(
   if (input_debug_panel_) {
     input_debug_panel_->Initialize(config);
   }
-  // NOLINTEND(*-magic-numbers)
 }
 
 auto MainModule::UpdateComposition(engine::FrameContext& context,
@@ -579,7 +507,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     };
   }
 
-  // Create the main scene view intent
   auto main_comp
     = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;

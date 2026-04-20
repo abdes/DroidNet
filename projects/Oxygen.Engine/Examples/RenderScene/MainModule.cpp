@@ -30,7 +30,6 @@
 #include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
@@ -222,10 +221,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     static_cast<const void*>(app_.input_system.get()),
     static_cast<const void*>(engine.get()));
 
-  // Create Pipeline
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
-
   auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { engine.get() };
@@ -243,9 +238,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
-  shell_config.get_active_pipeline = [this]() {
-    return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
-  };
   shell_config.on_scene_load_requested = [this](const ui::SceneEntry& entry) {
     pending_scene_load_ = SceneLoadRequest {
       .key = entry.key,
@@ -256,10 +248,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   };
   shell_config.on_scene_load_cancel_requested
     = [this]() { scene_load_cancel_requested_ = true; };
-  shell_config.on_dump_texture_memory = [this](const std::size_t top_n) {
-    if (auto* renderer = app_.renderer.get()) {
-      renderer->DumpEstimatedTextureMemory(top_n);
-    }
+  shell_config.on_dump_texture_memory = [this](const std::size_t /*top_n*/) {
+    LOG_F(INFO,
+      "RenderScene: Vortex runtime path does not expose legacy texture-memory "
+      "dump telemetry");
   };
   shell_config.get_last_released_scene_key
     = [this]() { return last_released_scene_key_; };
@@ -291,6 +283,21 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
     return nullptr;
   }
+
+  LOG_F(INFO, "RenderScene: Staging fallback default scene");
+  shell->StageScene(
+    std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
+  auto staged_scene = shell->GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene.get(),
+    "fallback staged scene must be available after StageScene");
+  main_camera_ = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const bool attached = main_camera_.AttachCamera(std::move(camera));
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = main_camera_.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  shell->SetStagedMainCamera(main_camera_);
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
@@ -962,12 +969,7 @@ auto MainModule::StageFallbackScene() -> void
   shell.SetStagedMainCamera(std::move(camera_node));
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
-}
+auto MainModule::ClearBackbufferReferences() -> void { }
 
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> /*context*/)
   -> co::Co<>
@@ -1001,22 +1003,6 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
-  if (!imgui_module_ref) {
-    co_return;
-  }
-
-  auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
-    co_return;
-  }
-
-  auto* imgui_context = imgui_module.GetImGuiContext();
-  if (imgui_context == nullptr) {
-    co_return;
-  }
-  ImGui::SetCurrentContext(imgui_context);
-
   auto& shell = GetShell();
   shell.Draw(context);
 
@@ -1028,12 +1014,9 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(app_window_);
 
-  if (auto imgui_module_ref
-    = app_.engine->GetModule<engine::imgui::ImGuiModule>()) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
+  if (!app_window_->GetWindow()) {
+    DLOG_F(1, "OnPreRender: no valid window - skipping");
+    co_return;
   }
 
   co_await Base::OnPreRender(context);
