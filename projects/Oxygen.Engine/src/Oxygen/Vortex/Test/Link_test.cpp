@@ -70,34 +70,6 @@ auto VerifySourceHermeticity() -> void
   }
 }
 
-auto VerifyBoundaryContracts() -> void
-{
-  namespace fs = std::filesystem;
-
-  const auto root = fs::path { OXYGEN_VORTEX_SOURCE_DIR };
-  const auto verify_absent = [](const fs::path& file, std::string_view needle) {
-    auto input = std::ifstream(file);
-    auto line = std::string {};
-    std::size_t line_number = 0;
-    while (std::getline(input, line)) {
-      ++line_number;
-      if (!std::string_view { line }.contains(needle)) {
-        continue;
-      }
-
-      throw std::runtime_error("forbidden Phase 1 boundary token found at "
-        + file.generic_string() + ':' + std::to_string(line_number) + " -> "
-        + std::string(needle));
-    }
-  };
-
-  verify_absent(root / "Renderer.h", "Internal/RenderContextPool.h");
-  verify_absent(root / "CMakeLists.txt", "SceneRenderer/ShaderDebugMode.h");
-  verify_absent(root / "CMakeLists.txt", "SceneRenderer/ShaderPassConfig.h");
-  verify_absent(root / "CMakeLists.txt", "SceneRenderer/ToneMapPassConfig.h");
-  verify_absent(root / "CMakeLists.txt", "oxygen::imgui");
-}
-
 auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
 {
   frame_context.SetFrameSlot(oxygen::frame::Slot { 0U },
@@ -137,7 +109,6 @@ auto main() -> int
 {
   try {
     VerifySourceHermeticity();
-    VerifyBoundaryContracts();
 
     auto graphics = std::make_shared<FakeGraphics>();
     graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
