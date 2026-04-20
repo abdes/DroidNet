@@ -93,6 +93,16 @@ $expectedDebugChecks = @{
 
 $expectedProductChecks = @{
   'stage3_depth_ok' = 'true'
+  'atmosphere_transmittance_lut_scope_count_match' = 'true'
+  'atmosphere_transmittance_lut_dispatch_count_match' = 'true'
+  'atmosphere_multi_scattering_lut_scope_count_match' = 'true'
+  'atmosphere_multi_scattering_lut_dispatch_count_match' = 'true'
+  'distant_sky_light_lut_scope_count_match' = 'true'
+  'distant_sky_light_lut_dispatch_count_match' = 'true'
+  'transmittance_lut_published' = 'true'
+  'multi_scattering_lut_published' = 'true'
+  'distant_sky_light_lut_published' = 'true'
+  'atmosphere_lut_cache_valid' = 'true'
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
@@ -186,6 +196,18 @@ $runtimeScreenHzbPublished = @(
 $runtimeLocalFogHzbConsumed = @(
   $runtimeLogLines | Select-String -Pattern 'local_fog_hzb_consumed=true'
 ).Count -gt 0
+$runtimeTransmittanceLutPublished = @(
+  $runtimeLogLines | Select-String -Pattern 'transmittance_lut_published=true'
+).Count -gt 0
+$runtimeMultiScatteringLutPublished = @(
+  $runtimeLogLines | Select-String -Pattern 'multi_scattering_lut_published=true'
+).Count -gt 0
+$runtimeDistantSkyLightLutPublished = @(
+  $runtimeLogLines | Select-String -Pattern 'distant_sky_light_lut_published=true'
+).Count -gt 0
+$runtimeAtmosphereLutCacheValid = @(
+  $runtimeLogLines | Select-String -Pattern 'atmosphere_lut_cache_valid=true'
+).Count -gt 0
 
 $captureReportLines = Get-Content -LiteralPath $captureReportFullPath
 $captureReportMap = @{}
@@ -259,6 +281,26 @@ if (($effectiveProductsReportMap['local_fog_hzb_consumed'] -ne 'true') `
   $localFogHzbProofSource = 'runtime_log+capture_report'
 }
 
+$transmittanceLutProofSource = 'runtime_log'
+if ($runtimeTransmittanceLutPublished) {
+  $effectiveProductsReportMap['transmittance_lut_published'] = 'true'
+}
+
+$multiScatteringLutProofSource = 'runtime_log'
+if ($runtimeMultiScatteringLutPublished) {
+  $effectiveProductsReportMap['multi_scattering_lut_published'] = 'true'
+}
+
+$distantSkyLightLutProofSource = 'runtime_log'
+if ($runtimeDistantSkyLightLutPublished) {
+  $effectiveProductsReportMap['distant_sky_light_lut_published'] = 'true'
+}
+
+$atmosphereLutCacheProofSource = 'runtime_log'
+if ($runtimeAtmosphereLutCacheValid) {
+  $effectiveProductsReportMap['atmosphere_lut_cache_valid'] = 'true'
+}
+
 foreach ($key in $expectedProductChecks.Keys) {
   $actualValue = if ($effectiveProductsReportMap.ContainsKey($key)) { $effectiveProductsReportMap[$key] } else { '' }
   if ($actualValue -ne $expectedProductChecks[$key]) {
@@ -298,6 +340,14 @@ $reportLines = @(
   "runtime_draw_writes=$($drawWriteCounts -join ',')"
   "runtime_peak_draws=$peakDrawCount"
   "local_fog_volume_instance_count=$localFogInstanceCount"
+  "transmittance_lut_published=$($effectiveProductsReportMap['transmittance_lut_published'])"
+  "transmittance_lut_proof_source=$transmittanceLutProofSource"
+  "multi_scattering_lut_published=$($effectiveProductsReportMap['multi_scattering_lut_published'])"
+  "multi_scattering_lut_proof_source=$multiScatteringLutProofSource"
+  "distant_sky_light_lut_published=$($effectiveProductsReportMap['distant_sky_light_lut_published'])"
+  "distant_sky_light_lut_proof_source=$distantSkyLightLutProofSource"
+  "atmosphere_lut_cache_valid=$($effectiveProductsReportMap['atmosphere_lut_cache_valid'])"
+  "atmosphere_lut_cache_proof_source=$atmosphereLutCacheProofSource"
 )
 
 foreach ($key in ($localFogValidationResults.Keys | Sort-Object)) {

@@ -1,9 +1,9 @@
 {
   "$meta": {
-    "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
+    "source": "src/Oxygen/Core/Meta/Bindless.yaml",
     "source_version": "2.0.0",
     "tool_version": "1.2.2",
-    "generated": "2026-04-02 21:10:18",
+    "generated": "2026-04-20 09:39:53",
     "format": "BindlessStrategy.Vulkan/1",
     "schema_version": "2.0.0"
   },

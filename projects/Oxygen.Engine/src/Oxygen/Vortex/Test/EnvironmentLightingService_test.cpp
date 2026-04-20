@@ -258,6 +258,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(view_products.atmosphere_light_count, 0U);
   EXPECT_EQ(
     view_products.conventional_shadow_authority_slot, kInvalidAtmosphereLightSlot);
+  EXPECT_EQ(view_products.transmittance_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(view_products.multi_scattering_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(view_products.sky_view_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(view_products.camera_aerial_perspective_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(view_products.distant_sky_light_lut_srv, kInvalidShaderVisibleIndex);
@@ -291,6 +293,14 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/LocalFogVolumeState.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/SkyPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereComposePass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Internal/AtmosphereLutCache.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Internal/AtmosphereLutCache.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereTransmittanceLutPass.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereTransmittanceLutPass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereMultiScatteringLutPass.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereMultiScatteringLutPass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/DistantSkyLightLutPass.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/DistantSkyLightLutPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereSkyViewLutPass.h"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereSkyViewLutPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereCameraAerialPerspectivePass.h"));
@@ -324,6 +334,12 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(catalog_source.contains(
     "Vortex/Services/Environment/AtmosphereCompose.hlsl"));
   EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/DistantSkyLightLut.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
     "Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
   EXPECT_TRUE(catalog_source.contains(
     "Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
@@ -333,6 +349,9 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(catalog_source.contains("VortexSkyPassPS"));
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereComposeVS"));
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereComposePS"));
+  EXPECT_TRUE(catalog_source.contains("VortexAtmosphereTransmittanceLutCS"));
+  EXPECT_TRUE(catalog_source.contains("VortexAtmosphereMultiScatteringLutCS"));
+  EXPECT_TRUE(catalog_source.contains("VortexDistantSkyLightLutCS"));
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereSkyViewLutCS"));
   EXPECT_TRUE(catalog_source.contains(
     "VortexAtmosphereCameraAerialPerspectiveCS"));
@@ -357,6 +376,12 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/DistantSkyLightLut.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
@@ -543,6 +568,9 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(vortexbasic_products.contains("choose_latest_stage_sample"));
   EXPECT_TRUE(vortexbasic_products.contains("find_last_named_record_any"));
   EXPECT_TRUE(vortexbasic_products.contains("COPY_NAME"));
+  EXPECT_TRUE(vortexbasic_products.contains("atmosphere_transmittance_lut_scope_count_match"));
+  EXPECT_TRUE(vortexbasic_products.contains("atmosphere_multi_scattering_lut_scope_count_match"));
+  EXPECT_TRUE(vortexbasic_products.contains("distant_sky_light_lut_scope_count_match"));
   EXPECT_TRUE(vortexbasic_products.contains("screen_hzb_expected_width"));
   EXPECT_TRUE(vortexbasic_products.contains("screen_hzb_published"));
   EXPECT_TRUE(vortexbasic_products.contains("local_fog_hzb_consumed"));
@@ -558,6 +586,13 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(async_assert.contains("'stage15_async_scene_color_changed'"));
   EXPECT_TRUE(async_assert.contains("'stage15_far_background_mask_valid'"));
   EXPECT_TRUE(async_assert.contains("'stage15_sky_quality_ok'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'atmosphere_transmittance_lut_scope_count_match'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'atmosphere_multi_scattering_lut_scope_count_match'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'distant_sky_light_lut_scope_count_match'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'transmittance_lut_published'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'multi_scattering_lut_published'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'distant_sky_light_lut_published'"));
+  EXPECT_TRUE(vortexbasic_assert.contains("'atmosphere_lut_cache_valid'"));
   EXPECT_TRUE(vortexbasic_assert.contains("'compositing_present_operation_count_match'"));
   EXPECT_TRUE(vortexbasic_assert.contains("'screen_hzb_published'"));
   EXPECT_TRUE(vortexbasic_assert.contains("screen_hzb_proof_source"));
@@ -1004,6 +1039,28 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(generation.view_id, ViewId { 18U });
   EXPECT_TRUE(generation.environment_view_published);
   EXPECT_TRUE(generation.environment_view_slot.IsValid());
+  EXPECT_TRUE(generation.atmosphere_lut_cache_valid);
+  EXPECT_GE(generation.atmosphere_lut_cache_revision, 3U);
+  EXPECT_EQ(generation.atmosphere_light_count, 1U);
+  EXPECT_FALSE(generation.dual_atmosphere_lights_participating);
+  EXPECT_TRUE(generation.transmittance_lut_requested);
+  EXPECT_TRUE(generation.transmittance_lut_executed);
+  EXPECT_TRUE(generation.transmittance_lut_srv.IsValid());
+  EXPECT_GE(generation.transmittance_dispatch_count_x, 1U);
+  EXPECT_GE(generation.transmittance_dispatch_count_y, 1U);
+  EXPECT_EQ(generation.transmittance_dispatch_count_z, 1U);
+  EXPECT_TRUE(generation.multi_scattering_lut_requested);
+  EXPECT_TRUE(generation.multi_scattering_lut_executed);
+  EXPECT_TRUE(generation.multi_scattering_lut_srv.IsValid());
+  EXPECT_GE(generation.multi_scattering_dispatch_count_x, 1U);
+  EXPECT_GE(generation.multi_scattering_dispatch_count_y, 1U);
+  EXPECT_EQ(generation.multi_scattering_dispatch_count_z, 1U);
+  EXPECT_TRUE(generation.distant_sky_light_lut_requested);
+  EXPECT_TRUE(generation.distant_sky_light_lut_executed);
+  EXPECT_TRUE(generation.distant_sky_light_lut_srv.IsValid());
+  EXPECT_EQ(generation.distant_sky_light_dispatch_count_x, 1U);
+  EXPECT_EQ(generation.distant_sky_light_dispatch_count_y, 1U);
+  EXPECT_EQ(generation.distant_sky_light_dispatch_count_z, 1U);
   EXPECT_TRUE(generation.sky_view_lut_requested);
   EXPECT_TRUE(generation.sky_view_lut_executed);
   EXPECT_TRUE(generation.sky_view_lut_srv.IsValid());
@@ -1019,7 +1076,33 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.environment_view_products_published);
   EXPECT_TRUE(generation.environment_view_products_slot.IsValid());
 
-  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 2U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 5U);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName()
+          == "Vortex.Environment.AtmosphereTransmittanceLut"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"
+        && bind.desc.ComputeShader().entry_point
+          == "VortexAtmosphereTransmittanceLutCS";
+    }));
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName()
+          == "Vortex.Environment.AtmosphereMultiScatteringLut"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"
+        && bind.desc.ComputeShader().entry_point
+          == "VortexAtmosphereMultiScatteringLutCS";
+    }));
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.Environment.DistantSkyLightLut"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Services/Environment/DistantSkyLightLut.hlsl"
+        && bind.desc.ComputeShader().entry_point
+          == "VortexDistantSkyLightLutCS";
+    }));
   EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
     [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.Environment.AtmosphereSkyViewLut"
@@ -1037,6 +1120,76 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
         && bind.desc.ComputeShader().entry_point
           == "VortexAtmosphereCameraAerialPerspectiveCS";
     }));
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AtmosphereLutCacheStopsRegeneratingSceneScopeLutsUntilStableStateChanges)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 2U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Secondary",
+    oxygen::scene::AtmosphereLightSlot::kSecondary, false, 1U, false,
+    { 0.5F, 0.5F, 0.7F }, { 0.6F, 0.7F, 1.0F }, 3000.0F));
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 181U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 181U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name = "EnvironmentLightingServiceBehaviorTest.AtmosphereCache.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  graphics_->dispatch_log_.dispatches.clear();
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 5U);
+  auto first_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(first_generation.atmosphere_lut_cache_valid);
+  EXPECT_TRUE(first_generation.dual_atmosphere_lights_participating);
+  EXPECT_TRUE(first_generation.transmittance_lut_executed);
+  EXPECT_TRUE(first_generation.multi_scattering_lut_executed);
+  EXPECT_TRUE(first_generation.distant_sky_light_lut_executed);
+
+  graphics_->dispatch_log_.dispatches.clear();
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 2U);
+  auto second_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(second_generation.atmosphere_lut_cache_valid);
+  EXPECT_TRUE(second_generation.dual_atmosphere_lights_participating);
+  EXPECT_FALSE(second_generation.transmittance_lut_executed);
+  EXPECT_FALSE(second_generation.multi_scattering_lut_executed);
+  EXPECT_FALSE(second_generation.distant_sky_light_lut_executed);
+  EXPECT_EQ(second_generation.transmittance_lut_srv,
+    first_generation.transmittance_lut_srv);
+  EXPECT_EQ(second_generation.multi_scattering_lut_srv,
+    first_generation.multi_scattering_lut_srv);
+  EXPECT_EQ(second_generation.distant_sky_light_lut_srv,
+    first_generation.distant_sky_light_lut_srv);
+
+  auto atmosphere
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::SkyAtmosphere>();
+  ASSERT_NE(atmosphere.get(), nullptr);
+  atmosphere->SetMultiScatteringFactor(0.75F);
+  scene->Update();
+
+  graphics_->dispatch_log_.dispatches.clear();
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 5U);
+  const auto third_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(third_generation.transmittance_lut_executed);
+  EXPECT_TRUE(third_generation.multi_scattering_lut_executed);
+  EXPECT_TRUE(third_generation.distant_sky_light_lut_executed);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

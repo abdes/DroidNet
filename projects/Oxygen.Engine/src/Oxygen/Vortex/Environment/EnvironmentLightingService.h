@@ -38,6 +38,9 @@ class AtmosphereRenderer;
 class FogRenderer;
 class LocalFogVolumeTiledCullingPass;
 class LocalFogVolumeComposePass;
+class AtmosphereTransmittanceLutPass;
+class AtmosphereMultiScatteringLutPass;
+class DistantSkyLightLutPass;
 class AtmosphereSkyViewLutPass;
 class AtmosphereCameraAerialPerspectivePass;
 namespace internal {
@@ -45,6 +48,7 @@ struct StableAtmosphereState;
 struct ResolvedAtmosphereLightState;
 class AtmosphereState;
 class AtmosphereLightState;
+class AtmosphereLutCache;
 class IblProcessor;
 class LocalFogVolumeState;
 }
@@ -75,6 +79,32 @@ public:
     ViewId view_id { kInvalidViewId };
     bool environment_view_published { false };
     ShaderVisibleIndex environment_view_slot { kInvalidShaderVisibleIndex };
+    bool atmosphere_lut_cache_valid { false };
+    std::uint32_t atmosphere_lut_cache_revision { 0U };
+    std::uint32_t atmosphere_light_count { 0U };
+    bool dual_atmosphere_lights_participating { false };
+    bool transmittance_lut_requested { false };
+    bool transmittance_lut_executed { false };
+    ShaderVisibleIndex transmittance_lut_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t transmittance_width { 0U };
+    std::uint32_t transmittance_height { 0U };
+    std::uint32_t transmittance_dispatch_count_x { 0U };
+    std::uint32_t transmittance_dispatch_count_y { 0U };
+    std::uint32_t transmittance_dispatch_count_z { 0U };
+    bool multi_scattering_lut_requested { false };
+    bool multi_scattering_lut_executed { false };
+    ShaderVisibleIndex multi_scattering_lut_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t multi_scattering_width { 0U };
+    std::uint32_t multi_scattering_height { 0U };
+    std::uint32_t multi_scattering_dispatch_count_x { 0U };
+    std::uint32_t multi_scattering_dispatch_count_y { 0U };
+    std::uint32_t multi_scattering_dispatch_count_z { 0U };
+    bool distant_sky_light_lut_requested { false };
+    bool distant_sky_light_lut_executed { false };
+    ShaderVisibleIndex distant_sky_light_lut_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t distant_sky_light_dispatch_count_x { 0U };
+    std::uint32_t distant_sky_light_dispatch_count_y { 0U };
+    std::uint32_t distant_sky_light_dispatch_count_z { 0U };
     bool sky_view_lut_requested { false };
     bool sky_view_lut_executed { false };
     ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
@@ -231,6 +261,13 @@ private:
   std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
     local_fog_tiled_culling_ {};
   std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_ {};
+  std::unique_ptr<environment::internal::AtmosphereLutCache> atmosphere_lut_cache_ {};
+  std::unique_ptr<environment::AtmosphereTransmittanceLutPass>
+    transmittance_lut_pass_ {};
+  std::unique_ptr<environment::AtmosphereMultiScatteringLutPass>
+    multi_scattering_lut_pass_ {};
+  std::unique_ptr<environment::DistantSkyLightLutPass>
+    distant_sky_light_lut_pass_ {};
   std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_ {};
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
     camera_aerial_perspective_pass_ {};

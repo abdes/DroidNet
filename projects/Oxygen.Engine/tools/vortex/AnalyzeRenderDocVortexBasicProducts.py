@@ -478,6 +478,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_spot_name = "Vortex.Stage12.SpotLight"
     stage12_point_name = "Vortex.Stage12.PointLight"
     stage12_directional_name = "Vortex.Stage12.DirectionalLight"
+    atmosphere_transmittance_lut_name = "Vortex.Environment.AtmosphereTransmittanceLut"
+    atmosphere_multi_scattering_lut_name = "Vortex.Environment.AtmosphereMultiScatteringLut"
+    distant_sky_light_lut_name = "Vortex.Environment.DistantSkyLightLut"
     stage14_local_fog_name = "Vortex.Stage14.LocalFogTiledCulling"
     stage15_sky_name = "Vortex.Stage15.Sky"
     stage15_atmosphere_name = "Vortex.Stage15.Atmosphere"
@@ -500,6 +503,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     spot_records = records_under_prefix(action_records, stage12_name + " > " + stage12_spot_name)
     point_records = records_under_prefix(action_records, stage12_name + " > " + stage12_point_name)
     directional_records = records_under_prefix(action_records, stage12_name + " > " + stage12_directional_name)
+    atmosphere_transmittance_lut_scope = records_with_name(action_records, atmosphere_transmittance_lut_name)
+    atmosphere_transmittance_lut_records = records_under_prefix(action_records, atmosphere_transmittance_lut_name)
+    atmosphere_multi_scattering_lut_scope = records_with_name(action_records, atmosphere_multi_scattering_lut_name)
+    atmosphere_multi_scattering_lut_records = records_under_prefix(action_records, atmosphere_multi_scattering_lut_name)
+    distant_sky_light_lut_scope = records_with_name(action_records, distant_sky_light_lut_name)
+    distant_sky_light_lut_records = records_under_prefix(action_records, distant_sky_light_lut_name)
     stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_name)
     stage15_sky_records = records_under_prefix(action_records, stage15_sky_name)
     stage15_atmosphere_records = records_under_prefix(action_records, stage15_atmosphere_name)
@@ -733,6 +742,19 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         len(indirect_args_usage) > 0 and len(indirect_count_usage) > 0
     )
 
+    atmosphere_transmittance_lut_scope_count_match = len(atmosphere_transmittance_lut_scope) == 1
+    atmosphere_transmittance_lut_dispatch_count_match = (
+        len(records_with_name(atmosphere_transmittance_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    atmosphere_multi_scattering_lut_scope_count_match = len(atmosphere_multi_scattering_lut_scope) == 1
+    atmosphere_multi_scattering_lut_dispatch_count_match = (
+        len(records_with_name(atmosphere_multi_scattering_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    distant_sky_light_lut_scope_count_match = len(distant_sky_light_lut_scope) == 1
+    distant_sky_light_lut_dispatch_count_match = (
+        len(records_with_name(distant_sky_light_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+
     report.append("analysis_profile=vortexbasic_stage_products")
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
@@ -753,6 +775,36 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     report.append("compositing_draw_event={}".format(compositing_draw.event_id))
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
+    report.append(
+        "atmosphere_transmittance_lut_scope_count_match={}".format(
+            str(atmosphere_transmittance_lut_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_transmittance_lut_dispatch_count_match={}".format(
+            str(atmosphere_transmittance_lut_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_multi_scattering_lut_scope_count_match={}".format(
+            str(atmosphere_multi_scattering_lut_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_multi_scattering_lut_dispatch_count_match={}".format(
+            str(atmosphere_multi_scattering_lut_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "distant_sky_light_lut_scope_count_match={}".format(
+            str(distant_sky_light_lut_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "distant_sky_light_lut_dispatch_count_match={}".format(
+            str(distant_sky_light_lut_dispatch_count_match).lower()
+        )
+    )
     report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
     report.append("stage9_gbuffer_base_color_nonzero={}".format(str(stage9_gbuffer_nonzero).lower()))
     report.append("stage9_velocity_nonzero={}".format(str(stage9_velocity_nonzero).lower()))
@@ -836,6 +888,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     overall = (
         stage3_depth_ok
+        and atmosphere_transmittance_lut_scope_count_match
+        and atmosphere_transmittance_lut_dispatch_count_match
+        and atmosphere_multi_scattering_lut_scope_count_match
+        and atmosphere_multi_scattering_lut_dispatch_count_match
+        and distant_sky_light_lut_scope_count_match
+        and distant_sky_light_lut_dispatch_count_match
         and stage9_has_expected_targets
         and stage9_gbuffer_nonzero
         and stage9_velocity_nonzero
