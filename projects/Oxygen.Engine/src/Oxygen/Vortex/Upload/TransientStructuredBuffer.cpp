@@ -141,16 +141,6 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
       SizeBytes { size_bytes }, debug_label_);
   }
 
-  auto& allocator = gfx_->GetDescriptorAllocator();
-  auto handle = allocator.AllocateBindless(
-    domain_, graphics::ResourceViewType::kStructuredBuffer_SRV);
-
-  if (!handle.IsValid()) {
-    LOG_F(ERROR, "Descriptor allocation for transient upload buffer failed!");
-    slot.allocation.reset();
-    return std::unexpected(make_error_code(UploadError::kResourceAllocFailed));
-  }
-
   graphics::BufferViewDescription view_desc;
   view_desc.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
   view_desc.range = { u_aligned_offset, size_bytes };
@@ -160,12 +150,46 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   DCHECK_F(gfx_->GetResourceRegistry().Contains(slot.allocation->Buffer()),
     "Backing buffer (RingBufferStaging) not registered in ResourceRegistry!");
   try {
+    auto& registry = gfx_->GetResourceRegistry();
+
+    if (const auto existing_srv
+      = registry.FindShaderVisibleIndex(slot.allocation->Buffer(), view_desc);
+      existing_srv.has_value()) {
+      SlotAlloc alloc_entry {};
+      alloc_entry.allocation = std::move(slot.allocation);
+      alloc_entry.srv_index = *existing_srv;
+      alloc_entry.sequence = current_frame_;
+      slot.allocs.emplace_back(std::move(alloc_entry));
+
+      TransientAllocation out {};
+      out.srv = *existing_srv;
+      out.mapped_ptr = const_cast<std::byte*>(aligned_ptr);
+      out.size_bytes = size_bytes;
+      out.sequence = current_frame_;
+      out.slot = current_slot_;
+      LOG_F(1,
+        "TransientStructuredBuffer::Allocate reused slot={} bytes={} srv_index={} "
+        "ptr={}",
+        slot_index, size_bytes, out.srv.get(), fmt::ptr(out.mapped_ptr));
+      return out;
+    }
+
+    auto& allocator = gfx_->GetDescriptorAllocator();
+    auto handle = allocator.AllocateBindless(
+      domain_, graphics::ResourceViewType::kStructuredBuffer_SRV);
+
+    if (!handle.IsValid()) {
+      LOG_F(ERROR, "Descriptor allocation for transient upload buffer failed!");
+      slot.allocation.reset();
+      return std::unexpected(make_error_code(UploadError::kResourceAllocFailed));
+    }
+
     // Register view and append a per-slot allocation record so multiple
     // allocations within the same frame slot are preserved until Next
     // OnFrameStart calls.
     try {
       const auto srv_index = allocator.GetShaderVisibleIndex(handle);
-      auto native_view = gfx_->GetResourceRegistry().RegisterView(
+      auto native_view = registry.RegisterView(
         slot.allocation->Buffer(), std::move(handle), view_desc);
 
       // Build allocation entry and append
