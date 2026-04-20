@@ -40,13 +40,10 @@
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -189,12 +186,7 @@ auto MainModule::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
-}
+auto MainModule::ClearBackbufferReferences() -> void { }
 
 auto MainModule::OnAttachedImpl(
   oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
@@ -205,9 +197,6 @@ auto MainModule::OnAttachedImpl(
   if (!InitInputBindings()) {
     return nullptr;
   }
-
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
 
   auto shell = std::make_unique<DemoShell>();
   const auto demo_root
@@ -229,9 +218,6 @@ auto MainModule::OnAttachedImpl(
       .post_process = true,
       .ground_grid = true,
     },
-    .get_active_pipeline = [this]() -> observer_ptr<renderer::RenderingPipeline> {
-      return observer_ptr { pipeline_.get() };
-    },
   };
 
   if (!shell->Initialize(shell_config)) {
@@ -245,6 +231,18 @@ auto MainModule::OnAttachedImpl(
     LOG_F(WARNING, "Physics: failed to register panel");
     return nullptr;
   }
+
+  shell->StageScene(std::make_unique<scene::Scene>("Physics-Scene", 512));
+  const auto staged_scene = shell->GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "Physics staged scene is null");
+  auto camera_node = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  CHECK_F(camera_node.AttachCamera(std::move(camera)),
+    "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = camera_node.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
+  shell->SetStagedMainCamera(camera_node);
 
   main_view_id_ = GetOrCreateViewId("MainView");
   LOG_F(INFO, "Physics: Module initialized");
@@ -304,16 +302,6 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  auto imgui_module_ref = app_.engine
-    ? app_.engine->GetModule<engine::imgui::ImGuiModule>()
-    : std::nullopt;
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
   co_await Base::OnPreRender(context);
 }
 
@@ -331,15 +319,15 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     if (!StageScenarioScene()) {
       ReportError(context, "failed to stage initial scenario");
     }
-    co_return;
-  }
-
-  if (!active_scene_.IsValid()) {
-    co_return;
   }
 
   if (!scene_ready_ && !BuildProceduralScene()) {
     ReportError(context, "failed to build procedural scene");
+    co_return;
+  }
+
+  if (!active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
     co_return;
   }
 

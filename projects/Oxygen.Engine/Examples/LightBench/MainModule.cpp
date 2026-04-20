@@ -1,4 +1,3 @@
-
 //===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
@@ -17,10 +16,7 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
 #include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -32,7 +28,7 @@ namespace oxygen::examples::light_bench {
 namespace {
   constexpr std::uint32_t kWindowWidth = 2560;
   constexpr std::uint32_t kWindowHeight = 1440;
-} // namespace
+}
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
@@ -56,11 +52,21 @@ auto MainModule::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
+auto MainModule::ClearBackbufferReferences() -> void { }
+
+auto MainModule::StageInitialScene(DemoShell& shell) -> void
 {
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
+  shell.StageScene(light_scene_.CreateScene());
+  const auto staged_scene = shell.GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "LightBench staged scene is null");
+
+  main_camera_ = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const bool attached = main_camera_.AttachCamera(std::move(camera));
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  shell.SetStagedMainCamera(main_camera_);
+
+  light_scene_.SetScene(staged_scene);
 }
 
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
@@ -68,11 +74,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 {
   DCHECK_NOTNULL_F(engine, "expecting a valid engine");
 
-  // Create Pipeline
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
-
-  // Initialize Shell
   auto shell = std::make_unique<DemoShell>();
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
@@ -80,6 +81,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   DemoShellConfig shell_config {
     .engine = observer_ptr { app_.engine.get() },
     .enable_camera_rig = true,
+    .enable_renderer_bound_panels = false,
     .content_roots = {
       .content_root = demo_root.parent_path() / "Content",
       .cooked_root = demo_root / ".cooked",
@@ -91,9 +93,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       .lighting = true,
       .rendering = true,
       .post_process = true,
-    },
-    .get_active_pipeline = [this]() {
-      return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
     },
   };
 
@@ -108,10 +107,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     LOG_F(WARNING, "LightBench: failed to register LightBench panel");
   }
 
-  // Create Main View ID
+  StageInitialScene(*shell);
+
   main_view_id_ = GetOrCreateViewId("MainView");
   LOG_F(INFO, "LightBench: MainView ID created: {}", main_view_id_.get());
-
   LOG_F(INFO, "LightBench: Module initialized");
   return shell;
 }
@@ -119,19 +118,14 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 auto MainModule::OnShutdown() noexcept -> void
 {
   auto& shell = GetShell();
-
-  // Clear scene from shell first to ensure controlled destruction
   shell.SetScene(nullptr);
-
   light_scene_.Reset();
-
   light_bench_panel_.reset();
-
   Base::OnShutdown();
 }
 
-auto MainModule::OnFrameStart(
-  observer_ptr<oxygen::engine::FrameContext> context) -> void
+auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
+  -> void
 {
   DCHECK_NOTNULL_F(context);
   auto& shell = GetShell();
@@ -150,36 +144,18 @@ auto MainModule::OnFrameStart(
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
-  const auto scene_ptr = shell.TryGetScene();
-  if (!scene_ptr) {
-    return;
+  if (const auto scene_ptr = shell.TryGetScene()) {
+    context->SetScene(scene_ptr);
   }
-  context->SetScene(scene_ptr);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
     co_return;
-  }
-
-  auto& shell = GetShell();
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(light_scene_.CreateScene());
-    const auto staged_scene = shell.GetStagedScene();
-    CHECK_NOTNULL_F(staged_scene, "LightBench staged scene is null");
-
-    main_camera_ = staged_scene->CreateNode("MainCamera");
-    auto camera = std::make_unique<scene::PerspectiveCamera>();
-    const bool attached = main_camera_.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    shell.SetStagedMainCamera(main_camera_);
-
-    light_scene_.SetScene(staged_scene);
   }
 
   if (!active_scene_.IsValid()) {
@@ -188,8 +164,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   }
 
   light_scene_.Update();
-
-  // Delegate to pipeline to register views
   co_await Base::OnSceneMutation(context);
 }
 
@@ -197,7 +171,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   std::vector<renderer::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
-
   if (!main_camera_.IsAlive()) {
     return;
   }
@@ -215,7 +188,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     };
   }
 
-  // Create the main scene view intent
   auto main_comp
     = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
@@ -242,15 +214,14 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
     co_return;
   }
-  auto& shell = GetShell();
 
+  auto& shell = GetShell();
   if (app_window_->IsShuttingDown()) {
     DLOG_F(1, "OnGuiUpdate: window is closed/closing - skipping");
     co_return;
   }
 
   shell.Draw(context);
-
   co_return;
 }
 
@@ -258,23 +229,11 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-
   if (!app_window_->GetWindow()) {
     DLOG_F(1, "OnPreRender: no valid window - skipping");
     co_return;
   }
 
-  auto imgui_module_ref = app_.engine
-    ? app_.engine->GetModule<engine::imgui::ImGuiModule>()
-    : std::nullopt;
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
-  // Delegate to pipeline
   co_await Base::OnPreRender(context);
 }
 

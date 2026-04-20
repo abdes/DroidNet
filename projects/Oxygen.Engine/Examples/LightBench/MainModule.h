@@ -98,6 +98,8 @@ protected:
     std::vector<renderer::CompositionView>& views) -> void override;
 
 private:
+  auto StageInitialScene(DemoShell& shell) -> void;
+
   ActiveScene active_scene_ {};
   scene::NodeHandle registered_view_camera_ {};
   scene::SceneNode main_camera_ {};
