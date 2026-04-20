@@ -387,6 +387,21 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kPixel, .name="VortexAtmosphereComposePS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexAtmosphereTransmittanceLutCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexAtmosphereMultiScatteringLutCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/DistantSkyLightLut.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexDistantSkyLightLutCS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl",
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="VortexAtmosphereSkyViewLutCS" } }

@@ -138,6 +138,51 @@ Related:
     is restored, but the live capture-backed product proof is still red and
     needs a dedicated follow-up pass
 
+### 2026-04-20 — 04-27 implementation landed, but the parity-closeout claim was invalid
+
+- Correction:
+  - the earlier `04-27 closed` wording was wrong
+  - the landed code proves **cache ownership / invalidation / publication** for the atmosphere LUT family, but it does **not** prove parity-grade **LUT production** against the relevant UE5.7 sources and shaders
+  - until that production-side parity assessment is completed and accepted, `04-27` must be treated as **not parity-closed**
+- Scope actually landed:
+  - grounded the atmosphere LUT-family work against UE5.7 `SkyAtmosphereRendering.cpp`, `SkyAtmosphere.usf`, and `SkyAtmosphereCommon.ush`
+  - added Vortex-owned scene-scope cache ownership for transmittance, multi-scattering, and distant-sky-light LUT products
+  - added dedicated Vortex compute passes and shader catalog entries for those cache products
+  - upgraded `EnvironmentLightingService` publication/testing/proof surfaces so cache validity and publication are explicit blocking signals instead of implied prerequisites
+- Landed code:
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.cpp`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.h`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp`
+  - `src/Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h`
+  - `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`
+  - `src/Oxygen/Vortex/CMakeLists.txt`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/DistantSkyLightLut.hlsl`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `tools/vortex/Assert-VortexBasicRuntimeProof.ps1`
+- Verification evidence:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R Oxygen.Vortex.EnvironmentLightingService --output-on-failure`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4 && ctest --test-dir out/build-ninja -C Debug -R Oxygen.Vortex.EnvironmentLightingService --output-on-failure`
+- What is proven:
+  - the LUT family now has persistent Vortex-owned cache state instead of per-view throwaway generation
+  - the service publishes explicit transmittance/multi-scattering/distant-sky-light validity and publication signals
+  - focused tests prove dual-light participation, cache reuse across stable publishes, and cache invalidation on authored-atmosphere changes
+  - VortexBasic proof tooling now blocks on the new LUT-family scope/publish signals
+- Remaining blocker:
+  - the actual transmittance / multi-scattering / distant-sky-light production shaders and pass parameterization were **not** assessed or closed to UE5.7 parity quality in this task
+  - `AtmosphereSkyViewLutPass` and `AtmosphereCameraAerialPerspectivePass` still do not consume the cached family or UE-style internal-common parameter block
+  - therefore `04-27` remains incomplete pending a truthful production-parity assessment and, if still short, explicit human approval of the gap
+
 ## Phase Summary
 
 ### 2026-04-19 — local fog parity claim corrected before rewrite

@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
@@ -20,7 +21,10 @@
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Internal/SkyRenderer.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
+#include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
@@ -46,6 +50,14 @@ EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
       std::make_unique<environment::LocalFogVolumeTiledCullingPass>(renderer))
   , local_fog_compose_(
       std::make_unique<environment::LocalFogVolumeComposePass>(renderer))
+  , atmosphere_lut_cache_(
+      std::make_unique<environment::internal::AtmosphereLutCache>(renderer))
+  , transmittance_lut_pass_(
+      std::make_unique<environment::AtmosphereTransmittanceLutPass>(renderer))
+  , multi_scattering_lut_pass_(
+      std::make_unique<environment::AtmosphereMultiScatteringLutPass>(renderer))
+  , distant_sky_light_lut_pass_(
+      std::make_unique<environment::DistantSkyLightLutPass>(renderer))
   , sky_view_lut_pass_(
       std::make_unique<environment::AtmosphereSkyViewLutPass>(renderer))
   , camera_aerial_perspective_pass_(
@@ -115,6 +127,18 @@ auto EnvironmentLightingService::OnFrameStart(
   last_stage15_state_ = {};
   if (local_fog_state_ != nullptr) {
     local_fog_state_->OnFrameStart(sequence, slot);
+  }
+  if (atmosphere_lut_cache_ != nullptr) {
+    atmosphere_lut_cache_->OnFrameStart(sequence, slot);
+  }
+  if (transmittance_lut_pass_ != nullptr) {
+    transmittance_lut_pass_->OnFrameStart(sequence, slot);
+  }
+  if (multi_scattering_lut_pass_ != nullptr) {
+    multi_scattering_lut_pass_->OnFrameStart(sequence, slot);
+  }
+  if (distant_sky_light_lut_pass_ != nullptr) {
+    distant_sky_light_lut_pass_->OnFrameStart(sequence, slot);
   }
   if (sky_view_lut_pass_ != nullptr) {
     sky_view_lut_pass_->OnFrameStart(sequence, slot);
@@ -257,18 +281,40 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     return kInvalidShaderVisibleIndex;
   }
 
+  const auto& stable_state = atmosphere_state_->GetState();
+  atmosphere_lut_cache_->RefreshForState(stable_state);
   const auto view_data = BuildEnvironmentViewData(ctx);
   const auto resolved_environment_view_slot = environment_view_slot.IsValid()
     ? environment_view_slot
     : view_data_publisher_->Publish(ctx.current_view.view_id, view_data);
 
-  auto products = atmosphere_state_->GetState().view_products;
-  const auto sky_view_state = sky_view_lut_pass_->Record(
-    ctx, view_data, atmosphere_state_->GetState());
+  const auto transmittance_state
+    = transmittance_lut_pass_->Record(ctx, stable_state, *atmosphere_lut_cache_);
+  const auto multi_scattering_state
+    = multi_scattering_lut_pass_->Record(ctx, stable_state, *atmosphere_lut_cache_);
+  const auto distant_sky_light_state
+    = distant_sky_light_lut_pass_->Record(ctx, stable_state, *atmosphere_lut_cache_);
+
+  auto products = stable_state.view_products;
+  products.transmittance_lut_srv
+    = atmosphere_lut_cache_->GetState().transmittance_lut_valid
+      ? atmosphere_lut_cache_->GetState().transmittance_lut_srv
+      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  products.multi_scattering_lut_srv
+    = atmosphere_lut_cache_->GetState().multi_scattering_lut_valid
+      ? atmosphere_lut_cache_->GetState().multi_scattering_lut_srv
+      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+  products.distant_sky_light_lut_srv
+    = atmosphere_lut_cache_->GetState().distant_sky_light_lut_valid
+      ? atmosphere_lut_cache_->GetState().distant_sky_light_lut_srv
+      : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
+
+  const auto sky_view_state
+    = sky_view_lut_pass_->Record(ctx, view_data, stable_state);
   products.sky_view_lut_srv = sky_view_state.sky_view_lut_srv;
 
   const auto camera_aerial_state = camera_aerial_perspective_pass_->Record(
-    ctx, view_data, atmosphere_state_->GetState(), products.sky_view_lut_srv);
+    ctx, view_data, stable_state, products.sky_view_lut_srv);
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
 
@@ -292,10 +338,53 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     last_publication_state_.ambient_bridge_view_count += 1U;
   }
 
+  const auto& cache_state = atmosphere_lut_cache_->GetState();
+  const auto atmosphere_lut_cache_valid = atmosphere_lut_cache_->IsFullyValid();
+  LOG_F(INFO, "atmosphere_lut_cache_valid={}",
+    atmosphere_lut_cache_valid ? "true" : "false");
+  LOG_F(INFO, "transmittance_lut_published={}",
+    products.transmittance_lut_srv.IsValid() ? "true" : "false");
+  LOG_F(INFO, "multi_scattering_lut_published={}",
+    products.multi_scattering_lut_srv.IsValid() ? "true" : "false");
+  LOG_F(INFO, "distant_sky_light_lut_published={}",
+    products.distant_sky_light_lut_srv.IsValid() ? "true" : "false");
+  LOG_F(INFO, "dual_atmosphere_lights_participating={}",
+    cache_state.dual_light_participating ? "true" : "false");
+
   last_view_product_generation_state_ = {
     .view_id = ctx.current_view.view_id,
     .environment_view_published = resolved_environment_view_slot.IsValid(),
     .environment_view_slot = resolved_environment_view_slot,
+    .atmosphere_lut_cache_valid = atmosphere_lut_cache_valid,
+    .atmosphere_lut_cache_revision
+    = static_cast<std::uint32_t>(cache_state.cache_revision),
+    .atmosphere_light_count = stable_state.view_products.atmosphere_light_count,
+    .dual_atmosphere_lights_participating = cache_state.dual_light_participating,
+    .transmittance_lut_requested = transmittance_state.requested,
+    .transmittance_lut_executed = transmittance_state.executed,
+    .transmittance_lut_srv = products.transmittance_lut_srv,
+    .transmittance_width = transmittance_state.width,
+    .transmittance_height = transmittance_state.height,
+    .transmittance_dispatch_count_x = transmittance_state.dispatch_count_x,
+    .transmittance_dispatch_count_y = transmittance_state.dispatch_count_y,
+    .transmittance_dispatch_count_z = transmittance_state.dispatch_count_z,
+    .multi_scattering_lut_requested = multi_scattering_state.requested,
+    .multi_scattering_lut_executed = multi_scattering_state.executed,
+    .multi_scattering_lut_srv = products.multi_scattering_lut_srv,
+    .multi_scattering_width = multi_scattering_state.width,
+    .multi_scattering_height = multi_scattering_state.height,
+    .multi_scattering_dispatch_count_x = multi_scattering_state.dispatch_count_x,
+    .multi_scattering_dispatch_count_y = multi_scattering_state.dispatch_count_y,
+    .multi_scattering_dispatch_count_z = multi_scattering_state.dispatch_count_z,
+    .distant_sky_light_lut_requested = distant_sky_light_state.requested,
+    .distant_sky_light_lut_executed = distant_sky_light_state.executed,
+    .distant_sky_light_lut_srv = products.distant_sky_light_lut_srv,
+    .distant_sky_light_dispatch_count_x
+    = distant_sky_light_state.dispatch_count_x,
+    .distant_sky_light_dispatch_count_y
+    = distant_sky_light_state.dispatch_count_y,
+    .distant_sky_light_dispatch_count_z
+    = distant_sky_light_state.dispatch_count_z,
     .sky_view_lut_requested = sky_view_state.requested,
     .sky_view_lut_executed = sky_view_state.executed,
     .sky_view_lut_srv = sky_view_state.sky_view_lut_srv,

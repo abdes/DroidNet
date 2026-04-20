@@ -32,6 +32,8 @@ struct EnvironmentViewProducts {
   std::uint32_t flags { 0U };
   std::uint32_t reserved0 { 0U };
 
+  ShaderVisibleIndex transmittance_lut_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex multi_scattering_lut_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex camera_aerial_perspective_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex distant_sky_light_lut_srv { kInvalidShaderVisibleIndex };
