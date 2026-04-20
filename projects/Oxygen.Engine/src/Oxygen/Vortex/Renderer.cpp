@@ -1790,14 +1790,18 @@ auto Renderer::DispatchSceneRendererRender(
   WireContext(render_context, {});
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, false);
-  scene_renderer.PrimePreparedView(render_context);
 
-  auto view_bindings = ViewFrameBindings {};
   if (render_context.current_view.view_id == kInvalidViewId) {
     scene_renderer.InvalidatePublishedViewFrameBindings();
     view_const_cpu_.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
-  } else if (auto gfx = GetGraphics(); gfx != nullptr) {
+    co_return;
+  }
+
+  scene_renderer.PrimePreparedView(render_context);
+
+  auto view_bindings = ViewFrameBindings {};
+  if (auto gfx = GetGraphics(); gfx != nullptr) {
     BeginPublicationFrame(
       *gfx, context->GetFrameSequenceNumber(), context->GetFrameSlot());
     auto& publication_state = EnsurePublicationState(*gfx);
@@ -1881,6 +1885,13 @@ auto Renderer::DispatchSceneRendererRender(
     const auto buffer_info = view_const_manager_->WriteViewConstants(
       render_context.current_view.view_id, &snapshot, sizeof(snapshot));
     render_context.view_constants = buffer_info.buffer;
+  }
+
+  if (render_context.current_view.view_id == kInvalidViewId) {
+    scene_renderer.InvalidatePublishedViewFrameBindings();
+    view_const_cpu_.SetBindlessViewFrameBindingsSlot(
+      BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
+    co_return;
   }
 
   scene_renderer.OnRender(render_context);

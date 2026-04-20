@@ -369,6 +369,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
+  if (!HasRenderableWindow()) {
+    return;
+  }
+
   if (!app_.headless && app_window_ && app_window_->GetWindow()) {
     last_viewport_ = app_window_->GetWindow()->Size();
   }

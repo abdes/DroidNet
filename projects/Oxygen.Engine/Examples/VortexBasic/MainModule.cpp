@@ -389,7 +389,9 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
 
-  if (scene_) {
+  if (scene_ && (app_.headless
+      || (app_window_ != nullptr && app_window_->GetWindow() != nullptr
+        && !app_window_->IsShuttingDown()))) {
     context->SetScene(observer_ptr { scene_.get() });
   }
 

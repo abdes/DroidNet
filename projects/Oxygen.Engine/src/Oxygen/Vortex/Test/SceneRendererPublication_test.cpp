@@ -229,6 +229,39 @@ protected:
 };
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
+  RendererOnRenderSkipsGracefullyWhenNoViewsAreRegistered)
+{
+  auto config = RendererConfig {};
+  config.upload_queue_key
+    = graphics_->QueueKeyFor(QueueRole::kGraphics).get();
+  constexpr CapabilitySet kDeferredPublicationWithPostProcessCapabilities
+    = RendererCapabilityFamily::kScenePreparation
+    | RendererCapabilityFamily::kDeferredShading
+    | RendererCapabilityFamily::kLightingData
+    | RendererCapabilityFamily::kEnvironmentLighting
+    | RendererCapabilityFamily::kFinalOutputComposition;
+  auto renderer = std::shared_ptr<Renderer> {
+    new Renderer(std::weak_ptr<Graphics>(graphics_), std::move(config),
+      kDeferredPublicationWithPostProcessCapabilities),
+    DestroyRenderer,
+  };
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.NoViews", 16U);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  renderer->OnFrameStart(oxygen::observer_ptr<FrameContext> { &frame_context });
+
+  auto loop = TestEventLoop {};
+  EXPECT_NO_THROW(oxygen::co::Run(loop, RunRenderAsync(renderer, &frame_context)));
+
+  renderer->OnFrameEnd(oxygen::observer_ptr<FrameContext> { &frame_context });
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
   RendererPublishesSceneTexturesThroughViewFrameBindingsAndViewConstants)
 {
   auto frame_context = FrameContext {};

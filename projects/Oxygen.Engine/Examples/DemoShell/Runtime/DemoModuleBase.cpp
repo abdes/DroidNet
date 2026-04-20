@@ -204,6 +204,15 @@ auto DemoModuleBase::ResolveVortexRenderer() const noexcept
   return nullptr;
 }
 
+auto DemoModuleBase::HasRenderableWindow() const noexcept -> bool
+{
+  if (app_.headless) {
+    return true;
+  }
+  return app_window_ != nullptr && app_window_->GetWindow() != nullptr
+    && !app_window_->IsShuttingDown();
+}
+
 auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
