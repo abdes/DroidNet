@@ -19,9 +19,6 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -34,6 +31,8 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -189,8 +188,7 @@ namespace {
         continue;
       }
 
-      if (const auto impl_opt = node.GetImpl();
-        impl_opt.has_value()
+      if (const auto impl_opt = node.GetImpl(); impl_opt.has_value()
         && impl_opt->get().HasComponent<scene::environment::LocalFogVolume>()) {
         result.push_back(node);
       }
@@ -202,18 +200,18 @@ namespace {
       }
     }
 
-    std::ranges::sort(result, [](const scene::SceneNode& lhs,
-                             const scene::SceneNode& rhs) {
-      return lhs.GetName() < rhs.GetName();
-    });
+    std::ranges::sort(
+      result, [](const scene::SceneNode& lhs, const scene::SceneNode& rhs) {
+        return lhs.GetName() < rhs.GetName();
+      });
     return result;
   }
 
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
     const data::pak::world::SkyAtmosphereEnvironmentRecord& source) -> void
   {
-    target.SetTransformMode(
-      scene::environment::SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+    target.SetTransformMode(scene::environment::SkyAtmosphereTransformMode::
+        kPlanetTopAtAbsoluteWorldOrigin);
     target.SetPlanetRadiusMeters(source.planet_radius_m);
     target.SetAtmosphereHeightMeters(source.atmosphere_height_m);
     target.SetGroundAlbedoRgb(Vec3 { source.ground_albedo_rgb[0],
@@ -388,8 +386,7 @@ namespace {
     target.SetVolumetricScatteringIntensity(
       source.volumetric_scattering_intensity);
     target.SetAffectReflections(source.affect_reflections != 0U);
-    target.SetAffectGlobalIllumination(
-      source.affect_global_illumination != 0U);
+    target.SetAffectGlobalIllumination(source.affect_global_illumination != 0U);
   }
 
   auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
@@ -967,8 +964,8 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& view) -> void
+  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
+  -> void
 {
   OnRuntimeMainViewReady(view.id);
 }
@@ -1038,6 +1035,14 @@ auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
   SyncFromSceneIfNeeded();
 }
 
+auto EnvironmentSettingsService::ActivateCustomMode() -> void
+{
+  preset_index_ = kPresetCustom;
+  settings_persist_dirty_ = true;
+  needs_sync_ = false;
+  apply_saved_sun_on_next_sync_ = false;
+}
+
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
   if (kForceEnvironmentOverride) {
@@ -1078,11 +1083,10 @@ auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
   bool luts_dirty = true;
 
   if (config_.renderer && main_view_id_.has_value()) {
-    if (auto lut_mgr
-      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
-      luts_valid = lut_mgr->HasBeenGenerated();
-      luts_dirty = lut_mgr->IsDirty();
-    }
+    const auto state = config_.renderer->GetLastEnvironmentLightingState();
+    luts_valid = state.published_bindings && state.sky_executed
+      && state.atmosphere_executed;
+    luts_dirty = !luts_valid;
   }
 
   return { luts_valid, luts_dirty };
@@ -1236,8 +1240,8 @@ auto EnvironmentSettingsService::GetSkyLuminanceFactor() const -> glm::vec3
   return sky_luminance_factor_;
 }
 
-auto EnvironmentSettingsService::SetSkyLuminanceFactor(
-  const glm::vec3& value) -> void
+auto EnvironmentSettingsService::SetSkyLuminanceFactor(const glm::vec3& value)
+  -> void
 {
   if (sky_luminance_factor_ == value) {
     return;
@@ -1246,8 +1250,8 @@ auto EnvironmentSettingsService::SetSkyLuminanceFactor(
   MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
-auto EnvironmentSettingsService::GetSkyAndAerialPerspectiveLuminanceFactor() const
-  -> glm::vec3
+auto EnvironmentSettingsService::GetSkyAndAerialPerspectiveLuminanceFactor()
+  const -> glm::vec3
 {
   return sky_and_aerial_perspective_luminance_factor_;
 }
@@ -1826,8 +1830,8 @@ auto EnvironmentSettingsService::SetSkyLightLowerHemisphereColor(
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
-auto EnvironmentSettingsService::GetSkyLightVolumetricScatteringIntensity() const
-  -> float
+auto EnvironmentSettingsService::GetSkyLightVolumetricScatteringIntensity()
+  const -> float
 {
   return sky_light_volumetric_scattering_intensity_;
 }
@@ -2083,8 +2087,7 @@ auto EnvironmentSettingsService::SetInscatteringColorCubemapAngle(
   MarkDirty(ToMask(DirtyDomain::kHeightFog));
 }
 
-auto EnvironmentSettingsService::GetInscatteringTextureTint() const
-  -> glm::vec3
+auto EnvironmentSettingsService::GetInscatteringTextureTint() const -> glm::vec3
 {
   return inscattering_texture_tint_;
 }
@@ -2230,8 +2233,8 @@ auto EnvironmentSettingsService::GetVolumetricFogAlbedo() const -> glm::vec3
   return volumetric_fog_albedo_;
 }
 
-auto EnvironmentSettingsService::SetVolumetricFogAlbedo(
-  const glm::vec3& value) -> void
+auto EnvironmentSettingsService::SetVolumetricFogAlbedo(const glm::vec3& value)
+  -> void
 {
   if (volumetric_fog_albedo_ == value) {
     return;
@@ -2271,8 +2274,7 @@ auto EnvironmentSettingsService::SetVolumetricFogExtinctionScale(
   MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
 }
 
-auto EnvironmentSettingsService::GetVolumetricFogDistanceMeters() const
-  -> float
+auto EnvironmentSettingsService::GetVolumetricFogDistanceMeters() const -> float
 {
   return volumetric_fog_distance_m_;
 }
@@ -2303,8 +2305,8 @@ auto EnvironmentSettingsService::SetVolumetricFogStartDistanceMeters(
   MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
 }
 
-auto EnvironmentSettingsService::GetVolumetricFogNearFadeInDistanceMeters() const
-  -> float
+auto EnvironmentSettingsService::GetVolumetricFogNearFadeInDistanceMeters()
+  const -> float
 {
   return volumetric_fog_near_fade_in_distance_m_;
 }
@@ -2319,14 +2321,14 @@ auto EnvironmentSettingsService::SetVolumetricFogNearFadeInDistanceMeters(
   MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
 }
 
-auto EnvironmentSettingsService::GetVolumetricFogStaticLightingScatteringIntensity()
-  const -> float
+auto EnvironmentSettingsService::
+  GetVolumetricFogStaticLightingScatteringIntensity() const -> float
 {
   return volumetric_fog_static_lighting_scattering_intensity_;
 }
 
-auto EnvironmentSettingsService::SetVolumetricFogStaticLightingScatteringIntensity(
-  const float value) -> void
+auto EnvironmentSettingsService::
+  SetVolumetricFogStaticLightingScatteringIntensity(const float value) -> void
 {
   if (volumetric_fog_static_lighting_scattering_intensity_ == value) {
     return;
@@ -2335,14 +2337,14 @@ auto EnvironmentSettingsService::SetVolumetricFogStaticLightingScatteringIntensi
   MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
 }
 
-auto EnvironmentSettingsService::GetOverrideLightColorsWithFogInscatteringColors()
-  const -> bool
+auto EnvironmentSettingsService::
+  GetOverrideLightColorsWithFogInscatteringColors() const -> bool
 {
   return override_light_colors_with_fog_inscattering_colors_;
 }
 
-auto EnvironmentSettingsService::SetOverrideLightColorsWithFogInscatteringColors(
-  const bool enabled) -> void
+auto EnvironmentSettingsService::
+  SetOverrideLightColorsWithFogInscatteringColors(const bool enabled) -> void
 {
   if (override_light_colors_with_fog_inscattering_colors_ == enabled) {
     return;
@@ -2441,7 +2443,8 @@ auto EnvironmentSettingsService::GetSelectedLocalFogVolumeMutable()
       >= static_cast<int>(local_fog_volumes_.size())) {
     return nullptr;
   }
-  return &local_fog_volumes_[static_cast<size_t>(selected_local_fog_volume_index_)];
+  return &local_fog_volumes_[static_cast<size_t>(
+    selected_local_fog_volume_index_)];
 }
 
 auto EnvironmentSettingsService::GetSelectedLocalFogVolume() const
@@ -2452,7 +2455,8 @@ auto EnvironmentSettingsService::GetSelectedLocalFogVolume() const
       >= static_cast<int>(local_fog_volumes_.size())) {
     return nullptr;
   }
-  return &local_fog_volumes_[static_cast<size_t>(selected_local_fog_volume_index_)];
+  return &local_fog_volumes_[static_cast<size_t>(
+    selected_local_fog_volume_index_)];
 }
 
 auto EnvironmentSettingsService::AddLocalFogVolume() -> void
@@ -2503,9 +2507,9 @@ auto EnvironmentSettingsService::RemoveSelectedLocalFogVolume() -> void
   if (local_fog_volumes_.empty()) {
     selected_local_fog_volume_index_ = -1;
   } else {
-    selected_local_fog_volume_index_ = std::clamp(
-      selected_local_fog_volume_index_, 0,
-      static_cast<int>(local_fog_volumes_.size()) - 1);
+    selected_local_fog_volume_index_
+      = std::clamp(selected_local_fog_volume_index_, 0,
+        static_cast<int>(local_fog_volumes_.size()) - 1);
   }
   MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
 }
@@ -2526,8 +2530,8 @@ auto EnvironmentSettingsService::SetSelectedLocalFogVolumeEnabled(
   }
 }
 
-auto EnvironmentSettingsService::GetSelectedLocalFogVolumeRadialFogExtinction() const
-  -> float
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeRadialFogExtinction()
+  const -> float
 {
   const auto* selected = GetSelectedLocalFogVolume();
   return selected != nullptr ? selected->radial_fog_extinction : 0.0F;
@@ -2542,8 +2546,8 @@ auto EnvironmentSettingsService::SetSelectedLocalFogVolumeRadialFogExtinction(
   }
 }
 
-auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogExtinction() const
-  -> float
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogExtinction()
+  const -> float
 {
   const auto* selected = GetSelectedLocalFogVolume();
   return selected != nullptr ? selected->height_fog_extinction : 0.0F;
@@ -2558,8 +2562,8 @@ auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogExtinction(
   }
 }
 
-auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogFalloff() const
-  -> float
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogFalloff()
+  const -> float
 {
   const auto* selected = GetSelectedLocalFogVolume();
   return selected != nullptr ? selected->height_fog_falloff : 0.0F;
@@ -2574,8 +2578,8 @@ auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogFalloff(
   }
 }
 
-auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogOffset() const
-  -> float
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogOffset()
+  const -> float
 {
   const auto* selected = GetSelectedLocalFogVolume();
   return selected != nullptr ? selected->height_fog_offset : 0.0F;
@@ -2802,8 +2806,8 @@ auto EnvironmentSettingsService::SetSunAtmosphereLightSlot(int value) -> void
   MarkDirty(ToMask(DirtyDomain::kAtmosphereLights));
 }
 
-auto EnvironmentSettingsService::GetSunUsePerPixelAtmosphereTransmittance() const
-  -> bool
+auto EnvironmentSettingsService::GetSunUsePerPixelAtmosphereTransmittance()
+  const -> bool
 {
   return sun_use_per_pixel_atmosphere_transmittance_;
 }
@@ -3015,8 +3019,7 @@ auto EnvironmentSettingsService::UpdateSunLightCandidate() -> void
 auto EnvironmentSettingsService::CaptureSunShadowSettingsFromLight(
   const scene::DirectionalLight& light) -> void
 {
-  sun_atmosphere_light_slot_
-    = static_cast<int>(light.GetAtmosphereLightSlot());
+  sun_atmosphere_light_slot_ = static_cast<int>(light.GetAtmosphereLightSlot());
   sun_use_per_pixel_atmosphere_transmittance_
     = light.GetUsePerPixelAtmosphereTransmittance();
   sun_atmosphere_disk_luminance_scale_
@@ -3338,10 +3341,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       atmosphere_state.aerial_perspective_start_depth_m);
     atmo->SetAerialScatteringStrength(
       atmosphere_state.aerial_scattering_strength);
-    atmo->SetHeightFogContribution(
-      atmosphere_state.height_fog_contribution);
-    atmo->SetTraceSampleCountScale(
-      atmosphere_state.trace_sample_count_scale);
+    atmo->SetHeightFogContribution(atmosphere_state.height_fog_contribution);
+    atmo->SetTraceSampleCountScale(atmosphere_state.trace_sample_count_scale);
     atmo->SetTransmittanceMinLightElevationDeg(
       atmosphere_state.transmittance_min_light_elevation_deg);
     atmo->SetHoldout(atmosphere_state.holdout);
@@ -3355,14 +3356,18 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto fog = env->TryGetSystem<scene::environment::Fog>();
-  if (apply_fog && fog_enabled_ && !fog) {
+  const bool volumetric_enabled
+    = fog_model_ == static_cast<int>(scene::environment::FogModel::kVolumetric);
+  const bool any_fog_enabled = fog_enabled_ || volumetric_enabled;
+  if (apply_fog && any_fog_enabled && !fog) {
     fog = observer_ptr { &env->AddSystem<scene::environment::Fog>() };
   }
   if (apply_fog && fog) {
-    fog->SetEnabled(fog_enabled_);
+    fog->SetEnabled(any_fog_enabled);
   }
-  if (apply_fog && fog_enabled_ && fog) {
+  if (apply_fog && any_fog_enabled && fog) {
     fog->SetModel(static_cast<scene::environment::FogModel>(fog_model_));
+    fog->SetEnableHeightFog(fog_enabled_);
     fog->SetExtinctionSigmaTPerMeter(fog_extinction_sigma_t_per_m_);
     fog->SetHeightFalloffPerMeter(fog_height_falloff_per_m_);
     fog->SetHeightOffsetMeters(fog_height_offset_m_);
@@ -3383,8 +3388,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       non_directional_inscattering_color_distance_);
     fog->SetDirectionalInscatteringLuminance(
       directional_inscattering_luminance_);
-    fog->SetDirectionalInscatteringExponent(
-      directional_inscattering_exponent_);
+    fog->SetDirectionalInscatteringExponent(directional_inscattering_exponent_);
     fog->SetDirectionalInscatteringStartDistance(
       directional_inscattering_start_distance_);
     fog->SetEndDistanceMeters(fog_end_distance_m_);
@@ -3481,19 +3485,21 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetVolumetricScatteringIntensity(
       sky_light_volumetric_scattering_intensity_);
     light->SetAffectReflections(sky_light_affect_reflections_);
-    light->SetAffectGlobalIllumination(
-      sky_light_affect_global_illumination_);
+    light->SetAffectGlobalIllumination(sky_light_affect_global_illumination_);
   }
 
   if (apply_skybox || apply_sky_sphere) {
     MaybeAutoLoadSkybox();
   }
 
+  config_.scene->Update(false);
+
   settings_persist_dirty_ = true;
   applied_changes_this_frame_ = true;
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   saved_sun_source_ = sun_source_;
+  epoch_++;
 }
 
 auto EnvironmentSettingsService::SyncFromScene() -> void
@@ -3549,7 +3555,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   }
 
   if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
-    fog_enabled_ = fog->IsEnabled();
+    fog_enabled_ = fog->GetEnableHeightFog();
     fog_model_ = static_cast<int>(fog->GetModel());
     fog_extinction_sigma_t_per_m_ = fog->GetExtinctionSigmaTPerMeter();
     fog_height_falloff_per_m_ = fog->GetHeightFalloffPerMeter();
@@ -3563,8 +3569,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     fog_inscattering_luminance_ = fog->GetFogInscatteringLuminance();
     sky_atmosphere_ambient_contribution_color_scale_
       = fog->GetSkyAtmosphereAmbientContributionColorScale();
-    inscattering_color_cubemap_angle_
-      = fog->GetInscatteringColorCubemapAngle();
+    inscattering_color_cubemap_angle_ = fog->GetInscatteringColorCubemapAngle();
     inscattering_texture_tint_ = fog->GetInscatteringTextureTint();
     fully_directional_inscattering_color_distance_
       = fog->GetFullyDirectionalInscatteringColorDistance();
@@ -3593,8 +3598,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       = fog->GetOverrideLightColorsWithFogInscatteringColors();
     fog_holdout_ = fog->GetHoldout();
     fog_render_in_main_pass_ = fog->GetRenderInMainPass();
-    fog_visible_in_reflection_captures_
-      = fog->GetVisibleInReflectionCaptures();
+    fog_visible_in_reflection_captures_ = fog->GetVisibleInReflectionCaptures();
     fog_visible_in_real_time_sky_captures_
       = fog->GetVisibleInRealTimeSkyCaptures();
   } else {
@@ -3603,15 +3607,9 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
 
   SyncLocalFogVolumesFromScene();
 
-  // Sync LUT slice configuration from the renderer's LUT manager.
-  if (config_.renderer && main_view_id_.has_value()) {
-    if (auto lut_mgr
-      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
-      sky_view_lut_slices_ = static_cast<int>(lut_mgr->GetSkyViewLutSlices());
-      sky_view_alt_mapping_mode_
-        = static_cast<int>(lut_mgr->GetAltMappingMode());
-    }
-  }
+  // DemoShell currently owns the user-facing slice/mapping controls; keep the
+  // persisted values as the source of truth until the Vortex runtime surfaces
+  // per-view LUT parameter introspection directly.
 
   if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
     sky_sphere_enabled_ = sky->IsEnabled();
@@ -3729,9 +3727,9 @@ auto EnvironmentSettingsService::SyncLocalFogVolumesFromScene() -> void
   if (local_fog_volumes_.empty()) {
     selected_local_fog_volume_index_ = -1;
   } else {
-    selected_local_fog_volume_index_ = std::clamp(
-      selected_local_fog_volume_index_, 0,
-      static_cast<int>(local_fog_volumes_.size()) - 1);
+    selected_local_fog_volume_index_
+      = std::clamp(selected_local_fog_volume_index_, 0,
+        static_cast<int>(local_fog_volumes_.size()) - 1);
   }
 }
 
@@ -3874,12 +3872,12 @@ auto EnvironmentSettingsService::HashAtmosphereState(
   seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.x));
   seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.y));
   seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.z));
-  seed = HashCombineU64(
-    seed, FloatBits(state.sky_and_aerial_luminance_factor.x));
-  seed = HashCombineU64(
-    seed, FloatBits(state.sky_and_aerial_luminance_factor.y));
-  seed = HashCombineU64(
-    seed, FloatBits(state.sky_and_aerial_luminance_factor.z));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.x));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.y));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.z));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.x));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.y));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.z));
@@ -3900,8 +3898,8 @@ auto EnvironmentSettingsService::HashAtmosphereState(
   seed
     = HashCombineU64(seed, static_cast<std::uint64_t>(state.sun_disk_enabled));
   seed = HashCombineU64(seed, FloatBits(state.aerial_perspective_scale));
-  seed = HashCombineU64(
-    seed, FloatBits(state.aerial_perspective_start_depth_m));
+  seed
+    = HashCombineU64(seed, FloatBits(state.aerial_perspective_start_depth_m));
   seed = HashCombineU64(seed, FloatBits(state.aerial_scattering_strength));
   seed = HashCombineU64(seed, FloatBits(state.height_fog_contribution));
   seed = HashCombineU64(seed, FloatBits(state.trace_sample_count_scale));
@@ -4007,7 +4005,8 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(volumetric_fog_distance_m_, 0.0F, 1000000.0F);
   clamp_float(volumetric_fog_start_distance_m_, 0.0F, 1000000.0F);
   clamp_float(volumetric_fog_near_fade_in_distance_m_, 0.0F, 1000000.0F);
-  clamp_float(volumetric_fog_static_lighting_scattering_intensity_, 0.0F, 100.0F);
+  clamp_float(
+    volumetric_fog_static_lighting_scattering_intensity_, 0.0F, 100.0F);
 
   clamp_int(sun_source_, 0, 1);
   clamp_float(sun_azimuth_deg_, -720.0F, 720.0F);
@@ -4253,8 +4252,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
     any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
     any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
-    any_loaded |= load_int(
-      kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
+    any_loaded
+      |= load_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
     any_loaded |= load_bool(kSunPerPixelAtmosphereTransmittanceKey,
       sun_use_per_pixel_atmosphere_transmittance_);
     any_loaded |= load_vec3(kSunAtmosphereDiskLuminanceScaleKey,
@@ -4399,12 +4398,13 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     sky_and_aerial_perspective_luminance_factor_);
   save_bool(kSunDiskEnabledKey, sun_disk_enabled_);
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
-  save_float(kAerialPerspectiveStartDepthKey, aerial_perspective_start_depth_m_);
+  save_float(
+    kAerialPerspectiveStartDepthKey, aerial_perspective_start_depth_m_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
   save_float(kHeightFogContributionKey, height_fog_contribution_);
   save_float(kTraceSampleCountScaleKey, trace_sample_count_scale_);
-  save_float(kTransmittanceMinLightElevationKey,
-    transmittance_min_light_elevation_deg_);
+  save_float(
+    kTransmittanceMinLightElevationKey, transmittance_min_light_elevation_deg_);
   save_bool(kAtmosphereHoldoutKey, atmosphere_holdout_);
   save_bool(kAtmosphereRenderInMainPassKey, atmosphere_render_in_main_pass_);
 
@@ -4442,8 +4442,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
-  save_bool(
-    kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
+  save_bool(kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
   save_vec3(
     kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
   save_float(kSkyLightVolumetricScatteringIntensityKey,
@@ -4473,8 +4472,8 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
   save_bool(kSunPerPixelAtmosphereTransmittanceKey,
     sun_use_per_pixel_atmosphere_transmittance_);
-  save_vec3(kSunAtmosphereDiskLuminanceScaleKey,
-    sun_atmosphere_disk_luminance_scale_);
+  save_vec3(
+    kSunAtmosphereDiskLuminanceScaleKey, sun_atmosphere_disk_luminance_scale_);
   save_float(kSunShadowBiasKey, sun_shadow_bias_);
   save_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
   save_int(kSunShadowResolutionHintKey, sun_shadow_resolution_hint_);

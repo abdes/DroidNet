@@ -29,7 +29,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace {
 

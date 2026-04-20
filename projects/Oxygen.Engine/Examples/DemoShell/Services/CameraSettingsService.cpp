@@ -16,8 +16,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
@@ -219,8 +217,8 @@ auto CameraSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 }
 
 auto CameraSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& view) -> void
+  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
+  -> void
 {
   if (!view.camera.has_value()) {
     DCHECK_F(false, "Main view must provide a camera");

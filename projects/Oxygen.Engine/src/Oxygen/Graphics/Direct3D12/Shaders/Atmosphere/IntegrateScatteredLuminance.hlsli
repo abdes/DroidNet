@@ -150,13 +150,13 @@ IntegrationStepResult IntegrateSingleStep(
             = multi_scat_lut.SampleLevel(linear_sampler, float2(u_ms, v_ms), 0);
 
         float3 multi_scat_radiance = ms_sample.rgb;
-        float f_ms = ms_sample.a;
-        float3 energy_compensation = 1.0 / max(1.0 - f_ms, 1e-4);
 
+        // The multi-scattering LUT already stores luminance with both the
+        // geometric series 1/(1-R) and multi_scattering_factor baked in.
+        // Match UE5: just multiply by scattering coefficient and illuminance.
         sigma_s_multi = (atmo.rayleigh_scattering_rgb * d_r
                       + atmo.mie_scattering_rgb * d_m)
-                      * multi_scat_radiance * energy_compensation
-                      * atmo.multi_scattering_factor * sun_illuminance;
+                      * multi_scat_radiance * sun_illuminance;
     }
 
     // Total source function

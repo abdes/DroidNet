@@ -18,6 +18,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
@@ -282,7 +283,7 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
 }
 
 auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
-  const renderer::MainViewContract& view) -> void
+  const vortex::MainViewContract& view) -> void
 {
   if (!impl_->initialized) {
     return;
@@ -299,9 +300,8 @@ auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
   }
 }
 
-auto DemoShell::OnRuntimeMainViewReady(
-  const ViewId view_id, scene::SceneNode camera, const ViewPort& viewport)
-  -> void
+auto DemoShell::OnRuntimeMainViewReady(const ViewId view_id,
+  scene::SceneNode camera, const ViewPort& viewport) -> void
 {
   if (!impl_->initialized) {
     return;
@@ -527,7 +527,12 @@ auto DemoShell::SyncRuntimeState() -> void
   EnvironmentRuntimeConfig runtime_config {};
   runtime_config.scene = TryGetScene();
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
-  runtime_config.renderer = nullptr;
+  if (impl_->config.engine) {
+    if (auto renderer_ref
+      = impl_->config.engine->GetModule<vortex::Renderer>()) {
+      runtime_config.renderer = observer_ptr { &renderer_ref->get() };
+    }
+  }
   runtime_config.on_atmosphere_params_changed = nullptr;
   runtime_config.on_exposure_changed
     = [] { LOG_F(INFO, "Exposure settings changed"); };

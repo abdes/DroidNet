@@ -5,9 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -19,6 +17,14 @@ auto LightCullingSettingsService::Initialize(
 {
   DCHECK_NOTNULL_F(pipeline);
   pipeline_ = pipeline;
+}
+
+auto LightCullingSettingsService::BindVortexRenderer(
+  observer_ptr<vortex::Renderer> renderer) -> void
+{
+  DCHECK_NOTNULL_F(renderer);
+  vortex_renderer_ = renderer;
+  ApplyVisualizationSettings();
 }
 
 auto LightCullingSettingsService::GetVisualizationMode() const
@@ -57,18 +63,17 @@ auto LightCullingSettingsService::OnSceneActivated(scene::Scene& /*scene*/)
 
 auto LightCullingSettingsService::OnMainViewReady(
   const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& /*view*/) -> void
+  const vortex::CompositionView& /*view*/) -> void
 {
-  ApplyPipelineSettings();
+  ApplyVisualizationSettings();
 }
 
-auto LightCullingSettingsService::ApplyPipelineSettings() -> void
+auto LightCullingSettingsService::ApplyVisualizationSettings() -> void
 {
-  if (!pipeline_) {
-    return;
+  if (vortex_renderer_ != nullptr) {
+    vortex_renderer_->SetShaderDebugMode(
+      static_cast<vortex::ShaderDebugMode>(GetVisualizationMode()));
   }
-
-  pipeline_->SetLightCullingVisualizationMode(GetVisualizationMode());
 }
 
 } // namespace oxygen::examples

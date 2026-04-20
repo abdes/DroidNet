@@ -11,12 +11,11 @@
 
 #include <glm/vec3.hpp>
 
-#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
-#include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 namespace oxygen::examples::ui {
 
@@ -355,7 +354,7 @@ auto EnvironmentVm::SetRuntimeConfig(const EnvironmentRuntimeConfig& config)
     last_runtime_config_scene_ = const_cast<scene::Scene*>(scene_ptr);
     last_runtime_config_skybox_service_
       = const_cast<SkyboxService*>(skybox_service_ptr);
-    last_runtime_config_renderer_ = const_cast<engine::Renderer*>(renderer_ptr);
+    last_runtime_config_renderer_ = const_cast<vortex::Renderer*>(renderer_ptr);
     runtime_config_initialized_ = true;
   }
   MaybeApplyStartupPreset(config);
@@ -579,6 +578,16 @@ auto EnvironmentVm::MaybeApplyStartupPreset(
   startup_preset_applied_ = true;
 }
 
+auto EnvironmentVm::PrepareForManualOverride() -> void
+{
+  if (service_ == nullptr) {
+    return;
+  }
+  if (service_->GetPresetIndex() == kPresetUseScene) {
+    service_->ActivateCustomMode();
+  }
+}
+
 auto EnvironmentVm::GetSkyAtmosphereEnabled() const -> bool
 {
   return service_->GetSkyAtmosphereEnabled();
@@ -586,6 +595,7 @@ auto EnvironmentVm::GetSkyAtmosphereEnabled() const -> bool
 
 auto EnvironmentVm::SetSkyAtmosphereEnabled(bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetSkyAtmosphereEnabled(enabled);
 }
 
@@ -845,6 +855,7 @@ auto EnvironmentVm::GetSkySphereEnabled() const -> bool
 
 auto EnvironmentVm::SetSkySphereEnabled(bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetSkySphereEnabled(enabled);
 }
 
@@ -1142,6 +1153,7 @@ auto EnvironmentVm::GetFogEnabled() const -> bool
 
 auto EnvironmentVm::SetFogEnabled(const bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetFogEnabled(enabled);
 }
 
@@ -1251,8 +1263,7 @@ auto EnvironmentVm::GetFogInscatteringLuminance() const -> glm::vec3
   return service_->GetFogInscatteringLuminance();
 }
 
-auto EnvironmentVm::SetFogInscatteringLuminance(const glm::vec3& value)
-  -> void
+auto EnvironmentVm::SetFogInscatteringLuminance(const glm::vec3& value) -> void
 {
   service_->SetFogInscatteringLuminance(value);
 }
@@ -1274,8 +1285,7 @@ auto EnvironmentVm::GetInscatteringColorCubemapAngle() const -> float
   return service_->GetInscatteringColorCubemapAngle();
 }
 
-auto EnvironmentVm::SetInscatteringColorCubemapAngle(const float value)
-  -> void
+auto EnvironmentVm::SetInscatteringColorCubemapAngle(const float value) -> void
 {
   service_->SetInscatteringColorCubemapAngle(value);
 }
@@ -1285,8 +1295,7 @@ auto EnvironmentVm::GetInscatteringTextureTint() const -> glm::vec3
   return service_->GetInscatteringTextureTint();
 }
 
-auto EnvironmentVm::SetInscatteringTextureTint(const glm::vec3& value)
-  -> void
+auto EnvironmentVm::SetInscatteringTextureTint(const glm::vec3& value) -> void
 {
   service_->SetInscatteringTextureTint(value);
 }
@@ -1303,8 +1312,7 @@ auto EnvironmentVm::SetFullyDirectionalInscatteringColorDistance(
   service_->SetFullyDirectionalInscatteringColorDistance(value);
 }
 
-auto EnvironmentVm::GetNonDirectionalInscatteringColorDistance() const
-  -> float
+auto EnvironmentVm::GetNonDirectionalInscatteringColorDistance() const -> float
 {
   return service_->GetNonDirectionalInscatteringColorDistance();
 }
@@ -1320,8 +1328,8 @@ auto EnvironmentVm::GetDirectionalInscatteringLuminance() const -> glm::vec3
   return service_->GetDirectionalInscatteringLuminance();
 }
 
-auto EnvironmentVm::SetDirectionalInscatteringLuminance(
-  const glm::vec3& value) -> void
+auto EnvironmentVm::SetDirectionalInscatteringLuminance(const glm::vec3& value)
+  -> void
 {
   service_->SetDirectionalInscatteringLuminance(value);
 }
@@ -1373,8 +1381,8 @@ auto EnvironmentVm::GetVolumetricFogScatteringDistribution() const -> float
   return service_->GetVolumetricFogScatteringDistribution();
 }
 
-auto EnvironmentVm::SetVolumetricFogScatteringDistribution(
-  const float value) -> void
+auto EnvironmentVm::SetVolumetricFogScatteringDistribution(const float value)
+  -> void
 {
   service_->SetVolumetricFogScatteringDistribution(value);
 }
@@ -1404,8 +1412,7 @@ auto EnvironmentVm::GetVolumetricFogExtinctionScale() const -> float
   return service_->GetVolumetricFogExtinctionScale();
 }
 
-auto EnvironmentVm::SetVolumetricFogExtinctionScale(const float value)
-  -> void
+auto EnvironmentVm::SetVolumetricFogExtinctionScale(const float value) -> void
 {
   service_->SetVolumetricFogExtinctionScale(value);
 }
@@ -1436,8 +1443,8 @@ auto EnvironmentVm::GetVolumetricFogNearFadeInDistanceMeters() const -> float
   return service_->GetVolumetricFogNearFadeInDistanceMeters();
 }
 
-auto EnvironmentVm::SetVolumetricFogNearFadeInDistanceMeters(
-  const float value) -> void
+auto EnvironmentVm::SetVolumetricFogNearFadeInDistanceMeters(const float value)
+  -> void
 {
   service_->SetVolumetricFogNearFadeInDistanceMeters(value);
 }
@@ -1572,8 +1579,8 @@ auto EnvironmentVm::GetSelectedLocalFogVolumeHeightFogFalloff() const -> float
   return service_->GetSelectedLocalFogVolumeHeightFogFalloff();
 }
 
-auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogFalloff(
-  const float value) -> void
+auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogFalloff(const float value)
+  -> void
 {
   service_->SetSelectedLocalFogVolumeHeightFogFalloff(value);
 }
@@ -1583,8 +1590,8 @@ auto EnvironmentVm::GetSelectedLocalFogVolumeHeightFogOffset() const -> float
   return service_->GetSelectedLocalFogVolumeHeightFogOffset();
 }
 
-auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogOffset(
-  const float value) -> void
+auto EnvironmentVm::SetSelectedLocalFogVolumeHeightFogOffset(const float value)
+  -> void
 {
   service_->SetSelectedLocalFogVolumeHeightFogOffset(value);
 }
@@ -1605,8 +1612,8 @@ auto EnvironmentVm::GetSelectedLocalFogVolumeFogAlbedo() const -> glm::vec3
   return service_->GetSelectedLocalFogVolumeFogAlbedo();
 }
 
-auto EnvironmentVm::SetSelectedLocalFogVolumeFogAlbedo(
-  const glm::vec3& value) -> void
+auto EnvironmentVm::SetSelectedLocalFogVolumeFogAlbedo(const glm::vec3& value)
+  -> void
 {
   service_->SetSelectedLocalFogVolumeFogAlbedo(value);
 }
@@ -1616,8 +1623,8 @@ auto EnvironmentVm::GetSelectedLocalFogVolumeFogEmissive() const -> glm::vec3
   return service_->GetSelectedLocalFogVolumeFogEmissive();
 }
 
-auto EnvironmentVm::SetSelectedLocalFogVolumeFogEmissive(
-  const glm::vec3& value) -> void
+auto EnvironmentVm::SetSelectedLocalFogVolumeFogEmissive(const glm::vec3& value)
+  -> void
 {
   service_->SetSelectedLocalFogVolumeFogEmissive(value);
 }
@@ -1645,6 +1652,7 @@ auto EnvironmentVm::GetSunEnabled() const -> bool
 
 auto EnvironmentVm::SetSunEnabled(bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunEnabled(enabled);
 }
 
@@ -1655,6 +1663,7 @@ auto EnvironmentVm::GetSunSource() const -> int
 
 auto EnvironmentVm::SetSunSource(int source) -> void
 {
+  PrepareForManualOverride();
   service_->SetSunSource(source);
 }
 
@@ -1754,8 +1763,8 @@ auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3
   return service_->GetSunAtmosphereDiskLuminanceScale();
 }
 
-auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(
-  const glm::vec3& value) -> void
+auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value)
+  -> void
 {
   service_->SetSunAtmosphereDiskLuminanceScale(value);
 }
@@ -1872,6 +1881,7 @@ auto EnvironmentVm::UpdateSunLightCandidate() -> void
 
 auto EnvironmentVm::EnableSyntheticSun() -> void
 {
+  PrepareForManualOverride();
   service_->EnableSyntheticSun();
 }
 

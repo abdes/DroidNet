@@ -9,7 +9,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/UI/RenderingPanel.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -30,8 +29,7 @@ auto RenderingPanel::DrawContents() -> void
   }
 
   if (vm_->SupportsRenderModeControls()
-    && ImGui::CollapsingHeader(
-      "Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
+    && ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawViewModeControls();
     if (vm_->SupportsWireframeColorControl()) {
       DrawWireframeColor();
@@ -149,8 +147,8 @@ void RenderingPanel::DrawDebugModes()
     vm_->SetDebugMode(ShaderDebugMode::kDisabled);
   }
 
-  const auto draw_debug_mode = [&](const char* label,
-                                 const ShaderDebugMode mode) -> void {
+  const auto draw_debug_mode
+    = [&](const char* label, const ShaderDebugMode mode) -> void {
     if (!vm_->SupportsDebugMode(mode)) {
       return;
     }
@@ -170,19 +168,16 @@ void RenderingPanel::DrawDebugModes()
   draw_debug_mode("IBL Raw Sky", ShaderDebugMode::kIblRawSky);
   draw_debug_mode("IBL Face Index", ShaderDebugMode::kIblFaceIndex);
   draw_debug_mode("IBL No BRDF LUT", ShaderDebugMode::kIblNoBrdfLut);
-  draw_debug_mode("Direct Lighting Only",
-    ShaderDebugMode::kDirectLightingOnly);
+  draw_debug_mode("Direct Lighting Only", ShaderDebugMode::kDirectLightingOnly);
   draw_debug_mode("IBL Only", ShaderDebugMode::kIblOnly);
   draw_debug_mode("Direct + IBL", ShaderDebugMode::kDirectPlusIbl);
-  draw_debug_mode("Direct Lighting Full",
-    ShaderDebugMode::kDirectLightingFull);
+  draw_debug_mode("Direct Lighting Full", ShaderDebugMode::kDirectLightingFull);
   draw_debug_mode("Direct Light Gates", ShaderDebugMode::kDirectLightGates);
   draw_debug_mode("Direct BRDF Core", ShaderDebugMode::kDirectBrdfCore);
   draw_debug_mode("Virtual Shadow Mask", ShaderDebugMode::kVirtualShadowMask);
   draw_debug_mode("Scene Depth Raw", ShaderDebugMode::kSceneDepthRaw);
   draw_debug_mode("Scene Depth Linear", ShaderDebugMode::kSceneDepthLinear);
-  draw_debug_mode(
-    "Scene Depth Mismatch", ShaderDebugMode::kSceneDepthMismatch);
+  draw_debug_mode("Scene Depth Mismatch", ShaderDebugMode::kSceneDepthMismatch);
   draw_debug_mode(
     "Masked Alpha Coverage", ShaderDebugMode::kMaskedAlphaCoverage);
 

@@ -19,6 +19,14 @@ struct EnvironmentFrameBindings
     uint volumetric_fog_model_slot;
     uint environment_view_products_slot;
     uint contract_flags;
+    uint transmittance_lut_srv;
+    uint multi_scattering_lut_srv;
+    uint sky_view_lut_srv;
+    uint camera_aerial_perspective_srv;
+    float4 atmosphere_light0_direction_angular_size;
+    float4 atmosphere_light0_disk_luminance_rgb;
+    float4 atmosphere_light1_direction_angular_size;
+    float4 atmosphere_light1_disk_luminance_rgb;
     uint environment_map_srv;
     uint irradiance_map_srv;
     uint prefiltered_map_srv;
@@ -45,6 +53,10 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.sky_light_model_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.volumetric_fog_model_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_view_products_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.transmittance_lut_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.multi_scattering_lut_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.sky_view_lut_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.camera_aerial_perspective_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.environment_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;

@@ -280,8 +280,7 @@ public:
   auto SetSelectedLocalFogVolumeFogPhaseG(float value) -> void;
   [[nodiscard]] auto GetSelectedLocalFogVolumeFogAlbedo() const -> glm::vec3;
   auto SetSelectedLocalFogVolumeFogAlbedo(const glm::vec3& value) -> void;
-  [[nodiscard]] auto GetSelectedLocalFogVolumeFogEmissive() const
-    -> glm::vec3;
+  [[nodiscard]] auto GetSelectedLocalFogVolumeFogEmissive() const -> glm::vec3;
   auto SetSelectedLocalFogVolumeFogEmissive(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSelectedLocalFogVolumeSortPriority() const -> int;
   auto SetSelectedLocalFogVolumeSortPriority(int value) -> void;
@@ -342,6 +341,7 @@ public:
 
 private:
   auto MaybeApplyStartupPreset(const EnvironmentRuntimeConfig& config) -> void;
+  auto PrepareForManualOverride() -> void;
 
   observer_ptr<EnvironmentSettingsService> service_;
   observer_ptr<PostProcessSettingsService> post_process_service_;
@@ -350,7 +350,7 @@ private:
   scene::Scene* runtime_scene_ { nullptr };
   scene::Scene* last_runtime_config_scene_ { nullptr };
   SkyboxService* last_runtime_config_skybox_service_ { nullptr };
-  engine::Renderer* last_runtime_config_renderer_ { nullptr };
+  vortex::Renderer* last_runtime_config_renderer_ { nullptr };
   bool runtime_config_initialized_ { false };
   bool startup_preset_applied_ { false };
 };

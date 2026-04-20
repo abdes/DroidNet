@@ -14,13 +14,13 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Services/DomainService.h"
 
-namespace oxygen::renderer {
-struct CompositionView;
-class RenderingPipeline;
-} // namespace oxygen::renderer
+namespace oxygen::vortex {
+class Renderer;
+}
 
 namespace oxygen::examples::ui {
 class CameraRigController;
@@ -28,7 +28,6 @@ class CameraRigController;
 
 namespace oxygen::examples {
 
-//! Settings persistence and runtime wiring for the demo ground grid.
 class GridSettingsService final : public DomainService {
 public:
   GridSettingsService() = default;
@@ -37,11 +36,9 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(GridSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(GridSettingsService)
 
-  //! Bind the demo camera rig used to position the grid.
   auto BindCameraRig(observer_ptr<ui::CameraRigController> camera_rig) -> void;
-  auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline) -> void;
+  auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer) -> void;
 
-  // Settings accessors
   [[nodiscard]] auto GetEnabled() const -> bool;
   auto SetEnabled(bool enabled) -> void;
 
@@ -92,11 +89,10 @@ public:
 
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
-  // DomainService
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::CompositionView& view) -> void override;
+    const vortex::CompositionView& view) -> void override;
 
 private:
   struct GridConfig;
@@ -105,11 +101,10 @@ private:
   auto UpdateGridOrigin(const GridConfig& config) -> void;
   auto ApplyGridConfig(const GridConfig& config) -> void;
 
-  observer_ptr<renderer::RenderingPipeline> pipeline_ { nullptr };
+  observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   observer_ptr<ui::CameraRigController> camera_rig_ { nullptr };
   Vec2 grid_origin_ { 0.0F, 0.0F };
   bool has_origin_ { false };
-
   mutable std::atomic_uint64_t epoch_ { 0 };
 };
 

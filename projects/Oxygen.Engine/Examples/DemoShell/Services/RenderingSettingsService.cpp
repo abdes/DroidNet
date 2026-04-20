@@ -9,8 +9,6 @@
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
@@ -20,69 +18,69 @@ namespace oxygen::examples {
 
 namespace {
 
-auto ParseShadowQualityTierString(std::string_view value)
-  -> std::optional<ShadowQualityTier>
-{
-  if (value == "low") {
-    return ShadowQualityTier::kLow;
+  auto ParseShadowQualityTierString(std::string_view value)
+    -> std::optional<ShadowQualityTier>
+  {
+    if (value == "low") {
+      return ShadowQualityTier::kLow;
+    }
+    if (value == "medium") {
+      return ShadowQualityTier::kMedium;
+    }
+    if (value == "high") {
+      return ShadowQualityTier::kHigh;
+    }
+    if (value == "ultra") {
+      return ShadowQualityTier::kUltra;
+    }
+    return std::nullopt;
   }
-  if (value == "medium") {
-    return ShadowQualityTier::kMedium;
-  }
-  if (value == "high") {
-    return ShadowQualityTier::kHigh;
-  }
-  if (value == "ultra") {
-    return ShadowQualityTier::kUltra;
-  }
-  return std::nullopt;
-}
 
-auto ShadowQualityTierToString(const ShadowQualityTier tier) -> std::string_view
-{
-  switch (tier) {
-  case ShadowQualityTier::kLow:
-    return "low";
-  case ShadowQualityTier::kMedium:
-    return "medium";
-  case ShadowQualityTier::kHigh:
-    return "high";
-  case ShadowQualityTier::kUltra:
-    return "ultra";
-  default:
-    return "ultra";
+  auto ShadowQualityTierToString(const ShadowQualityTier tier)
+    -> std::string_view
+  {
+    switch (tier) {
+    case ShadowQualityTier::kLow:
+      return "low";
+    case ShadowQualityTier::kMedium:
+      return "medium";
+    case ShadowQualityTier::kHigh:
+      return "high";
+    case ShadowQualityTier::kUltra:
+      return "ultra";
+    default:
+      return "ultra";
+    }
   }
-}
 
-auto ClampShadowQualityTierIndex(const float value) -> ShadowQualityTier
-{
-  const auto clamped
-    = static_cast<int>(std::clamp(value, 0.0F, 3.0F) + 0.5F);
-  return static_cast<ShadowQualityTier>(clamped);
-}
-
-auto ToVortexDebugMode(const engine::ShaderDebugMode mode)
-  -> vortex::ShaderDebugMode
-{
-  return static_cast<vortex::ShaderDebugMode>(mode);
-}
-
-auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode) -> bool
-{
-  using engine::ShaderDebugMode;
-  switch (mode) {
-  case ShaderDebugMode::kDisabled:
-  case ShaderDebugMode::kBaseColor:
-  case ShaderDebugMode::kWorldNormals:
-  case ShaderDebugMode::kRoughness:
-  case ShaderDebugMode::kMetalness:
-  case ShaderDebugMode::kSceneDepthRaw:
-  case ShaderDebugMode::kSceneDepthLinear:
-    return true;
-  default:
-    return false;
+  auto ClampShadowQualityTierIndex(const float value) -> ShadowQualityTier
+  {
+    const auto clamped = static_cast<int>(std::clamp(value, 0.0F, 3.0F) + 0.5F);
+    return static_cast<ShadowQualityTier>(clamped);
   }
-}
+
+  auto ToVortexDebugMode(const engine::ShaderDebugMode mode)
+    -> vortex::ShaderDebugMode
+  {
+    return static_cast<vortex::ShaderDebugMode>(mode);
+  }
+
+  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode) -> bool
+  {
+    using engine::ShaderDebugMode;
+    switch (mode) {
+    case ShaderDebugMode::kDisabled:
+    case ShaderDebugMode::kBaseColor:
+    case ShaderDebugMode::kWorldNormals:
+    case ShaderDebugMode::kRoughness:
+    case ShaderDebugMode::kMetalness:
+    case ShaderDebugMode::kSceneDepthRaw:
+    case ShaderDebugMode::kSceneDepthLinear:
+      return true;
+    default:
+      return false;
+    }
+  }
 
 } // namespace
 
@@ -220,8 +218,7 @@ auto RenderingSettingsService::SetAtmosphereBlueNoiseEnabled(bool enabled)
   epoch_++;
 }
 
-auto RenderingSettingsService::GetShadowQualityTier() const
-  -> ShadowQualityTier
+auto RenderingSettingsService::GetShadowQualityTier() const -> ShadowQualityTier
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
@@ -264,39 +261,30 @@ auto RenderingSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 
 auto RenderingSettingsService::OnMainViewReady(
   const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& /*view*/) -> void
+  const vortex::CompositionView& /*view*/) -> void
 {
-  if (!pipeline_) {
-    ApplyVortexSettings();
-    return;
-  }
-
-  pipeline_->SetRenderMode(GetRenderMode());
-  pipeline_->SetWireframeColor(GetWireframeColor());
-  pipeline_->SetShaderDebugMode(GetDebugMode());
-  pipeline_->SetGpuDebugPassEnabled(GetGpuDebugPassEnabled());
-  pipeline_->SetAtmosphereBlueNoiseEnabled(GetAtmosphereBlueNoiseEnabled());
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::SupportsRenderModeControls() const -> bool
 {
-  return pipeline_ != nullptr;
+  return false;
 }
 
 auto RenderingSettingsService::SupportsWireframeColorControl() const -> bool
 {
-  return pipeline_ != nullptr;
+  return false;
 }
 
 auto RenderingSettingsService::SupportsGpuDebugPassControl() const -> bool
 {
-  return pipeline_ != nullptr;
+  return false;
 }
 
 auto RenderingSettingsService::SupportsAtmosphereBlueNoiseControl() const
   -> bool
 {
-  return pipeline_ != nullptr;
+  return false;
 }
 
 auto RenderingSettingsService::SupportsDebugMode(

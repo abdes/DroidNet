@@ -17,8 +17,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -387,7 +387,8 @@ auto Renderer::RegisterConsoleBindings(
 
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexLocalFogRenderIntoVolumetricFog),
-    .help = "Inject local fog into volumetric fog when volumetric fog is enabled",
+    .help
+    = "Inject local fog into volumetric fog when volumetric fog is enabled",
     .default_value = true,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
@@ -681,10 +682,24 @@ auto Renderer::SetShaderDebugMode(const ShaderDebugMode mode) noexcept -> void
     static_cast<std::uint8_t>(mode), std::memory_order_relaxed);
 }
 
+auto Renderer::SetGroundGridConfig(const GroundGridConfig& config) noexcept
+  -> void
+{
+  ground_grid_config_ = config;
+}
+
 auto Renderer::GetShaderDebugMode() const noexcept -> ShaderDebugMode
 {
   return static_cast<ShaderDebugMode>(
     shader_debug_mode_.load(std::memory_order_relaxed));
+}
+
+auto Renderer::GetLastEnvironmentLightingState() const noexcept
+  -> SceneRenderer::EnvironmentLightingState
+{
+  return scene_renderer_ != nullptr
+    ? scene_renderer_->GetLastEnvironmentLightingState()
+    : SceneRenderer::EnvironmentLightingState {};
 }
 
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
@@ -1416,20 +1431,21 @@ auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t
     auto value = std::int64_t { 128 };
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTilePixelSize, value)) {
-      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 8, 512));
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 8, 512));
     }
   }
   return 128U;
 }
 
-auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept
-  -> std::uint32_t
+auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
     auto value = std::int64_t { 32 };
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTileMaxInstanceCount, value)) {
-      return static_cast<std::uint32_t>(std::clamp<std::int64_t>(value, 1, 256));
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 1, 256));
     }
   }
   return 32U;
@@ -1559,9 +1575,12 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
     = selected_view.metadata.exposure_view_id != kInvalidViewId
     ? selected_view.metadata.exposure_view_id
     : selection.view_id;
-  render_context.current_view.with_atmosphere = selected_view.metadata.with_atmosphere;
-  render_context.current_view.with_height_fog = selected_view.metadata.with_height_fog;
-  render_context.current_view.with_local_fog = selected_view.metadata.with_local_fog;
+  render_context.current_view.with_atmosphere
+    = selected_view.metadata.with_atmosphere;
+  render_context.current_view.with_height_fog
+    = selected_view.metadata.with_height_fog;
+  render_context.current_view.with_local_fog
+    = selected_view.metadata.with_local_fog;
   render_context.current_view.composition_view = selection.composition_view;
   render_context.current_view.shading_mode_override
     = selection.shading_mode_override;

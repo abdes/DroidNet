@@ -17,6 +17,8 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -195,6 +197,20 @@ auto BuildAtmospherePipelineDesc(const SceneTextures& scene_textures)
     .Build();
 }
 
+auto IsAtmosphereEnabled(const RenderContext& ctx) -> bool
+{
+  const auto scene = ctx.GetScene();
+  if (scene == nullptr) {
+    return false;
+  }
+  const auto env = scene->GetEnvironment();
+  if (env == nullptr) {
+    return false;
+  }
+  const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+  return atmo != nullptr && atmo->IsEnabled();
+}
+
 } // namespace
 
 AtmosphereComposePass::AtmosphereComposePass(Renderer& renderer)
@@ -208,7 +224,7 @@ auto AtmosphereComposePass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
   const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_atmosphere;
+    && ctx.current_view.with_atmosphere && IsAtmosphereEnabled(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested

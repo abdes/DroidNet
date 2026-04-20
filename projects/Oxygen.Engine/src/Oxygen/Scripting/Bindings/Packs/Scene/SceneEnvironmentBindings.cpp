@@ -641,11 +641,16 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 14); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 16); // NOLINT(*-magic-numbers)
+    lua_pushinteger(
+      state, static_cast<lua_Integer>(system->GetTransformMode()));
+    lua_setfield(state, -2, "transform_mode");
     lua_pushnumber(state, system->GetPlanetRadiusMeters());
     lua_setfield(state, -2, "planet_radius_meters");
     lua_pushnumber(state, system->GetAtmosphereHeightMeters());
     lua_setfield(state, -2, "atmosphere_height_meters");
+    PushVec3(state, system->GetPlanetAnchorWorldPosition());
+    lua_setfield(state, -2, "planet_anchor_world_position");
     PushVec3(state, system->GetGroundAlbedoRgb());
     lua_setfield(state, -2, "ground_albedo_rgb");
     PushVec3(state, system->GetRayleighScatteringRgb());
@@ -688,12 +693,24 @@ namespace {
     float fv = 0.0F;
     bool bv = false;
     Vec3 vv {};
+    uint64_t iv = 0;
+    if (TryGetIntegerField(state, 2, "transform_mode", iv)) {
+      system->SetTransformMode(
+        static_cast<scene::environment::SkyAtmosphereTransformMode>(iv));
+    }
     if (TryGetNumberField(state, 2, "planet_radius_meters", fv)) {
       system->SetPlanetRadiusMeters(fv);
     }
     if (TryGetNumberField(state, 2, "atmosphere_height_meters", fv)) {
       system->SetAtmosphereHeightMeters(fv);
     }
+    lua_getfield(state, 2, "planet_anchor_world_position");
+    if (lua_isvector(state, -1) != 0) {
+      if (TryCheckVec3(state, -1, vv)) {
+        system->SetPlanetAnchorWorldPosition(vv);
+      }
+    }
+    lua_pop(state, 1);
     lua_getfield(state, 2, "ground_albedo_rgb");
     if (lua_isvector(state, -1) != 0) {
       if (TryCheckVec3(state, -1, vv)) {

@@ -15,6 +15,7 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -29,29 +30,29 @@ class Renderer;
 class SceneTextures;
 
 namespace internal {
-template <typename Payload> class PerViewStructuredPublisher;
+  template <typename Payload> class PerViewStructuredPublisher;
 }
 
 namespace environment {
-class SkyRenderer;
-class AtmosphereRenderer;
-class FogRenderer;
-class LocalFogVolumeTiledCullingPass;
-class LocalFogVolumeComposePass;
-class AtmosphereTransmittanceLutPass;
-class AtmosphereMultiScatteringLutPass;
-class DistantSkyLightLutPass;
-class AtmosphereSkyViewLutPass;
-class AtmosphereCameraAerialPerspectivePass;
-namespace internal {
-struct StableAtmosphereState;
-struct ResolvedAtmosphereLightState;
-class AtmosphereState;
-class AtmosphereLightState;
-class AtmosphereLutCache;
-class IblProcessor;
-class LocalFogVolumeState;
-}
+  class SkyRenderer;
+  class AtmosphereRenderer;
+  class FogRenderer;
+  class LocalFogVolumeTiledCullingPass;
+  class LocalFogVolumeComposePass;
+  class AtmosphereTransmittanceLutPass;
+  class AtmosphereMultiScatteringLutPass;
+  class DistantSkyLightLutPass;
+  class AtmosphereSkyViewLutPass;
+  class AtmosphereCameraAerialPerspectivePass;
+  namespace internal {
+    struct StableAtmosphereState;
+    struct ResolvedAtmosphereLightState;
+    class AtmosphereState;
+    class AtmosphereLightState;
+    class AtmosphereLutCache;
+    class IblProcessor;
+    class LocalFogVolumeState;
+  }
 } // namespace environment
 
 class EnvironmentLightingService {
@@ -165,17 +166,21 @@ public:
   OXGN_VRTX_API ~EnvironmentLightingService();
 
   EnvironmentLightingService(const EnvironmentLightingService&) = delete;
-  auto operator=(const EnvironmentLightingService&) -> EnvironmentLightingService& = delete;
+  auto operator=(const EnvironmentLightingService&)
+    -> EnvironmentLightingService& = delete;
   EnvironmentLightingService(EnvironmentLightingService&&) = delete;
-  auto operator=(EnvironmentLightingService&&) -> EnvironmentLightingService& = delete;
+  auto operator=(EnvironmentLightingService&&)
+    -> EnvironmentLightingService& = delete;
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
-  OXGN_VRTX_API auto RefreshPersistentProbeState(bool environment_source_changed) -> void;
+  OXGN_VRTX_API auto RefreshPersistentProbeState(
+    bool environment_source_changed) -> void;
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     ShaderVisibleIndex environment_static_slot,
     ShaderVisibleIndex environment_view_slot,
     ShaderVisibleIndex environment_view_products_slot,
+    const environment::EnvironmentViewProducts& view_products,
     bool enable_ambient_bridge) const -> EnvironmentFrameBindings;
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
@@ -186,8 +191,10 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const EnvironmentFrameBindings*;
-  [[nodiscard]] OXGN_VRTX_API auto ResolveEnvironmentFrameSlot(ViewId view_id) const
-    -> ShaderVisibleIndex;
+  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewData(ViewId view_id) const
+    -> const EnvironmentViewData*;
+  [[nodiscard]] OXGN_VRTX_API auto ResolveEnvironmentFrameSlot(
+    ViewId view_id) const -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto InspectProbeState() const noexcept
     -> const EnvironmentProbeState&
   {
@@ -203,7 +210,8 @@ public:
   {
     return last_publication_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastViewProductGenerationState() const noexcept
+  [[nodiscard]] OXGN_VRTX_NDAPI auto
+  GetLastViewProductGenerationState() const noexcept
     -> const ViewProductGenerationState&
   {
     return last_view_product_generation_state_;
@@ -227,9 +235,13 @@ private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     EnvironmentFrameBindings bindings {};
+    EnvironmentViewData view_data {};
   };
 
   auto EnsurePublishResources() -> bool;
+  [[nodiscard]] auto BuildEnvironmentStaticData(
+    const environment::EnvironmentViewProducts& view_products) const
+    -> EnvironmentStaticData;
   [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const
     -> EnvironmentViewData;
   auto RefreshStableAtmosphereState(const scene::Scene* scene) -> void;
@@ -243,8 +255,11 @@ private:
   ViewProductGenerationState last_view_product_generation_state_ {};
   Stage14State last_stage14_state_ {};
   Stage15State last_stage15_state_ {};
-  std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
     bindings_publisher_ {};
+  std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentStaticData>>
+    static_data_publisher_ {};
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
     view_data_publisher_ {};
   std::unique_ptr<
@@ -257,11 +272,13 @@ private:
   std::unique_ptr<environment::internal::AtmosphereLightState>
     atmosphere_light_state_ {};
   std::unique_ptr<environment::internal::AtmosphereState> atmosphere_state_ {};
-  std::unique_ptr<environment::internal::LocalFogVolumeState> local_fog_state_ {};
+  std::unique_ptr<environment::internal::LocalFogVolumeState>
+    local_fog_state_ {};
   std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
     local_fog_tiled_culling_ {};
   std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_ {};
-  std::unique_ptr<environment::internal::AtmosphereLutCache> atmosphere_lut_cache_ {};
+  std::unique_ptr<environment::internal::AtmosphereLutCache>
+    atmosphere_lut_cache_ {};
   std::unique_ptr<environment::AtmosphereTransmittanceLutPass>
     transmittance_lut_pass_ {};
   std::unique_ptr<environment::AtmosphereMultiScatteringLutPass>

@@ -10,8 +10,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/Services/RenderingSettingsService.h"
 

@@ -34,9 +34,9 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "InputSystem/MainModule.h"
@@ -490,7 +490,7 @@ auto MainModule::UpdateInputDebugPanelConfig(
 }
 
 auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+  std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -511,13 +511,13 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   }
 
   auto main_comp
-    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
+    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
+  views.push_back(vortex::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 

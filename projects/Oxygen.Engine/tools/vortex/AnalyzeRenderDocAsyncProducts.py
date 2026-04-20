@@ -58,6 +58,7 @@ if str(SCRIPT_DIR) not in sys.path:
 from renderdoc_ui_analysis import (  # noqa: E402
     ReportWriter,
     collect_action_records,
+    collect_resource_records_raw,
     is_work_action,
     renderdoc_module,
     resource_id_to_name,
@@ -76,6 +77,8 @@ STAGE8_SCOPE_NAME = "Vortex.Stage8.ShadowDepths"
 STAGE12_SCOPE_NAME = "Vortex.Stage12.DeferredLighting"
 STAGE12_DIRECTIONAL_SCOPE_NAME = "Vortex.Stage12.DirectionalLight"
 STAGE12_SPOT_SCOPE_NAME = "Vortex.Stage12.SpotLight"
+ATMOSPHERE_SKY_VIEW_SCOPE_NAME = "Vortex.Environment.AtmosphereSkyViewLut"
+ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME = "Vortex.Environment.AtmosphereCameraAerialPerspective"
 STAGE15_SKY_SCOPE_NAME = "Vortex.Stage15.Sky"
 STAGE15_ATMOSPHERE_SCOPE_NAME = "Vortex.Stage15.Atmosphere"
 STAGE15_FOG_SCOPE_NAME = "Vortex.Stage15.Fog"
@@ -111,6 +114,34 @@ def records_under_prefix(action_records, prefix):
         for record in action_records
         if record.path.startswith(prefix_with_sep)
     ]
+
+
+def collect_event_ids(scope_records, child_records):
+    event_ids = {record.event_id for record in child_records}
+    event_ids.update(record.event_id for record in scope_records)
+    return event_ids
+
+
+def resource_used_in_events(controller, resource_id, event_ids):
+    for usage in controller.GetUsage(resource_id):
+        if safe_getattr(usage, "eventId") in event_ids:
+            return True
+    return False
+
+
+def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
+    matches = []
+    for resource in resource_records:
+        resource_id = safe_getattr(resource, "resourceId")
+        name = safe_getattr(resource, "name", "")
+        if resource_id is None or not name:
+            continue
+        lower_name = name.lower()
+        if not all(token.lower() in lower_name for token in tokens):
+            continue
+        if resource_used_in_events(controller, resource_id, event_ids):
+            matches.append({"resource_id": resource_id, "name": name})
+    return matches
 
 
 def float4_values(pixel_value):
@@ -637,8 +668,14 @@ def build_report(
 ):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
+    resource_records = collect_resource_records_raw(controller)
     resource_names = resource_id_to_name(controller)
     texture_descs = texture_desc_map(controller)
+
+    atmosphere_sky_view_scopes = records_with_name(action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME)
+    atmosphere_sky_view_records = records_under_prefix(action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME)
+    atmosphere_camera_aerial_scopes = records_with_name(action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME)
+    atmosphere_camera_aerial_records = records_under_prefix(action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME)
 
     stage3_records = records_under_prefix(action_records, STAGE3_SCOPE_NAME)
     stage8_records = records_under_prefix(action_records, STAGE8_SCOPE_NAME)
@@ -654,6 +691,10 @@ def build_report(
     )
     stage15_atmosphere_records = records_under_prefix(
         action_records, STAGE15_ATMOSPHERE_SCOPE_NAME
+    )
+    stage15_atmosphere_event_ids = collect_event_ids(
+        records_with_name(action_records, STAGE15_ATMOSPHERE_SCOPE_NAME),
+        stage15_atmosphere_records,
     )
     stage15_fog_records = records_under_prefix(
         action_records, STAGE15_FOG_SCOPE_NAME
@@ -866,6 +907,21 @@ def build_report(
         stage15_atmosphere_scene_color_delta > 1.0e-5
     )
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
+    atmosphere_sky_view_scope_count_match = len(atmosphere_sky_view_scopes) == 1
+    atmosphere_sky_view_dispatch_count_match = (
+        len(records_with_name(atmosphere_sky_view_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    atmosphere_camera_aerial_scope_count_match = len(atmosphere_camera_aerial_scopes) == 1
+    atmosphere_camera_aerial_dispatch_count_match = (
+        len(records_with_name(atmosphere_camera_aerial_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    atmosphere_camera_aerial_usage = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage15_atmosphere_event_ids,
+        "vortex.environment.atmospherecameraaerialperspective",
+    )
+    atmosphere_camera_aerial_consumed = len(atmosphere_camera_aerial_usage) > 0
     stage15_async_scene_color_delta = max(
         max_sample_delta(stage12_final_scene_color, stage15_fog_scene_color),
         dense_grid_delta(
@@ -1020,6 +1076,36 @@ def build_report(
         )
     )
     report.append(
+        "atmosphere_sky_view_lut_scope_count_match={}".format(
+            str(atmosphere_sky_view_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_sky_view_lut_dispatch_count_match={}".format(
+            str(atmosphere_sky_view_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_scope_count_match={}".format(
+            str(atmosphere_camera_aerial_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_dispatch_count_match={}".format(
+            str(atmosphere_camera_aerial_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_consumed={}".format(
+            str(atmosphere_camera_aerial_consumed).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_resource_name={}".format(
+            atmosphere_camera_aerial_usage[0]["name"] if atmosphere_camera_aerial_usage else ""
+        )
+    )
+    report.append(
         "stage15_async_scene_color_delta_max={:.6f}".format(
             stage15_async_scene_color_delta
         )
@@ -1127,6 +1213,11 @@ def build_report(
         and stage15_sky_scene_color_changed
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
+        and atmosphere_sky_view_scope_count_match
+        and atmosphere_sky_view_dispatch_count_match
+        and atmosphere_camera_aerial_scope_count_match
+        and atmosphere_camera_aerial_dispatch_count_match
+        and atmosphere_camera_aerial_consumed
         and stage15_async_scene_color_changed
         and stage15_far_background_mask["valid"]
         and stage15_sky_quality["valid"]

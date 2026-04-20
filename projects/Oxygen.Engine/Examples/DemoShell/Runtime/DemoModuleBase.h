@@ -17,7 +17,7 @@
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/AppWindow.h"
@@ -88,7 +88,7 @@ protected:
   //! Hook: derived classes fill this with the views they want to render this
   //! frame.
   virtual auto UpdateComposition(engine::FrameContext& /*context*/,
-    std::vector<renderer::CompositionView>& /*views*/) -> void
+    std::vector<vortex::CompositionView>& /*views*/) -> void
   {
   }
 
@@ -109,11 +109,12 @@ protected:
   //! Map of logical view names to persistent ViewIds for resource tracking.
   std::map<std::string, ViewId> view_registry_;
   //! The active descriptors for the current frame.
-  std::vector<renderer::CompositionView> active_views_;
+  std::vector<vortex::CompositionView> active_views_;
 
 private:
   struct RuntimeSceneTarget {
-    std::shared_ptr<graphics::Framebuffer> framebuffer {};
+    std::shared_ptr<graphics::Framebuffer> scene_framebuffer {};
+    std::shared_ptr<graphics::Framebuffer> composite_framebuffer {};
     uint32_t width { 0 };
     uint32_t height { 0 };
   };
@@ -122,7 +123,7 @@ private:
 
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
   auto EnsureSceneFramebuffer(ViewId view_id, uint32_t width, uint32_t height)
-    -> std::shared_ptr<graphics::Framebuffer>;
+    -> RuntimeSceneTarget*;
   auto ClearSceneFramebuffers() -> void;
   auto ReleaseInactiveRuntimeViews(observer_ptr<engine::FrameContext> context,
     const std::vector<ViewId>& retained_intent_ids) -> void;

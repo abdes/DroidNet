@@ -74,7 +74,7 @@ private:
     float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
     float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
     float sky_luminance_factor_rgb[4] { 1.0F, 1.0F, 1.0F, 0.0F };
-    float ground_albedo_rgb[4] { 0.1F, 0.1F, 0.1F, 0.0F };
+    float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
     float rayleigh_scattering_rgb[4] { 5.8e-6F, 13.5e-6F, 33.1e-6F, 0.0F };
     float mie_scattering_rgb[4] { 2.0e-5F, 2.0e-5F, 2.0e-5F, 0.0F };
     float mie_absorption_rgb[4] { 4.4e-6F, 4.4e-6F, 4.4e-6F, 0.0F };

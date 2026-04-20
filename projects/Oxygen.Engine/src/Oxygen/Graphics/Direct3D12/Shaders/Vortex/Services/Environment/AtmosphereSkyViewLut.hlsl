@@ -6,9 +6,9 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
+#include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
+#include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/ViewConstants.hlsli"
-
-static const float PI = 3.14159265359f;
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -21,32 +21,107 @@ struct AtmosphereSkyViewLutPassConstants
     uint output_texture_uav;
     uint output_width;
     uint output_height;
+    uint transmittance_lut_srv;
+    uint multi_scattering_lut_srv;
+    uint transmittance_width;
+    uint transmittance_height;
+    uint multi_scattering_width;
+    uint multi_scattering_height;
+    uint active_light_count;
+    uint integration_sample_count;
     uint _pad0;
-    float4 sky_luminance_factor_height_fog_contribution;
-    float4 planet_radius_atmosphere_height_camera_altitude_trace_scale;
-    float4 sun_direction_ws_pad;
-    float4 sun_illuminance_rgb_pad;
+    float planet_radius_m;
+    float atmosphere_height_m;
+    float camera_altitude_m;
+    float trace_sample_count_scale;
+    float rayleigh_scale_height_m;
+    float mie_scale_height_m;
+    float multi_scattering_factor;
+    float mie_anisotropy;
+    float4 ground_albedo_rgb;
+    float4 rayleigh_scattering_rgb;
+    float4 mie_scattering_rgb;
+    float4 mie_absorption_rgb;
+    float4 ozone_absorption_rgb;
+    float4 ozone_density_layer0;
+    float4 ozone_density_layer1;
+    float4 sky_view_lut_referential_row0;
+    float4 sky_view_lut_referential_row1;
+    float4 sky_view_lut_referential_row2;
+    float4 sky_luminance_factor_rgb;
+    float4 sky_and_aerial_luminance_factor_rgb;
+    float4 light0_direction_enabled;
+    float4 light0_illuminance_rgb;
+    float4 light1_direction_enabled;
+    float4 light1_illuminance_rgb;
 };
 
-static float3 SafeNormalize(float3 v)
+static GpuSkyAtmosphereParams BuildAtmosphereParams(
+    AtmosphereSkyViewLutPassConstants pass)
 {
-    const float len_sq = dot(v, v);
-    if (len_sq <= 1.0e-8f)
-    {
-        return float3(0.0f, 0.0f, 1.0f);
-    }
-    return v * rsqrt(len_sq);
+    AtmosphereDensityProfile ozone_density = (AtmosphereDensityProfile)0;
+    ozone_density.layers[0].width_m = pass.ozone_density_layer0.x;
+    ozone_density.layers[0].exp_term = pass.ozone_density_layer0.y;
+    ozone_density.layers[0].linear_term = pass.ozone_density_layer0.z;
+    ozone_density.layers[0].constant_term = pass.ozone_density_layer0.w;
+    ozone_density.layers[1].width_m = pass.ozone_density_layer1.x;
+    ozone_density.layers[1].exp_term = pass.ozone_density_layer1.y;
+    ozone_density.layers[1].linear_term = pass.ozone_density_layer1.z;
+    ozone_density.layers[1].constant_term = pass.ozone_density_layer1.w;
+
+    return BuildVortexAtmosphereParams(
+        pass.planet_radius_m,
+        pass.atmosphere_height_m,
+        pass.multi_scattering_factor,
+        pass.rayleigh_scale_height_m,
+        pass.mie_scale_height_m,
+        pass.mie_anisotropy,
+        pass.ground_albedo_rgb.xyz,
+        pass.rayleigh_scattering_rgb.xyz,
+        pass.mie_scattering_rgb.xyz,
+        pass.mie_absorption_rgb.xyz,
+        pass.ozone_absorption_rgb.xyz,
+        ozone_density,
+        pass.transmittance_lut_srv,
+        (float)pass.transmittance_width,
+        (float)pass.transmittance_height,
+        pass.multi_scattering_lut_srv);
 }
 
-static float3 EvaluateSkyDirection(float2 uv)
+static float3 IntegrateSkyLight(
+    GpuSkyAtmosphereParams atmosphere,
+    AtmosphereSkyViewLutPassConstants pass,
+    float3 ray_origin,
+    float3 ray_direction,
+    float ray_length,
+    float3 light_direction,
+    float3 light_illuminance,
+    out float3 throughput)
 {
-    const float azimuth = (uv.x * 2.0f - 1.0f) * PI;
-    const float elevation = uv.y * (0.5f * PI);
-    const float cos_elevation = cos(elevation);
-    return SafeNormalize(float3(
-        cos_elevation * cos(azimuth),
-        cos_elevation * sin(azimuth),
-        sin(elevation)));
+    Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
+        ray_origin,
+        ray_direction,
+        true,
+        0.0f,
+        max(1.0f, 4.0f * pass.trace_sample_count_scale),
+        max((float)pass.integration_sample_count, 4.0f),
+        1.0f / 150000.0f,
+        light_direction,
+        float3(0.0f, 0.0f, 1.0f),
+        light_illuminance,
+        0.0f.xxx,
+        1.0f,
+        atmosphere,
+        pass.transmittance_lut_srv,
+        (float)pass.transmittance_width,
+        (float)pass.transmittance_height,
+        multi_scat_lut,
+        linear_sampler,
+        ray_length);
+    throughput = scattering.Transmittance;
+    return scattering.L;
 }
 
 [shader("compute")]
@@ -62,6 +137,8 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     const AtmosphereSkyViewLutPassConstants pass = pass_buffer[0];
     if (pass.output_texture_uav == K_INVALID_BINDLESS_INDEX
+        || pass.transmittance_lut_srv == K_INVALID_BINDLESS_INDEX
+        || pass.multi_scattering_lut_srv == K_INVALID_BINDLESS_INDEX
         || dispatch_id.x >= pass.output_width
         || dispatch_id.y >= pass.output_height)
     {
@@ -70,41 +147,94 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 
     RWTexture2D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
 
+    const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
     const float2 uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass.output_width, pass.output_height);
-    const float3 sky_dir = EvaluateSkyDirection(uv);
-    const float3 sun_dir = SafeNormalize(pass.sun_direction_ws_pad.xyz);
-    const float sun_amount = saturate(dot(sky_dir, sun_dir));
-    const float horizon = saturate(1.0f - abs(sky_dir.z));
-    const float zenith = saturate(sky_dir.z * 0.5f + 0.5f);
 
-    const float atmosphere_height = max(
-        pass.planet_radius_atmosphere_height_camera_altitude_trace_scale.y,
-        1.0f);
-    const float camera_altitude = max(
-        pass.planet_radius_atmosphere_height_camera_altitude_trace_scale.z,
-        0.0f);
-    const float altitude_fraction = saturate(camera_altitude / atmosphere_height);
-    const float density = exp(-altitude_fraction * 4.0f)
-        * lerp(1.2f, 0.35f, zenith);
-    const float multi_scatter = 0.2f + 0.8f * saturate(
-        pass.planet_radius_atmosphere_height_camera_altitude_trace_scale.w);
+    const float view_height = atmosphere.planet_radius_m + max(pass.camera_altitude_m, 0.0f);
+    float3 ray_origin = float3(0.0f, 0.0f, view_height);
+    float3 ray_direction = 0.0f.xxx;
+    UvToSkyViewLutParams(ray_direction, view_height, atmosphere.planet_radius_m, uv);
+    ray_direction = VortexSafeNormalize(ray_direction);
 
-    const float3 base_sky = lerp(
-        float3(0.18f, 0.28f, 0.48f),
-        float3(0.48f, 0.67f, 0.95f),
-        zenith);
-    const float3 horizon_glow = float3(0.55f, 0.42f, 0.20f)
-        * pow(horizon, 1.5f)
-        * (0.35f + 0.65f * sun_amount);
-    const float3 sun_disk = pass.sun_illuminance_rgb_pad.xyz
-        * pow(sun_amount, 64.0f)
-        * 2.5e-5f;
+    const float3 light0_direction = VortexSafeNormalize(float3(
+        dot(pass.sky_view_lut_referential_row0.xyz, pass.light0_direction_enabled.xyz),
+        dot(pass.sky_view_lut_referential_row1.xyz, pass.light0_direction_enabled.xyz),
+        dot(pass.sky_view_lut_referential_row2.xyz, pass.light0_direction_enabled.xyz)));
+    const float3 light1_direction = VortexSafeNormalize(float3(
+        dot(pass.sky_view_lut_referential_row0.xyz, pass.light1_direction_enabled.xyz),
+        dot(pass.sky_view_lut_referential_row1.xyz, pass.light1_direction_enabled.xyz),
+        dot(pass.sky_view_lut_referential_row2.xyz, pass.light1_direction_enabled.xyz)));
 
-    float3 sky_luminance = (base_sky * density + horizon_glow + sun_disk)
-        * multi_scatter;
-    sky_luminance *= pass.sky_luminance_factor_height_fog_contribution.xyz;
+    const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
+    if (!MoveToTopAtmosphere(ray_origin, ray_direction, atmosphere_radius))
+    {
+        output_texture[dispatch_id.xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return;
+    }
 
-    const float transmittance = saturate(exp(-density * (0.6f + 0.4f * horizon)));
-    output_texture[dispatch_id.xy] = float4(max(sky_luminance, 0.0f.xxx), transmittance);
+    float ray_length = 0.0f;
+    const float2 top_hits = RayIntersectSphere(
+        ray_origin,
+        ray_direction,
+        float4(0.0f, 0.0f, 0.0f, atmosphere_radius));
+    const float2 bottom_hits = RayIntersectSphere(
+        ray_origin,
+        ray_direction,
+        float4(0.0f, 0.0f, 0.0f, atmosphere.planet_radius_m));
+    const bool no_top_intersection = all(top_hits < 0.0f);
+    const bool no_bottom_intersection = all(bottom_hits < 0.0f);
+    if (no_top_intersection)
+    {
+        ray_length = 0.0f;
+    }
+    else if (no_bottom_intersection)
+    {
+        ray_length = max(top_hits.x, top_hits.y);
+    }
+    else
+    {
+        ray_length = max(0.0f, min(bottom_hits.x, bottom_hits.y));
+    }
+    if (ray_length <= 0.0f)
+    {
+        output_texture[dispatch_id.xy] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return;
+    }
+
+    float3 throughput = 1.0f.xxx;
+    float3 luminance = 0.0f.xxx;
+
+    if (pass.light0_direction_enabled.w > 0.5f)
+    {
+        float3 local_throughput = 1.0f.xxx;
+        luminance += IntegrateSkyLight(
+            atmosphere,
+            pass,
+            ray_origin,
+            ray_direction,
+            ray_length,
+            light0_direction,
+            pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
+            local_throughput);
+        throughput = local_throughput;
+    }
+
+    if (pass.light1_direction_enabled.w > 0.5f)
+    {
+        float3 local_throughput = 1.0f.xxx;
+        luminance += IntegrateSkyLight(
+            atmosphere,
+            pass,
+            ray_origin,
+            ray_direction,
+            ray_length,
+            light1_direction,
+            pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
+            local_throughput);
+        throughput = local_throughput;
+    }
+
+    const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
+    output_texture[dispatch_id.xy] = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
 }

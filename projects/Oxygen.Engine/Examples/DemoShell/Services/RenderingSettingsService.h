@@ -12,8 +12,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/Services/DomainService.h"
 
@@ -99,8 +99,7 @@ public:
   [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
   [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
   [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
-  [[nodiscard]] virtual auto SupportsAtmosphereBlueNoiseControl() const
-    -> bool;
+  [[nodiscard]] virtual auto SupportsAtmosphereBlueNoiseControl() const -> bool;
   [[nodiscard]] virtual auto SupportsDebugMode(
     engine::ShaderDebugMode mode) const -> bool;
   [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
@@ -111,7 +110,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::CompositionView& view) -> void override;
+    const vortex::CompositionView& view) -> void override;
 
 private:
   static constexpr auto kViewModeKey = "rendering.view_mode";
@@ -122,8 +121,7 @@ private:
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
-  static constexpr auto kShadowQualityTierKey
-    = "rendering.shadow_quality_tier";
+  static constexpr auto kShadowQualityTierKey = "rendering.shadow_quality_tier";
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };

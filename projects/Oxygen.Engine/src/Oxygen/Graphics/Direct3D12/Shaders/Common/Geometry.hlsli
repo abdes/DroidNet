@@ -18,6 +18,36 @@
 // Ray-Sphere Intersection
 // ============================================================================
 
+//! Computes both ray-sphere intersection distances using UE-style contract.
+//!
+//! @param origin Ray origin.
+//! @param dir Ray direction (normalized).
+//! @param sphere Sphere packed as float4(center.xyz, radius).
+//! @return float2(near, far) or (-1, -1) if no intersection exists.
+float2 RayIntersectSphere(float3 origin, float3 dir, float4 sphere)
+{
+    const float3 local_position = origin - sphere.xyz;
+    const float local_position_sq = dot(local_position, local_position);
+
+    float3 quadratic;
+    quadratic.x = dot(dir, dir);
+    quadratic.y = 2.0f * dot(dir, local_position);
+    quadratic.z = local_position_sq - sphere.w * sphere.w;
+
+    const float discriminant = quadratic.y * quadratic.y
+        - 4.0f * quadratic.x * quadratic.z;
+
+    if (discriminant < 0.0f)
+    {
+        return float2(-1.0f, -1.0f);
+    }
+
+    const float sqrt_discriminant = SafeSqrt(discriminant);
+    return float2(
+        (-quadratic.y - sqrt_discriminant) / (2.0f * quadratic.x),
+        (-quadratic.y + sqrt_discriminant) / (2.0f * quadratic.x));
+}
+
 //! Computes ray-sphere intersection distance (nearest intersection).
 //!
 //! Returns the distance to the nearest intersection point along the ray.
@@ -30,18 +60,9 @@
 //! @return Distance to intersection, or -1 if no intersection.
 float RaySphereIntersectNearest(float3 origin, float3 dir, float radius)
 {
-    float b = dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float discriminant = b * b - c;
-
-    if (discriminant < 0.0)
-    {
-        return -1.0;
-    }
-
-    float sqrt_disc = SafeSqrt(discriminant);
-    float t0 = -b - sqrt_disc;
-    float t1 = -b + sqrt_disc;
+    const float2 intersections = RayIntersectSphere(origin, dir, float4(0.0f, 0.0f, 0.0f, radius));
+    const float t0 = intersections.x;
+    const float t1 = intersections.y;
 
     // Return the positive intersection (exit point for inside, entry for outside)
     if (t0 > 0.0)
@@ -65,20 +86,13 @@ float RaySphereIntersectNearest(float3 origin, float3 dir, float radius)
 //! @return True if intersection exists, false otherwise.
 bool RaySphereIntersectBoth(float3 origin, float3 dir, float radius, out float t0, out float t1)
 {
-    float b = dot(origin, dir);
-    float c = dot(origin, origin) - radius * radius;
-    float discriminant = b * b - c;
-
-    if (discriminant < 0.0)
+    const float2 intersections = RayIntersectSphere(origin, dir, float4(0.0f, 0.0f, 0.0f, radius));
+    t0 = intersections.x;
+    t1 = intersections.y;
+    if (t0 < 0.0f && t1 < 0.0f)
     {
-        t0 = -1.0;
-        t1 = -1.0;
         return false;
     }
-
-    float sqrt_disc = SafeSqrt(discriminant);
-    t0 = -b - sqrt_disc;
-    t1 = -b + sqrt_disc;
     return true;
 }
 

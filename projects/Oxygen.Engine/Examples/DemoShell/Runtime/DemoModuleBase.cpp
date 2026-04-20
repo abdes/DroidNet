@@ -24,7 +24,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -40,7 +39,7 @@ namespace {
     return std::max(1U, static_cast<std::uint32_t>(value));
   }
 
-  auto ResolveViewport(const renderer::CompositionView& view_intent,
+  auto ResolveViewport(const vortex::CompositionView& view_intent,
     const observer_ptr<AppWindow> app_window) -> ViewPort
   {
     if (view_intent.view.viewport.IsValid()) {
@@ -69,15 +68,12 @@ namespace {
     };
   }
 
-  auto ToVortexCompositionView(const renderer::CompositionView& source,
+  auto NormalizeVortexCompositionView(const vortex::CompositionView& source,
     const observer_ptr<AppWindow> app_window) -> vortex::CompositionView
   {
     const auto viewport = ResolveViewport(source, app_window);
 
-    auto target = vortex::CompositionView {};
-    target.name = source.name;
-    target.id = source.id;
-    target.view = source.view;
+    auto target = source;
     target.view.viewport = viewport;
     if (source.camera.has_value() && viewport.IsValid()) {
       target.view.viewport.top_left_x = 0.0F;
@@ -86,33 +82,25 @@ namespace {
         && target.view.scissor.bottom > target.view.scissor.top) {
         const auto offset_x = static_cast<int32_t>(viewport.top_left_x);
         const auto offset_y = static_cast<int32_t>(viewport.top_left_y);
-        target.view.scissor.left = std::max(0, target.view.scissor.left - offset_x);
-        target.view.scissor.top = std::max(0, target.view.scissor.top - offset_y);
-        target.view.scissor.right
-          = std::max(target.view.scissor.left, target.view.scissor.right - offset_x);
-        target.view.scissor.bottom
-          = std::max(target.view.scissor.top, target.view.scissor.bottom - offset_y);
+        target.view.scissor.left
+          = std::max(0, target.view.scissor.left - offset_x);
+        target.view.scissor.top
+          = std::max(0, target.view.scissor.top - offset_y);
+        target.view.scissor.right = std::max(
+          target.view.scissor.left, target.view.scissor.right - offset_x);
+        target.view.scissor.bottom = std::max(
+          target.view.scissor.top, target.view.scissor.bottom - offset_y);
       }
     }
-    target.z_order = vortex::CompositionView::ZOrder { source.z_order.get() };
-    target.opacity = source.opacity;
-    target.should_clear = source.should_clear;
-    target.camera = source.camera;
-    target.clear_color = source.clear_color;
-    target.enable_hdr = source.enable_hdr;
-    target.with_atmosphere = source.with_atmosphere;
-    target.with_height_fog = source.camera.has_value();
-    target.with_local_fog = source.camera.has_value();
-    target.exposure_source_view_id = source.exposure_source_view_id;
-    target.force_wireframe = source.force_wireframe;
+    target.with_height_fog = source.camera.has_value() && source.with_height_fog;
+    target.with_local_fog = source.camera.has_value() && source.with_local_fog;
     target.shading_mode = source.camera.has_value()
       ? std::optional<vortex::ShadingMode> { vortex::ShadingMode::kDeferred }
       : std::nullopt;
-    target.on_overlay = source.on_overlay;
     return target;
   }
 
-  auto IsSceneView(const renderer::CompositionView& view_intent) -> bool
+  auto IsSceneView(const vortex::CompositionView& view_intent) -> bool
   {
     return view_intent.camera.has_value() && view_intent.id != kInvalidViewId;
   }
@@ -263,12 +251,13 @@ auto DemoModuleBase::ReleaseInactiveRuntimeViews(
 
 auto DemoModuleBase::EnsureSceneFramebuffer(
   const ViewId view_id, const uint32_t width, const uint32_t height)
-  -> std::shared_ptr<graphics::Framebuffer>
+  -> RuntimeSceneTarget*
 {
   if (auto it = scene_targets_.find(view_id); it != scene_targets_.end()
-    && it->second.framebuffer && it->second.width == width
+    && it->second.scene_framebuffer && it->second.composite_framebuffer
+    && it->second.width == width
     && it->second.height == height) {
-    return it->second.framebuffer;
+    return &it->second;
   }
 
   auto gfx = app_.gfx_weak.lock();
@@ -279,7 +268,7 @@ auto DemoModuleBase::EnsureSceneFramebuffer(
   graphics::TextureDesc color_desc {};
   color_desc.width = width;
   color_desc.height = height;
-  color_desc.format = Format::kRGBA8UNorm;
+  color_desc.format = Format::kRGBA16Float;
   color_desc.texture_type = TextureType::kTexture2D;
   color_desc.is_render_target = true;
   color_desc.is_shader_resource = true;
@@ -299,12 +288,36 @@ auto DemoModuleBase::EnsureSceneFramebuffer(
   CHECK_F(static_cast<bool>(framebuffer),
     "Failed to create Vortex runtime framebuffer for view {}", view_id.get());
 
+  graphics::TextureDesc composite_desc {};
+  composite_desc.width = width;
+  composite_desc.height = height;
+  composite_desc.format = Format::kRGBA8UNorm;
+  composite_desc.texture_type = TextureType::kTexture2D;
+  composite_desc.is_render_target = true;
+  composite_desc.is_shader_resource = true;
+  composite_desc.initial_state = graphics::ResourceStates::kCommon;
+  composite_desc.use_clear_value = true;
+  composite_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  composite_desc.debug_name
+    = fmt::format("DemoRuntime.CompositeColor.{}", view_id.get());
+
+  auto composite_texture = gfx->CreateTexture(composite_desc);
+  CHECK_F(static_cast<bool>(composite_texture),
+    "Failed to create Vortex runtime composite texture for view {}", view_id.get());
+
+  auto composite_desc_fb = graphics::FramebufferDesc {};
+  composite_desc_fb.AddColorAttachment({ .texture = std::move(composite_texture) });
+  auto composite_framebuffer = gfx->CreateFramebuffer(composite_desc_fb);
+  CHECK_F(static_cast<bool>(composite_framebuffer),
+    "Failed to create Vortex runtime composite framebuffer for view {}", view_id.get());
+
   scene_targets_[view_id] = RuntimeSceneTarget {
-    .framebuffer = framebuffer,
+    .scene_framebuffer = framebuffer,
+    .composite_framebuffer = composite_framebuffer,
     .width = width,
     .height = height,
   };
-  return framebuffer;
+  return &scene_targets_.at(view_id);
 }
 
 auto DemoModuleBase::ClearSceneFramebuffers() -> void
@@ -334,7 +347,7 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
   std::vector<ViewId> retained_scene_view_ids {};
   retained_scene_view_ids.reserve(active_views_.size());
 
-  const renderer::CompositionView* primary_scene_view = nullptr;
+  const vortex::CompositionView* primary_scene_view = nullptr;
   for (const auto& view_intent : active_views_) {
     if (!IsSceneView(view_intent)) {
       continue;
@@ -354,12 +367,13 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
       continue;
     }
 
-    auto vortex_view = ToVortexCompositionView(view_intent, app_window_);
+    auto vortex_view = NormalizeVortexCompositionView(view_intent, app_window_);
     const auto width = ClampViewportDimension(vortex_view.view.viewport.width);
     const auto height
       = ClampViewportDimension(vortex_view.view.viewport.height);
-    auto target = EnsureSceneFramebuffer(view_intent.id, width, height);
-    if (!target) {
+    auto* target = EnsureSceneFramebuffer(view_intent.id, width, height);
+    if (target == nullptr || !target->scene_framebuffer
+      || !target->composite_framebuffer) {
       LOG_F(WARNING,
         "Skipping Vortex runtime publication for view {} due to missing "
         "framebuffer",
@@ -370,8 +384,8 @@ auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
     renderer->PublishRuntimeCompositionView(*context,
       vortex::Renderer::RuntimeViewPublishInput {
         .composition_view = std::move(vortex_view),
-        .render_target = observer_ptr { target.get() },
-        .composite_source = observer_ptr { target.get() },
+        .render_target = observer_ptr { target->scene_framebuffer.get() },
+        .composite_source = observer_ptr { target->composite_framebuffer.get() },
       });
 
     if (primary_scene_view == &view_intent) {

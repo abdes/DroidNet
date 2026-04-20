@@ -435,6 +435,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kVertex, .name="VortexTonemapVS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/PostProcess/GroundGrid.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kPixel, .name="VortexGroundGridPS" },
+      EntryPoint { .type=kVertex, .name="VortexGroundGridVS" } },
+    .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/PostProcess/BloomDownsample.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexBloomDownsamplePS" } }
@@ -661,7 +668,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - DepthPrePass: 4 (2 entries x 2 permutations)
 // - VortexDepthPrepass: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
 // - VortexBasePassGBuffer: 8 (2 entries x HAS_VELOCITY x ALPHA_TEST)
-// - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x ALPHA_TEST)
+// - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x
+// ALPHA_TEST)
 // - VortexBasePassVelocityMerge: 1
 // - VortexBasePassDebugView: 7 (VS + 6 required debug PS variants)
 // - VortexShadowDepth: 4 (2 entries x ALPHA_TEST)

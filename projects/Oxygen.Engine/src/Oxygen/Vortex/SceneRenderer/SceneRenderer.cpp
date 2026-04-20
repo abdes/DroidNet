@@ -42,6 +42,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -266,15 +267,14 @@ namespace {
       || ctx.current_view.resolved_view->ReverseZ();
   }
 
-  auto ResolveScreenHzbRequest(
-    const RenderContext& ctx, const ShadingMode shading_mode)
-    -> RenderContext::ScreenHzbRequest
+  auto ResolveScreenHzbRequest(const RenderContext& ctx,
+    const ShadingMode shading_mode) -> RenderContext::ScreenHzbRequest
   {
     auto request = RenderContext::ScreenHzbRequest {};
     const auto* active_view = ctx.GetActiveViewEntry();
-    const auto is_scene_view
-      = active_view != nullptr ? active_view->is_scene_view
-                               : ctx.current_view.resolved_view != nullptr;
+    const auto is_scene_view = active_view != nullptr
+      ? active_view->is_scene_view
+      : ctx.current_view.resolved_view != nullptr;
     if (!is_scene_view) {
       return request;
     }
@@ -282,11 +282,32 @@ namespace {
     if (shading_mode == ShadingMode::kDeferred) {
       request.current_closest = true;
     }
-    if (shading_mode == ShadingMode::kDeferred || ctx.current_view.with_local_fog) {
+    if (shading_mode == ShadingMode::kDeferred
+      || ctx.current_view.with_local_fog) {
       request.current_furthest = true;
       request.publish_previous_furthest = true;
     }
     return request;
+  }
+
+  auto ResolveLateOverlayTarget(
+    const RenderContext& ctx) -> observer_ptr<const graphics::Framebuffer>
+  {
+    if (const auto* active_view = ctx.GetActiveViewEntry();
+      active_view != nullptr) {
+      if (active_view->composite_source != nullptr) {
+        return observer_ptr<const graphics::Framebuffer> {
+          active_view->composite_source.get()
+        };
+      }
+      if (active_view->primary_target != nullptr) {
+        return observer_ptr<const graphics::Framebuffer> {
+          active_view->primary_target.get()
+        };
+      }
+    }
+
+    return ctx.pass_target;
   }
 
   auto ResolveWorldRotation(
@@ -360,8 +381,12 @@ namespace {
           return scene::VisitResult::kContinue;
         }
 
+        // Directional-light consumers expect the vector from the shaded point
+        // toward the light source. The node's rotated forward axis represents
+        // the emitted ray direction, so flip it here to preserve Oxygen's
+        // coordinate conventions while matching UE-style lighting semantics.
         selection.directional_light = FrameDirectionalLightSelection {
-          .direction = ComputeDirectionWs(scene_ref, node),
+          .direction = -ComputeDirectionWs(scene_ref, node),
           .source_radius = light.GetAngularSizeRadians(),
           .color = light.Common().color_rgb,
           .illuminance_lux = light.GetIntensityLux(),
@@ -1007,10 +1032,12 @@ namespace {
           config.tone_mapper = post_process->GetToneMapper();
           config.enable_auto_exposure = post_process->GetExposureEnabled()
             && post_process->GetExposureMode() == engine::ExposureMode::kAuto;
-          config.fixed_exposure = ResolveAuthoredExposureValue(*post_process, ctx);
+          config.fixed_exposure
+            = ResolveAuthoredExposureValue(*post_process, ctx);
           config.gamma = post_process->GetDisplayGamma();
           config.metering_mode = post_process->GetAutoExposureMeteringMode();
-          config.auto_exposure_speed_up = post_process->GetAutoExposureSpeedUp();
+          config.auto_exposure_speed_up
+            = post_process->GetAutoExposureSpeedUp();
           config.auto_exposure_speed_down
             = post_process->GetAutoExposureSpeedDown();
           config.auto_exposure_low_percentile
@@ -1113,6 +1140,9 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   if (renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
     environment_ = std::make_unique<EnvironmentLightingService>(renderer_);
   }
+  if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
+    ground_grid_pass_ = std::make_unique<GroundGridPass>(renderer_);
+  }
   if (renderer_.HasCapability(
         RendererCapabilityFamily::kFinalOutputComposition)) {
     post_process_ = std::make_unique<PostProcessService>(renderer_);
@@ -1176,7 +1206,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
-  ctx.current_view.screen_hzb_request = ResolveScreenHzbRequest(ctx, shading_mode);
+  ctx.current_view.screen_hzb_request
+    = ResolveScreenHzbRequest(ctx, shading_mode);
   ctx.current_view.scene_depth_product_valid = false;
   // Renderer Core materializes the eligible views and selects the current
   // scene-view cursor in RenderContext. SceneRenderer owns the stage chain for
@@ -1257,20 +1288,21 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     if (screen_hzb_output.closest_texture != nullptr) {
       ctx.current_view.screen_hzb_closest_texture
         = observer_ptr<const graphics::Texture> {
-          screen_hzb_output.closest_texture.get()
-        };
+            screen_hzb_output.closest_texture.get()
+          };
     }
     if (screen_hzb_output.furthest_texture != nullptr) {
       ctx.current_view.screen_hzb_furthest_texture
         = observer_ptr<const graphics::Texture> {
-          screen_hzb_output.furthest_texture.get()
-        };
+            screen_hzb_output.furthest_texture.get()
+          };
     }
     ctx.current_view.screen_hzb_width
       = static_cast<std::uint32_t>(screen_hzb_output.bindings.hzb_size_x);
     ctx.current_view.screen_hzb_height
       = static_cast<std::uint32_t>(screen_hzb_output.bindings.hzb_size_y);
-    ctx.current_view.screen_hzb_mip_count = screen_hzb_output.bindings.mip_count;
+    ctx.current_view.screen_hzb_mip_count
+      = screen_hzb_output.bindings.mip_count;
     ctx.current_view.screen_hzb_available = screen_hzb_output.available;
     if (ctx.current_view.screen_hzb_request.WantsPreviousFurthest()) {
       const auto& screen_hzb_previous = screen_hzb_->GetPreviousOutput();
@@ -1278,8 +1310,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
         && screen_hzb_previous.furthest_texture != nullptr) {
         ctx.current_view.screen_hzb_previous_furthest_texture
           = observer_ptr<const graphics::Texture> {
-            screen_hzb_previous.furthest_texture.get()
-          };
+              screen_hzb_previous.furthest_texture.get()
+            };
         ctx.current_view.screen_hzb_previous_furthest_srv
           = screen_hzb_previous.bindings.furthest_srv;
         ctx.current_view.screen_hzb_has_previous = true;
@@ -1364,8 +1396,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
   // Stage 15: Sky / atmosphere / fog
-  if (environment_ != nullptr
-    && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
+  if (environment_ != nullptr && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures_);
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1393,8 +1424,6 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 18: Translucency
 
   // Stage 19: reserved - DistortionModule
-
-  // Stage 20: reserved - LightShaftBloomModule
 
   // Maintain late scene-texture publication before the output handoff stages.
   PublishCustomDepthProducts();
@@ -1463,6 +1492,12 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     published_view_frame_bindings_.post_process_frame_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
     renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  }
+
+  // Stage 20: Ground grid
+  if (ground_grid_pass_ != nullptr) {
+    static_cast<void>(ground_grid_pass_->Record(
+      ctx, scene_textures_, ResolveLateOverlayTarget(ctx)));
   }
 
   // Stage 23: Post-render cleanup / extraction
@@ -1779,6 +1814,11 @@ auto SceneRenderer::EnsureArtifactTexture(ExtractArtifact& artifact,
   if (requires_reallocation) {
     auto artifact_desc = source_desc;
     artifact_desc.debug_name = std::string(debug_name);
+    artifact_desc.is_render_target = false;
+    artifact_desc.is_uav = false;
+    artifact_desc.use_clear_value = false;
+    artifact_desc.clear_value = {};
+    artifact_desc.initial_state = graphics::ResourceStates::kCommon;
     auto& registry = gfx_.GetResourceRegistry();
     if (artifact.texture != nullptr && registry.Contains(*artifact.texture)) {
       gfx_.ForgetKnownResourceState(*artifact.texture);

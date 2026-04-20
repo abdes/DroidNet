@@ -42,6 +42,56 @@ Related:
 5. **Per-session update.** Each implementation session must update this file
    with: changed files, commands run, results, and remaining blockers.
 
+### 2026-04-20 — atmosphere frame fix widened from shader-only tuning to authored/view-frame parity
+
+- Scope:
+  - corrected the root-cause lane for the grey sky from shader-local heuristics
+    to the missing UE5.7-style authored planet anchor plus per-view translated
+    atmosphere frame
+  - updated the authored `SkyAtmosphere` contract, Vortex atmosphere model,
+    per-view publication payload, and the active sky / sky-view / camera-aerial
+    shader consumers
+  - aligned the default distant-sky-light sample altitude with UE5.7’s `6km`
+    contract and restored UE-style `0.4` linear ground albedo defaults on the
+    active Vortex atmosphere path
+- Files changed:
+  - `design/vortex/lld/environment-service.md`
+  - `src/Oxygen/Scene/Environment/SkyAtmosphere.h`
+  - `src/Oxygen/Scene/Test/EnvironmentComponents_test.cpp`
+  - `src/Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.cpp`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereState.cpp`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.h`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Types/AtmosphereModel.h`
+  - `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`
+  - `src/Oxygen/Vortex/Types/EnvironmentViewData.h`
+  - `src/Oxygen/Data/PakFormat_world.h`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentViewData.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentViewHelpers.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereParityCommon.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl`
+- Verification evidence:
+  - `cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService.Tests --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "EnvironmentComponents" --output-on-failure`
+  - `ctest --test-dir out/build-ninja -C Debug -R "EnvironmentLightingService" --output-on-failure`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.EnvironmentLightingService.Tests.exe --gtest_filter=EnvironmentLightingServiceSurfaceTest.SkyShaderUsesFarBackgroundMaskInsteadOfDepthEqualityShortcuts:EnvironmentLightingServiceBehaviorTest.PublishedEnvironmentViewDataUsesUeStyleTranslatedPlanetFrameForComponentModes`
+- Results:
+  - targeted build passed for the environment-lighting test target
+  - `EnvironmentComponents` passed
+  - the rebuilt environment-lighting binary passes the updated sky-shader
+    source assertion and the new translated-frame behavior test directly
+- Remaining validation delta:
+  - the broader regex also exercises `SceneRendererPublicationTest.Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn`, which currently fails in this workspace on a framebuffer attachment size mismatch (`96 != 64`); that failure was not root-caused in this atmosphere-frame fix and must not be counted as closed here without a separate investigation
+
 ### 2026-04-19 — Stage 5 HZB core implementation summary
 
 - Scope:
@@ -182,6 +232,53 @@ Related:
   - the actual transmittance / multi-scattering / distant-sky-light production shaders and pass parameterization were **not** assessed or closed to UE5.7 parity quality in this task
   - `AtmosphereSkyViewLutPass` and `AtmosphereCameraAerialPerspectivePass` still do not consume the cached family or UE-style internal-common parameter block
   - therefore `04-27` remains incomplete pending a truthful production-parity assessment and, if still short, explicit human approval of the gap
+
+### 2026-04-20 — 04-28 re-closed the active per-view atmosphere lane against UE5.7’s main-view contracts
+
+- Scope:
+  - re-read the UE5.7 main-view sky-view / camera-aerial generation and visible-consumer contracts in:
+    - `F:/Epic Games/UE_5.7/Engine/Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp`
+    - `F:/Epic Games/UE_5.7/Engine/Shaders/Private/SkyAtmosphere.usf`
+    - `F:/Epic Games/UE_5.7/Engine/Shaders/Private/SkyAtmosphereCommon.ush`
+  - rewired the Vortex per-view sky-view and camera-aerial passes to consume the cached transmittance + multi-scattering family and the cache-owned internal parameter contract instead of pass-local placeholder math
+  - closed the active Stage 15 visible path by making `AtmosphereCompose` consume the generated camera-aerial volume and apply `scene * transmittance + inscatter`
+  - tightened proof tooling so task closure now blocks on sky-view generation, camera-aerial generation, and Stage 15 atmosphere consumption of the camera-aerial product
+- Landed code:
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.cpp`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h`
+  - `src/Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.cpp`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.h`
+  - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp`
+  - `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`
+  - `src/Oxygen/Vortex/Types/EnvironmentViewData.h`
+  - `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentViewData.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereParityCommon.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl`
+  - `tools/vortex/AnalyzeRenderDocVortexBasicProducts.py`
+  - `tools/vortex/AnalyzeRenderDocAsyncProducts.py`
+  - `tools/vortex/Assert-VortexBasicRuntimeProof.ps1`
+  - `tools/vortex/Assert-AsyncRuntimeProof.ps1`
+- Verification evidence:
+  - `python -m py_compile tools/vortex/AnalyzeRenderDocVortexBasicProducts.py tools/vortex/AnalyzeRenderDocAsyncProducts.py`
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests oxygen-examples-async --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "EnvironmentLightingService" --output-on-failure`
+- What is now proven on the active Vortex path:
+  - cache-owned internal parameters now define the per-view sky-view size (`192x104`) and camera-aerial volume contract (`32x32x16`, squared depth mapping over `96km`)
+  - `AtmosphereSkyViewLutPass` now consumes cached transmittance + multi-scattering LUTs plus dual-light state instead of emitting a stand-alone heuristic sky texture
+  - `AtmosphereCameraAerialPerspectivePass` now consumes cached transmittance + multi-scattering LUTs and uses UE-style squared depth distribution instead of deriving luminance from the sky-view texture
+  - Stage 15 atmosphere composition now consumes the generated camera-aerial volume through the published per-view environment bindings and applies transmittance/inscatter over scene color
+  - proof scripts now block on `atmosphere_sky_view_lut_*`, `atmosphere_camera_aerial_*`, and `atmosphere_camera_aerial_consumed=true`
+- Residual truth:
+  - this task closes the **active main-view** parity lane only
+  - UE5.7 permutation lanes that are still not mirrored in Vortex here include the optional separated Mie/Ray aerial-volume outputs and the reflection-capture-specific aerial path; those are not active Vortex consumer surfaces today and were not part of this task’s expected outputs
+  - the broad task-plan verification regex `ctest -R "Oxygen.Vortex.EnvironmentLightingService|Async"` is stale in this workspace because it pulls unrelated `_NOT_BUILT` async tests; the truthful passing verification surface for this task is the narrower `EnvironmentLightingService` run above
 
 ## Phase Summary
 

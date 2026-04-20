@@ -6,8 +6,18 @@
 
 #pragma once
 
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
+#include <Oxygen/Vortex/RenderMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 
 #include "DemoShell/Runtime/MainViewContract.h"
+
+namespace oxygen::renderer {
+using RenderMode = vortex::RenderMode;
+} // namespace oxygen::renderer
+
+namespace oxygen::engine {
+using ShaderDebugMode = vortex::ShaderDebugMode;
+using vortex::IsIblDebugMode;
+using vortex::IsLightCullingDebugMode;
+using vortex::IsNonIblDebugMode;
+} // namespace oxygen::engine

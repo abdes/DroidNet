@@ -49,6 +49,7 @@ namespace {
     model.planet_radius_m = atmosphere->GetPlanetRadiusMeters();
     model.atmosphere_height_m = atmosphere->GetAtmosphereHeightMeters();
     model.ground_albedo_rgb = atmosphere->GetGroundAlbedoRgb();
+    model.planet_anchor_position_ws = atmosphere->GetPlanetAnchorWorldPosition();
     model.rayleigh_scattering_rgb = atmosphere->GetRayleighScatteringRgb();
     model.rayleigh_scale_height_m = atmosphere->GetRayleighScaleHeightMeters();
     model.mie_scattering_rgb = atmosphere->GetMieScatteringRgb();
@@ -200,6 +201,9 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.ground_albedo_rgb.x));
     seed = HashCombineU64(seed, FloatBits(model.ground_albedo_rgb.y));
     seed = HashCombineU64(seed, FloatBits(model.ground_albedo_rgb.z));
+    seed = HashCombineU64(seed, FloatBits(model.planet_anchor_position_ws.x));
+    seed = HashCombineU64(seed, FloatBits(model.planet_anchor_position_ws.y));
+    seed = HashCombineU64(seed, FloatBits(model.planet_anchor_position_ws.z));
     seed = HashCombineU64(seed, FloatBits(model.rayleigh_scattering_rgb.x));
     seed = HashCombineU64(seed, FloatBits(model.rayleigh_scattering_rgb.y));
     seed = HashCombineU64(seed, FloatBits(model.rayleigh_scattering_rgb.z));

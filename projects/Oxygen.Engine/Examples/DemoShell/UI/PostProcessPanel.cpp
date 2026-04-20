@@ -11,7 +11,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Renderer/Passes/ToneMapPass.h>
 
 #include "DemoShell/UI/PostProcessPanel.h"
 

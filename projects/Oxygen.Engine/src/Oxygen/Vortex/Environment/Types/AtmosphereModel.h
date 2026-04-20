@@ -27,7 +27,8 @@ struct AtmosphereModel {
   };
   float planet_radius_m { engine::atmos::kDefaultPlanetRadiusM };
   float atmosphere_height_m { engine::atmos::kDefaultAtmosphereHeightM };
-  glm::vec3 ground_albedo_rgb { 0.1F, 0.1F, 0.1F };
+  glm::vec3 ground_albedo_rgb { 0.4F, 0.4F, 0.4F };
+  glm::vec3 planet_anchor_position_ws { 0.0F, 0.0F, 0.0F };
   glm::vec3 rayleigh_scattering_rgb {
     engine::atmos::kDefaultRayleighScatteringRgb
   };

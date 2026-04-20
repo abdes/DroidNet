@@ -17,6 +17,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -184,6 +187,27 @@ auto BuildSkyPipelineDesc(const SceneTextures& scene_textures)
     .Build();
 }
 
+auto IsSkyRenderingEnabled(const RenderContext& ctx) -> bool
+{
+  const auto scene = ctx.GetScene();
+  if (scene == nullptr) {
+    return false;
+  }
+  const auto env = scene->GetEnvironment();
+  if (env == nullptr) {
+    return false;
+  }
+  if (const auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
+    atmo != nullptr && atmo->IsEnabled()) {
+    return true;
+  }
+  if (const auto sphere = env->TryGetSystem<scene::environment::SkySphere>();
+    sphere != nullptr && sphere->IsEnabled()) {
+    return true;
+  }
+  return false;
+}
+
 } // namespace
 
 SkyPass::SkyPass(Renderer& renderer) : renderer_(renderer) { }
@@ -194,7 +218,7 @@ auto SkyPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
   const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_atmosphere;
+    && ctx.current_view.with_atmosphere && IsSkyRenderingEnabled(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested
