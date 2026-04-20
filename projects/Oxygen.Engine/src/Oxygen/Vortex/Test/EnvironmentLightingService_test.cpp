@@ -291,6 +291,10 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("Environment/Internal/LocalFogVolumeState.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/SkyPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereComposePass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereSkyViewLutPass.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereSkyViewLutPass.cpp"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereCameraAerialPerspectivePass.h"));
+  EXPECT_TRUE(cmake_source.contains("Environment/Passes/AtmosphereCameraAerialPerspectivePass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/FogPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/IblProbePass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Environment/Passes/LocalFogVolumeTiledCullingPass.cpp"));
@@ -319,12 +323,19 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     catalog_source.contains("Vortex/Services/Environment/Sky.hlsl"));
   EXPECT_TRUE(catalog_source.contains(
     "Vortex/Services/Environment/AtmosphereCompose.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
+  EXPECT_TRUE(catalog_source.contains(
+    "Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
   EXPECT_TRUE(
     catalog_source.contains("Vortex/Services/Environment/Fog.hlsl"));
   EXPECT_TRUE(catalog_source.contains("VortexSkyPassVS"));
   EXPECT_TRUE(catalog_source.contains("VortexSkyPassPS"));
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereComposeVS"));
   EXPECT_TRUE(catalog_source.contains("VortexAtmosphereComposePS"));
+  EXPECT_TRUE(catalog_source.contains("VortexAtmosphereSkyViewLutCS"));
+  EXPECT_TRUE(catalog_source.contains(
+    "VortexAtmosphereCameraAerialPerspectiveCS"));
   EXPECT_TRUE(catalog_source.contains("VortexFogPassVS"));
   EXPECT_TRUE(catalog_source.contains("VortexFogPassPS"));
   EXPECT_TRUE(catalog_source.contains(
@@ -346,6 +357,10 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCompose.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
+  EXPECT_TRUE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(
     source_root / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
@@ -829,7 +844,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   const auto& light_state = service.InspectAtmosphereLightState();
   auto traversal_order = std::vector<oxygen::scene::NodeHandle> {};
-  const auto visitor = [&traversal_order](const oxygen::scene::ConstVisitedNode& visited,
+  const auto visitor = [&traversal_order](const oxygen::scene::MutableVisitedNode& visited,
                          const bool dry_run) -> oxygen::scene::VisitResult {
     static_cast<void>(dry_run);
     const auto& node = *visited.node_impl;
@@ -940,6 +955,88 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(bindings->ambient_bridge.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings->ambient_bridge.flags, 0U);
   EXPECT_EQ(service.GetLastPublicationState().ambient_bridge_view_count, 0U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  EnvironmentPublicationGeneratesAndPublishesPerViewAtmosphereProducts)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto primary = AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 2U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F);
+  static_cast<void>(primary);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 18U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 18U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.AtmosphereProducts.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  graphics_->dispatch_log_.dispatches.clear();
+  graphics_->compute_pipeline_log_.binds.clear();
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 18U });
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_TRUE(bindings->environment_view_slot.IsValid());
+  EXPECT_TRUE(bindings->environment_view_products_slot.IsValid());
+  EXPECT_EQ(service.GetLastPublicationState().published_view_count, 1U);
+  EXPECT_EQ(service.GetLastPublicationState().published_environment_view_count, 1U);
+  EXPECT_EQ(service.GetLastPublicationState().published_environment_view_products_count,
+    1U);
+
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_EQ(generation.view_id, ViewId { 18U });
+  EXPECT_TRUE(generation.environment_view_published);
+  EXPECT_TRUE(generation.environment_view_slot.IsValid());
+  EXPECT_TRUE(generation.sky_view_lut_requested);
+  EXPECT_TRUE(generation.sky_view_lut_executed);
+  EXPECT_TRUE(generation.sky_view_lut_srv.IsValid());
+  EXPECT_GE(generation.sky_view_dispatch_count_x, 1U);
+  EXPECT_GE(generation.sky_view_dispatch_count_y, 1U);
+  EXPECT_EQ(generation.sky_view_dispatch_count_z, 1U);
+  EXPECT_TRUE(generation.camera_aerial_perspective_requested);
+  EXPECT_TRUE(generation.camera_aerial_perspective_executed);
+  EXPECT_TRUE(generation.camera_aerial_perspective_srv.IsValid());
+  EXPECT_GE(generation.camera_aerial_dispatch_count_x, 1U);
+  EXPECT_GE(generation.camera_aerial_dispatch_count_y, 1U);
+  EXPECT_GE(generation.camera_aerial_dispatch_count_z, 1U);
+  EXPECT_TRUE(generation.environment_view_products_published);
+  EXPECT_TRUE(generation.environment_view_products_slot.IsValid());
+
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 2U);
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName() == "Vortex.Environment.AtmosphereSkyViewLut"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"
+        && bind.desc.ComputeShader().entry_point
+          == "VortexAtmosphereSkyViewLutCS";
+    }));
+  EXPECT_TRUE(std::ranges::any_of(graphics_->compute_pipeline_log_.binds,
+    [](const auto& bind) -> bool {
+      return bind.desc.GetName()
+          == "Vortex.Environment.AtmosphereCameraAerialPerspective"
+        && bind.desc.ComputeShader().source_path
+          == "Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"
+        && bind.desc.ComputeShader().entry_point
+          == "VortexAtmosphereCameraAerialPerspectiveCS";
+    }));
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

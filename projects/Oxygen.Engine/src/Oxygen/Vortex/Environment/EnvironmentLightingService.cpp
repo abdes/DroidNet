@@ -8,6 +8,9 @@
 
 #include <memory>
 
+#include <glm/geometric.hpp>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereRenderer.h>
@@ -16,12 +19,13 @@
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Internal/SkyRenderer.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
+#include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 
@@ -36,11 +40,17 @@ EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
       std::make_unique<environment::internal::AtmosphereLightState>())
   , atmosphere_state_(
       std::make_unique<environment::internal::AtmosphereState>())
-  , local_fog_state_(std::make_unique<environment::internal::LocalFogVolumeState>(renderer))
+  , local_fog_state_(
+      std::make_unique<environment::internal::LocalFogVolumeState>(renderer))
   , local_fog_tiled_culling_(
       std::make_unique<environment::LocalFogVolumeTiledCullingPass>(renderer))
   , local_fog_compose_(
       std::make_unique<environment::LocalFogVolumeComposePass>(renderer))
+  , sky_view_lut_pass_(
+      std::make_unique<environment::AtmosphereSkyViewLutPass>(renderer))
+  , camera_aerial_perspective_pass_(
+      std::make_unique<environment::AtmosphereCameraAerialPerspectivePass>(
+        renderer))
   , ibl_(std::make_unique<environment::internal::IblProcessor>(renderer))
 {
 }
@@ -49,7 +59,8 @@ EnvironmentLightingService::~EnvironmentLightingService() = default;
 
 auto EnvironmentLightingService::EnsurePublishResources() -> bool
 {
-  if (bindings_publisher_ != nullptr) {
+  if (bindings_publisher_ != nullptr && view_data_publisher_ != nullptr
+    && view_products_publisher_ != nullptr) {
     return true;
   }
 
@@ -58,11 +69,27 @@ auto EnvironmentLightingService::EnsurePublishResources() -> bool
     return false;
   }
 
-  bindings_publisher_ = std::make_unique<
-    internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>(
-    observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
-    observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-    "EnvironmentFrameBindings");
+  if (bindings_publisher_ == nullptr) {
+    bindings_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>(
+      observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+      "EnvironmentFrameBindings");
+  }
+  if (view_data_publisher_ == nullptr) {
+    view_data_publisher_
+      = std::make_unique<internal::PerViewStructuredPublisher<EnvironmentViewData>>(
+        observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+        observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+        "EnvironmentViewData");
+  }
+  if (view_products_publisher_ == nullptr) {
+    view_products_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<environment::EnvironmentViewProducts>>(
+      observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+      "EnvironmentViewProducts");
+  }
   return true;
 }
 
@@ -83,13 +110,22 @@ auto EnvironmentLightingService::OnFrameStart(
     .frame_slot = slot,
     .probe_revision = probe_state_.probes.probe_revision,
   };
+  last_view_product_generation_state_ = {};
   last_stage14_state_ = {};
   last_stage15_state_ = {};
   if (local_fog_state_ != nullptr) {
     local_fog_state_->OnFrameStart(sequence, slot);
   }
+  if (sky_view_lut_pass_ != nullptr) {
+    sky_view_lut_pass_->OnFrameStart(sequence, slot);
+  }
+  if (camera_aerial_perspective_pass_ != nullptr) {
+    camera_aerial_perspective_pass_->OnFrameStart(sequence, slot);
+  }
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
+    view_data_publisher_->OnFrameStart(sequence, slot);
+    view_products_publisher_->OnFrameStart(sequence, slot);
   }
 }
 
@@ -113,6 +149,7 @@ auto EnvironmentLightingService::RefreshPersistentProbeState(
 auto EnvironmentLightingService::BuildBindings(
   const ShaderVisibleIndex environment_static_slot,
   const ShaderVisibleIndex environment_view_slot,
+  const ShaderVisibleIndex environment_view_products_slot,
   const bool enable_ambient_bridge) const -> EnvironmentFrameBindings
 {
   const auto& stable_state = atmosphere_state_->GetState();
@@ -123,7 +160,7 @@ auto EnvironmentLightingService::BuildBindings(
     .height_fog_model_slot = kInvalidShaderVisibleIndex,
     .sky_light_model_slot = kInvalidShaderVisibleIndex,
     .volumetric_fog_model_slot = kInvalidShaderVisibleIndex,
-    .environment_view_products_slot = kInvalidShaderVisibleIndex,
+    .environment_view_products_slot = environment_view_products_slot,
     .contract_flags = 0U,
     .probes = probe_state_.probes,
     .evaluation = EnvironmentEvaluationParameters {},
@@ -144,8 +181,10 @@ auto EnvironmentLightingService::BuildBindings(
     bindings.evaluation.flags |= kEnvironmentEvaluationFlagAmbientBridgeEligible;
   }
   if (enable_ambient_bridge && probe_state_.valid) {
-    bindings.ambient_bridge.irradiance_map_srv = probe_state_.probes.irradiance_map_srv;
-    bindings.ambient_bridge.ambient_intensity = bindings.evaluation.ambient_intensity;
+    bindings.ambient_bridge.irradiance_map_srv
+      = probe_state_.probes.irradiance_map_srv;
+    bindings.ambient_bridge.ambient_intensity
+      = bindings.evaluation.ambient_intensity;
     bindings.ambient_bridge.average_brightness
       = bindings.evaluation.average_brightness;
     bindings.ambient_bridge.blend_fraction = bindings.evaluation.blend_fraction;
@@ -153,6 +192,59 @@ auto EnvironmentLightingService::BuildBindings(
   }
 
   return bindings;
+}
+
+auto EnvironmentLightingService::BuildEnvironmentViewData(
+  const RenderContext& ctx) const -> EnvironmentViewData
+{
+  const auto& stable_state = atmosphere_state_->GetState();
+  const auto& atmosphere = stable_state.view_products.atmosphere;
+
+  auto planet_up_ws = engine::atmos::kDefaultPlanetUp;
+  auto planet_center_ws = glm::vec3 { 0.0F, 0.0F, -atmosphere.planet_radius_m };
+  auto camera_altitude_m = 0.0F;
+  if (ctx.current_view.resolved_view != nullptr) {
+    const auto camera_position = ctx.current_view.resolved_view->CameraPosition();
+    camera_altitude_m = glm::dot(camera_position - planet_center_ws, planet_up_ws)
+      - atmosphere.planet_radius_m;
+  }
+
+  auto sun_direction_ws = engine::atmos::kDefaultSunDirection;
+  if (stable_state.view_products.atmosphere_lights[0].enabled) {
+    const auto& slot0 = stable_state.view_products.atmosphere_lights[0];
+    const auto length_sq
+      = glm::dot(slot0.direction_to_light_ws, slot0.direction_to_light_ws);
+    if (length_sq > 1.0e-6F) {
+      sun_direction_ws
+        = glm::normalize(slot0.direction_to_light_ws);
+    }
+  }
+
+  auto data = EnvironmentViewData {};
+  data.flags = atmosphere.enabled ? 1U : 0U;
+  data.transform_mode = static_cast<std::uint32_t>(atmosphere.transform_mode);
+  data.atmosphere_light_count = stable_state.view_products.atmosphere_light_count;
+  data.sky_view_lut_slice = 0.0F;
+  data.planet_to_sun_cos_zenith
+    = glm::dot(glm::normalize(planet_up_ws), glm::normalize(sun_direction_ws));
+  data.aerial_perspective_distance_scale
+    = atmosphere.aerial_perspective_distance_scale;
+  data.aerial_scattering_strength = atmosphere.aerial_scattering_strength;
+  data.planet_center_ws_pad = glm::vec4(planet_center_ws, 0.0F);
+  data.planet_up_ws_camera_altitude_m
+    = glm::vec4(planet_up_ws, camera_altitude_m);
+  data.sky_luminance_factor_height_fog_contribution
+    = glm::vec4(atmosphere.sky_luminance_factor_rgb,
+      atmosphere.height_fog_contribution);
+  data.sky_aerial_luminance_aerial_start_depth_m = glm::vec4(
+    atmosphere.sky_and_aerial_perspective_luminance_factor_rgb,
+    atmosphere.aerial_perspective_start_depth_m);
+  data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass
+    = glm::vec4(atmosphere.trace_sample_count_scale,
+      atmosphere.transmittance_min_light_elevation_deg,
+      atmosphere.holdout ? 1.0F : 0.0F,
+      atmosphere.render_in_main_pass ? 1.0F : 0.0F);
+  return data;
 }
 
 auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
@@ -165,8 +257,26 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     return kInvalidShaderVisibleIndex;
   }
 
-  const auto bindings = BuildBindings(
-    environment_static_slot, environment_view_slot, enable_ambient_bridge);
+  const auto view_data = BuildEnvironmentViewData(ctx);
+  const auto resolved_environment_view_slot = environment_view_slot.IsValid()
+    ? environment_view_slot
+    : view_data_publisher_->Publish(ctx.current_view.view_id, view_data);
+
+  auto products = atmosphere_state_->GetState().view_products;
+  const auto sky_view_state = sky_view_lut_pass_->Record(
+    ctx, view_data, atmosphere_state_->GetState());
+  products.sky_view_lut_srv = sky_view_state.sky_view_lut_srv;
+
+  const auto camera_aerial_state = camera_aerial_perspective_pass_->Record(
+    ctx, view_data, atmosphere_state_->GetState(), products.sky_view_lut_srv);
+  products.camera_aerial_perspective_srv
+    = camera_aerial_state.camera_aerial_perspective_srv;
+
+  const auto environment_view_products_slot
+    = view_products_publisher_->Publish(ctx.current_view.view_id, products);
+  const auto bindings = BuildBindings(environment_static_slot,
+    resolved_environment_view_slot, environment_view_products_slot,
+    enable_ambient_bridge);
   const auto slot
     = bindings_publisher_->Publish(ctx.current_view.view_id, bindings);
   published_views_.insert_or_assign(
@@ -175,10 +285,39 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   last_publication_state_.frame_sequence = current_sequence_;
   last_publication_state_.frame_slot = current_slot_;
   last_publication_state_.published_view_count += 1U;
+  last_publication_state_.published_environment_view_count += 1U;
+  last_publication_state_.published_environment_view_products_count += 1U;
   last_publication_state_.probe_revision = bindings.probes.probe_revision;
   if (bindings.ambient_bridge.flags != 0U) {
     last_publication_state_.ambient_bridge_view_count += 1U;
   }
+
+  last_view_product_generation_state_ = {
+    .view_id = ctx.current_view.view_id,
+    .environment_view_published = resolved_environment_view_slot.IsValid(),
+    .environment_view_slot = resolved_environment_view_slot,
+    .sky_view_lut_requested = sky_view_state.requested,
+    .sky_view_lut_executed = sky_view_state.executed,
+    .sky_view_lut_srv = sky_view_state.sky_view_lut_srv,
+    .sky_view_width = sky_view_state.width,
+    .sky_view_height = sky_view_state.height,
+    .sky_view_dispatch_count_x = sky_view_state.dispatch_count_x,
+    .sky_view_dispatch_count_y = sky_view_state.dispatch_count_y,
+    .sky_view_dispatch_count_z = sky_view_state.dispatch_count_z,
+    .camera_aerial_perspective_requested = camera_aerial_state.requested,
+    .camera_aerial_perspective_executed = camera_aerial_state.executed,
+    .camera_aerial_perspective_srv
+    = camera_aerial_state.camera_aerial_perspective_srv,
+    .camera_aerial_width = camera_aerial_state.width,
+    .camera_aerial_height = camera_aerial_state.height,
+    .camera_aerial_depth = camera_aerial_state.depth,
+    .camera_aerial_dispatch_count_x = camera_aerial_state.dispatch_count_x,
+    .camera_aerial_dispatch_count_y = camera_aerial_state.dispatch_count_y,
+    .camera_aerial_dispatch_count_z = camera_aerial_state.dispatch_count_z,
+    .environment_view_products_published
+    = environment_view_products_slot.IsValid(),
+    .environment_view_products_slot = environment_view_products_slot,
+  };
 
   return slot;
 }
@@ -239,8 +378,8 @@ auto EnvironmentLightingService::InspectBindings(const ViewId view_id) const
   return it != published_views_.end() ? &it->second.bindings : nullptr;
 }
 
-auto EnvironmentLightingService::ResolveEnvironmentFrameSlot(const ViewId view_id) const
-  -> ShaderVisibleIndex
+auto EnvironmentLightingService::ResolveEnvironmentFrameSlot(
+  const ViewId view_id) const -> ShaderVisibleIndex
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? it->second.slot
