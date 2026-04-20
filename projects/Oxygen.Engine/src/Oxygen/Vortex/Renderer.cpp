@@ -50,6 +50,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/Types/DrawFrameBindings.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewColorData.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::internal {
@@ -71,6 +72,8 @@ struct RendererPublicationState {
     view_history_frame_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<SceneTextureBindings>>
     scene_texture_bindings_publisher;
+  std::unique_ptr<internal::PerViewStructuredPublisher<ViewColorData>>
+    view_color_data_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ScreenHzbFrameBindings>>
     screen_hzb_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
@@ -126,6 +129,17 @@ namespace {
     }
 
     return { 1U, 1U };
+  }
+
+  auto BuildViewColorData(const RenderContext& render_context) -> ViewColorData
+  {
+    auto data = ViewColorData {};
+    if (render_context.current_view.prepared_frame != nullptr) {
+      data.exposure = std::max(
+        render_context.current_view.prepared_frame->exposure,
+        1.0e-6F);
+    }
+    return data;
   }
 
   auto ResolveViewOutputTexture(const engine::FrameContext& context,
@@ -584,6 +598,13 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       observer_ptr { &GetInlineTransfersCoordinator() },
       "ScreenHzbFrameBindings");
   }
+
+  if (!state.view_color_data_publisher) {
+    state.view_color_data_publisher = std::make_unique<
+      internal::PerViewStructuredPublisher<ViewColorData>>(
+      observer_ptr { &gfx }, GetStagingProvider(),
+      observer_ptr { &GetInlineTransfersCoordinator() }, "ViewColorData");
+  }
   if (!state.view_history_frame_bindings_publisher) {
     state.view_history_frame_bindings_publisher = std::make_unique<
       internal::PerViewStructuredPublisher<ViewHistoryFrameBindings>>(
@@ -612,6 +633,7 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   state.scene_texture_bindings_publisher->OnFrameStart(sequence, slot);
   state.draw_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.screen_hzb_bindings_publisher->OnFrameStart(sequence, slot);
+  state.view_color_data_publisher->OnFrameStart(sequence, slot);
   state.view_history_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.view_frame_bindings_publisher->OnFrameStart(sequence, slot);
   state.prepared_frame_sequence = sequence;
@@ -1878,6 +1900,10 @@ auto Renderer::DispatchSceneRendererRender(
         = publication_state.draw_frame_bindings_publisher->Publish(
           render_context.current_view.view_id, draw_bindings);
     }
+    view_bindings.view_color_frame_slot
+      = publication_state.view_color_data_publisher->Publish(
+        render_context.current_view.view_id,
+        BuildViewColorData(render_context));
     if (render_context.current_view.resolved_view != nullptr) {
       view_bindings.history_frame_slot
         = publication_state.view_history_frame_bindings_publisher->Publish(
@@ -1935,6 +1961,10 @@ auto Renderer::DispatchSceneRendererRender(
         render_context.current_view.view_id,
         scene_renderer.GetSceneTextureBindings());
     view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
+    view_bindings.view_color_frame_slot
+      = publication_state.view_color_data_publisher->Publish(
+        render_context.current_view.view_id,
+        BuildViewColorData(render_context));
     view_bindings.screen_hzb_frame_slot
       = publication_state.screen_hzb_bindings_publisher->Publish(
         render_context.current_view.view_id,

@@ -137,6 +137,7 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
         pass_constants.active_light_count > 0u ? pass_constants.light0_illuminance_rgb.xyz : 0.0f.xxx,
         pass_constants.active_light_count > 1u ? pass_constants.light1_illuminance_rgb.xyz : 0.0f.xxx,
         1.0f,
+        1.0f,
         atmosphere_parameters,
         transmittance_lut_srv,
         transmittance_lut_width,

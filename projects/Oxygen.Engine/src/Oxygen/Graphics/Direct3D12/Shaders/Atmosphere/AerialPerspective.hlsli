@@ -25,6 +25,7 @@
 #include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
@@ -125,6 +126,7 @@ float4 SampleCameraVolumeLut(
         linear_sampler, float3(screen_uv, non_linear_w), 0);
     aerial.rgb *= weight;
     aerial.a = 1.0 - (weight * (1.0 - aerial.a));
+    aerial.rgb *= rcp(max(GetExposure(), 1.0e-6f));
     return aerial;
 }
 

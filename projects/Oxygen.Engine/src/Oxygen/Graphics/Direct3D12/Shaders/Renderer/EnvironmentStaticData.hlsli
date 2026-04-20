@@ -66,6 +66,9 @@ struct GpuSkyAtmosphereParams
     float3 ground_albedo_rgb;
     float sun_disk_angular_radius_radians;
 
+    float3 sun_disk_luminance_scale_rgb;
+    float _pad_sun_disk_luminance;
+
     float3 rayleigh_scattering_rgb;
     float rayleigh_scale_height_m;
 
