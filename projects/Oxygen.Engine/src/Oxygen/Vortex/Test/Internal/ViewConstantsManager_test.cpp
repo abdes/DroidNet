@@ -109,4 +109,16 @@ NOLINT_TEST_F(ViewConstantsManagerTest,
   EXPECT_EQ(constants.GetSnapshot().reverse_z, 1U);
 }
 
+NOLINT_TEST_F(ViewConstantsManagerTest,
+  SnapshotCarriesExplicitOrthographicFlagFromRendererOwnedState)
+{
+  ViewConstants constants {};
+
+  constants.SetOrthographic(false, ViewConstants::kRenderer);
+  EXPECT_EQ(constants.GetSnapshot().is_orthographic, 0U);
+
+  constants.SetOrthographic(true, ViewConstants::kRenderer);
+  EXPECT_EQ(constants.GetSnapshot().is_orthographic, 1U);
+}
+
 } // namespace

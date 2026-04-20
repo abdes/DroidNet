@@ -20,7 +20,7 @@ cbuffer ViewConstants : register(b1, space0)
 
     uint bindless_view_frame_bindings_slot;
     uint reverse_z;
-    uint _pad2;
+    uint is_orthographic;
     uint _pad3;
     float4 _pad_to_256_1;
 }

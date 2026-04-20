@@ -9,6 +9,7 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/ViewConstants.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -92,30 +93,37 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         pass.multi_scattering_lut_srv);
 }
 
-static float3 IntegrateSkyLight(
+static VortexSingleScatteringResult IntegrateSkyLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereSkyViewLutPassConstants pass,
     float3 ray_origin,
     float3 ray_direction,
-    float ray_length,
-    float3 light_direction,
-    float3 light_illuminance,
-    out float3 throughput)
+    float ray_length)
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
+    const float output_pre_exposure = max(GetExposure(), 1.0e-6f);
+    return VortexIntegrateSingleScatteredLuminance(
         ray_origin,
         ray_direction,
+        false,
+        true,
+        true,
         true,
         0.0f,
         max(pass.sample_count_min, 1.0f),
         max(pass.sample_count_max, pass.sample_count_min),
         pass.distance_to_sample_count_max_inv,
-        light_direction,
-        float3(0.0f, 0.0f, 1.0f),
-        light_illuminance,
-        0.0f.xxx,
+        pass.light0_direction_enabled.w > 0.5f ? VortexSafeNormalize(float3(
+            dot(pass.sky_view_lut_referential_row0.xyz, pass.light0_direction_enabled.xyz),
+            dot(pass.sky_view_lut_referential_row1.xyz, pass.light0_direction_enabled.xyz),
+            dot(pass.sky_view_lut_referential_row2.xyz, pass.light0_direction_enabled.xyz))) : float3(0.0f, 0.0f, 1.0f),
+        pass.light1_direction_enabled.w > 0.5f ? VortexSafeNormalize(float3(
+            dot(pass.sky_view_lut_referential_row0.xyz, pass.light1_direction_enabled.xyz),
+            dot(pass.sky_view_lut_referential_row1.xyz, pass.light1_direction_enabled.xyz),
+            dot(pass.sky_view_lut_referential_row2.xyz, pass.light1_direction_enabled.xyz))) : float3(0.0f, 0.0f, 1.0f),
+        pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz * output_pre_exposure : 0.0f.xxx,
+        pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz * output_pre_exposure : 0.0f.xxx,
         1.0f,
         atmosphere,
         pass.transmittance_lut_srv,
@@ -124,8 +132,6 @@ static float3 IntegrateSkyLight(
         multi_scat_lut,
         linear_sampler,
         ray_length);
-    throughput = scattering.Transmittance;
-    return scattering.L;
 }
 
 [shader("compute")]
@@ -160,15 +166,6 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     float3 ray_direction = 0.0f.xxx;
     UvToSkyViewLutParams(ray_direction, view_height, atmosphere.planet_radius_m, uv);
     ray_direction = VortexSafeNormalize(ray_direction);
-
-    const float3 light0_direction = VortexSafeNormalize(float3(
-        dot(pass.sky_view_lut_referential_row0.xyz, pass.light0_direction_enabled.xyz),
-        dot(pass.sky_view_lut_referential_row1.xyz, pass.light0_direction_enabled.xyz),
-        dot(pass.sky_view_lut_referential_row2.xyz, pass.light0_direction_enabled.xyz)));
-    const float3 light1_direction = VortexSafeNormalize(float3(
-        dot(pass.sky_view_lut_referential_row0.xyz, pass.light1_direction_enabled.xyz),
-        dot(pass.sky_view_lut_referential_row1.xyz, pass.light1_direction_enabled.xyz),
-        dot(pass.sky_view_lut_referential_row2.xyz, pass.light1_direction_enabled.xyz)));
 
     const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
     if (!MoveToTopAtmosphere(ray_origin, ray_direction, atmosphere_radius))
@@ -206,39 +203,14 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         return;
     }
 
-    float3 throughput = 1.0f.xxx;
-    float3 luminance = 0.0f.xxx;
-
-    if (pass.light0_direction_enabled.w > 0.5f)
-    {
-        float3 local_throughput = 1.0f.xxx;
-        luminance += IntegrateSkyLight(
-            atmosphere,
-            pass,
-            ray_origin,
-            ray_direction,
-            ray_length,
-            light0_direction,
-            pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
-            local_throughput);
-        throughput = local_throughput;
-    }
-
-    if (pass.light1_direction_enabled.w > 0.5f)
-    {
-        float3 local_throughput = 1.0f.xxx;
-        luminance += IntegrateSkyLight(
-            atmosphere,
-            pass,
-            ray_origin,
-            ray_direction,
-            ray_length,
-            light1_direction,
-            pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz,
-            local_throughput);
-        throughput = local_throughput;
-    }
-
+    const VortexSingleScatteringResult scattering = IntegrateSkyLight(
+        atmosphere,
+        pass,
+        ray_origin,
+        ray_direction,
+        ray_length);
+    const float3 luminance = max(scattering.L, 0.0f.xxx);
+    const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
-    output_texture[dispatch_id.xy] = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
+    output_texture[dispatch_id.xy] = float4(luminance, saturate(transmittance));
 }

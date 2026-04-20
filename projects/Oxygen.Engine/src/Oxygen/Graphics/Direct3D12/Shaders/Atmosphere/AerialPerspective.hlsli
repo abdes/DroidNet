@@ -27,6 +27,7 @@
 #include "Renderer/ViewConstants.hlsli"
 #include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Atmosphere/AtmospherePhase.hlsli"
+#include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Common/Math.hlsli"
 #include "Atmosphere/AtmosphereConstants.hlsli"
 
@@ -39,6 +40,16 @@ struct AerialPerspectiveResult
     float3 inscatter;     //!< Inscattered radiance to add (linear RGB).
     float3 transmittance; //!< RGB transmittance through atmosphere [0, 1].
 };
+
+static inline bool IsOrthoProjection()
+{
+    return is_orthographic != 0u;
+}
+
+static inline float ResolveNearDepthReference()
+{
+    return reverse_z != 0u ? 1.0f : 0.0f;
+}
 
 //! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
 //!
@@ -91,8 +102,22 @@ float4 SampleCameraVolumeLut(
     float4 clip_pos = mul(projection_matrix, view_pos);
     clip_pos /= clip_pos.w;
     float2 screen_uv = clip_pos.xy * 0.5 + 0.5;
-    // Handle D3D12/Vulkan Y flip
     screen_uv.y = 1.0 - screen_uv.y;
+
+    if (IsOrthoProjection())
+    {
+        const float3 near_world_position = ReconstructWorldPosition(
+            screen_uv,
+            ResolveNearDepthReference(),
+            inverse_view_projection_matrix);
+        const float3 ortho_camera_offset = near_world_position - camera_pos;
+        view_distance = max(0.0f, length((world_pos - camera_pos) + ortho_camera_offset) - 0.0f);
+        t_depth = max(0.0f, (view_distance * distance_scale) / 1000.0f - start_depth_km);
+        linear_slice = t_depth * depth_slice_length_km_inv;
+        linear_w = linear_slice * depth_resolution_inv;
+        non_linear_w = sqrt(saturate(linear_w));
+        non_linear_slice = non_linear_w * depth_resolution;
+    }
 
     Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
