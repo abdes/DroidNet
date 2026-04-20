@@ -99,6 +99,9 @@ protected:
   //! Resolve the active Vortex renderer module if available.
   auto ResolveVortexRenderer() const noexcept -> observer_ptr<vortex::Renderer>;
 
+  //! True when this demo still has a live renderable window, or is headless.
+  [[nodiscard]] auto HasRenderableWindow() const noexcept -> bool;
+
   // State
   const DemoAppContext& app_;
   observer_ptr<AppWindow> app_window_ { nullptr };

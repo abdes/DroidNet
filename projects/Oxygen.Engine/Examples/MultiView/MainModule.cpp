@@ -305,6 +305,9 @@ auto MainModule::OnFrameStart(
   Base::OnFrameStart(context);
 
   CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
+  if (!HasRenderableWindow()) {
+    return;
+  }
 
   const auto scene_ptr = shell.TryGetScene();
   if (!scene_ptr) {

@@ -144,6 +144,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
+  if (!HasRenderableWindow()) {
+    return;
+  }
+
   if (const auto scene_ptr = shell.TryGetScene()) {
     context->SetScene(scene_ptr);
   }

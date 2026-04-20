@@ -479,6 +479,11 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   // Call base to handle window lifecycle and surface setup
   Base::OnFrameStart(context);
 
+  if (!HasRenderableWindow()) {
+    ReleasePublishedRuntimeView(context);
+    return;
+  }
+
   LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
 
   // Register scene with frame context (required for rendering)

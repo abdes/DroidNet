@@ -202,6 +202,9 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
+  if (!HasRenderableWindow()) {
+    return;
+  }
   frame_context.SetScene(shell.TryGetScene());
 
   const auto rig = shell.GetCameraRig();

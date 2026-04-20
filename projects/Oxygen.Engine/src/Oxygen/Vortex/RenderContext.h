@@ -82,7 +82,7 @@ struct RenderContext {
   };
 
   struct ViewExecutionEntry {
-    oxygen::ViewId view_id {};
+    oxygen::ViewId view_id { kInvalidViewId };
     bool is_scene_view { false };
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
@@ -99,8 +99,8 @@ struct RenderContext {
   ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
 
   struct ViewSpecific {
-    oxygen::ViewId view_id {};
-    oxygen::ViewId exposure_view_id {};
+    oxygen::ViewId view_id { kInvalidViewId };
+    oxygen::ViewId exposure_view_id { kInvalidViewId };
     observer_ptr<const CompositionView> composition_view;
     std::optional<ShadingMode> shading_mode_override;
     observer_ptr<const oxygen::ResolvedView> resolved_view;
