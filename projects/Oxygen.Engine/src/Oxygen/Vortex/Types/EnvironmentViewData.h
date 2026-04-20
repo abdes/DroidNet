@@ -19,7 +19,7 @@ namespace oxygen::vortex {
 
 //! Environment-owned per-view atmosphere context and controls.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
-  static constexpr size_t kSize = 80;
+  static constexpr size_t kSize = 112;
 
   uint32_t flags { 0U };
   uint32_t transform_mode { 0U };
@@ -28,12 +28,21 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
   float sky_view_lut_slice { 0.0F };
   float planet_to_sun_cos_zenith { 0.0F };
   float aerial_perspective_distance_scale {
-    atmos::kDefaultAerialPerspectiveDistanceScale
+    engine::atmos::kDefaultAerialPerspectiveDistanceScale
   };
-  float aerial_scattering_strength { atmos::kDefaultAerialScatteringStrength };
-  glm::vec4 planet_center_ws_pad { 0.0F, 0.0F, -atmos::kDefaultPlanetRadiusM,
-    0.0F };
-  glm::vec4 planet_up_ws_camera_altitude_m { atmos::kDefaultPlanetUp, 0.0F };
+  float aerial_scattering_strength {
+    engine::atmos::kDefaultAerialScatteringStrength
+  };
+  glm::vec4 planet_center_ws_pad {
+    0.0F,
+    0.0F,
+    -engine::atmos::kDefaultPlanetRadiusM,
+    0.0F,
+  };
+  glm::vec4 planet_up_ws_camera_altitude_m {
+    engine::atmos::kDefaultPlanetUp,
+    0.0F,
+  };
   glm::vec4 sky_luminance_factor_height_fog_contribution {
     1.0F,
     1.0F,

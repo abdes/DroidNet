@@ -13,7 +13,9 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::scene {
@@ -36,6 +38,8 @@ class AtmosphereRenderer;
 class FogRenderer;
 class LocalFogVolumeTiledCullingPass;
 class LocalFogVolumeComposePass;
+class AtmosphereSkyViewLutPass;
+class AtmosphereCameraAerialPerspectivePass;
 namespace internal {
 struct StableAtmosphereState;
 struct ResolvedAtmosphereLightState;
@@ -61,8 +65,39 @@ public:
     frame::SequenceNumber frame_sequence { 0U };
     frame::Slot frame_slot { frame::kInvalidSlot };
     std::uint32_t published_view_count { 0U };
+    std::uint32_t published_environment_view_count { 0U };
+    std::uint32_t published_environment_view_products_count { 0U };
     std::uint32_t ambient_bridge_view_count { 0U };
     std::uint32_t probe_revision { 0U };
+  };
+
+  struct ViewProductGenerationState {
+    ViewId view_id { kInvalidViewId };
+    bool environment_view_published { false };
+    ShaderVisibleIndex environment_view_slot { kInvalidShaderVisibleIndex };
+    bool sky_view_lut_requested { false };
+    bool sky_view_lut_executed { false };
+    ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
+    std::uint32_t sky_view_width { 0U };
+    std::uint32_t sky_view_height { 0U };
+    std::uint32_t sky_view_dispatch_count_x { 0U };
+    std::uint32_t sky_view_dispatch_count_y { 0U };
+    std::uint32_t sky_view_dispatch_count_z { 0U };
+    bool camera_aerial_perspective_requested { false };
+    bool camera_aerial_perspective_executed { false };
+    ShaderVisibleIndex camera_aerial_perspective_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t camera_aerial_width { 0U };
+    std::uint32_t camera_aerial_height { 0U };
+    std::uint32_t camera_aerial_depth { 0U };
+    std::uint32_t camera_aerial_dispatch_count_x { 0U };
+    std::uint32_t camera_aerial_dispatch_count_y { 0U };
+    std::uint32_t camera_aerial_dispatch_count_z { 0U };
+    bool environment_view_products_published { false };
+    ShaderVisibleIndex environment_view_products_slot {
+      kInvalidShaderVisibleIndex
+    };
   };
 
   struct Stage15State {
@@ -110,6 +145,7 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
     ShaderVisibleIndex environment_static_slot,
     ShaderVisibleIndex environment_view_slot,
+    ShaderVisibleIndex environment_view_products_slot,
     bool enable_ambient_bridge) const -> EnvironmentFrameBindings;
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
@@ -137,6 +173,11 @@ public:
   {
     return last_publication_state_;
   }
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastViewProductGenerationState() const noexcept
+    -> const ViewProductGenerationState&
+  {
+    return last_view_product_generation_state_;
+  }
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastStage15State() const noexcept
     -> const Stage15State&
   {
@@ -159,6 +200,8 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
+  [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const
+    -> EnvironmentViewData;
   auto RefreshStableAtmosphereState(const scene::Scene* scene) -> void;
 
   Renderer& renderer_;
@@ -167,10 +210,16 @@ private:
   EnvironmentProbeState probe_state_ {};
   ProbeRefreshState last_probe_refresh_state_ {};
   PublicationState last_publication_state_ {};
+  ViewProductGenerationState last_view_product_generation_state_ {};
   Stage14State last_stage14_state_ {};
   Stage15State last_stage15_state_ {};
   std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>
     bindings_publisher_ {};
+  std::unique_ptr<internal::PerViewStructuredPublisher<EnvironmentViewData>>
+    view_data_publisher_ {};
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<environment::EnvironmentViewProducts>>
+    view_products_publisher_ {};
   std::unordered_map<ViewId, PublishedView> published_views_ {};
   std::unique_ptr<environment::SkyRenderer> sky_ {};
   std::unique_ptr<environment::AtmosphereRenderer> atmosphere_ {};
@@ -182,6 +231,9 @@ private:
   std::unique_ptr<environment::LocalFogVolumeTiledCullingPass>
     local_fog_tiled_culling_ {};
   std::unique_ptr<environment::LocalFogVolumeComposePass> local_fog_compose_ {};
+  std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_ {};
+  std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
+    camera_aerial_perspective_pass_ {};
   std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
 };
 
