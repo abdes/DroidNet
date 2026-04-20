@@ -109,7 +109,7 @@ protected:
 
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
+    std::vector<vortex::CompositionView>& views) -> void override;
 
 private:
   auto ResolveSelectedCustomMaterial()

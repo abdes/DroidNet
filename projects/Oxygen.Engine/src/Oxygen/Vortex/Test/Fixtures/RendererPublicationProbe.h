@@ -7,8 +7,10 @@
 #pragma once
 
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::testing {
 
@@ -21,6 +23,45 @@ struct RendererPublicationProbe {
   static auto GetSceneRenderer(const Renderer& renderer) -> const SceneRenderer*
   {
     return renderer.scene_renderer_.get();
+  }
+
+  static auto GetLightingService(Renderer& renderer) -> LightingService*
+  {
+    return renderer.scene_renderer_ != nullptr
+      ? renderer.scene_renderer_->lighting_.get()
+      : nullptr;
+  }
+
+  static auto GetLightingService(const Renderer& renderer)
+    -> const LightingService*
+  {
+    return renderer.scene_renderer_ != nullptr
+      ? renderer.scene_renderer_->lighting_.get()
+      : nullptr;
+  }
+
+  static auto GetLightingService(SceneRenderer& scene_renderer)
+    -> LightingService*
+  {
+    return scene_renderer.lighting_.get();
+  }
+
+  static auto GetLightingService(const SceneRenderer& scene_renderer)
+    -> const LightingService*
+  {
+    return scene_renderer.lighting_.get();
+  }
+
+  static auto GetFrameLightSelection(SceneRenderer& scene_renderer)
+    -> FrameLightSelection&
+  {
+    return scene_renderer.frame_light_selection_;
+  }
+
+  static auto GetFrameLightSelection(const SceneRenderer& scene_renderer)
+    -> const FrameLightSelection&
+  {
+    return scene_renderer.frame_light_selection_;
   }
 
   static auto GetViewConstants(const Renderer& renderer) -> const ViewConstants&

@@ -19,7 +19,7 @@ namespace oxygen::vortex {
 
 //! Environment-owned per-view atmosphere context and controls.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
-  static constexpr size_t kSize = 112;
+  static constexpr size_t kSize = 208;
 
   uint32_t flags { 0U };
   uint32_t transform_mode { 0U };
@@ -43,6 +43,36 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     engine::atmos::kDefaultPlanetUp,
     0.0F,
   };
+  glm::vec4 sky_planet_translated_world_center_and_view_height {
+    0.0F,
+    0.0F,
+    -engine::atmos::kDefaultPlanetRadiusM,
+    engine::atmos::kDefaultPlanetRadiusM,
+  };
+  glm::vec4 sky_camera_translated_world_origin_pad {
+    0.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+  };
+  glm::vec4 sky_view_lut_referential_row0 {
+    1.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+  };
+  glm::vec4 sky_view_lut_referential_row1 {
+    0.0F,
+    1.0F,
+    0.0F,
+    0.0F,
+  };
+  glm::vec4 sky_view_lut_referential_row2 {
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+  };
   glm::vec4 sky_luminance_factor_height_fog_contribution {
     1.0F,
     1.0F,
@@ -55,11 +85,18 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     1.0F,
     100.0F,
   };
-  glm::vec4 trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass {
-    1.0F,
-    -6.0F,
-    0.0F,
-    1.0F,
+  glm::vec4
+    trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass {
+      1.0F,
+      -6.0F,
+      0.0F,
+      1.0F,
+    };
+  glm::vec4 camera_aerial_volume_depth_params {
+    16.0F,
+    1.0F / 16.0F,
+    6.0F,
+    1.0F / 6.0F,
   };
 };
 

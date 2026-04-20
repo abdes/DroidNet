@@ -26,17 +26,14 @@
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Environment/Sun.h>
-#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 
 #include "DemoShell/Services/DomainService.h"
 
 namespace oxygen {
-namespace engine {
+namespace vortex {
   class Renderer;
-}
-namespace renderer {
-  struct CompositionView;
 }
 namespace data {
   class SceneAsset;
@@ -56,7 +53,7 @@ class SkyboxService;
 struct EnvironmentRuntimeConfig {
   observer_ptr<scene::Scene> scene { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
-  observer_ptr<engine::Renderer> renderer { nullptr };
+  observer_ptr<vortex::Renderer> renderer { nullptr };
   std::function<void()> on_atmosphere_params_changed;
   std::function<void()> on_exposure_changed;
 };
@@ -116,6 +113,7 @@ public:
   //! Sets the index of the currently active preset.
   virtual auto SetPresetIndex(int index) -> void;
   virtual auto ActivateUseSceneMode() -> void;
+  virtual auto ActivateCustomMode() -> void;
 
   //! Returns whether LUTs are valid and dirty (renderer state).
   [[nodiscard]] virtual auto GetAtmosphereLutStatus() const
@@ -127,7 +125,7 @@ public:
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::CompositionView& view) -> void override;
+    const vortex::CompositionView& view) -> void override;
   auto OnRuntimeMainViewReady(ViewId view_id) -> void;
 
   // SkyAtmosphere
@@ -167,8 +165,8 @@ public:
   virtual auto SetSkyLuminanceFactor(const glm::vec3& value) -> void;
   [[nodiscard]] virtual auto GetSkyAndAerialPerspectiveLuminanceFactor() const
     -> glm::vec3;
-  virtual auto SetSkyAndAerialPerspectiveLuminanceFactor(
-    const glm::vec3& value) -> void;
+  virtual auto SetSkyAndAerialPerspectiveLuminanceFactor(const glm::vec3& value)
+    -> void;
 
   // Absorption
   // Ozone Profile
@@ -326,16 +324,16 @@ public:
   virtual auto SetFogSingleScatteringAlbedoRgb(const glm::vec3& value) -> void;
   [[nodiscard]] virtual auto GetFogInscatteringLuminance() const -> glm::vec3;
   virtual auto SetFogInscatteringLuminance(const glm::vec3& value) -> void;
-  [[nodiscard]] virtual auto GetSkyAtmosphereAmbientContributionColorScale()
-    const -> glm::vec3;
+  [[nodiscard]] virtual auto
+  GetSkyAtmosphereAmbientContributionColorScale() const -> glm::vec3;
   virtual auto SetSkyAtmosphereAmbientContributionColorScale(
     const glm::vec3& value) -> void;
   [[nodiscard]] virtual auto GetInscatteringColorCubemapAngle() const -> float;
   virtual auto SetInscatteringColorCubemapAngle(float value) -> void;
   [[nodiscard]] virtual auto GetInscatteringTextureTint() const -> glm::vec3;
   virtual auto SetInscatteringTextureTint(const glm::vec3& value) -> void;
-  [[nodiscard]] virtual auto GetFullyDirectionalInscatteringColorDistance() const
-    -> float;
+  [[nodiscard]] virtual auto
+  GetFullyDirectionalInscatteringColorDistance() const -> float;
   virtual auto SetFullyDirectionalInscatteringColorDistance(float value)
     -> void;
   [[nodiscard]] virtual auto GetNonDirectionalInscatteringColorDistance() const
@@ -372,12 +370,12 @@ public:
   [[nodiscard]] virtual auto GetVolumetricFogNearFadeInDistanceMeters() const
     -> float;
   virtual auto SetVolumetricFogNearFadeInDistanceMeters(float value) -> void;
-  [[nodiscard]] virtual auto GetVolumetricFogStaticLightingScatteringIntensity()
-    const -> float;
+  [[nodiscard]] virtual auto
+  GetVolumetricFogStaticLightingScatteringIntensity() const -> float;
   virtual auto SetVolumetricFogStaticLightingScatteringIntensity(float value)
     -> void;
-  [[nodiscard]] virtual auto GetOverrideLightColorsWithFogInscatteringColors()
-    const -> bool;
+  [[nodiscard]] virtual auto
+  GetOverrideLightColorsWithFogInscatteringColors() const -> bool;
   virtual auto SetOverrideLightColorsWithFogInscatteringColors(bool enabled)
     -> void;
   [[nodiscard]] virtual auto GetFogHoldout() const -> bool;
@@ -386,8 +384,7 @@ public:
   virtual auto SetFogRenderInMainPass(bool enabled) -> void;
   [[nodiscard]] virtual auto GetFogVisibleInReflectionCaptures() const -> bool;
   virtual auto SetFogVisibleInReflectionCaptures(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetFogVisibleInRealTimeSkyCaptures() const
-    -> bool;
+  [[nodiscard]] virtual auto GetFogVisibleInRealTimeSkyCaptures() const -> bool;
   virtual auto SetFogVisibleInRealTimeSkyCaptures(bool enabled) -> void;
 
   // Local fog volumes
@@ -398,12 +395,14 @@ public:
   virtual auto RemoveSelectedLocalFogVolume() -> void;
   [[nodiscard]] virtual auto GetSelectedLocalFogVolumeEnabled() const -> bool;
   virtual auto SetSelectedLocalFogVolumeEnabled(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeRadialFogExtinction() const
-    -> float;
-  virtual auto SetSelectedLocalFogVolumeRadialFogExtinction(float value) -> void;
-  [[nodiscard]] virtual auto GetSelectedLocalFogVolumeHeightFogExtinction() const
-    -> float;
-  virtual auto SetSelectedLocalFogVolumeHeightFogExtinction(float value) -> void;
+  [[nodiscard]] virtual auto
+  GetSelectedLocalFogVolumeRadialFogExtinction() const -> float;
+  virtual auto SetSelectedLocalFogVolumeRadialFogExtinction(float value)
+    -> void;
+  [[nodiscard]] virtual auto
+  GetSelectedLocalFogVolumeHeightFogExtinction() const -> float;
+  virtual auto SetSelectedLocalFogVolumeHeightFogExtinction(float value)
+    -> void;
   [[nodiscard]] virtual auto GetSelectedLocalFogVolumeHeightFogFalloff() const
     -> float;
   virtual auto SetSelectedLocalFogVolumeHeightFogFalloff(float value) -> void;
@@ -583,9 +582,8 @@ private:
     float disk_radius_deg {
       scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
     };
-    int atmosphere_light_slot {
-      static_cast<int>(scene::AtmosphereLightSlot::kPrimary)
-    };
+    int atmosphere_light_slot { static_cast<int>(
+      scene::AtmosphereLightSlot::kPrimary) };
     bool use_per_pixel_atmosphere_transmittance { false };
     glm::vec3 atmosphere_disk_luminance_scale { 1.0F, 1.0F, 1.0F };
     float shadow_bias { scene::kDefaultShadowBias };
@@ -802,9 +800,8 @@ private:
   float sun_component_disk_radius_deg_ {
     scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
   };
-  int sun_atmosphere_light_slot_ {
-    static_cast<int>(scene::AtmosphereLightSlot::kPrimary)
-  };
+  int sun_atmosphere_light_slot_ { static_cast<int>(
+    scene::AtmosphereLightSlot::kPrimary) };
   bool sun_use_per_pixel_atmosphere_transmittance_ { false };
   glm::vec3 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
   float sun_shadow_bias_ { scene::kDefaultShadowBias };

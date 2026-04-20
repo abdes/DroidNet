@@ -37,14 +37,16 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
+#include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-#include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 struct ImGuiContext;
@@ -320,8 +322,8 @@ public:
   public:
     OXGN_VRTX_API OffscreenSceneViewInput();
 
-    OXGN_VRTX_NDAPI static auto FromCamera(std::string name,
-      ViewId view_id, const View& view, const scene::SceneNode& camera)
+    OXGN_VRTX_NDAPI static auto FromCamera(std::string name, ViewId view_id,
+      const View& view, const scene::SceneNode& camera)
       -> OffscreenSceneViewInput;
 
     OXGN_VRTX_API auto SetWithAtmosphere(bool enabled)
@@ -542,6 +544,16 @@ public:
 
   OXGN_VRTX_API auto SetShaderDebugMode(ShaderDebugMode mode) noexcept -> void;
   OXGN_VRTX_NDAPI auto GetShaderDebugMode() const noexcept -> ShaderDebugMode;
+  OXGN_VRTX_API auto SetGroundGridConfig(
+    const GroundGridConfig& config) noexcept -> void;
+  [[nodiscard]] OXGN_VRTX_NDAPI auto GetGroundGridConfig() const noexcept
+    -> const GroundGridConfig&
+  {
+    return ground_grid_config_;
+  }
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetLastEnvironmentLightingState() const noexcept
+    -> SceneRenderer::EnvironmentLightingState;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
   OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;
@@ -550,14 +562,14 @@ public:
     -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogEnabled() const noexcept -> bool;
-  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogGlobalStartDistanceMeters() const
-    noexcept -> float;
-  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogMaxDensityIntoVolumetricFog()
-    const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetLocalFogGlobalStartDistanceMeters() const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;
-  [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTileMaxInstanceCount()
-    const noexcept -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogUseHzb() const noexcept -> bool;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
@@ -588,8 +600,8 @@ private:
   [[nodiscard]] auto ResolvePublishedRuntimeShadingMode(
     ViewId published_view_id) const noexcept -> std::optional<ShadingMode>;
   auto UpdateViewConstantsFromView(const ResolvedView& view) -> void;
-  [[nodiscard]] auto BuildViewHistoryFrameBindings(
-    ViewId view_id, const ResolvedView& view, observer_ptr<const scene::Scene> scene)
+  [[nodiscard]] auto BuildViewHistoryFrameBindings(ViewId view_id,
+    const ResolvedView& view, observer_ptr<const scene::Scene> scene)
     -> ViewHistoryFrameBindings;
   auto EnsureSceneRenderer(const CompositionView* composition_view = nullptr)
     -> SceneRenderer&;
@@ -635,6 +647,7 @@ private:
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
   std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_ {};
+  GroundGridConfig ground_grid_config_ {};
   std::unique_ptr<internal::BasicRenderContextPool<RenderContext>>
     render_context_pool_;
   std::unique_ptr<SceneRenderer> scene_renderer_;
@@ -665,9 +678,8 @@ private:
   std::uint64_t frame_seq_num_ { 0 };
   frame::Slot frame_slot_ { frame::kInvalidSlot };
   float last_frame_dt_seconds_ { time::SimulationClock::kMinDeltaTimeSeconds };
-  std::atomic<std::uint8_t> shader_debug_mode_ {
-    static_cast<std::uint8_t>(ShaderDebugMode::kDisabled)
-  };
+  std::atomic<std::uint8_t> shader_debug_mode_ { static_cast<std::uint8_t>(
+    ShaderDebugMode::kDisabled) };
   bool shutdown_called_ { false };
   observer_ptr<console::Console> console_ { nullptr };
 };

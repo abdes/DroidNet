@@ -17,7 +17,6 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PatchManifest.h>
-#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::content {
 

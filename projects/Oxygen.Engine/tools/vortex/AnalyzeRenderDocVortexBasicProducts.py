@@ -480,6 +480,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_directional_name = "Vortex.Stage12.DirectionalLight"
     atmosphere_transmittance_lut_name = "Vortex.Environment.AtmosphereTransmittanceLut"
     atmosphere_multi_scattering_lut_name = "Vortex.Environment.AtmosphereMultiScatteringLut"
+    atmosphere_sky_view_lut_name = "Vortex.Environment.AtmosphereSkyViewLut"
+    atmosphere_camera_aerial_name = "Vortex.Environment.AtmosphereCameraAerialPerspective"
     distant_sky_light_lut_name = "Vortex.Environment.DistantSkyLightLut"
     stage14_local_fog_name = "Vortex.Stage14.LocalFogTiledCulling"
     stage15_sky_name = "Vortex.Stage15.Sky"
@@ -507,6 +509,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     atmosphere_transmittance_lut_records = records_under_prefix(action_records, atmosphere_transmittance_lut_name)
     atmosphere_multi_scattering_lut_scope = records_with_name(action_records, atmosphere_multi_scattering_lut_name)
     atmosphere_multi_scattering_lut_records = records_under_prefix(action_records, atmosphere_multi_scattering_lut_name)
+    atmosphere_sky_view_lut_scope = records_with_name(action_records, atmosphere_sky_view_lut_name)
+    atmosphere_sky_view_lut_records = records_under_prefix(action_records, atmosphere_sky_view_lut_name)
+    atmosphere_camera_aerial_scope = records_with_name(action_records, atmosphere_camera_aerial_name)
+    atmosphere_camera_aerial_records = records_under_prefix(action_records, atmosphere_camera_aerial_name)
     distant_sky_light_lut_scope = records_with_name(action_records, distant_sky_light_lut_name)
     distant_sky_light_lut_records = records_under_prefix(action_records, distant_sky_light_lut_name)
     stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_name)
@@ -518,6 +524,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage5_event_ids = collect_event_ids(stage5_scope, stage5_records)
     stage14_event_ids = collect_event_ids(
         records_with_name(action_records, stage14_local_fog_name), stage14_local_fog_records
+    )
+    stage15_atmosphere_event_ids = collect_event_ids(
+        records_with_name(action_records, stage15_atmosphere_name), stage15_atmosphere_records
     )
     stage15_local_fog_event_ids = collect_event_ids(
         records_with_name(action_records, stage15_local_fog_name), stage15_local_fog_records
@@ -750,6 +759,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     atmosphere_multi_scattering_lut_dispatch_count_match = (
         len(records_with_name(atmosphere_multi_scattering_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
     )
+    atmosphere_sky_view_lut_scope_count_match = len(atmosphere_sky_view_lut_scope) == 1
+    atmosphere_sky_view_lut_dispatch_count_match = (
+        len(records_with_name(atmosphere_sky_view_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    atmosphere_camera_aerial_scope_count_match = len(atmosphere_camera_aerial_scope) == 1
+    atmosphere_camera_aerial_dispatch_count_match = (
+        len(records_with_name(atmosphere_camera_aerial_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    )
+    atmosphere_camera_aerial_usage = find_named_resource_usage(
+        controller,
+        resource_records,
+        stage15_atmosphere_event_ids,
+        "vortex.environment.atmospherecameraaerialperspective",
+    )
+    atmosphere_camera_aerial_consumed = len(atmosphere_camera_aerial_usage) > 0
     distant_sky_light_lut_scope_count_match = len(distant_sky_light_lut_scope) == 1
     distant_sky_light_lut_dispatch_count_match = (
         len(records_with_name(distant_sky_light_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
@@ -793,6 +817,36 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "atmosphere_multi_scattering_lut_dispatch_count_match={}".format(
             str(atmosphere_multi_scattering_lut_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_sky_view_lut_scope_count_match={}".format(
+            str(atmosphere_sky_view_lut_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_sky_view_lut_dispatch_count_match={}".format(
+            str(atmosphere_sky_view_lut_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_scope_count_match={}".format(
+            str(atmosphere_camera_aerial_scope_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_dispatch_count_match={}".format(
+            str(atmosphere_camera_aerial_dispatch_count_match).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_consumed={}".format(
+            str(atmosphere_camera_aerial_consumed).lower()
+        )
+    )
+    report.append(
+        "atmosphere_camera_aerial_resource_name={}".format(
+            atmosphere_camera_aerial_usage[0]["name"] if atmosphere_camera_aerial_usage else ""
         )
     )
     report.append(
@@ -892,6 +946,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and atmosphere_transmittance_lut_dispatch_count_match
         and atmosphere_multi_scattering_lut_scope_count_match
         and atmosphere_multi_scattering_lut_dispatch_count_match
+        and atmosphere_sky_view_lut_scope_count_match
+        and atmosphere_sky_view_lut_dispatch_count_match
+        and atmosphere_camera_aerial_scope_count_match
+        and atmosphere_camera_aerial_dispatch_count_match
+        and atmosphere_camera_aerial_consumed
         and distant_sky_light_lut_scope_count_match
         and distant_sky_light_lut_dispatch_count_match
         and stage9_has_expected_targets

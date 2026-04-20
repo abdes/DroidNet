@@ -18,10 +18,10 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
-#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
@@ -48,8 +48,12 @@ class BasePassModule;
 class LightingService;
 class ShadowService;
 class PostProcessService;
+class GroundGridPass;
 class EnvironmentLightingService;
 class ScreenHzbModule;
+namespace testing {
+  struct RendererPublicationProbe;
+}
 
 class SceneRenderer {
 public:
@@ -147,13 +151,11 @@ public:
   OXGN_VRTX_API void PublishDepthPrepassProducts();
   OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
   OXGN_VRTX_API void PublishBasePassVelocity();
-  OXGN_VRTX_API void PublishDeferredBasePassSceneTextures(
-    RenderContext& ctx);
+  OXGN_VRTX_API void PublishDeferredBasePassSceneTextures(RenderContext& ctx);
   OXGN_VRTX_API void PublishCustomDepthProducts();
   OXGN_VRTX_API void FinalizeSceneTextureExtractions();
 
-  OXGN_VRTX_NDAPI auto GetSceneTextures() const
-    -> const SceneTextures&;
+  OXGN_VRTX_NDAPI auto GetSceneTextures() const -> const SceneTextures&;
   OXGN_VRTX_NDAPI auto GetSceneTextures() -> SceneTextures&;
   OXGN_VRTX_NDAPI auto GetSceneTextureBindings() const
     -> const SceneTextureBindings&;
@@ -162,8 +164,8 @@ public:
   OXGN_VRTX_NDAPI auto GetResolvedSceneColorTexture() const
     -> std::shared_ptr<graphics::Texture>;
   OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const -> ShadingMode;
-  OXGN_VRTX_NDAPI auto GetEffectiveShadingMode(
-    const RenderContext& ctx) const -> ShadingMode;
+  OXGN_VRTX_NDAPI auto GetEffectiveShadingMode(const RenderContext& ctx) const
+    -> ShadingMode;
   OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindings() const
     -> const ViewFrameBindings&;
   OXGN_VRTX_NDAPI auto GetPublishedScreenHzbBindings() const
@@ -175,13 +177,14 @@ public:
     -> const DeferredLightingState&;
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
-  OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder()
-    -> const StageOrder&;
+  OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder() -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
     ViewId view_id, const ViewFrameBindings& bindings, ShaderVisibleIndex slot);
   OXGN_VRTX_API void InvalidatePublishedViewFrameBindings();
 
 private:
+  friend struct testing::RendererPublicationProbe;
+
   struct ExtractArtifact {
     std::shared_ptr<graphics::Texture> texture;
   };
@@ -215,13 +218,13 @@ private:
   ExtractArtifact prev_scene_depth_artifact_ {};
   ExtractArtifact prev_velocity_artifact_ {};
   std::shared_ptr<graphics::Framebuffer> debug_visualization_framebuffer_ {};
-  ShadingMode default_shading_mode_ { ShadingMode::kForward };
+  ViewId published_view_id_ { kInvalidViewId };
   ViewFrameBindings published_view_frame_bindings_ {};
   ScreenHzbFrameBindings published_screen_hzb_bindings_ {};
   ShaderVisibleIndex published_view_frame_bindings_slot_ {
     kInvalidShaderVisibleIndex
   };
-  ViewId published_view_id_ { kInvalidViewId };
+  ShadingMode default_shading_mode_ { ShadingMode::kForward };
   DeferredLightingState deferred_lighting_state_ {};
   EnvironmentLightingState environment_lighting_state_ {};
   FrameLightSelection frame_light_selection_ {};
@@ -236,6 +239,7 @@ private:
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;
   std::unique_ptr<EnvironmentLightingService> environment_;
+  std::unique_ptr<GroundGridPass> ground_grid_pass_;
   std::unique_ptr<PostProcessService> post_process_;
 };
 

@@ -7,7 +7,8 @@
 #pragma once
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/RenderingVm.h"

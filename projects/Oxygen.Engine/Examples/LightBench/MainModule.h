@@ -25,9 +25,9 @@
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightScene.h"
 
-namespace oxygen::renderer {
+namespace oxygen::vortex {
 struct CompositionView;
-} // namespace oxygen::renderer
+} // namespace oxygen::vortex
 
 namespace oxygen::examples::light_bench {
 
@@ -95,7 +95,7 @@ protected:
   auto ClearBackbufferReferences() -> void override;
 
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
+    std::vector<vortex::CompositionView>& views) -> void override;
 
 private:
   auto StageInitialScene(DemoShell& shell) -> void;

@@ -186,6 +186,7 @@ Current `SkyAtmosphere` is too small. Expand it to cover the target design.
 Required authored fields:
 
 - `transform_mode`
+- `planet_anchor_position_ws`
 - `planet_radius_m`
 - `atmosphere_height_m`
 - `ground_albedo_rgb`

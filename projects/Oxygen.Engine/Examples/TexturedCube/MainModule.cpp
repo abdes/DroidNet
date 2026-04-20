@@ -19,8 +19,8 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -302,8 +302,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  constexpr size_t kDefaultSceneCapacity = 128;
-
   DCHECK_NOTNULL_F(app_window_);
   auto& shell = GetShell();
   if (!app_window_->GetWindow()) {
@@ -468,7 +466,7 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
 }
 
 auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+  std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -490,14 +488,14 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   // Create the main scene view intent
   auto main_comp
-    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
+    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
+  views.push_back(vortex::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 

@@ -36,7 +36,10 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
@@ -389,7 +392,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 {
   DCHECK_NOTNULL_F(context);
 
-  if (scene_ && (app_.headless
+  if (scene_
+    && (app_.headless
       || (app_window_ != nullptr && app_window_->GetWindow() != nullptr
         && !app_window_->IsShuttingDown()))) {
     context->SetScene(observer_ptr { scene_.get() });
@@ -571,6 +575,45 @@ auto MainModule::EnsureScene() -> void
 
   constexpr size_t kCapacity = 32;
   scene_ = std::make_shared<scene::Scene>("VortexBasicScene", kCapacity);
+  scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+
+  if (const auto environment = scene_->GetEnvironment();
+    environment != nullptr) {
+    if (!environment->HasSystem<scene::environment::SkyAtmosphere>()) {
+      auto& atmosphere
+        = environment->AddSystem<scene::environment::SkyAtmosphere>();
+      atmosphere.SetEnabled(true);
+      atmosphere.SetTransformMode(scene::environment::
+          SkyAtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin);
+      atmosphere.SetRenderInMainPass(true);
+      atmosphere.SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
+      atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+        { 1.0F, 1.0F, 1.0F });
+      atmosphere.SetAerialPerspectiveDistanceScale(1.0F);
+      atmosphere.SetAerialScatteringStrength(1.0F);
+      atmosphere.SetAerialPerspectiveStartDepthMeters(100.0F);
+      atmosphere.SetHeightFogContribution(1.0F);
+      atmosphere.SetTraceSampleCountScale(1.0F);
+      atmosphere.SetSunDiskEnabled(true);
+    }
+    if (app_.with_height_fog
+      && !environment->HasSystem<scene::environment::Fog>()) {
+      auto& fog = environment->AddSystem<scene::environment::Fog>();
+      fog.SetEnabled(true);
+      fog.SetEnableHeightFog(true);
+      fog.SetEnableVolumetricFog(false);
+      fog.SetExtinctionSigmaTPerMeter(0.0015F);
+      fog.SetHeightFalloffPerMeter(0.12F);
+      fog.SetHeightOffsetMeters(0.0F);
+      fog.SetStartDistanceMeters(0.0F);
+      fog.SetMaxOpacity(1.0F);
+      fog.SetFogInscatteringLuminance({ 0.3F, 0.38F, 0.48F });
+      fog.SetSkyAtmosphereAmbientContributionColorScale({ 1.0F, 1.0F, 1.0F });
+      fog.SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.9F });
+      fog.SetDirectionalInscatteringExponent(8.0F);
+      fog.SetDirectionalInscatteringStartDistance(0.0F);
+    }
+  }
 
   auto cube_geo = BuildCubeGeometry(
     "ValidationCube", "ValidationCube", kCubeColor, 0.28F, 0.85F);
@@ -622,8 +665,13 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
-    light->SetIntensityLux(20000.0F);
+    light->SetAngularSizeRadians(glm::radians(0.53F));
+    light->SetIntensityLux(100000.0F);
+    light->SetEnvironmentContribution(true);
     light->SetIsSunLight(true);
+    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+    light->SetUsePerPixelAtmosphereTransmittance(true);
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
     CHECK_F(directional_light_node_.AttachLight(std::move(light)),
       "Failed to attach DirectionalLight to SunLight");
   }
@@ -663,8 +711,7 @@ auto MainModule::UpdateValidationScene(
     += delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F);
 
   if (cube_node_.IsAlive()) {
-    const float rotation_step_radians
-      = kCubeRotationAnglePerSecond
+    const float rotation_step_radians = kCubeRotationAnglePerSecond
       * (delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F));
     cube_rotation_ = glm::normalize(
       glm::angleAxis(rotation_step_radians, cube_rotation_axis_)

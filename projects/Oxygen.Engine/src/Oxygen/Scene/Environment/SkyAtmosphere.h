@@ -75,6 +75,19 @@ public:
     return atmosphere_height_m_;
   }
 
+  //! Sets the authored world-space anchor used by component-relative modes.
+  auto SetPlanetAnchorWorldPosition(const Vec3& position_ws) noexcept -> void
+  {
+    planet_anchor_position_ws_ = position_ws;
+  }
+
+  //! Gets the authored world-space anchor used by component-relative modes.
+  [[nodiscard]] auto GetPlanetAnchorWorldPosition() const noexcept
+    -> const Vec3&
+  {
+    return planet_anchor_position_ws_;
+  }
+
   //! Sets ground albedo (linear RGB).
   auto SetGroundAlbedoRgb(const Vec3& rgb) noexcept -> void
   {
@@ -315,7 +328,8 @@ private:
   float planet_radius_m_ = engine::atmos::kDefaultPlanetRadiusM;
   float atmosphere_height_m_ = engine::atmos::kDefaultAtmosphereHeightM;
 
-  Vec3 ground_albedo_rgb_ { 0.1F, 0.1F, 0.1F };
+  Vec3 ground_albedo_rgb_ { 0.4F, 0.4F, 0.4F };
+  Vec3 planet_anchor_position_ws_ { 0.0F, 0.0F, 0.0F };
 
   // Earth-like baseline coefficients; treated as authorable parameters.
   Vec3 rayleigh_scattering_rgb_ {

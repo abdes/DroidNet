@@ -34,6 +34,11 @@ struct alignas(16) ViewFrameBindings {
   ShaderVisibleIndex debug_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex history_frame_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex ray_tracing_frame_slot { kInvalidShaderVisibleIndex };
+  std::array<ShaderVisibleIndex, 3> reserved_padding_slots {
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+  };
 };
 
 static_assert(sizeof(ViewFrameBindings) == 64);

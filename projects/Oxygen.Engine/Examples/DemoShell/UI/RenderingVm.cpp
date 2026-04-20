@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/UI/RenderingVm.h"

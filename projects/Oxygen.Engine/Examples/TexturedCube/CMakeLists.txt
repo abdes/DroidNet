@@ -84,7 +84,7 @@ target_link_libraries(
     oxygen::engine
     oxygen::imgui
     oxygen::graphics-direct3d12
-    oxygen::renderer
+    oxygen::vortex
     oxygen::loader
     oxygen::cooker
     oxygen::content

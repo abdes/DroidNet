@@ -20,6 +20,8 @@ enum class LocalLightKind : std::uint32_t {
 };
 
 struct FrameDirectionalLightSelection {
+  // Vector from the shaded point toward the directional-light source in
+  // Oxygen world space (+Z up, -Y forward).
   glm::vec3 direction { 0.0F, -1.0F, 0.0F };
   float source_radius { 0.0F };
 

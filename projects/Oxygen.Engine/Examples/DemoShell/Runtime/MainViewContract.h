@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
-namespace oxygen::renderer {
+namespace oxygen::vortex {
 
 using MainViewContract = CompositionView;
 
-} // namespace oxygen::renderer
+} // namespace oxygen::vortex

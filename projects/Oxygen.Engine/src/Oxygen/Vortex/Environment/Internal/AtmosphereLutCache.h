@@ -32,12 +32,17 @@ public:
     std::uint32_t transmittance_height { 64U };
     std::uint32_t multi_scattering_width { 32U };
     std::uint32_t multi_scattering_height { 32U };
+    std::uint32_t sky_view_width { 192U };
+    std::uint32_t sky_view_height { 104U };
+    std::uint32_t camera_aerial_width { 32U };
+    std::uint32_t camera_aerial_height { 32U };
     std::uint32_t camera_aerial_depth_resolution { 16U };
-    float camera_aerial_depth_slice_length_km { 4.0F };
+    float camera_aerial_depth_km { 96.0F };
+    float camera_aerial_depth_slice_length_km { 6.0F };
     float camera_aerial_sample_count_per_slice { 2.0F };
-    float transmittance_sample_count { 40.0F };
-    float multi_scattering_sample_count { 64.0F };
-    float distant_sky_light_sample_altitude_km { 1.0F };
+    float transmittance_sample_count { 10.0F };
+    float multi_scattering_sample_count { 15.0F };
+    float distant_sky_light_sample_altitude_km { 6.0F };
     glm::vec3 sky_luminance_factor_rgb { 1.0F, 1.0F, 1.0F };
     glm::vec3 sky_and_aerial_perspective_luminance_factor_rgb {
       1.0F,

@@ -10,19 +10,16 @@
 #include <mutex>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Renderer/Passes/AutoExposurePass.h>
-#include <Oxygen/Renderer/Passes/ToneMapPass.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 
 #include "DemoShell/Services/PostProcessSettingsService.h"
 
 namespace oxygen::examples::ui {
 
-//! View model for Post Process panel state.
 class PostProcessVm {
 public:
   explicit PostProcessVm(observer_ptr<PostProcessSettingsService> service);
 
-  // Exposure
   [[nodiscard]] auto GetExposureEnabled() -> bool;
   auto SetExposureEnabled(bool enabled) -> void;
 
@@ -49,7 +46,6 @@ public:
   [[nodiscard]] auto GetExposureKey() -> float;
   auto SetExposureKey(float exposure_key) -> void;
 
-  // Auto Exposure
   [[nodiscard]] auto GetAutoExposureAdaptationSpeedUp() -> float;
   auto SetAutoExposureAdaptationSpeedUp(float speed) -> void;
 
@@ -76,13 +72,13 @@ public:
 
   [[nodiscard]] auto GetAutoExposureTargetLuminance() -> float;
   auto SetAutoExposureTargetLuminance(float target_lum) -> void;
+
   [[nodiscard]] auto GetAutoExposureSpotMeterRadius() -> float;
   auto SetAutoExposureSpotMeterRadius(float radius) -> void;
 
   [[nodiscard]] auto GetAutoExposureMeteringMode() -> engine::MeteringMode;
   auto SetAutoExposureMeteringMode(engine::MeteringMode mode) -> void;
 
-  // Tonemapping
   [[nodiscard]] auto GetTonemappingEnabled() -> bool;
   auto SetTonemappingEnabled(bool enabled) -> void;
 
@@ -94,6 +90,7 @@ public:
 
   auto ResetToDefaults() -> void;
   auto ResetAutoExposureDefaults() -> void;
+  auto ResetAutoExposure(float initial_ev) -> void;
 
 private:
   auto Refresh() -> void;
@@ -103,7 +100,6 @@ private:
   observer_ptr<PostProcessSettingsService> service_;
   std::uint64_t epoch_ { 0 };
 
-  // Cached state
   bool exposure_enabled_ { true };
   engine::ExposureMode exposure_mode_ { engine::ExposureMode::kManual };
   float manual_ev_ { 9.7F };
@@ -112,37 +108,19 @@ private:
   float manual_camera_iso_ { 100.0F };
   float exposure_compensation_ { 0.0F };
   float exposure_key_ { 12.5F };
-
-  float auto_exposure_speed_up_ {
-    engine::AutoExposurePassConfig::kDefaultAdaptationSpeedUp
-  };
-  float auto_exposure_speed_down_ {
-    engine::AutoExposurePassConfig::kDefaultAdaptationSpeedDown
-  };
-  float auto_exposure_low_percentile_ {
-    engine::AutoExposurePassConfig::kDefaultLowPercentile
-  };
-  float auto_exposure_high_percentile_ {
-    engine::AutoExposurePassConfig::kDefaultHighPercentile
-  };
+  float auto_exposure_speed_up_ { 3.0F };
+  float auto_exposure_speed_down_ { 3.0F };
+  float auto_exposure_low_percentile_ { 0.1F };
+  float auto_exposure_high_percentile_ { 0.9F };
   float auto_exposure_min_ev_ { -6.0F };
   float auto_exposure_max_ev_ { 16.0F };
-  float auto_exposure_min_log_lum_ {
-    engine::AutoExposurePassConfig::kDefaultMinLogLuminance
-  };
-  float auto_exposure_log_lum_range_ {
-    engine::AutoExposurePassConfig::kDefaultLogLuminanceRange
-  };
-  float auto_exposure_target_lum_ {
-    engine::AutoExposurePassConfig::kDefaultTargetLuminance
-  };
-  float auto_exposure_spot_radius_ {
-    engine::AutoExposurePassConfig::kDefaultSpotMeterRadius
-  };
+  float auto_exposure_min_log_lum_ { -12.0F };
+  float auto_exposure_log_lum_range_ { 25.0F };
+  float auto_exposure_target_lum_ { 0.18F };
+  float auto_exposure_spot_radius_ { 0.2F };
   engine::MeteringMode auto_exposure_metering_mode_ {
-    engine::AutoExposurePassConfig::kDefaultMeteringMode
+    engine::MeteringMode::kAverage
   };
-
   bool tonemapping_enabled_ { true };
   engine::ToneMapper tonemapping_mode_ { engine::ToneMapper::kAcesFitted };
   float gamma_ { 2.2F };

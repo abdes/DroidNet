@@ -17,6 +17,8 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -194,6 +196,20 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
     .Build();
 }
 
+auto IsHeightFogEnabled(const RenderContext& ctx) -> bool
+{
+  const auto scene = ctx.GetScene();
+  if (scene == nullptr) {
+    return false;
+  }
+  const auto env = scene->GetEnvironment();
+  if (env == nullptr) {
+    return false;
+  }
+  const auto fog = env->TryGetSystem<scene::environment::Fog>();
+  return fog != nullptr && fog->IsEnabled() && fog->GetEnableHeightFog();
+}
+
 } // namespace
 
 FogPass::FogPass(Renderer& renderer) : renderer_(renderer) { }
@@ -204,7 +220,7 @@ auto FogPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
   const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_height_fog;
+    && ctx.current_view.with_height_fog && IsHeightFogEnabled(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested

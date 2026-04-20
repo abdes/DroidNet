@@ -17,12 +17,12 @@
 
 namespace oxygen::vortex {
 
-inline constexpr std::uint32_t
-  kEnvironmentContractFlagAtmosphereLight0Enabled = 1U << 0U;
-inline constexpr std::uint32_t
-  kEnvironmentContractFlagAtmosphereLight1Enabled = 1U << 1U;
-inline constexpr std::uint32_t
-  kEnvironmentContractFlagShadowAuthoritySlot0Only = 1U << 2U;
+inline constexpr std::uint32_t kEnvironmentContractFlagAtmosphereLight0Enabled
+  = 1U << 0U;
+inline constexpr std::uint32_t kEnvironmentContractFlagAtmosphereLight1Enabled
+  = 1U << 1U;
+inline constexpr std::uint32_t kEnvironmentContractFlagShadowAuthoritySlot0Only
+  = 1U << 2U;
 
 //! Bindless environment-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
@@ -32,14 +32,26 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   ShaderVisibleIndex height_fog_model_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex sky_light_model_slot { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex volumetric_fog_model_slot { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex environment_view_products_slot { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex environment_view_products_slot {
+    kInvalidShaderVisibleIndex
+  };
   std::uint32_t contract_flags { 0U };
+  ShaderVisibleIndex transmittance_lut_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex multi_scattering_lut_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex sky_view_lut_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex camera_aerial_perspective_srv {
+    kInvalidShaderVisibleIndex
+  };
+  float atmosphere_light0_direction_angular_size[4] { 0.0F, 0.0F, 1.0F, 0.0F };
+  float atmosphere_light0_disk_luminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
+  float atmosphere_light1_direction_angular_size[4] { 0.0F, 0.0F, 1.0F, 0.0F };
+  float atmosphere_light1_disk_luminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
   EnvironmentProbeBindings probes {};
   EnvironmentEvaluationParameters evaluation {};
   EnvironmentAmbientBridgeBindings ambient_bridge {};
 };
 
-static_assert(sizeof(EnvironmentFrameBindings) == 96);
+static_assert(sizeof(EnvironmentFrameBindings) == 176);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(sizeof(EnvironmentFrameBindings) % 16 == 0);

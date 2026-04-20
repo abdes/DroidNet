@@ -18,6 +18,7 @@ NOLINT_TEST(EnvironmentComponentsTest, SkyAtmosphereExposesWidenedAuthoredFields
   auto atmosphere = environment::SkyAtmosphere {};
   atmosphere.SetTransformMode(
     environment::SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
+  atmosphere.SetPlanetAnchorWorldPosition({ 12.0F, -3.0F, 48.0F });
   atmosphere.SetSkyLuminanceFactorRgb({ 1.1F, 1.2F, 1.3F });
   atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb(
     { 0.9F, 0.8F, 0.7F });
@@ -30,6 +31,8 @@ NOLINT_TEST(EnvironmentComponentsTest, SkyAtmosphereExposesWidenedAuthoredFields
 
   EXPECT_EQ(atmosphere.GetTransformMode(),
     environment::SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
+  EXPECT_EQ(
+    atmosphere.GetPlanetAnchorWorldPosition(), Vec3(12.0F, -3.0F, 48.0F));
   EXPECT_EQ(atmosphere.GetSkyLuminanceFactorRgb(), Vec3(1.1F, 1.2F, 1.3F));
   EXPECT_EQ(atmosphere.GetSkyAndAerialPerspectiveLuminanceFactorRgb(),
     Vec3(0.9F, 0.8F, 0.7F));

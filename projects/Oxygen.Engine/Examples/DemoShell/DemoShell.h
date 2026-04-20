@@ -13,9 +13,9 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
@@ -70,7 +70,8 @@ struct DemoShellPanelConfig {
 
 - **Centralized Wiring**: Connects UI panels to engine services and callbacks.
 - **Safe Ownership**: Uses non-owning pointers for engine dependencies.
-- **Flexible Updates**: Refreshes scene-backed runtime state without owning renderer internals.
+- **Flexible Updates**: Refreshes scene-backed runtime state without owning
+renderer internals.
 
 ### Usage Patterns
 
@@ -101,7 +102,6 @@ struct DemoShellConfig {
   std::function<void()> on_clear_mounts;
   std::function<void(const std::filesystem::path&)> on_pak_mounted;
   std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
-
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.
@@ -151,7 +151,7 @@ public:
 
   //! Notify services once the main view is ready in the frame context.
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::MainViewContract& view) -> void;
+    const vortex::MainViewContract& view) -> void;
 
   //! Notify runtime-backed services once the Vortex main view is ready.
   auto OnRuntimeMainViewReady(

@@ -65,4 +65,30 @@ static inline float GetPlanetToSunCosZenith()
     return LoadResolvedEnvironmentViewData().planet_to_sun_cos_zenith;
 }
 
+static inline float3 GetSkyPlanetTranslatedWorldCenter()
+{
+    return LoadResolvedEnvironmentViewData()
+        .sky_planet_translated_world_center_and_view_height.xyz;
+}
+
+static inline float GetSkyViewHeight()
+{
+    return LoadResolvedEnvironmentViewData()
+        .sky_planet_translated_world_center_and_view_height.w;
+}
+
+static inline float3 GetSkyCameraTranslatedWorldOrigin()
+{
+    return LoadResolvedEnvironmentViewData().sky_camera_translated_world_origin_pad.xyz;
+}
+
+static inline float3x3 GetSkyViewLutReferentialRows()
+{
+    const EnvironmentViewData data = LoadResolvedEnvironmentViewData();
+    return float3x3(
+        data.sky_view_lut_referential_row0.xyz,
+        data.sky_view_lut_referential_row1.xyz,
+        data.sky_view_lut_referential_row2.xyz);
+}
+
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTVIEWHELPERS_HLSLI

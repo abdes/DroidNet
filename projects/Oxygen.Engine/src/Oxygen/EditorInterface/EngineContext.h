@@ -20,8 +20,10 @@ class AsyncEngine;
 
 namespace engine {
   class InputSystem;
-  class Renderer;
 } // namespace engine
+namespace vortex {
+  class Renderer;
+} // namespace vortex
 
 } // namespace oxygen
 
@@ -37,7 +39,7 @@ struct EngineContext {
   std::shared_ptr<AsyncEngine> engine;
 
   // Observed modules (non-owning), owned by the AsyncEngine ModuleManager
-  observer_ptr<engine::Renderer> renderer { nullptr };
+  observer_ptr<vortex::Renderer> renderer { nullptr };
   observer_ptr<engine::InputSystem> input_system { nullptr };
 
   //! Flag toggled to request loop continue/stop

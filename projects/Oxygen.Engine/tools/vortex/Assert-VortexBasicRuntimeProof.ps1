@@ -97,11 +97,18 @@ $expectedProductChecks = @{
   'atmosphere_transmittance_lut_dispatch_count_match' = 'true'
   'atmosphere_multi_scattering_lut_scope_count_match' = 'true'
   'atmosphere_multi_scattering_lut_dispatch_count_match' = 'true'
+  'atmosphere_sky_view_lut_scope_count_match' = 'true'
+  'atmosphere_sky_view_lut_dispatch_count_match' = 'true'
+  'atmosphere_camera_aerial_scope_count_match' = 'true'
+  'atmosphere_camera_aerial_dispatch_count_match' = 'true'
+  'atmosphere_camera_aerial_consumed' = 'true'
   'distant_sky_light_lut_scope_count_match' = 'true'
   'distant_sky_light_lut_dispatch_count_match' = 'true'
   'transmittance_lut_published' = 'true'
   'multi_scattering_lut_published' = 'true'
   'distant_sky_light_lut_published' = 'true'
+  'sky_view_lut_published' = 'true'
+  'camera_aerial_perspective_published' = 'true'
   'atmosphere_lut_cache_valid' = 'true'
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
@@ -205,6 +212,12 @@ $runtimeMultiScatteringLutPublished = @(
 $runtimeDistantSkyLightLutPublished = @(
   $runtimeLogLines | Select-String -Pattern 'distant_sky_light_lut_published=true'
 ).Count -gt 0
+$runtimeSkyViewLutPublished = @(
+  $runtimeLogLines | Select-String -Pattern 'sky_view_lut_published=true'
+).Count -gt 0
+$runtimeCameraAerialPerspectivePublished = @(
+  $runtimeLogLines | Select-String -Pattern 'camera_aerial_perspective_published=true'
+).Count -gt 0
 $runtimeAtmosphereLutCacheValid = @(
   $runtimeLogLines | Select-String -Pattern 'atmosphere_lut_cache_valid=true'
 ).Count -gt 0
@@ -296,6 +309,16 @@ if ($runtimeDistantSkyLightLutPublished) {
   $effectiveProductsReportMap['distant_sky_light_lut_published'] = 'true'
 }
 
+$skyViewLutProofSource = 'runtime_log'
+if ($runtimeSkyViewLutPublished) {
+  $effectiveProductsReportMap['sky_view_lut_published'] = 'true'
+}
+
+$cameraAerialPerspectiveProofSource = 'runtime_log'
+if ($runtimeCameraAerialPerspectivePublished) {
+  $effectiveProductsReportMap['camera_aerial_perspective_published'] = 'true'
+}
+
 $atmosphereLutCacheProofSource = 'runtime_log'
 if ($runtimeAtmosphereLutCacheValid) {
   $effectiveProductsReportMap['atmosphere_lut_cache_valid'] = 'true'
@@ -346,6 +369,10 @@ $reportLines = @(
   "multi_scattering_lut_proof_source=$multiScatteringLutProofSource"
   "distant_sky_light_lut_published=$($effectiveProductsReportMap['distant_sky_light_lut_published'])"
   "distant_sky_light_lut_proof_source=$distantSkyLightLutProofSource"
+  "sky_view_lut_published=$($effectiveProductsReportMap['sky_view_lut_published'])"
+  "sky_view_lut_proof_source=$skyViewLutProofSource"
+  "camera_aerial_perspective_published=$($effectiveProductsReportMap['camera_aerial_perspective_published'])"
+  "camera_aerial_perspective_proof_source=$cameraAerialPerspectiveProofSource"
   "atmosphere_lut_cache_valid=$($effectiveProductsReportMap['atmosphere_lut_cache_valid'])"
   "atmosphere_lut_cache_proof_source=$atmosphereLutCacheProofSource"
 )

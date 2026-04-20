@@ -311,7 +311,7 @@ struct SkyAtmosphereEnvironmentRecord {
   float planet_radius_m = 6360000.0F;
   float atmosphere_height_m = 80000.0F;
 
-  float ground_albedo_rgb[3] = { 0.1F, 0.1F, 0.1F };
+  float ground_albedo_rgb[3] = { 0.4F, 0.4F, 0.4F };
 
   float rayleigh_scattering_rgb[3] = { 5.8e-6F, 13.5e-6F, 33.1e-6F };
   float rayleigh_scale_height_m = 8000.0F;

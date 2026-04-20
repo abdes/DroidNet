@@ -19,10 +19,10 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
@@ -358,8 +358,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
-  constexpr size_t kDefaultSceneCapacity = 128;
-
   auto& shell = GetShell();
   CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
   if (!app_window_->GetWindow()) {
@@ -421,7 +419,7 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 }
 
 auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+  std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_node_.IsAlive()) {
@@ -453,7 +451,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     .right = static_cast<int32_t>(extent.width),
     .bottom = static_cast<int32_t>(extent.height),
   };
-  auto main_comp = renderer::CompositionView::ForScene(
+  auto main_comp = vortex::CompositionView::ForScene(
     main_view_id_, main_view, main_camera_node_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
@@ -497,9 +495,9 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         config_.pip_scissor_inset_px, pip_layout.width, pip_layout.height);
     }
 
-    auto pip_comp = renderer::CompositionView::ForPip(pip_view_id_,
-      renderer::CompositionView::ZOrder {
-        renderer::CompositionView::kZOrderScene.get() + 1 },
+    auto pip_comp = vortex::CompositionView::ForPip(pip_view_id_,
+      vortex::CompositionView::ZOrder {
+        vortex::CompositionView::kZOrderScene.get() + 1 },
       pip_view, pip_camera_node_);
 
     const graphics::Color kPipClearColor { 0.1F, 0.1F, 0.1F, 0.5F };
@@ -512,7 +510,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
 
   // 3. ImGui
   const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
+  views.push_back(vortex::CompositionView::ForImGui(
     imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
 }
 

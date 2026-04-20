@@ -27,12 +27,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -906,7 +903,7 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
 }
 
 auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+  std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -928,14 +925,14 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   // Create the main scene view intent
   auto main_comp
-    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
+    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
+  views.push_back(vortex::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 

@@ -10,7 +10,8 @@
 #include <mutex>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
 
 namespace oxygen::examples {
 class LightCullingSettingsService;

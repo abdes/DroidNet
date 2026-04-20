@@ -39,7 +39,7 @@ static inline bool LoadEnvironmentStaticData(out EnvironmentStaticData out_data)
     {
         // Access via global ResourceDescriptorHeap (pure bindless)
         StructuredBuffer<EnvironmentStaticData> env_buffer = ResourceDescriptorHeap[bindless_slot];
-        out_data = env_buffer[frame_slot];
+        out_data = env_buffer[0];
         return true;
     }
 

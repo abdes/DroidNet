@@ -214,7 +214,6 @@ target_link_libraries(
     oxygen::input
     oxygen::platform
     oxygen::physicsmodule
-    oxygen::renderer
     oxygen::scene
     oxygen::scripting
     oxygen::vortex
