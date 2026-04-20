@@ -37,6 +37,7 @@ float3 SampleSkyboxCubemap(uint cubemap_slot, float3 view_dir, float rotation_ra
 float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
 {
     float3 sky_color = float3(0.0f, 0.0f, 0.0f);
+    const EnvironmentViewData env_view = LoadResolvedEnvironmentViewData();
 
     // Priority 1: SkyAtmosphere (procedural)
     if (env_data.atmosphere.enabled)
@@ -53,12 +54,22 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
             }
 
             float planet_radius = env_data.atmosphere.planet_radius_m;
-            float camera_altitude = GetCameraAltitudeM();
+            float camera_altitude = max(
+                env_view.sky_planet_translated_world_center_and_view_height.w - planet_radius,
+                0.0f);
+            float3 local_view_dir = float3(
+                dot(env_view.sky_view_lut_referential_row0.xyz, view_dir),
+                dot(env_view.sky_view_lut_referential_row1.xyz, view_dir),
+                dot(env_view.sky_view_lut_referential_row2.xyz, view_dir));
+            float3 local_sun_dir = float3(
+                dot(env_view.sky_view_lut_referential_row0.xyz, sun_dir),
+                dot(env_view.sky_view_lut_referential_row1.xyz, sun_dir),
+                dot(env_view.sky_view_lut_referential_row2.xyz, sun_dir));
 
             sky_color = ComputeAtmosphereSkyColor(
                 env_data.atmosphere,
-                view_dir,
-                sun_dir,
+                normalize(local_view_dir),
+                normalize(local_sun_dir),
                 sun_illuminance,
                 planet_radius,
                 camera_altitude);

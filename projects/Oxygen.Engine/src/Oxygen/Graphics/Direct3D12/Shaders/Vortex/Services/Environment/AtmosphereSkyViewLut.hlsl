@@ -9,7 +9,8 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/ViewConstants.hlsli"
-#include "Renderer/ViewColorHelpers.hlsli"
+#include "Renderer/ViewColorData.hlsli"
+#include "Renderer/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -93,6 +94,19 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
         pass.multi_scattering_lut_srv);
 }
 
+static float GetVortexExposure()
+{
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    if (view_bindings.view_color_frame_slot != K_INVALID_BINDLESS_INDEX)
+    {
+        const ViewColorData view_color =
+            LoadViewColorData(view_bindings.view_color_frame_slot);
+        return max(view_color.exposure, 0.0f);
+    }
+    return 1.0f;
+}
+
 static VortexSingleScatteringResult IntegrateSkyLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereSkyViewLutPassConstants pass,
@@ -102,7 +116,7 @@ static VortexSingleScatteringResult IntegrateSkyLight(
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    const float output_pre_exposure = max(GetExposure(), 1.0e-6f);
+    const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
     return VortexIntegrateSingleScatteredLuminance(
         ray_origin,
         ray_direction,
@@ -122,8 +136,9 @@ static VortexSingleScatteringResult IntegrateSkyLight(
             dot(pass.sky_view_lut_referential_row0.xyz, pass.light1_direction_enabled.xyz),
             dot(pass.sky_view_lut_referential_row1.xyz, pass.light1_direction_enabled.xyz),
             dot(pass.sky_view_lut_referential_row2.xyz, pass.light1_direction_enabled.xyz))) : float3(0.0f, 0.0f, 1.0f),
-        pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz * output_pre_exposure : 0.0f.xxx,
-        pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz * output_pre_exposure : 0.0f.xxx,
+        pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
+        pass.light1_direction_enabled.w > 0.5f ? pass.light1_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
+        output_pre_exposure,
         1.0f,
         atmosphere,
         pass.transmittance_lut_srv,
@@ -158,8 +173,13 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     RWTexture2D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
 
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
-    const float2 uv = (float2(dispatch_id.xy) + 0.5f)
+    float2 uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass.output_width, pass.output_height);
+    uv.x = (uv.x - (0.5f / pass.output_width))
+        * (pass.output_width / max((float)pass.output_width - 1.0f, 1.0f));
+    uv.y = (uv.y - (0.5f / pass.output_height))
+        * (pass.output_height / max((float)pass.output_height - 1.0f, 1.0f));
+    uv = saturate(uv);
 
     const float view_height = atmosphere.planet_radius_m + max(pass.camera_altitude_m, 0.0f);
     float3 ray_origin = float3(0.0f, 0.0f, view_height);

@@ -326,7 +326,10 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     : 0.0F;
   constants.planet_radius_m = atmosphere.planet_radius_m;
   constants.atmosphere_height_m = atmosphere.atmosphere_height_m;
-  constants.camera_altitude_m = view_data.planet_up_ws_camera_altitude_m.w;
+  constants.camera_altitude_m = std::max(
+    view_data.sky_planet_translated_world_center_and_view_height.w
+      - atmosphere.planet_radius_m,
+    0.0F);
   constants.rayleigh_scale_height_m = atmosphere.rayleigh_scale_height_m;
   constants.mie_scale_height_m = atmosphere.mie_scale_height_m;
   constants.multi_scattering_factor = atmosphere.multi_scattering_factor;

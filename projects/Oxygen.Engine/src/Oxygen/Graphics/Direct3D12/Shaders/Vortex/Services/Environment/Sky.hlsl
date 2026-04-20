@@ -7,6 +7,7 @@
 #include "Renderer/EnvironmentFrameBindings.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
 #include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/SceneTextures.hlsli"
@@ -198,44 +199,50 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 
     Texture2D<float4> sky_view_lut = ResourceDescriptorHeap[environment_bindings.sky_view_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const float view_pre_exposure = max(GetExposure(), 1.0e-6f);
+    const float view_one_over_pre_exposure = rcp(view_pre_exposure);
     float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
     float3 sky_color = max(
         sky_sample.rgb * environment_view.sky_luminance_factor_height_fog_contribution.xyz,
         0.0f.xxx);
 
     const float3 planet_center_to_camera = float3(0.0f, 0.0f, view_height);
-    if (environment_bindings.atmosphere_light0_disk_luminance_rgb.w > 0.5f)
+    if (env_data.atmosphere.sun_disk_enabled != 0u
+        && environment_bindings.atmosphere_light0_disk_luminance_rgb.w > 0.5f)
     {
         const float cos_half_apex = cos(0.5f * environment_bindings.atmosphere_light0_direction_angular_size.w);
         const float3 light_direction_local = ApplySkyViewLutReferential(
             environment_view,
             VortexSafeNormalize(environment_bindings.atmosphere_light0_direction_angular_size.xyz));
-        sky_color += GetLightDiskLuminance(
+        sky_color += min(GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             environment_bindings.transmittance_lut_srv,
             light_direction_local,
             cos_half_apex,
-            environment_bindings.atmosphere_light0_disk_luminance_rgb.xyz);
+            environment_bindings.atmosphere_light0_disk_luminance_rgb.xyz) * view_pre_exposure,
+            64000.0f.xxx);
     }
-    if (environment_bindings.atmosphere_light1_disk_luminance_rgb.w > 0.5f)
+    if (env_data.atmosphere.sun_disk_enabled != 0u
+        && environment_bindings.atmosphere_light1_disk_luminance_rgb.w > 0.5f)
     {
         const float cos_half_apex = cos(0.5f * environment_bindings.atmosphere_light1_direction_angular_size.w);
         const float3 light_direction_local = ApplySkyViewLutReferential(
             environment_view,
             VortexSafeNormalize(environment_bindings.atmosphere_light1_direction_angular_size.xyz));
-        sky_color += GetLightDiskLuminance(
+        sky_color += min(GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             environment_bindings.transmittance_lut_srv,
             light_direction_local,
             cos_half_apex,
-            environment_bindings.atmosphere_light1_disk_luminance_rgb.xyz);
+            environment_bindings.atmosphere_light1_disk_luminance_rgb.xyz) * view_pre_exposure,
+            64000.0f.xxx);
     }
 
-    return float4(sky_color, 1.0f);
+    return float4(sky_color * view_one_over_pre_exposure, 1.0f);
 }
 
 [shader("compute")]

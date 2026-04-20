@@ -54,6 +54,7 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     atmosphere.aerial_perspective_distance_scale = aerial_perspective_distance_scale;
     atmosphere.ground_albedo_rgb = ground_albedo_rgb;
     atmosphere.sun_disk_angular_radius_radians = sun_disk_angular_radius_radians;
+    atmosphere.sun_disk_luminance_scale_rgb = 1.0f.xxx;
     atmosphere.rayleigh_scattering_rgb = rayleigh_scattering_rgb;
     atmosphere.rayleigh_scale_height_m = rayleigh_scale_height_m;
     atmosphere.mie_scattering_rgb = mie_scattering_rgb;

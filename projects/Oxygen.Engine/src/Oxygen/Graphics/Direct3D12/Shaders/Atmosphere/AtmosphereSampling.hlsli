@@ -157,11 +157,10 @@ float3 SampleTransmittanceLut(
     return TransmittanceFromOpticalDepth(od, atmo);
 }
 
-//! Computes sky-view LUT UV from view direction with sun-relative parameterization.
+//! Computes sky-view LUT UV from view direction using UE-style azimuth mapping.
 //!
-//! This must match the UvToViewDirection function in SkyViewLut_CS.hlsl exactly.
-//! The LUT is parameterized with sun at azimuth=0 (U=0.5), so we compute the
-//! view direction's azimuth relative to the sun's azimuth.
+//! This mirrors UE's `SkyViewLutParamsToUv`: U is full azimuth around the local
+//! sky referential and V uses the horizon-aware zenith-angle mapping.
 //!
 //! @param view_dir Normalized world-space view direction.
 //! @param sun_dir Normalized world-space sun direction.
@@ -170,51 +169,26 @@ float3 SampleTransmittanceLut(
 //! @return UV coordinates for sky-view LUT sampling.
 float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, float camera_altitude_m)
 {
+    (void)sun_dir;
     // cos_zenith from Z component (Z is up).
     float cos_zenith = view_dir.z;
-    float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
-
-    // Compute view-relative azimuth in the XY plane (Z-up). Note that azimuth is
-    // ill-defined at zenith (sin_zenith -> 0), so we later blend U toward 0.5
-    // smoothly to avoid any discontinuity.
-    // Safety: atan2(0,0) is undefined/platform-dependent.
-    // When looking straight up/down, view_dir.xy is zero. Use 0 azimuth.
-    float view_azimuth = 0.0;
-    if (dot(view_dir.xy, view_dir.xy) > EPSILON_SMALL)
-    {
-        view_azimuth = atan2(view_dir.y, view_dir.x);
-    }
-
-    // Same for sun direction, though usually stable.
-    float sun_azimuth = 0.0;
-    if (dot(sun_dir.xy, sun_dir.xy) > EPSILON_SMALL)
-    {
-        sun_azimuth = atan2(sun_dir.y, sun_dir.x);
-    }
-
-    float relative_azimuth = view_azimuth - sun_azimuth;
-
-    // Normalize to [0, 2π)
-    if (relative_azimuth < 0.0)
-        relative_azimuth += TWO_PI;
-    if (relative_azimuth >= TWO_PI)
-        relative_azimuth -= TWO_PI;
 
     // Compute horizon angle for this altitude.
     float r = planet_radius + camera_altitude_m;
     float rho = planet_radius / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
-    // Inverse of the non-linear V mapping used in LUT generation (Reference).
-    // Mapping uses Angles, not Cosines.
     float zenith_horizon_angle = acos(cos_horizon);
     float beta = PI - zenith_horizon_angle;
     float view_zenith_angle = acos(clamp(cos_zenith, -1.0, 1.0));
+    bool intersect_ground = RaySphereIntersectNearest(
+        float3(0.0f, 0.0f, r),
+        view_dir,
+        planet_radius) >= 0.0f;
 
     float v;
-    if (view_zenith_angle < zenith_horizon_angle)
+    if (!intersect_ground)
     {
-        // Sky: map [0, ZenithHorizonAngle] -> [0, 0.5]
         float coord = view_zenith_angle / zenith_horizon_angle;
         coord = 1.0 - coord;
         coord = sqrt(max(0.0, coord));
@@ -223,21 +197,12 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
     }
     else
     {
-        // Ground: map [ZenithHorizonAngle, PI] -> [0.5, 1]
         float coord = (view_zenith_angle - zenith_horizon_angle) / beta;
         coord = sqrt(max(0.0, coord));
         v = (coord + 1.0) * 0.5;
     }
 
-    // Azimuth U mapping (Reference Squared Distribution)
-    // Mapping: u = sqrt(0.5 * (1 - cos(phi)))
-    // Range: u in [0, 1] maps to phi in [0, PI] (Symmetric)
-    // cos(phi) = cos(relative_azimuth)
-    // Note: dot(view_xy, sun_xy) gives cos(phi) directly if vectors are normalized in 2D or 3D horizontal plane.
-
-    // Since we computed relative_azimuth already:
-    float cos_phi = cos(relative_azimuth);
-    float u = sqrt(max(0.0, 0.5 * (1.0 - cos_phi)));
+    float u = (atan2(-view_dir.y, -view_dir.x) + PI) / TWO_PI;
 
     return float2(u, v);
 }
@@ -587,7 +552,8 @@ float3 ComputeAtmosphereSkyColor(
             camera_altitude_m,
             atmo.atmosphere_height_m);
 
-        float3 attenuated_sun_illuminance = sun_illuminance * sun_transmittance;
+        float3 attenuated_sun_illuminance
+            = sun_illuminance * atmo.sun_disk_luminance_scale_rgb * sun_transmittance;
 
         sun_contribution = ComputeSunDisk(
             view_dir,

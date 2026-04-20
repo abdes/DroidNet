@@ -48,6 +48,9 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   std::array<float, 3> ground_albedo_rgb { 0.4F, 0.4F, 0.4F };
   float sun_disk_angular_radius_radians { 0.0F };
 
+  std::array<float, 3> sun_disk_luminance_scale_rgb { 1.0F, 1.0F, 1.0F };
+  float pad_sun_disk_luminance { 0.0F };
+
   std::array<float, 3> rayleigh_scattering_rgb { 0.0F, 0.0F, 0.0F };
   float rayleigh_scale_height_m { 8000.0F };
 
@@ -168,11 +171,11 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
 static_assert(sizeof(AtmosphereDensityLayerGpu) == 16);
 static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
 static_assert(sizeof(GpuFogParams) == 48);
-static_assert(sizeof(GpuSkyAtmosphereParams) == 192);
+static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
 static_assert(sizeof(GpuSkyLightParams) == 64);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
-static_assert(sizeof(EnvironmentStaticData) == 480);
+static_assert(sizeof(EnvironmentStaticData) == 496);
 
 } // namespace oxygen::vortex

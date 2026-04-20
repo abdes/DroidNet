@@ -267,6 +267,8 @@ auto EnvironmentLightingService::BuildBindings(
   const bool enable_ambient_bridge) const -> EnvironmentFrameBindings
 {
   const auto& stable_state = atmosphere_state_->GetState();
+  const auto sun_disk_enabled
+    = stable_state.view_products.atmosphere.sun_disk_enabled;
   auto bindings = EnvironmentFrameBindings {
     .environment_static_slot = environment_static_slot,
     .environment_view_slot = environment_view_slot,
@@ -287,10 +289,10 @@ auto EnvironmentLightingService::BuildBindings(
       view_products.atmosphere_lights[0].angular_size_radians,
     },
     .atmosphere_light0_disk_luminance_rgb = {
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).x,
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).y,
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).z,
-      view_products.atmosphere_lights[0].enabled ? 1.0F : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).x : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).y : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[0]).z : 0.0F,
+      sun_disk_enabled && view_products.atmosphere_lights[0].enabled ? 1.0F : 0.0F,
     },
     .atmosphere_light1_direction_angular_size = {
       view_products.atmosphere_lights[1].direction_to_light_ws.x,
@@ -299,17 +301,17 @@ auto EnvironmentLightingService::BuildBindings(
       view_products.atmosphere_lights[1].angular_size_radians,
     },
     .atmosphere_light1_disk_luminance_rgb = {
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).x,
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).y,
-      ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).z,
-      view_products.atmosphere_lights[1].enabled ? 1.0F : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).x : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).y : 0.0F,
+      sun_disk_enabled ? ComputeSunDiskLuminanceRgb(view_products.atmosphere_lights[1]).z : 0.0F,
+      sun_disk_enabled && view_products.atmosphere_lights[1].enabled ? 1.0F : 0.0F,
     },
     .probes = probe_state_.probes,
     .evaluation = EnvironmentEvaluationParameters {},
     .ambient_bridge = EnvironmentAmbientBridgeBindings {},
   };
 
-  if (stable_state.view_products.atmosphere_lights[0].enabled) {
+  if (sun_disk_enabled && stable_state.view_products.atmosphere_lights[0].enabled) {
     const auto disk_luminance
       = ComputeSunDiskLuminanceRgb(stable_state.view_products.atmosphere_lights[0]);
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight0Enabled;
@@ -326,7 +328,7 @@ auto EnvironmentLightingService::BuildBindings(
     bindings.atmosphere_light0_disk_luminance_rgb[2] = disk_luminance.z;
     bindings.atmosphere_light0_disk_luminance_rgb[3] = 1.0F;
   }
-  if (stable_state.view_products.atmosphere_lights[1].enabled) {
+  if (sun_disk_enabled && stable_state.view_products.atmosphere_lights[1].enabled) {
     const auto disk_luminance
       = ComputeSunDiskLuminanceRgb(stable_state.view_products.atmosphere_lights[1]);
     bindings.contract_flags |= kEnvironmentContractFlagAtmosphereLight1Enabled;
@@ -485,6 +487,14 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.fog.enabled = view_products.height_fog.enabled ? 1U : 0U;
 
   const auto& atmo = view_products.atmosphere;
+  const auto primary_sun_disk_enabled = atmo.sun_disk_enabled
+    && view_products.atmosphere_lights[0].enabled;
+  const auto primary_sun_disk_half_apex_radians = primary_sun_disk_enabled
+    ? std::max(0.0F, 0.5F * view_products.atmosphere_lights[0].angular_size_radians)
+    : 0.0F;
+  const auto primary_sun_disk_luminance_scale_rgb = primary_sun_disk_enabled
+    ? view_products.atmosphere_lights[0].disk_luminance_scale_rgb
+    : glm::vec3 { 1.0F, 1.0F, 1.0F };
   data.atmosphere.planet_radius_m = atmo.planet_radius_m;
   data.atmosphere.atmosphere_height_m = atmo.atmosphere_height_m;
   data.atmosphere.multi_scattering_factor = atmo.multi_scattering_factor;
@@ -494,7 +504,12 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     atmo.ground_albedo_rgb.x, atmo.ground_albedo_rgb.y, atmo.ground_albedo_rgb.z
   };
   data.atmosphere.sun_disk_angular_radius_radians
-    = atmo.sun_disk_enabled ? engine::atmos::kDefaultSunDiskAngularRadiusRad : 0.0F;
+    = primary_sun_disk_half_apex_radians;
+  data.atmosphere.sun_disk_luminance_scale_rgb = {
+    primary_sun_disk_luminance_scale_rgb.x,
+    primary_sun_disk_luminance_scale_rgb.y,
+    primary_sun_disk_luminance_scale_rgb.z,
+  };
   data.atmosphere.rayleigh_scattering_rgb = {
     atmo.rayleigh_scattering_rgb.x,
     atmo.rayleigh_scattering_rgb.y,
@@ -526,7 +541,7 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     data.atmosphere.absorption_density.layers[i].constant_term
       = atmo.ozone_density_profile.layers[i].constant_term;
   }
-  data.atmosphere.sun_disk_enabled = atmo.sun_disk_enabled ? 1U : 0U;
+  data.atmosphere.sun_disk_enabled = primary_sun_disk_enabled ? 1U : 0U;
   data.atmosphere.enabled = atmo.enabled ? 1U : 0U;
   data.atmosphere.transmittance_lut_slot = view_products.transmittance_lut_srv.get();
   data.atmosphere.sky_view_lut_slot = view_products.sky_view_lut_srv.get();
