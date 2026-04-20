@@ -114,18 +114,20 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
     const float3 one_illuminance = 1.0f.xxx;
     const float sphere_solid_angle = 4.0f * PI;
     const float isotropic_phase = 1.0f / sphere_solid_angle;
+    VortexSamplingSetup sampling = (VortexSamplingSetup)0;
+    sampling.VariableSampleCount = false;
+    sampling.SampleCountIni = max(1.0f, (float)pass_constants.integration_sample_count);
+    sampling.MinSampleCount = 1.0f;
+    sampling.MaxSampleCount = 1.0f;
+    sampling.DistanceToSampleCountMaxInv = 0.0f;
 
     const VortexSingleScatteringResult r0 = VortexIntegrateSingleScatteredLuminance(
         sample_origin,
         world_dir,
         true,
+        sampling,
         false,
         false,
-        false,
-        max(1.0f, (float)pass_constants.integration_sample_count),
-        1.0f,
-        1.0f,
-        0.0f,
         light_direction,
         null_light_direction,
         one_illuminance,
@@ -143,13 +145,9 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
         sample_origin,
         -world_dir,
         true,
+        sampling,
         false,
         false,
-        false,
-        max(1.0f, (float)pass_constants.integration_sample_count),
-        1.0f,
-        1.0f,
-        0.0f,
         light_direction,
         null_light_direction,
         one_illuminance,

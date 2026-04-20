@@ -10,6 +10,8 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Shared/ViewConstants.hlsli"
+#include "Renderer/EnvironmentViewData.hlsli"
+#include "Renderer/EnvironmentFrameBindings.hlsli"
 #include "Renderer/ViewColorData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
@@ -33,6 +35,8 @@ struct AtmosphereCameraAerialPerspectivePassConstants
     uint multi_scattering_height;
     uint active_light_count;
     uint depth_resolution;
+    float fog_show_flag_factor;
+    float real_time_reflection_360_mode;
     float depth_resolution_inv;
     float depth_slice_length_km;
     float depth_slice_length_km_inv;
@@ -109,6 +113,19 @@ static float GetVortexExposure()
     return 1.0f;
 }
 
+static EnvironmentViewData LoadVortexEnvironmentViewData()
+{
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    if (view_bindings.environment_frame_slot == K_INVALID_BINDLESS_INDEX)
+    {
+        return LoadEnvironmentViewData(K_INVALID_BINDLESS_INDEX);
+    }
+    const EnvironmentFrameBindings environment_bindings =
+        LoadEnvironmentFrameBindings(view_bindings.environment_frame_slot);
+    return LoadEnvironmentViewData(environment_bindings.environment_view_slot);
+}
+
 static float ResolveFarDepthReference()
 {
     return reverse_z != 0u ? 0.0f : 1.0f;
@@ -124,6 +141,11 @@ static bool IsOrthoProjection()
     return is_orthographic != 0u;
 }
 
+static float2 FromSubUvsToUnit(float2 uv, float2 size, float2 inv_size)
+{
+    return (uv - 0.5f * inv_size) * (size / max(size - 1.0f.xx, 1.0f.xx));
+}
+
 static VortexSingleScatteringResult IntegrateCameraAerialLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereCameraAerialPerspectivePassConstants pass,
@@ -135,17 +157,19 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass.multi_scattering_lut_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
+    VortexSamplingSetup sampling = (VortexSamplingSetup)0;
+    sampling.VariableSampleCount = false;
+    sampling.SampleCountIni = max(1.0f, sample_count);
+    sampling.MinSampleCount = 1.0f;
+    sampling.MaxSampleCount = 1.0f;
+    sampling.DistanceToSampleCountMaxInv = 0.0f;
     return VortexIntegrateSingleScatteredLuminance(
         ray_origin,
         ray_direction,
         false,
+        sampling,
         true,
         true,
-        false,
-        max(1.0f, sample_count),
-        1.0f,
-        1.0f,
-        0.0f,
         pass.light0_direction_enabled.w > 0.5f ? VortexSafeNormalize(pass.light0_direction_enabled.xyz) : float3(0.0f, 0.0f, 1.0f),
         pass.light1_direction_enabled.w > 0.5f ? VortexSafeNormalize(pass.light1_direction_enabled.xyz) : float3(0.0f, 0.0f, 1.0f),
         pass.light0_direction_enabled.w > 0.5f ? pass.light0_illuminance_rgb.xyz * pass.sky_and_aerial_luminance_factor_rgb.xyz : 0.0f.xxx,
@@ -185,6 +209,12 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
 
     RWTexture3D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
+    const EnvironmentViewData environment_view = LoadVortexEnvironmentViewData();
+    if (pass.fog_show_flag_factor <= 0.0f)
+    {
+        output_texture[dispatch_id] = float4(0.0f, 0.0f, 0.0f, 1.0f);
+        return;
+    }
     const float2 uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass.output_width, pass.output_height);
     const float far_depth = ResolveFarDepthReference();
@@ -202,6 +232,24 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
             inverse_view_projection_matrix);
         world_direction = VortexSafeNormalize(far_world_position - near_world_position);
         camera_planet_position += near_world_position - camera_position;
+    }
+
+    if (pass.real_time_reflection_360_mode > 0.5f)
+    {
+        const float2 unit_uv = FromSubUvsToUnit(
+            uv,
+            float2(pass.output_width, pass.output_height),
+            float2(1.0f / pass.output_width, 1.0f / pass.output_height));
+        const float sin_phi = 2.0f * unit_uv.y - 1.0f;
+        const float cos_phi = sqrt(saturate(1.0f - sin_phi * sin_phi));
+        const float theta = 2.0f * PI * unit_uv.x;
+        const float cos_theta = cos(theta);
+        const float sin_theta = sqrt(saturate(1.0f - cos_theta * cos_theta))
+            * (theta > PI ? -1.0f : 1.0f);
+        world_direction = VortexSafeNormalize(float3(
+            cos_theta * cos_phi,
+            sin_theta * cos_phi,
+            sin_phi));
     }
 
     const float slice = ((float(dispatch_id.z) + 0.5f) * pass.depth_resolution_inv);
@@ -294,7 +342,11 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         world_direction,
         t_max_max,
         sample_count);
-    const float3 luminance = scattering.L;
+    float3 luminance = scattering.L;
+    if (environment_view.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.z > 0.5f)
+    {
+        luminance = 0.0f.xxx;
+    }
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     output_texture[dispatch_id] = float4(

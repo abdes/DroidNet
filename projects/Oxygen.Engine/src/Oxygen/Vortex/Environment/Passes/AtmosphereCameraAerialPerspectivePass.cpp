@@ -321,6 +321,9 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   constants.active_light_count
     = stable_state.view_products.atmosphere_light_count;
   constants.depth_resolution = depth;
+  constants.fog_show_flag_factor
+    = ctx.current_view.with_atmosphere ? 1.0F : 0.0F;
+  constants.real_time_reflection_360_mode = 0.0F;
   constants.depth_resolution_inv
     = depth > 0U ? 1.0F / static_cast<float>(depth) : 0.0F;
   constants.depth_slice_length_km

@@ -23,6 +23,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Renderer/EnvironmentStaticData.hlsli"
+#include "Renderer/ViewColorHelpers.hlsli"
 #include "Atmosphere/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
@@ -121,7 +122,7 @@ float3 SampleTransmittanceOpticalDepthLut(
 
 
 
-//! Samples the transmittance LUT and converts it to transmittance RGB.
+//! Samples a transmittance LUT that stores resolved RGB transmittance.
 //!
 //! @param atmo Atmosphere parameters.
 //! @param lut_slot Bindless SRV index.
@@ -145,16 +146,19 @@ float3 SampleTransmittanceLut(
         return float3(1.0, 1.0, 1.0);
     }
 
-    float3 od = SampleTransmittanceOpticalDepthLut(
-        lut_slot,
-        lut_width,
-        lut_height,
-        cos_zenith,
-        altitude_m,
-        atmo.planet_radius_m,
-        atmosphere_height_m);
+    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude_m);
+    if (cos_zenith < cos_horizon)
+    {
+        return 0.0.xxx;
+    }
 
-    return TransmittanceFromOpticalDepth(od, atmo);
+    float2 uv = GetTransmittanceLutUv(
+        cos_zenith, altitude_m, atmo.planet_radius_m, atmosphere_height_m);
+    uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
+
+    Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    return lut.SampleLevel(linear_sampler, uv, 0).rgb;
 }
 
 //! Computes sky-view LUT UV from view direction using UE-style azimuth mapping.
@@ -338,6 +342,16 @@ float4 SampleSkyViewLut(
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
+    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius, camera_altitude_m);
+    float2 uv = ApplyHalfTexelOffset(uv_base, lut_width, lut_height);
+
+    if (slices <= 1u)
+    {
+        Texture2D<float4> lut_2d = ResourceDescriptorHeap[lut_slot];
+        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+        return lut_2d.SampleLevel(linear_sampler, uv, 0.0f);
+    }
+
     // Load the Texture2DArray instead of Texture2D [P7].
     Texture2DArray<float4> lut = ResourceDescriptorHeap[lut_slot];
 
@@ -349,45 +363,10 @@ float4 SampleSkyViewLut(
     int slice_hi = min(slice_lo + 1, (int)slices - 1);
     float blend = slice_frac - float(slice_lo);
 
-    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius, camera_altitude_m);
-    float2 uv = ApplyHalfTexelOffset(uv_base, lut_width, lut_height);
-
     // Sample both neighboring slices and lerp.
     float4 sample_lo = SampleSliceBilinear(lut, uv, lut_width, lut_height, slice_lo);
     float4 sample_hi = SampleSliceBilinear(lut, uv, lut_width, lut_height, slice_hi);
-    float4 base_sample = lerp(sample_lo, sample_hi, blend);
-
-    // Zenith azimuth-averaging filter [P8].
-    // Near zenith, azimuth becomes ill-defined (view_dir.xy ~ 0). We average
-    // 4 azimuth-offset samples to suppress flickering.
-    const float cos_zenith = view_dir.z;
-    const float sin_zenith = sqrt(max(0.0, 1.0 - cos_zenith * cos_zenith));
-    const float zenith_weight = saturate(1.0 - (sin_zenith / kZenithFilterThreshold));
-
-    if (zenith_weight > 0.0)
-    {
-        // Offsets of 0.00, 0.25, 0.50, 0.75 in U cover the full azimuth ring.
-        static const float kAzOffsets[4] = { 0.00, 0.25, 0.50, 0.75 };
-
-        float4 acc = float4(0.0, 0.0, 0.0, 0.0);
-        [unroll]
-        for (int i = 0; i < 4; ++i)
-        {
-            float2 offset_uv = ApplyHalfTexelOffset(
-                float2(frac(uv_base.x + kAzOffsets[i]), uv_base.y),
-                lut_width, lut_height);
-
-            // Each azimuth sample also needs the two-slice lerp.
-            float4 lo = SampleSliceBilinear(lut, offset_uv, lut_width, lut_height, slice_lo);
-            float4 hi = SampleSliceBilinear(lut, offset_uv, lut_width, lut_height, slice_hi);
-            acc += lerp(lo, hi, blend);
-        }
-
-        float4 zenith_filtered = acc * 0.25;
-        return lerp(base_sample, zenith_filtered, zenith_weight);
-    }
-
-    return base_sample;
+    return lerp(sample_lo, sample_hi, blend);
 }
 
 //! Computes the sun disk contribution with proper horizon clipping.
@@ -529,7 +508,8 @@ float3 ComputeAtmosphereSkyColor(
         atmo.sky_view_alt_mapping_mode,
         atmo.atmosphere_height_m);
 
-    float3 inscatter = sky_sample.rgb;
+    const float view_one_over_pre_exposure = rcp(max(GetExposure(), 1.0e-6f));
+    float3 inscatter = sky_sample.rgb * view_one_over_pre_exposure;
     float transmittance = sky_sample.a;
 
     // Sky-view LUT now stores absolute radiance (Nits).

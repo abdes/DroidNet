@@ -292,7 +292,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(published_bindings.history_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(published_bindings.draw_frame_slot, oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_EQ(
+  EXPECT_NE(
     published_bindings.view_color_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
   EXPECT_NE(scene_renderer->GetPublishedViewId(), oxygen::kInvalidViewId);

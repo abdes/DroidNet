@@ -14,9 +14,7 @@
 #include "Common/Math.hlsli"
 
 static const float kVortexSkyPi = 3.14159265359f;
-static const float kVortexInfiniteOpticalDepth = 1.0e6f;
 static const float kVortexSegmentSampleOffset = 0.3f;
-static const float kVortexFp16SafeMax = 65000.0f;
 static const float kVortexPlanetRadiusOffsetM = 1.0f;
 
 struct VortexSingleScatteringResult
@@ -160,17 +158,28 @@ static float3 VortexSampleTransmittanceLut(
     return lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
 }
 
+static float3 VortexGetMultipleScattering(
+    float3 world_pos,
+    float view_zenith_cos_angle,
+    GpuSkyAtmosphereParams atmosphere,
+    Texture2D<float4> multi_scat_lut,
+    SamplerState linear_sampler)
+{
+    const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
+    const float2 uv = saturate(float2(
+        view_zenith_cos_angle * 0.5f + 0.5f,
+        (length(world_pos) - atmosphere.planet_radius_m)
+            / max(atmosphere_radius - atmosphere.planet_radius_m, 1.0e-6f)));
+    return multi_scat_lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
+}
+
 static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     float3 world_pos,
     float3 world_dir,
     bool ground,
+    VortexSamplingSetup sampling,
     bool mie_ray_phase,
     bool multi_scattering_approx_sampling_enabled,
-    bool variable_sample_count,
-    float sample_count_ini,
-    float min_sample_count,
-    float max_sample_count,
-    float distance_to_sample_count_max_inv,
     float3 light0_dir,
     float3 light1_dir,
     float3 light0_illuminance,
@@ -227,16 +236,16 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         return result;
     }
 
-    float sample_count = sample_count_ini;
-    if (variable_sample_count)
+    float sample_count = sampling.SampleCountIni;
+    if (sampling.VariableSampleCount)
     {
-        const float t = saturate(t_max * distance_to_sample_count_max_inv);
-        sample_count = lerp(min_sample_count, max_sample_count, t);
+        const float t = saturate(t_max * sampling.DistanceToSampleCountMaxInv);
+        sample_count = lerp(sampling.MinSampleCount, sampling.MaxSampleCount, t);
     }
 
     float sample_count_floor = sample_count;
     float t_max_floor = t_max;
-    if (variable_sample_count)
+    if (sampling.VariableSampleCount)
     {
         sample_count_floor = floor(sample_count);
         sample_count_floor = max(sample_count_floor, 1.0f);
@@ -270,7 +279,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     for (uint i = 0u; i < sample_count_u; ++i)
     {
         float t = 0.0f;
-        if (variable_sample_count)
+        if (sampling.VariableSampleCount)
         {
             float t0 = float(i) / sample_count_floor;
             float t1 = (float(i) + 1.0f) / sample_count_floor;
@@ -328,21 +337,21 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         const float3 phase_times_scattering0_ray_only = mie_ray_phase
             ? (atmosphere.rayleigh_scattering_rgb * d_r * rayleigh_phase0)
             : (atmosphere.rayleigh_scattering_rgb * d_r * uniform_phase);
-        const float3 sigma_s0 = phase_times_scattering0 * sun_t0 * exposed_light0_illuminance;
-        float3 sigma_s1 = 0.0f.xxx;
+        float3 S = 0.0f.xxx;
+        float3 SMieOnly = 0.0f.xxx;
+        float3 SRayOnly = 0.0f.xxx;
         const float t_planet0 = VortexRaySphereIntersectNearestOffset(
             sample_pos,
             light0_dir,
             sample_up * kVortexPlanetRadiusOffsetM,
             atmosphere.planet_radius_m);
         const float planet_shadow0 = t_planet0 >= 0.0f ? 0.0f : 1.0f;
-        float planet_shadow1 = 0.0f;
 
         float4 ms0 = 0.0f.xxxx;
         if (multi_scattering_approx_sampling_enabled)
         {
-            const float2 uv_ms0 = saturate(float2(cos_sun_zenith0 * 0.5f + 0.5f, altitude_m / max(atmosphere.atmosphere_height_m, 1.0f)));
-            ms0 = multi_scat_lut.SampleLevel(linear_sampler, uv_ms0, 0.0f);
+            ms0.rgb = VortexGetMultipleScattering(
+                sample_pos, cos_sun_zenith0, atmosphere, multi_scat_lut, linear_sampler);
         }
         // The multi-scattering LUT already stores luminance with both the
         // geometric series 1/(1-R) and multi_scattering_factor baked in.
@@ -351,9 +360,16 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
             * ms0.rgb * exposed_light0_illuminance;
         const float3 sigma_mie_only_ms0 = atmosphere.mie_scattering_rgb * d_m * ms0.rgb * exposed_light0_illuminance;
         const float3 sigma_ray_only_ms0 = atmosphere.rayleigh_scattering_rgb * d_r * ms0.rgb * exposed_light0_illuminance;
-        float3 sigma_ms1 = 0.0f.xxx;
-        float3 sigma_mie_only_ms1 = 0.0f.xxx;
-        float3 sigma_ray_only_ms1 = 0.0f.xxx;
+        S += exposed_light0_illuminance
+            * (planet_shadow0 * sun_t0 * phase_times_scattering0
+                + ms0.rgb * (atmosphere.rayleigh_scattering_rgb * d_r + atmosphere.mie_scattering_rgb * d_m));
+        SMieOnly += exposed_light0_illuminance
+            * (planet_shadow0 * sun_t0 * phase_times_scattering0_mie_only
+                + ms0.rgb * atmosphere.mie_scattering_rgb * d_m);
+        SRayOnly += exposed_light0_illuminance
+            * (planet_shadow0 * sun_t0 * phase_times_scattering0_ray_only
+                + ms0.rgb * atmosphere.rayleigh_scattering_rgb * d_r);
+
         if (second_light_enabled)
         {
             const float cos_sun_zenith1 = dot(sample_up, light1_dir);
@@ -364,68 +380,40 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
                 ? (atmosphere.rayleigh_scattering_rgb * d_r * rayleigh_phase1
                     + atmosphere.mie_scattering_rgb * d_m * mie_phase1)
                 : ((atmosphere.rayleigh_scattering_rgb * d_r + atmosphere.mie_scattering_rgb * d_m) * uniform_phase);
-            sigma_s1 = phase_times_scattering1 * sun_t1 * exposed_light1_illuminance;
+            const float3 phase_times_scattering1_mie_only = mie_ray_phase
+                ? (atmosphere.mie_scattering_rgb * d_m * mie_phase1)
+                : (atmosphere.mie_scattering_rgb * d_m * uniform_phase);
+            const float3 phase_times_scattering1_ray_only = mie_ray_phase
+                ? (atmosphere.rayleigh_scattering_rgb * d_r * rayleigh_phase1)
+                : (atmosphere.rayleigh_scattering_rgb * d_r * uniform_phase);
             const float t_planet1 = VortexRaySphereIntersectNearestOffset(
                 sample_pos,
                 light1_dir,
                 sample_up * kVortexPlanetRadiusOffsetM,
                 atmosphere.planet_radius_m);
-            planet_shadow1 = t_planet1 >= 0.0f ? 0.0f : 1.0f;
+            const float planet_shadow1 = t_planet1 >= 0.0f ? 0.0f : 1.0f;
             float4 ms1 = 0.0f.xxxx;
             if (multi_scattering_approx_sampling_enabled)
             {
-                const float2 uv_ms1 = saturate(float2(cos_sun_zenith1 * 0.5f + 0.5f, altitude_m / max(atmosphere.atmosphere_height_m, 1.0f)));
-                ms1 = multi_scat_lut.SampleLevel(linear_sampler, uv_ms1, 0.0f);
+                ms1.rgb = VortexGetMultipleScattering(
+                    sample_pos, cos_sun_zenith1, atmosphere, multi_scat_lut, linear_sampler);
             }
-            sigma_ms1 = (atmosphere.rayleigh_scattering_rgb * d_r + atmosphere.mie_scattering_rgb * d_m)
-                * ms1.rgb * exposed_light1_illuminance;
-            sigma_mie_only_ms1 = atmosphere.mie_scattering_rgb * d_m * ms1.rgb * exposed_light1_illuminance;
-            sigma_ray_only_ms1 = atmosphere.rayleigh_scattering_rgb * d_r * ms1.rgb * exposed_light1_illuminance;
+            S += exposed_light1_illuminance
+                * (planet_shadow1 * sun_t1 * phase_times_scattering1
+                    + ms1.rgb * (atmosphere.rayleigh_scattering_rgb * d_r + atmosphere.mie_scattering_rgb * d_m));
+            SMieOnly += exposed_light1_illuminance
+                * (planet_shadow1 * sun_t1 * phase_times_scattering1_mie_only
+                    + ms1.rgb * atmosphere.mie_scattering_rgb * d_m);
+            SRayOnly += exposed_light1_illuminance
+                * (planet_shadow1 * sun_t1 * phase_times_scattering1_ray_only
+                    + ms1.rgb * atmosphere.rayleigh_scattering_rgb * d_r);
         }
 
-        const float3 source = planet_shadow0 * sigma_s0 + planet_shadow1 * sigma_s1 + sigma_ms0 + sigma_ms1;
-        const float3 source_mie_only =
-            planet_shadow0 * (phase_times_scattering0_mie_only * sun_t0 * exposed_light0_illuminance)
-            + sigma_mie_only_ms0
-            + (second_light_enabled
-                ? planet_shadow1 * ((mie_ray_phase
-                    ? (atmosphere.mie_scattering_rgb * d_m * mie_phase1)
-                    : (atmosphere.mie_scattering_rgb * d_m * uniform_phase))
-                    * VortexSampleTransmittanceLut(
-                        transmittance_lut_srv, transmittance_width, transmittance_height,
-                        dot(sample_up, light1_dir), altitude_m, atmosphere.planet_radius_m, atmosphere.atmosphere_height_m)
-                    * exposed_light1_illuminance)
-                    + sigma_mie_only_ms1
-                : 0.0f.xxx);
-        const float3 source_ray_only =
-            planet_shadow0 * (phase_times_scattering0_ray_only * sun_t0 * exposed_light0_illuminance)
-            + sigma_ray_only_ms0
-            + (second_light_enabled
-                ? planet_shadow1 * ((mie_ray_phase
-                    ? (atmosphere.rayleigh_scattering_rgb * d_r * rayleigh_phase1)
-                    : (atmosphere.rayleigh_scattering_rgb * d_r * uniform_phase))
-                    * VortexSampleTransmittanceLut(
-                        transmittance_lut_srv, transmittance_width, transmittance_height,
-                        dot(sample_up, light1_dir), altitude_m, atmosphere.planet_radius_m, atmosphere.atmosphere_height_m)
-                    * exposed_light1_illuminance)
-                    + sigma_ray_only_ms1
-                : 0.0f.xxx);
         result.MultiScatAs1 += throughput * (atmosphere.rayleigh_scattering_rgb * d_r + atmosphere.mie_scattering_rgb * d_m) * dt;
-        float3 sint;
-        float3 sint_mie_only;
-        float3 sint_ray_only;
-        if (all(extinction < 1.0e-6f.xxx))
-        {
-            sint = source * dt;
-            sint_mie_only = source_mie_only * dt;
-            sint_ray_only = source_ray_only * dt;
-        }
-        else
-        {
-            sint = (source - source * sample_transmittance) / max(extinction, 1.0e-6f.xxx);
-            sint_mie_only = (source_mie_only - source_mie_only * sample_transmittance) / max(extinction, 1.0e-6f.xxx);
-            sint_ray_only = (source_ray_only - source_ray_only * sample_transmittance) / max(extinction, 1.0e-6f.xxx);
-        }
+        const float3 safe_extinction = max(extinction, 1.0e-9f.xxx);
+        const float3 sint = (S - S * sample_transmittance) / safe_extinction;
+        const float3 sint_mie_only = (SMieOnly - SMieOnly * sample_transmittance) / safe_extinction;
+        const float3 sint_ray_only = (SRayOnly - SRayOnly * sample_transmittance) / safe_extinction;
 
         result.L += throughput * sint;
         result.LMieOnly += throughput * sint_mie_only;
@@ -449,7 +437,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
             atmosphere.planet_radius_m,
             atmosphere.atmosphere_height_m);
         const float n_dot_l0 = saturate(dot(up_vector, light0_dir));
-        result.L += exposed_light0_illuminance * transmittance_to_light0 * throughput * n_dot_l0
+        result.L += light0_illuminance * transmittance_to_light0 * throughput * n_dot_l0
             * atmosphere.ground_albedo_rgb / kVortexSkyPi;
 
         if (second_light_enabled)
@@ -464,14 +452,11 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
                 atmosphere.planet_radius_m,
                 atmosphere.atmosphere_height_m);
             const float n_dot_l1 = saturate(dot(up_vector, light1_dir));
-            result.L += exposed_light1_illuminance * transmittance_to_light1 * throughput * n_dot_l1
+            result.L += light1_illuminance * transmittance_to_light1 * throughput * n_dot_l1
                 * atmosphere.ground_albedo_rgb / kVortexSkyPi;
         }
     }
 
-    result.L = min(result.L, kVortexFp16SafeMax.xxx);
-    result.LMieOnly = min(result.LMieOnly, kVortexFp16SafeMax.xxx);
-    result.LRayOnly = min(result.LRayOnly, kVortexFp16SafeMax.xxx);
     result.OpticalDepth = optical_depth;
     result.Transmittance = throughput;
     result.TransmittanceMieOnly = throughput_mie_only;

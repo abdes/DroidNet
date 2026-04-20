@@ -40,7 +40,8 @@ float3 ComputeSkyColor(EnvironmentStaticData env_data, float3 view_dir)
     const EnvironmentViewData env_view = LoadResolvedEnvironmentViewData();
 
     // Priority 1: SkyAtmosphere (procedural)
-    if (env_data.atmosphere.enabled)
+    if (env_data.atmosphere.enabled
+        && env_view.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.w > 0.5f)
     {
         if (env_data.atmosphere.sky_view_lut_slot != K_INVALID_BINDLESS_INDEX)
         {

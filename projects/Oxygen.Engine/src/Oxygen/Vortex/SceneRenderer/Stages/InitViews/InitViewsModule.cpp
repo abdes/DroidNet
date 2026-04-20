@@ -9,8 +9,11 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -34,6 +37,33 @@ namespace oxygen::vortex {
 namespace {
 
   constexpr std::size_t kMatrixFloatCount = 16U;
+
+  auto ResolvePreparedFrameExposure(
+    const scene::Scene& scene,
+    const observer_ptr<const ResolvedView> resolved_view) -> float
+  {
+    const auto environment = scene.GetEnvironment();
+    if (environment == nullptr) {
+      return 1.0F;
+    }
+
+    const auto post_process
+      = environment->TryGetSystem<scene::environment::PostProcessVolume>();
+    if (post_process == nullptr || !post_process->GetExposureEnabled()) {
+      return 1.0F;
+    }
+
+    float ev = post_process->GetManualExposureEv();
+    if (post_process->GetExposureMode() == engine::ExposureMode::kManualCamera
+      && resolved_view != nullptr && resolved_view->CameraEv().has_value()) {
+      ev = *resolved_view->CameraEv();
+    }
+
+    return engine::ExposureScaleFromEv100(
+      ev,
+      post_process->GetExposureCompensationEv(),
+      post_process->GetExposureKey());
+  }
 
   auto BeginResourceManagerFrame(resources::TextureBinder* const texture_binder,
     upload::TransientStructuredBuffer* const current_skinned_pose_buffer,
@@ -589,6 +619,8 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     scene_prep_->FinalizeView(scene_prep_state_);
     PublishPreparedSceneFrame(
       scene_prep_state_, storage.render_items, storage.prepared_frame);
+    storage.prepared_frame.exposure = ResolvePreparedFrameExposure(
+      *scene, view_entry.resolved_view);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,
       scene_prep_state_.GetDrawMetadataEmitter(),
       current_material_wpo_buffer_.get(), previous_material_wpo_buffer_.get(),
