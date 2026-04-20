@@ -177,13 +177,10 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     RWTexture2D<float4> output_texture = ResourceDescriptorHeap[pass.output_texture_uav];
 
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
-    float2 uv = (float2(dispatch_id.xy) + 0.5f)
-        / float2(pass.output_width, pass.output_height);
-    uv.x = (uv.x - (0.5f / pass.output_width))
-        * (pass.output_width / max((float)pass.output_width - 1.0f, 1.0f));
-    uv.y = (uv.y - (0.5f / pass.output_height))
-        * (pass.output_height / max((float)pass.output_height - 1.0f, 1.0f));
-    uv = saturate(uv);
+    const float2 lut_size = float2(pass.output_width, pass.output_height);
+    const float2 lut_inv_size = 1.0f.xx / lut_size;
+    float2 uv = (float2(dispatch_id.xy) + 0.5f) / lut_size;
+    uv = saturate(VortexFromSubUvsToUnit(uv, lut_size, lut_inv_size));
 
     const float view_height = atmosphere.planet_radius_m + max(pass.camera_altitude_m, 0.0f);
     float3 ray_origin = float3(0.0f, 0.0f, view_height);

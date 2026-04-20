@@ -89,12 +89,16 @@ static inline float2 ResolveSkyViewUv(
         env_data.atmosphere.sky_view_lut_height > 0.0f
             ? rcp(env_data.atmosphere.sky_view_lut_height)
             : 0.0f);
+    const float2 sky_view_lut_size = float2(
+        env_data.atmosphere.sky_view_lut_width,
+        env_data.atmosphere.sky_view_lut_height);
     return SkyViewLutParamsToUv(
         intersect_ground,
         view_zenith_cos_angle,
         view_direction_local,
         view_height,
         bottom_radius,
+        sky_view_lut_size,
         sky_view_lut_inv_size);
 }
 
