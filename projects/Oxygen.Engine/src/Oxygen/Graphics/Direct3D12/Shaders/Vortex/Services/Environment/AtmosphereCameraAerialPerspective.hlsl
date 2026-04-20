@@ -9,7 +9,7 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
-#include "Vortex/Shared/ViewConstants.hlsli"
+#include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/EnvironmentViewData.hlsli"
 #include "Renderer/EnvironmentFrameBindings.hlsli"
 #include "Renderer/ViewColorData.hlsli"
@@ -146,9 +146,37 @@ static float2 FromSubUvsToUnit(float2 uv, float2 size, float2 inv_size)
     return (uv - 0.5f * inv_size) * (size / max(size - 1.0f.xx, 1.0f.xx));
 }
 
+static bool TryGetCurrentViewRect(out float4 view_rect_min_and_size)
+{
+    const ViewHistoryFrameBindings view_history = LoadResolvedViewHistoryFrameBindings();
+    view_rect_min_and_size = view_history.current_view_rect_min_and_size;
+    return view_rect_min_and_size.z > 1.0e-6f && view_rect_min_and_size.w > 1.0e-6f;
+}
+
+static float2 MakeSvPosFromUv(float2 uv, float2 fallback_size)
+{
+    float4 view_rect_min_and_size = 0.0f.xxxx;
+    if (TryGetCurrentViewRect(view_rect_min_and_size))
+    {
+        return view_rect_min_and_size.xy + uv * view_rect_min_and_size.zw;
+    }
+    return uv * fallback_size;
+}
+
+static float2 ScreenUvFromSvPos(float2 sv_pos, float2 fallback_uv)
+{
+    float4 view_rect_min_and_size = 0.0f.xxxx;
+    if (TryGetCurrentViewRect(view_rect_min_and_size))
+    {
+        return (sv_pos - view_rect_min_and_size.xy) / view_rect_min_and_size.zw;
+    }
+    return fallback_uv;
+}
+
 static VortexSingleScatteringResult IntegrateCameraAerialLight(
     GpuSkyAtmosphereParams atmosphere,
     AtmosphereCameraAerialPerspectivePassConstants pass,
+    float2 sv_pos,
     float3 ray_origin,
     float3 ray_direction,
     float ray_length,
@@ -164,8 +192,10 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
     sampling.MaxSampleCount = 1.0f;
     sampling.DistanceToSampleCountMaxInv = 0.0f;
     return VortexIntegrateSingleScatteredLuminance(
+        sv_pos,
         ray_origin,
         ray_direction,
+        ResolveFarDepthReference(),
         false,
         sampling,
         true,
@@ -217,9 +247,13 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     }
     const float2 uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass.output_width, pass.output_height);
+    const float2 sv_pos = MakeSvPosFromUv(
+        uv,
+        float2(pass.output_width, pass.output_height));
+    const float2 screen_uv = ScreenUvFromSvPos(sv_pos, uv);
     const float far_depth = ResolveFarDepthReference();
     float3 far_world_position = ReconstructWorldPosition(
-        uv,
+        screen_uv,
         far_depth,
         inverse_view_projection_matrix);
     float3 world_direction = VortexSafeNormalize(far_world_position - camera_position);
@@ -227,7 +261,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     if (IsOrthoProjection())
     {
         const float3 near_world_position = ReconstructWorldPosition(
-            uv,
+            screen_uv,
             ResolveNearDepthReference(),
             inverse_view_projection_matrix);
         world_direction = VortexSafeNormalize(far_world_position - near_world_position);
@@ -338,6 +372,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const VortexSingleScatteringResult scattering = IntegrateCameraAerialLight(
         atmosphere,
         pass,
+        sv_pos,
         ray_origin,
         world_direction,
         t_max_max,
