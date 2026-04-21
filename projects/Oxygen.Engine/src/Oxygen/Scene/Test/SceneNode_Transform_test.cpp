@@ -166,4 +166,27 @@ NOLINT_TEST_F(
   TRACE_GCHECK_F(ExpectTransformValues(node, new_pos, new_scale), "new");
 }
 
+NOLINT_TEST_F(SceneNodeTransformTest,
+  LookAt_AlignsOxygenForwardMinusYTowardTarget)
+{
+  auto node = scene_->CreateNode("LookAtNode");
+  auto transform = node.GetTransform();
+  const auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+
+  ASSERT_TRUE(
+    transform.SetLocalPosition(::oxygen::Vec3 { 0.0F, 0.0F, 0.0F }));
+  impl->get().UpdateTransforms(*scene_);
+  ASSERT_TRUE(transform.LookAt(::oxygen::Vec3 { 0.0F, -10.0F, 0.0F }));
+  impl->get().UpdateTransforms(*scene_);
+
+  const auto world_rotation = transform.GetWorldRotation();
+  ASSERT_TRUE(world_rotation.has_value());
+
+  const auto world_forward = (*world_rotation) * ::oxygen::space::move::Forward;
+  EXPECT_NEAR(world_forward.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(world_forward.y, -1.0F, 1.0e-5F);
+  EXPECT_NEAR(world_forward.z, 0.0F, 1.0e-5F);
+}
+
 } // namespace
