@@ -79,6 +79,9 @@ namespace {
     if (length_sq <= math::EpsilonDirection) {
       return { 0.0F, 0.0F, 1.0F };
     }
+    // DirectionalLight node forward is the emitted-ray direction (from the
+    // light toward the scene). Runtime lighting/environment contracts publish
+    // the opposite vector: from the shaded point toward the light source.
     return -glm::normalize(light_direction);
   }
 

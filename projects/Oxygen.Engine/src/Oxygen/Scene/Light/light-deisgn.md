@@ -256,9 +256,13 @@ as the scene’s sun.
 
 **Direction semantics (important for shading)**:
 
-- Scene extraction publishes `sun_dir_ws` as the direction of incoming rays
-  (from light to scene). Many BRDF implementations use a vector from surface to
-  light, commonly named `L`; in that case `L = -sun_dir_ws`.
+- The node’s world-space `oxygen::space::move::Forward` axis is the
+  **emitted-ray direction** (from the light toward the scene).
+- Renderer/light-environment publication must expose the opposite convention:
+  a normalized vector **from the shaded point toward the light source**.
+- This "toward the light" vector is the Oxygen runtime convention for
+  directional-light data consumed by both scene lighting and atmosphere/sky
+  rendering. Shader stages that need the incoming-ray direction must negate it.
 
 **Visibility and contribution gates**:
 

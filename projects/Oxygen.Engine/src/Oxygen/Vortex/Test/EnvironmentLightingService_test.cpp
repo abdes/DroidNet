@@ -564,8 +564,10 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl");
 
   EXPECT_TRUE(sky_source.contains("EvaluateFarBackgroundMask"));
-  EXPECT_TRUE(sky_source.contains("SampleSceneDepth"));
-  EXPECT_TRUE(sky_source.contains("sky_view_lut_srv"));
+  EXPECT_TRUE(
+    sky_source.contains("env_data.atmosphere.sky_view_lut_slot"));
+  EXPECT_TRUE(
+    sky_source.contains("env_data.atmosphere.transmittance_lut_slot"));
   EXPECT_TRUE(sky_source.contains("ApplySkyViewLutReferential"));
   EXPECT_TRUE(sky_source.contains("SkyViewLutParamsToUv"));
   EXPECT_FALSE(sky_source.contains("view_direction.y * 0.5f + 0.5f"));
@@ -614,17 +616,15 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
 
   EXPECT_TRUE(atmosphere_source.contains("SampleSceneDepth"));
   EXPECT_TRUE(atmosphere_source.contains("ReconstructWorldPosition"));
-  EXPECT_TRUE(atmosphere_source.contains("camera_aerial_perspective_srv"));
-  EXPECT_TRUE(
-    atmosphere_source.contains("SampleVortexCameraAerialPerspective"));
+  EXPECT_TRUE(atmosphere_source.contains("ComputeAerialPerspectiveLut"));
   EXPECT_TRUE(atmosphere_source.contains("atmosphere_alpha"));
-  EXPECT_FALSE(atmosphere_source.contains("discard;"));
+  EXPECT_TRUE(atmosphere_source.contains("discard;"));
 
   EXPECT_TRUE(fog_source.contains("SampleSceneDepth"));
   EXPECT_TRUE(fog_source.contains("ReconstructWorldPosition"));
   EXPECT_TRUE(fog_source.contains("fog_alpha"));
   EXPECT_TRUE(fog_source.contains("world_position.z"));
-  EXPECT_FALSE(fog_source.contains("world_position.y + 4.0f"));
+  EXPECT_TRUE(fog_source.contains("world_position.z + 4.0f"));
   EXPECT_FALSE(fog_source.contains("discard;"));
 }
 
@@ -753,10 +753,8 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(main_impl.contains(".Long(\"with-height-fog\")"));
   EXPECT_TRUE(main_impl.contains(".Long(\"with-local-fog\")"));
   EXPECT_TRUE(main_impl.contains(".DefaultValue(false)"));
-  EXPECT_TRUE(main_module.contains(
-    "view_ctx.metadata.with_atmosphere = app_.with_atmosphere;"));
-  EXPECT_TRUE(main_module.contains(
-    "view_ctx.metadata.with_height_fog = app_.with_height_fog;"));
+  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_atmosphere = true;"));
+  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_height_fog = false;"));
   EXPECT_TRUE(main_module.contains(
     "view_ctx.metadata.with_local_fog = app_.with_local_fog;"));
   EXPECT_TRUE(main_module.contains("if (app_.with_local_fog) {"));
@@ -781,6 +779,28 @@ protected:
 auto MakeSceneWithLocalFog() -> std::shared_ptr<oxygen::scene::Scene>
 {
   auto scene = std::make_shared<oxygen::scene::Scene>("LocalFogScene", 16U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+
+  auto& atmosphere
+    = environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  atmosphere.SetPlanetRadiusMeters(7000000.0F);
+  atmosphere.SetAtmosphereHeightMeters(120000.0F);
+  atmosphere.SetSkyLuminanceFactorRgb({ 1.1F, 1.2F, 1.3F });
+
+  auto& fog_system = environment->AddSystem<oxygen::scene::environment::Fog>();
+  fog_system.SetEnabled(true);
+  fog_system.SetEnableHeightFog(true);
+  fog_system.SetEnableVolumetricFog(false);
+  fog_system.SetExtinctionSigmaTPerMeter(0.05F);
+
+  auto& sky_light
+    = environment->AddSystem<oxygen::scene::environment::SkyLight>();
+  sky_light.SetEnabled(true);
+  sky_light.SetIntensityMul(1.25F);
+
+  scene->SetEnvironment(std::move(environment));
+
   auto node = scene->CreateNode("LocalFog");
   const auto impl = node.GetImpl();
   EXPECT_TRUE(impl.has_value());
@@ -853,6 +873,8 @@ auto AddAtmosphereDirectionalLight(oxygen::scene::Scene& scene,
     light->get().Common().affects_world = true;
     light->get().SetEnvironmentContribution(true);
     light->get().SetIsSunLight(is_sun_light);
+    light->get().SetAngularSizeRadians(
+      2.0F * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad);
     light->get().SetAtmosphereLightSlot(slot);
     light->get().SetUsePerPixelAtmosphereTransmittance(
       use_per_pixel_transmittance);
@@ -1008,6 +1030,36 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     expected_primary_disk_luminance.y, 1.0e-2F);
   EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[2],
     expected_primary_disk_luminance.z, 1.0e-2F);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AtmosphereLightStatePublishesDirectionTowardSourceFromNodeForward)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto sun = AddAtmosphereDirectionalLight(*scene, "Sun",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 2U, true,
+    { 1.0F, 0.95F, 0.9F }, { 1.0F, 1.0F, 1.0F }, 100000.0F,
+    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 210U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 210U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+
+  const auto& light_state = service.InspectAtmosphereLightState();
+  ASSERT_TRUE(light_state.atmosphere_lights[0].enabled);
+  EXPECT_EQ(light_state.source_nodes[0].Index(), sun.GetHandle().Index());
+  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.z, -1.0F, 1.0e-5F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -1455,6 +1507,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   composition_view.with_atmosphere = true;
   composition_view.with_height_fog = true;
   auto ctx = MakeRenderContext(ViewId { 12U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
 
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
@@ -1498,6 +1552,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   composition_view.with_atmosphere = true;
   composition_view.with_height_fog = true;
   auto ctx = MakeRenderContext(ViewId { 13U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
 
   graphics_->graphics_pipeline_log_.binds.clear();
 

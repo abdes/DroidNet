@@ -5,11 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 // Generated file - do not edit.
-// Source: src/Oxygen/Core/Meta/Bindless.yaml
+// Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-20 09:39:53
+// Generated: 2026-04-21 10:29:41
 
 #pragma once
 
