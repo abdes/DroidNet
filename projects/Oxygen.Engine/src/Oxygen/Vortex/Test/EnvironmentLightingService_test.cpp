@@ -18,6 +18,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -1240,6 +1241,18 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(bindings->multi_scattering_lut_srv.IsValid());
   EXPECT_TRUE(bindings->sky_view_lut_srv.IsValid());
   EXPECT_TRUE(bindings->camera_aerial_perspective_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    bindings->transmittance_lut_srv.get()));
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    bindings->multi_scattering_lut_srv.get()));
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    bindings->sky_view_lut_srv.get()));
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    bindings->camera_aerial_perspective_srv.get()));
   EXPECT_EQ(service.GetLastPublicationState().published_view_count, 1U);
   EXPECT_EQ(
     service.GetLastPublicationState().published_environment_view_count, 1U);
@@ -1258,30 +1271,45 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.transmittance_lut_requested);
   EXPECT_TRUE(generation.transmittance_lut_executed);
   EXPECT_TRUE(generation.transmittance_lut_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    generation.transmittance_lut_srv.get()));
   EXPECT_GE(generation.transmittance_dispatch_count_x, 1U);
   EXPECT_GE(generation.transmittance_dispatch_count_y, 1U);
   EXPECT_EQ(generation.transmittance_dispatch_count_z, 1U);
   EXPECT_TRUE(generation.multi_scattering_lut_requested);
   EXPECT_TRUE(generation.multi_scattering_lut_executed);
   EXPECT_TRUE(generation.multi_scattering_lut_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    generation.multi_scattering_lut_srv.get()));
   EXPECT_GE(generation.multi_scattering_dispatch_count_x, 1U);
   EXPECT_GE(generation.multi_scattering_dispatch_count_y, 1U);
   EXPECT_EQ(generation.multi_scattering_dispatch_count_z, 1U);
   EXPECT_TRUE(generation.distant_sky_light_lut_requested);
   EXPECT_TRUE(generation.distant_sky_light_lut_executed);
   EXPECT_TRUE(generation.distant_sky_light_lut_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kGlobalSrvDomain,
+    generation.distant_sky_light_lut_srv.get()));
   EXPECT_EQ(generation.distant_sky_light_dispatch_count_x, 1U);
   EXPECT_EQ(generation.distant_sky_light_dispatch_count_y, 1U);
   EXPECT_EQ(generation.distant_sky_light_dispatch_count_z, 1U);
   EXPECT_TRUE(generation.sky_view_lut_requested);
   EXPECT_TRUE(generation.sky_view_lut_executed);
   EXPECT_TRUE(generation.sky_view_lut_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    generation.sky_view_lut_srv.get()));
   EXPECT_GE(generation.sky_view_dispatch_count_x, 1U);
   EXPECT_GE(generation.sky_view_dispatch_count_y, 1U);
   EXPECT_EQ(generation.sky_view_dispatch_count_z, 1U);
   EXPECT_TRUE(generation.camera_aerial_perspective_requested);
   EXPECT_TRUE(generation.camera_aerial_perspective_executed);
   EXPECT_TRUE(generation.camera_aerial_perspective_srv.IsValid());
+  EXPECT_TRUE(oxygen::bindless::generated::IsShaderVisibleIndexInDomain(
+    oxygen::bindless::generated::kTexturesDomain,
+    generation.camera_aerial_perspective_srv.get()));
   EXPECT_GE(generation.camera_aerial_dispatch_count_x, 1U);
   EXPECT_GE(generation.camera_aerial_dispatch_count_y, 1U);
   EXPECT_GE(generation.camera_aerial_dispatch_count_z, 1U);
