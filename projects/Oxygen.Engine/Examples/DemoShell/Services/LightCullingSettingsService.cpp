@@ -71,8 +71,11 @@ auto LightCullingSettingsService::OnMainViewReady(
 auto LightCullingSettingsService::ApplyVisualizationSettings() -> void
 {
   if (vortex_renderer_ != nullptr) {
-    vortex_renderer_->SetShaderDebugMode(
-      static_cast<vortex::ShaderDebugMode>(GetVisualizationMode()));
+    const auto mode = GetVisualizationMode();
+    if (engine::IsLightCullingDebugMode(mode)) {
+      vortex_renderer_->SetShaderDebugMode(
+        static_cast<vortex::ShaderDebugMode>(mode));
+    }
   }
 }
 
