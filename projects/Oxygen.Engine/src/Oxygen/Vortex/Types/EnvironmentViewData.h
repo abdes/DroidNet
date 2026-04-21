@@ -19,7 +19,7 @@ namespace oxygen::vortex {
 
 //! Environment-owned per-view atmosphere context and controls.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
-  static constexpr size_t kSize = 208;
+  static constexpr size_t kSize = 272;
 
   uint32_t flags { 0U };
   uint32_t transform_mode { 0U };
@@ -73,11 +73,35 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     1.0F,
     0.0F,
   };
+  glm::vec4 atmosphere_light0_direction_angular_size {
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+  };
+  glm::vec4 atmosphere_light0_disk_luminance_rgb {
+    0.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+  };
   glm::vec4 sky_luminance_factor_height_fog_contribution {
     1.0F,
     1.0F,
     1.0F,
     1.0F,
+  };
+  glm::vec4 atmosphere_light1_direction_angular_size {
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+  };
+  glm::vec4 atmosphere_light1_disk_luminance_rgb {
+    0.0F,
+    0.0F,
+    0.0F,
+    0.0F,
   };
   glm::vec4 sky_aerial_luminance_aerial_start_depth_m {
     1.0F,

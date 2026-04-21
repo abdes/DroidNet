@@ -985,10 +985,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   static_cast<void>(service.PublishEnvironmentBindings(ctx));
 
-  const auto& light_state = service.InspectAtmosphereLightState();
-  const auto& atmosphere_state = service.InspectAtmosphereState();
-  const auto* bindings = service.InspectBindings(ViewId { 21U });
-  ASSERT_NE(bindings, nullptr);
+    const auto& light_state = service.InspectAtmosphereLightState();
+    const auto& atmosphere_state = service.InspectAtmosphereState();
+    const auto* view_data = service.InspectEnvironmentViewData(ViewId { 21U });
+    ASSERT_NE(view_data, nullptr);
 
   // slot 0 is the primary atmosphere light, slot 1 is the optional secondary.
   EXPECT_TRUE(light_state.atmosphere_lights[0].enabled);
@@ -1008,9 +1008,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(
     atmosphere_state.view_products.conventional_shadow_authority_slot, 0U);
 
-  EXPECT_NE(bindings->contract_flags
-      & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight0Enabled,
-    0U);
+    const auto* bindings = service.InspectBindings(ViewId { 21U });
+    ASSERT_NE(bindings, nullptr);
+    EXPECT_NE(bindings->contract_flags
+        & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight0Enabled,
+      0U);
   EXPECT_NE(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight1Enabled,
     0U);
@@ -1019,9 +1021,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     0U);
 
   constexpr auto kPi = 3.14159265358979323846F;
-  const auto primary_half_apex = 0.5F * light_state.atmosphere_lights[0].angular_size_radians;
+  const auto primary_angular_radius
+    = light_state.atmosphere_lights[0].angular_size_radians;
   const auto primary_solid_angle
-    = 2.0F * kPi * (1.0F - std::cos(primary_half_apex));
+    = 2.0F * kPi * (1.0F - std::cos(primary_angular_radius));
   const auto expected_primary_disk_luminance = glm::vec3(
     light_state.atmosphere_lights[0].disk_luminance_scale_rgb.x
       * light_state.atmosphere_lights[0].illuminance_rgb_lux.x,
@@ -1030,13 +1033,22 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     light_state.atmosphere_lights[0].disk_luminance_scale_rgb.z
       * light_state.atmosphere_lights[0].illuminance_rgb_lux.z)
     / primary_solid_angle;
-  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[0],
-    expected_primary_disk_luminance.x, 1.0e-2F);
-  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[1],
-    expected_primary_disk_luminance.y, 1.0e-2F);
-  EXPECT_NEAR(bindings->atmosphere_light0_disk_luminance_rgb[2],
-    expected_primary_disk_luminance.z, 1.0e-2F);
-}
+    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.x,
+      light_state.atmosphere_lights[0].direction_to_light_ws.x, 1.0e-5F);
+    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.y,
+      light_state.atmosphere_lights[0].direction_to_light_ws.y, 1.0e-5F);
+    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.z,
+      light_state.atmosphere_lights[0].direction_to_light_ws.z, 1.0e-5F);
+    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.w,
+      light_state.atmosphere_lights[0].angular_size_radians, 1.0e-6F);
+    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.x,
+      expected_primary_disk_luminance.x, 1.0e-2F);
+    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.y,
+      expected_primary_disk_luminance.y, 1.0e-2F);
+    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.z,
+      expected_primary_disk_luminance.z, 1.0e-2F);
+    EXPECT_FLOAT_EQ(view_data->atmosphere_light0_disk_luminance_rgb.w, 1.0F);
+  }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   AtmosphereLightStatePublishesDirectionTowardSourceFromNodeForward)

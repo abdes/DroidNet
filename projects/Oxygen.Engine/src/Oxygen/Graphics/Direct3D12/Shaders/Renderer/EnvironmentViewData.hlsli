@@ -26,7 +26,11 @@ struct EnvironmentViewData
     float4 sky_view_lut_referential_row0;
     float4 sky_view_lut_referential_row1;
     float4 sky_view_lut_referential_row2;
+    float4 atmosphere_light0_direction_angular_size;
+    float4 atmosphere_light0_disk_luminance_rgb;
     float4 sky_luminance_factor_height_fog_contribution;
+    float4 atmosphere_light1_direction_angular_size;
+    float4 atmosphere_light1_disk_luminance_rgb;
     float4 sky_aerial_luminance_aerial_start_depth_m;
     float4 trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass;
     float4 camera_aerial_volume_depth_params;
@@ -52,7 +56,11 @@ static EnvironmentViewData LoadEnvironmentViewData(uint slot)
     invalid_data.sky_view_lut_referential_row0 = float4(1.0f, 0.0f, 0.0f, 0.0f);
     invalid_data.sky_view_lut_referential_row1 = float4(0.0f, 1.0f, 0.0f, 0.0f);
     invalid_data.sky_view_lut_referential_row2 = float4(0.0f, 0.0f, 1.0f, 0.0f);
+    invalid_data.atmosphere_light0_direction_angular_size = float4(0.0f, 0.0f, 1.0f, 0.0f);
+    invalid_data.atmosphere_light0_disk_luminance_rgb = float4(0.0f, 0.0f, 0.0f, 0.0f);
     invalid_data.sky_luminance_factor_height_fog_contribution = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    invalid_data.atmosphere_light1_direction_angular_size = float4(0.0f, 0.0f, 1.0f, 0.0f);
+    invalid_data.atmosphere_light1_disk_luminance_rgb = float4(0.0f, 0.0f, 0.0f, 0.0f);
     invalid_data.sky_aerial_luminance_aerial_start_depth_m = float4(1.0f, 1.0f, 1.0f, 100.0f);
     invalid_data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass = float4(1.0f, -6.0f, 0.0f, 1.0f);
     invalid_data.camera_aerial_volume_depth_params = float4(16.0f, 1.0f / 16.0f, 6.0f, 1.0f / 6.0f);
