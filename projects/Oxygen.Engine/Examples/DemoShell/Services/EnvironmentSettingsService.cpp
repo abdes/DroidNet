@@ -26,7 +26,6 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
-#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
@@ -768,7 +767,6 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
       needs_sync_ = false;
       skybox_dirty_ = true;
-      sun_present_ = true;
       return;
     }
 
@@ -2531,7 +2529,7 @@ auto EnvironmentSettingsService::SetSelectedLocalFogVolumeSortPriority(
 
 auto EnvironmentSettingsService::GetSunPresent() const -> bool
 {
-  return sun_present_;
+  return config_.scene != nullptr;
 }
 
 auto EnvironmentSettingsService::GetSunEnabled() const -> bool
@@ -2980,13 +2978,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     env = config_.scene->GetEnvironment();
   }
 
-  auto sun = env->TryGetSystem<scene::environment::Sun>();
-  if (apply_sun && sun_enabled_ && (sun == nullptr)) {
-    sun = observer_ptr { &env->AddSystem<scene::environment::Sun>() };
-  }
-  if (apply_sun && sun) {
-    sun->SetEnabled(sun_enabled_);
-  }
   if (apply_sun && !sun_enabled_) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
@@ -3000,26 +2991,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       }
     }
 
-    if (sun) {
-      sun->ClearLightReference();
-    }
   }
 
   if (apply_sun && sun_enabled_) {
-    const auto sun_source = scene::environment::SunSource::kFromScene;
-    if (sun) {
-      sun->SetSunSource(sun_source);
-      sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
-      sun->SetIlluminanceLx(sun_illuminance_lx_);
-      sun->SetDiskAngularRadiusRadians(
-        sun_component_disk_radius_deg_ * kDegToRad);
-      if (sun_use_temperature_) {
-        sun->SetLightTemperatureKelvin(sun_temperature_kelvin_);
-      } else {
-        sun->SetColorRgb(sun_color_rgb_);
-      }
-    }
-
     const auto scene_name
       = config_.scene ? config_.scene->GetName() : std::string_view {};
     UpdateSunLightCandidate();
@@ -3044,9 +3018,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
       }
 
-      if (sun) {
-        sun->SetLightReference(sun_light_node_);
-      }
       LOG_F(INFO,
         "using scene directional '{}' as sun "
         "(source=scene, casts_shadows=true, environment_contribution=true)",
@@ -3055,12 +3026,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       LOG_F(WARNING,
         "no resolved scene sun is currently available in scene '{}'",
         scene_name);
-      if (sun) {
-        sun->ClearLightReference();
-      }
     }
-  } else if (apply_sun && sun) {
-    sun->ClearLightReference();
   }
 
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
@@ -3398,30 +3364,33 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_enabled_ = false;
   }
 
-  if (auto sun = env->TryGetSystem<scene::environment::Sun>()) {
-    sun_present_ = true;
-    sun_enabled_ = sun->IsEnabled();
-    sun_azimuth_deg_ = sun->GetAzimuthDegrees();
-    sun_elevation_deg_ = sun->GetElevationDegrees();
-    sun_color_rgb_ = sun->GetColorRgb();
-    sun_illuminance_lx_ = sun->GetIlluminanceLx();
-    sun_use_temperature_ = sun->HasLightTemperature();
-    if (sun_use_temperature_) {
-      sun_temperature_kelvin_ = sun->GetLightTemperatureKelvin();
-    }
-    sun_component_disk_radius_deg_
-      = sun->GetDiskAngularRadiusRadians() * kRadToDeg;
-
-    UpdateSunLightCandidate();
-    if (sun_light_available_) {
-      if (auto light
-        = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        sun_enabled_ = light->get().Common().affects_world;
-        CaptureSunShadowSettingsFromLight(light->get());
+  UpdateSunLightCandidate();
+  if (sun_light_available_) {
+    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      sun_enabled_ = light->get().Common().affects_world;
+      sun_color_rgb_ = light->get().Common().color_rgb;
+      sun_illuminance_lx_ = light->get().GetIntensityLux();
+      sun_component_disk_radius_deg_
+        = light->get().GetAngularSizeRadians() * kRadToDeg;
+      sun_use_temperature_ = false;
+      const auto& resolver = config_.scene->GetDirectionalLightResolver();
+      if (const auto primary = resolver.ResolvePrimarySun();
+        primary.has_value()
+        && primary->NodeHandle() == sun_light_node_.GetHandle()) {
+        const auto direction_to_light_ws = primary->DirectionToLightWs();
+        sun_azimuth_deg_
+          = std::atan2(direction_to_light_ws.y, direction_to_light_ws.x)
+          * kRadToDeg;
+        if (sun_azimuth_deg_ < 0.0F) {
+          sun_azimuth_deg_ += 360.0F;
+        }
+        sun_elevation_deg_
+          = std::asin(std::clamp(direction_to_light_ws.z, -1.0F, 1.0F))
+          * kRadToDeg;
       }
+      CaptureSunShadowSettingsFromLight(light->get());
     }
   } else {
-    sun_present_ = false;
     sun_light_available_ = false;
   }
 
@@ -4037,9 +4006,6 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   }
 
   ValidateAndClampState();
-  if (kForceEnvironmentOverride) {
-    sun_present_ = true;
-  }
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
@@ -4252,20 +4218,16 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
 
 auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
 {
-  const scene::environment::Sun defaults;
   const scene::CascadedShadowSettings default_csm;
 
-  sun_present_ = true;
-  sun_enabled_ = defaults.IsEnabled();
-  sun_azimuth_deg_ = defaults.GetAzimuthDegrees();
-  sun_elevation_deg_ = defaults.GetElevationDegrees();
-  sun_color_rgb_ = defaults.GetColorRgb();
-  sun_illuminance_lx_ = defaults.GetIlluminanceLx();
-  sun_use_temperature_ = defaults.HasLightTemperature();
-  sun_temperature_kelvin_
-    = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
-  sun_component_disk_radius_deg_
-    = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
+  sun_enabled_ = true;
+  sun_azimuth_deg_ = kDefaultSunAzimuthDeg;
+  sun_elevation_deg_ = kDefaultSunElevationDeg;
+  sun_color_rgb_ = { 1.0F, 1.0F, 1.0F };
+  sun_illuminance_lx_ = kDefaultSunIlluminanceLx;
+  sun_use_temperature_ = false;
+  sun_temperature_kelvin_ = 6500.0F;
+  sun_component_disk_radius_deg_ = kDefaultSunDiskAngularRadiusDeg;
   sun_shadow_bias_ = scene::kDefaultShadowBias;
   sun_shadow_normal_bias_ = scene::kDefaultShadowNormalBias;
   sun_shadow_resolution_hint_
@@ -4297,7 +4259,6 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
     CHECK_F(ApplyDirectionalSunRole(sun_light_node_, true, true, true, true),
       "failed to promote scene directional '{}' to active sun during activation",
       sun_light_node_.GetName());
-    sun_present_ = true;
     sun_enabled_ = true;
     if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
       CaptureSunShadowSettingsFromLight(light->get());
@@ -4310,7 +4271,6 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
 
   sun_light_available_ = false;
   sun_light_node_ = {};
-  sun_present_ = false;
   sun_enabled_ = false;
   LOG_F(WARNING,
     "scene '{}' has no resolved sun directional light",

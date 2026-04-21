@@ -16,14 +16,14 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/Sun.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
+
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -57,16 +57,6 @@ namespace {
         light->get().SetEnvironmentContribution(is_sun_light);
       }
       return node;
-    }
-
-    static auto AttachSceneSunSystem(
-      scene::Scene& scene, const scene::SceneNode& light_node) -> void
-    {
-      auto environment = std::make_unique<scene::SceneEnvironment>();
-      auto& sun = environment->AddSystem<scene::environment::Sun>();
-      sun.SetSunSource(scene::environment::SunSource::kFromScene);
-      sun.SetLightReference(light_node);
-      scene.SetEnvironment(std::move(environment));
     }
 
     static auto CollectSunLights(scene::Scene& scene)
@@ -152,7 +142,8 @@ namespace {
 
         const auto impl_opt = node.GetImpl();
         if (impl_opt.has_value()
-          && impl_opt->get().HasComponent<scene::environment::LocalFogVolume>()) {
+          && impl_opt->get()
+            .HasComponent<scene::environment::LocalFogVolume>()) {
           result.push_back(node);
         }
 
@@ -309,8 +300,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   oxygen::testing::ScopedLogCapture capture(
     "EnvironmentSettingsService.MultiSun", loguru::Verbosity_ERROR);
 
-  EXPECT_THROW(service_.OnSceneActivated(*scene),
-    scene::DirectionalLightContractError);
+  EXPECT_THROW(
+    service_.OnSceneActivated(*scene), scene::DirectionalLightContractError);
   EXPECT_TRUE(capture.Contains("more than one directional light"));
 }
 
@@ -343,7 +334,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto scene = MakeScene("DemoShell.DisableEnableSceneSun");
   auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
   ASSERT_TRUE(authored_sun.IsAlive());
-  AttachSceneSunSystem(*scene, authored_sun);
 
   service_.OnSceneActivated(*scene);
 
@@ -378,7 +368,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto scene = MakeScene("DemoShell.SceneSunShadowSettings");
   auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
   ASSERT_TRUE(authored_sun.IsAlive());
-  AttachSceneSunSystem(*scene, authored_sun);
 
   service_.OnSceneActivated(*scene);
 
@@ -424,7 +413,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto scene = MakeScene("DemoShell.SceneSunAtmosphereLightMetadata");
   auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
   ASSERT_TRUE(authored_sun.IsAlive());
-  AttachSceneSunSystem(*scene, authored_sun);
 
   service_.OnSceneActivated(*scene);
 
@@ -436,8 +424,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(light.has_value());
-  EXPECT_EQ(
-    light->get().GetAtmosphereLightSlot(),
+  EXPECT_EQ(light->get().GetAtmosphereLightSlot(),
     oxygen::scene::AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
@@ -505,12 +492,12 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
-  EXPECT_EQ(service_.GetSunAtmosphereDiskLuminanceScale(),
-    glm::vec3(1.4F, 1.1F, 0.7F));
+  EXPECT_EQ(
+    service_.GetSunAtmosphereDiskLuminanceScale(), glm::vec3(1.4F, 1.1F, 0.7F));
 }
 
-NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  SaveSettings_DoesNotPersistLegacySunSourceKey)
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, SaveSettings_DoesNotPersistLegacySunSourceKey)
 {
   ResetDemoSettings();
   auto scene = MakeScene("DemoShell.SaveSettingsWithoutLegacySunSource");
@@ -568,7 +555,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   });
 
   service_.SetFogEnabled(true);
-  service_.SetFogModel(static_cast<int>(scene::environment::FogModel::kVolumetric));
+  service_.SetFogModel(
+    static_cast<int>(scene::environment::FogModel::kVolumetric));
   service_.SetFogExtinctionSigmaTPerMeter(0.5F);
   service_.SetFogHeightFalloffPerMeter(1.25F);
   service_.SetFogHeightOffsetMeters(18.0F);
@@ -584,8 +572,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(service_.GetFogHeightOffsetMeters(), 18.0F);
   EXPECT_FLOAT_EQ(service_.GetFogStartDistanceMeters(), 96.0F);
   EXPECT_FLOAT_EQ(service_.GetFogMaxOpacity(), 0.55F);
-  EXPECT_EQ(service_.GetFogSingleScatteringAlbedoRgb(),
-    glm::vec3(0.2F, 0.3F, 0.4F));
+  EXPECT_EQ(
+    service_.GetFogSingleScatteringAlbedoRgb(), glm::vec3(0.2F, 0.3F, 0.4F));
 
   service_.ApplyPendingChanges();
 
@@ -599,8 +587,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(updated_fog->GetHeightOffsetMeters(), 18.0F);
   EXPECT_FLOAT_EQ(updated_fog->GetStartDistanceMeters(), 96.0F);
   EXPECT_FLOAT_EQ(updated_fog->GetMaxOpacity(), 0.55F);
-  EXPECT_EQ(updated_fog->GetSingleScatteringAlbedoRgb(),
-    glm::vec3(0.2F, 0.3F, 0.4F));
+  EXPECT_EQ(
+    updated_fog->GetSingleScatteringAlbedoRgb(), glm::vec3(0.2F, 0.3F, 0.4F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -612,7 +600,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   });
 
   service_.SetFogEnabled(true);
-  service_.SetFogModel(static_cast<int>(scene::environment::FogModel::kVolumetric));
+  service_.SetFogModel(
+    static_cast<int>(scene::environment::FogModel::kVolumetric));
   service_.SetSecondFogDensity(0.02F);
   service_.SetSecondFogHeightFalloff(0.03F);
   service_.SetSecondFogHeightOffset(4.0F);
@@ -657,8 +646,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(fog->GetInscatteringTextureTint(), glm::vec3(0.9F, 0.8F, 0.7F));
   EXPECT_FLOAT_EQ(fog->GetFullyDirectionalInscatteringColorDistance(), 1000.0F);
   EXPECT_FLOAT_EQ(fog->GetNonDirectionalInscatteringColorDistance(), 2000.0F);
-  EXPECT_EQ(fog->GetDirectionalInscatteringLuminance(),
-    glm::vec3(0.4F, 0.5F, 0.6F));
+  EXPECT_EQ(
+    fog->GetDirectionalInscatteringLuminance(), glm::vec3(0.4F, 0.5F, 0.6F));
   EXPECT_FLOAT_EQ(fog->GetDirectionalInscatteringExponent(), 12.0F);
   EXPECT_FLOAT_EQ(fog->GetDirectionalInscatteringStartDistance(), 32.0F);
   EXPECT_FLOAT_EQ(fog->GetEndDistanceMeters(), 500.0F);
@@ -692,8 +681,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetPlanetRadiusKm(7000.0F);
   service_.SetAtmosphereHeightKm(120.0F);
   service_.SetSkyLuminanceFactor({ 1.1F, 1.2F, 1.3F });
-  service_.SetSkyAndAerialPerspectiveLuminanceFactor(
-    { 0.8F, 0.9F, 1.0F });
+  service_.SetSkyAndAerialPerspectiveLuminanceFactor({ 0.8F, 0.9F, 1.0F });
   service_.SetAerialPerspectiveStartDepthMeters(250.0F);
   service_.SetHeightFogContribution(0.4F);
   service_.SetTraceSampleCountScale(2.0F);
@@ -719,7 +707,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
   ASSERT_NE(atmo.get(), nullptr);
   EXPECT_EQ(atmo->GetTransformMode(),
-    scene::environment::SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
+    scene::environment::SkyAtmosphereTransformMode::
+      kPlanetCenterAtComponentTransform);
   EXPECT_FLOAT_EQ(atmo->GetPlanetRadiusMeters(), 7000000.0F);
   EXPECT_FLOAT_EQ(atmo->GetAtmosphereHeightMeters(), 120000.0F);
   EXPECT_EQ(atmo->GetSkyLuminanceFactorRgb(), glm::vec3(1.1F, 1.2F, 1.3F));
@@ -741,8 +730,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(sky_light->GetSpecularIntensity(), 0.9F);
   EXPECT_TRUE(sky_light->GetRealTimeCaptureEnabled());
   EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
-  EXPECT_FLOAT_EQ(
-    sky_light->GetVolumetricScatteringIntensity(), 0.6F);
+  EXPECT_FLOAT_EQ(sky_light->GetVolumetricScatteringIntensity(), 0.6F);
   EXPECT_FALSE(sky_light->GetAffectReflections());
   EXPECT_FALSE(sky_light->GetAffectGlobalIllumination());
 }
@@ -759,13 +747,18 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
   EXPECT_TRUE(service_.GetSelectedLocalFogVolumeEnabled());
-  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeRadialFogExtinction(), 1.0F);
-  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogExtinction(), 1.0F);
-  EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogFalloff(), 1000.0F);
+  EXPECT_FLOAT_EQ(
+    service_.GetSelectedLocalFogVolumeRadialFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(
+    service_.GetSelectedLocalFogVolumeHeightFogExtinction(), 1.0F);
+  EXPECT_FLOAT_EQ(
+    service_.GetSelectedLocalFogVolumeHeightFogFalloff(), 1000.0F);
   EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeHeightFogOffset(), 0.0F);
   EXPECT_FLOAT_EQ(service_.GetSelectedLocalFogVolumeFogPhaseG(), 0.2F);
-  EXPECT_EQ(service_.GetSelectedLocalFogVolumeFogAlbedo(), glm::vec3(1.0F, 1.0F, 1.0F));
-  EXPECT_EQ(service_.GetSelectedLocalFogVolumeFogEmissive(), glm::vec3(0.0F, 0.0F, 0.0F));
+  EXPECT_EQ(
+    service_.GetSelectedLocalFogVolumeFogAlbedo(), glm::vec3(1.0F, 1.0F, 1.0F));
+  EXPECT_EQ(service_.GetSelectedLocalFogVolumeFogEmissive(),
+    glm::vec3(0.0F, 0.0F, 0.0F));
   EXPECT_EQ(service_.GetSelectedLocalFogVolumeSortPriority(), 0);
 
   service_.ApplyPendingChanges();

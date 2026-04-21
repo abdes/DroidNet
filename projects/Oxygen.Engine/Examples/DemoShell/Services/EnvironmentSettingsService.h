@@ -25,7 +25,6 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 
@@ -596,6 +595,10 @@ private:
     = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
   static constexpr float kDefaultAtmosphereHeightKm
     = engine::atmos::kDefaultAtmosphereHeightM * 0.001F;
+  static constexpr float kDefaultSunAzimuthDeg = 90.0F;
+  static constexpr float kDefaultSunElevationDeg = 30.0F;
+  static constexpr float kDefaultSunIlluminanceLx = 110000.0F;
+  static constexpr float kDefaultSunDiskAngularRadiusDeg = 0.2725F;
 
   EnvironmentRuntimeConfig config_ {};
 
@@ -736,18 +739,15 @@ private:
   std::vector<scene::NodeHandle> removed_local_fog_nodes_ {};
   int selected_local_fog_volume_index_ { -1 };
 
-  // Sun component
-  bool sun_present_ { false };
+  // Resolved scene sun controls
   bool sun_enabled_ { true };
-  float sun_azimuth_deg_ { scene::environment::Sun::kDefaultAzimuthDeg };
-  float sun_elevation_deg_ { scene::environment::Sun::kDefaultElevationDeg };
+  float sun_azimuth_deg_ { kDefaultSunAzimuthDeg };
+  float sun_elevation_deg_ { kDefaultSunElevationDeg };
   glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
-  float sun_illuminance_lx_ { scene::environment::Sun::kDefaultIlluminanceLx };
+  float sun_illuminance_lx_ { kDefaultSunIlluminanceLx };
   bool sun_use_temperature_ { false };
   float sun_temperature_kelvin_ { 6500.0F };
-  float sun_component_disk_radius_deg_ {
-    scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
-  };
+  float sun_component_disk_radius_deg_ { kDefaultSunDiskAngularRadiusDeg };
   int sun_atmosphere_light_slot_ { static_cast<int>(
     scene::AtmosphereLightSlot::kPrimary) };
   bool sun_use_per_pixel_atmosphere_transmittance_ { false };
