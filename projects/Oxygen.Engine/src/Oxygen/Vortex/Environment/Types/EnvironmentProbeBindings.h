@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
@@ -22,5 +23,14 @@ struct EnvironmentProbeBindings {
 };
 
 static_assert(std::is_standard_layout_v<EnvironmentProbeBindings>);
+static_assert(sizeof(ShaderVisibleIndex) == 4);
+static_assert(alignof(ShaderVisibleIndex) == 4);
+static_assert(sizeof(EnvironmentProbeBindings) == 20);
+static_assert(alignof(EnvironmentProbeBindings) == 4);
+static_assert(offsetof(EnvironmentProbeBindings, environment_map_srv) == 0);
+static_assert(offsetof(EnvironmentProbeBindings, irradiance_map_srv) == 4);
+static_assert(offsetof(EnvironmentProbeBindings, prefiltered_map_srv) == 8);
+static_assert(offsetof(EnvironmentProbeBindings, brdf_lut_srv) == 12);
+static_assert(offsetof(EnvironmentProbeBindings, probe_revision) == 16);
 
 } // namespace oxygen::vortex

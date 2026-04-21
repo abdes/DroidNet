@@ -49,10 +49,6 @@ struct EnvironmentFrameBindings
     uint multi_scattering_lut_srv;
     uint sky_view_lut_srv;
     uint camera_aerial_perspective_srv;
-    float4 atmosphere_light0_direction_angular_size;
-    float4 atmosphere_light0_disk_luminance_rgb;
-    float4 atmosphere_light1_direction_angular_size;
-    float4 atmosphere_light1_disk_luminance_rgb;
     EnvironmentProbeBindings probes;
     EnvironmentEvaluationParameters evaluation;
     EnvironmentAmbientBridgeBindings ambient_bridge;

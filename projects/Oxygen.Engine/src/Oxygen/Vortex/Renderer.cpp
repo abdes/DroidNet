@@ -678,8 +678,8 @@ auto Renderer::RefreshCurrentViewFrameBindings(
   const auto view_frame_bindings_slot
     = publication_state.view_frame_bindings_publisher->Publish(
       render_context.current_view.view_id, view_bindings);
-  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-    view_bindings, view_frame_bindings_slot);
+    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+      view_bindings, view_frame_bindings_slot);
 
   EnsureViewConstantsManager(*gfx);
   view_const_manager_->OnFrameStart(render_context.frame_slot);

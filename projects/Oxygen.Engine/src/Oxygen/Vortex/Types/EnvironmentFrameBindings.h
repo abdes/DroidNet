@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -42,18 +43,29 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   ShaderVisibleIndex camera_aerial_perspective_srv {
     kInvalidShaderVisibleIndex
   };
-  float atmosphere_light0_direction_angular_size[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-  float atmosphere_light0_disk_luminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-  float atmosphere_light1_direction_angular_size[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-  float atmosphere_light1_disk_luminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
   EnvironmentProbeBindings probes {};
   EnvironmentEvaluationParameters evaluation {};
   EnvironmentAmbientBridgeBindings ambient_bridge {};
 };
 
-static_assert(sizeof(EnvironmentFrameBindings) == 176);
+static_assert(sizeof(EnvironmentFrameBindings) == 112);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(sizeof(EnvironmentFrameBindings) % 16 == 0);
+static_assert(offsetof(EnvironmentFrameBindings, environment_static_slot) == 0);
+static_assert(offsetof(EnvironmentFrameBindings, environment_view_slot) == 4);
+static_assert(offsetof(EnvironmentFrameBindings, atmosphere_model_slot) == 8);
+static_assert(offsetof(EnvironmentFrameBindings, height_fog_model_slot) == 12);
+static_assert(offsetof(EnvironmentFrameBindings, sky_light_model_slot) == 16);
+static_assert(offsetof(EnvironmentFrameBindings, volumetric_fog_model_slot) == 20);
+static_assert(offsetof(EnvironmentFrameBindings, environment_view_products_slot) == 24);
+static_assert(offsetof(EnvironmentFrameBindings, contract_flags) == 28);
+static_assert(offsetof(EnvironmentFrameBindings, transmittance_lut_srv) == 32);
+static_assert(offsetof(EnvironmentFrameBindings, multi_scattering_lut_srv) == 36);
+static_assert(offsetof(EnvironmentFrameBindings, sky_view_lut_srv) == 40);
+static_assert(offsetof(EnvironmentFrameBindings, camera_aerial_perspective_srv) == 44);
+static_assert(offsetof(EnvironmentFrameBindings, probes) == 48);
+static_assert(offsetof(EnvironmentFrameBindings, evaluation) == 68);
+static_assert(offsetof(EnvironmentFrameBindings, ambient_bridge) == 84);
 
 } // namespace oxygen::vortex

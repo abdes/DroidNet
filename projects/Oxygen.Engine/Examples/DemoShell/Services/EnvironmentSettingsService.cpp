@@ -2896,6 +2896,8 @@ auto EnvironmentSettingsService::CaptureSunShadowSettingsFromLight(
 auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   scene::DirectionalLight& light) const -> void
 {
+  light.SetAngularSizeRadians(
+    std::max(sun_component_disk_radius_deg_ * kDegToRad, 0.0F));
   light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(
     std::clamp(sun_atmosphere_light_slot_,
       static_cast<int>(scene::AtmosphereLightSlot::kNone),
