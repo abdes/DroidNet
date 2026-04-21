@@ -247,9 +247,9 @@ auto AtmosphereLutCache::EnsureTexture(
   }
 
   if (!slots.srv.IsValid()) {
-    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
-      graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = gfx->GetDescriptorAllocator().AllocateBindless(
+      bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
     if (!handle.IsValid()) {
       throw std::runtime_error(
         "AtmosphereLutCache: failed to allocate texture SRV");
@@ -267,9 +267,9 @@ auto AtmosphereLutCache::EnsureTexture(
   }
 
   if (!slots.uav.IsValid()) {
-    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
-      graphics::ResourceViewType::kTexture_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = gfx->GetDescriptorAllocator().AllocateBindless(
+      bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_UAV);
     if (!handle.IsValid()) {
       throw std::runtime_error(
         "AtmosphereLutCache: failed to allocate texture UAV");
@@ -323,9 +323,9 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
   }
 
   if (!slots.srv.IsValid()) {
-    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
-      graphics::ResourceViewType::kStructuredBuffer_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = gfx->GetDescriptorAllocator().AllocateBindless(
+      bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_SRV);
     if (!handle.IsValid()) {
       throw std::runtime_error(
         "AtmosphereLutCache: failed to allocate buffer SRV");
@@ -342,9 +342,9 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
   }
 
   if (!slots.uav.IsValid()) {
-    auto handle = gfx->GetDescriptorAllocator().AllocateRaw(
-      graphics::ResourceViewType::kStructuredBuffer_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+    auto handle = gfx->GetDescriptorAllocator().AllocateBindless(
+      bindless::generated::kGlobalSrvDomain,
+      graphics::ResourceViewType::kStructuredBuffer_UAV);
     if (!handle.IsValid()) {
       throw std::runtime_error(
         "AtmosphereLutCache: failed to allocate buffer UAV");

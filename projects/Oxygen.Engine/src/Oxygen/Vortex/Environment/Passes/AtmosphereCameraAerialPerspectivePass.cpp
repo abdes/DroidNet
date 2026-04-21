@@ -279,9 +279,9 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   }
 
   auto& allocator = gfx->GetDescriptorAllocator();
-  auto srv_handle
-    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
-      graphics::DescriptorVisibility::kShaderVisible);
+  auto srv_handle = allocator.AllocateBindless(
+    bindless::generated::kTexturesDomain,
+    graphics::ResourceViewType::kTexture_SRV);
   if (!srv_handle.IsValid()) {
     throw std::runtime_error("AtmosphereCameraAerialPerspectivePass: failed to "
                              "allocate SRV descriptor");
@@ -290,9 +290,9 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   registry.RegisterView(*texture, std::move(srv_handle),
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV));
 
-  auto uav_handle
-    = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_UAV,
-      graphics::DescriptorVisibility::kShaderVisible);
+  auto uav_handle = allocator.AllocateBindless(
+    bindless::generated::kTexturesDomain,
+    graphics::ResourceViewType::kTexture_UAV);
   if (!uav_handle.IsValid()) {
     throw std::runtime_error("AtmosphereCameraAerialPerspectivePass: failed to "
                              "allocate UAV descriptor");
