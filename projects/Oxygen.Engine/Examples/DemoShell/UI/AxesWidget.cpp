@@ -10,7 +10,6 @@
 #include <imgui.h>
 
 #include <glm/geometric.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
@@ -56,11 +55,10 @@ namespace {
   };
 
   [[nodiscard]] auto ProjectAxis(const glm::vec3& axis_dir,
-    const glm::mat4& view_matrix, const glm::vec2& center,
+    const glm::mat3& world_to_view_rotation, const glm::vec2& center,
     const AxesWidgetConfig& config) -> glm::vec2
   {
-    const glm::mat3 rotation(view_matrix);
-    const glm::vec3 view_axis = rotation * axis_dir;
+    const glm::vec3 view_axis = world_to_view_rotation * axis_dir;
     const float axis_pixel_length = config.size * config.axis_length;
 
     return {
@@ -79,17 +77,19 @@ AxesWidget::AxesWidget(observer_ptr<UiSettingsVm> settings_vm)
 
 /*!
  Renders a 3D coordinate axes indicator in the bottom-left corner of the
- viewport. Each axis is color-coded (X=Red, Y=Green, Z=Blue) and the widget
- updates in real-time based on the camera's view matrix.
+ viewport. Each axis is color-coded (+X=Red, +Y=Green, +Z=Blue) and the widget
+ updates in real-time based on the active camera's world-space view
+ orientation.
 
  The axes are depth-sorted so that axes pointing toward the camera are drawn
  on top of those pointing away. Axes pointing away from the camera are drawn
  with dimmed colors to provide visual depth cues.
 
- @param view_matrix The camera's view matrix used to determine axis
-                    orientations. Only the rotation component is used.
+ @param world_to_view_rotation Rotation mapping world-space directions into the
+                               camera's current view basis. Only orientation is
+                               used; translation is irrelevant for the widget.
  */
-void AxesWidget::Draw(const glm::mat4& view_matrix)
+void AxesWidget::Draw(const glm::mat3& world_to_view_rotation)
 {
   if (!settings_vm_->GetAxesVisible()) {
     return;
@@ -109,35 +109,36 @@ void AxesWidget::Draw(const glm::mat4& view_matrix)
     widget_pos.y + config.size * 0.5F,
   };
 
-  // Extract view rotation for depth calculation
-  const glm::mat3 rotation(view_matrix);
-
-  // Define the three world axes
+  // Define the positive world axes under Oxygen engine law:
+  // +X = Right, +Y = Back, +Z = Up. The widget must visualize these axes as
+  // they appear in the current camera view, not the movement "forward" axis.
   std::array<AxisInfo, 3> axes = { {
     {
       .direction = space::move::Right,
       .screen_end
-      = ProjectAxis(space::move::Right, view_matrix, center, config),
+      = ProjectAxis(space::move::Right, world_to_view_rotation, center, config),
       .color = kAxisColorX,
       .color_dim = kAxisColorXDim,
       .label = "X",
-      .depth = (rotation * space::move::Right).z,
+      .depth = (world_to_view_rotation * space::move::Right).z,
     },
     {
       .direction = space::move::Back,
-      .screen_end = ProjectAxis(space::move::Back, view_matrix, center, config),
+      .screen_end
+      = ProjectAxis(space::move::Back, world_to_view_rotation, center, config),
       .color = kAxisColorY,
       .color_dim = kAxisColorYDim,
       .label = "Y",
-      .depth = (rotation * space::move::Back).z,
+      .depth = (world_to_view_rotation * space::move::Back).z,
     },
     {
       .direction = space::move::Up,
-      .screen_end = ProjectAxis(space::move::Up, view_matrix, center, config),
+      .screen_end
+      = ProjectAxis(space::move::Up, world_to_view_rotation, center, config),
       .color = kAxisColorZ,
       .color_dim = kAxisColorZDim,
       .label = "Z",
-      .depth = (rotation * space::move::Up).z,
+      .depth = (world_to_view_rotation * space::move::Up).z,
     },
   } };
 
@@ -208,22 +209,19 @@ void AxesWidget::Draw(observer_ptr<scene::SceneNode> camera)
     return;
   }
 
-  glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
-  glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
-
   const auto& tf = camera->GetTransform();
-  if (auto lp = tf.GetLocalPosition()) {
-    cam_pos = *lp;
-  }
-  if (auto lr = tf.GetLocalRotation()) {
-    cam_rot = *lr;
+  const auto world_rotation = tf.GetWorldRotation();
+  if (!world_rotation.has_value()) {
+    return;
   }
 
-  const glm::vec3 forward = cam_rot * space::look::Forward;
-  const glm::vec3 up = cam_rot * space::look::Up;
-  const glm::mat4 view_matrix = glm::lookAt(cam_pos, cam_pos + forward, up);
-
-  Draw(view_matrix);
+  // Camera rotations in DemoShell/controllers map view-space basis vectors
+  // (look::Forward = -Z, look::Up = +Y) into world space. The widget needs the
+  // inverse mapping so it can express world axes in the exact basis currently
+  // seen on screen.
+  const glm::mat3 world_to_view_rotation
+    = glm::mat3_cast(glm::conjugate(*world_rotation));
+  Draw(world_to_view_rotation);
 }
 
 } // namespace oxygen::examples::ui
