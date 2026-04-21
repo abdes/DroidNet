@@ -70,12 +70,31 @@ namespace {
     using engine::ShaderDebugMode;
     switch (mode) {
     case ShaderDebugMode::kDisabled:
+    case ShaderDebugMode::kLightCullingHeatMap:
+    case ShaderDebugMode::kDepthSlice:
+    case ShaderDebugMode::kClusterIndex:
+    case ShaderDebugMode::kIblSpecular:
+    case ShaderDebugMode::kIblRawSky:
+    case ShaderDebugMode::kIblIrradiance:
     case ShaderDebugMode::kBaseColor:
+    case ShaderDebugMode::kUv0:
+    case ShaderDebugMode::kOpacity:
     case ShaderDebugMode::kWorldNormals:
     case ShaderDebugMode::kRoughness:
     case ShaderDebugMode::kMetalness:
+    case ShaderDebugMode::kIblFaceIndex:
+    case ShaderDebugMode::kIblNoBrdfLut:
+    case ShaderDebugMode::kDirectLightingOnly:
+    case ShaderDebugMode::kIblOnly:
+    case ShaderDebugMode::kDirectPlusIbl:
+    case ShaderDebugMode::kDirectLightingFull:
+    case ShaderDebugMode::kDirectLightGates:
+    case ShaderDebugMode::kDirectBrdfCore:
+    case ShaderDebugMode::kVirtualShadowMask:
     case ShaderDebugMode::kSceneDepthRaw:
     case ShaderDebugMode::kSceneDepthLinear:
+    case ShaderDebugMode::kSceneDepthMismatch:
+    case ShaderDebugMode::kMaskedAlphaCoverage:
       return true;
     default:
       return false;
