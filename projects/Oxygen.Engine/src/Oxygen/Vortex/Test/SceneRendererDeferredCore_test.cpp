@@ -1029,6 +1029,37 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  DirectionalLightSelectionPrefersEnvironmentContributingSunOverEarlierFill)
+{
+  auto fill = AddDirectionalLight("Fill");
+  auto fill_light = fill.GetLightAs<DirectionalLight>();
+  ASSERT_TRUE(fill_light.has_value());
+  fill_light->get().Common().affects_world = true;
+  fill_light->get().SetEnvironmentContribution(false);
+  fill.GetTransform().SetLocalRotation(
+    glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right));
+
+  auto sun = AddDirectionalLight("Sun");
+  auto sun_light = sun.GetLightAs<DirectionalLight>();
+  ASSERT_TRUE(sun_light.has_value());
+  sun_light->get().Common().affects_world = true;
+  sun_light->get().SetEnvironmentContribution(true);
+  sun_light->get().SetIsSunLight(true);
+  sun.GetTransform().SetLocalRotation(
+    glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
+
+  UpdateSceneTransforms();
+  static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
+
+  const auto& selection
+    = RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_);
+  ASSERT_TRUE(selection.directional_light.has_value());
+  EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredLightingShadersStopGeneratingLocalLightProxyVerticesProcedurally)
 {
   const auto source_root = SourceRoot();
