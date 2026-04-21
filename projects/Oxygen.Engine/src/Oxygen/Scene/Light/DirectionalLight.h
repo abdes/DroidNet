@@ -93,18 +93,20 @@ public:
     return environment_contribution_;
   }
 
-  //! Designates this light as the sun for atmospheric systems.
+  //! Designates this light as the authored primary sun candidate.
   /*!
-   When true, this directional light's direction is used by atmospheric systems
-   (fog inscattering, sky atmosphere, etc.). Only the first enabled
-   DirectionalLight with is_sun_light=true is used.
+   Contract:
+   - `is_sun_light == true` requires `environment_contribution == true`
+   - at most one directional light in a scene may satisfy both
+   - the scene-owned DirectionalLightResolver validates and enforces this
+     contract before renderer/runtime consumers resolve primary/secondary suns
   */
   auto SetIsSunLight(const bool is_sun) noexcept -> void
   {
     is_sun_light_ = is_sun;
   }
 
-  //! Returns true if this light is designated as the sun for atmosphere.
+  //! Returns true if this light is designated as the authored primary sun candidate.
   [[nodiscard]] auto IsSunLight() const noexcept -> bool
   {
     return is_sun_light_;

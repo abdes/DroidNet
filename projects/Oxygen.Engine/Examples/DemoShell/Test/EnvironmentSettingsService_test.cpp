@@ -13,6 +13,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -21,6 +22,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -52,7 +54,7 @@ namespace {
         light->get().SetIsSunLight(is_sun_light);
         light->get().Common().affects_world = true;
         light->get().Common().casts_shadows = false;
-        light->get().SetEnvironmentContribution(false);
+        light->get().SetEnvironmentContribution(is_sun_light);
       }
       return node;
     }
@@ -173,31 +175,37 @@ namespace {
       settings->Load();
     }
 
+    static auto PersistPendingSettings(EnvironmentSettingsService& service)
+      -> void
+    {
+      engine::FrameContext frame_context {};
+      service.OnFrameStart(frame_context);
+      const auto settings = SettingsService::ForDemoApp();
+      ASSERT_NE(settings, nullptr);
+      settings->Save();
+      settings->Load();
+    }
+
     EnvironmentSettingsService service_ {};
   };
 
 } // namespace
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedInjectsSyntheticSunWhenSceneHasNoDirectionalLight)
+  OnSceneActivatedLeavesSceneWithoutSunWhenSceneHasNoDirectionalLight)
 {
   auto scene = MakeScene("DemoShell.InjectSyntheticSun");
 
   service_.OnSceneActivated(*scene);
 
   auto sun_lights = CollectSunLights(*scene);
-  ASSERT_EQ(sun_lights.size(), 1U);
-  EXPECT_EQ(sun_lights.front().GetName(), "Synthetic Sun");
-  auto light = sun_lights.front().GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(light.has_value());
-  EXPECT_TRUE(light->get().Common().affects_world);
-  EXPECT_TRUE(light->get().GetEnvironmentContribution());
-  EXPECT_TRUE(service_.GetSunLightAvailable());
-  EXPECT_EQ(service_.GetSunSource(), 1);
+  EXPECT_TRUE(sun_lights.empty());
+  EXPECT_FALSE(service_.GetSunLightAvailable());
+  EXPECT_FALSE(FindNodeByName(*scene, "Synthetic Sun").has_value());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedPromotesFirstDirectionalLightWhenSceneHasNoTaggedSun)
+  OnSceneActivatedLeavesUnresolvedWhenNoDirectionalLightIsTaggedAsSun)
 {
   auto scene = MakeScene("DemoShell.PromoteFirstDirectional");
   auto fill = CreateDirectionalLightNode(*scene, "Fill", false);
@@ -206,18 +214,16 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.OnSceneActivated(*scene);
 
   auto sun_lights = CollectSunLights(*scene);
-  ASSERT_EQ(sun_lights.size(), 1U);
-  EXPECT_EQ(sun_lights.front().GetName(), "Fill");
+  EXPECT_TRUE(sun_lights.empty());
   auto original_light = fill.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(original_light.has_value());
-  EXPECT_TRUE(original_light->get().IsSunLight());
-  EXPECT_TRUE(original_light->get().Common().casts_shadows);
-  EXPECT_TRUE(original_light->get().GetEnvironmentContribution());
-  EXPECT_EQ(service_.GetSunSource(), 0);
+  EXPECT_FALSE(original_light->get().IsSunLight());
+  EXPECT_FALSE(original_light->get().GetEnvironmentContribution());
+  EXPECT_FALSE(service_.GetSunLightAvailable());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedPrefersDirectionalNamedSunOverEarlierDirectional)
+  OnSceneActivatedDoesNotPromoteNamedDirectionalWithoutSunTag)
 {
   auto scene = MakeScene("DemoShell.PreferNamedSun");
   auto fill = CreateDirectionalLightNode(*scene, "Fill", false);
@@ -228,8 +234,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.OnSceneActivated(*scene);
 
   auto sun_lights = CollectSunLights(*scene);
-  ASSERT_EQ(sun_lights.size(), 1U);
-  EXPECT_EQ(sun_lights.front().GetName(), "SUN");
+  EXPECT_TRUE(sun_lights.empty());
 
   auto fill_light = fill.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(fill_light.has_value());
@@ -237,9 +242,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   auto sun_light = named_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(sun_light.has_value());
-  EXPECT_TRUE(sun_light->get().IsSunLight());
-  EXPECT_TRUE(sun_light->get().Common().casts_shadows);
-  EXPECT_TRUE(sun_light->get().GetEnvironmentContribution());
+  EXPECT_FALSE(sun_light->get().IsSunLight());
+  EXPECT_FALSE(sun_light->get().GetEnvironmentContribution());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -255,7 +259,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   ASSERT_EQ(sun_lights.size(), 1U);
   EXPECT_EQ(sun_lights.front().GetName(), "AuthoredSun");
   EXPECT_TRUE(service_.GetSunLightAvailable());
-  EXPECT_EQ(service_.GetSunSource(), 0);
   auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(light.has_value());
   EXPECT_TRUE(light->get().Common().casts_shadows);
@@ -263,7 +266,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedDoesNotWarnWhenInjectingSyntheticSunIntoCameraOnlyScene)
+  OnSceneActivatedDoesNotInjectSyntheticSunIntoCameraOnlyScene)
 {
   auto scene = MakeScene("DemoShell.CameraOnlyFallback");
   auto camera = scene->CreateNode("MainCamera");
@@ -276,16 +279,13 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   service_.OnSceneActivated(*scene);
 
-  EXPECT_FALSE(capture.Contains(
-    "activated non-empty scene 'DemoShell.CameraOnlyFallback' had no "
-    "usable scene directional light"));
   auto sun_lights = CollectSunLights(*scene);
-  ASSERT_EQ(sun_lights.size(), 1U);
-  EXPECT_EQ(sun_lights.front().GetName(), "Synthetic Sun");
+  EXPECT_TRUE(sun_lights.empty());
+  EXPECT_FALSE(FindNodeByName(*scene, "Synthetic Sun").has_value());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedWarnsWhenInjectingSyntheticSunIntoNonEmptyScene)
+  OnSceneActivatedWarnsWhenNoResolvedSceneSunExistsInNonEmptyScene)
 {
   auto scene = MakeScene("DemoShell.NonEmptySceneWithoutSun");
   auto marker = scene->CreateNode("Marker");
@@ -296,13 +296,11 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   service_.OnSceneActivated(*scene);
 
-  EXPECT_TRUE(capture.Contains(
-    "activated non-empty scene 'DemoShell.NonEmptySceneWithoutSun' had no "
-    "usable scene directional light"));
+  EXPECT_TRUE(capture.Contains("no resolved sun directional light"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedDoesNotInjectSyntheticSunWhenSceneHasMultipleTaggedSuns)
+  OnSceneActivatedRejectsSceneWithMultipleTaggedSuns)
 {
   auto scene = MakeScene("DemoShell.InvalidMultiSun");
   ASSERT_TRUE(CreateDirectionalLightNode(*scene, "SunA", true).IsAlive());
@@ -311,47 +309,32 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   oxygen::testing::ScopedLogCapture capture(
     "EnvironmentSettingsService.MultiSun", loguru::Verbosity_ERROR);
 
-  service_.OnSceneActivated(*scene);
-
-  EXPECT_TRUE(capture.Contains("invalid scene lighting configuration in scene "
-                               "'DemoShell.InvalidMultiSun'"));
-  auto sun_lights = CollectSunLights(*scene);
-  EXPECT_EQ(sun_lights.size(), 2U);
+  EXPECT_THROW(service_.OnSceneActivated(*scene),
+    scene::DirectionalLightContractError);
+  EXPECT_TRUE(capture.Contains("more than one directional light"));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  SyntheticOverrideBecomesOnlyShadowCastingSunNode)
+  SceneOnlySunControlsDoNotCreateSyntheticFallback)
 {
   auto scene = MakeScene("DemoShell.SyntheticOverride");
   auto authored_sun = CreateDirectionalLightNode(*scene, "SUN", true);
   ASSERT_TRUE(authored_sun.IsAlive());
 
   service_.OnSceneActivated(*scene);
-  ASSERT_EQ(service_.GetSunSource(), 0);
-
-  service_.SetSunSource(1);
   service_.ApplyPendingChanges();
 
   auto authored_light = authored_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(authored_light.has_value());
-  EXPECT_FALSE(authored_light->get().IsSunLight());
-  EXPECT_FALSE(authored_light->get().Common().affects_world);
-  EXPECT_FALSE(authored_light->get().Common().casts_shadows);
-  EXPECT_FALSE(authored_light->get().GetEnvironmentContribution());
-
-  auto synthetic_node = FindNodeByName(*scene, "Synthetic Sun");
-  ASSERT_TRUE(synthetic_node.has_value());
-  auto synthetic_light = synthetic_node->GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(synthetic_light.has_value());
-  EXPECT_TRUE(synthetic_light->get().IsSunLight());
-  EXPECT_TRUE(synthetic_light->get().Common().affects_world);
-  EXPECT_TRUE(synthetic_light->get().Common().casts_shadows);
-  EXPECT_TRUE(synthetic_light->get().GetEnvironmentContribution());
+  EXPECT_TRUE(authored_light->get().IsSunLight());
+  EXPECT_TRUE(authored_light->get().Common().affects_world);
+  EXPECT_TRUE(authored_light->get().Common().casts_shadows);
+  EXPECT_TRUE(authored_light->get().GetEnvironmentContribution());
 
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
-  EXPECT_EQ(sun_lights.front().GetName(), "Synthetic Sun");
-  EXPECT_EQ(service_.GetSunSource(), 1);
+  EXPECT_EQ(sun_lights.front().GetName(), "SUN");
+  EXPECT_FALSE(FindNodeByName(*scene, "Synthetic Sun").has_value());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -398,7 +381,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   AttachSceneSunSystem(*scene, authored_sun);
 
   service_.OnSceneActivated(*scene);
-  ASSERT_EQ(service_.GetSunSource(), 0);
 
   service_.SetSunShadowBias(0.0125F);
   service_.SetSunShadowNormalBias(0.08F);
@@ -437,46 +419,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  AppliesDirectionalShadowSettingsToSyntheticSunLight)
-{
-  auto scene = MakeScene("DemoShell.SyntheticSunShadowSettings");
-
-  service_.OnSceneActivated(*scene);
-  ASSERT_EQ(service_.GetSunSource(), 1);
-
-  service_.SetSunShadowBias(0.02F);
-  service_.SetSunShadowNormalBias(0.11F);
-  service_.SetSunShadowResolutionHint(
-    static_cast<int>(oxygen::scene::ShadowResolutionHint::kUltra));
-  service_.SetSunShadowCascadeCount(2);
-  service_.SetSunShadowSplitMode(
-    static_cast<int>(oxygen::scene::DirectionalCsmSplitMode::kGenerated));
-  service_.SetSunShadowMaxDistance(420.0F);
-  service_.SetSunShadowDistributionExponent(5.0F);
-  service_.SetSunShadowTransitionFraction(0.22F);
-  service_.SetSunShadowDistanceFadeoutFraction(0.31F);
-  service_.ApplyPendingChanges();
-
-  auto synthetic_node = FindNodeByName(*scene, "Synthetic Sun");
-  ASSERT_TRUE(synthetic_node.has_value());
-  auto light = synthetic_node->GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(light.has_value());
-  const auto& shadow = light->get().Common().shadow;
-  const auto& csm = light->get().CascadedShadows();
-
-  EXPECT_FLOAT_EQ(shadow.bias, 0.02F);
-  EXPECT_FLOAT_EQ(shadow.normal_bias, 0.11F);
-  EXPECT_EQ(
-    shadow.resolution_hint, oxygen::scene::ShadowResolutionHint::kUltra);
-  EXPECT_EQ(csm.cascade_count, 2U);
-  EXPECT_EQ(csm.split_mode, oxygen::scene::DirectionalCsmSplitMode::kGenerated);
-  EXPECT_FLOAT_EQ(csm.max_shadow_distance, 420.0F);
-  EXPECT_FLOAT_EQ(csm.distribution_exponent, 5.0F);
-  EXPECT_FLOAT_EQ(csm.transition_fraction, 0.22F);
-  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.31F);
-}
-
-NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   AppliesAtmosphereLightMetadataToAuthoredSceneSunLight)
 {
   auto scene = MakeScene("DemoShell.SceneSunAtmosphereLightMetadata");
@@ -485,7 +427,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   AttachSceneSunSystem(*scene, authored_sun);
 
   service_.OnSceneActivated(*scene);
-  ASSERT_EQ(service_.GetSunSource(), 0);
 
   service_.SetSunAtmosphereLightSlot(
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
@@ -501,32 +442,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
     glm::vec3(1.2F, 0.9F, 0.8F));
-}
-
-NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  AppliesAtmosphereLightMetadataToSyntheticSunLight)
-{
-  auto scene = MakeScene("DemoShell.SyntheticSunAtmosphereLightMetadata");
-
-  service_.OnSceneActivated(*scene);
-  ASSERT_EQ(service_.GetSunSource(), 1);
-
-  service_.SetSunAtmosphereLightSlot(
-    static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
-  service_.SetSunUsePerPixelAtmosphereTransmittance(true);
-  service_.SetSunAtmosphereDiskLuminanceScale({ 0.6F, 0.7F, 0.8F });
-  service_.ApplyPendingChanges();
-
-  auto synthetic_node = FindNodeByName(*scene, "Synthetic Sun");
-  ASSERT_TRUE(synthetic_node.has_value());
-  auto light = synthetic_node->GetLightAs<scene::DirectionalLight>();
-  ASSERT_TRUE(light.has_value());
-  EXPECT_EQ(
-    light->get().GetAtmosphereLightSlot(),
-    oxygen::scene::AtmosphereLightSlot::kSecondary);
-  EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
-  EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
-    glm::vec3(0.6F, 0.7F, 0.8F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -592,6 +507,55 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(service_.GetSunAtmosphereDiskLuminanceScale(),
     glm::vec3(1.4F, 1.1F, 0.7F));
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SaveSettings_DoesNotPersistLegacySunSourceKey)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SaveSettingsWithoutLegacySunSource");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+  service_.ActivateCustomMode();
+  service_.SetSunAzimuthDeg(35.0F);
+  service_.SetSunElevationDeg(12.0F);
+
+  PersistPendingSettings(service_);
+
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+  EXPECT_FALSE(settings->GetFloat("env.sun.source").has_value());
+  EXPECT_EQ(
+    settings->GetFloat("env.settings.schema_version").value_or(0.0F), 5.0F);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  LoadSettings_RemovesLegacySunSourceKeyDuringMigration)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.settings.schema_version", 4.0F);
+  settings->SetFloat("env.sun.source", 1.0F);
+  settings->SetFloat("env.sun.azimuth_deg", 80.0F);
+  settings->SetFloat("env.sun.elevation_deg", 10.0F);
+  settings->Save();
+  settings->Load();
+
+  auto scene = MakeScene("DemoShell.RemoveLegacySunSource");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  PersistPendingSettings(service_);
+
+  EXPECT_FALSE(settings->GetFloat("env.sun.source").has_value());
+  EXPECT_FLOAT_EQ(service_.GetSunAzimuthDeg(), 80.0F);
+  EXPECT_FLOAT_EQ(service_.GetSunElevationDeg(), 10.0F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

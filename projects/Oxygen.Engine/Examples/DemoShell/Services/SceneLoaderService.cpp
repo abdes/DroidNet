@@ -59,6 +59,7 @@
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -2441,6 +2442,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   ApplyHierarchy(scene, asset);
   AttachRenderables(asset);
   AttachLights(asset);
+  scene.GetDirectionalLightResolver().Validate();
   AttachLocalFogVolumes(asset);
   AttachScripting(asset);
   SelectActiveCamera(asset);

@@ -429,9 +429,6 @@ public:
   [[nodiscard]] virtual auto GetSunEnabled() const -> bool;
   virtual auto SetSunEnabled(bool enabled) -> void;
 
-  [[nodiscard]] virtual auto GetSunSource() const -> int;
-  virtual auto SetSunSource(int source) -> void;
-
   [[nodiscard]] virtual auto GetSunAzimuthDeg() const -> float;
   virtual auto SetSunAzimuthDeg(float value) -> void;
 
@@ -496,8 +493,6 @@ public:
 
   [[nodiscard]] virtual auto GetSunLightAvailable() const -> bool;
   virtual auto UpdateSunLightCandidate() -> void;
-
-  virtual auto EnableSyntheticSun() -> void;
 
   // Renderer debug flags
   [[nodiscard]] virtual auto GetUseLut() const -> bool;
@@ -571,43 +566,6 @@ private:
     return (mask & ToMask(domain)) != 0U;
   }
 
-  struct SunUiSettings {
-    bool enabled { true };
-    float azimuth_deg { scene::environment::Sun::kDefaultAzimuthDeg };
-    float elevation_deg { scene::environment::Sun::kDefaultElevationDeg };
-    glm::vec3 color_rgb { 1.0F, 1.0F, 1.0F };
-    float illuminance_lx { scene::environment::Sun::kDefaultIlluminanceLx };
-    bool use_temperature { false };
-    float temperature_kelvin { 6500.0F };
-    float disk_radius_deg {
-      scene::environment::Sun::kDefaultDiskAngularRadiusRad * math::RadToDeg
-    };
-    int atmosphere_light_slot { static_cast<int>(
-      scene::AtmosphereLightSlot::kPrimary) };
-    bool use_per_pixel_atmosphere_transmittance { false };
-    glm::vec3 atmosphere_disk_luminance_scale { 1.0F, 1.0F, 1.0F };
-    float shadow_bias { scene::kDefaultShadowBias };
-    float shadow_normal_bias { scene::kDefaultShadowNormalBias };
-    int shadow_resolution_hint { static_cast<int>(
-      scene::ShadowResolutionHint::kMedium) };
-    int shadow_cascade_count { static_cast<int>(scene::kMaxShadowCascades) };
-    int shadow_split_mode { static_cast<int>(
-      scene::DirectionalCsmSplitMode::kGenerated) };
-    float shadow_max_distance { scene::kDefaultDirectionalMaxShadowDistance };
-    std::array<float, scene::kMaxShadowCascades> shadow_cascade_distances {
-      scene::kDefaultDirectionalCascadeDistances
-    };
-    float shadow_distribution_exponent {
-      scene::kDefaultDirectionalDistributionExponent
-    };
-    float shadow_transition_fraction {
-      scene::kDefaultDirectionalTransitionFraction
-    };
-    float shadow_distance_fadeout_fraction {
-      scene::kDefaultDirectionalDistanceFadeoutFraction
-    };
-  };
-
   auto SyncFromScene() -> void;
   auto LoadSettings() -> void;
   auto SaveSettings() const -> void;
@@ -620,19 +578,13 @@ private:
   auto GetSelectedLocalFogVolumeMutable() -> LocalFogVolumeUiState*;
   [[nodiscard]] auto GetSelectedLocalFogVolume() const
     -> const LocalFogVolumeUiState*;
-  auto ApplySavedSunSourcePreference() -> void;
   auto ResetSunUiToDefaults() -> void;
   auto EnsureSceneHasSunAtActivation() -> void;
   auto FindSunLightCandidate() const -> std::optional<scene::SceneNode>;
-  auto EnsureSyntheticSunLight() -> void;
-  auto DestroySyntheticSunLight() -> void;
   auto CaptureSunShadowSettingsFromLight(const scene::DirectionalLight& light)
     -> void;
   auto ApplySunShadowSettingsToLight(scene::DirectionalLight& light) const
     -> void;
-  auto GetSunSettingsForSource(int source) -> SunUiSettings&;
-  auto LoadSunSettingsFromProfile(int source) -> void;
-  auto SaveSunSettingsToProfile(int source) -> void;
   [[nodiscard]] auto CaptureAtmosphereCanonicalState() const
     -> AtmosphereCanonicalState;
   [[nodiscard]] auto CaptureSceneAtmosphereCanonicalState() const
@@ -661,9 +613,6 @@ private:
   std::uint64_t settings_revision_ { 0 };
   std::uint64_t last_persisted_settings_revision_ { 0 };
   std::optional<ViewId> main_view_id_ {};
-
-  bool apply_saved_sun_on_next_sync_ { false };
-  std::optional<int> saved_sun_source_ {};
 
   // SkyAtmosphere
   bool sky_atmo_enabled_ { false };
@@ -790,7 +739,6 @@ private:
   // Sun component
   bool sun_present_ { false };
   bool sun_enabled_ { true };
-  int sun_source_ { 0 };
   float sun_azimuth_deg_ { scene::environment::Sun::kDefaultAzimuthDeg };
   float sun_elevation_deg_ { scene::environment::Sun::kDefaultElevationDeg };
   glm::vec3 sun_color_rgb_ { 1.0F, 1.0F, 1.0F };
@@ -828,11 +776,6 @@ private:
   };
   scene::SceneNode sun_light_node_;
   bool sun_light_available_ { false };
-  scene::SceneNode synthetic_sun_light_node_;
-  bool synthetic_sun_light_created_ { false };
-
-  SunUiSettings sun_scene_settings_ {};
-  SunUiSettings sun_synthetic_settings_ {};
 
   // Atmosphere debug flags
   bool use_lut_ { true };

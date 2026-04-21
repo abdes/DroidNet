@@ -626,11 +626,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (!environment_vm_->GetSunPresent()) {
     ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
       "No Sun component found in the scene environment.");
-    ImGui::TextDisabled(
-      "From Scene is selected; no sun settings are available.");
-    if (ImGui::Button("Add Synthetic Sun")) {
-      environment_vm_->EnableSyntheticSun();
-    }
+    ImGui::TextDisabled("Sun controls require a scene environment Sun system.");
     ImGui::Unindent();
     return;
   }
@@ -640,30 +636,15 @@ void EnvironmentDebugPanel::DrawSunSection()
     environment_vm_->SetSunEnabled(sun_enabled);
   }
 
-  constexpr const char* kSourceLabels[] = { "From Scene", "Synthetic" };
-  int sun_source = environment_vm_->GetSunSource();
-  ImGui::SetNextItemWidth(180.0F);
-  if (ImGui::Combo(
-        "Source", &sun_source, kSourceLabels, IM_ARRAYSIZE(kSourceLabels))) {
-    environment_vm_->SetSunSource(sun_source);
+  environment_vm_->UpdateSunLightCandidate();
+  if (!environment_vm_->GetSunLightAvailable()) {
+    ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F),
+      "No resolved scene sun is currently available.");
   }
+  ImGui::TextDisabled(
+    "Uses the resolved primary scene sun from authored directional lights.");
 
-  const bool sun_from_scene = sun_source == 0;
-  if (sun_from_scene) {
-    environment_vm_->UpdateSunLightCandidate();
-    if (!environment_vm_->GetSunLightAvailable()) {
-      ImGui::TextColored(ImVec4(1.0F, 0.5F, 0.0F, 1.0F),
-        "No DirectionalLight found to use as the sun.");
-    }
-  }
-
-  if (sun_source == 0) {
-    ImGui::TextDisabled("Uses the first DirectionalLight flagged as sun "
-                        "(or first available).");
-  }
-
-  const bool disable_sun_controls
-    = sun_from_scene && !environment_vm_->GetSunLightAvailable();
+  const bool disable_sun_controls = !environment_vm_->GetSunLightAvailable();
   ImGui::BeginDisabled(disable_sun_controls);
 
   ImGui::Separator();

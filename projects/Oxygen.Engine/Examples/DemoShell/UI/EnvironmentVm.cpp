@@ -26,7 +26,6 @@ namespace {
   struct EnvironmentPresetData {
     std::string_view name;
     bool sun_enabled;
-    int sun_source;
     float sun_azimuth_deg;
     float sun_elevation_deg;
     float sun_illuminance_lx;
@@ -79,7 +78,6 @@ namespace {
     EnvironmentPresetData {
       .name = "Outdoor Sunny",
       .sun_enabled = true,
-      .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 55.0F,
       .sun_illuminance_lx = 120000.0F,
@@ -127,7 +125,6 @@ namespace {
     EnvironmentPresetData {
       .name = "Outdoor Cloudy",
       .sun_enabled = true,
-      .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 30.0F,
       .sun_illuminance_lx = 15000.0F,
@@ -175,7 +172,6 @@ namespace {
     EnvironmentPresetData {
       .name = "Foggy Daylight",
       .sun_enabled = true,
-      .sun_source = 1,
       .sun_azimuth_deg = 135.0F,
       .sun_elevation_deg = 45.0F,
       .sun_illuminance_lx = 60000.0F,
@@ -223,7 +219,6 @@ namespace {
     EnvironmentPresetData {
       .name = "Outdoor Dawn",
       .sun_enabled = true,
-      .sun_source = 1,
       .sun_azimuth_deg = 95.0F,
       .sun_elevation_deg = 6.0F,
       .sun_illuminance_lx = 3000.0F,
@@ -271,7 +266,6 @@ namespace {
     EnvironmentPresetData {
       .name = "Outdoor Dusk",
       .sun_enabled = true,
-      .sun_source = 1,
       .sun_azimuth_deg = 265.0F,
       .sun_elevation_deg = 4.0F,
       .sun_illuminance_lx = 1500.0F,
@@ -443,11 +437,6 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
 
   // 2. Configure systems
   // Sun
-  if (preset.sun_enabled && preset.sun_source == 1) {
-    EnableSyntheticSun();
-  }
-  // Set source first to load profiles if needed
-  SetSunSource(preset.sun_source);
   SetSunAzimuthDeg(preset.sun_azimuth_deg);
   SetSunElevationDeg(preset.sun_elevation_deg);
   SetSunIlluminanceLx(preset.sun_illuminance_lx);
@@ -1656,17 +1645,6 @@ auto EnvironmentVm::SetSunEnabled(bool enabled) -> void
   service_->SetSunEnabled(enabled);
 }
 
-auto EnvironmentVm::GetSunSource() const -> int
-{
-  return service_->GetSunSource();
-}
-
-auto EnvironmentVm::SetSunSource(int source) -> void
-{
-  PrepareForManualOverride();
-  service_->SetSunSource(source);
-}
-
 auto EnvironmentVm::GetSunAzimuthDeg() const -> float
 {
   return service_->GetSunAzimuthDeg();
@@ -1877,12 +1855,6 @@ auto EnvironmentVm::GetSunLightAvailable() const -> bool
 auto EnvironmentVm::UpdateSunLightCandidate() -> void
 {
   service_->UpdateSunLightCandidate();
-}
-
-auto EnvironmentVm::EnableSyntheticSun() -> void
-{
-  PrepareForManualOverride();
-  service_->EnableSyntheticSun();
 }
 
 auto EnvironmentVm::GetUseLut() const -> bool { return service_->GetUseLut(); }

@@ -73,6 +73,9 @@ public:
   //! Sets a boolean stored under the given key.
   auto SetBool(std::string_view key, bool value) -> void;
 
+  //! Removes a stored key if it exists.
+  auto Remove(std::string_view key) -> bool;
+
   //! Gets the storage path.
   [[nodiscard]] auto GetStoragePath() const noexcept
     -> const std::filesystem::path&
