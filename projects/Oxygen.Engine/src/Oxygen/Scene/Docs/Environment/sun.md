@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the sun as a first-class environment system with clear ownership, authored parameters, and renderer-driven integration. The sun must remain compatible with scenes that only provide directional lights, while enabling explicit artistic control and consistent atmospheric rendering.
+Define the sun as a first-class environment system with clear ownership, authored parameters, and renderer-driven integration. The effective runtime sun now comes only from authored scene directional lights resolved by the scene-owned `DirectionalLightResolver`; there is no synthetic runtime sun fallback.
 
 ## Scope
 
@@ -28,14 +28,19 @@ Define the sun as a first-class environment system with clear ownership, authore
 These define the physical/artist-intended sun. They are the authoritative values that other systems can only modulate via multipliers.
 
 - **Sun Source**
-  - `mode`: Synthetic | FromScene (default)
+  - `mode`: FromScene
   - `light_reference`: Optional reference to a scene directional light node
-  - **DirectionalLight selection rule** (when `light_reference` is not set and
-    `mode == FromScene`):
-    pick the first enabled `DirectionalLight` with `IsSunLight()==true`; if
-    none, fall back to the first enabled directional light in the scene. See
-    [src/Oxygen/Scene/Light/DirectionalLight.h](src/Oxygen/Scene/Light/DirectionalLight.h)
-    for `DirectionalLight::SetIsSunLight()` and `DirectionalLight::IsSunLight()`.
+  - **DirectionalLight selection rule**:
+    - if `light_reference` is set, it must identify a valid scene
+      `DirectionalLight`
+    - otherwise the scene-owned `DirectionalLightResolver` resolves:
+      - primary sun = unique directional light with
+        `is_sun_light == true && environment_contribution == true`
+      - fallback primary sun = first `environment_contribution == true`
+        directional light
+      - optional secondary sun/moon = second
+        `environment_contribution == true` directional light
+    - if no directional light resolves, there is no sun
 - **Direction**
   - `direction_ws`: Normalized world-space direction toward the sun (Z‑up)
   - `azimuth_deg`, `elevation_deg`: UI‑friendly representation
@@ -49,10 +54,7 @@ These define the physical/artist-intended sun. They are the authoritative values
 - **Enabled**
   - `enabled`: On/off for all sun contributions
 - **Shadowing Policy**
-  - If `light_reference` is set, shadowing comes from
-    `DirectionalLight::Common().casts_shadows` in
-    [src/Oxygen/Scene/Light/LightCommon.h](src/Oxygen/Scene/Light/LightCommon.h).
-  - If the sun is synthesized, use the Sun’s own `casts_shadows` flag.
+  - Shadowing comes from the resolved scene `DirectionalLight` only.
 - **Light Temperature**
   - `temperature_kelvin` (optional). If set, convert to **linear RGB** and use
     it as `color_rgb`. If not set, use authored `color_rgb`.
@@ -106,29 +108,17 @@ authoring contract below. This is the authoritative order and must be
 consistent across tools and runtime.
 
 1. **If a `Sun` component exists and is enabled:**
-   - **Synthetic mode**: use authored `direction_ws` (or
-     `azimuth_deg`/`elevation_deg`) and the authored intrinsic values
-     `color_rgb`, `intensity`, `disk_angular_radius_rad`, `casts_shadows`, and
-     optional `temperature_kelvin`.
-   - **FromScene mode**:
-     - If `light_reference` is set, use that `DirectionalLight`.
-     - If `light_reference` is not set, select the first enabled
-       `DirectionalLight` where `IsSunLight()==true`, then fall back to the
-       first enabled `DirectionalLight`.
-     - Reference: [src/Oxygen/Scene/Light/DirectionalLight.h](src/Oxygen/Scene/Light/DirectionalLight.h).
-   - **Contract**: `direction_ws` and `azimuth_deg`/`elevation_deg` stay
-     consistent.
+   - If `light_reference` is set, use that `DirectionalLight`.
+   - If `light_reference` is not set, use `DirectionalLightResolver`:
+     - primary sun = unique tagged primary sun if present
+     - otherwise first environment-contributing directional light
+   - If no directional light resolves, there is no sun.
 
 2. **If no `Sun` component exists:**
-   - Use the same directional light selection rule as above.
-   - If no directional light exists, use the engine default sun constants.
+   - Use the same `DirectionalLightResolver` rule.
+   - If no directional light resolves, there is no sun.
 
-3. **Shadowing rule:**
-   - If `light_reference` is used, shadowing comes from
-     `DirectionalLight::Common().casts_shadows`.
-   - If synthesized, use the Sun’s `casts_shadows` value.
-
-4. **Temperature rule:**
+3. **Temperature rule:**
    - If `temperature_kelvin` is set, it defines `color_rgb`.
    - Otherwise, use authored `color_rgb` or the referenced light’s color.
 

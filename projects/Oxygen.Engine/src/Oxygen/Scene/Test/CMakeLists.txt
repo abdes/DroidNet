@@ -64,6 +64,12 @@ m_gtest_program(
 )
 
 m_gtest_program(
+  DirectionalLightResolver
+  SOURCES
+    "DirectionalLightResolver_test.cpp"
+)
+
+m_gtest_program(
   PathParser
   SOURCES
     "PathMatcher/Fixtures/PathParserTest.h"

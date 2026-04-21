@@ -16,30 +16,13 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/SceneTraversal.h>
 
 namespace oxygen::vortex::environment::internal {
 
 namespace {
-
-  struct AtmosphereLightCandidate {
-    scene::NodeHandle node_handle {};
-    std::string node_name {};
-    environment::AtmosphereLightModel model {};
-    scene::AtmosphereLightSlot authored_slot { scene::AtmosphereLightSlot::kNone };
-    bool is_sun_light { false };
-    std::uint32_t cascade_count { 0U };
-  };
-
-  struct ConflictRecord {
-    std::uint32_t slot_index { environment::kInvalidAtmosphereLightSlot };
-    std::string winner_name {};
-    std::string ignored_name {};
-  };
 
   auto HashCombineU64(std::uint64_t seed, const std::uint64_t value)
     -> std::uint64_t
@@ -53,97 +36,28 @@ namespace {
     return std::bit_cast<std::uint32_t>(value);
   }
 
-  auto ResolveWorldRotation(
-    const scene::Scene& scene_ref, const scene::SceneNodeImpl& node) -> glm::quat
+  auto AssignLightToSlot(const scene::ResolvedDirectionalLightView& resolved,
+    const std::uint32_t slot_index,
+    ResolvedAtmosphereLightState& state) -> void
   {
-    const auto& transform
-      = node.GetComponent<scene::detail::TransformComponent>();
-    const auto ignore_parent = node.GetFlags().GetEffectiveValue(
-      scene::SceneNodeFlags::kIgnoreParentTransform);
-    auto rotation = transform.GetLocalRotation();
-    if (const auto parent = node.AsGraphNode().GetParent();
-      parent.IsValid() && !ignore_parent) {
-      rotation
-        = ResolveWorldRotation(scene_ref, scene_ref.GetNodeImplRef(parent))
-        * rotation;
-    }
-    return rotation;
-  }
-
-  auto ComputeDirectionToLightWs(
-    const scene::Scene& scene_ref, const scene::SceneNodeImpl& node) -> glm::vec3
-  {
-    const auto light_direction
-      = ResolveWorldRotation(scene_ref, node) * space::move::Forward;
-    const auto length_sq = glm::dot(light_direction, light_direction);
-    if (length_sq <= math::EpsilonDirection) {
-      return { 0.0F, 0.0F, 1.0F };
-    }
-    // DirectionalLight node forward is the emitted-ray direction (from the
-    // light toward the scene). Runtime lighting/environment contracts publish
-    // the opposite vector: from the shaded point toward the light source.
-    return -glm::normalize(light_direction);
-  }
-
-  auto BuildAtmosphereLightCandidate(const scene::Scene& scene_ref,
-    const scene::ConstVisitedNode& visited) -> std::optional<AtmosphereLightCandidate>
-  {
-    const auto& node = *visited.node_impl;
-    if (!node.HasComponent<scene::detail::TransformComponent>()
-      || !node.HasComponent<scene::DirectionalLight>()) {
-      return std::nullopt;
-    }
-
-    const auto& light = node.GetComponent<scene::DirectionalLight>();
-    if (!light.Common().affects_world || !light.GetEnvironmentContribution()) {
-      return std::nullopt;
-    }
-
     auto model = environment::AtmosphereLightModel {};
     model.enabled = true;
     model.use_per_pixel_transmittance
-      = light.GetUsePerPixelAtmosphereTransmittance();
-    model.direction_to_light_ws = ComputeDirectionToLightWs(scene_ref, node);
-    model.angular_size_radians = light.GetAngularSizeRadians();
+      = resolved.Light().GetUsePerPixelAtmosphereTransmittance();
+    model.direction_to_light_ws = resolved.DirectionToLightWs();
+    model.angular_size_radians = resolved.Light().GetAngularSizeRadians();
     model.illuminance_rgb_lux
-      = light.Common().color_rgb * light.GetIntensityLux();
-    model.illuminance_lux = light.GetIntensityLux();
-    model.disk_luminance_scale_rgb = light.GetAtmosphereDiskLuminanceScale();
-
-    return AtmosphereLightCandidate {
-      .node_handle = visited.handle,
-      .node_name = std::string(node.GetName()),
-      .model = model,
-      .authored_slot = light.GetAtmosphereLightSlot(),
-      .is_sun_light = light.IsSunLight(),
-      .cascade_count = light.CascadedShadows().cascade_count,
-    };
-  }
-
-  auto AssignLightToSlot(const AtmosphereLightCandidate& candidate,
-    const std::uint32_t slot_index, const bool explicit_claim,
-    ResolvedAtmosphereLightState& state) -> void
-  {
-    auto model = candidate.model;
+      = resolved.Light().Common().color_rgb
+      * resolved.Light().GetIntensityLux();
+    model.illuminance_lux = resolved.Light().GetIntensityLux();
+    model.disk_luminance_scale_rgb
+      = resolved.Light().GetAtmosphereDiskLuminanceScale();
     model.slot_index = slot_index;
     state.atmosphere_lights[slot_index] = model;
-    state.source_nodes[slot_index] = candidate.node_handle;
-    state.source_cascade_counts[slot_index] = candidate.cascade_count;
-    state.explicit_slot_claims[slot_index] = explicit_claim;
-  }
-
-  [[nodiscard]] auto IsCandidateAssigned(
-    const AtmosphereLightCandidate& candidate,
-    const ResolvedAtmosphereLightState& state) -> bool
-  {
-    for (const auto& node_handle : state.source_nodes) {
-      if (node_handle.IsValid()
-        && node_handle.Index() == candidate.node_handle.Index()
-        && node_handle.GetSceneId() == candidate.node_handle.GetSceneId()) {
-        return true;
-      }
-    }
-    return false;
+    state.source_nodes[slot_index] = resolved.NodeHandle();
+    state.source_cascade_counts[slot_index]
+      = resolved.Light().CascadedShadows().cascade_count;
+    state.explicit_slot_claims[slot_index] = true;
   }
 
   auto HashResolvedState(
@@ -186,94 +100,21 @@ namespace {
 
     return seed;
   }
-
-  auto ResolveWinnerName(const scene::NodeHandle handle,
-    const std::vector<AtmosphereLightCandidate>& candidates) -> std::string
-  {
-    if (!handle.IsValid()) {
-      return {};
-    }
-
-    for (const auto& candidate : candidates) {
-      if (candidate.node_handle.Index() == handle.Index()
-        && candidate.node_handle.GetSceneId() == handle.GetSceneId()) {
-        return candidate.node_name;
-      }
-    }
-    return {};
-  }
-
 } // namespace
 
 auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
 {
-  auto candidates = std::vector<AtmosphereLightCandidate> {};
-  const auto visitor = [&scene_ref, &candidates](const scene::ConstVisitedNode& visited,
-                         const bool dry_run) -> scene::VisitResult {
-    static_cast<void>(dry_run);
-    if (const auto candidate
-      = BuildAtmosphereLightCandidate(scene_ref, visited);
-      candidate.has_value()) {
-      candidates.push_back(*candidate);
-    }
-    return scene::VisitResult::kContinue;
-  };
-
-  static_cast<void>(scene_ref.Traverse().Traverse(
-    visitor, scene::TraversalOrder::kPreOrder));
-
+  const auto& resolver = scene_ref.GetDirectionalLightResolver();
+  resolver.Validate();
   auto next = ResolvedAtmosphereLightState {};
-  auto conflicts = std::vector<ConflictRecord> {};
 
-  for (const auto& candidate : candidates) {
-    std::uint32_t slot_index = environment::kInvalidAtmosphereLightSlot;
-    switch (candidate.authored_slot) {
-    case scene::AtmosphereLightSlot::kPrimary:
-      slot_index = 0U;
-      break;
-    case scene::AtmosphereLightSlot::kSecondary:
-      slot_index = 1U;
-      break;
-    case scene::AtmosphereLightSlot::kNone:
-      break;
-    }
-
-    if (slot_index == environment::kInvalidAtmosphereLightSlot) {
-      continue;
-    }
-
-    if (!next.atmosphere_lights[slot_index].enabled) {
-      AssignLightToSlot(candidate, slot_index, true, next);
-      continue;
-    }
-
-    next.conflict_count += 1U;
-    if (next.first_conflict_slot == environment::kInvalidAtmosphereLightSlot) {
-      next.first_conflict_slot = slot_index;
-    }
-    conflicts.push_back(ConflictRecord {
-      .slot_index = slot_index,
-      .winner_name = ResolveWinnerName(next.source_nodes[slot_index], candidates),
-      .ignored_name = candidate.node_name,
-    });
+  if (const auto primary = resolver.ResolvePrimarySun();
+    primary.has_value()) {
+    AssignLightToSlot(*primary, 0U, next);
   }
-
-  if (!next.atmosphere_lights[0].enabled) {
-    for (const auto& candidate : candidates) {
-      if (candidate.is_sun_light && !IsCandidateAssigned(candidate, next)) {
-        AssignLightToSlot(candidate, 0U, false, next);
-        break;
-      }
-    }
-  }
-
-  if (!next.atmosphere_lights[0].enabled) {
-    for (const auto& candidate : candidates) {
-      if (!IsCandidateAssigned(candidate, next)) {
-        AssignLightToSlot(candidate, 0U, false, next);
-        break;
-      }
-    }
+  if (const auto secondary = resolver.ResolveSecondarySun();
+    secondary.has_value()) {
+    AssignLightToSlot(*secondary, 1U, next);
   }
 
   next.active_light_count = 0U;
@@ -289,18 +130,14 @@ auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
     return false;
   }
 
-  for (const auto& conflict : conflicts) {
-    LOG_F(ERROR,
-      "Atmosphere-light slot {} conflict detected; first-wins keeps '{}' and "
-      "ignores '{}'",
-      conflict.slot_index, conflict.winner_name, conflict.ignored_name);
-  }
-
   next.revision = state_.revision + 1U;
   state_ = next;
   return true;
 }
 
-auto AtmosphereLightState::Reset() -> void { state_ = ResolvedAtmosphereLightState {}; }
+auto AtmosphereLightState::Reset() -> void
+{
+  state_ = ResolvedAtmosphereLightState {};
+}
 
 } // namespace oxygen::vortex::environment::internal

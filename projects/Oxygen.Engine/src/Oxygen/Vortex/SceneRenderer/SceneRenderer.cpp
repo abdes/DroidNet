@@ -34,6 +34,7 @@
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -360,54 +361,29 @@ namespace {
     return glm::normalize(direction);
   }
 
-  struct DirectionalLightCandidate {
-    glm::vec3 direction { space::move::Forward };
-    float source_radius { 0.0F };
-    glm::vec3 color { 1.0F, 1.0F, 1.0F };
-    float illuminance_lux { 0.0F };
-    float specular_scale { 1.0F };
-    float diffuse_scale { 1.0F };
-    std::uint32_t shadow_flags { 0U };
-    std::uint32_t light_function_atlas_index { 0xFFFFFFFFU };
-    std::uint32_t cascade_count { 0U };
-    bool environment_contribution { false };
-    bool is_sun_light { false };
-  };
-
-  auto ChooseDirectionalLightCandidate(
-    const std::vector<DirectionalLightCandidate>& candidates)
-    -> std::optional<DirectionalLightCandidate>
-  {
-    if (candidates.empty()) {
-      return std::nullopt;
-    }
-
-    if (const auto it = std::ranges::find_if(candidates,
-          [](const DirectionalLightCandidate& candidate) {
-            return candidate.environment_contribution && candidate.is_sun_light;
-          });
-      it != candidates.end()) {
-      return *it;
-    }
-
-    if (const auto it = std::ranges::find_if(candidates,
-          [](const DirectionalLightCandidate& candidate) {
-            return candidate.environment_contribution;
-          });
-      it != candidates.end()) {
-      return *it;
-    }
-
-    return candidates.front();
-  }
-
   auto BuildFrameLightSelection(const scene::Scene& scene_ref,
+    const scene::DirectionalLightResolver& resolver,
     const std::uint64_t selection_epoch) -> FrameLightSelection
   {
     auto selection = FrameLightSelection { .selection_epoch = selection_epoch };
-    auto directional_candidates = std::vector<DirectionalLightCandidate> {};
+    const auto directional_lights = resolver.ResolveDirectionalLights();
+    if (!directional_lights.empty()) {
+      const auto& primary = directional_lights.front();
+      selection.directional_light = FrameDirectionalLightSelection {
+        .direction = primary.DirectionToLightWs(),
+        .source_radius = primary.Light().GetAngularSizeRadians(),
+        .color = primary.Light().Common().color_rgb,
+        .illuminance_lux = primary.Light().GetIntensityLux(),
+        .specular_scale = 1.0F,
+        .diffuse_scale = 1.0F,
+        .shadow_flags = 0U,
+        .light_function_atlas_index = 0xFFFFFFFFU,
+        .cascade_count = primary.Light().CascadedShadows().cascade_count,
+      };
+    }
+
     const auto visitor
-      = [&selection, &scene_ref, &directional_candidates](
+      = [&selection, &scene_ref](
           const scene::ConstVisitedNode& visited,
           const bool dry_run) -> scene::VisitResult {
       static_cast<void>(dry_run);
@@ -418,24 +394,6 @@ namespace {
       }
 
       if (node.HasComponent<scene::DirectionalLight>()) {
-        const auto& light = node.GetComponent<scene::DirectionalLight>();
-        if (!light.Common().affects_world) {
-          return scene::VisitResult::kContinue;
-        }
-
-        directional_candidates.push_back(DirectionalLightCandidate {
-          .direction = -ComputeDirectionWs(scene_ref, node),
-          .source_radius = light.GetAngularSizeRadians(),
-          .color = light.Common().color_rgb,
-          .illuminance_lux = light.GetIntensityLux(),
-          .specular_scale = 1.0F,
-          .diffuse_scale = 1.0F,
-          .shadow_flags = 0U,
-          .light_function_atlas_index = 0xFFFFFFFFU,
-          .cascade_count = light.CascadedShadows().cascade_count,
-          .environment_contribution = light.GetEnvironmentContribution(),
-          .is_sun_light = light.IsSunLight(),
-        });
         return scene::VisitResult::kContinue;
       }
 
@@ -486,22 +444,6 @@ namespace {
     [[maybe_unused]] const auto traversal_result
       = scene_ref.Traverse().Traverse(
         visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
-
-    if (const auto chosen
-      = ChooseDirectionalLightCandidate(directional_candidates);
-      chosen.has_value()) {
-      selection.directional_light = FrameDirectionalLightSelection {
-        .direction = chosen->direction,
-        .source_radius = chosen->source_radius,
-        .color = chosen->color,
-        .illuminance_lux = chosen->illuminance_lux,
-        .specular_scale = chosen->specular_scale,
-        .diffuse_scale = chosen->diffuse_scale,
-        .shadow_flags = chosen->shadow_flags,
-        .light_function_atlas_index = chosen->light_function_atlas_index,
-        .cascade_count = chosen->cascade_count,
-      };
-    }
     return selection;
   }
 
@@ -1274,14 +1216,15 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     PrimePreparedView(ctx);
   }
 
-  if (lighting_ != nullptr
+    if (lighting_ != nullptr
     && lighting_grid_built_sequence_ != ctx.frame_sequence) {
     if (auto* scene_mutable = ctx.GetSceneMutable().get();
       scene_mutable != nullptr) {
       scene_mutable->Update(false);
-      const auto* scene_ptr = static_cast<const scene::Scene*>(scene_mutable);
-      frame_light_selection_
-        = BuildFrameLightSelection(*scene_ptr, ctx.frame_sequence.get());
+      auto& resolver = scene_mutable->GetDirectionalLightResolver();
+      resolver.Validate();
+      frame_light_selection_ = BuildFrameLightSelection(
+        *scene_mutable, resolver, ctx.frame_sequence.get());
     } else {
       frame_light_selection_ = FrameLightSelection {
         .selection_epoch = ctx.frame_sequence.get(),

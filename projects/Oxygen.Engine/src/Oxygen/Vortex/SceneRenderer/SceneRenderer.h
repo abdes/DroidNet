@@ -16,6 +16,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>

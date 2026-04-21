@@ -289,8 +289,6 @@ public:
   [[nodiscard]] auto GetSunPresent() const -> bool;
   [[nodiscard]] auto GetSunEnabled() const -> bool;
   auto SetSunEnabled(bool enabled) -> void;
-  [[nodiscard]] auto GetSunSource() const -> int;
-  auto SetSunSource(int source) -> void;
   [[nodiscard]] auto GetSunAzimuthDeg() const -> float;
   auto SetSunAzimuthDeg(float value) -> void;
   [[nodiscard]] auto GetSunElevationDeg() const -> float;
@@ -333,7 +331,6 @@ public:
   auto SetSunShadowCascadeDistance(int index, float value) -> void;
   [[nodiscard]] auto GetSunLightAvailable() const -> bool;
   auto UpdateSunLightCandidate() -> void;
-  auto EnableSyntheticSun() -> void;
 
   // Renderer debug flags
   [[nodiscard]] auto GetUseLut() const -> bool;

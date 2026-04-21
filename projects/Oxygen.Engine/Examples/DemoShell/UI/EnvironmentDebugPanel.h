@@ -78,7 +78,7 @@ private:
   observer_ptr<EnvironmentVm> environment_vm_ { nullptr };
   bool initialized_ { false };
 
-  // Skybox load UI (disk -> synthetic cubemap)
+  // Skybox load UI (disk -> cooked runtime cubemap)
   std::array<char, 260> skybox_path_ {};
   bool skybox_auto_load_pending_ { false };
   std::string last_auto_load_path_ {};
