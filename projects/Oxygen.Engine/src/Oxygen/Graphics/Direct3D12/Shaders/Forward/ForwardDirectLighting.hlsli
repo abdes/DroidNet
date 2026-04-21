@@ -127,7 +127,7 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
         return terms;
     }
 
-    const float3 light_dir_ws = -dl.direction_ws;
+    const float3 light_dir_ws = dl.direction_ws;
     const float3 L = SafeNormalize(light_dir_ws);
     if (dot(L, L) < 0.5) {
         return terms;
@@ -206,7 +206,7 @@ static inline float3 EvaluateDirectionalLightContributionRawLambert(
         return 0.0.xxx;
     }
 
-    const float3 L = SafeNormalize(-dl.direction_ws);
+    const float3 L = SafeNormalize(dl.direction_ws);
     if (dot(L, L) < 0.5) {
         return 0.0.xxx;
     }

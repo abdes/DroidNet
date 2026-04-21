@@ -381,10 +381,9 @@ namespace {
           return scene::VisitResult::kContinue;
         }
 
-        // Directional-light consumers expect the vector from the shaded point
-        // toward the light source. The node's rotated forward axis represents
-        // the emitted ray direction, so flip it here to preserve Oxygen's
-        // coordinate conventions while matching UE-style lighting semantics.
+        // DirectionalLight node forward is the emitted-ray direction. Runtime
+        // lighting/environment contracts consume the opposite vector: from the
+        // shaded point toward the light source in Oxygen world space.
         selection.directional_light = FrameDirectionalLightSelection {
           .direction = -ComputeDirectionWs(scene_ref, node),
           .source_radius = light.GetAngularSizeRadians(),

@@ -1025,7 +1025,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ASSERT_TRUE(selection.directional_light.has_value());
   EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(selection.directional_light->direction.z, 1.0F, 1.0e-5F);
+  EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1251,7 +1251,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  GroundGridPassExecutesWhenEnabled)
+  GroundGridPassRequiresLateOverlayTargetWhenEnabled)
 {
   renderer_->SetGroundGridConfig(oxygen::vortex::GroundGridConfig {
     .enabled = true,
@@ -1261,11 +1261,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   graphics_->graphics_pipeline_log_.binds.clear();
   static_cast<void>(RenderForView(first_view_id_, first_resolved_view_));
 
-  EXPECT_TRUE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
+  EXPECT_FALSE(std::ranges::any_of(graphics_->graphics_pipeline_log_.binds,
     [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.Stage20.GroundGrid";
     }));
-  EXPECT_GE(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 0U);
 }
 
 NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,

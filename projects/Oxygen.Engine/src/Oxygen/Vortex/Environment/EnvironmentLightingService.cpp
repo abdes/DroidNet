@@ -65,12 +65,14 @@ auto SafeNormalizeOrFallback(
   return glm::normalize(value);
 }
 
-auto BuildSkyViewReferentialRows(
+  auto BuildSkyViewReferentialRows(
   const glm::vec3 up, const glm::vec3 forward_hint)
   -> std::array<glm::vec4, 3>
 {
   const auto safe_up = SafeNormalizeOrFallback(up, engine::atmos::kDefaultPlanetUp);
-  auto forward = SafeNormalizeOrFallback(forward_hint, space::look::Forward);
+  // The sky-view referential is expressed in Oxygen world space, not view
+  // space. Keep its fallback axes on the engine world basis: Z-up, -Y-forward.
+  auto forward = SafeNormalizeOrFallback(forward_hint, space::move::Forward);
   auto left = glm::cross(forward, safe_up);
   const auto dot_main = std::abs(glm::dot(safe_up, forward));
   if (dot_main > 0.999F || glm::dot(left, left) <= 1.0e-8F) {
@@ -86,7 +88,7 @@ auto BuildSkyViewReferentialRows(
       sign + a * safe_up.y * safe_up.y,
       -safe_up.y);
   } else {
-    left = SafeNormalizeOrFallback(left, space::look::Right);
+    left = SafeNormalizeOrFallback(left, space::move::Right);
     forward = SafeNormalizeOrFallback(glm::cross(safe_up, left), forward);
   }
 
@@ -374,13 +376,13 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto& atmosphere = stable_state.view_products.atmosphere;
 
   auto camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F };
-  auto view_forward_ws = glm::vec3(space::look::Forward);
+  auto view_forward_ws = glm::vec3(space::move::Forward);
   if (ctx.current_view.resolved_view != nullptr) {
     camera_position = ctx.current_view.resolved_view->CameraPosition();
     const auto inverse_view = ctx.current_view.resolved_view->InverseView();
     view_forward_ws = SafeNormalizeOrFallback(
       glm::vec3(inverse_view * glm::vec4(space::look::Forward, 0.0F)),
-      glm::vec3(space::look::Forward));
+      glm::vec3(space::move::Forward));
   }
   const auto planet_center_ws = ResolvePlanetCenterWs(atmosphere);
   const auto planet_center_translated_ws = planet_center_ws - camera_position;
