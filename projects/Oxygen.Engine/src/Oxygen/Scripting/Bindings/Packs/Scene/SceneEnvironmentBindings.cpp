@@ -19,7 +19,6 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
-#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -50,7 +49,6 @@ namespace {
     = "oxygen.scene.environment.sky_light";
   constexpr const char* kSkySphereMetatable
     = "oxygen.scene.environment.sky_sphere";
-  constexpr const char* kSunMetatable = "oxygen.scene.environment.sun";
   constexpr const char* kCloudsMetatable = "oxygen.scene.environment.clouds";
   constexpr const char* kPostProcessMetatable
     = "oxygen.scene.environment.post_process";
@@ -69,9 +67,6 @@ namespace {
     observer_ptr<scene::Scene> scene_ref;
   };
   struct SkySphereUserdata {
-    observer_ptr<scene::Scene> scene_ref;
-  };
-  struct SunUserdata {
     observer_ptr<scene::Scene> scene_ref;
   };
   struct CloudsUserdata {
@@ -198,15 +193,6 @@ namespace {
     auto* ud = static_cast<SkySphereUserdata*>(lua_touserdata(state, index));
     return ud != nullptr ? ud : &invalid;
   }
-  auto CheckSun(lua_State* state, const int index) -> SunUserdata*
-  {
-    static SunUserdata invalid { .scene_ref = nullptr };
-    if (!HasMetatable(state, index, kSunMetatable)) {
-      return &invalid;
-    }
-    auto* ud = static_cast<SunUserdata*>(lua_touserdata(state, index));
-    return ud != nullptr ? ud : &invalid;
-  }
   auto CheckClouds(lua_State* state, const int index) -> CloudsUserdata*
   {
     static CloudsUserdata invalid { .scene_ref = nullptr };
@@ -264,10 +250,6 @@ namespace {
       lua_pushliteral(state, "sky_sphere");
       lua_rawseti(state, -2, idx++);
     }
-    if (env->HasSystem<scene::environment::Sun>()) {
-      lua_pushliteral(state, "sun");
-      lua_rawseti(state, -2, idx++);
-    }
     if (env->HasSystem<scene::environment::VolumetricClouds>()) {
       lua_pushliteral(state, "clouds");
       lua_rawseti(state, -2, idx++);
@@ -312,10 +294,6 @@ namespace {
     if (name == "sky_sphere") {
       lua_pushboolean(
         state, env->HasSystem<scene::environment::SkySphere>() ? 1 : 0);
-      return 1;
-    }
-    if (name == "sun") {
-      lua_pushboolean(state, env->HasSystem<scene::environment::Sun>() ? 1 : 0);
       return 1;
     }
     if (name == "clouds") {
@@ -376,14 +354,6 @@ namespace {
       const bool had = env->HasSystem<scene::environment::SkySphere>();
       if (had) {
         env->RemoveSystem<scene::environment::SkySphere>();
-      }
-      lua_pushboolean(state, had ? 1 : 0);
-      return 1;
-    }
-    if (name == "sun") {
-      const bool had = env->HasSystem<scene::environment::Sun>();
-      if (had) {
-        env->RemoveSystem<scene::environment::Sun>();
       }
       lua_pushboolean(state, had ? 1 : 0);
       return 1;
@@ -491,16 +461,6 @@ namespace {
   {
     return GetSystem<scene::environment::SkySphere, SkySphereUserdata>(
       state, kSkySphereMetatable);
-  }
-  auto EnvironmentEnsureSun(lua_State* state) -> int
-  {
-    return EnsureSystem<scene::environment::Sun, SunUserdata>(
-      state, kSunMetatable);
-  }
-  auto EnvironmentGetSun(lua_State* state) -> int
-  {
-    return GetSystem<scene::environment::Sun, SunUserdata>(
-      state, kSunMetatable);
   }
   auto EnvironmentEnsureClouds(lua_State* state) -> int
   {
@@ -935,114 +895,6 @@ namespace {
     return 1;
   }
 
-  auto SunGet(lua_State* state) -> int
-  {
-    const auto system
-      = ResolveSystem<scene::environment::Sun, SunUserdata, CheckSun>(state);
-    if (system == nullptr) {
-      lua_pushnil(state);
-      return 1;
-    }
-    lua_createtable(state, 0, 11); // NOLINT(*-magic-numbers)
-    const char* source_name
-      = system->GetSunSource() == scene::environment::SunSource::kSynthetic
-      ? "synthetic"
-      : "from_scene";
-    lua_pushstring(state, source_name);
-    lua_setfield(state, -2, "source");
-    PushVec3(state, system->GetDirectionWs());
-    lua_setfield(state, -2, "direction_ws");
-    lua_pushnumber(state, system->GetAzimuthDegrees());
-    lua_setfield(state, -2, "azimuth_degrees");
-    lua_pushnumber(state, system->GetElevationDegrees());
-    lua_setfield(state, -2, "elevation_degrees");
-    PushVec3(state, system->GetColorRgb());
-    lua_setfield(state, -2, "color_rgb");
-    lua_pushnumber(state, system->GetIlluminanceLx());
-    lua_setfield(state, -2, "illuminance_lx");
-    lua_pushnumber(state, system->GetDiskAngularRadiusRadians());
-    lua_setfield(state, -2, "disk_angular_radius_radians");
-    lua_pushboolean(state, system->CastsShadows() ? 1 : 0);
-    lua_setfield(state, -2, "casts_shadows");
-    if (system->HasLightTemperature()) {
-      lua_pushnumber(state, system->GetLightTemperatureKelvin());
-      lua_setfield(state, -2, "light_temperature_kelvin");
-    }
-    return 1;
-  }
-
-  auto SunSet(lua_State* state) -> int
-  {
-    const auto system
-      = ResolveSystem<scene::environment::Sun, SunUserdata, CheckSun>(state);
-    if (system == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    if (lua_type(state, 2) != LUA_TTABLE) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_getfield(state, 2, "source");
-    if (lua_isstring(state, -1) != 0) {
-      size_t len = 0;
-      const char* src = lua_tolstring(state, -1, &len);
-      const std::string_view v(src, len);
-      if (v == "synthetic") {
-        system->SetSunSource(scene::environment::SunSource::kSynthetic);
-      } else if (v == "from_scene") {
-        system->SetSunSource(scene::environment::SunSource::kFromScene);
-      }
-    }
-    lua_pop(state, 1);
-    lua_getfield(state, 2, "direction_ws");
-    if (lua_isvector(state, -1) != 0) {
-      Vec3 direction {};
-      if (TryCheckVec3(state, -1, direction)) {
-        system->SetDirectionWs(direction);
-      }
-    }
-    lua_pop(state, 1);
-    float azimuth = 0.0F;
-    float elevation = 0.0F;
-    const bool has_azimuth
-      = TryGetNumberField(state, 2, "azimuth_degrees", azimuth);
-    const bool has_elevation
-      = TryGetNumberField(state, 2, "elevation_degrees", elevation);
-    if (has_azimuth && has_elevation) {
-      system->SetAzimuthElevationDegrees(azimuth, elevation);
-    }
-    lua_getfield(state, 2, "color_rgb");
-    if (lua_isvector(state, -1) != 0) {
-      Vec3 color {};
-      if (TryCheckVec3(state, -1, color)) {
-        system->SetColorRgb(color);
-      }
-    }
-    lua_pop(state, 1);
-    float fv = 0.0F;
-    if (TryGetNumberField(state, 2, "illuminance_lx", fv)) {
-      system->SetIlluminanceLx(fv);
-    }
-    if (TryGetNumberField(state, 2, "disk_angular_radius_radians", fv)) {
-      system->SetDiskAngularRadiusRadians(fv);
-    }
-    bool bv = false;
-    if (TryGetBoolField(state, 2, "casts_shadows", bv)) {
-      system->SetCastsShadows(bv);
-    }
-    lua_getfield(state, 2, "light_temperature_kelvin");
-    if (lua_isnil(state, -1) != 0) {
-      system->ClearLightTemperature();
-    } else if (lua_isnumber(state, -1) != 0) {
-      system->SetLightTemperatureKelvin(
-        static_cast<float>(lua_tonumber(state, -1)));
-    }
-    lua_pop(state, 1);
-    lua_pushboolean(state, 1);
-    return 1;
-  }
-
   auto CloudsGet(lua_State* state) -> int
   {
     const auto system = ResolveSystem<scene::environment::VolumetricClouds,
@@ -1325,7 +1177,7 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
   luaL_newmetatable(state, kEnvironmentMetatable);
   lua_pushvalue(state, -1);
   lua_setfield(state, -2, "__index");
-  constexpr std::array<luaL_Reg, 17> env_methods {
+  constexpr std::array<luaL_Reg, 15> env_methods {
     { { .name = "systems", .func = EnvironmentSystems },
       { .name = "has_system", .func = EnvironmentHasSystem },
       { .name = "remove_system", .func = EnvironmentRemoveSystem },
@@ -1338,8 +1190,6 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
       { .name = "sky_light", .func = EnvironmentGetSkyLight },
       { .name = "ensure_sky_sphere", .func = EnvironmentEnsureSkySphere },
       { .name = "sky_sphere", .func = EnvironmentGetSkySphere },
-      { .name = "ensure_sun", .func = EnvironmentEnsureSun },
-      { .name = "sun", .func = EnvironmentGetSun },
       { .name = "ensure_clouds", .func = EnvironmentEnsureClouds },
       { .name = "clouds", .func = EnvironmentGetClouds },
       { .name = "ensure_post_process", .func = EnvironmentEnsurePostProcess },
@@ -1413,9 +1263,6 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
   register_methods(kSkySphereMetatable,
     { { { .name = "get", .func = SkySphereGet },
       { .name = "set", .func = SkySphereSet } } });
-  register_methods(kSunMetatable,
-    { { { .name = "get", .func = SunGet },
-      { .name = "set", .func = SunSet } } });
   register_methods(kCloudsMetatable,
     { { { .name = "get", .func = CloudsGet },
       { .name = "set", .func = CloudsSet } } });

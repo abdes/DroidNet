@@ -69,20 +69,6 @@ local function apply_environment_settings(azimuth_deg, elevation_deg, color_rgb,
     return
   end
 
-  local sun = env:ensure_sun()
-  if sun ~= nil then
-    sun:set({
-      source = "synthetic",
-      azimuth_degrees = azimuth_deg,
-      elevation_degrees = elevation_deg,
-      color_rgb = color_rgb,
-      illuminance_lx = lux,
-      disk_angular_radius_radians = 0.004675,
-      casts_shadows = true,
-      light_temperature_kelvin = lerp(2300.0, 6500.0, day01),
-    })
-  end
-
   local sky_atmo = env:ensure_sky_atmosphere()
   if sky_atmo ~= nil then
     sky_atmo:set({ sun_disk_enabled = sun_disk_enabled })

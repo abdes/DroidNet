@@ -77,7 +77,6 @@ set(
   "Environment/LocalFogVolume.h"
   "Environment/PostProcessVolume.h"
   "Environment/SceneEnvironment.h"
-  "Environment/Sun.h"
   "Environment/SkyAtmosphere.h"
   "Environment/SkyLight.h"
   "Environment/SkySphere.h"
@@ -139,7 +138,6 @@ set(
   "Internal/MutationTypes.h"
   "Internal/ScriptSlotMutationProcessor.cpp"
   "Internal/ScriptSlotMutationProcessor.h"
-  "Environment/Sun.cpp"
   "Environment/LocalFogVolume.cpp"
 )
 

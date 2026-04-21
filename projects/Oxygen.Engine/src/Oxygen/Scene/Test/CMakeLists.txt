@@ -214,12 +214,4 @@ add_test_scene_factory_dependencies(Oxygen.Scene.PrettyPrinter)
 
 # -- Scene Environment Tests ---------------------------------------------------
 
-m_gtest_program(
-  SunEnvironment
-  SOURCES
-    ${TEST_FACTORY_SOURCES}
-    "Sun_basic_test.cpp"
-)
-add_test_scene_factory_dependencies(${META_MODULE_NAME}.SunEnvironment.Tests)
-
 m_gtest_program(EnvironmentComponents SOURCES "EnvironmentComponents_test.cpp")

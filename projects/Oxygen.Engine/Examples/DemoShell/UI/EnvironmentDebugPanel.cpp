@@ -623,14 +623,6 @@ void EnvironmentDebugPanel::DrawRendererDebugSection()
 
 void EnvironmentDebugPanel::DrawSunSection()
 {
-  if (!environment_vm_->GetSunPresent()) {
-    ImGui::TextColored(ImVec4(0.7F, 0.7F, 0.7F, 1.0F),
-      "No Sun component found in the scene environment.");
-    ImGui::TextDisabled("Sun controls require a scene environment Sun system.");
-    ImGui::Unindent();
-    return;
-  }
-
   bool sun_enabled = environment_vm_->GetSunEnabled();
   if (ImGui::Checkbox("Enabled##Sun", &sun_enabled)) {
     environment_vm_->SetSunEnabled(sun_enabled);
