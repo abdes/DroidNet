@@ -164,6 +164,10 @@ static float3 ApplyPassSkyViewReferential(
     AtmosphereSkyViewLutPassConstants pass,
     float3 world_direction)
 {
+    // Pass constants carry the same shared local frame published in
+    // EnvironmentViewData:
+    //   local +X = forward, local +Y = right, local +Z = up.
+    // Both LUT generation and main-view sampling must use this exact basis.
     return float3(
         dot(pass.sky_view_lut_referential_row0.xyz, world_direction),
         dot(pass.sky_view_lut_referential_row1.xyz, world_direction),

@@ -260,9 +260,20 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
 
     const uint sample_count_u = max(1u, (uint)ceil(sample_count));
     float dt = t_max / max(sample_count, 1.0f);
+    // Scattering-angle contract:
+    // - light*_dir is the normalized direction from the sample/view point
+    //   toward the light source
+    // - world_dir is the normalized direction from the camera through the sky
+    //   sample
+    // - the atmosphere phase functions in the active Vortex path use
+    //   cos(theta) = dot(world_dir, light_dir) directly
+    //
+    // Do not negate cos(theta) here. A previous sign flip mirrored the Mie
+    // forward-scattering lobe to the opposite side of the sun, which left
+    // scene lighting correct but placed the sky halo on the wrong horizon side.
     const float cos_theta0 = dot(world_dir, light0_dir);
     const float rayleigh_phase0 = VortexRayleighPhase(cos_theta0);
-    const float mie_phase0 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, -cos_theta0);
+    const float mie_phase0 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, cos_theta0);
     const float uniform_phase = 1.0f / (4.0f * kVortexSkyPi);
     const bool second_light_enabled = any(light1_illuminance > 1.0e-6f.xxx);
     float rayleigh_phase1 = 0.0f;
@@ -271,7 +282,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     {
         const float cos_theta1 = dot(world_dir, light1_dir);
         rayleigh_phase1 = VortexRayleighPhase(cos_theta1);
-        mie_phase1 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, -cos_theta1);
+        mie_phase1 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, cos_theta1);
     }
 
     float3 throughput = 1.0f.xxx;

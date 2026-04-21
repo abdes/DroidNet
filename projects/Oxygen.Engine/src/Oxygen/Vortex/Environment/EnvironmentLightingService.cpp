@@ -65,7 +65,21 @@ auto SafeNormalizeOrFallback(
   return glm::normalize(value);
 }
 
-  auto BuildSkyViewReferentialRows(
+//! Builds the shared sky-view local basis used by both the LUT producer and
+//! the main-view sky consumer.
+/*!
+ Contract:
+ - rows are expressed in Oxygen world space
+ - row0 = local +X = forward hint projected onto the tangent plane
+ - row1 = local +Y = right = cross(up, forward)
+ - row2 = local +Z = up
+
+ This basis must stay right-handed and must not silently switch to "left".
+ The sky-view LUT parameterization already applies its own azimuth convention in
+ shader code, so mirroring this basis would not "fix" sun position; it would
+ only create a mirrored local frame shared by producer and consumer.
+*/
+auto BuildSkyViewReferentialRows(
   const glm::vec3 up, const glm::vec3 forward_hint)
   -> std::array<glm::vec4, 3>
 {
@@ -73,28 +87,23 @@ auto SafeNormalizeOrFallback(
   // The sky-view referential is expressed in Oxygen world space, not view
   // space. Keep its fallback axes on the engine world basis: Z-up, -Y-forward.
   auto forward = SafeNormalizeOrFallback(forward_hint, space::move::Forward);
-  auto left = glm::cross(forward, safe_up);
+  // +Y in the local sky-view frame is RIGHT, not LEFT. Using cross(forward, up)
+  // would mirror the basis horizontally under Oxygen's right-handed Z-up law.
+  auto right = glm::cross(safe_up, forward);
   const auto dot_main = std::abs(glm::dot(safe_up, forward));
-  if (dot_main > 0.999F || glm::dot(left, left) <= 1.0e-8F) {
-    const auto sign = safe_up.z >= 0.0F ? 1.0F : -1.0F;
-    const auto a = -1.0F / (sign + safe_up.z);
-    const auto b = safe_up.x * safe_up.y * a;
-    forward = glm::vec3(
-      1.0F + sign * a * safe_up.x * safe_up.x,
-      sign * b,
-      -sign * safe_up.x);
-    left = glm::vec3(
-      b,
-      sign + a * safe_up.y * safe_up.y,
-      -safe_up.y);
+  if (dot_main > 0.999F || glm::dot(right, right) <= 1.0e-8F) {
+    right = glm::cross(safe_up, glm::vec3(space::move::Forward));
+    right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
+    forward = SafeNormalizeOrFallback(
+      glm::cross(right, safe_up), glm::vec3(space::move::Forward));
   } else {
-    left = SafeNormalizeOrFallback(left, space::move::Right);
-    forward = SafeNormalizeOrFallback(glm::cross(safe_up, left), forward);
+    right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
+    forward = SafeNormalizeOrFallback(glm::cross(right, safe_up), forward);
   }
 
   return {
     glm::vec4(forward, 0.0F),
-    glm::vec4(left, 0.0F),
+    glm::vec4(right, 0.0F),
     glm::vec4(safe_up, 0.0F),
   };
 }
