@@ -953,6 +953,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.x, 1.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.x, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.y, -1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.z, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row2.x, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row2.y, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row2.z, 1.0F, 1.0e-3F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

@@ -82,6 +82,16 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     return atmosphere;
 }
 
+//! Projects a world-space direction into the shared sky-view local frame.
+//!
+//! Contract with C++ publisher:
+//! - row0 = local +X = forward
+//! - row1 = local +Y = right
+//! - row2 = local +Z = up
+//!
+//! This basis is shared by the sky-view LUT producer and consumer. Keep the
+//! handedness consistent with Oxygen world space (right-handed, Z-up,
+//! -Y-forward). Do not reinterpret row1 as "left" here.
 static float3 ApplySkyViewLutReferential(EnvironmentViewData view_data, float3 world_direction)
 {
     return float3(
@@ -188,6 +198,9 @@ static float2 SkyViewLutParamsToUv(
         uv.y = coord * 0.5f + 0.5f;
     }
 
+    // U uses the atmosphere sky-view azimuth convention around the shared
+    // local frame. The sign here belongs to the LUT parameterization itself;
+    // it is independent from the handedness of the referential rows above.
     uv.x = (atan2(-view_direction.y, -view_direction.x) + kVortexPi)
         / (2.0f * kVortexPi);
     uv = saturate(uv);
