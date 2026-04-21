@@ -11,6 +11,32 @@
 
 struct EnvironmentFrameBindings
 {
+    struct EnvironmentProbeBindings
+    {
+        uint environment_map_srv;
+        uint irradiance_map_srv;
+        uint prefiltered_map_srv;
+        uint brdf_lut_srv;
+        uint probe_revision;
+    };
+
+    struct EnvironmentEvaluationParameters
+    {
+        float ambient_intensity;
+        float average_brightness;
+        float blend_fraction;
+        uint evaluation_flags;
+    };
+
+    struct EnvironmentAmbientBridgeBindings
+    {
+        uint irradiance_map_srv;
+        float ambient_intensity;
+        float average_brightness;
+        float blend_fraction;
+        uint flags;
+    };
+
     uint environment_static_slot;
     uint environment_view_slot;
     uint atmosphere_model_slot;
@@ -27,20 +53,9 @@ struct EnvironmentFrameBindings
     float4 atmosphere_light0_disk_luminance_rgb;
     float4 atmosphere_light1_direction_angular_size;
     float4 atmosphere_light1_disk_luminance_rgb;
-    uint environment_map_srv;
-    uint irradiance_map_srv;
-    uint prefiltered_map_srv;
-    uint brdf_lut_srv;
-    uint probe_revision;
-    float ambient_intensity;
-    float average_brightness;
-    float blend_fraction;
-    uint evaluation_flags;
-    uint ambient_bridge_irradiance_map_srv;
-    float ambient_bridge_ambient_intensity;
-    float ambient_bridge_average_brightness;
-    float ambient_bridge_blend_fraction;
-    uint ambient_bridge_flags;
+    EnvironmentProbeBindings probes;
+    EnvironmentEvaluationParameters evaluation;
+    EnvironmentAmbientBridgeBindings ambient_bridge;
 };
 
 static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
@@ -57,11 +72,20 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.multi_scattering_lut_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.sky_view_lut_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.camera_aerial_perspective_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.environment_map_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.ambient_bridge_irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.environment_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.probes.probe_revision = 0u;
+    invalid_bindings.evaluation.ambient_intensity = 1.0f;
+    invalid_bindings.evaluation.average_brightness = 1.0f;
+    invalid_bindings.evaluation.blend_fraction = 0.0f;
+    invalid_bindings.evaluation.evaluation_flags = 0u;
+    invalid_bindings.ambient_bridge.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.ambient_bridge.ambient_intensity = 1.0f;
+    invalid_bindings.ambient_bridge.average_brightness = 1.0f;
+    invalid_bindings.ambient_bridge.blend_fraction = 0.0f;
+    invalid_bindings.ambient_bridge.flags = 0u;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;
