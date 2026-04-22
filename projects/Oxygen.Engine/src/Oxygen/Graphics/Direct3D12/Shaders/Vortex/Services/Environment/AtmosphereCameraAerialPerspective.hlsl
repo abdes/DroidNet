@@ -10,8 +10,8 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
-#include "Renderer/EnvironmentViewData.hlsli"
-#include "Renderer/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/EnvironmentViewData.hlsli"
+#include "Vortex/Contracts/EnvironmentFrameBindings.hlsli"
 #include "Renderer/ViewColorData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 

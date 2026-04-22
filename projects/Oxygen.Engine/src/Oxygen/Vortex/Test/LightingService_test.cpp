@@ -178,32 +178,30 @@ NOLINT_TEST(LightingServiceSurfaceTest,
 }
 
 NOLINT_TEST(LightingServiceSurfaceTest,
-  VortexOwnedDirectionalLightShaderHelpersLiveUnderVortexAndLegacyWrappersOnlyForward)
+  VortexOwnedDirectionalLightShaderHelpersAndContractsLiveOnlyUnderVortex)
 {
   const auto source_root = SourceRoot();
   const auto vortex_forward = ReadTextFile(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/ForwardDirectLighting.hlsli");
-  const auto legacy_forward = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli");
   const auto vortex_atmosphere_helpers = ReadTextFile(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli");
-  const auto legacy_atmosphere_helpers = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli");
   const auto vortex_lighting_contract = ReadTextFile(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Contracts/LightingFrameBindings.hlsli");
-  const auto legacy_lighting_contract = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli");
+  const auto vortex_environment_contract = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentHelpers.hlsli");
 
   EXPECT_TRUE(vortex_forward.contains(
     "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"));
-  EXPECT_TRUE(legacy_forward.contains(
-    "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"));
   EXPECT_TRUE(vortex_atmosphere_helpers.contains("ComputeSunTransmittance"));
-  EXPECT_TRUE(legacy_atmosphere_helpers.contains(
-    "Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli"));
   EXPECT_TRUE(vortex_lighting_contract.contains("DirectionalLightForwardData"));
-  EXPECT_TRUE(legacy_lighting_contract.contains(
-    "Vortex/Contracts/LightingFrameBindings.hlsli"));
+  EXPECT_TRUE(vortex_environment_contract.contains(
+    "Vortex/Contracts/EnvironmentFrameBindings.hlsli"));
+  EXPECT_FALSE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli"));
+  EXPECT_FALSE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli"));
+  EXPECT_FALSE(std::filesystem::exists(source_root
+    / "Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli"));
 }
 
 class LightingServiceBehaviorTest : public ::testing::Test {

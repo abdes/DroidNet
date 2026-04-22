@@ -8,9 +8,9 @@
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Renderer/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/EnvironmentFrameBindings.hlsli"
 #include "Renderer/ViewConstants.hlsli"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
 /**

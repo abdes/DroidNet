@@ -1,6 +1,0 @@
-#ifndef OXYGEN_PASSES_FORWARD_FORWARDDIRECTLIGHTING_HLSLI
-#define OXYGEN_PASSES_FORWARD_FORWARDDIRECTLIGHTING_HLSLI
-
-#include "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"
-
-#endif

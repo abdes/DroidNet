@@ -9,7 +9,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"

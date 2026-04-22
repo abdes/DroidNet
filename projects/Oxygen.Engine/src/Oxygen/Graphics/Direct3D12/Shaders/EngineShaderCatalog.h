@@ -498,28 +498,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Renderer/Vsm/VsmPublishRasterResults.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
-  // Sky atmosphere LUT compute shaders (no permutations)
-  ShaderFileSpec {
-    .path="Atmosphere/TransmittanceLut_CS.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  // Sky-view LUT compute uses runtime blue-noise slot toggling (no permutation).
-  ShaderFileSpec {
-    .path="Atmosphere/SkyViewLut_CS.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Atmosphere/MultiScatLut_CS.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Atmosphere/SkyIrradianceLut_CS.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
-  ShaderFileSpec {
-    .path="Atmosphere/CameraVolumeLut_CS.hlsl",
-    .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
-  },
   // IBL filtering compute shaders (no permutations)
   ShaderFileSpec {
     .path="Lighting/IblFiltering.hlsl",
@@ -662,11 +640,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexPostProcessBloomUpsample: 1 entry
 // - VortexPostProcessExposure: 1 entry
 // - LightCulling: 1
-// - TransmittanceLut_CS: 1 entry
-// - SkyViewLut_CS: 1 entry
-// - MultiScatLut_CS: 1 entry
-// - SkyIrradianceLut_CS: 1 entry
-// - CameraVolumeLut_CS: 1 entry
 // - IblFiltering: 2 entries
 // - GpuDebugClear: 1 entry
 // - GpuDebugDraw: 2 entries

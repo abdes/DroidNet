@@ -11,7 +11,7 @@
 #include "Renderer/DebugHelpers.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/MaskedAlphaTest.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"

@@ -191,6 +191,140 @@ Related:
     parity lane remains `in_progress` even though this focused implementation
     item is landed in code
 
+### 2026-04-22 — removed legacy atmosphere shader leftovers and moved active atmosphere/environment shader contracts under Vortex
+
+- Scope:
+  - moved the active atmosphere/environment shader contracts out of legacy
+    `Shaders/Renderer` and `Shaders/Atmosphere` into Vortex-owned shader paths
+  - rewired active shader include sites to the Vortex-owned contracts/helpers
+  - removed dead legacy atmosphere compute shaders and no-longer-used legacy
+    atmosphere/direct-light helper files
+  - removed the old atmosphere compute entries from `EngineShaderCatalog`
+    so ShaderBake no longer bakes unused legacy atmosphere modules
+- Files changed:
+  - moved to Vortex-owned paths:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentStaticData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentViewData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentViewHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AerialPerspective.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereConstants.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereMedium.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmospherePhase.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSampling.hlsli`
+  - deleted legacy files:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmospherePassConstants.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/CameraVolumeLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/IntegrateScatteredLuminance.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/MultiScatLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyIrradianceLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyViewLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/TransmittanceLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DirectionalLightBasic.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/SyntheticSunData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+  - updated active callers/tests:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Compositing/ToneMap_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/IblFiltering.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardMesh_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDebug_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Test/ShaderBakeExecution_test.cpp`
+    - `src/Oxygen/Vortex/Test/LightingService_test.cpp`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "(ShaderBake(Catalog|Execution)|LightingService|EnvironmentLightingService|SceneRendererDeferredCore)" --output-on-failure`
+- Result:
+  - full `windows-debug` build passed
+  - ShaderBake regenerated `shaders.bin` successfully and removed stale legacy
+    atmosphere modules/artifacts
+  - targeted shader-bake + Vortex lighting/environment/deferred-core tests
+    passed except for the known unrelated
+    `SceneRendererPublicationTest.Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn`
+    framebuffer-size mismatch
+- Remaining validation delta:
+  - no full workspace `ctest` run was executed
+  - no runtime/capture proof was run for this shader cleanup lane
+  - the unrelated framebuffer-size mismatch above remains open and is not
+    counted as a regression from this cleanup task
+
+### 2026-04-22 — completed the atmosphere/renderer shader cleanup under Vortex-owned paths
+
+- Scope:
+  - moved the remaining active atmosphere/environment HLSL contracts from
+    `Shaders/Renderer` / `Shaders/Atmosphere` into `Shaders/Vortex`
+  - deleted dead legacy atmosphere compute shaders, old sampling helpers, and
+    no-longer-used legacy directional-light atmosphere payload files
+  - removed legacy atmosphere compute entries from `EngineShaderCatalog`
+  - updated ShaderBake and lighting tests to track the Vortex-owned shader
+    paths and the absence of deleted legacy files
+- Files changed:
+  - new Vortex contracts:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentStaticData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentViewData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentViewHelpers.hlsli`
+  - new Vortex environment helpers:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AerialPerspective.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereConstants.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereMedium.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmospherePhase.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSampling.hlsli`
+  - deleted legacy files:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AerialPerspective.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmosphereConstants.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmosphereMedium.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmospherePassConstants.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmospherePhase.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmosphereSampling.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/CameraVolumeLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/IntegrateScatteredLuminance.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/MultiScatLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyIrradianceLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/SkyViewLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/TransmittanceLut_CS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/DirectionalLightBasic.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentStaticData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentViewData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/EnvironmentViewHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/SyntheticSunData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+  - updated active callers/tests:
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Compositing/ToneMap_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Lighting/IblFiltering.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDebug_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardMesh_PS.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Test/ShaderBakeCatalog_test.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Test/ShaderBakeExecution_test.cpp`
+    - `src/Oxygen/Vortex/Test/LightingService_test.cpp`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "(ShaderBake(Catalog|Execution)|LightingService|EnvironmentLightingService|SceneRendererDeferredCore)" --output-on-failure`
+- Result:
+  - full `windows-debug` build passed
+  - ShaderBake compiled and repacked successfully, removing stale legacy
+    atmosphere artifacts from the dev shader archive
+  - targeted shader-bake + Vortex lighting/environment/deferred-core tests
+    passed except for the known unrelated
+    `SceneRendererPublicationTest.Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn`
+    framebuffer-size mismatch
+- Remaining validation delta:
+  - no full workspace `ctest` run was executed
+  - no runtime/capture proof was run for this cleanup session
+  - the same unrelated Stage 15 framebuffer-size mismatch remains open and is
+    not counted as a regression from this task
+
 ### 2026-04-20 — atmosphere frame fix widened from shader-only tuning to authored/view-frame parity
 
 - Scope:

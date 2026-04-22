@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 #include "Renderer/GpuDebug.hlsli"
 
 struct ToneMapVSOutput

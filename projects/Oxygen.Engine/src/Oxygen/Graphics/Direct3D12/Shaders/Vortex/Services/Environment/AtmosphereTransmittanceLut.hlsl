@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Renderer/EnvironmentStaticData.hlsli"
-#include "Atmosphere/AtmosphereMedium.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
+#include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"
 

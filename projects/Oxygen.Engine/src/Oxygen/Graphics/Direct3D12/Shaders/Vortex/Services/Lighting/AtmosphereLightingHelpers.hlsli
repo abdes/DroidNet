@@ -7,9 +7,9 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHERELIGHTINGHELPERS_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHERELIGHTINGHELPERS_HLSLI
 
-#include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentViewHelpers.hlsli"
-#include "Atmosphere/AtmosphereSampling.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 
 float3 ComputeSunTransmittance(
     float3 world_pos,
