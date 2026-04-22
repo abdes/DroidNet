@@ -16,6 +16,10 @@ namespace oxygen::vortex::environment {
 
 inline constexpr std::uint32_t kAtmosphereLightSlotCount = 2U;
 inline constexpr std::uint32_t kInvalidAtmosphereLightSlot = 0xFFFFFFFFU;
+inline constexpr std::uint32_t kAtmosphereDirectLightFlagPerPixelTransmittance
+  = 1U << 0U;
+inline constexpr std::uint32_t
+  kAtmosphereDirectLightFlagHasBakedGroundTransmittance = 1U << 1U;
 
 struct AtmosphereLightModel {
   bool enabled { false };
@@ -30,6 +34,8 @@ struct AtmosphereLightModel {
   float angular_size_radians { 0.0F };
   glm::vec3 illuminance_rgb_lux { 0.0F, 0.0F, 0.0F };
   float illuminance_lux { 0.0F };
+  glm::vec3 transmittance_toward_sun_rgb { 1.0F, 1.0F, 1.0F };
+  std::uint32_t direct_light_authority_flags { 0U };
   glm::vec4 disk_luminance_scale_rgba { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 

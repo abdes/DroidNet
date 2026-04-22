@@ -289,8 +289,12 @@ protected:
   {
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<DirectionalLight>();
+    light->Common().affects_world = true;
     light->Common().color_rgb = { 1.0F, 0.95F, 0.8F };
     light->SetIntensityLux(1500.0F);
+    light->SetEnvironmentContribution(true);
+    light->SetIsSunLight(true);
+    light->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kNone);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
     UpdateSceneTransforms();
     return node;
@@ -1026,6 +1030,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
+  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
+  EXPECT_NE(selection.directional_light->atmosphere_mode_flags
+      & oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority,
+    0U);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1036,6 +1044,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   ASSERT_TRUE(fill_light.has_value());
   fill_light->get().Common().affects_world = true;
   fill_light->get().SetEnvironmentContribution(false);
+  fill_light->get().SetIsSunLight(false);
   fill.GetTransform().SetLocalRotation(
     glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -1057,6 +1066,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NEAR(selection.directional_light->direction.x, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
+  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

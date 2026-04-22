@@ -229,6 +229,7 @@ set(
   "Environment/Internal/AtmosphereRenderer.cpp"
   "Environment/Internal/AtmosphereState.cpp"
   "Environment/Internal/AtmosphereLightState.cpp"
+  "Environment/Internal/AtmosphereLightTranslation.h"
   "Environment/Internal/AtmosphereLutCache.cpp"
   "Environment/Internal/FogRenderer.cpp"
   "Environment/Internal/IblProcessor.cpp"

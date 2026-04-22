@@ -115,6 +115,10 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   EXPECT_EQ(bindings.local_light_count, 0U);
   EXPECT_EQ(bindings.has_directional_light, 0U);
   EXPECT_EQ(bindings.directional.cascade_count, 0U);
+  EXPECT_EQ(bindings.directional.atmosphere_light_slot, 0xFFFFFFFFU);
+  EXPECT_EQ(bindings.directional.atmosphere_mode_flags, 0U);
+  EXPECT_EQ(
+    bindings.directional.transmittance_toward_sun_rgb, glm::vec3(1.0F, 1.0F, 1.0F));
 }
 
 NOLINT_TEST(LightingServiceSurfaceTest,
@@ -126,6 +130,11 @@ NOLINT_TEST(LightingServiceSurfaceTest,
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F },
     .color = glm::vec3 { 1.0F, 0.9F, 0.8F },
     .illuminance_lux = 1200.0F,
+    .transmittance_toward_sun_rgb = glm::vec3 { 0.4F, 0.5F, 0.6F },
+    .atmosphere_light_slot = 0U,
+    .atmosphere_mode_flags
+    = oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
+      | oxygen::vortex::kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
   };
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kPoint,
@@ -140,6 +149,9 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   EXPECT_EQ(selection.local_lights.size(), 1U);
   EXPECT_EQ(selection.local_lights.front().kind, LocalLightKind::kPoint);
   EXPECT_EQ(selection.directional_light->illuminance_lux, 1200.0F);
+  EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
+  EXPECT_EQ(selection.directional_light->transmittance_toward_sun_rgb,
+    glm::vec3(0.4F, 0.5F, 0.6F));
 }
 
 NOLINT_TEST(LightingServiceSurfaceTest,
@@ -163,6 +175,35 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   EXPECT_TRUE(cmake_source.contains("Lighting/Internal/DeferredLightPacketBuilder.cpp"));
   EXPECT_TRUE(cmake_source.contains("Lighting/Passes/DeferredLightPass.cpp"));
   EXPECT_TRUE(cmake_source.contains("Types/FrameLightSelection.h"));
+}
+
+NOLINT_TEST(LightingServiceSurfaceTest,
+  VortexOwnedDirectionalLightShaderHelpersLiveUnderVortexAndLegacyWrappersOnlyForward)
+{
+  const auto source_root = SourceRoot();
+  const auto vortex_forward = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/ForwardDirectLighting.hlsli");
+  const auto legacy_forward = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli");
+  const auto vortex_atmosphere_helpers = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli");
+  const auto legacy_atmosphere_helpers = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli");
+  const auto vortex_lighting_contract = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/LightingFrameBindings.hlsli");
+  const auto legacy_lighting_contract = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli");
+
+  EXPECT_TRUE(vortex_forward.contains(
+    "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"));
+  EXPECT_TRUE(legacy_forward.contains(
+    "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"));
+  EXPECT_TRUE(vortex_atmosphere_helpers.contains("ComputeSunTransmittance"));
+  EXPECT_TRUE(legacy_atmosphere_helpers.contains(
+    "Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli"));
+  EXPECT_TRUE(vortex_lighting_contract.contains("DirectionalLightForwardData"));
+  EXPECT_TRUE(legacy_lighting_contract.contains(
+    "Vortex/Contracts/LightingFrameBindings.hlsli"));
 }
 
 class LightingServiceBehaviorTest : public ::testing::Test {
@@ -192,6 +233,11 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     .source_radius = 0.05F,
     .color = glm::vec3 { 1.0F, 0.95F, 0.8F },
     .illuminance_lux = 1600.0F,
+    .transmittance_toward_sun_rgb = glm::vec3 { 0.25F, 0.5F, 0.75F },
+    .atmosphere_light_slot = 0U,
+    .atmosphere_mode_flags
+    = oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
+      | oxygen::vortex::kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance,
   };
   selection.local_lights.push_back(FrameLocalLightSelection {
     .kind = LocalLightKind::kPoint,
@@ -253,6 +299,12 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_NE(second_bindings->grid_metadata_buffer_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->grid_indirection_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->directional_light_indices_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    first_bindings->directional.transmittance_toward_sun_rgb, glm::vec3(0.25F, 0.5F, 0.75F));
+  EXPECT_EQ(first_bindings->directional.atmosphere_light_slot, 0U);
+  EXPECT_EQ(first_bindings->directional.atmosphere_mode_flags,
+    oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority
+      | oxygen::vortex::kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance);
 }
 
 } // namespace

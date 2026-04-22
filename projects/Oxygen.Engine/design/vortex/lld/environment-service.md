@@ -43,6 +43,19 @@
   needed for those integration points, that is an explicit parity blocker, not
   a reason to call local fog complete.
 
+## Sun At/Below Horizon Correction (2026-04-22)
+
+- The current Vortex atmosphere implementation is **not** parity-closed for the
+  UE5.7 sunset / below-horizon contract.
+- The earlier Vortex "active per-view atmosphere lane" closeout did **not**
+  assess the full direct-lighting, transmittance-LUT, and jitter contracts that
+  govern `mu <= 0` behavior.
+- The authoritative remediation for this gap now lives in:
+  - [environment-below-horizon-remediation.md](environment-below-horizon-remediation.md)
+- That remediation is a **blocking** sub-scope of Phase 4D and Phase 4E.
+- Do not describe Vortex sunset handling as parity-closed until that
+  remediation document's validation gate is satisfied with explicit evidence.
+
 ## 1. Scope and Intent
 
 ### 1.1 Goal

@@ -33,6 +33,7 @@
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -42,6 +43,7 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -372,16 +374,41 @@ namespace {
     const std::uint64_t selection_epoch) -> FrameLightSelection
   {
     auto selection = FrameLightSelection { .selection_epoch = selection_epoch };
-    const auto directional_lights = resolver.ResolveDirectionalLights();
-    if (!directional_lights.empty()) {
-      const auto& primary = directional_lights.front();
+    const auto environment = scene_ref.GetEnvironment();
+    const auto atmosphere = environment != nullptr
+      ? environment->TryGetSystem<scene::environment::SkyAtmosphere>().get()
+      : nullptr;
+    const auto& atmosphere_lights = resolver.ResolveAtmosphereLights();
+    if (atmosphere_lights.slots[0].has_value()) {
+      const auto& primary = *atmosphere_lights.slots[0];
+      const auto primary_atmosphere_light
+        = environment::internal::BuildAtmosphereLightModel(
+          primary, 0U, atmosphere);
+      auto atmosphere_mode_flags
+        = kDirectionalLightAtmosphereModeFlagAuthority;
+      if ((primary_atmosphere_light.direct_light_authority_flags
+            & environment::kAtmosphereDirectLightFlagPerPixelTransmittance)
+        != 0U) {
+        atmosphere_mode_flags
+          |= kDirectionalLightAtmosphereModeFlagPerPixelTransmittance;
+      }
+      if ((primary_atmosphere_light.direct_light_authority_flags
+            & environment::kAtmosphereDirectLightFlagHasBakedGroundTransmittance)
+        != 0U) {
+        atmosphere_mode_flags
+          |= kDirectionalLightAtmosphereModeFlagHasBakedGroundTransmittance;
+      }
       selection.directional_light = FrameDirectionalLightSelection {
-        .direction = primary.DirectionToLightWs(),
-        .source_radius = primary.Light().GetAngularSizeRadians(),
+        .direction = primary_atmosphere_light.direction_to_light_ws,
+        .source_radius = primary_atmosphere_light.angular_size_radians,
         .color = primary.Light().Common().color_rgb,
         .illuminance_lux = primary.Light().GetIntensityLux(),
-        .specular_scale = 1.0F,
+        .transmittance_toward_sun_rgb
+        = primary_atmosphere_light.transmittance_toward_sun_rgb,
         .diffuse_scale = 1.0F,
+        .specular_scale = 1.0F,
+        .atmosphere_light_slot = 0U,
+        .atmosphere_mode_flags = atmosphere_mode_flags,
         .shadow_flags = 0U,
         .light_function_atlas_index = 0xFFFFFFFFU,
         .cascade_count = primary.Light().CascadedShadows().cascade_count,

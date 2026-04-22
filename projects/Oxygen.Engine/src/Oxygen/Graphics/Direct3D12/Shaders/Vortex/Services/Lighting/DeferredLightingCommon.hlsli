@@ -20,6 +20,7 @@ struct DeferredLightConstants
     float4 spot_angles;
     float4x4 light_world_matrix;
     uint4 shadow_info;
+    float4 atmosphere_transmittance_and_padding;
     uint light_type;
     uint light_geometry_vertices_srv;
     uint light_geometry_vertex_count;

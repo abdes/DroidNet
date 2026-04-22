@@ -7,18 +7,12 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 
 #include <bit>
-#include <string>
-#include <utility>
-#include <vector>
 
-#include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
 
 namespace oxygen::vortex::environment::internal {
 
@@ -37,27 +31,16 @@ namespace {
   }
 
   auto AssignLightToSlot(const scene::ResolvedDirectionalLightView& resolved,
-    const std::uint32_t slot_index,
+    const std::uint32_t slot_index, const bool explicit_slot_claim,
+    const scene::environment::SkyAtmosphere* atmosphere,
     ResolvedAtmosphereLightState& state) -> void
   {
-    auto model = environment::AtmosphereLightModel {};
-    model.enabled = true;
-    model.use_per_pixel_transmittance
-      = resolved.Light().GetUsePerPixelAtmosphereTransmittance();
-    model.direction_to_light_ws = resolved.DirectionToLightWs();
-    model.angular_size_radians = resolved.Light().GetAngularSizeRadians();
-    model.illuminance_rgb_lux
-      = resolved.Light().Common().color_rgb
-      * resolved.Light().GetIntensityLux();
-    model.illuminance_lux = resolved.Light().GetIntensityLux();
-    model.disk_luminance_scale_rgba
-      = resolved.Light().GetAtmosphereDiskLuminanceScale();
-    model.slot_index = slot_index;
-    state.atmosphere_lights[slot_index] = model;
+    state.atmosphere_lights[slot_index]
+      = BuildAtmosphereLightModel(resolved, slot_index, atmosphere);
     state.source_nodes[slot_index] = resolved.NodeHandle();
     state.source_cascade_counts[slot_index]
       = resolved.Light().CascadedShadows().cascade_count;
-    state.explicit_slot_claims[slot_index] = true;
+    state.explicit_slot_claims[slot_index] = explicit_slot_claim;
   }
 
   auto HashResolvedState(
@@ -85,6 +68,13 @@ namespace {
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.y));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.z));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_lux));
+      seed = HashCombineU64(
+        seed, FloatBits(light.transmittance_toward_sun_rgb.x));
+      seed = HashCombineU64(
+        seed, FloatBits(light.transmittance_toward_sun_rgb.y));
+      seed = HashCombineU64(
+        seed, FloatBits(light.transmittance_toward_sun_rgb.z));
+      seed = HashCombineU64(seed, light.direct_light_authority_flags);
       seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.x));
       seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.y));
       seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.z));
@@ -108,16 +98,24 @@ auto AtmosphereLightState::Update(const scene::Scene& scene_ref) -> bool
   const auto& resolver = scene_ref.GetDirectionalLightResolver();
   resolver.Validate();
   auto next = ResolvedAtmosphereLightState {};
+  const auto environment = scene_ref.GetEnvironment();
+  const auto atmosphere = environment != nullptr
+    ? environment->TryGetSystem<scene::environment::SkyAtmosphere>().get()
+    : nullptr;
+  const auto& resolved_atmosphere_lights = resolver.ResolveAtmosphereLights();
 
-  if (const auto primary = resolver.ResolvePrimarySun();
-    primary.has_value()) {
-    AssignLightToSlot(*primary, 0U, next);
-  }
-  if (const auto secondary = resolver.ResolveSecondarySun();
-    secondary.has_value()) {
-    AssignLightToSlot(*secondary, 1U, next);
+  for (std::uint32_t slot_index = 0U;
+       slot_index < environment::kAtmosphereLightSlotCount; ++slot_index) {
+    if (!resolved_atmosphere_lights.slots[slot_index].has_value()) {
+      continue;
+    }
+    AssignLightToSlot(*resolved_atmosphere_lights.slots[slot_index], slot_index,
+      resolved_atmosphere_lights.explicit_slot_claims[slot_index], atmosphere,
+      next);
   }
 
+  next.conflict_count = resolved_atmosphere_lights.conflict_count;
+  next.first_conflict_slot = resolved_atmosphere_lights.first_conflict_slot;
   next.active_light_count = 0U;
   for (const auto& light : next.atmosphere_lights) {
     next.active_light_count += light.enabled ? 1U : 0U;

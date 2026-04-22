@@ -42,6 +42,155 @@ Related:
 5. **Per-session update.** Each implementation session must update this file
    with: changed files, commands run, results, and remaining blockers.
 
+### 2026-04-22 — sunset / below-horizon atmosphere parity re-opened; previous active-lane closeout was too narrow
+
+- Correction:
+  - the earlier `04-28 re-closed the active per-view atmosphere lane` wording
+    is not sufficient to claim UE5.7 parity for sun elevation at or below the
+    horizon
+  - that closeout covered translated-frame publication, sky-view generation,
+    camera-aerial generation, and Stage-15 consumption on the active path, but
+    it did **not** close the full sunset contract across direct lighting,
+    transmittance LUT behavior, or ray-march jitter
+  - treat the sunset/below-horizon lane as **re-opened** until the new
+    remediation scope is implemented and capture-validated
+- Scope this session:
+  - audited the active Vortex sunset-relevant code against the UE5.7
+    source/shader contract
+  - documented the missing parity mechanisms and the required remediation order
+  - updated the environment LLD and Phase 4 plan to record the corrected scope
+- Files changed:
+  - `design/vortex/lld/environment-service.md`
+  - `design/vortex/lld/environment-below-horizon-remediation.md`
+  - `design/vortex/PLAN.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for evidence:
+  - `rg -n "TransmittanceMin|transmittance_min_light_elevation|GetTransmittance|PlanetShadow|RaySphereIntersectNearest|use_per_pixel_transmittance|DirectionalLightFlagPerPixelAtmosphereTransmittance|ResolveDirectionalLights\\(\\)\\.front\\(|AtmosphereLightSlot|InterleavedGradientNoise|StateFrameIndexMod8" src/Oxygen`
+  - targeted `Get-Content` audits for:
+    - `src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp`
+    - `src/Oxygen/Vortex/Environment/Internal/AtmosphereState.cpp`
+    - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLightState.cpp`
+    - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+    - `src/Oxygen/Scene/Light/DirectionalLightResolver.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Atmosphere/AtmosphereSampling.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightDirectional.hlsl`
+- Result:
+  - the sunset parity blocker is now explicitly documented
+  - the corrected design/plan state records the real remaining work before any
+    Phase 4 environment parity claim can be made
+  - the repo now has an authoritative remediation document for the sunset lane
+- Remaining validation delta:
+  - no build/test/capture commands were run in this documentation-correction
+    session
+  - implementation is still missing for the documented sunset gaps
+  - capture-backed verification at multiple sun elevations is still required
+
+### 2026-04-22 — prepared the focused plan for retiring the old direct-light path and canonicalizing directional-light resolution
+
+- Scope:
+  - mapped the resolver/direct-light remediation onto the active Vortex data
+    flow and publication seams
+  - produced a focused implementation plan tied to the current C++ and HLSL
+    files instead of a generic sunset-gap summary
+  - adjusted that plan so Vortex-specific shader contracts/helpers for this
+    item live under `Shaders/Vortex/...` instead of adding new logic under
+    legacy shader trees
+- Files changed:
+  - `design/vortex/lld/environment-below-horizon-remediation.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for evidence:
+  - targeted `Get-Content` audits for:
+    - `src/Oxygen/Scene/Light/DirectionalLightResolver.cpp`
+    - `src/Oxygen/Scene/Test/DirectionalLightResolver_test.cpp`
+    - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+    - `src/Oxygen/Vortex/Types/FrameLightSelection.h`
+    - `src/Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h`
+    - `src/Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.cpp`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightDirectional.hlsl`
+  - `rg -n "AtmosphereLightSlot|ResolvePrimarySun|ResolveSecondarySun|ResolveDirectionalLights\\(|use_per_pixel_atmosphere_transmittance|light_flags|PerPixelAtmosphereTransmittance" src/Oxygen/Vortex/Test src/Oxygen/Scene/Test design/vortex`
+- Result:
+  - the repo now recorded the concrete implementation scope for this item,
+    including the resolver API change, payload changes, shared shader helper
+    boundary, and required validation gates
+- Remaining validation delta:
+  - no implementation code changed
+  - no build/test/capture commands were run in this planning session
+  - the item remains `in_progress` until the plan is implemented and verified
+
+### 2026-04-22 — implemented the focused direct-light / resolver remediation; targeted resolver/environment/lighting suites pass
+
+- Scope:
+  - moved canonical atmosphere-slot resolution into `DirectionalLightResolver`
+  - rewired `AtmosphereLightState` to consume resolver-owned slot results
+    instead of reimplementing selection policy
+  - added shared CPU atmosphere-light translation with non-per-pixel
+    ground-transmittance publication
+  - rewired `SceneRenderer` directional-light selection to slot-0
+    atmosphere-light authority instead of `ResolveDirectionalLights().front()`
+  - expanded directional-light frame/publication payloads with atmosphere slot,
+    mode flags, and baked transmittance
+  - moved active direct-light shader helpers/contracts under
+    `Shaders/Vortex/...` and reduced legacy shader files to wrappers for the
+    Vortex-owned logic
+  - unified forward and deferred directional-light atmosphere application
+    through one shared Vortex HLSL branch
+- Files changed:
+  - `src/Oxygen/Scene/Light/DirectionalLightResolver.h`
+  - `src/Oxygen/Scene/Light/DirectionalLightResolver.cpp`
+  - `src/Oxygen/Scene/Test/DirectionalLightResolver_test.cpp`
+  - `src/Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h`
+  - `src/Oxygen/Vortex/Environment/Internal/AtmosphereLightState.cpp`
+  - `src/Oxygen/Vortex/Types/FrameLightSelection.h`
+  - `src/Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h`
+  - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`
+  - `src/Oxygen/Vortex/Lighting/Passes/DeferredLightPass.cpp`
+  - `src/Oxygen/Vortex/Test/LightingService_test.cpp`
+  - `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`
+  - `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/LightingFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/ForwardDirectLighting.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Forward/ForwardMesh_PS.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightDirectional.hlsl`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for verification:
+  - `cmake --build --preset windows-debug --target oxygen-vortex Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.LightingService.Tests Oxygen.Vortex.SceneRendererDeferredCore oxygen-scene --parallel 4`
+  - `cmake --build --preset windows-debug --target Oxygen.Scene.DirectionalLightResolver.Tests Oxygen.Vortex.EnvironmentLightingService.Tests Oxygen.Vortex.LightingService.Tests Oxygen.Vortex.SceneRendererDeferredCore --parallel 4`
+  - `ctest --test-dir out/build-ninja -C Debug -R "^(Oxygen\\.Scene\\.DirectionalLightResolver\\.Tests|DirectionalLightResolverTest\\.|Oxygen\\.Vortex\\.LightingService\\.Tests|LightingService(SurfaceTest|BehaviorTest)\\.|Oxygen\\.Vortex\\.EnvironmentLightingService\\.Tests|EnvironmentLightingService(SurfaceTest|BehaviorTest)\\.|Oxygen\\.Vortex\\.SceneRendererDeferredCore\\.Tests|SceneRendererDeferredCore(Test|SurfaceTest|MeshProcessorTest|CapabilityTest)\\.)" --output-on-failure`
+- Result:
+  - targeted build passed for the changed Vortex and Scene targets
+  - targeted resolver/environment/lighting/deferred-core suite passed
+    `85 / 85`
+  - the active direct-light atmosphere shader path now lives under
+    `Shaders/Vortex/...`, with legacy shader surfaces reduced to wrapper
+    includes for the Vortex-owned logic
+- Remaining validation delta:
+  - no ShaderBake/HLSL compile proof was run in this session
+  - no runtime or capture-backed proof was run for the direct-light/remediation
+    lane
+  - the broader unrelated
+    `SceneRendererPublicationTest.Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn`
+    surface still fails in this workspace on the known framebuffer attachment
+    size mismatch and was not part of the focused closeout surface
+  - because runtime/capture proof is still missing, the sunset/below-horizon
+    parity lane remains `in_progress` even though this focused implementation
+    item is landed in code
+
 ### 2026-04-20 — atmosphere frame fix widened from shader-only tuning to authored/view-frame parity
 
 - Scope:
