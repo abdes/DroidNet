@@ -23,6 +23,9 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -128,12 +131,13 @@ protected:
       DestroyRenderer };
   }
 
-  [[nodiscard]] auto MakeFramebuffer(std::string_view debug_name) const
+  [[nodiscard]] auto MakeFramebuffer(std::string_view debug_name,
+    const std::uint32_t width = 64U, const std::uint32_t height = 64U) const
     -> std::shared_ptr<Framebuffer>
   {
     auto color_desc = TextureDesc {};
-    color_desc.width = 64U;
-    color_desc.height = 64U;
+    color_desc.width = width;
+    color_desc.height = height;
     color_desc.format = Format::kRGBA8UNorm;
     color_desc.texture_type = TextureType::kTexture2D;
     color_desc.is_render_target = true;
@@ -400,7 +404,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto scene = std::make_shared<Scene>(
     "SceneRendererPublicationTest.ResolveAndCleanup", 16U);
   frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
-  auto framebuffer = MakeFramebuffer("SceneRendererPublicationTest.ResolveAndCleanup");
+  auto framebuffer = MakeFramebuffer(
+    "SceneRendererPublicationTest.ResolveAndCleanup", 96U, 54U);
   const auto view_id = frame_context.RegisterView(
     MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
   auto resolved_view = MakeResolvedView(96.0F, 54.0F);
@@ -493,7 +498,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
       "SceneRendererPublicationTest.DestructorCleanup", 16U);
     frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
     auto framebuffer
-      = MakeFramebuffer("SceneRendererPublicationTest.DestructorCleanup");
+      = MakeFramebuffer("SceneRendererPublicationTest.DestructorCleanup", 96U,
+        54U);
     const auto view_id = frame_context.RegisterView(
       MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
     auto resolved_view = MakeResolvedView(96.0F, 54.0F);
@@ -726,7 +732,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   auto overlay_fb = MakeFramebuffer("SceneRendererPublicationTest.Overlay");
   auto scene_fb_small = MakeFramebuffer("SceneRendererPublicationTest.SceneSmall");
-  auto scene_fb_large = MakeFramebuffer("SceneRendererPublicationTest.SceneLarge");
+  auto scene_fb_large = MakeFramebuffer(
+    "SceneRendererPublicationTest.SceneLarge", 128U, 72U);
 
   static_cast<void>(frame_context.RegisterView(
     MakeView(oxygen::observer_ptr { overlay_fb.get() }, 48.0F, 48.0F, false)));
@@ -770,7 +777,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
 
   auto framebuffer
-    = MakeFramebuffer("SceneRendererPublicationTest.Stage5ScreenHzb");
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5ScreenHzb", 96U,
+      54U);
   const auto view_id = ViewId { 11U };
   auto resolved_view = MakeResolvedView(96.0F, 54.0F);
   auto render_context = MakeSceneRenderContext(
@@ -849,7 +857,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
 
   auto framebuffer
-    = MakeFramebuffer("SceneRendererPublicationTest.Stage5SubViewport");
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5SubViewport", 192U,
+      108U);
   const auto view_id = ViewId { 21U };
   auto resolved_view = MakeResolvedView(128.0F, 72.0F, 32.0F, 16.0F);
   auto render_context = MakeSceneRenderContext(
@@ -961,7 +970,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     "SceneRendererPublicationTest.Stage5PreviousFrame", 16U);
   frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
   auto framebuffer
-    = MakeFramebuffer("SceneRendererPublicationTest.Stage5PreviousFrame");
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage5PreviousFrame", 96U,
+      54U);
   const auto view_id = ViewId { 23U };
   auto resolved_view = MakeResolvedView(96.0F, 54.0F);
   auto render_context = MakeSceneRenderContext(
@@ -1018,10 +1028,21 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   auto scene = std::make_shared<Scene>(
     "SceneRendererPublicationTest.Stage15Environment", 16U);
   frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  scene->SetEnvironment(
+    std::make_unique<oxygen::scene::SceneEnvironment>());
+  auto* environment = scene->GetEnvironment().get();
+  ASSERT_NE(environment, nullptr);
+  auto& atmosphere = environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  auto& fog = environment->AddSystem<oxygen::scene::environment::Fog>();
+  fog.SetEnabled(true);
+  scene->Update();
 
   auto framebuffer
-    = MakeFramebuffer("SceneRendererPublicationTest.Stage15Environment");
-  const auto view_id = ViewId { 12U };
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage15Environment", 96U,
+      54U);
+  const auto view_id = frame_context.RegisterView(
+    MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
   auto resolved_view = MakeResolvedView(96.0F, 54.0F);
   auto render_context = MakeSceneRenderContext(
     scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
@@ -1055,7 +1076,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_TRUE(environment_state.published_bindings);
   EXPECT_EQ(environment_state.published_environment_frame_slot,
     scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot);
-  EXPECT_EQ(graphics_->draw_log_.draws.size(),
+  EXPECT_GE(graphics_->draw_log_.draws.size(),
     environment_state.total_draw_count);
   EXPECT_FALSE(environment_state.ambient_bridge_published);
   EXPECT_EQ(environment_state.ambient_bridge_irradiance_srv,

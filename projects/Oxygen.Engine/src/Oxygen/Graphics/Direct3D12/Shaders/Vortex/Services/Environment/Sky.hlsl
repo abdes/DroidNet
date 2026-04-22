@@ -90,9 +90,9 @@ static inline float2 ResolveSkyViewUvFromLocalDirection(
     out float bottom_radius,
     out float top_radius)
 {
-    view_height = environment_view.sky_planet_translated_world_center_and_view_height.w;
-    bottom_radius = env_data.atmosphere.planet_radius_m;
-    top_radius = env_data.atmosphere.planet_radius_m + env_data.atmosphere.atmosphere_height_m;
+    view_height = environment_view.sky_planet_translated_world_center_km_and_view_height_km.w;
+    bottom_radius = env_data.atmosphere.planet_radius_km;
+    top_radius = env_data.atmosphere.planet_radius_km + env_data.atmosphere.atmosphere_height_km;
 
     const float view_zenith_cos_angle = view_direction_local.z;
     const bool intersect_ground = RaySphereIntersectNearest(
@@ -147,7 +147,7 @@ static float3 GetAtmosphereTransmittance(
     const float ground_hit = RaySphereIntersectNearest(
         planet_center_to_world_pos,
         world_dir,
-        atmo.planet_radius_m);
+        atmo.planet_radius_km);
     if (ground_hit > 0.0f)
     {
         return 0.0f.xxx;
@@ -156,16 +156,16 @@ static float3 GetAtmosphereTransmittance(
     const float p_height = length(planet_center_to_world_pos);
     const float3 up_vector = planet_center_to_world_pos / max(p_height, 1.0e-4f);
     const float light_zenith_cos_angle = dot(world_dir, up_vector);
-    const float altitude_m = max(p_height - atmo.planet_radius_m, 0.0f);
+    const float altitude_km = max(p_height - atmo.planet_radius_km, 0.0f);
 
     const float3 transmittance_to_light = VortexSampleTransmittanceLut(
         transmittance_lut_srv,
         atmo.transmittance_lut_width,
         atmo.transmittance_lut_height,
         light_zenith_cos_angle,
-        altitude_m,
-        atmo.planet_radius_m,
-        atmo.atmosphere_height_m);
+        altitude_km,
+        atmo.planet_radius_km,
+        atmo.atmosphere_height_km);
     return transmittance_to_light;
 }
 

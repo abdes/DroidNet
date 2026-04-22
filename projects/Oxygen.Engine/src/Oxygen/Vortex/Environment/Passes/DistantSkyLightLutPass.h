@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -61,12 +62,12 @@ private:
     std::uint32_t multi_scattering_height { 0U };
     std::uint32_t active_light_count { 0U };
     std::uint32_t integration_sample_count { 64U };
-    float planet_radius_m { 6360000.0F };
-    float atmosphere_height_m { 100000.0F };
+    float planet_radius_km { 6360.0F };
+    float atmosphere_height_km { 100.0F };
     float sample_altitude_km { 1.0F };
     float multi_scattering_factor { 1.0F };
-    float rayleigh_scale_height_m { 8000.0F };
-    float mie_scale_height_m { 1200.0F };
+    float rayleigh_scale_height_km { 8.0F };
+    float mie_scale_height_km { 1.2F };
     float mie_anisotropy { 0.8F };
     float _pad0 { 0.0F };
     float light0_direction_ws[4] { 0.0F, 0.0F, 1.0F, 0.0F };
@@ -75,11 +76,13 @@ private:
     float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
     float sky_luminance_factor_rgb[4] { 1.0F, 1.0F, 1.0F, 0.0F };
     float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
-    float rayleigh_scattering_rgb[4] { 5.8e-6F, 13.5e-6F, 33.1e-6F, 0.0F };
-    float mie_scattering_rgb[4] { 2.0e-5F, 2.0e-5F, 2.0e-5F, 0.0F };
-    float mie_absorption_rgb[4] { 4.4e-6F, 4.4e-6F, 4.4e-6F, 0.0F };
-    float ozone_absorption_rgb[4] { 0.65e-6F, 1.88e-6F, 0.08e-6F, 0.0F };
-    float ozone_density_layer0[4] { 25000.0F, 0.0F, 0.0F, 0.0F };
+    float rayleigh_scattering_per_km_rgb[4] { 5.8e-3F, 13.5e-3F, 33.1e-3F,
+      0.0F };
+    float mie_scattering_per_km_rgb[4] { 2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F };
+    float mie_absorption_per_km_rgb[4] { 4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F };
+    float ozone_absorption_per_km_rgb[4] { 0.65e-3F, 1.88e-3F, 0.08e-3F,
+      0.0F };
+    float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
     float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
   };
 

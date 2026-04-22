@@ -336,53 +336,60 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
   constants.depth_control1.sample_count_per_slice
     = cache_state.internal_parameters.camera_aerial_sample_count_per_slice;
   constants.depth_control1.start_depth_km
-    = std::max(view_data.sky_aerial_luminance_aerial_start_depth_m.w, 0.0F)
-    / 1000.0F;
-  constants.depth_control1.planet_radius_m = atmosphere.planet_radius_m;
-  constants.atmosphere_scales0.atmosphere_height_m
-    = atmosphere.atmosphere_height_m;
+    = std::max(view_data.sky_aerial_luminance_aerial_start_depth_km.w, 0.0F);
+  constants.depth_control1.planet_radius_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.planet_radius_m);
+  constants.atmosphere_scales0.atmosphere_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.atmosphere_height_m);
   constants.atmosphere_scales0.aerial_perspective_distance_scale
     = view_data.aerial_perspective_distance_scale;
   constants.atmosphere_scales0.aerial_scattering_strength
     = view_data.aerial_scattering_strength;
-  constants.atmosphere_scales0.rayleigh_scale_height_m
-    = atmosphere.rayleigh_scale_height_m;
-  constants.atmosphere_scales1.mie_scale_height_m
-    = atmosphere.mie_scale_height_m;
+  constants.atmosphere_scales0.rayleigh_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.rayleigh_scale_height_m);
+  constants.atmosphere_scales1.mie_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.mie_scale_height_m);
   constants.atmosphere_scales1.multi_scattering_factor
     = atmosphere.multi_scattering_factor;
   constants.atmosphere_scales1.mie_anisotropy = atmosphere.mie_anisotropy;
   SetVec4(constants.ground_albedo_rgb, atmosphere.ground_albedo_rgb);
-  SetVec4(
-    constants.rayleigh_scattering_rgb, atmosphere.rayleigh_scattering_rgb);
-  SetVec4(constants.mie_scattering_rgb, atmosphere.mie_scattering_rgb);
-  SetVec4(constants.mie_absorption_rgb, atmosphere.mie_absorption_rgb);
-  SetVec4(constants.ozone_absorption_rgb, atmosphere.ozone_absorption_rgb);
+  SetVec4(constants.rayleigh_scattering_per_km_rgb,
+    atmosphere.rayleigh_scattering_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.mie_scattering_per_km_rgb,
+    atmosphere.mie_scattering_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.mie_absorption_per_km_rgb,
+    atmosphere.mie_absorption_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.ozone_absorption_per_km_rgb,
+    atmosphere.ozone_absorption_rgb * engine::atmos::kSkyUnitToM);
   constants.ozone_density_layer0[0]
-    = atmosphere.ozone_density_profile.layers[0].width_m;
+    = engine::atmos::MetersToSkyUnit(
+      atmosphere.ozone_density_profile.layers[0].width_m);
   constants.ozone_density_layer0[1]
     = atmosphere.ozone_density_profile.layers[0].exp_term;
   constants.ozone_density_layer0[2]
-    = atmosphere.ozone_density_profile.layers[0].linear_term;
+    = atmosphere.ozone_density_profile.layers[0].linear_term
+    * engine::atmos::kSkyUnitToM;
   constants.ozone_density_layer0[3]
     = atmosphere.ozone_density_profile.layers[0].constant_term;
   constants.ozone_density_layer1[0]
-    = atmosphere.ozone_density_profile.layers[1].width_m;
+    = engine::atmos::MetersToSkyUnit(
+      atmosphere.ozone_density_profile.layers[1].width_m);
   constants.ozone_density_layer1[1]
     = atmosphere.ozone_density_profile.layers[1].exp_term;
   constants.ozone_density_layer1[2]
-    = atmosphere.ozone_density_profile.layers[1].linear_term;
+    = atmosphere.ozone_density_profile.layers[1].linear_term
+    * engine::atmos::kSkyUnitToM;
   constants.ozone_density_layer1[3]
     = atmosphere.ozone_density_profile.layers[1].constant_term;
-  constants.camera_planet_position[0]
-    = view_data.sky_camera_translated_world_origin_pad.x
-    - view_data.sky_planet_translated_world_center_and_view_height.x;
-  constants.camera_planet_position[1]
-    = view_data.sky_camera_translated_world_origin_pad.y
-    - view_data.sky_planet_translated_world_center_and_view_height.y;
-  constants.camera_planet_position[2]
-    = view_data.sky_camera_translated_world_origin_pad.z
-    - view_data.sky_planet_translated_world_center_and_view_height.z;
+  constants.camera_planet_position_km[0]
+    = view_data.sky_camera_translated_world_origin_km_pad.x
+    - view_data.sky_planet_translated_world_center_km_and_view_height_km.x;
+  constants.camera_planet_position_km[1]
+    = view_data.sky_camera_translated_world_origin_km_pad.y
+    - view_data.sky_planet_translated_world_center_km_and_view_height_km.y;
+  constants.camera_planet_position_km[2]
+    = view_data.sky_camera_translated_world_origin_km_pad.z
+    - view_data.sky_planet_translated_world_center_km_and_view_height_km.z;
   SetVec4(constants.sky_and_aerial_luminance_factor_rgb,
     atmosphere.sky_and_aerial_perspective_luminance_factor_rgb);
   PopulateLight(constants.light0_direction_enabled,

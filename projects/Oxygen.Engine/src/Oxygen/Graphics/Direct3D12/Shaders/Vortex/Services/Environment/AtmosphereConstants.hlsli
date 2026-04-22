@@ -25,8 +25,12 @@ static const float kSegmentSampleOffset = 0.3;
 //! Aerial perspective slice count (UE5: AP_SLICE_COUNT).
 static const uint kAerialPerspectiveSliceCount = 32;
 
+//! Float accuracy offset in atmosphere-space km (UE5: PLANET_RADIUS_OFFSET).
+static const float PLANET_RADIUS_OFFSET = 0.001f;
+
 //! Kilometers per aerial perspective slice (UE5: AP_KM_PER_SLICE).
-static const float kAerialPerspectiveKmPerSlice = 4.0;
+static const float AP_KM_PER_SLICE = 4.0f;
+static const float AP_KM_PER_SLICE_INV = 1.0f / AP_KM_PER_SLICE;
 
 // =============================================================================
 // Safety Limits

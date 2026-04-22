@@ -175,10 +175,14 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
     .transmittance_width = cache_state.internal_parameters.transmittance_width,
     .transmittance_height = cache_state.internal_parameters.transmittance_height,
     .active_light_count = stable_state.view_products.atmosphere_light_count,
-    .planet_radius_m = atmosphere.planet_radius_m,
-    .atmosphere_height_m = atmosphere.atmosphere_height_m,
-    .rayleigh_scale_height_m = atmosphere.rayleigh_scale_height_m,
-    .mie_scale_height_m = atmosphere.mie_scale_height_m,
+    .planet_radius_km = engine::atmos::MetersToSkyUnit(
+      atmosphere.planet_radius_m),
+    .atmosphere_height_km = engine::atmos::MetersToSkyUnit(
+      atmosphere.atmosphere_height_m),
+    .rayleigh_scale_height_km = engine::atmos::MetersToSkyUnit(
+      atmosphere.rayleigh_scale_height_m),
+    .mie_scale_height_km = engine::atmos::MetersToSkyUnit(
+      atmosphere.mie_scale_height_m),
     .multi_scattering_factor = atmosphere.multi_scattering_factor,
     .mie_anisotropy = atmosphere.mie_anisotropy,
     ._pad1 = 0.0F,
@@ -189,40 +193,44 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
       atmosphere.ground_albedo_rgb.z,
       0.0F,
     },
-    .rayleigh_scattering_rgb = {
-      atmosphere.rayleigh_scattering_rgb.x,
-      atmosphere.rayleigh_scattering_rgb.y,
-      atmosphere.rayleigh_scattering_rgb.z,
+    .rayleigh_scattering_per_km_rgb = {
+      atmosphere.rayleigh_scattering_rgb.x * engine::atmos::kSkyUnitToM,
+      atmosphere.rayleigh_scattering_rgb.y * engine::atmos::kSkyUnitToM,
+      atmosphere.rayleigh_scattering_rgb.z * engine::atmos::kSkyUnitToM,
       0.0F,
     },
-    .mie_scattering_rgb = {
-      atmosphere.mie_scattering_rgb.x,
-      atmosphere.mie_scattering_rgb.y,
-      atmosphere.mie_scattering_rgb.z,
+    .mie_scattering_per_km_rgb = {
+      atmosphere.mie_scattering_rgb.x * engine::atmos::kSkyUnitToM,
+      atmosphere.mie_scattering_rgb.y * engine::atmos::kSkyUnitToM,
+      atmosphere.mie_scattering_rgb.z * engine::atmos::kSkyUnitToM,
       0.0F,
     },
-    .mie_absorption_rgb = {
-      atmosphere.mie_absorption_rgb.x,
-      atmosphere.mie_absorption_rgb.y,
-      atmosphere.mie_absorption_rgb.z,
+    .mie_absorption_per_km_rgb = {
+      atmosphere.mie_absorption_rgb.x * engine::atmos::kSkyUnitToM,
+      atmosphere.mie_absorption_rgb.y * engine::atmos::kSkyUnitToM,
+      atmosphere.mie_absorption_rgb.z * engine::atmos::kSkyUnitToM,
       0.0F,
     },
-    .ozone_absorption_rgb = {
-      atmosphere.ozone_absorption_rgb.x,
-      atmosphere.ozone_absorption_rgb.y,
-      atmosphere.ozone_absorption_rgb.z,
+    .ozone_absorption_per_km_rgb = {
+      atmosphere.ozone_absorption_rgb.x * engine::atmos::kSkyUnitToM,
+      atmosphere.ozone_absorption_rgb.y * engine::atmos::kSkyUnitToM,
+      atmosphere.ozone_absorption_rgb.z * engine::atmos::kSkyUnitToM,
       0.0F,
     },
     .ozone_density_layer0 = {
-      atmosphere.ozone_density_profile.layers[0].width_m,
+      engine::atmos::MetersToSkyUnit(
+        atmosphere.ozone_density_profile.layers[0].width_m),
       atmosphere.ozone_density_profile.layers[0].exp_term,
-      atmosphere.ozone_density_profile.layers[0].linear_term,
+      atmosphere.ozone_density_profile.layers[0].linear_term
+        * engine::atmos::kSkyUnitToM,
       atmosphere.ozone_density_profile.layers[0].constant_term,
     },
     .ozone_density_layer1 = {
-      atmosphere.ozone_density_profile.layers[1].width_m,
+      engine::atmos::MetersToSkyUnit(
+        atmosphere.ozone_density_profile.layers[1].width_m),
       atmosphere.ozone_density_profile.layers[1].exp_term,
-      atmosphere.ozone_density_profile.layers[1].linear_term,
+      atmosphere.ozone_density_profile.layers[1].linear_term
+        * engine::atmos::kSkyUnitToM,
       atmosphere.ozone_density_profile.layers[1].constant_term,
     },
   };

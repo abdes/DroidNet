@@ -36,20 +36,30 @@ static float3 VortexSafeNormalize(float3 value)
     return value * rsqrt(length_sq);
 }
 
+static float AtmosphereMetersToSkyUnit(float meters)
+{
+    return meters * 1.0e-3f;
+}
+
+static float3 AtmosphereMetersToSkyUnit(float3 meters)
+{
+    return meters * 1.0e-3f;
+}
+
 static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
-    float planet_radius_m,
-    float atmosphere_height_m,
+    float planet_radius_km,
+    float atmosphere_height_km,
     float multi_scattering_factor,
     float aerial_perspective_distance_scale,
-    float rayleigh_scale_height_m,
-    float mie_scale_height_m,
+    float rayleigh_scale_height_km,
+    float mie_scale_height_km,
     float mie_anisotropy,
     float3 ground_albedo_rgb,
     float sun_disk_angular_radius_radians,
-    float3 rayleigh_scattering_rgb,
-    float3 mie_scattering_rgb,
-    float3 mie_absorption_rgb,
-    float3 ozone_absorption_rgb,
+    float3 rayleigh_scattering_per_km_rgb,
+    float3 mie_scattering_per_km_rgb,
+    float3 mie_absorption_per_km_rgb,
+    float3 ozone_absorption_per_km_rgb,
     AtmosphereDensityProfile ozone_density_profile,
     uint sun_disk_enabled,
     uint transmittance_lut_srv,
@@ -58,20 +68,21 @@ static GpuSkyAtmosphereParams BuildVortexAtmosphereParams(
     uint multi_scattering_lut_srv)
 {
     GpuSkyAtmosphereParams atmosphere = (GpuSkyAtmosphereParams)0;
-    atmosphere.planet_radius_m = planet_radius_m;
-    atmosphere.atmosphere_height_m = atmosphere_height_m;
+    atmosphere.planet_radius_km = planet_radius_km;
+    atmosphere.atmosphere_height_km = atmosphere_height_km;
     atmosphere.multi_scattering_factor = multi_scattering_factor;
     atmosphere.aerial_perspective_distance_scale = aerial_perspective_distance_scale;
     atmosphere.ground_albedo_rgb = ground_albedo_rgb;
     atmosphere.sun_disk_angular_radius_radians = sun_disk_angular_radius_radians;
     atmosphere.sun_disk_luminance_scale_rgb = 1.0f.xxx;
-    atmosphere.rayleigh_scattering_rgb = rayleigh_scattering_rgb;
-    atmosphere.rayleigh_scale_height_m = rayleigh_scale_height_m;
-    atmosphere.mie_scattering_rgb = mie_scattering_rgb;
-    atmosphere.mie_scale_height_m = mie_scale_height_m;
-    atmosphere.mie_extinction_rgb = mie_scattering_rgb + mie_absorption_rgb;
+    atmosphere.rayleigh_scattering_per_km_rgb = rayleigh_scattering_per_km_rgb;
+    atmosphere.rayleigh_scale_height_km = rayleigh_scale_height_km;
+    atmosphere.mie_scattering_per_km_rgb = mie_scattering_per_km_rgb;
+    atmosphere.mie_scale_height_km = mie_scale_height_km;
+    atmosphere.mie_extinction_per_km_rgb
+        = mie_scattering_per_km_rgb + mie_absorption_per_km_rgb;
     atmosphere.mie_g = mie_anisotropy;
-    atmosphere.absorption_rgb = ozone_absorption_rgb;
+    atmosphere.absorption_per_km_rgb = ozone_absorption_per_km_rgb;
     atmosphere.absorption_density = ozone_density_profile;
     atmosphere.sun_disk_enabled = sun_disk_enabled;
     atmosphere.enabled = 1u;

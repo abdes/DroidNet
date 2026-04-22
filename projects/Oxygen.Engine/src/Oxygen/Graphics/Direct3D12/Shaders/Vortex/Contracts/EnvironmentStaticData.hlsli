@@ -10,7 +10,7 @@
 // Atmosphere density profile structures (used by GpuSkyAtmosphereParams)
 struct AtmosphereDensityLayer
 {
-    float width_m;
+    float width_km;
     float exp_term;
     float linear_term;
     float constant_term;
@@ -58,8 +58,8 @@ struct GpuFogParams
 // Mirrors oxygen::vortex::GpuSkyAtmosphereParams (sizeof = 208)
 struct GpuSkyAtmosphereParams
 {
-    float planet_radius_m;
-    float atmosphere_height_m;
+    float planet_radius_km;
+    float atmosphere_height_km;
     float multi_scattering_factor;
     float aerial_perspective_distance_scale;
 
@@ -69,17 +69,17 @@ struct GpuSkyAtmosphereParams
     float3 sun_disk_luminance_scale_rgb;
     float _pad_sun_disk_luminance;
 
-    float3 rayleigh_scattering_rgb;
-    float rayleigh_scale_height_m;
+    float3 rayleigh_scattering_per_km_rgb;
+    float rayleigh_scale_height_km;
 
-    float3 mie_scattering_rgb;
-    float mie_scale_height_m;
+    float3 mie_scattering_per_km_rgb;
+    float mie_scale_height_km;
 
     // Precomputed Mie extinction (scattering + absorption).
-    float3 mie_extinction_rgb;
+    float3 mie_extinction_per_km_rgb;
     float mie_g;
 
-    float3 absorption_rgb;
+    float3 absorption_per_km_rgb;
     float _pad_absorption;
 
     AtmosphereDensityProfile absorption_density;

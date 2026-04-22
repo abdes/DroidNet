@@ -13,6 +13,40 @@
 
 namespace oxygen::engine::atmos {
 
+//! Meters to UE-style atmosphere-space km.
+inline constexpr float kMToSkyUnit = 1.0e-3F;
+
+//! UE-style atmosphere-space km to meters.
+inline constexpr float kSkyUnitToM = 1.0e3F;
+
+//! Centimeters to UE-style atmosphere-space km.
+//! Matches UE5.7 `CM_TO_SKY_UNIT` in `SkyAtmosphereCommon.ush`.
+inline constexpr float kCmToSkyUnit = 1.0e-5F;
+
+//! Precision-safe radius epsilon near the planet surface in km (1 meter).
+//! Matches UE5.7 `PLANET_RADIUS_OFFSET`.
+inline constexpr float kPlanetRadiusOffsetKm = 0.001F;
+
+//! Aerial-perspective froxel depth spacing in km.
+//! Matches UE5.7 `AP_KM_PER_SLICE`.
+inline constexpr float kAerialPerspectiveKmPerSlice = 4.0F;
+
+constexpr auto MetersToSkyUnit(const float meters) -> float
+{
+  return meters * kMToSkyUnit;
+}
+
+constexpr auto SkyUnitToMeters(const float kilometers) -> float
+{
+  return kilometers * kSkyUnitToM;
+}
+
+constexpr auto CoefficientPerMeterToPerSkyUnit(const float coefficient_per_m)
+  -> float
+{
+  return coefficient_per_m * kSkyUnitToM;
+}
+
 //! Radius of the planet in meters (Earth ≈ 6360km).
 inline constexpr float kDefaultPlanetRadiusM = 6360000.0F;
 
@@ -24,6 +58,21 @@ inline constexpr float kDefaultAtmosphereHeightM = 100000.0F;
 
 //! Earth's atmosphere height in meters.
 inline constexpr float kEarthAtmosphereHeightM = 100000.0F;
+
+//! Radius of the planet in UE-style atmosphere-space km.
+inline constexpr float kDefaultPlanetRadiusKm
+  = MetersToSkyUnit(kDefaultPlanetRadiusM);
+
+//! Earth's average radius in UE-style atmosphere-space km.
+inline constexpr float kEarthRadiusKm = MetersToSkyUnit(kEarthRadiusM);
+
+//! Height of the atmosphere in UE-style atmosphere-space km.
+inline constexpr float kDefaultAtmosphereHeightKm
+  = MetersToSkyUnit(kDefaultAtmosphereHeightM);
+
+//! Earth's atmosphere height in UE-style atmosphere-space km.
+inline constexpr float kEarthAtmosphereHeightKm
+  = MetersToSkyUnit(kEarthAtmosphereHeightM);
 
 //! Default planet up direction (+Z).
 inline constexpr glm::vec3 kDefaultPlanetUp { 0.0F, 0.0F, 1.0F };
@@ -64,6 +113,10 @@ inline constexpr glm::vec3 kDefaultRayleighScatteringRgb { 5.802e-6F,
 //! Rayleigh scale height in meters (Earth ≈ 8km).
 inline constexpr float kDefaultRayleighScaleHeightM = 8000.0F;
 
+//! Rayleigh scale height in UE-style atmosphere-space km.
+inline constexpr float kDefaultRayleighScaleHeightKm
+  = MetersToSkyUnit(kDefaultRayleighScaleHeightM);
+
 //! Mie scattering coefficients at sea level (Earth-like).
 inline constexpr glm::vec3 kDefaultMieScatteringRgb { 3.996e-6F, 3.996e-6F,
   3.996e-6F };
@@ -79,6 +132,10 @@ inline constexpr glm::vec3 kDefaultMieExtinctionRgb { kDefaultMieScatteringRgb
 //! Mie scale height in meters (Earth ≈ 1.2km).
 inline constexpr float kDefaultMieScaleHeightM = 1200.0F;
 
+//! Mie scale height in UE-style atmosphere-space km.
+inline constexpr float kDefaultMieScaleHeightKm
+  = MetersToSkyUnit(kDefaultMieScaleHeightM);
+
 //! Mie phase function anisotropy (Earth ≈ 0.8).
 inline constexpr float kDefaultMieAnisotropyG = 0.8F;
 
@@ -90,6 +147,13 @@ inline constexpr glm::vec3 kDefaultOzoneAbsorptionRgb { 0.650e-6F, 1.881e-6F,
 inline constexpr float kDefaultOzoneBottomM = 10000.0F;
 inline constexpr float kDefaultOzonePeakM = 25000.0F;
 inline constexpr float kDefaultOzoneTopM = 40000.0F;
+
+//! Default ozone profile altitude bounds in UE-style atmosphere-space km.
+inline constexpr float kDefaultOzoneBottomKm
+  = MetersToSkyUnit(kDefaultOzoneBottomM);
+inline constexpr float kDefaultOzonePeakKm
+  = MetersToSkyUnit(kDefaultOzonePeakM);
+inline constexpr float kDefaultOzoneTopKm = MetersToSkyUnit(kDefaultOzoneTopM);
 
 //! Defines a single atmospheric density layer (linear distribution).
 /*!
@@ -142,6 +206,26 @@ inline constexpr DensityProfile kDefaultOzoneDensityProfile {
       .linear_term = -1.0F / (kDefaultOzoneTopM - kDefaultOzonePeakM),
       .constant_term = kDefaultOzoneTopM
         / (kDefaultOzoneTopM - kDefaultOzonePeakM),
+    },
+  },
+};
+
+//! Default ozone density profile in UE-style atmosphere-space km.
+inline constexpr DensityProfile kDefaultOzoneDensityProfileKm {
+  .layers = {
+    DensityLayer {
+      .width_m = kDefaultOzonePeakKm,
+      .exp_term = 0.0F,
+      .linear_term = 1.0F / (kDefaultOzonePeakKm - kDefaultOzoneBottomKm),
+      .constant_term = -kDefaultOzoneBottomKm
+        / (kDefaultOzonePeakKm - kDefaultOzoneBottomKm),
+    },
+    DensityLayer {
+      .width_m = 0.0F,
+      .exp_term = 0.0F,
+      .linear_term = -1.0F / (kDefaultOzoneTopKm - kDefaultOzonePeakKm),
+      .constant_term = kDefaultOzoneTopKm
+        / (kDefaultOzoneTopKm - kDefaultOzonePeakKm),
     },
   },
 };

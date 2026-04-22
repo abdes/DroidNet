@@ -962,14 +962,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FLOAT_EQ(view_data->planet_center_ws_pad.x, 1000.0F);
   EXPECT_FLOAT_EQ(view_data->planet_center_ws_pad.y, 2000.0F);
   EXPECT_FLOAT_EQ(view_data->planet_center_ws_pad.z, 3000.0F);
-  EXPECT_GT(view_data->sky_planet_translated_world_center_and_view_height.w,
-    7000000.0F);
+  EXPECT_GT(view_data->sky_planet_translated_world_center_km_and_view_height_km.w,
+    7000.0F);
   EXPECT_NEAR(
-    view_data->sky_camera_translated_world_origin_pad.x, 0.0F, 1.0e-3F);
+    view_data->sky_camera_translated_world_origin_km_pad.x, 0.0F, 1.0e-3F);
   EXPECT_NEAR(
-    view_data->sky_camera_translated_world_origin_pad.y, 0.0F, 1.0e-3F);
+    view_data->sky_camera_translated_world_origin_km_pad.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(
-    view_data->sky_camera_translated_world_origin_pad.z, 0.0F, 1.0e-3F);
+    view_data->sky_camera_translated_world_origin_km_pad.z, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.x, 1.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);

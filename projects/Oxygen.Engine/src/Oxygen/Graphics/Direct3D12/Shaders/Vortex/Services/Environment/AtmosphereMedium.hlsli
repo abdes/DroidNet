@@ -19,33 +19,33 @@
 //! Computes the density of an atmospheric layer with exponential distribution.
 //! Used for Rayleigh and Mie scattering.
 //!
-//! @param altitude_m    Height above the planet surface in meters.
-//! @param scale_height_m Scale height of the layer in meters.
+//! @param altitude_km    Height above the planet surface in km.
+//! @param scale_height_km Scale height of the layer in km.
 //! @return Normalized density (0 to 1).
-float AtmosphereExponentialDensity(float altitude_m, float scale_height_m)
+float AtmosphereExponentialDensity(float altitude_km, float scale_height_km)
 {
-    return exp(-altitude_m / scale_height_m);
+    return exp(-altitude_km / scale_height_km);
 }
 
 //! Computes ozone density using a tent distribution (Hillaire 2020).
 //!
-//! Defined by two linear ramps meeting at layer_width_m.
+//! Defined by two linear ramps meeting at layer_width_km.
 //!
-//! @param altitude_m       Altitude above planet surface (meters).
-//! @param layer_width_m    Altitude of peak density (meters).
-//! @param linear_term_below Slope for altitude < layer_width_m.
-//! @param linear_term_above Slope for altitude >= layer_width_m (typically negative).
+//! @param altitude_km       Altitude above planet surface (km).
+//! @param layer_width_km    Altitude of peak density (km).
+//! @param linear_term_below Slope for altitude < layer_width_km.
+//! @param linear_term_above Slope for altitude >= layer_width_km (typically negative).
 //! @return Normalized density in [0, 1].
-float EvaluateDensityProfile(float altitude_m, AtmosphereDensityProfile profile)
+float EvaluateDensityProfile(float altitude_km, AtmosphereDensityProfile profile)
 {
     // Clamp altitude to avoid negative heights.
-    float h = max(altitude_m, 0.0);
+    float h = max(altitude_km, 0.0);
 
-    // Layer 0 is the lower layer (below profile.layers[0].width_m).
+    // Layer 0 is the lower layer (below profile.layers[0].width_km).
     // Layer 1 is the upper layer.
     // This matches UE5's implementation of a 2-layer profile.
     AtmosphereDensityLayer layer;
-    if (h < profile.layers[0].width_m)
+    if (h < profile.layers[0].width_km)
     {
         layer = profile.layers[0];
     }
@@ -65,7 +65,7 @@ float EvaluateDensityProfile(float altitude_m, AtmosphereDensityProfile profile)
     // For Ozone tent: ExpWeight=0, LinearTerm=slope, ConstantTerm=offset.
     if (layer.exp_term != 0.0)
     {
-        // For exponential layers, width_m is often unused or a soft limit.
+        // For exponential layers, width_km is often unused or a soft limit.
         // We use linear_term as the scale factor (e.g. -1/H).
         return layer.exp_term * exp(layer.linear_term * h) + layer.constant_term;
     }
@@ -73,9 +73,9 @@ float EvaluateDensityProfile(float altitude_m, AtmosphereDensityProfile profile)
     return layer.linear_term * h + layer.constant_term;
 }
 
-float OzoneAbsorptionDensity(float altitude_m, AtmosphereDensityProfile profile)
+float OzoneAbsorptionDensity(float altitude_km, AtmosphereDensityProfile profile)
 {
-    return saturate(EvaluateDensityProfile(altitude_m, profile));
+    return saturate(EvaluateDensityProfile(altitude_km, profile));
 }
 
 //------------------------------------------------------------------------------
@@ -114,9 +114,9 @@ float3 TransmittanceFromOpticalDepth(
     float d_m = optical_depth.y; // Mie optical depth
     float d_a = optical_depth.z; // Absorption optical depth
 
-    float3 extinction = (atmo.rayleigh_scattering_rgb * d_r)
-        + (atmo.mie_extinction_rgb * d_m)
-        + (atmo.absorption_rgb * d_a);
+        float3 extinction = (atmo.rayleigh_scattering_per_km_rgb * d_r)
+        + (atmo.mie_extinction_per_km_rgb * d_m)
+        + (atmo.absorption_per_km_rgb * d_a);
 
     return exp(-extinction);
 }

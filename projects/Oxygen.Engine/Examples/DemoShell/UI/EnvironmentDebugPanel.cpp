@@ -282,18 +282,19 @@ void EnvironmentDebugPanel::DrawFog()
   ImGui::SeparatorText("Secondary Layer");
   float second_fog_density = environment_vm_->GetSecondFogDensity();
   if (ImGui::DragFloat(
-        "Second Density", &second_fog_density, 0.001F, 0.0F, 10.0F, "%.4f")) {
+        "Second Density (1/m)", &second_fog_density, 0.001F, 0.0F, 10.0F,
+        "%.4f")) {
     environment_vm_->SetSecondFogDensity(second_fog_density);
   }
   float second_fog_height_falloff
     = environment_vm_->GetSecondFogHeightFalloff();
-  if (ImGui::DragFloat("Second Height Falloff", &second_fog_height_falloff,
-        0.0001F, 0.0F, 10.0F, "%.4f")) {
+  if (ImGui::DragFloat("Second Height Falloff (1/m)",
+        &second_fog_height_falloff, 0.0001F, 0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSecondFogHeightFalloff(second_fog_height_falloff);
   }
   float second_fog_height_offset = environment_vm_->GetSecondFogHeightOffset();
-  if (ImGui::DragFloat("Second Height Offset", &second_fog_height_offset, 0.25F,
-        -100000.0F, 100000.0F, "%.1f")) {
+  if (ImGui::DragFloat("Second Height Offset (m)", &second_fog_height_offset,
+        0.25F, -100000.0F, 100000.0F, "%.1f")) {
     environment_vm_->SetSecondFogHeightOffset(second_fog_height_offset);
   }
 
@@ -347,7 +348,7 @@ void EnvironmentDebugPanel::DrawFog()
       ambient_scale);
   }
   float cubemap_angle = environment_vm_->GetInscatteringColorCubemapAngle();
-  if (ImGui::DragFloat("Inscattering Cubemap Angle", &cubemap_angle, 1.0F,
+  if (ImGui::DragFloat("Inscattering Cubemap Angle (deg)", &cubemap_angle, 1.0F,
         -3600.0F, 3600.0F, "%.1f")) {
     environment_vm_->SetInscatteringColorCubemapAngle(cubemap_angle);
   }
@@ -358,14 +359,15 @@ void EnvironmentDebugPanel::DrawFog()
   }
   float fully_directional_distance
     = environment_vm_->GetFullyDirectionalInscatteringColorDistance();
-  if (ImGui::DragFloat("Fully Directional Distance",
+  if (ImGui::DragFloat("Fully Directional Distance (m)",
         &fully_directional_distance, 10.0F, 0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetFullyDirectionalInscatteringColorDistance(
       fully_directional_distance);
   }
   float non_directional_distance
     = environment_vm_->GetNonDirectionalInscatteringColorDistance();
-  if (ImGui::DragFloat("Non Directional Distance", &non_directional_distance,
+  if (ImGui::DragFloat("Non-Directional Distance (m)",
+        &non_directional_distance,
         10.0F, 0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetNonDirectionalInscatteringColorDistance(
       non_directional_distance);
@@ -384,7 +386,7 @@ void EnvironmentDebugPanel::DrawFog()
   }
   float directional_start_distance
     = environment_vm_->GetDirectionalInscatteringStartDistance();
-  if (ImGui::DragFloat("Directional Start Distance",
+  if (ImGui::DragFloat("Directional Start Distance (m)",
         &directional_start_distance, 1.0F, 0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetDirectionalInscatteringStartDistance(
       directional_start_distance);
@@ -432,13 +434,15 @@ void EnvironmentDebugPanel::DrawFog()
   }
   float volumetric_start
     = environment_vm_->GetVolumetricFogStartDistanceMeters();
-  if (ImGui::DragFloat("Volumetric Start Distance", &volumetric_start, 1.0F,
+  if (ImGui::DragFloat("Volumetric Start Distance (m)", &volumetric_start,
+        1.0F,
         0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetVolumetricFogStartDistanceMeters(volumetric_start);
   }
   float volumetric_near_fade
     = environment_vm_->GetVolumetricFogNearFadeInDistanceMeters();
-  if (ImGui::DragFloat("Volumetric Near Fade", &volumetric_near_fade, 1.0F,
+  if (ImGui::DragFloat("Volumetric Near Fade (m)", &volumetric_near_fade,
+        1.0F,
         0.0F, 1000000.0F, "%.1f")) {
     environment_vm_->SetVolumetricFogNearFadeInDistanceMeters(
       volumetric_near_fade);
@@ -514,7 +518,7 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
 
   float radial_extinction
     = environment_vm_->GetSelectedLocalFogVolumeRadialFogExtinction();
-  if (ImGui::DragFloat("Radial Extinction##LocalFog", &radial_extinction,
+  if (ImGui::DragFloat("Radial Extinction (1/m)##LocalFog", &radial_extinction,
         0.001F, 0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSelectedLocalFogVolumeRadialFogExtinction(
       radial_extinction);
@@ -522,7 +526,7 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
 
   float height_extinction
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogExtinction();
-  if (ImGui::DragFloat("Height Extinction##LocalFog", &height_extinction,
+  if (ImGui::DragFloat("Height Extinction (1/m)##LocalFog", &height_extinction,
         0.001F, 0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSelectedLocalFogVolumeHeightFogExtinction(
       height_extinction);
@@ -530,14 +534,15 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
 
   float height_falloff
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogFalloff();
-  if (ImGui::DragFloat("Height Falloff##LocalFog", &height_falloff, 0.001F,
+  if (ImGui::DragFloat("Height Falloff (1/m)##LocalFog", &height_falloff,
+        0.001F,
         0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSelectedLocalFogVolumeHeightFogFalloff(height_falloff);
   }
 
   float height_offset
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogOffset();
-  if (ImGui::DragFloat("Height Offset##LocalFog", &height_offset, 0.05F,
+  if (ImGui::DragFloat("Height Offset (m)##LocalFog", &height_offset, 0.05F,
         -1000.0F, 1000.0F, "%.2f")) {
     environment_vm_->SetSelectedLocalFogVolumeHeightFogOffset(height_offset);
   }
@@ -864,16 +869,17 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   // Planet parameters
   ImGui::SeparatorText("Planet:");
-  // Note: Max radius limited to 15000 km due to float precision issues in
-  // ray-sphere intersection at larger values (causes sky/ground flip).
-  // Min radius 10 km allows testing small asteroid-like bodies.
+  ImGui::TextDisabled(
+    "Earth defaults: radius 6360 km, atmosphere height 100 km. "
+    "UI clamps: radius 10-100000 km, height 1-1000 km.");
   float planet_radius_km = environment_vm_->GetPlanetRadiusKm();
   if (ImGui::DragFloat(
-        "Radius (km)", &planet_radius_km, 10.0F, 10.0F, 15000.0F, "%.0F")) {
+        "Radius (km)", &planet_radius_km, 10.0F, 10.0F, 100000.0F, "%.0F")) {
     environment_vm_->SetPlanetRadiusKm(planet_radius_km);
   }
   float atmosphere_height_km = environment_vm_->GetAtmosphereHeightKm();
-  if (ImGui::DragFloat("Atmo Height (km)", &atmosphere_height_km, 1.0F, 1.0F,
+  if (ImGui::DragFloat("Atmosphere Height (km)", &atmosphere_height_km, 1.0F,
+        1.0F,
         1000.0F, "%.1F")) {
     environment_vm_->SetAtmosphereHeightKm(atmosphere_height_km);
   }
@@ -887,14 +893,18 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   // Scattering parameters
   ImGui::SeparatorText("Scattering:");
+  ImGui::TextDisabled(
+    "Earth defaults: Rayleigh 8 km, Mie 1.2 km. "
+    "UI clamps: Rayleigh 0.1-50 km, Mie 0.05-20 km.");
   float rayleigh_scale_height_km = environment_vm_->GetRayleighScaleHeightKm();
-  if (ImGui::DragFloat("Rayleigh Scale H (km)", &rayleigh_scale_height_km, 0.1F,
-        0.1F, 100.0F, "%.1F")) {
+  if (ImGui::DragFloat("Rayleigh Scale Height (km)",
+        &rayleigh_scale_height_km, 0.1F, 0.1F, 50.0F, "%.1F")) {
     environment_vm_->SetRayleighScaleHeightKm(rayleigh_scale_height_km);
   }
   float mie_scale_height_km = environment_vm_->GetMieScaleHeightKm();
   if (ImGui::DragFloat(
-        "Mie Scale H (km)", &mie_scale_height_km, 0.1F, 0.1F, 100.0F, "%.2F")) {
+        "Mie Scale Height (km)", &mie_scale_height_km, 0.05F, 0.05F, 20.0F,
+        "%.2F")) {
     environment_vm_->SetMieScaleHeightKm(mie_scale_height_km);
   }
   float mie_anisotropy = environment_vm_->GetMieAnisotropy();
@@ -937,8 +947,12 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   // Ozone Profile (2-layer density profile)
   ImGui::SeparatorText("Ozone Density Profile (2-layer):");
 
-  constexpr float kMetersToKm = 0.001F;
-  constexpr float kKmToMeters = 1000.0F;
+  constexpr float kMetersToKm = engine::atmos::kMToSkyUnit;
+  constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
+
+  ImGui::TextDisabled(
+    "Peak altitude is in km. Slopes are shown in 1/km. "
+    "Offsets are unitless density terms.");
 
   auto ozone_profile = environment_vm_->GetOzoneDensityProfile();
   const auto& lower = ozone_profile.layers[0];
@@ -966,23 +980,23 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   float lower_slope_inv_km = ozone_profile.layers[0].linear_term * kKmToMeters;
   if (ImGui::DragFloat("Lower Slope (1/km)", &lower_slope_inv_km, 0.01F,
-        -1.0e3F, 1.0e3F, "%.4f")) {
+        -1.0F, 1.0F, "%.4f")) {
     ozone_profile_changed = true;
   }
   float lower_offset = ozone_profile.layers[0].constant_term;
   if (ImGui::DragFloat(
-        "Lower Offset", &lower_offset, 0.01F, -1000.0F, 1000.0F, "%.4f")) {
+        "Lower Offset", &lower_offset, 0.01F, -8.0F, 8.0F, "%.4f")) {
     ozone_profile_changed = true;
   }
 
   float upper_slope_inv_km = ozone_profile.layers[1].linear_term * kKmToMeters;
   if (ImGui::DragFloat("Upper Slope (1/km)", &upper_slope_inv_km, 0.01F,
-        -1.0e3F, 1.0e3F, "%.4f")) {
+        -1.0F, 1.0F, "%.4f")) {
     ozone_profile_changed = true;
   }
   float upper_offset = ozone_profile.layers[1].constant_term;
   if (ImGui::DragFloat(
-        "Upper Offset", &upper_offset, 0.01F, -1000.0F, 1000.0F, "%.4f")) {
+        "Upper Offset", &upper_offset, 0.01F, -8.0F, 8.0F, "%.4f")) {
     ozone_profile_changed = true;
   }
 
@@ -1016,8 +1030,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   // fit nicely in 0..1 ColorEdit. So scaling by 1e6 makes it user-friendly
   // color picker compatible!
 
-  if (ImGui::DragFloat3("Ozone Coeffs (x1e-6)", absorption_rgb_arr, 0.01F, 0.0F,
-        10.0F, "%.3f")) {
+  if (ImGui::DragFloat3("Ozone Absorption (x1e-6 1/m)", absorption_rgb_arr,
+        0.01F, 0.0F, 10.0F, "%.3f")) {
     environment_vm_->SetOzoneRgb(glm::vec3(absorption_rgb_arr[0],
                                    absorption_rgb_arr[1], absorption_rgb_arr[2])
       / kOzoneScale);
@@ -1031,8 +1045,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
-      "Absorption coefficient in inverse micrometers (1e-6 m^-1).\n"
-      "Default Earth Ozone ~ (0.65, 1.88, 0.085).");
+      "Absorption coefficient shown as x1e-6 1/m.\n"
+      "Default Earth ozone is approximately (0.65, 1.88, 0.085).");
   }
 
   // Sun disk
@@ -1053,8 +1067,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   ImGui::BeginDisabled(!aerial_perspective_enabled);
   float aerial_perspective_scale = environment_vm_->GetAerialPerspectiveScale();
-  if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 0.01F, 0.0F,
-        50.0F, "%.2F")) {
+  if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 0.01F,
+        0.0F, 16.0F, "%.2F")) {
     environment_vm_->SetAerialPerspectiveScale(aerial_perspective_scale);
   }
   float aerial_start_depth
@@ -1066,7 +1080,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   float aerial_scattering_strength
     = environment_vm_->GetAerialScatteringStrength();
   if (ImGui::DragFloat(
-        "Haze", &aerial_scattering_strength, 0.01F, 0.0F, 50.0F, "%.2F")) {
+        "Haze Strength", &aerial_scattering_strength, 0.01F, 0.0F, 16.0F,
+        "%.2F")) {
     environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
   }
   float height_fog_contribution = environment_vm_->GetHeightFogContribution();

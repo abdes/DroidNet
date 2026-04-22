@@ -69,6 +69,17 @@ namespace {
     return glm::normalize(value);
   }
 
+  auto MetersToSkyUnitVec3(const glm::vec3 meters) -> glm::vec3
+  {
+    return meters * engine::atmos::kMToSkyUnit;
+  }
+
+  auto CoefficientsPerMeterToPerSkyUnitVec3(const glm::vec3 coefficients_per_m)
+    -> glm::vec3
+  {
+    return coefficients_per_m * engine::atmos::kSkyUnitToM;
+  }
+
   //! Builds the shared sky-view local basis used by both the LUT producer and
   //! the main-view sky consumer.
   /*!
@@ -352,7 +363,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto camera_to_planet_translated_ws = -planet_center_translated_ws;
   const auto distance_to_planet_center_m
     = glm::length(camera_to_planet_translated_ws);
-  const auto planet_radius_offset_m = 5.0F;
+  const auto planet_radius_offset_m
+    = engine::atmos::SkyUnitToMeters(engine::atmos::kPlanetRadiusOffsetKm);
   auto sky_camera_translated_world_origin = glm::vec3 { 0.0F, 0.0F, 0.0F };
   if (distance_to_planet_center_m
     < (atmosphere.planet_radius_m + planet_radius_offset_m)) {
@@ -366,8 +378,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto planet_up_ws = SafeNormalizeOrFallback(
     sky_camera_planet_vector, engine::atmos::kDefaultPlanetUp);
   const auto view_height_m = glm::length(sky_camera_planet_vector);
-  const auto camera_altitude_m
-    = std::max(view_height_m - atmosphere.planet_radius_m, 0.0F);
+  const auto camera_altitude_km = engine::atmos::MetersToSkyUnit(
+    std::max(view_height_m - atmosphere.planet_radius_m, 0.0F));
   const auto referential_rows
     = BuildSkyViewReferentialRows(planet_up_ws, view_forward_ws);
 
@@ -399,12 +411,13 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
     = atmosphere.aerial_perspective_distance_scale;
   data.aerial_scattering_strength = atmosphere.aerial_scattering_strength;
   data.planet_center_ws_pad = glm::vec4(planet_center_ws, 0.0F);
-  data.planet_up_ws_camera_altitude_m
-    = glm::vec4(planet_up_ws, camera_altitude_m);
-  data.sky_planet_translated_world_center_and_view_height
-    = glm::vec4(planet_center_translated_ws, view_height_m);
-  data.sky_camera_translated_world_origin_pad
-    = glm::vec4(sky_camera_translated_world_origin, 0.0F);
+  data.planet_up_ws_camera_altitude_km
+    = glm::vec4(planet_up_ws, camera_altitude_km);
+  data.sky_planet_translated_world_center_km_and_view_height_km = glm::vec4(
+    MetersToSkyUnitVec3(planet_center_translated_ws),
+    engine::atmos::MetersToSkyUnit(view_height_m));
+  data.sky_camera_translated_world_origin_km_pad
+    = glm::vec4(MetersToSkyUnitVec3(sky_camera_translated_world_origin), 0.0F);
   data.sky_view_lut_referential_row0 = referential_rows[0];
   data.sky_view_lut_referential_row1 = referential_rows[1];
   data.sky_view_lut_referential_row2 = referential_rows[2];
@@ -438,9 +451,10 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   }
   data.sky_luminance_factor_height_fog_contribution = glm::vec4(
     atmosphere.sky_luminance_factor_rgb, atmosphere.height_fog_contribution);
-  data.sky_aerial_luminance_aerial_start_depth_m
+  data.sky_aerial_luminance_aerial_start_depth_km
     = glm::vec4(atmosphere.sky_and_aerial_perspective_luminance_factor_rgb,
-      atmosphere.aerial_perspective_start_depth_m);
+      engine::atmos::MetersToSkyUnit(
+        atmosphere.aerial_perspective_start_depth_m));
   data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass
     = glm::vec4(atmosphere.trace_sample_count_scale,
       atmosphere.transmittance_min_light_elevation_deg,
@@ -495,8 +509,10 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   const auto primary_sun_disk_luminance_scale_rgb = primary_sun_disk_enabled
     ? glm::vec3 { view_products.atmosphere_lights[0].disk_luminance_scale_rgba }
     : glm::vec3 { 1.0F, 1.0F, 1.0F };
-  data.atmosphere.planet_radius_m = atmo.planet_radius_m;
-  data.atmosphere.atmosphere_height_m = atmo.atmosphere_height_m;
+  data.atmosphere.planet_radius_km
+    = engine::atmos::MetersToSkyUnit(atmo.planet_radius_m);
+  data.atmosphere.atmosphere_height_km
+    = engine::atmos::MetersToSkyUnit(atmo.atmosphere_height_m);
   data.atmosphere.multi_scattering_factor = atmo.multi_scattering_factor;
   data.atmosphere.aerial_perspective_distance_scale
     = atmo.aerial_perspective_distance_scale;
@@ -509,34 +525,46 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     primary_sun_disk_luminance_scale_rgb.y,
     primary_sun_disk_luminance_scale_rgb.z,
   };
-  data.atmosphere.rayleigh_scattering_rgb = {
-    atmo.rayleigh_scattering_rgb.x,
-    atmo.rayleigh_scattering_rgb.y,
-    atmo.rayleigh_scattering_rgb.z,
+  const auto rayleigh_scattering_per_km
+    = CoefficientsPerMeterToPerSkyUnitVec3(atmo.rayleigh_scattering_rgb);
+  const auto mie_scattering_per_km
+    = CoefficientsPerMeterToPerSkyUnitVec3(atmo.mie_scattering_rgb);
+  const auto mie_absorption_per_km
+    = CoefficientsPerMeterToPerSkyUnitVec3(atmo.mie_absorption_rgb);
+  const auto ozone_absorption_per_km
+    = CoefficientsPerMeterToPerSkyUnitVec3(atmo.ozone_absorption_rgb);
+  data.atmosphere.rayleigh_scattering_per_km_rgb = {
+    rayleigh_scattering_per_km.x,
+    rayleigh_scattering_per_km.y,
+    rayleigh_scattering_per_km.z,
   };
-  data.atmosphere.rayleigh_scale_height_m = atmo.rayleigh_scale_height_m;
-  data.atmosphere.mie_scattering_rgb = { atmo.mie_scattering_rgb.x,
-    atmo.mie_scattering_rgb.y, atmo.mie_scattering_rgb.z };
-  data.atmosphere.mie_scale_height_m = atmo.mie_scale_height_m;
-  data.atmosphere.mie_extinction_rgb = {
-    atmo.mie_scattering_rgb.x + atmo.mie_absorption_rgb.x,
-    atmo.mie_scattering_rgb.y + atmo.mie_absorption_rgb.y,
-    atmo.mie_scattering_rgb.z + atmo.mie_absorption_rgb.z,
+  data.atmosphere.rayleigh_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmo.rayleigh_scale_height_m);
+  data.atmosphere.mie_scattering_per_km_rgb = { mie_scattering_per_km.x,
+    mie_scattering_per_km.y, mie_scattering_per_km.z };
+  data.atmosphere.mie_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmo.mie_scale_height_m);
+  data.atmosphere.mie_extinction_per_km_rgb = {
+    mie_scattering_per_km.x + mie_absorption_per_km.x,
+    mie_scattering_per_km.y + mie_absorption_per_km.y,
+    mie_scattering_per_km.z + mie_absorption_per_km.z,
   };
   data.atmosphere.mie_g = atmo.mie_anisotropy;
-  data.atmosphere.absorption_rgb = {
-    atmo.ozone_absorption_rgb.x,
-    atmo.ozone_absorption_rgb.y,
-    atmo.ozone_absorption_rgb.z,
+  data.atmosphere.absorption_per_km_rgb = {
+    ozone_absorption_per_km.x,
+    ozone_absorption_per_km.y,
+    ozone_absorption_per_km.z,
   };
   for (std::size_t i = 0; i < data.atmosphere.absorption_density.layers.size();
     ++i) {
-    data.atmosphere.absorption_density.layers[i].width_m
-      = atmo.ozone_density_profile.layers[i].width_m;
+    data.atmosphere.absorption_density.layers[i].width_km
+      = engine::atmos::MetersToSkyUnit(
+        atmo.ozone_density_profile.layers[i].width_m);
     data.atmosphere.absorption_density.layers[i].exp_term
       = atmo.ozone_density_profile.layers[i].exp_term;
     data.atmosphere.absorption_density.layers[i].linear_term
-      = atmo.ozone_density_profile.layers[i].linear_term;
+      = atmo.ozone_density_profile.layers[i].linear_term
+      * engine::atmos::kSkyUnitToM;
     data.atmosphere.absorption_density.layers[i].constant_term
       = atmo.ozone_density_profile.layers[i].constant_term;
   }

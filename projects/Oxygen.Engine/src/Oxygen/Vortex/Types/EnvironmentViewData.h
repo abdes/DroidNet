@@ -39,17 +39,17 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     -engine::atmos::kDefaultPlanetRadiusM,
     0.0F,
   };
-  glm::vec4 planet_up_ws_camera_altitude_m {
+  glm::vec4 planet_up_ws_camera_altitude_km {
     engine::atmos::kDefaultPlanetUp,
     0.0F,
   };
-  glm::vec4 sky_planet_translated_world_center_and_view_height {
+  glm::vec4 sky_planet_translated_world_center_km_and_view_height_km {
     0.0F,
     0.0F,
-    -engine::atmos::kDefaultPlanetRadiusM,
-    engine::atmos::kDefaultPlanetRadiusM,
+    -engine::atmos::kDefaultPlanetRadiusKm,
+    engine::atmos::kDefaultPlanetRadiusKm,
   };
-  glm::vec4 sky_camera_translated_world_origin_pad {
+  glm::vec4 sky_camera_translated_world_origin_km_pad {
     0.0F,
     0.0F,
     0.0F,
@@ -103,11 +103,11 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     0.0F,
     0.0F,
   };
-  glm::vec4 sky_aerial_luminance_aerial_start_depth_m {
+  glm::vec4 sky_aerial_luminance_aerial_start_depth_km {
     1.0F,
     1.0F,
     1.0F,
-    100.0F,
+    engine::atmos::MetersToSkyUnit(100.0F),
   };
   glm::vec4
     trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass {
