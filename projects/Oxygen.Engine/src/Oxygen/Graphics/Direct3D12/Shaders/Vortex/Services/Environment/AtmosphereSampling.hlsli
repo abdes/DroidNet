@@ -22,12 +22,12 @@
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
-#include "Atmosphere/AtmosphereMedium.hlsli"
+#include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Common/Math.hlsli"
 #include "Common/Geometry.hlsli"
-#include "Atmosphere/AtmosphereConstants.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!

@@ -9,7 +9,7 @@
 
 // Common math functions (saturate, max, etc. are intrinsics, but we might need others)
 #include "Common/Math.hlsli"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 
 
 //------------------------------------------------------------------------------

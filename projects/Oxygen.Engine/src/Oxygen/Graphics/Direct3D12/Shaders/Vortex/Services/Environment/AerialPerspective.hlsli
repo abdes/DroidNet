@@ -21,17 +21,17 @@
 #ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 
-#include "Renderer/EnvironmentStaticData.hlsli"
-#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
-#include "Atmosphere/AtmosphereSampling.hlsli"
-#include "Atmosphere/AtmospherePhase.hlsli"
+#include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
+#include "Vortex/Services/Environment/AtmospherePhase.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Common/Math.hlsli"
-#include "Atmosphere/AtmosphereConstants.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 #include "Common/Geometry.hlsli"
 #include "Common/Lighting.hlsli"

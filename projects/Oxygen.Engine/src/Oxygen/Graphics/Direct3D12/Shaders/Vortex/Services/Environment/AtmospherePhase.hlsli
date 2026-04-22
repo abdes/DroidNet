@@ -14,7 +14,7 @@
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_PHASE_HLSLI
 
 #include "Common/Math.hlsli"
-#include "Atmosphere/AtmosphereConstants.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 //------------------------------------------------------------------------------
 // Phase Functions

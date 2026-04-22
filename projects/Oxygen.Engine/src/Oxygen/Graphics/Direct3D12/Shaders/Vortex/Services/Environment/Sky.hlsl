@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
 #include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 

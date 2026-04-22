@@ -7,7 +7,7 @@
 #include "Common/Math.hlsli"
 #include "Forward/ForwardPbr.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
 #include "Renderer/MaterialShadingConstants.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 

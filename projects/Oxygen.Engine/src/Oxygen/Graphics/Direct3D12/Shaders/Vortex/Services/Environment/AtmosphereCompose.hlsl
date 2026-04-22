@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/EnvironmentFrameBindings.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 
-#include "Atmosphere/AerialPerspective.hlsli"
+#include "Vortex/Services/Environment/AerialPerspective.hlsli"
 #include "Vortex/Contracts/SceneTextures.hlsli"
 #include "Vortex/Contracts/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"

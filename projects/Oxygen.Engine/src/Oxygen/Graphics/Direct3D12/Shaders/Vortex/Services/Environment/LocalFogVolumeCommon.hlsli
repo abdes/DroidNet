@@ -7,9 +7,9 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_LOCALFOGVOLUMECOMMON_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_LOCALFOGVOLUMECOMMON_HLSLI
 
-#include "Atmosphere/AtmospherePhase.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentStaticData.hlsli"
+#include "Vortex/Services/Environment/AtmospherePhase.hlsli"
+#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 #include "Vortex/Contracts/ScreenHzbBindings.hlsli"

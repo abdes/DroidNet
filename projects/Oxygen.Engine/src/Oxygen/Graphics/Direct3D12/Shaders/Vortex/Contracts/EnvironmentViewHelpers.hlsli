@@ -7,9 +7,9 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTVIEWHELPERS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTVIEWHELPERS_HLSLI
 
-#include "Renderer/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/EnvironmentFrameBindings.hlsli"
 #include "Renderer/ViewConstants.hlsli"
-#include "Renderer/EnvironmentViewData.hlsli"
+#include "Vortex/Contracts/EnvironmentViewData.hlsli"
 #include "Renderer/ViewFrameBindings.hlsli"
 
 static inline EnvironmentViewData LoadResolvedEnvironmentViewData()
