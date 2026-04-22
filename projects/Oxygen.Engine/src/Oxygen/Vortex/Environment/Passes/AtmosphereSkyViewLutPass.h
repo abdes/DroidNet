@@ -87,15 +87,15 @@ namespace environment {
     struct alignas(16) SamplingAtmosphere0 {
       float sample_count_min { 4.0F };
       float sample_count_max { 32.0F };
-      float distance_to_sample_count_max_inv { 1.0F / 150000.0F };
-      float planet_radius_m { 6360000.0F };
+      float distance_to_sample_count_max_inv { 1.0F / 150.0F };
+      float planet_radius_km { 6360.0F };
     };
 
     struct alignas(16) SamplingAtmosphere1 {
-      float atmosphere_height_m { 100000.0F };
-      float camera_altitude_m { 0.0F };
-      float rayleigh_scale_height_m { 8000.0F };
-      float mie_scale_height_m { 1200.0F };
+      float atmosphere_height_km { 100.0F };
+      float camera_altitude_km { 0.0F };
+      float rayleigh_scale_height_km { 8.0F };
+      float mie_scale_height_km { 1.2F };
     };
 
     struct alignas(16) PhaseFactors0 {
@@ -113,11 +113,13 @@ namespace environment {
       SamplingAtmosphere1 sampling_atmosphere1 {};
       PhaseFactors0 phase_factors0 {};
       float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
-      float rayleigh_scattering_rgb[4] { 5.8e-6F, 13.5e-6F, 33.1e-6F, 0.0F };
-      float mie_scattering_rgb[4] { 2.0e-5F, 2.0e-5F, 2.0e-5F, 0.0F };
-      float mie_absorption_rgb[4] { 4.4e-6F, 4.4e-6F, 4.4e-6F, 0.0F };
-      float ozone_absorption_rgb[4] { 0.65e-6F, 1.88e-6F, 0.08e-6F, 0.0F };
-      float ozone_density_layer0[4] { 25000.0F, 0.0F, 0.0F, 0.0F };
+      float rayleigh_scattering_per_km_rgb[4] { 5.8e-3F, 13.5e-3F, 33.1e-3F,
+        0.0F };
+      float mie_scattering_per_km_rgb[4] { 2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F };
+      float mie_absorption_per_km_rgb[4] { 4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F };
+      float ozone_absorption_per_km_rgb[4] { 0.65e-3F, 1.88e-3F, 0.08e-3F,
+        0.0F };
+      float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
       float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
       float sky_view_lut_referential_row0[4] { 1.0F, 0.0F, 0.0F, 0.0F };
       float sky_view_lut_referential_row1[4] { 0.0F, 1.0F, 0.0F, 0.0F };

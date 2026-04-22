@@ -36,8 +36,8 @@ TEST(RenderContextTest, ResetClearsPhase1PerViewAndFrameState)
   context.Reset();
 
   EXPECT_TRUE(context.pass_enable_flags.empty());
-  EXPECT_EQ(context.current_view.view_id, oxygen::ViewId {});
-  EXPECT_EQ(context.current_view.exposure_view_id, oxygen::ViewId {});
+  EXPECT_EQ(context.current_view.view_id, oxygen::kInvalidViewId);
+  EXPECT_EQ(context.current_view.exposure_view_id, oxygen::kInvalidViewId);
   EXPECT_TRUE(context.frame_views.empty());
   EXPECT_EQ(context.active_view_index, std::numeric_limits<std::size_t>::max());
   EXPECT_EQ(context.frame_slot, oxygen::frame::kInvalidSlot);

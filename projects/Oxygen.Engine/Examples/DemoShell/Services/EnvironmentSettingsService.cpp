@@ -44,8 +44,8 @@ namespace {
 
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
-  constexpr float kMetersToKm = 0.001F;
-  constexpr float kKmToMeters = 1000.0F;
+  constexpr float kMetersToKm = engine::atmos::kMToSkyUnit;
+  constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -3631,12 +3631,12 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
     value = glm::max(value, glm::vec3(min_v));
   };
 
-  clamp_float(planet_radius_km_, 1.0F, 100000.0F);
-  clamp_float(atmosphere_height_km_, 0.1F, 1000.0F);
+  clamp_float(planet_radius_km_, 10.0F, 100000.0F);
+  clamp_float(atmosphere_height_km_, 1.0F, 1000.0F);
   clamp_int(sky_atmo_transform_mode_, 0, 2);
   clamp_vec3(ground_albedo_, 0.0F, 1.0F);
-  clamp_float(rayleigh_scale_height_km_, 0.01F, 100.0F);
-  clamp_float(mie_scale_height_km_, 0.01F, 50.0F);
+  clamp_float(rayleigh_scale_height_km_, 0.1F, 50.0F);
+  clamp_float(mie_scale_height_km_, 0.05F, 20.0F);
   clamp_float(mie_anisotropy_, 0.0F, 0.999F);
   clamp_float(mie_absorption_scale_, 0.0F, 5.0F);
   clamp_float(multi_scattering_, 0.0F, 5.0F);
@@ -3650,16 +3650,18 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(trace_sample_count_scale_, 0.25F, 8.0F);
   clamp_float(transmittance_min_light_elevation_deg_, -90.0F, 90.0F);
 
-  clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 200000.0F);
-  clamp_float(ozone_profile_.layers[0].linear_term, -1.0F, 1.0F);
-  clamp_float(ozone_profile_.layers[0].constant_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 120000.0F);
+  clamp_float(ozone_profile_.layers[0].linear_term, -1.0F / kKmToMeters,
+    1.0F / kKmToMeters);
+  clamp_float(ozone_profile_.layers[0].constant_term, -8.0F, 8.0F);
   ozone_profile_.layers[0].exp_term = 0.0F;
   ozone_profile_.layers[1].width_m = 0.0F;
   ozone_profile_.layers[1].exp_term = 0.0F;
-  clamp_float(ozone_profile_.layers[1].linear_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[1].linear_term, -1.0F / kKmToMeters,
+    1.0F / kKmToMeters);
   // For the canonical two-layer ozone profile, this term is commonly > 1
   // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
-  clamp_float(ozone_profile_.layers[1].constant_term, -1.0F, 8.0F);
+  clamp_float(ozone_profile_.layers[1].constant_term, -8.0F, 8.0F);
 
   clamp_int(sky_view_lut_slices_, 1, 128);
   clamp_int(sky_view_alt_mapping_mode_, 0, 1);

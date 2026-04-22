@@ -592,9 +592,9 @@ private:
     const AtmosphereCanonicalState& state) -> std::uint64_t;
 
   static constexpr float kDefaultPlanetRadiusKm
-    = engine::atmos::kDefaultPlanetRadiusM * 0.001F;
+    = engine::atmos::kDefaultPlanetRadiusKm;
   static constexpr float kDefaultAtmosphereHeightKm
-    = engine::atmos::kDefaultAtmosphereHeightM * 0.001F;
+    = engine::atmos::kDefaultAtmosphereHeightKm;
   static constexpr float kDefaultSunAzimuthDeg = 90.0F;
   static constexpr float kDefaultSunElevationDeg = 30.0F;
   static constexpr float kDefaultSunIlluminanceLx = 110000.0F;

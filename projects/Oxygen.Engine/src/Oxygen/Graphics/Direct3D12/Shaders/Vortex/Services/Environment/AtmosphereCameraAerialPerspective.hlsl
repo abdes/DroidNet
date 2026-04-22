@@ -58,20 +58,20 @@ struct CameraAerialDepthControl1
     float depth_slice_length_km_inv;
     float sample_count_per_slice;
     float start_depth_km;
-    float planet_radius_m;
+    float planet_radius_km;
 };
 
 struct CameraAerialAtmosphereScales0
 {
-    float atmosphere_height_m;
+    float atmosphere_height_km;
     float aerial_perspective_distance_scale;
     float aerial_scattering_strength;
-    float rayleigh_scale_height_m;
+    float rayleigh_scale_height_km;
 };
 
 struct CameraAerialAtmosphereScales1
 {
-    float mie_scale_height_m;
+    float mie_scale_height_km;
     float multi_scattering_factor;
     float mie_anisotropy;
     float _pad0;
@@ -87,13 +87,13 @@ struct AtmosphereCameraAerialPerspectivePassConstants
     CameraAerialAtmosphereScales0 atmosphere_scales0;
     CameraAerialAtmosphereScales1 atmosphere_scales1;
     float4 ground_albedo_rgb;
-    float4 rayleigh_scattering_rgb;
-    float4 mie_scattering_rgb;
-    float4 mie_absorption_rgb;
-    float4 ozone_absorption_rgb;
+    float4 rayleigh_scattering_per_km_rgb;
+    float4 mie_scattering_per_km_rgb;
+    float4 mie_absorption_per_km_rgb;
+    float4 ozone_absorption_per_km_rgb;
     float4 ozone_density_layer0;
     float4 ozone_density_layer1;
-    float4 camera_planet_position;
+    float4 camera_planet_position_km;
     float4 sky_and_aerial_luminance_factor_rgb;
     float4 light0_direction_enabled;
     float4 light0_illuminance_rgb;
@@ -120,12 +120,12 @@ static float PassDepthSliceLengthKm(AtmosphereCameraAerialPerspectivePassConstan
 static float PassDepthSliceLengthKmInv(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.depth_slice_length_km_inv; }
 static float PassSampleCountPerSlice(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.sample_count_per_slice; }
 static float PassStartDepthKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.start_depth_km; }
-static float PassPlanetRadiusM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.planet_radius_m; }
-static float PassAtmosphereHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.atmosphere_height_m; }
+static float PassPlanetRadiusKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.planet_radius_km; }
+static float PassAtmosphereHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.atmosphere_height_km; }
 static float PassAerialPerspectiveDistanceScale(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_perspective_distance_scale; }
 static float PassAerialScatteringStrength(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_scattering_strength; }
-static float PassRayleighScaleHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.rayleigh_scale_height_m; }
-static float PassMieScaleHeightM(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_scale_height_m; }
+static float PassRayleighScaleHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.rayleigh_scale_height_km; }
+static float PassMieScaleHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_scale_height_km; }
 static float PassMultiScatteringFactor(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.multi_scattering_factor; }
 static float PassMieAnisotropy(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_anisotropy; }
 
@@ -133,29 +133,29 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereCameraAerialPerspectivePassConstants pass)
 {
     AtmosphereDensityProfile ozone_density = (AtmosphereDensityProfile)0;
-    ozone_density.layers[0].width_m = pass.ozone_density_layer0.x;
+    ozone_density.layers[0].width_km = pass.ozone_density_layer0.x;
     ozone_density.layers[0].exp_term = pass.ozone_density_layer0.y;
     ozone_density.layers[0].linear_term = pass.ozone_density_layer0.z;
     ozone_density.layers[0].constant_term = pass.ozone_density_layer0.w;
-    ozone_density.layers[1].width_m = pass.ozone_density_layer1.x;
+    ozone_density.layers[1].width_km = pass.ozone_density_layer1.x;
     ozone_density.layers[1].exp_term = pass.ozone_density_layer1.y;
     ozone_density.layers[1].linear_term = pass.ozone_density_layer1.z;
     ozone_density.layers[1].constant_term = pass.ozone_density_layer1.w;
 
     return BuildVortexAtmosphereParams(
-        PassPlanetRadiusM(pass),
-        PassAtmosphereHeightM(pass),
+        PassPlanetRadiusKm(pass),
+        PassAtmosphereHeightKm(pass),
         PassMultiScatteringFactor(pass),
         PassAerialPerspectiveDistanceScale(pass),
-        PassRayleighScaleHeightM(pass),
-        PassMieScaleHeightM(pass),
+        PassRayleighScaleHeightKm(pass),
+        PassMieScaleHeightKm(pass),
         PassMieAnisotropy(pass),
         pass.ground_albedo_rgb.xyz,
         0.0f,
-        pass.rayleigh_scattering_rgb.xyz,
-        pass.mie_scattering_rgb.xyz,
-        pass.mie_absorption_rgb.xyz,
-        pass.ozone_absorption_rgb.xyz,
+        pass.rayleigh_scattering_per_km_rgb.xyz,
+        pass.mie_scattering_per_km_rgb.xyz,
+        pass.mie_absorption_per_km_rgb.xyz,
+        pass.ozone_absorption_per_km_rgb.xyz,
         ozone_density,
         0u,
         PassTransmittanceLutSrv(pass),
@@ -321,7 +321,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         far_depth,
         inverse_view_projection_matrix);
     float3 world_direction = VortexSafeNormalize(far_world_position - camera_position);
-    float3 camera_planet_position = pass.camera_planet_position.xyz;
+    float3 camera_planet_position = pass.camera_planet_position_km.xyz;
     if (IsOrthoProjection())
     {
         const float3 near_world_position = ReconstructWorldPosition(
@@ -329,7 +329,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
             ResolveNearDepthReference(),
             inverse_view_projection_matrix);
         world_direction = VortexSafeNormalize(far_world_position - near_world_position);
-        camera_planet_position += near_world_position - camera_position;
+        camera_planet_position += AtmosphereMetersToSkyUnit(near_world_position - camera_position);
     }
 
     if (PassRealTimeReflection360Mode(pass) > 0.5f)
@@ -355,9 +355,9 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     non_linear_slice *= non_linear_slice;
     non_linear_slice *= PassDepthResolution(pass);
 
-    const float start_depth_m = PassStartDepthKm(pass) * 1000.0f;
-    float3 ray_origin = camera_planet_position + world_direction * start_depth_m;
-    float t_max_max = non_linear_slice * PassDepthSliceLengthKm(pass) * 1000.0f;
+    const float start_depth_km = PassStartDepthKm(pass);
+    float3 ray_origin = camera_planet_position + world_direction * start_depth_km;
+    float t_max_max = non_linear_slice * PassDepthSliceLengthKm(pass);
     if (t_max_max <= 1.0e-4f)
     {
         output_texture[dispatch_id] = float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -366,7 +366,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
 
     float3 voxel_world_pos = ray_origin + t_max_max * world_direction;
     const float voxel_height = length(voxel_world_pos);
-    const bool underground = voxel_height < atmosphere.planet_radius_m;
+    const bool underground = voxel_height < atmosphere.planet_radius_km;
 
     const float3 camera_to_voxel = voxel_world_pos - camera_planet_position;
     const float camera_to_voxel_len = length(camera_to_voxel);
@@ -376,34 +376,34 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float planet_near_t = RaySphereIntersectNearest(
         camera_planet_position,
         camera_to_voxel_dir,
-        atmosphere.planet_radius_m);
+        atmosphere.planet_radius_km);
     const bool below_horizon = planet_near_t > 0.0f && camera_to_voxel_len > planet_near_t;
 
     if (below_horizon || underground)
     {
-        camera_planet_position += normalize(camera_planet_position) * 20.0f;
+        camera_planet_position += normalize(camera_planet_position) * (20.0f * PLANET_RADIUS_OFFSET);
 
         const float3 voxel_world_pos_norm = normalize(voxel_world_pos);
-        const float3 camera_proj_on_ground = normalize(camera_planet_position) * atmosphere.planet_radius_m;
-        const float3 voxel_proj_on_ground = voxel_world_pos_norm * atmosphere.planet_radius_m;
+        const float3 camera_proj_on_ground = normalize(camera_planet_position) * atmosphere.planet_radius_km;
+        const float3 voxel_proj_on_ground = voxel_world_pos_norm * atmosphere.planet_radius_km;
         const float3 voxel_ground_to_ray_start = camera_planet_position - voxel_proj_on_ground;
         if (below_horizon && dot(normalize(voxel_ground_to_ray_start), voxel_world_pos_norm) < 0.0001f)
         {
             const float3 middle_point = 0.5f * (camera_proj_on_ground + voxel_proj_on_ground);
-            const float3 middle_point_on_ground = normalize(middle_point) * atmosphere.planet_radius_m;
+            const float3 middle_point_on_ground = normalize(middle_point) * atmosphere.planet_radius_km;
             voxel_world_pos = camera_planet_position + 2.0f * (middle_point_on_ground - camera_planet_position);
         }
         else if (underground)
         {
-            voxel_world_pos = normalize(voxel_world_pos) * atmosphere.planet_radius_m;
+            voxel_world_pos = normalize(voxel_world_pos) * atmosphere.planet_radius_km;
         }
 
         world_direction = VortexSafeNormalize(voxel_world_pos - camera_planet_position);
-        ray_origin = camera_planet_position + start_depth_m * world_direction;
+        ray_origin = camera_planet_position + start_depth_km * world_direction;
         t_max_max = length(voxel_world_pos - ray_origin);
     }
 
-    const float atmosphere_radius = atmosphere.planet_radius_m + atmosphere.atmosphere_height_m;
+    const float atmosphere_radius = atmosphere.planet_radius_km + atmosphere.atmosphere_height_km;
     const float view_height = length(ray_origin);
     if (view_height >= atmosphere_radius)
     {

@@ -53,6 +53,11 @@ static inline float ResolveNearDepthReference()
     return reverse_z != 0u ? 1.0f : 0.0f;
 }
 
+static inline float WorldMetersToAtmosphereKm(float meters)
+{
+    return meters * 1.0e-3f;
+}
+
 //! Samples the camera-volume LUT at the fragment's screen UV and depth slice.
 //!
 //! Returns float4 where rgb = inscatter, a = transmittance.
@@ -74,7 +79,7 @@ float4 SampleCameraVolumeLut(
 
     // Effective path length with user scaling.
     float effective_distance = view_distance * distance_scale;
-    float view_distance_km = effective_distance / 1000.0;
+    float view_distance_km = WorldMetersToAtmosphereKm(effective_distance);
 
     const EnvironmentViewData view_data = LoadResolvedEnvironmentViewData();
     const float depth_resolution = view_data.camera_aerial_volume_depth_params.x;
@@ -82,7 +87,7 @@ float4 SampleCameraVolumeLut(
     const float depth_slice_length_km = view_data.camera_aerial_volume_depth_params.z;
     const float depth_slice_length_km_inv = view_data.camera_aerial_volume_depth_params.w;
     const float start_depth_km
-        = view_data.sky_aerial_luminance_aerial_start_depth_m.w / 1000.0;
+        = view_data.sky_aerial_luminance_aerial_start_depth_km.w;
 
     float t_depth = max(0.0, view_distance_km - start_depth_km);
     float linear_slice = t_depth * depth_slice_length_km_inv;
@@ -121,7 +126,7 @@ float4 SampleCameraVolumeLut(
             inverse_view_projection_matrix);
         const float3 ortho_camera_offset = near_world_position - camera_pos;
         view_distance = max(0.0f, length((world_pos - camera_pos) + ortho_camera_offset) - 0.0f);
-        t_depth = max(0.0f, (view_distance * distance_scale) / 1000.0f - start_depth_km);
+        t_depth = max(0.0f, WorldMetersToAtmosphereKm(view_distance * distance_scale) - start_depth_km);
         linear_slice = t_depth * depth_slice_length_km_inv;
         linear_w = linear_slice * depth_resolution_inv;
         non_linear_w = sqrt(saturate(linear_w));

@@ -32,21 +32,21 @@
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!
 //! @param cos_zenith Cosine of zenith angle (view direction dot up).
-//! @param altitude_m Height above planet surface in meters.
-//! @param atmosphere_height_m Total atmosphere thickness in meters.
+//! @param altitude_km Height above planet surface in km.
+//! @param atmosphere_height_km Total atmosphere thickness in km.
 //! @return UV coordinates for transmittance LUT sampling.
 float2 GetTransmittanceLutUv(
     float cos_zenith,
-    float altitude_m,
-    float planet_radius_m,
-    float atmosphere_height_m)
+    float altitude_km,
+    float planet_radius_km,
+    float atmosphere_height_km)
 {
-    float view_height = planet_radius_m + altitude_m;
-    float top_radius = planet_radius_m + atmosphere_height_m;
+    float view_height = planet_radius_km + altitude_km;
+    float top_radius = planet_radius_km + atmosphere_height_km;
     float H = sqrt(max(0.0, top_radius * top_radius
-        - planet_radius_m * planet_radius_m));
+        - planet_radius_km * planet_radius_km));
     float rho = sqrt(max(0.0, view_height * view_height
-        - planet_radius_m * planet_radius_m));
+        - planet_radius_km * planet_radius_km));
 
     float discriminant = view_height * view_height
         * (cos_zenith * cos_zenith - 1.0)
@@ -80,18 +80,18 @@ static inline float2 ApplyHalfTexelOffset(float2 uv, float lut_width, float lut_
 //! @param lut_width LUT texture width.
 //! @param lut_height LUT texture height.
 //! @param cos_zenith Cosine of zenith angle.
-//! @param altitude_m Height above planet surface in meters.
-//! @param planet_radius_m Planet radius in meters.
-//! @param atmosphere_height_m Total atmosphere thickness in meters.
+//! @param altitude_km Height above planet surface in km.
+//! @param planet_radius_km Planet radius in km.
+//! @param atmosphere_height_km Total atmosphere thickness in km.
 //! @return RGB transmittance.
 float3 SampleTransmittanceOpticalDepthLut(
     uint lut_slot,
     float lut_width,
     float lut_height,
     float cos_zenith,
-    float altitude_m,
-    float planet_radius_m,
-    float atmosphere_height_m)
+    float altitude_km,
+    float planet_radius_km,
+    float atmosphere_height_km)
 {
     if (lut_slot == K_INVALID_BINDLESS_INDEX)
     {
@@ -101,14 +101,14 @@ float3 SampleTransmittanceOpticalDepthLut(
 
     // Geometric horizon check: if looking below the horizon, the planet
     // blocks all light (infinite optical depth).
-    float cos_horizon = HorizonCosineFromAltitude(planet_radius_m, altitude_m);
+    float cos_horizon = HorizonCosineFromAltitude(planet_radius_km, altitude_km);
     if (cos_zenith < cos_horizon)
     {
         return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
     }
 
     float2 uv = GetTransmittanceLutUv(
-        cos_zenith, altitude_m, planet_radius_m, atmosphere_height_m);
+        cos_zenith, altitude_km, planet_radius_km, atmosphere_height_km);
 
     // Apply half-texel offset for proper filtering.
     uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
@@ -129,8 +129,8 @@ float3 SampleTransmittanceOpticalDepthLut(
 //! @param lut_width LUT texture width.
 //! @param lut_height LUT texture height.
 //! @param cos_zenith Cosine of zenith angle.
-//! @param altitude_m Height above planet surface in meters.
-//! @param atmosphere_height_m Total atmosphere thickness in meters.
+//! @param altitude_km Height above planet surface in km.
+//! @param atmosphere_height_km Total atmosphere thickness in km.
 //! @return RGB transmittance.
 float3 SampleTransmittanceLut(
     GpuSkyAtmosphereParams atmo,
@@ -138,22 +138,22 @@ float3 SampleTransmittanceLut(
     float lut_width,
     float lut_height,
     float cos_zenith,
-    float altitude_m,
-    float atmosphere_height_m)
+    float altitude_km,
+    float atmosphere_height_km)
 {
     if (lut_slot == K_INVALID_BINDLESS_INDEX)
     {
         return float3(1.0, 1.0, 1.0);
     }
 
-    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude_m);
+    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_km, altitude_km);
     if (cos_zenith < cos_horizon)
     {
         return 0.0.xxx;
     }
 
     float2 uv = GetTransmittanceLutUv(
-        cos_zenith, altitude_m, atmo.planet_radius_m, atmosphere_height_m);
+        cos_zenith, altitude_km, atmo.planet_radius_km, atmosphere_height_km);
     uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
 
     Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
@@ -168,18 +168,18 @@ float3 SampleTransmittanceLut(
 //!
 //! @param view_dir Normalized world-space view direction.
 //! @param sun_dir Normalized world-space sun direction.
-//! @param planet_radius Planet radius in meters.
-//! @param camera_altitude_m Camera altitude above surface in meters.
+//! @param planet_radius_km Planet radius in km.
+//! @param camera_altitude_km Camera altitude above surface in km.
 //! @return UV coordinates for sky-view LUT sampling.
-float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, float camera_altitude_m)
+float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius_km, float camera_altitude_km)
 {
     (void)sun_dir;
     // cos_zenith from Z component (Z is up).
     float cos_zenith = view_dir.z;
 
     // Compute horizon angle for this altitude.
-    float r = planet_radius + camera_altitude_m;
-    float rho = planet_radius / r;
+    float r = planet_radius_km + camera_altitude_km;
+    float rho = planet_radius_km / r;
     float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
 
     float zenith_horizon_angle = acos(cos_horizon);
@@ -188,7 +188,7 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
     bool intersect_ground = RaySphereIntersectNearest(
         float3(0.0f, 0.0f, r),
         view_dir,
-        planet_radius) >= 0.0f;
+        planet_radius_km) >= 0.0f;
 
     float v;
     if (!intersect_ground)
@@ -221,27 +221,27 @@ float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius, flo
 //! The -0.5 accounts for the centered-bin convention where slice i represents
 //! altitude at (i + 0.5) / slices. The result is clamped to [0, slices - 1].
 //!
-//! @param altitude_m       Camera altitude above ground in meters.
-//! @param atmosphere_h     Total atmosphere height in meters.
+//! @param altitude_km      Camera altitude above ground in km.
+//! @param atmosphere_h_km  Total atmosphere height in km.
 //! @param slices           Number of altitude slices in the LUT.
 //! @param mapping_mode     0 = linear, 1 = log.
 //! @return Fractional slice index (e.g. 3.7 means lerp 70% from slice 3 to 4).
-float AltitudeToSliceFrac(float altitude_m, float atmosphere_h,
+float AltitudeToSliceFrac(float altitude_km, float atmosphere_h_km,
                           uint slices, uint mapping_mode)
 {
     // Clamp altitude into valid range to avoid out-of-bounds slice.
-    float h = clamp(altitude_m, 0.0, atmosphere_h);
+    float h = clamp(altitude_km, 0.0, atmosphere_h_km);
 
     float t;
     if (mapping_mode == 1)
     {
         // Inverse of h = H * (2^t - 1) → t = log2(1 + h / H).
-        t = log2(1.0 + h / atmosphere_h);
+        t = log2(1.0 + h / atmosphere_h_km);
     }
     else
     {
         // Inverse of h = H * t → t = h / H.
-        t = h / atmosphere_h;
+        t = h / atmosphere_h_km;
     }
 
     // Convert normalised t back to centered-bin slice index.
@@ -318,11 +318,11 @@ static inline float4 SampleSliceBilinear(Texture2DArray<float4> lut,
 //! @param lut_height       LUT texture height (per slice).
 //! @param view_dir         Normalized world-space view direction.
 //! @param sun_dir          Normalized world-space sun direction.
-//! @param planet_radius    Planet radius in meters.
-//! @param camera_altitude_m Camera altitude above surface in meters.
+//! @param planet_radius_km Planet radius in km.
+//! @param camera_altitude_km Camera altitude above surface in km.
 //! @param slices           Number of altitude slices in the array.
 //! @param alt_mapping_mode Altitude mapping mode (0 = linear, 1 = log).
-//! @param atmosphere_height_m Total atmosphere height in meters.
+//! @param atmosphere_height_km Total atmosphere height in km.
 //! @return float4(inscattered_radiance.rgb, transmittance).
 float4 SampleSkyViewLut(
     uint lut_slot,
@@ -330,11 +330,11 @@ float4 SampleSkyViewLut(
     float lut_height,
     float3 view_dir,
     float3 sun_dir,
-    float planet_radius,
-    float camera_altitude_m,
+    float planet_radius_km,
+    float camera_altitude_km,
     uint slices,
     uint alt_mapping_mode,
-    float atmosphere_height_m)
+    float atmosphere_height_km)
 {
     if (lut_slot == K_INVALID_BINDLESS_INDEX)
     {
@@ -342,7 +342,7 @@ float4 SampleSkyViewLut(
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
-    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius, camera_altitude_m);
+    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius_km, camera_altitude_km);
     float2 uv = ApplyHalfTexelOffset(uv_base, lut_width, lut_height);
 
     if (slices <= 1u)
@@ -357,7 +357,7 @@ float4 SampleSkyViewLut(
 
     // Compute fractional slice index from camera altitude.
     float slice_frac = AltitudeToSliceFrac(
-        camera_altitude_m, atmosphere_height_m, slices, alt_mapping_mode);
+        camera_altitude_km, atmosphere_height_km, slices, alt_mapping_mode);
 
     int slice_lo = (int)floor(slice_frac);
     int slice_hi = min(slice_lo + 1, (int)slices - 1);

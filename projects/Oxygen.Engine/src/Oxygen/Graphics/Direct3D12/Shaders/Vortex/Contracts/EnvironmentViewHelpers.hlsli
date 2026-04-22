@@ -32,12 +32,12 @@ static inline float3 GetPlanetCenterWS()
 
 static inline float3 GetPlanetUpWS()
 {
-    return LoadResolvedEnvironmentViewData().planet_up_ws_camera_altitude_m.xyz;
+    return LoadResolvedEnvironmentViewData().planet_up_ws_camera_altitude_km.xyz;
 }
 
-static inline float GetCameraAltitudeM()
+static inline float GetCameraAltitudeKm()
 {
-    return LoadResolvedEnvironmentViewData().planet_up_ws_camera_altitude_m.w;
+    return LoadResolvedEnvironmentViewData().planet_up_ws_camera_altitude_km.w;
 }
 
 static inline float GetAerialPerspectiveDistanceScale()
@@ -65,21 +65,21 @@ static inline float GetPlanetToSunCosZenith()
     return LoadResolvedEnvironmentViewData().planet_to_sun_cos_zenith;
 }
 
-static inline float3 GetSkyPlanetTranslatedWorldCenter()
+static inline float3 GetSkyPlanetTranslatedWorldCenterKm()
 {
     return LoadResolvedEnvironmentViewData()
-        .sky_planet_translated_world_center_and_view_height.xyz;
+        .sky_planet_translated_world_center_km_and_view_height_km.xyz;
 }
 
-static inline float GetSkyViewHeight()
+static inline float GetSkyViewHeightKm()
 {
     return LoadResolvedEnvironmentViewData()
-        .sky_planet_translated_world_center_and_view_height.w;
+        .sky_planet_translated_world_center_km_and_view_height_km.w;
 }
 
-static inline float3 GetSkyCameraTranslatedWorldOrigin()
+static inline float3 GetSkyCameraTranslatedWorldOriginKm()
 {
-    return LoadResolvedEnvironmentViewData().sky_camera_translated_world_origin_pad.xyz;
+    return LoadResolvedEnvironmentViewData().sky_camera_translated_world_origin_km_pad.xyz;
 }
 
 static inline float3x3 GetSkyViewLutReferentialRows()

@@ -10,11 +10,12 @@
 #include <cstdint>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 
 namespace oxygen::vortex {
 
 struct alignas(packing::kShaderDataFieldAlignment) AtmosphereDensityLayerGpu {
-  float width_m { 0.0F };
+  float width_km { 0.0F };
   float exp_term { 0.0F };
   float linear_term { 0.0F };
   float constant_term { 0.0F };
@@ -40,8 +41,8 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuFogParams {
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
-  float planet_radius_m { 6360000.0F };
-  float atmosphere_height_m { 100000.0F };
+  float planet_radius_km { engine::atmos::kDefaultPlanetRadiusKm };
+  float atmosphere_height_km { engine::atmos::kDefaultAtmosphereHeightKm };
   float multi_scattering_factor { 1.0F };
   float aerial_perspective_distance_scale { 1.0F };
 
@@ -51,16 +52,16 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   std::array<float, 3> sun_disk_luminance_scale_rgb { 1.0F, 1.0F, 1.0F };
   float pad_sun_disk_luminance { 0.0F };
 
-  std::array<float, 3> rayleigh_scattering_rgb { 0.0F, 0.0F, 0.0F };
-  float rayleigh_scale_height_m { 8000.0F };
+  std::array<float, 3> rayleigh_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
+  float rayleigh_scale_height_km { engine::atmos::kDefaultRayleighScaleHeightKm };
 
-  std::array<float, 3> mie_scattering_rgb { 0.0F, 0.0F, 0.0F };
-  float mie_scale_height_m { 1200.0F };
+  std::array<float, 3> mie_scattering_per_km_rgb { 0.0F, 0.0F, 0.0F };
+  float mie_scale_height_km { engine::atmos::kDefaultMieScaleHeightKm };
 
-  std::array<float, 3> mie_extinction_rgb { 0.0F, 0.0F, 0.0F };
+  std::array<float, 3> mie_extinction_per_km_rgb { 0.0F, 0.0F, 0.0F };
   float mie_g { 0.8F };
 
-  std::array<float, 3> absorption_rgb { 0.0F, 0.0F, 0.0F };
+  std::array<float, 3> absorption_per_km_rgb { 0.0F, 0.0F, 0.0F };
   float pad_absorption { 0.0F };
 
   AtmosphereDensityProfileGpu absorption_density {};

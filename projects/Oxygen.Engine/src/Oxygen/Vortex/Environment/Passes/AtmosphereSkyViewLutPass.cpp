@@ -323,42 +323,51 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     = cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
       > 1.0e-6F
     ? 1.0F
-      / cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
+      / engine::atmos::MetersToSkyUnit(
+        cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m)
     : 0.0F;
-  constants.sampling_atmosphere0.planet_radius_m = atmosphere.planet_radius_m;
-  constants.sampling_atmosphere1.atmosphere_height_m
-    = atmosphere.atmosphere_height_m;
-  constants.sampling_atmosphere1.camera_altitude_m = std::max(
-    view_data.sky_planet_translated_world_center_and_view_height.w
-      - atmosphere.planet_radius_m,
+  constants.sampling_atmosphere0.planet_radius_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.planet_radius_m);
+  constants.sampling_atmosphere1.atmosphere_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.atmosphere_height_m);
+  constants.sampling_atmosphere1.camera_altitude_km = std::max(
+    view_data.sky_planet_translated_world_center_km_and_view_height_km.w
+      - constants.sampling_atmosphere0.planet_radius_km,
     0.0F);
-  constants.sampling_atmosphere1.rayleigh_scale_height_m
-    = atmosphere.rayleigh_scale_height_m;
-  constants.sampling_atmosphere1.mie_scale_height_m
-    = atmosphere.mie_scale_height_m;
+  constants.sampling_atmosphere1.rayleigh_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.rayleigh_scale_height_m);
+  constants.sampling_atmosphere1.mie_scale_height_km
+    = engine::atmos::MetersToSkyUnit(atmosphere.mie_scale_height_m);
   constants.phase_factors0.multi_scattering_factor
     = atmosphere.multi_scattering_factor;
   constants.phase_factors0.mie_anisotropy = atmosphere.mie_anisotropy;
   SetVec4(constants.ground_albedo_rgb, atmosphere.ground_albedo_rgb);
-  SetVec4(
-    constants.rayleigh_scattering_rgb, atmosphere.rayleigh_scattering_rgb);
-  SetVec4(constants.mie_scattering_rgb, atmosphere.mie_scattering_rgb);
-  SetVec4(constants.mie_absorption_rgb, atmosphere.mie_absorption_rgb);
-  SetVec4(constants.ozone_absorption_rgb, atmosphere.ozone_absorption_rgb);
+  SetVec4(constants.rayleigh_scattering_per_km_rgb,
+    atmosphere.rayleigh_scattering_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.mie_scattering_per_km_rgb,
+    atmosphere.mie_scattering_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.mie_absorption_per_km_rgb,
+    atmosphere.mie_absorption_rgb * engine::atmos::kSkyUnitToM);
+  SetVec4(constants.ozone_absorption_per_km_rgb,
+    atmosphere.ozone_absorption_rgb * engine::atmos::kSkyUnitToM);
   constants.ozone_density_layer0[0]
-    = atmosphere.ozone_density_profile.layers[0].width_m;
+    = engine::atmos::MetersToSkyUnit(
+      atmosphere.ozone_density_profile.layers[0].width_m);
   constants.ozone_density_layer0[1]
     = atmosphere.ozone_density_profile.layers[0].exp_term;
   constants.ozone_density_layer0[2]
-    = atmosphere.ozone_density_profile.layers[0].linear_term;
+    = atmosphere.ozone_density_profile.layers[0].linear_term
+    * engine::atmos::kSkyUnitToM;
   constants.ozone_density_layer0[3]
     = atmosphere.ozone_density_profile.layers[0].constant_term;
   constants.ozone_density_layer1[0]
-    = atmosphere.ozone_density_profile.layers[1].width_m;
+    = engine::atmos::MetersToSkyUnit(
+      atmosphere.ozone_density_profile.layers[1].width_m);
   constants.ozone_density_layer1[1]
     = atmosphere.ozone_density_profile.layers[1].exp_term;
   constants.ozone_density_layer1[2]
-    = atmosphere.ozone_density_profile.layers[1].linear_term;
+    = atmosphere.ozone_density_profile.layers[1].linear_term
+    * engine::atmos::kSkyUnitToM;
   constants.ozone_density_layer1[3]
     = atmosphere.ozone_density_profile.layers[1].constant_term;
   constants.sky_view_lut_referential_row0[0]

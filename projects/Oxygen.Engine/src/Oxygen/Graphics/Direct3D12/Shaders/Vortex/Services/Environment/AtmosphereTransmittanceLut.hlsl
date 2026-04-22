@@ -22,14 +22,14 @@ struct AtmosphereTransmittanceLutPassConstants
     uint output_width;
     uint output_height;
     uint integration_sample_count;
-    float planet_radius_m;
-    float atmosphere_height_m;
-    float rayleigh_scale_height_m;
-    float mie_scale_height_m;
-    float4 rayleigh_scattering_rgb;
-    float4 mie_scattering_rgb;
-    float4 mie_absorption_rgb;
-    float4 ozone_absorption_rgb;
+    float planet_radius_km;
+    float atmosphere_height_km;
+    float rayleigh_scale_height_km;
+    float mie_scale_height_km;
+    float4 rayleigh_scattering_per_km_rgb;
+    float4 mie_scattering_per_km_rgb;
+    float4 mie_absorption_per_km_rgb;
+    float4 ozone_absorption_per_km_rgb;
     float4 ozone_density_layer0;
     float4 ozone_density_layer1;
 };
@@ -38,20 +38,20 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereTransmittanceLutPassConstants pass)
 {
     GpuSkyAtmosphereParams atmo = (GpuSkyAtmosphereParams)0;
-    atmo.planet_radius_m = pass.planet_radius_m;
-    atmo.atmosphere_height_m = pass.atmosphere_height_m;
-    atmo.rayleigh_scattering_rgb = pass.rayleigh_scattering_rgb.xyz;
-    atmo.rayleigh_scale_height_m = pass.rayleigh_scale_height_m;
-    atmo.mie_scattering_rgb = pass.mie_scattering_rgb.xyz;
-    atmo.mie_scale_height_m = pass.mie_scale_height_m;
-    atmo.mie_extinction_rgb = pass.mie_scattering_rgb.xyz + pass.mie_absorption_rgb.xyz;
+    atmo.planet_radius_km = pass.planet_radius_km;
+    atmo.atmosphere_height_km = pass.atmosphere_height_km;
+    atmo.rayleigh_scattering_per_km_rgb = pass.rayleigh_scattering_per_km_rgb.xyz;
+    atmo.rayleigh_scale_height_km = pass.rayleigh_scale_height_km;
+    atmo.mie_scattering_per_km_rgb = pass.mie_scattering_per_km_rgb.xyz;
+    atmo.mie_scale_height_km = pass.mie_scale_height_km;
+    atmo.mie_extinction_per_km_rgb = pass.mie_scattering_per_km_rgb.xyz + pass.mie_absorption_per_km_rgb.xyz;
     atmo.mie_g = 0.8f;
-    atmo.absorption_rgb = pass.ozone_absorption_rgb.xyz;
-    atmo.absorption_density.layers[0].width_m = pass.ozone_density_layer0.x;
+    atmo.absorption_per_km_rgb = pass.ozone_absorption_per_km_rgb.xyz;
+    atmo.absorption_density.layers[0].width_km = pass.ozone_density_layer0.x;
     atmo.absorption_density.layers[0].exp_term = pass.ozone_density_layer0.y;
     atmo.absorption_density.layers[0].linear_term = pass.ozone_density_layer0.z;
     atmo.absorption_density.layers[0].constant_term = pass.ozone_density_layer0.w;
-    atmo.absorption_density.layers[1].width_m = pass.ozone_density_layer1.x;
+    atmo.absorption_density.layers[1].width_km = pass.ozone_density_layer1.x;
     atmo.absorption_density.layers[1].exp_term = pass.ozone_density_layer1.y;
     atmo.absorption_density.layers[1].linear_term = pass.ozone_density_layer1.z;
     atmo.absorption_density.layers[1].constant_term = pass.ozone_density_layer1.w;
@@ -60,12 +60,11 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
 
 static float2 UvToAtmosphereParamsBruneton(
     float2 uv,
-    float planet_radius,
-    float atmosphere_height)
+    float planet_radius_km,
+    float atmosphere_height_km)
 {
-    const float kMetersToSkyUnit = 0.001f;
-    const float bottom_radius = planet_radius * kMetersToSkyUnit;
-    const float top_radius = (planet_radius + atmosphere_height) * kMetersToSkyUnit;
+    const float bottom_radius = planet_radius_km;
+    const float top_radius = planet_radius_km + atmosphere_height_km;
     const float H = sqrt(max(0.0, top_radius * top_radius - bottom_radius * bottom_radius));
     float rho = uv.y * H;
     float view_height = sqrt(rho * rho + bottom_radius * bottom_radius);
@@ -84,7 +83,7 @@ static float2 UvToAtmosphereParamsBruneton(
         cos_zenith = (H * H - rho * rho - d * d) / denom;
     }
 
-    return float2((view_height - bottom_radius) / kMetersToSkyUnit, clamp(cos_zenith, -1.0, 1.0));
+    return float2(view_height - bottom_radius, clamp(cos_zenith, -1.0, 1.0));
 }
 
 static float3 IntegrateOpticalDepth(
@@ -103,10 +102,10 @@ static float3 IntegrateOpticalDepth(
     {
         float ray_distance = (float(step_index) + 0.5f) * integration_step_size;
         float3 sample_position = origin + dir * ray_distance;
-        float altitude_m = max(length(sample_position) - atmo.planet_radius_m, 0.0f);
-        optical_depth.x += AtmosphereExponentialDensity(altitude_m, atmo.rayleigh_scale_height_m) * integration_step_size;
-        optical_depth.y += AtmosphereExponentialDensity(altitude_m, atmo.mie_scale_height_m) * integration_step_size;
-        optical_depth.z += OzoneAbsorptionDensity(altitude_m, atmo.absorption_density) * integration_step_size;
+        float altitude_km = max(length(sample_position) - atmo.planet_radius_km, 0.0f);
+        optical_depth.x += AtmosphereExponentialDensity(altitude_km, atmo.rayleigh_scale_height_km) * integration_step_size;
+        optical_depth.y += AtmosphereExponentialDensity(altitude_km, atmo.mie_scale_height_km) * integration_step_size;
+        optical_depth.z += OzoneAbsorptionDensity(altitude_km, atmo.absorption_density) * integration_step_size;
     }
 
     return optical_depth;
@@ -136,30 +135,30 @@ void VortexAtmosphereTransmittanceLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     float2 uv = (float2(dispatch_id.xy) + 0.5f) / float2(pass.output_width, pass.output_height);
     float2 atmo_params = UvToAtmosphereParamsBruneton(
         uv,
-        atmo.planet_radius_m,
-        atmo.atmosphere_height_m);
-    float altitude_m = atmo_params.x;
+        atmo.planet_radius_km,
+        atmo.atmosphere_height_km);
+    float altitude_km = atmo_params.x;
     float cos_zenith = atmo_params.y;
 
-    float r = atmo.planet_radius_m + altitude_m;
+    float r = atmo.planet_radius_km + altitude_km;
     float3 origin = float3(0.0f, 0.0f, r);
     float sin_zenith = sqrt(max(0.0f, 1.0f - cos_zenith * cos_zenith));
     float3 dir = float3(sin_zenith, 0.0f, cos_zenith);
 
-    float atmosphere_radius = atmo.planet_radius_m + atmo.atmosphere_height_m;
+    float atmosphere_radius = atmo.planet_radius_km + atmo.atmosphere_height_km;
     float ray_length = RaySphereIntersectNearest(origin, dir, atmosphere_radius);
     float3 optical_depth = 0.0.xxx;
 
     if (ray_length > 0.0f)
     {
-        float ground_dist = RaySphereIntersectNearest(origin, dir, atmo.planet_radius_m);
+        float ground_dist = RaySphereIntersectNearest(origin, dir, atmo.planet_radius_km);
         float integrate_length = (ground_dist > 0.0f && ground_dist < ray_length) ? ground_dist : ray_length;
         optical_depth = IntegrateOpticalDepth(origin, dir, integrate_length, atmo, pass.integration_sample_count);
     }
 
-    const float3 extinction = (atmo.rayleigh_scattering_rgb * optical_depth.x)
-        + (atmo.mie_extinction_rgb * optical_depth.y)
-        + (atmo.absorption_rgb * optical_depth.z);
+    const float3 extinction = (atmo.rayleigh_scattering_per_km_rgb * optical_depth.x)
+        + (atmo.mie_extinction_per_km_rgb * optical_depth.y)
+        + (atmo.absorption_per_km_rgb * optical_depth.z);
     const float3 transmittance = exp(-extinction);
     output_texture[dispatch_id.xy] = float4(transmittance, 0.0f);
 }

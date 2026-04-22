@@ -46,15 +46,15 @@ struct SkyViewSamplingAtmosphere0
     float sample_count_min;
     float sample_count_max;
     float distance_to_sample_count_max_inv;
-    float planet_radius_m;
+    float planet_radius_km;
 };
 
 struct SkyViewSamplingAtmosphere1
 {
-    float atmosphere_height_m;
-    float camera_altitude_m;
-    float rayleigh_scale_height_m;
-    float mie_scale_height_m;
+    float atmosphere_height_km;
+    float camera_altitude_km;
+    float rayleigh_scale_height_km;
+    float mie_scale_height_km;
 };
 
 struct SkyViewPhaseFactors0
@@ -74,10 +74,10 @@ struct AtmosphereSkyViewLutPassConstants
     SkyViewSamplingAtmosphere1 sampling_atmosphere1;
     SkyViewPhaseFactors0 phase_factors0;
     float4 ground_albedo_rgb;
-    float4 rayleigh_scattering_rgb;
-    float4 mie_scattering_rgb;
-    float4 mie_absorption_rgb;
-    float4 ozone_absorption_rgb;
+    float4 rayleigh_scattering_per_km_rgb;
+    float4 mie_scattering_per_km_rgb;
+    float4 mie_absorption_per_km_rgb;
+    float4 ozone_absorption_per_km_rgb;
     float4 ozone_density_layer0;
     float4 ozone_density_layer1;
     float4 sky_view_lut_referential_row0;
@@ -104,11 +104,11 @@ static uint PassActiveLightCount(AtmosphereSkyViewLutPassConstants pass) { retur
 static float PassSampleCountMin(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.sample_count_min; }
 static float PassSampleCountMax(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.sample_count_max; }
 static float PassDistanceToSampleCountMaxInv(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.distance_to_sample_count_max_inv; }
-static float PassPlanetRadiusM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.planet_radius_m; }
-static float PassAtmosphereHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.atmosphere_height_m; }
-static float PassCameraAltitudeM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.camera_altitude_m; }
-static float PassRayleighScaleHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.rayleigh_scale_height_m; }
-static float PassMieScaleHeightM(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.mie_scale_height_m; }
+static float PassPlanetRadiusKm(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere0.planet_radius_km; }
+static float PassAtmosphereHeightKm(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.atmosphere_height_km; }
+static float PassCameraAltitudeKm(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.camera_altitude_km; }
+static float PassRayleighScaleHeightKm(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.rayleigh_scale_height_km; }
+static float PassMieScaleHeightKm(AtmosphereSkyViewLutPassConstants pass) { return pass.sampling_atmosphere1.mie_scale_height_km; }
 static float PassMultiScatteringFactor(AtmosphereSkyViewLutPassConstants pass) { return pass.phase_factors0.multi_scattering_factor; }
 static float PassMieAnisotropy(AtmosphereSkyViewLutPassConstants pass) { return pass.phase_factors0.mie_anisotropy; }
 
@@ -116,29 +116,29 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereSkyViewLutPassConstants pass)
 {
     AtmosphereDensityProfile ozone_density = (AtmosphereDensityProfile)0;
-    ozone_density.layers[0].width_m = pass.ozone_density_layer0.x;
+    ozone_density.layers[0].width_km = pass.ozone_density_layer0.x;
     ozone_density.layers[0].exp_term = pass.ozone_density_layer0.y;
     ozone_density.layers[0].linear_term = pass.ozone_density_layer0.z;
     ozone_density.layers[0].constant_term = pass.ozone_density_layer0.w;
-    ozone_density.layers[1].width_m = pass.ozone_density_layer1.x;
+    ozone_density.layers[1].width_km = pass.ozone_density_layer1.x;
     ozone_density.layers[1].exp_term = pass.ozone_density_layer1.y;
     ozone_density.layers[1].linear_term = pass.ozone_density_layer1.z;
     ozone_density.layers[1].constant_term = pass.ozone_density_layer1.w;
 
     return BuildVortexAtmosphereParams(
-        PassPlanetRadiusM(pass),
-        PassAtmosphereHeightM(pass),
+        PassPlanetRadiusKm(pass),
+        PassAtmosphereHeightKm(pass),
         PassMultiScatteringFactor(pass),
         1.0f,
-        PassRayleighScaleHeightM(pass),
-        PassMieScaleHeightM(pass),
+        PassRayleighScaleHeightKm(pass),
+        PassMieScaleHeightKm(pass),
         PassMieAnisotropy(pass),
         pass.ground_albedo_rgb.xyz,
         0.0f,
-        pass.rayleigh_scattering_rgb.xyz,
-        pass.mie_scattering_rgb.xyz,
-        pass.mie_absorption_rgb.xyz,
-        pass.ozone_absorption_rgb.xyz,
+        pass.rayleigh_scattering_per_km_rgb.xyz,
+        pass.mie_scattering_per_km_rgb.xyz,
+        pass.mie_absorption_per_km_rgb.xyz,
+        pass.ozone_absorption_per_km_rgb.xyz,
         ozone_density,
         0u,
         PassTransmittanceLutSrv(pass),
@@ -250,13 +250,13 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     float2 uv = (float2(dispatch_id.xy) + 0.5f) / lut_size;
     uv = saturate(VortexFromSubUvsToUnit(uv, lut_size, lut_inv_size));
 
-    const float view_height = PassPlanetRadiusM(pass) + max(PassCameraAltitudeM(pass), 0.0f);
+    const float view_height = PassPlanetRadiusKm(pass) + max(PassCameraAltitudeKm(pass), 0.0f);
     float3 ray_origin = float3(0.0f, 0.0f, view_height);
     float3 ray_direction = 0.0f.xxx;
-    UvToSkyViewLutParams(ray_direction, view_height, PassPlanetRadiusM(pass), uv);
+    UvToSkyViewLutParams(ray_direction, view_height, PassPlanetRadiusKm(pass), uv);
     ray_direction = VortexSafeNormalize(ray_direction);
 
-    const float atmosphere_radius = PassPlanetRadiusM(pass) + PassAtmosphereHeightM(pass);
+    const float atmosphere_radius = PassPlanetRadiusKm(pass) + PassAtmosphereHeightKm(pass);
     if (!MoveToTopAtmosphere(ray_origin, ray_direction, atmosphere_radius))
     {
         output_texture[dispatch_id.xy] = 0.0f.xxxx;
@@ -268,7 +268,7 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         pass,
         ray_origin,
         ray_direction,
-        9000000.0f);
+        9000.0f);
     const float transmittance = dot(
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
