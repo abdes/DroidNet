@@ -31,7 +31,7 @@ namespace {
     float sun_illuminance_lx;
     bool sun_use_temperature;
     float sun_temperature_kelvin;
-    float sun_disk_radius_deg;
+    float sun_source_angle_deg;
     bool sky_atmo_enabled;
     bool sky_atmo_sun_disk_enabled;
     float planet_radius_km;
@@ -83,7 +83,7 @@ namespace {
       .sun_illuminance_lx = 120000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 5600.0F,
-      .sun_disk_radius_deg = 0.2725F,
+      .sun_source_angle_deg = 0.545F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
@@ -130,7 +130,7 @@ namespace {
       .sun_illuminance_lx = 15000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 6500.0F,
-      .sun_disk_radius_deg = 0.2725F,
+      .sun_source_angle_deg = 0.545F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
@@ -177,7 +177,7 @@ namespace {
       .sun_illuminance_lx = 60000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 6000.0F,
-      .sun_disk_radius_deg = 0.2725F,
+      .sun_source_angle_deg = 0.545F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = false, // Sun disk obscured by fog usually
       .planet_radius_km = 6360.0F,
@@ -224,7 +224,7 @@ namespace {
       .sun_illuminance_lx = 3000.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 3500.0F,
-      .sun_disk_radius_deg = 0.2725F,
+      .sun_source_angle_deg = 0.545F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
@@ -271,7 +271,7 @@ namespace {
       .sun_illuminance_lx = 1500.0F,
       .sun_use_temperature = true,
       .sun_temperature_kelvin = 3200.0F,
-      .sun_disk_radius_deg = 0.2725F,
+      .sun_source_angle_deg = 0.545F,
       .sky_atmo_enabled = true,
       .sky_atmo_sun_disk_enabled = true,
       .planet_radius_km = 6360.0F,
@@ -442,11 +442,11 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSunIlluminanceLx(preset.sun_illuminance_lx);
   SetSunUseTemperature(preset.sun_use_temperature);
   SetSunTemperatureKelvin(preset.sun_temperature_kelvin);
-  SetSunDiskRadiusDeg(preset.sun_disk_radius_deg);
+  SetSunSourceAngleDeg(preset.sun_source_angle_deg);
   SetSunAtmosphereLightSlot(
     static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
   SetSunUsePerPixelAtmosphereTransmittance(false);
-  SetSunAtmosphereDiskLuminanceScale({ 1.0F, 1.0F, 1.0F });
+  SetSunAtmosphereDiskLuminanceScale({ 1.0F, 1.0F, 1.0F, 1.0F });
 
   // Sky Atmosphere
   SetSunDiskEnabled(preset.sky_atmo_sun_disk_enabled);
@@ -1705,14 +1705,14 @@ auto EnvironmentVm::SetSunTemperatureKelvin(float value) -> void
   service_->SetSunTemperatureKelvin(value);
 }
 
-auto EnvironmentVm::GetSunDiskRadiusDeg() const -> float
+auto EnvironmentVm::GetSunSourceAngleDeg() const -> float
 {
-  return service_->GetSunDiskRadiusDeg();
+  return service_->GetSunSourceAngleDeg();
 }
 
-auto EnvironmentVm::SetSunDiskRadiusDeg(float value) -> void
+auto EnvironmentVm::SetSunSourceAngleDeg(float value) -> void
 {
-  service_->SetSunDiskRadiusDeg(value);
+  service_->SetSunSourceAngleDeg(value);
 }
 
 auto EnvironmentVm::GetSunAtmosphereLightSlot() const -> int
@@ -1736,12 +1736,12 @@ auto EnvironmentVm::SetSunUsePerPixelAtmosphereTransmittance(bool enabled)
   service_->SetSunUsePerPixelAtmosphereTransmittance(enabled);
 }
 
-auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3
+auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec4
 {
   return service_->GetSunAtmosphereDiskLuminanceScale();
 }
 
-auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value)
+auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value)
   -> void
 {
   service_->SetSunAtmosphereDiskLuminanceScale(value);

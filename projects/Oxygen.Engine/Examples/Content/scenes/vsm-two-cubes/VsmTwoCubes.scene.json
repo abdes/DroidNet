@@ -191,7 +191,7 @@
             "normal_bias": 0.5
           }
         },
-        "angular_size_radians": 0.004675,
+        "angular_size_radians": 0.00935,
         "environment_contribution": true,
         "is_sun_light": true,
         "intensity_lux": 110000.0

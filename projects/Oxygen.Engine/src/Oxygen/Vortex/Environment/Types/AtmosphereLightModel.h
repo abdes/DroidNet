@@ -10,6 +10,7 @@
 #include <cstdint>
 
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 namespace oxygen::vortex::environment {
 
@@ -29,8 +30,7 @@ struct AtmosphereLightModel {
   float angular_size_radians { 0.0F };
   glm::vec3 illuminance_rgb_lux { 0.0F, 0.0F, 0.0F };
   float illuminance_lux { 0.0F };
-  glm::vec3 disk_luminance_scale_rgb { 1.0F, 1.0F, 1.0F };
-  float reserved1 { 0.0F };
+  glm::vec4 disk_luminance_scale_rgba { 1.0F, 1.0F, 1.0F, 1.0F };
 };
 
 using AtmosphereLightSlots

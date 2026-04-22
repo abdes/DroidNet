@@ -28,8 +28,12 @@ inline constexpr float kEarthAtmosphereHeightM = 100000.0F;
 //! Default planet up direction (+Z).
 inline constexpr glm::vec3 kDefaultPlanetUp { 0.0F, 0.0F, 1.0F };
 
-//! Sun disk angular radius in radians (Earth sun ≈ 0.545 degrees total).
-inline constexpr float kDefaultSunDiskAngularRadiusRad = 0.004756022F;
+//! Sun angular diameter in radians (Earth sun ≈ 0.545 degrees total).
+inline constexpr float kDefaultSunSourceAngleRad = 0.009512044F;
+
+//! Sun disk angular radius in radians (half of the UE-style source angle).
+inline constexpr float kDefaultSunDiskAngularRadiusRad
+  = 0.5F * kDefaultSunSourceAngleRad;
 
 //! Default sun color (linear RGB white).
 inline constexpr glm::vec3 kDefaultSunColorRgb { 1.0F, 1.0F, 1.0F };

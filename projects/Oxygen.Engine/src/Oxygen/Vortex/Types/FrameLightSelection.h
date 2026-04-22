@@ -34,6 +34,7 @@ struct FrameDirectionalLightSelection {
   std::uint32_t light_function_atlas_index { 0xFFFFFFFFU };
 
   std::uint32_t cascade_count { 0U };
+  std::uint32_t light_flags { 0U };
   std::uint32_t reserved0 { 0U };
   std::uint32_t reserved1 { 0U };
   std::uint32_t reserved2 { 0U };

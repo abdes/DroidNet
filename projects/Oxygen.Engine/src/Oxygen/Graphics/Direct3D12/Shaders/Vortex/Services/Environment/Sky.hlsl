@@ -9,7 +9,6 @@
 #include "Renderer/ViewColorHelpers.hlsli"
 #include "Renderer/ViewConstants.hlsli"
 
-#include "Atmosphere/AtmosphereSampling.hlsli"
 #include "Vortex/Contracts/SceneTextures.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
@@ -53,6 +52,34 @@ static inline bool IsAtmosphereRenderedInMain(EnvironmentViewData environment_vi
 {
     return environment_view
         .trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.w > 0.5f;
+}
+
+static const uint kEnvironmentViewFlagReflectionCapture = 1u << 1u;
+
+static inline bool IsReflectionCaptureView(EnvironmentViewData environment_view)
+{
+    return (environment_view.flags & kEnvironmentViewFlagReflectionCapture) != 0u;
+}
+
+static float3 ClampPreExposedDiskLuminancePreserveChromaticity(float3 pre_exposed_luminance)
+{
+    // Oxygen keeps the sun in physical lux. After converting illuminance to
+    // disk luminance via solid angle, the visible disk can reach values far
+    // above the FP16 scene-color range. A per-channel clamp destroys the RGB
+    // ratios and makes the disk turn white or behave erratically when multiple
+    // channels are driven. Clamp uniformly instead so chromaticity is preserved.
+    const float max_pre_exposed_component = max(
+        max(pre_exposed_luminance.x, pre_exposed_luminance.y),
+        pre_exposed_luminance.z);
+    const float safe_max_pre_exposed_luminance = 64000.0f;
+    if (max_pre_exposed_component <= safe_max_pre_exposed_luminance)
+    {
+        return pre_exposed_luminance;
+    }
+
+    const float scale = safe_max_pre_exposed_luminance
+        / max(max_pre_exposed_component, 1.0e-6f);
+    return pre_exposed_luminance * scale;
 }
 
 static inline float2 ResolveSkyViewUvFromLocalDirection(
@@ -113,13 +140,13 @@ static inline float2 ResolveSkyViewUv(
 
 static float3 GetAtmosphereTransmittance(
     float3 planet_center_to_world_pos,
-    float3 light_dir,
+    float3 world_dir,
     GpuSkyAtmosphereParams atmo,
     uint transmittance_lut_srv)
 {
     const float ground_hit = RaySphereIntersectNearest(
         planet_center_to_world_pos,
-        light_dir,
+        world_dir,
         atmo.planet_radius_m);
     if (ground_hit > 0.0f)
     {
@@ -128,7 +155,7 @@ static float3 GetAtmosphereTransmittance(
 
     const float p_height = length(planet_center_to_world_pos);
     const float3 up_vector = planet_center_to_world_pos / max(p_height, 1.0e-4f);
-    const float light_zenith_cos_angle = dot(light_dir, up_vector);
+    const float light_zenith_cos_angle = dot(world_dir, up_vector);
     const float altitude_m = max(p_height - atmo.planet_radius_m, 0.0f);
 
     const float3 transmittance_to_light = VortexSampleTransmittanceLut(
@@ -157,7 +184,7 @@ static float3 GetLightDiskLuminance(
     {
         const float3 transmittance_to_light = GetAtmosphereTransmittance(
             planet_center_to_camera,
-            atmosphere_light_direction,
+            world_dir,
             atmo,
             transmittance_lut_srv);
         const float soft_edge = saturate(
@@ -218,10 +245,13 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         0.0f.xxx);
 
     const float3 planet_center_to_camera = float3(0.0f, 0.0f, view_height);
-    const bool light0_disk_enabled = env_data.atmosphere.sun_disk_enabled != 0u
+    const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
+    const bool light0_disk_enabled = !reflection_capture_view
+        && env_data.atmosphere.sun_disk_enabled != 0u
         && env_data.atmosphere.transmittance_lut_slot != K_INVALID_BINDLESS_INDEX
         && environment_view.atmosphere_light0_disk_luminance_rgb.w > 0.5f;
-    const bool light1_disk_enabled = env_data.atmosphere.sun_disk_enabled != 0u
+    const bool light1_disk_enabled = !reflection_capture_view
+        && env_data.atmosphere.sun_disk_enabled != 0u
         && env_data.atmosphere.transmittance_lut_slot != K_INVALID_BINDLESS_INDEX
         && environment_view.atmosphere_light1_disk_luminance_rgb.w > 0.5f;
 
@@ -231,15 +261,16 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         const float3 light_direction_local = ApplySkyViewLutReferential(
             environment_view,
             VortexSafeNormalize(environment_view.atmosphere_light0_direction_angular_size.xyz));
-        sky_color += min(GetLightDiskLuminance(
+        const float3 disk_luminance_pre_exposed = GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             env_data.atmosphere.transmittance_lut_slot,
             light_direction_local,
             cos_half_apex,
-            environment_view.atmosphere_light0_disk_luminance_rgb.xyz) * view_pre_exposure,
-            64000.0f.xxx);
+            environment_view.atmosphere_light0_disk_luminance_rgb.xyz) * view_pre_exposure;
+        sky_color += ClampPreExposedDiskLuminancePreserveChromaticity(
+            disk_luminance_pre_exposed);
     }
     if (light1_disk_enabled)
     {
@@ -247,15 +278,16 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         const float3 light_direction_local = ApplySkyViewLutReferential(
             environment_view,
             VortexSafeNormalize(environment_view.atmosphere_light1_direction_angular_size.xyz));
-        sky_color += min(GetLightDiskLuminance(
+        const float3 disk_luminance_pre_exposed = GetLightDiskLuminance(
             planet_center_to_camera,
             view_direction_local,
             env_data.atmosphere,
             env_data.atmosphere.transmittance_lut_slot,
             light_direction_local,
             cos_half_apex,
-            environment_view.atmosphere_light1_disk_luminance_rgb.xyz) * view_pre_exposure,
-            64000.0f.xxx);
+            environment_view.atmosphere_light1_disk_luminance_rgb.xyz) * view_pre_exposure;
+        sky_color += ClampPreExposedDiskLuminancePreserveChromaticity(
+            disk_luminance_pre_exposed);
     }
 
     return float4(sky_color * view_one_over_pre_exposure, sky_sample.a);

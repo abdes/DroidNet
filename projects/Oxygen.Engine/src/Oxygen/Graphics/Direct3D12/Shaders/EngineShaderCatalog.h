@@ -520,25 +520,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Atmosphere/CameraVolumeLut_CS.hlsl",
     .entries=std::array { EntryPoint { .type=kCompute, .name="CS" } }
   },
-  // Sky sphere shaders (no permutations)
-  ShaderFileSpec {
-    .path="Atmosphere/SkySphere_VS.hlsl",
-    .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
-  },
-  ShaderFileSpec {
-    .path="Atmosphere/SkySphere_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } },
-    .permutations=std::array<std::string_view, 1> { "OXYGEN_HDR_OUTPUT" }
-  },
-  // Sky capture shaders (no permutations)
-  ShaderFileSpec {
-    .path="Atmosphere/SkyCapture_VS.hlsl",
-    .entries=std::array { EntryPoint { .type=kVertex, .name="VS" } }
-  },
-  ShaderFileSpec {
-    .path="Atmosphere/SkyCapture_PS.hlsl",
-    .entries=std::array { EntryPoint { .type=kPixel, .name="PS" } }
-  },
   // IBL filtering compute shaders (no permutations)
   ShaderFileSpec {
     .path="Lighting/IblFiltering.hlsl",
@@ -686,9 +667,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - MultiScatLut_CS: 1 entry
 // - SkyIrradianceLut_CS: 1 entry
 // - CameraVolumeLut_CS: 1 entry
-// - SkySphere_VS: 1 entry
-// - SkySphere_PS: 2 entries
-// - SkyCapture_VS/PS: 2 entries
 // - IblFiltering: 2 entries
 // - GpuDebugClear: 1 entry
 // - GpuDebugDraw: 2 entries
@@ -697,6 +675,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - ToneMap: 2 entries
 // - AutoExposure_Histogram_CS: 2 entries
 // - AutoExposure_Average_CS: 1 entry
-// Total: 165
+// Total: 160
 
 } // namespace oxygen::graphics::d3d12

@@ -136,8 +136,7 @@ namespace {
     auto data = ViewColorData {};
     if (render_context.current_view.prepared_frame != nullptr) {
       data.exposure = std::max(
-        render_context.current_view.prepared_frame->exposure,
-        1.0e-6F);
+        render_context.current_view.prepared_frame->exposure, 1.0e-6F);
     }
     return data;
   }
@@ -600,10 +599,10 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
   }
 
   if (!state.view_color_data_publisher) {
-    state.view_color_data_publisher = std::make_unique<
-      internal::PerViewStructuredPublisher<ViewColorData>>(
-      observer_ptr { &gfx }, GetStagingProvider(),
-      observer_ptr { &GetInlineTransfersCoordinator() }, "ViewColorData");
+    state.view_color_data_publisher
+      = std::make_unique<internal::PerViewStructuredPublisher<ViewColorData>>(
+        observer_ptr { &gfx }, GetStagingProvider(),
+        observer_ptr { &GetInlineTransfersCoordinator() }, "ViewColorData");
   }
   if (!state.view_history_frame_bindings_publisher) {
     state.view_history_frame_bindings_publisher = std::make_unique<
@@ -678,8 +677,8 @@ auto Renderer::RefreshCurrentViewFrameBindings(
   const auto view_frame_bindings_slot
     = publication_state.view_frame_bindings_publisher->Publish(
       render_context.current_view.view_id, view_bindings);
-    scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-      view_bindings, view_frame_bindings_slot);
+  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
+    view_bindings, view_frame_bindings_slot);
 
   EnsureViewConstantsManager(*gfx);
   view_const_manager_->OnFrameStart(render_context.frame_slot);
@@ -1602,6 +1601,11 @@ auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
     = selected_view.metadata.exposure_view_id != kInvalidViewId
     ? selected_view.metadata.exposure_view_id
     : selection.view_id;
+  const auto is_reflection_capture_view
+    = selected_view.metadata.purpose.find("reflection") != std::string::npos
+    || selected_view.metadata.purpose.find("capture") != std::string::npos;
+  render_context.current_view.is_reflection_capture
+    = is_reflection_capture_view;
   render_context.current_view.with_atmosphere
     = selected_view.metadata.with_atmosphere;
   render_context.current_view.with_height_fog
@@ -1917,13 +1921,13 @@ auto Renderer::DispatchSceneRendererRender(
       = publication_state.view_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, view_bindings);
     LOG_F(INFO,
-      "view_frame_cpu_pre_scene view={} draw_slot={} color_slot={} history_slot={} "
+      "view_frame_cpu_pre_scene view={} draw_slot={} color_slot={} "
+      "history_slot={} "
       "frame_slot={}",
       render_context.current_view.view_id.get(),
       view_bindings.draw_frame_slot.get(),
       view_bindings.view_color_frame_slot.get(),
-      view_bindings.history_frame_slot.get(),
-      view_frame_bindings_slot.get());
+      view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
     scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
       view_bindings, view_frame_bindings_slot);
 
@@ -1994,7 +1998,8 @@ auto Renderer::DispatchSceneRendererRender(
       = publication_state.view_frame_bindings_publisher->Publish(
         render_context.current_view.view_id, view_bindings);
     LOG_F(INFO,
-      "view_frame_cpu_post_scene view={} lighting_slot={} env_slot={} scene_tex_slot={} "
+      "view_frame_cpu_post_scene view={} lighting_slot={} env_slot={} "
+      "scene_tex_slot={} "
       "color_slot={} hzb_slot={} history_slot={} frame_slot={}",
       render_context.current_view.view_id.get(),
       view_bindings.lighting_frame_slot.get(),
@@ -2002,8 +2007,7 @@ auto Renderer::DispatchSceneRendererRender(
       view_bindings.scene_texture_frame_slot.get(),
       view_bindings.view_color_frame_slot.get(),
       view_bindings.screen_hzb_frame_slot.get(),
-      view_bindings.history_frame_slot.get(),
-      view_frame_bindings_slot.get());
+      view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
     scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
       view_bindings, view_frame_bindings_slot);
 

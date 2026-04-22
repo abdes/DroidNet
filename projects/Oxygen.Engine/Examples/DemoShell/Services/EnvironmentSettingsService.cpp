@@ -560,7 +560,7 @@ namespace {
   constexpr std::string_view kSunIlluminanceKey = "env.sun.illuminance_lx";
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
-  constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
+  constexpr std::string_view kSunSourceAngleKey = "env.sun.source_angle_deg";
   constexpr std::string_view kSunAtmosphereLightSlotKey
     = "env.sun.atmosphere_light_slot";
   constexpr std::string_view kSunPerPixelAtmosphereTransmittanceKey
@@ -2630,17 +2630,17 @@ auto EnvironmentSettingsService::SetSunTemperatureKelvin(float value) -> void
   MarkDirty(kSunDirtyMask);
 }
 
-auto EnvironmentSettingsService::GetSunDiskRadiusDeg() const -> float
+auto EnvironmentSettingsService::GetSunSourceAngleDeg() const -> float
 {
-  return sun_component_disk_radius_deg_;
+  return sun_source_angle_deg_;
 }
 
-auto EnvironmentSettingsService::SetSunDiskRadiusDeg(float value) -> void
+auto EnvironmentSettingsService::SetSunSourceAngleDeg(float value) -> void
 {
-  if (sun_component_disk_radius_deg_ == value) {
+  if (sun_source_angle_deg_ == value) {
     return;
   }
-  sun_component_disk_radius_deg_ = value;
+  sun_source_angle_deg_ = value;
   MarkDirty(kSunDirtyMask);
 }
 
@@ -2675,13 +2675,13 @@ auto EnvironmentSettingsService::SetSunUsePerPixelAtmosphereTransmittance(
 }
 
 auto EnvironmentSettingsService::GetSunAtmosphereDiskLuminanceScale() const
-  -> glm::vec3
+  -> glm::vec4
 {
   return sun_atmosphere_disk_luminance_scale_;
 }
 
 auto EnvironmentSettingsService::SetSunAtmosphereDiskLuminanceScale(
-  const glm::vec3& value) -> void
+  const glm::vec4& value) -> void
 {
   if (sun_atmosphere_disk_luminance_scale_ == value) {
     return;
@@ -2897,7 +2897,7 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   scene::DirectionalLight& light) const -> void
 {
   light.SetAngularSizeRadians(
-    std::max(sun_component_disk_radius_deg_ * kDegToRad, 0.0F));
+    std::max(sun_source_angle_deg_ * kDegToRad, 0.0F));
   light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(
     std::clamp(sun_atmosphere_light_slot_,
       static_cast<int>(scene::AtmosphereLightSlot::kNone),
@@ -2992,7 +2992,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           sun_light_node_.GetName());
       }
     }
-
   }
 
   if (apply_sun && sun_enabled_) {
@@ -3000,8 +2999,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       = config_.scene ? config_.scene->GetName() : std::string_view {};
     UpdateSunLightCandidate();
     if (sun_light_available_) {
-      if (auto light
-        = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
         CHECK_F(ApplyDirectionalSunRole(
                   sun_light_node_, sun_enabled_, true, true, true),
           "failed to apply scene sun role to directional node '{}'",
@@ -3014,8 +3012,8 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
           ? KelvinToLinearRgb(sun_temperature_kelvin_)
           : sun_color_rgb_;
 
-        const auto sun_dir = DirectionFromAzimuthElevation(
-          sun_azimuth_deg_, sun_elevation_deg_);
+        const auto sun_dir
+          = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
         const glm::vec3 light_dir = -sun_dir;
         ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
       }
@@ -3372,12 +3370,10 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
       sun_enabled_ = light->get().Common().affects_world;
       sun_color_rgb_ = light->get().Common().color_rgb;
       sun_illuminance_lx_ = light->get().GetIntensityLux();
-      sun_component_disk_radius_deg_
-        = light->get().GetAngularSizeRadians() * kRadToDeg;
+      sun_source_angle_deg_ = light->get().GetAngularSizeRadians() * kRadToDeg;
       sun_use_temperature_ = false;
       const auto& resolver = config_.scene->GetDirectionalLightResolver();
-      if (const auto primary = resolver.ResolvePrimarySun();
-        primary.has_value()
+      if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()
         && primary->NodeHandle() == sun_light_node_.GetHandle()) {
         const auto direction_to_light_ws = primary->DirectionToLightWs();
         sun_azimuth_deg_
@@ -3722,11 +3718,14 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_vec3_min(sun_color_rgb_, 0.0F);
   clamp_float(sun_illuminance_lx_, 0.0F, 250000.0F);
   clamp_float(sun_temperature_kelvin_, 1000.0F, 40000.0F);
-  clamp_float(sun_component_disk_radius_deg_, 0.01F, 2.0F);
+  clamp_float(sun_source_angle_deg_, 0.01F, 5.0F);
   clamp_int(sun_atmosphere_light_slot_,
     static_cast<int>(scene::AtmosphereLightSlot::kNone),
     static_cast<int>(scene::AtmosphereLightSlot::kSecondary));
-  clamp_vec3_min(sun_atmosphere_disk_luminance_scale_, 0.0F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.x, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.y, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.z, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.w, 0.0F, 1.0e9F);
   clamp_float(sun_shadow_bias_, 0.0F, 10.0F);
   clamp_float(sun_shadow_normal_bias_, 0.0F, 10.0F);
   clamp_int(sun_shadow_resolution_hint_,
@@ -3802,6 +3801,22 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     key.resize(prefix.size());
     key += ".z";
     loaded |= load_float(key, out.z);
+    return loaded;
+  };
+  auto load_vec4 = [&](std::string_view prefix, glm::vec4& out) -> bool {
+    bool loaded = false;
+    std::string key(prefix);
+    key += ".x";
+    loaded |= load_float(key, out.x);
+    key.resize(prefix.size());
+    key += ".y";
+    loaded |= load_float(key, out.y);
+    key.resize(prefix.size());
+    key += ".z";
+    loaded |= load_float(key, out.z);
+    key.resize(prefix.size());
+    key += ".w";
+    loaded |= load_float(key, out.w);
     return loaded;
   };
   auto load_int = [&](std::string_view key, int& out) -> bool {
@@ -3956,12 +3971,12 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_float(kSunIlluminanceKey, sun_illuminance_lx_);
     any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
     any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
-    any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+    any_loaded |= load_float(kSunSourceAngleKey, sun_source_angle_deg_);
     any_loaded
       |= load_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
     any_loaded |= load_bool(kSunPerPixelAtmosphereTransmittanceKey,
       sun_use_per_pixel_atmosphere_transmittance_);
-    any_loaded |= load_vec3(kSunAtmosphereDiskLuminanceScaleKey,
+    any_loaded |= load_vec4(kSunAtmosphereDiskLuminanceScaleKey,
       sun_atmosphere_disk_luminance_scale_);
     any_loaded |= load_float(kSunShadowBiasKey, sun_shadow_bias_);
     any_loaded |= load_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
@@ -4067,6 +4082,20 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     key += ".z";
     save_float(key, value.z);
   };
+  auto save_vec4 = [&](std::string_view prefix, const glm::vec4& value) {
+    std::string key(prefix);
+    key += ".x";
+    save_float(key, value.x);
+    key.resize(prefix.size());
+    key += ".y";
+    save_float(key, value.y);
+    key.resize(prefix.size());
+    key += ".z";
+    save_float(key, value.z);
+    key.resize(prefix.size());
+    key += ".w";
+    save_float(key, value.w);
+  };
   auto save_int = [&](std::string_view key, int value) {
     save_float(key, static_cast<float>(value));
   };
@@ -4165,11 +4194,11 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSunIlluminanceKey, sun_illuminance_lx_);
   save_bool(kSunUseTemperatureKey, sun_use_temperature_);
   save_float(kSunTemperatureKey, sun_temperature_kelvin_);
-  save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+  save_float(kSunSourceAngleKey, sun_source_angle_deg_);
   save_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
   save_bool(kSunPerPixelAtmosphereTransmittanceKey,
     sun_use_per_pixel_atmosphere_transmittance_);
-  save_vec3(
+  save_vec4(
     kSunAtmosphereDiskLuminanceScaleKey, sun_atmosphere_disk_luminance_scale_);
   save_float(kSunShadowBiasKey, sun_shadow_bias_);
   save_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
@@ -4229,7 +4258,7 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   sun_illuminance_lx_ = kDefaultSunIlluminanceLx;
   sun_use_temperature_ = false;
   sun_temperature_kelvin_ = 6500.0F;
-  sun_component_disk_radius_deg_ = kDefaultSunDiskAngularRadiusDeg;
+  sun_source_angle_deg_ = kDefaultSunSourceAngleDeg;
   sun_shadow_bias_ = scene::kDefaultShadowBias;
   sun_shadow_normal_bias_ = scene::kDefaultShadowNormalBias;
   sun_shadow_resolution_hint_
@@ -4251,22 +4280,23 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
 
   const auto& resolver = config_.scene->GetDirectionalLightResolver();
   resolver.Validate();
-  if (const auto primary = resolver.ResolvePrimarySun();
-    primary.has_value()) {
+  if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()) {
     auto node = config_.scene->GetNode(primary->NodeHandle());
-    CHECK_F(node.has_value(),
-      "failed to resolve scene node for primary sun handle");
+    CHECK_F(
+      node.has_value(), "failed to resolve scene node for primary sun handle");
     sun_light_node_ = *node;
     sun_light_available_ = sun_light_node_.IsAlive();
     CHECK_F(ApplyDirectionalSunRole(sun_light_node_, true, true, true, true),
-      "failed to promote scene directional '{}' to active sun during activation",
+      "failed to promote scene directional '{}' to active sun during "
+      "activation",
       sun_light_node_.GetName());
     sun_enabled_ = true;
     if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
       CaptureSunShadowSettingsFromLight(light->get());
     }
     LOG_F(INFO,
-      "activated scene '{}' selected scene directional '{}' as resolved primary sun",
+      "activated scene '{}' selected scene directional '{}' as resolved "
+      "primary sun",
       config_.scene->GetName(), sun_light_node_.GetName());
     return;
   }
@@ -4274,8 +4304,7 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
   sun_light_available_ = false;
   sun_light_node_ = {};
   sun_enabled_ = false;
-  LOG_F(WARNING,
-    "scene '{}' has no resolved sun directional light",
+  LOG_F(WARNING, "scene '{}' has no resolved sun directional light",
     config_.scene->GetName());
 }
 
@@ -4288,17 +4317,13 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
 
   const auto& resolver = config_.scene->GetDirectionalLightResolver();
   resolver.Validate();
-  if (const auto primary = resolver.ResolvePrimarySun();
-    primary.has_value()) {
-    DLOG_F(1,
-      "resolved scene sun candidate '{}' in scene '{}'",
-      primary->Node().GetName(),
-      config_.scene->GetName());
+  if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()) {
+    DLOG_F(1, "resolved scene sun candidate '{}' in scene '{}'",
+      primary->Node().GetName(), config_.scene->GetName());
     return config_.scene->GetNode(primary->NodeHandle());
   }
 
-  DLOG_F(1,
-    "resolved no scene sun candidate in scene '{}'",
+  DLOG_F(1, "resolved no scene sun candidate in scene '{}'",
     config_.scene->GetName());
   return std::nullopt;
 }

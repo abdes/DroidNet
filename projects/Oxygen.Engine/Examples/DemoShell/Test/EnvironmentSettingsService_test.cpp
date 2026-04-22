@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <vector>
@@ -23,7 +24,6 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
-
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -419,7 +419,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSunAtmosphereLightSlot(
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   service_.SetSunUsePerPixelAtmosphereTransmittance(true);
-  service_.SetSunAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F });
+  service_.SetSunAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F, 0.5F });
   service_.ApplyPendingChanges();
 
   auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
@@ -428,7 +428,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     oxygen::scene::AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
-    glm::vec3(1.2F, 0.9F, 0.8F));
+    glm::vec4(1.2F, 0.9F, 0.8F, 0.5F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -467,6 +467,23 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(service_.GetSunShadowCascadeDistance(2), 92.0F);
 }
 
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, AppliesSunSourceAngleToAuthoredSceneSunLight)
+{
+  auto scene = MakeScene("DemoShell.SceneSunSourceAngle");
+  auto authored_sun = CreateDirectionalLightNode(*scene, "AuthoredSun", true);
+  ASSERT_TRUE(authored_sun.IsAlive());
+
+  service_.OnSceneActivated(*scene);
+  service_.SetSunSourceAngleDeg(0.9F);
+  service_.ApplyPendingChanges();
+
+  auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
+  ASSERT_TRUE(light.has_value());
+  EXPECT_NEAR(light->get().GetAngularSizeRadians(),
+    0.9F * (std::numbers::pi_v<float> / 180.0F), 1.0e-6F);
+}
+
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   LoadSettings_ReadsSunAtmosphereLightMetadataKeys)
 {
@@ -483,6 +500,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.x", 1.4F);
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.y", 1.1F);
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.z", 0.7F);
+  settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.w", 0.25F);
 
   auto scene = MakeScene("DemoShell.LoadSunAtmosphereLightMetadata");
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
@@ -493,7 +511,28 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(
-    service_.GetSunAtmosphereDiskLuminanceScale(), glm::vec3(1.4F, 1.1F, 0.7F));
+    service_.GetSunAtmosphereDiskLuminanceScale(),
+    glm::vec4(1.4F, 1.1F, 0.7F, 0.25F));
+}
+
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, LoadSettings_ReadsSunSourceAngleKey)
+{
+  ResetDemoSettings();
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+
+  settings->SetFloat("environment_preset_index", -1.0F);
+  settings->SetBool("env.settings.custom_state_present", true);
+  settings->SetFloat("env.settings.schema_version", 5.0F);
+  settings->SetFloat("env.sun.source_angle_deg", 0.85F);
+
+  auto scene = MakeScene("DemoShell.LoadSunSourceAngle");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  EXPECT_FLOAT_EQ(service_.GetSunSourceAngleDeg(), 0.85F);
 }
 
 NOLINT_TEST_F(
@@ -515,6 +554,25 @@ NOLINT_TEST_F(
   EXPECT_FALSE(settings->GetFloat("env.sun.source").has_value());
   EXPECT_EQ(
     settings->GetFloat("env.settings.schema_version").value_or(0.0F), 5.0F);
+}
+
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, SaveSettings_PersistsSunSourceAngleKey)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SaveSunSourceAngle");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+  service_.ActivateCustomMode();
+  service_.SetSunSourceAngleDeg(1.1F);
+
+  PersistPendingSettings(service_);
+
+  const auto settings = SettingsService::ForDemoApp();
+  ASSERT_NE(settings, nullptr);
+  ASSERT_TRUE(settings->GetFloat("env.sun.source_angle_deg").has_value());
+  EXPECT_FLOAT_EQ(settings->GetFloat("env.sun.source_angle_deg").value(), 1.1F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

@@ -464,7 +464,7 @@ Source, cubemap resource, solid color, intensity, rotation, tint.
 
 ## 10.5 SunSystem
 
-Sun source, world direction, azimuth/elevation, color, illuminance (lux), disk angular radius, cast shadows, temperature, optional referenced scene light.
+Sun source, world direction, azimuth/elevation, color, illuminance (lux), source angle / angular diameter, cast shadows, temperature, optional referenced scene light.
 
 ## 10.6 VolumetricCloudsSystem
 

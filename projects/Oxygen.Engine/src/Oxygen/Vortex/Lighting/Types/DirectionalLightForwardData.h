@@ -28,6 +28,7 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
   std::uint32_t light_function_atlas_index { 0xFFFFFFFFU };
 
   std::uint32_t cascade_count { 0U };
+  std::uint32_t light_flags { 0U };
   std::uint32_t reserved0 { 0U };
   std::uint32_t reserved1 { 0U };
   std::uint32_t reserved2 { 0U };
@@ -46,6 +47,7 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
       .shadow_flags = selection.shadow_flags,
       .light_function_atlas_index = selection.light_function_atlas_index,
       .cascade_count = selection.cascade_count,
+      .light_flags = selection.light_flags,
       .reserved0 = selection.reserved0,
       .reserved1 = selection.reserved1,
       .reserved2 = selection.reserved2,
@@ -56,6 +58,7 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
 static_assert(
   alignof(DirectionalLightForwardData) == packing::kShaderDataFieldAlignment);
 static_assert(
-  sizeof(DirectionalLightForwardData) % packing::kShaderDataFieldAlignment == 0);
+  sizeof(DirectionalLightForwardData) % packing::kShaderDataFieldAlignment
+  == 0);
 
 } // namespace oxygen::vortex

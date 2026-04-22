@@ -23,6 +23,7 @@ struct DirectionalLightForwardData
     uint light_function_atlas_index;
 
     uint cascade_count;
+    uint light_flags;
     uint reserved0;
     uint reserved1;
     uint reserved2;
