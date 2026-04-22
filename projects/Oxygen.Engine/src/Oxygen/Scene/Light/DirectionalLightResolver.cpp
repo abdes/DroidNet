@@ -7,6 +7,7 @@
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 
 #include <algorithm>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -86,6 +87,51 @@ namespace {
     return resolved;
   }
 
+  auto IsEnvironmentContributingLight(const ResolvedDirectionalLightView& entry)
+    -> bool
+  {
+    return entry.Light().GetEnvironmentContribution();
+  }
+
+  auto IsExplicitPrimary(const ResolvedDirectionalLightView& entry) -> bool
+  {
+    return IsEnvironmentContributingLight(entry)
+      && entry.Light().GetAtmosphereLightSlot() == AtmosphereLightSlot::kPrimary;
+  }
+
+  auto IsExplicitSecondary(const ResolvedDirectionalLightView& entry) -> bool
+  {
+    return IsEnvironmentContributingLight(entry)
+      && entry.Light().GetAtmosphereLightSlot() == AtmosphereLightSlot::kSecondary;
+  }
+
+  auto IsNodeAlreadyAssigned(
+    const ResolvedAtmosphereDirectionalLights& result, const NodeHandle node)
+    -> bool
+  {
+    return std::ranges::any_of(result.slots,
+      [node](const std::optional<ResolvedDirectionalLightView>& entry) {
+        return entry.has_value() && entry->NodeHandle() == node;
+      });
+  }
+
+  auto FindFirstUnassignedEnvironmentLight(
+    const std::vector<ResolvedDirectionalLightView>& directional_lights,
+    const ResolvedAtmosphereDirectionalLights& result,
+    const std::function<bool(const ResolvedDirectionalLightView&)>& predicate)
+    -> std::optional<ResolvedDirectionalLightView>
+  {
+    const auto found = std::ranges::find_if(directional_lights,
+      [&result, &predicate](const ResolvedDirectionalLightView& entry) {
+        return IsEnvironmentContributingLight(entry)
+          && !IsNodeAlreadyAssigned(result, entry.NodeHandle()) && predicate(entry);
+      });
+    if (found == directional_lights.end()) {
+      return std::nullopt;
+    }
+    return *found;
+  }
+
 } // namespace
 
 ResolvedDirectionalLightView::ResolvedDirectionalLightView(
@@ -154,23 +200,27 @@ auto DirectionalLightResolver::ResolvePrimarySun() const
   -> std::optional<ResolvedDirectionalLightView>
 {
   Validate();
-  if (primary_sun_light_.has_value()) {
-    return primary_sun_light_;
-  }
-  return ResolvePrimaryEnvironmentLight();
+  return atmosphere_lights_.slots[0];
 }
 
 auto DirectionalLightResolver::ResolveSecondarySun() const
   -> std::optional<ResolvedDirectionalLightView>
 {
   Validate();
-  return ResolveSecondaryEnvironmentLight();
+  return atmosphere_lights_.slots[1];
 }
 
 auto DirectionalLightResolver::ResolveMoon() const
   -> std::optional<ResolvedDirectionalLightView>
 {
   return ResolveSecondarySun();
+}
+
+auto DirectionalLightResolver::ResolveAtmosphereLights() const
+  -> const ResolvedAtmosphereDirectionalLights&
+{
+  Validate();
+  return atmosphere_lights_;
 }
 
 auto DirectionalLightResolver::ResolveDirectionalLights() const
@@ -205,9 +255,7 @@ auto DirectionalLightResolver::RebuildIfDirty() const -> void
   }
 
   directional_lights_.clear();
-  primary_sun_light_.reset();
-  primary_environment_light_.reset();
-  secondary_environment_light_.reset();
+  atmosphere_lights_ = ResolvedAtmosphereDirectionalLights {};
   validation_error_.reset();
   valid_ = true;
 
@@ -225,13 +273,8 @@ auto DirectionalLightResolver::RebuildIfDirty() const -> void
     return;
   }
 
+  atmosphere_lights_ = ResolveCanonicalAtmosphereLights();
   dirty_ = false;
-  primary_environment_light_ = ResolvePrimaryEnvironmentLight();
-  secondary_environment_light_ = ResolveSecondaryEnvironmentLight();
-  if (primary_environment_light_.has_value()
-    && primary_environment_light_->Light().IsSunLight()) {
-    primary_sun_light_ = primary_environment_light_;
-  }
 }
 
 auto DirectionalLightResolver::MarkDirty() noexcept -> void
@@ -239,59 +282,58 @@ auto DirectionalLightResolver::MarkDirty() noexcept -> void
   dirty_ = true;
 }
 
-auto DirectionalLightResolver::ResolvePrimaryEnvironmentLight() const
-  -> std::optional<ResolvedDirectionalLightView>
+auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
+  -> ResolvedAtmosphereDirectionalLights
 {
-  if (dirty_) {
-    RebuildIfDirty();
-  }
-  if (!valid_) {
-    return std::nullopt;
+  auto result = ResolvedAtmosphereDirectionalLights {};
+
+  const auto assign_explicit = [this, &result](const std::uint32_t slot_index,
+                                 const ResolvedDirectionalLightView& entry) {
+    if (result.slots[slot_index].has_value()) {
+      ++result.conflict_count;
+      if (result.first_conflict_slot == 0xFFFFFFFFU) {
+        result.first_conflict_slot = slot_index;
+      }
+      const auto& kept = *result.slots[slot_index];
+      const auto scene_name = scene_ != nullptr ? scene_->GetName() : "<unbound>";
+      LOG_F(ERROR,
+        "scene '{}' has multiple explicit atmosphere-light slot {} claims; "
+        "keeping '{}' and ignoring '{}'",
+        scene_name, slot_index, kept.Node().GetName().data(),
+        entry.Node().GetName().data());
+      return;
+    }
+
+    result.slots[slot_index] = entry;
+    result.explicit_slot_claims[slot_index] = true;
+  };
+
+  for (const auto& entry : directional_lights_) {
+    if (IsExplicitPrimary(entry)) {
+      assign_explicit(0U, entry);
+      continue;
+    }
+    if (IsExplicitSecondary(entry)) {
+      assign_explicit(1U, entry);
+    }
   }
 
-  const auto sun = std::ranges::find_if(directional_lights_,
-    [](const ResolvedDirectionalLightView& entry) {
-      const auto& light = entry.Light();
-      return light.GetEnvironmentContribution() && light.IsSunLight();
-    });
-  if (sun != directional_lights_.end()) {
-    return *sun;
+  if (!result.slots[0].has_value()) {
+    if (const auto first_sun = FindFirstUnassignedEnvironmentLight(
+          directional_lights_, result, [](const ResolvedDirectionalLightView& entry) {
+            return entry.Light().IsSunLight();
+          });
+      first_sun.has_value()) {
+      result.slots[0] = *first_sun;
+    } else if (const auto first_environment = FindFirstUnassignedEnvironmentLight(
+                 directional_lights_, result,
+                 [](const ResolvedDirectionalLightView&) { return true; });
+      first_environment.has_value()) {
+      result.slots[0] = *first_environment;
+    }
   }
 
-  const auto environment_light = std::ranges::find_if(directional_lights_,
-    [](const ResolvedDirectionalLightView& entry) {
-      return entry.Light().GetEnvironmentContribution();
-    });
-  if (environment_light != directional_lights_.end()) {
-    return *environment_light;
-  }
-  return std::nullopt;
-}
-
-auto DirectionalLightResolver::ResolveSecondaryEnvironmentLight() const
-  -> std::optional<ResolvedDirectionalLightView>
-{
-  if (dirty_) {
-    RebuildIfDirty();
-  }
-  if (!valid_) {
-    return std::nullopt;
-  }
-
-  const auto primary = ResolvePrimaryEnvironmentLight();
-  if (!primary.has_value()) {
-    return std::nullopt;
-  }
-
-  const auto secondary = std::ranges::find_if(directional_lights_,
-    [&primary](const ResolvedDirectionalLightView& entry) {
-      return entry.Light().GetEnvironmentContribution()
-        && entry.NodeHandle() != primary->NodeHandle();
-    });
-  if (secondary != directional_lights_.end()) {
-    return *secondary;
-  }
-  return std::nullopt;
+  return result;
 }
 
 auto DirectionalLightResolver::ValidationErrorMessage() const

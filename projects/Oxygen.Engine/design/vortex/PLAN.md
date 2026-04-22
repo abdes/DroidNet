@@ -508,6 +508,18 @@ fog coupling, local fog volumes, volumetric fog, sky-light coupling, and dual
 atmosphere-light support, with clouds explicitly excluded. Stage 12 remains
 direct-light-only. Stage 13 remains the future canonical indirect-light owner.
 
+**Blocking sunset sub-scope:** Phase 4D / 4E cannot close while the
+sun-at/below-horizon parity gaps remain open. The authoritative scope correction
+and remediation sequence are recorded in
+`design/vortex/lld/environment-below-horizon-remediation.md`, including:
+
+- non-per-pixel ground-transmittance clamp parity
+- retirement of the legacy direct-light authority path in favor of the
+  atmosphere-light model
+- transmittance LUT smooth-horizon/no-baked-occlusion parity
+- sunset ray-march jitter / TAA-friendly sampling parity
+- authored default parity for `transmittance_min_light_elevation_deg`
+
 ### 4E: First Migration — `Examples/Async`
 
 This is the PRD's required first migration target (PRD §6.1.1). It is not a

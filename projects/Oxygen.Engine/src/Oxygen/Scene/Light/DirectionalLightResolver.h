@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -77,6 +78,13 @@ private:
   std::uint32_t traversal_index_ { 0U };
 };
 
+struct ResolvedAtmosphereDirectionalLights final {
+  std::array<std::optional<ResolvedDirectionalLightView>, 2> slots {};
+  std::array<bool, 2> explicit_slot_claims { false, false };
+  std::uint32_t conflict_count { 0U };
+  std::uint32_t first_conflict_slot { 0xFFFFFFFFU };
+};
+
 class DirectionalLightResolver final : public ISceneObserver {
 public:
   OXGN_SCN_API DirectionalLightResolver() = default;
@@ -97,6 +105,8 @@ public:
     -> std::optional<ResolvedDirectionalLightView>;
   OXGN_SCN_NDAPI auto ResolveMoon() const
     -> std::optional<ResolvedDirectionalLightView>;
+  OXGN_SCN_NDAPI auto ResolveAtmosphereLights() const
+    -> const ResolvedAtmosphereDirectionalLights&;
   OXGN_SCN_NDAPI auto ResolveDirectionalLights() const
     -> std::span<const ResolvedDirectionalLightView>;
 
@@ -110,10 +120,8 @@ public:
 private:
   auto RebuildIfDirty() const -> void;
   auto MarkDirty() noexcept -> void;
-  auto ResolvePrimaryEnvironmentLight() const
-    -> std::optional<ResolvedDirectionalLightView>;
-  auto ResolveSecondaryEnvironmentLight() const
-    -> std::optional<ResolvedDirectionalLightView>;
+  auto ResolveCanonicalAtmosphereLights() const
+    -> ResolvedAtmosphereDirectionalLights;
   auto ValidationErrorMessage() const -> std::optional<std::string>;
 
   observer_ptr<Scene> scene_ { nullptr };
@@ -121,9 +129,7 @@ private:
   mutable bool valid_ { true };
   mutable std::optional<std::string> validation_error_ {};
   mutable std::vector<ResolvedDirectionalLightView> directional_lights_ {};
-  mutable std::optional<ResolvedDirectionalLightView> primary_sun_light_ {};
-  mutable std::optional<ResolvedDirectionalLightView> primary_environment_light_ {};
-  mutable std::optional<ResolvedDirectionalLightView> secondary_environment_light_ {};
+  mutable ResolvedAtmosphereDirectionalLights atmosphere_lights_ {};
 };
 
 } // namespace oxygen::scene

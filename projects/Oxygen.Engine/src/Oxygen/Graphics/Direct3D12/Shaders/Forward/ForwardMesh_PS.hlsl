@@ -8,7 +8,6 @@
 //! @brief Pixel shader for Forward+ physically based rendering.
 
 #include "Atmosphere/AerialPerspective.hlsli"
-#include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/DrawHelpers.hlsli"
 #include "Renderer/DrawMetadata.hlsli"
 #include "Renderer/EnvironmentHelpers.hlsli"
@@ -23,10 +22,10 @@
 #include "MaterialFlags.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
-#include "Forward/ForwardDirectLighting.hlsli"
 #include "Forward/ForwardMaterialEval.hlsli"
 #include "Forward/ForwardPbr.hlsli"
 #include "Lighting/ClusterLookup.hlsli"
+#include "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"
 
 float3 EnvBrdfApprox(float3 F0, float roughness, float NoV)
 {

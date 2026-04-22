@@ -60,6 +60,7 @@ namespace {
     glm::vec4 spot_angles { 0.0F };
     glm::mat4 light_world_matrix { 1.0F };
     glm::uvec4 shadow_info { 0U };
+    glm::vec4 atmosphere_transmittance_and_padding { 1.0F, 1.0F, 1.0F, 0.0F };
     std::uint32_t light_type { 0U };
     std::uint32_t light_geometry_vertices_srv {
       kInvalidShaderVisibleIndex.get()
@@ -768,6 +769,10 @@ auto DeferredLightPass::Record(RenderContext& ctx,
         ? directional_shadow_bindings->cascade_count
         : 0U;
       constants.shadow_info.y = packets.directional->light_flags;
+      constants.shadow_info.z = packets.directional->atmosphere_light_slot;
+      constants.shadow_info.w = packets.directional->atmosphere_mode_flags;
+      constants.atmosphere_transmittance_and_padding = glm::vec4(
+        packets.directional->transmittance_toward_sun_rgb, 0.0F);
       constants.light_type
         = static_cast<std::uint32_t>(DeferredLightKind::kDirectional);
     } else {

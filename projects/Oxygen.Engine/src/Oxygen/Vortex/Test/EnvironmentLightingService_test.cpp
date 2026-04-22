@@ -895,7 +895,8 @@ auto AddAtmosphereDirectionalLight(oxygen::scene::Scene& scene,
     light->get().SetAtmosphereLightSlot(slot);
     light->get().SetUsePerPixelAtmosphereTransmittance(
       use_per_pixel_transmittance);
-    light->get().SetAtmosphereDiskLuminanceScale(disk_scale);
+    light->get().SetAtmosphereDiskLuminanceScale(
+      { disk_scale.x, disk_scale.y, disk_scale.z, 1.0F });
     light->get().Common().color_rgb = color_rgb;
     light->get().SetIntensityLux(illuminance_lux);
     light->get().CascadedShadows().cascade_count = cascade_count;
@@ -973,7 +974,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row1.x, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.y, -1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.y, 1.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row1.z, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row2.x, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row2.y, 0.0F, 1.0e-3F);
@@ -1020,6 +1021,18 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(light_state.conflict_count, 0U);
   EXPECT_TRUE(light_state.atmosphere_lights[0].use_per_pixel_transmittance);
   EXPECT_FALSE(light_state.atmosphere_lights[1].use_per_pixel_transmittance);
+  EXPECT_NE(light_state.atmosphere_lights[0].direct_light_authority_flags
+      & oxygen::vortex::environment::kAtmosphereDirectLightFlagPerPixelTransmittance,
+    0U);
+  EXPECT_EQ(light_state.atmosphere_lights[0].direct_light_authority_flags
+      & oxygen::vortex::environment::kAtmosphereDirectLightFlagHasBakedGroundTransmittance,
+    0U);
+  EXPECT_EQ(light_state.atmosphere_lights[1].direct_light_authority_flags
+      & oxygen::vortex::environment::kAtmosphereDirectLightFlagPerPixelTransmittance,
+    0U);
+  EXPECT_NE(light_state.atmosphere_lights[1].direct_light_authority_flags
+      & oxygen::vortex::environment::kAtmosphereDirectLightFlagHasBakedGroundTransmittance,
+    0U);
 
   EXPECT_EQ(atmosphere_state.conventional_shadow_authority_slot, 0U);
   EXPECT_EQ(atmosphere_state.conventional_shadow_cascade_count, 2U);
@@ -1045,11 +1058,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   const auto primary_solid_angle
     = 2.0F * kPi * (1.0F - std::cos(primary_half_apex_angle));
   const auto expected_primary_disk_luminance
-    = glm::vec3(light_state.atmosphere_lights[0].disk_luminance_scale_rgb.x
+    = glm::vec3(light_state.atmosphere_lights[0].disk_luminance_scale_rgba.x
           * light_state.atmosphere_lights[0].illuminance_rgb_lux.x,
-        light_state.atmosphere_lights[0].disk_luminance_scale_rgb.y
+        light_state.atmosphere_lights[0].disk_luminance_scale_rgba.y
           * light_state.atmosphere_lights[0].illuminance_rgb_lux.y,
-        light_state.atmosphere_lights[0].disk_luminance_scale_rgb.z
+        light_state.atmosphere_lights[0].disk_luminance_scale_rgba.z
           * light_state.atmosphere_lights[0].illuminance_rgb_lux.z)
     / primary_solid_angle;
   EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.x,
@@ -1116,9 +1129,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto sun = AddAtmosphereDirectionalLight(*scene, "FallbackSun",
     oxygen::scene::AtmosphereLightSlot::kNone, true, 3U, true,
     { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.9F, 0.8F }, 90000.0F);
-  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Fill",
+  auto fill = AddAtmosphereDirectionalLight(*scene, "Fill",
     oxygen::scene::AtmosphereLightSlot::kNone, false, 4U, false,
-    { 0.2F, 0.2F, 0.2F }, { 0.4F, 0.5F, 0.6F }, 500.0F));
+    { 0.2F, 0.2F, 0.2F }, { 0.4F, 0.5F, 0.6F }, 500.0F);
+  auto fill_light = fill.GetLightAs<oxygen::scene::DirectionalLight>();
+  ASSERT_TRUE(fill_light.has_value());
+  fill_light->get().SetEnvironmentContribution(false);
   scene->Update();
 
   auto resolved_view = MakeResolvedView(64.0F, 64.0F);
@@ -1198,6 +1214,39 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(light_state.conflict_count, 1U);
   EXPECT_EQ(light_state.first_conflict_slot, 0U);
   EXPECT_TRUE(light_state.explicit_slot_claims[0]);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  StableAtmosphereStateLeavesSlot1DisabledWithoutExplicitSecondaryClaim)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto sun = AddAtmosphereDirectionalLight(*scene, "Sun",
+    oxygen::scene::AtmosphereLightSlot::kNone, true, 2U, false,
+    { 1.0F, 0.95F, 0.9F }, { 1.0F, 1.0F, 1.0F }, 90000.0F);
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "MoonCandidate",
+    oxygen::scene::AtmosphereLightSlot::kNone, false, 1U, false,
+    { 0.5F, 0.6F, 0.8F }, { 0.7F, 0.8F, 1.0F }, 2500.0F));
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 24U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 24U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+
+  const auto& light_state = service.InspectAtmosphereLightState();
+  EXPECT_TRUE(light_state.atmosphere_lights[0].enabled);
+  EXPECT_FALSE(light_state.atmosphere_lights[1].enabled);
+  EXPECT_EQ(light_state.source_nodes[0].Index(), sun.GetHandle().Index());
+  EXPECT_FALSE(light_state.explicit_slot_claims[0]);
+  EXPECT_FALSE(light_state.explicit_slot_claims[1]);
+  EXPECT_EQ(light_state.active_light_count, 1U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
