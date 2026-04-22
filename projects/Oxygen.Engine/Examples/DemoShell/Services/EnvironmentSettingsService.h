@@ -446,16 +446,16 @@ public:
   [[nodiscard]] virtual auto GetSunTemperatureKelvin() const -> float;
   virtual auto SetSunTemperatureKelvin(float value) -> void;
 
-  [[nodiscard]] virtual auto GetSunDiskRadiusDeg() const -> float;
-  virtual auto SetSunDiskRadiusDeg(float value) -> void;
+  [[nodiscard]] virtual auto GetSunSourceAngleDeg() const -> float;
+  virtual auto SetSunSourceAngleDeg(float value) -> void;
   [[nodiscard]] virtual auto GetSunAtmosphereLightSlot() const -> int;
   virtual auto SetSunAtmosphereLightSlot(int value) -> void;
   [[nodiscard]] virtual auto GetSunUsePerPixelAtmosphereTransmittance() const
     -> bool;
   virtual auto SetSunUsePerPixelAtmosphereTransmittance(bool enabled) -> void;
   [[nodiscard]] virtual auto GetSunAtmosphereDiskLuminanceScale() const
-    -> glm::vec3;
-  virtual auto SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value)
+    -> glm::vec4;
+  virtual auto SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value)
     -> void;
 
   [[nodiscard]] virtual auto GetSunShadowBias() const -> float;
@@ -598,7 +598,7 @@ private:
   static constexpr float kDefaultSunAzimuthDeg = 90.0F;
   static constexpr float kDefaultSunElevationDeg = 30.0F;
   static constexpr float kDefaultSunIlluminanceLx = 110000.0F;
-  static constexpr float kDefaultSunDiskAngularRadiusDeg = 0.2725F;
+  static constexpr float kDefaultSunSourceAngleDeg = 0.545F;
 
   EnvironmentRuntimeConfig config_ {};
 
@@ -747,11 +747,11 @@ private:
   float sun_illuminance_lx_ { kDefaultSunIlluminanceLx };
   bool sun_use_temperature_ { false };
   float sun_temperature_kelvin_ { 6500.0F };
-  float sun_component_disk_radius_deg_ { kDefaultSunDiskAngularRadiusDeg };
+  float sun_source_angle_deg_ { kDefaultSunSourceAngleDeg };
   int sun_atmosphere_light_slot_ { static_cast<int>(
     scene::AtmosphereLightSlot::kPrimary) };
   bool sun_use_per_pixel_atmosphere_transmittance_ { false };
-  glm::vec3 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
+  glm::vec4 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F, 1.0F };
   float sun_shadow_bias_ { scene::kDefaultShadowBias };
   float sun_shadow_normal_bias_ { scene::kDefaultShadowNormalBias };
   int sun_shadow_resolution_hint_ { static_cast<int>(

@@ -56,13 +56,17 @@ public:
     return common_;
   }
 
-  //! Sets the light's angular size in radians.
+  //! Sets the light source angle in radians.
+  //!
+  //! Semantics match UE's directional-light Source Angle: this is the full
+  //! angular diameter, not the half-apex angle used internally by the
+  //! atmosphere sun-disk shader math.
   auto SetAngularSizeRadians(const float angular_size_radians) noexcept -> void
   {
     angular_size_radians_ = angular_size_radians;
   }
 
-  //! Gets the light's angular size in radians.
+  //! Gets the light source angle in radians.
   OXGN_SCN_NDAPI auto GetAngularSizeRadians() const noexcept -> float
   {
     return angular_size_radians_;
@@ -106,7 +110,8 @@ public:
     is_sun_light_ = is_sun;
   }
 
-  //! Returns true if this light is designated as the authored primary sun candidate.
+  //! Returns true if this light is designated as the authored primary sun
+  //! candidate.
   [[nodiscard]] auto IsSunLight() const noexcept -> bool
   {
     return is_sun_light_;
@@ -133,12 +138,12 @@ public:
     return use_per_pixel_atmosphere_transmittance_;
   }
 
-  auto SetAtmosphereDiskLuminanceScale(const Vec3& rgb) noexcept -> void
+  auto SetAtmosphereDiskLuminanceScale(const Vec4& rgba) noexcept -> void
   {
-    atmosphere_disk_luminance_scale_ = rgb;
+    atmosphere_disk_luminance_scale_ = rgba;
   }
   [[nodiscard]] auto GetAtmosphereDiskLuminanceScale() const noexcept
-    -> const Vec3&
+    -> const Vec4&
   {
     return atmosphere_disk_luminance_scale_;
   }
@@ -164,8 +169,8 @@ protected:
 private:
   CommonLightProperties common_ {};
 
-  //! Angular radius of the light source in radians.
-  //! Scale: 0 to pi/2 (radians).
+  //! Full source angle / angular diameter of the light source in radians.
+  //! Scale: 0 to pi (radians).
   //! Variation: Small changes (e.g. 0.01) affect shadow softness and specular
   //! highlights.
   float angular_size_radians_ = 0.0F;
@@ -180,7 +185,7 @@ private:
   bool is_sun_light_ = false;
   AtmosphereLightSlot atmosphere_light_slot_ = AtmosphereLightSlot::kNone;
   bool use_per_pixel_atmosphere_transmittance_ = false;
-  Vec3 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
+  Vec4 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F, 1.0F };
   CascadedShadowSettings csm_ {};
   detail::TransformComponent* transform_ { nullptr };
 };

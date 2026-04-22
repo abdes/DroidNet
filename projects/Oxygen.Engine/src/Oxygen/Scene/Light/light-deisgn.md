@@ -222,7 +222,7 @@ Must-have fields/behavior:
 
 Suggested fields (names not final; semantics are):
 
-- `float angular_size_radians`
+- `float angular_size_radians` (full source angle / angular diameter)
 - `bool environment_contribution`
 - `CascadedShadowSettings csm` with:
   - `uint32_t cascade_count`

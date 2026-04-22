@@ -3,14 +3,12 @@
 
 #include "Renderer/DirectionalLightBasic.hlsli"
 #include "Renderer/PositionalLightData.hlsli"
+#include "Renderer/AtmosphereLightingHelpers.hlsli"
 #include "Forward/ForwardPbr.hlsli"
-#include "Renderer/EnvironmentHelpers.hlsli"
-#include "Renderer/EnvironmentViewHelpers.hlsli"
 #include "Renderer/LightingHelpers.hlsli"
 #include "Renderer/ShadowHelpers.hlsli"
 #include "Common/Lighting.hlsli"
 #include "Common/Geometry.hlsli"
-#include "Atmosphere/AtmosphereSampling.hlsli"
 
 // Safety caps for fallback loops (pre-clustered culling).
 #ifndef MAX_DIRECTIONAL_LIGHTS
@@ -20,78 +18,6 @@
 #ifndef MAX_POSITIONAL_LIGHTS
 #define MAX_POSITIONAL_LIGHTS 1024
 #endif
-
-//! Computes sun transmittance for a surface point.
-//!
-//! Returns the atmospheric transmittance from the surface point toward the sun.
-//! This accounts for both the sun's elevation and the surface altitude.
-//! When atmosphere is disabled (atmo.enabled == 0), returns 1.0.
-//!
-//! In Oxygen's coordinate system (+Z up, -Y forward):
-//! - World Z=0 is at the planet surface (ground level)
-//! - Object altitude = world_pos.z (in the same units as planet_radius)
-//! - Planet center is at (0, 0, -planet_radius) in world space
-//!
-//! @param world_pos World-space position of the surface.
-//! @param atmo Atmosphere parameters from environment data.
-//! @param sun_dir Direction toward the sun (normalized).
-//! @return RGB transmittance (0 when sun below horizon, 1 when no atmosphere).
-float3 ComputeSunTransmittance(
-    float3 world_pos,
-    GpuSkyAtmosphereParams atmo,
-    float3 sun_dir)
-{
-    // No atmosphere = no attenuation.
-    if (!atmo.enabled) {
-        return float3(1.0, 1.0, 1.0);
-    }
-
-    // In Oxygen's convention:
-    // - Ground is at Z=0, so altitude = world_pos.z
-    // - Planet up is +Z
-    // - The sun zenith angle is computed from the local vertical at the surface point
-    //
-    // For objects on/near the ground, the local "up" is approximately +Z.
-    // For more precision, we could compute the actual radial direction from planet center,
-    // but for typical camera altitudes (meters) vs planet radius (millions of meters),
-    // treating up as +Z is accurate enough.
-
-    // Local up direction at this point on the planet surface.
-    // For small altitudes compared to planet radius, this is effectively +Z.
-    // For high altitudes or precision, use the radial direction from planet center.
-    float3 planet_center = GetPlanetCenterWS();
-    float3 to_surface = world_pos - planet_center;
-    float height = length(to_surface);
-    float altitude = max(height - atmo.planet_radius_m, 0.0);
-    float3 local_up = to_surface / max(height, 1e-6);
-
-    // Compute cosine of sun zenith from the local up direction
-    float cos_sun_zenith = dot(local_up, sun_dir);
-
-    // Hard geometric horizon guard: when sun is below the local horizon, direct
-    // illumination must be zero, regardless of LUT readiness.
-    const float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_m, altitude);
-    if (cos_sun_zenith < cos_horizon) {
-        return float3(0.0, 0.0, 0.0);
-    }
-
-    // LUT missing/not ready: keep conservative passthrough only for above-horizon
-    // sun to avoid blackouts during startup, while still honoring horizon occlusion.
-    if (atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX) {
-        return float3(1.0, 1.0, 1.0);
-    }
-
-    // Sample transmittance LUT directly. The LUT now stores transmittance.
-    float3 transmittance = SampleTransmittanceLut(
-        atmo,
-        atmo.transmittance_lut_slot,
-        atmo.transmittance_lut_width,
-        atmo.transmittance_lut_height,
-        cos_sun_zenith,
-        altitude,
-        atmo.atmosphere_height_m);
-    return transmittance;
-}
 
 struct DirectionalLightDiagnosticTerms
 {

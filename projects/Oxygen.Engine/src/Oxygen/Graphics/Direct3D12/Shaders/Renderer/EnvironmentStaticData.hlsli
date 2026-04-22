@@ -55,7 +55,7 @@ struct GpuFogParams
     uint enabled;
 };
 
-// Mirrors oxygen::engine::GpuSkyAtmosphereParams (sizeof = 192)
+// Mirrors oxygen::vortex::GpuSkyAtmosphereParams (sizeof = 208)
 struct GpuSkyAtmosphereParams
 {
     float planet_radius_m;
@@ -186,7 +186,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::engine::EnvironmentStaticData (sizeof = 480)
+// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 496)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

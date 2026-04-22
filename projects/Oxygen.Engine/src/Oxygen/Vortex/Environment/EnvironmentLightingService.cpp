@@ -39,90 +39,96 @@ namespace oxygen::vortex {
 
 namespace {
 
-auto ResolvePlanetCenterWs(
-  const environment::AtmosphereModel& atmosphere) -> glm::vec3
-{
-  switch (atmosphere.transform_mode) {
-  case environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin:
-    return { 0.0F, 0.0F, -atmosphere.planet_radius_m };
-  case environment::AtmosphereTransformMode::kPlanetTopAtComponentTransform:
-    return atmosphere.planet_anchor_position_ws
-      + glm::vec3 { 0.0F, 0.0F, -atmosphere.planet_radius_m };
-  case environment::AtmosphereTransformMode::kPlanetCenterAtComponentTransform:
-    return atmosphere.planet_anchor_position_ws;
-  default:
-    return { 0.0F, 0.0F, -atmosphere.planet_radius_m };
-  }
-}
+  constexpr std::uint32_t kEnvironmentViewFlagAtmosphereEnabled = 1U << 0U;
+  constexpr std::uint32_t kEnvironmentViewFlagReflectionCapture = 1U << 1U;
 
-auto SafeNormalizeOrFallback(
-  const glm::vec3 value, const glm::vec3 fallback) -> glm::vec3
-{
-  const auto length_sq = glm::dot(value, value);
-  if (length_sq <= 1.0e-8F) {
-    return fallback;
-  }
-  return glm::normalize(value);
-}
-
-//! Builds the shared sky-view local basis used by both the LUT producer and
-//! the main-view sky consumer.
-/*!
- Contract:
- - rows are expressed in Oxygen world space
- - row0 = local +X = forward hint projected onto the tangent plane
- - row1 = local +Y = right = cross(up, forward)
- - row2 = local +Z = up
-
- This basis must stay right-handed and must not silently switch to "left".
- The sky-view LUT parameterization already applies its own azimuth convention in
- shader code, so mirroring this basis would not "fix" sun position; it would
- only create a mirrored local frame shared by producer and consumer.
-*/
-auto BuildSkyViewReferentialRows(
-  const glm::vec3 up, const glm::vec3 forward_hint)
-  -> std::array<glm::vec4, 3>
-{
-  const auto safe_up = SafeNormalizeOrFallback(up, engine::atmos::kDefaultPlanetUp);
-  // The sky-view referential is expressed in Oxygen world space, not view
-  // space. Keep its fallback axes on the engine world basis: Z-up, -Y-forward.
-  auto forward = SafeNormalizeOrFallback(forward_hint, space::move::Forward);
-  // +Y in the local sky-view frame is RIGHT, not LEFT. Using cross(forward, up)
-  // would mirror the basis horizontally under Oxygen's right-handed Z-up law.
-  auto right = glm::cross(safe_up, forward);
-  const auto dot_main = std::abs(glm::dot(safe_up, forward));
-  if (dot_main > 0.999F || glm::dot(right, right) <= 1.0e-8F) {
-    right = glm::cross(safe_up, glm::vec3(space::move::Forward));
-    right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
-    forward = SafeNormalizeOrFallback(
-      glm::cross(right, safe_up), glm::vec3(space::move::Forward));
-  } else {
-    right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
-    forward = SafeNormalizeOrFallback(glm::cross(right, safe_up), forward);
+  auto ResolvePlanetCenterWs(const environment::AtmosphereModel& atmosphere)
+    -> glm::vec3
+  {
+    switch (atmosphere.transform_mode) {
+    case environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin:
+      return { 0.0F, 0.0F, -atmosphere.planet_radius_m };
+    case environment::AtmosphereTransformMode::kPlanetTopAtComponentTransform:
+      return atmosphere.planet_anchor_position_ws
+        + glm::vec3 { 0.0F, 0.0F, -atmosphere.planet_radius_m };
+    case environment::AtmosphereTransformMode::
+      kPlanetCenterAtComponentTransform:
+      return atmosphere.planet_anchor_position_ws;
+    default:
+      return { 0.0F, 0.0F, -atmosphere.planet_radius_m };
+    }
   }
 
-  return {
-    glm::vec4(forward, 0.0F),
-    glm::vec4(right, 0.0F),
-    glm::vec4(safe_up, 0.0F),
-  };
-}
+  auto SafeNormalizeOrFallback(const glm::vec3 value, const glm::vec3 fallback)
+    -> glm::vec3
+  {
+    const auto length_sq = glm::dot(value, value);
+    if (length_sq <= 1.0e-8F) {
+      return fallback;
+    }
+    return glm::normalize(value);
+  }
 
-auto ComputeSunDiskLuminanceRgb(
-  const environment::AtmosphereLightModel& light) -> glm::vec3
-{
-  constexpr auto kPi = 3.14159265358979323846F;
-  const auto angular_radius_radians
-    = std::max(0.0F, light.angular_size_radians);
-  const auto solid_angle
-    = 2.0F * kPi * (1.0F - std::cos(angular_radius_radians));
-  const auto safe_solid_angle = std::max(solid_angle, 1.0e-6F);
-  return glm::vec3(
-    light.disk_luminance_scale_rgb.x * light.illuminance_rgb_lux.x,
-    light.disk_luminance_scale_rgb.y * light.illuminance_rgb_lux.y,
-    light.disk_luminance_scale_rgb.z * light.illuminance_rgb_lux.z)
-    / safe_solid_angle;
-}
+  //! Builds the shared sky-view local basis used by both the LUT producer and
+  //! the main-view sky consumer.
+  /*!
+   Contract:
+   - rows are expressed in Oxygen world space
+   - row0 = local +X = forward hint projected onto the tangent plane
+   - row1 = local +Y = right = cross(up, forward)
+   - row2 = local +Z = up
+
+   This basis must stay right-handed and must not silently switch to "left".
+   The sky-view LUT parameterization already applies its own azimuth convention
+   in shader code, so mirroring this basis would not "fix" sun position; it
+   would only create a mirrored local frame shared by producer and consumer.
+  */
+  auto BuildSkyViewReferentialRows(const glm::vec3 up,
+    const glm::vec3 forward_hint) -> std::array<glm::vec4, 3>
+  {
+    const auto safe_up
+      = SafeNormalizeOrFallback(up, engine::atmos::kDefaultPlanetUp);
+    // The sky-view referential is expressed in Oxygen world space, not view
+    // space. Keep its fallback axes on the engine world basis: Z-up,
+    // -Y-forward.
+    auto forward = SafeNormalizeOrFallback(forward_hint, space::move::Forward);
+    // +Y in the local sky-view frame is RIGHT, not LEFT. Using cross(forward,
+    // up) would mirror the basis horizontally under Oxygen's right-handed Z-up
+    // law.
+    auto right = glm::cross(safe_up, forward);
+    const auto dot_main = std::abs(glm::dot(safe_up, forward));
+    if (dot_main > 0.999F || glm::dot(right, right) <= 1.0e-8F) {
+      right = glm::cross(safe_up, glm::vec3(space::move::Forward));
+      right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
+      forward = SafeNormalizeOrFallback(
+        glm::cross(right, safe_up), glm::vec3(space::move::Forward));
+    } else {
+      right = SafeNormalizeOrFallback(right, glm::vec3(space::move::Right));
+      forward = SafeNormalizeOrFallback(glm::cross(right, safe_up), forward);
+    }
+
+    return {
+      glm::vec4(forward, 0.0F),
+      glm::vec4(right, 0.0F),
+      glm::vec4(safe_up, 0.0F),
+    };
+  }
+
+  auto ComputeSunDiskLuminanceRgb(
+    const environment::AtmosphereLightModel& light) -> glm::vec3
+  {
+    constexpr auto kPi = 3.14159265358979323846F;
+    const auto angular_radius_radians
+      = 0.5F * std::max(0.0F, light.angular_size_radians);
+    const auto solid_angle
+      = 2.0F * kPi * (1.0F - std::cos(angular_radius_radians));
+    const auto safe_solid_angle = std::max(solid_angle, 1.0e-6F);
+    return glm::vec3(
+             light.disk_luminance_scale_rgba.x * light.illuminance_rgb_lux.x,
+             light.disk_luminance_scale_rgba.y * light.illuminance_rgb_lux.y,
+             light.disk_luminance_scale_rgba.z * light.illuminance_rgb_lux.z)
+      / safe_solid_angle;
+  }
 
 } // namespace
 
@@ -163,7 +169,8 @@ EnvironmentLightingService::~EnvironmentLightingService() = default;
 auto EnvironmentLightingService::EnsurePublishResources() -> bool
 {
   if (bindings_publisher_ != nullptr && view_data_publisher_ != nullptr
-    && view_products_publisher_ != nullptr && static_data_publisher_ != nullptr) {
+    && view_products_publisher_ != nullptr
+    && static_data_publisher_ != nullptr) {
     return true;
   }
 
@@ -290,7 +297,8 @@ auto EnvironmentLightingService::BuildBindings(
     .transmittance_lut_srv = view_products.transmittance_lut_srv,
     .multi_scattering_lut_srv = view_products.multi_scattering_lut_srv,
     .sky_view_lut_srv = view_products.sky_view_lut_srv,
-    .camera_aerial_perspective_srv = view_products.camera_aerial_perspective_srv,
+    .camera_aerial_perspective_srv
+    = view_products.camera_aerial_perspective_srv,
     .probes = probe_state_.probes,
     .evaluation = EnvironmentEvaluationParameters {},
     .ambient_bridge = EnvironmentAmbientBridgeBindings {},
@@ -358,8 +366,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto planet_up_ws = SafeNormalizeOrFallback(
     sky_camera_planet_vector, engine::atmos::kDefaultPlanetUp);
   const auto view_height_m = glm::length(sky_camera_planet_vector);
-  const auto camera_altitude_m = std::max(
-    view_height_m - atmosphere.planet_radius_m, 0.0F);
+  const auto camera_altitude_m
+    = std::max(view_height_m - atmosphere.planet_radius_m, 0.0F);
   const auto referential_rows
     = BuildSkyViewReferentialRows(planet_up_ws, view_forward_ws);
 
@@ -374,7 +382,13 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   }
 
   auto data = EnvironmentViewData {};
-  data.flags = atmosphere.enabled ? 1U : 0U;
+  data.flags = 0U;
+  if (atmosphere.enabled) {
+    data.flags |= kEnvironmentViewFlagAtmosphereEnabled;
+  }
+  if (ctx.current_view.is_reflection_capture) {
+    data.flags |= kEnvironmentViewFlagReflectionCapture;
+  }
   data.transform_mode = static_cast<std::uint32_t>(atmosphere.transform_mode);
   data.atmosphere_light_count
     = stable_state.view_products.atmosphere_light_count;
@@ -389,39 +403,41 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
     = glm::vec4(planet_up_ws, camera_altitude_m);
   data.sky_planet_translated_world_center_and_view_height
     = glm::vec4(planet_center_translated_ws, view_height_m);
-    data.sky_camera_translated_world_origin_pad
-      = glm::vec4(sky_camera_translated_world_origin, 0.0F);
-    data.sky_view_lut_referential_row0 = referential_rows[0];
-    data.sky_view_lut_referential_row1 = referential_rows[1];
-    data.sky_view_lut_referential_row2 = referential_rows[2];
-    if (stable_state.view_products.atmosphere_lights[0].enabled) {
-      const auto disk_luminance
-        = atmosphere.sun_disk_enabled
-        ? ComputeSunDiskLuminanceRgb(
-            stable_state.view_products.atmosphere_lights[0])
-        : glm::vec3 { 0.0F, 0.0F, 0.0F };
-      data.atmosphere_light0_direction_angular_size = glm::vec4(
-        stable_state.view_products.atmosphere_lights[0].direction_to_light_ws,
-        stable_state.view_products.atmosphere_lights[0].angular_size_radians);
-      data.atmosphere_light0_disk_luminance_rgb = glm::vec4(
-        disk_luminance,
-        atmosphere.sun_disk_enabled ? 1.0F : 0.0F);
-    }
-    if (stable_state.view_products.atmosphere_lights[1].enabled) {
-      const auto disk_luminance
-        = atmosphere.sun_disk_enabled
-        ? ComputeSunDiskLuminanceRgb(
-            stable_state.view_products.atmosphere_lights[1])
-        : glm::vec3 { 0.0F, 0.0F, 0.0F };
-      data.atmosphere_light1_direction_angular_size = glm::vec4(
-        stable_state.view_products.atmosphere_lights[1].direction_to_light_ws,
-        stable_state.view_products.atmosphere_lights[1].angular_size_radians);
-      data.atmosphere_light1_disk_luminance_rgb = glm::vec4(
-        disk_luminance,
-        atmosphere.sun_disk_enabled ? 1.0F : 0.0F);
-    }
-    data.sky_luminance_factor_height_fog_contribution = glm::vec4(
-      atmosphere.sky_luminance_factor_rgb, atmosphere.height_fog_contribution);
+  data.sky_camera_translated_world_origin_pad
+    = glm::vec4(sky_camera_translated_world_origin, 0.0F);
+  data.sky_view_lut_referential_row0 = referential_rows[0];
+  data.sky_view_lut_referential_row1 = referential_rows[1];
+  data.sky_view_lut_referential_row2 = referential_rows[2];
+  if (stable_state.view_products.atmosphere_lights[0].enabled) {
+    const auto disk_luminance = atmosphere.sun_disk_enabled
+      ? ComputeSunDiskLuminanceRgb(
+          stable_state.view_products.atmosphere_lights[0])
+      : glm::vec3 { 0.0F, 0.0F, 0.0F };
+    data.atmosphere_light0_direction_angular_size = glm::vec4(
+      stable_state.view_products.atmosphere_lights[0].direction_to_light_ws,
+      0.5F
+        * std::max(0.0F,
+          stable_state.view_products.atmosphere_lights[0]
+            .angular_size_radians));
+    data.atmosphere_light0_disk_luminance_rgb
+      = glm::vec4(disk_luminance, atmosphere.sun_disk_enabled ? 1.0F : 0.0F);
+  }
+  if (stable_state.view_products.atmosphere_lights[1].enabled) {
+    const auto disk_luminance = atmosphere.sun_disk_enabled
+      ? ComputeSunDiskLuminanceRgb(
+          stable_state.view_products.atmosphere_lights[1])
+      : glm::vec3 { 0.0F, 0.0F, 0.0F };
+    data.atmosphere_light1_direction_angular_size = glm::vec4(
+      stable_state.view_products.atmosphere_lights[1].direction_to_light_ws,
+      0.5F
+        * std::max(0.0F,
+          stable_state.view_products.atmosphere_lights[1]
+            .angular_size_radians));
+    data.atmosphere_light1_disk_luminance_rgb
+      = glm::vec4(disk_luminance, atmosphere.sun_disk_enabled ? 1.0F : 0.0F);
+  }
+  data.sky_luminance_factor_height_fog_contribution = glm::vec4(
+    atmosphere.sky_luminance_factor_rgb, atmosphere.height_fog_contribution);
   data.sky_aerial_luminance_aerial_start_depth_m
     = glm::vec4(atmosphere.sky_and_aerial_perspective_luminance_factor_rgb,
       atmosphere.aerial_perspective_start_depth_m);
@@ -470,22 +486,22 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.fog.enabled = view_products.height_fog.enabled ? 1U : 0U;
 
   const auto& atmo = view_products.atmosphere;
-  const auto primary_sun_disk_enabled = atmo.sun_disk_enabled
-    && view_products.atmosphere_lights[0].enabled;
+  const auto primary_sun_disk_enabled
+    = atmo.sun_disk_enabled && view_products.atmosphere_lights[0].enabled;
   const auto primary_sun_disk_angular_radius_radians = primary_sun_disk_enabled
-    ? std::max(0.0F, view_products.atmosphere_lights[0].angular_size_radians)
+    ? 0.5F
+      * std::max(0.0F, view_products.atmosphere_lights[0].angular_size_radians)
     : 0.0F;
   const auto primary_sun_disk_luminance_scale_rgb = primary_sun_disk_enabled
-    ? view_products.atmosphere_lights[0].disk_luminance_scale_rgb
+    ? glm::vec3 { view_products.atmosphere_lights[0].disk_luminance_scale_rgba }
     : glm::vec3 { 1.0F, 1.0F, 1.0F };
   data.atmosphere.planet_radius_m = atmo.planet_radius_m;
   data.atmosphere.atmosphere_height_m = atmo.atmosphere_height_m;
   data.atmosphere.multi_scattering_factor = atmo.multi_scattering_factor;
   data.atmosphere.aerial_perspective_distance_scale
     = atmo.aerial_perspective_distance_scale;
-  data.atmosphere.ground_albedo_rgb = {
-    atmo.ground_albedo_rgb.x, atmo.ground_albedo_rgb.y, atmo.ground_albedo_rgb.z
-  };
+  data.atmosphere.ground_albedo_rgb = { atmo.ground_albedo_rgb.x,
+    atmo.ground_albedo_rgb.y, atmo.ground_albedo_rgb.z };
   data.atmosphere.sun_disk_angular_radius_radians
     = primary_sun_disk_angular_radius_radians;
   data.atmosphere.sun_disk_luminance_scale_rgb = {
@@ -499,9 +515,8 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     atmo.rayleigh_scattering_rgb.z,
   };
   data.atmosphere.rayleigh_scale_height_m = atmo.rayleigh_scale_height_m;
-  data.atmosphere.mie_scattering_rgb = {
-    atmo.mie_scattering_rgb.x, atmo.mie_scattering_rgb.y, atmo.mie_scattering_rgb.z
-  };
+  data.atmosphere.mie_scattering_rgb = { atmo.mie_scattering_rgb.x,
+    atmo.mie_scattering_rgb.y, atmo.mie_scattering_rgb.z };
   data.atmosphere.mie_scale_height_m = atmo.mie_scale_height_m;
   data.atmosphere.mie_extinction_rgb = {
     atmo.mie_scattering_rgb.x + atmo.mie_absorption_rgb.x,
@@ -514,7 +529,8 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     atmo.ozone_absorption_rgb.y,
     atmo.ozone_absorption_rgb.z,
   };
-  for (std::size_t i = 0; i < data.atmosphere.absorption_density.layers.size(); ++i) {
+  for (std::size_t i = 0; i < data.atmosphere.absorption_density.layers.size();
+    ++i) {
     data.atmosphere.absorption_density.layers[i].width_m
       = atmo.ozone_density_profile.layers[i].width_m;
     data.atmosphere.absorption_density.layers[i].exp_term
@@ -526,14 +542,17 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   }
   data.atmosphere.sun_disk_enabled = primary_sun_disk_enabled ? 1U : 0U;
   data.atmosphere.enabled = atmo.enabled ? 1U : 0U;
-  data.atmosphere.transmittance_lut_slot = view_products.transmittance_lut_srv.get();
+  data.atmosphere.transmittance_lut_slot
+    = view_products.transmittance_lut_srv.get();
   data.atmosphere.sky_view_lut_slot = view_products.sky_view_lut_srv.get();
   data.atmosphere.sky_irradiance_lut_slot = kInvalidBindlessIndex;
-  data.atmosphere.multi_scat_lut_slot = view_products.multi_scattering_lut_srv.get();
+  data.atmosphere.multi_scat_lut_slot
+    = view_products.multi_scattering_lut_srv.get();
   data.atmosphere.camera_volume_lut_slot
     = view_products.camera_aerial_perspective_srv.get();
   data.atmosphere.blue_noise_slot = kInvalidBindlessIndex;
-  const auto& internal_params = atmosphere_lut_cache_->GetState().internal_parameters;
+  const auto& internal_params
+    = atmosphere_lut_cache_->GetState().internal_parameters;
   data.atmosphere.transmittance_lut_width
     = static_cast<float>(internal_params.transmittance_width);
   data.atmosphere.transmittance_lut_height
@@ -554,7 +573,8 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   };
   data.sky_light.radiance_scale = view_products.sky_light.intensity_mul;
   data.sky_light.diffuse_intensity = view_products.sky_light.diffuse_intensity;
-  data.sky_light.specular_intensity = view_products.sky_light.specular_intensity;
+  data.sky_light.specular_intensity
+    = view_products.sky_light.specular_intensity;
   data.sky_light.source = view_products.sky_light.source;
   data.sky_light.enabled = view_products.sky_light.enabled ? 1U : 0U;
 
@@ -612,20 +632,22 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
 
-  const auto resolved_environment_static_slot = environment_static_slot.IsValid()
+  const auto resolved_environment_static_slot
+    = environment_static_slot.IsValid()
     ? environment_static_slot
     : static_data_publisher_->Publish(
         ctx.current_view.view_id, BuildEnvironmentStaticData(products));
 
   const auto environment_view_products_slot
     = view_products_publisher_->Publish(ctx.current_view.view_id, products);
-  const auto bindings
-    = BuildBindings(resolved_environment_static_slot, resolved_environment_view_slot,
-      environment_view_products_slot, products, enable_ambient_bridge);
+  const auto bindings = BuildBindings(resolved_environment_static_slot,
+    resolved_environment_view_slot, environment_view_products_slot, products,
+    enable_ambient_bridge);
   const auto slot
     = bindings_publisher_->Publish(ctx.current_view.view_id, bindings);
   published_views_.insert_or_assign(ctx.current_view.view_id,
-    PublishedView { .slot = slot, .bindings = bindings, .view_data = view_data });
+    PublishedView {
+      .slot = slot, .bindings = bindings, .view_data = view_data });
 
   last_publication_state_.frame_sequence = current_sequence_;
   last_publication_state_.frame_slot = current_slot_;

@@ -708,7 +708,7 @@ auto MainModule::EnsureLighting() -> void
     light->SetIsSunLight(true);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     light->SetUsePerPixelAtmosphereTransmittance(true);
-    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F, 1.0F });
     CHECK_F(directional_light_node_.AttachLight(std::move(light)),
       "Failed to attach DirectionalLight to SunLight");
   }

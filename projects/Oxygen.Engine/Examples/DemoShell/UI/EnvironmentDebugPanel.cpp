@@ -273,8 +273,8 @@ void EnvironmentDebugPanel::DrawFog()
   }
 
   float start_distance_m = environment_vm_->GetFogStartDistanceMeters();
-  if (ImGui::DragFloat(
-        "Start Distance (m)", &start_distance_m, 1.0F, 0.0F, 1000000.0F, "%.1f")) {
+  if (ImGui::DragFloat("Start Distance (m)", &start_distance_m, 1.0F, 0.0F,
+        1000000.0F, "%.1f")) {
     environment_vm_->SetFogStartDistanceMeters(
       std::max(start_distance_m, 0.0F));
   }
@@ -313,8 +313,8 @@ void EnvironmentDebugPanel::DrawFog()
   }
 
   float height_offset_m = environment_vm_->GetFogHeightOffsetMeters();
-  if (ImGui::DragFloat(
-        "Height Offset (m)", &height_offset_m, 0.25F, -100000.0F, 100000.0F, "%.1f")) {
+  if (ImGui::DragFloat("Height Offset (m)", &height_offset_m, 0.25F, -100000.0F,
+        100000.0F, "%.1f")) {
     environment_vm_->SetFogHeightOffsetMeters(height_offset_m);
   }
 
@@ -374,8 +374,7 @@ void EnvironmentDebugPanel::DrawFog()
     = environment_vm_->GetDirectionalInscatteringLuminance();
   if (ImGui::ColorEdit3("Directional Inscattering", &directional_luminance.x,
         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetDirectionalInscatteringLuminance(
-      directional_luminance);
+    environment_vm_->SetDirectionalInscatteringLuminance(directional_luminance);
   }
   float directional_exponent
     = environment_vm_->GetDirectionalInscatteringExponent();
@@ -410,8 +409,8 @@ void EnvironmentDebugPanel::DrawFog()
       scattering_distribution);
   }
   auto volumetric_albedo = environment_vm_->GetVolumetricFogAlbedo();
-  if (ImGui::ColorEdit3("Volumetric Albedo", &volumetric_albedo.x,
-        ImGuiColorEditFlags_Float)) {
+  if (ImGui::ColorEdit3(
+        "Volumetric Albedo", &volumetric_albedo.x, ImGuiColorEditFlags_Float)) {
     environment_vm_->SetVolumetricFogAlbedo(volumetric_albedo);
   }
   auto volumetric_emissive = environment_vm_->GetVolumetricFogEmissive();
@@ -444,17 +443,16 @@ void EnvironmentDebugPanel::DrawFog()
     environment_vm_->SetVolumetricFogNearFadeInDistanceMeters(
       volumetric_near_fade);
   }
-  float static_lighting_scattering = environment_vm_
-    ->GetVolumetricFogStaticLightingScatteringIntensity();
+  float static_lighting_scattering
+    = environment_vm_->GetVolumetricFogStaticLightingScatteringIntensity();
   if (ImGui::DragFloat("Static Lighting Scattering",
         &static_lighting_scattering, 0.01F, 0.0F, 100.0F, "%.2f")) {
     environment_vm_->SetVolumetricFogStaticLightingScatteringIntensity(
       static_lighting_scattering);
   }
-  bool override_light_colors = environment_vm_
-    ->GetOverrideLightColorsWithFogInscatteringColors();
-  if (ImGui::Checkbox(
-        "Override Light Colors", &override_light_colors)) {
+  bool override_light_colors
+    = environment_vm_->GetOverrideLightColorsWithFogInscatteringColors();
+  if (ImGui::Checkbox("Override Light Colors", &override_light_colors)) {
     environment_vm_->SetOverrideLightColorsWithFogInscatteringColors(
       override_light_colors);
   }
@@ -472,13 +470,10 @@ void EnvironmentDebugPanel::DrawFog()
     = environment_vm_->GetFogVisibleInReflectionCaptures();
   if (ImGui::Checkbox(
         "Visible In Reflection Captures", &fog_reflection_captures)) {
-    environment_vm_->SetFogVisibleInReflectionCaptures(
-      fog_reflection_captures);
+    environment_vm_->SetFogVisibleInReflectionCaptures(fog_reflection_captures);
   }
-  bool fog_realtime_sky
-    = environment_vm_->GetFogVisibleInRealTimeSkyCaptures();
-  if (ImGui::Checkbox(
-        "Visible In Real-Time Sky Captures", &fog_realtime_sky)) {
+  bool fog_realtime_sky = environment_vm_->GetFogVisibleInRealTimeSkyCaptures();
+  if (ImGui::Checkbox("Visible In Real-Time Sky Captures", &fog_realtime_sky)) {
     environment_vm_->SetFogVisibleInRealTimeSkyCaptures(fog_realtime_sky);
   }
 }
@@ -519,16 +514,16 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
 
   float radial_extinction
     = environment_vm_->GetSelectedLocalFogVolumeRadialFogExtinction();
-  if (ImGui::DragFloat("Radial Extinction##LocalFog", &radial_extinction, 0.001F,
-        0.0F, 10.0F, "%.4f")) {
+  if (ImGui::DragFloat("Radial Extinction##LocalFog", &radial_extinction,
+        0.001F, 0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSelectedLocalFogVolumeRadialFogExtinction(
       radial_extinction);
   }
 
   float height_extinction
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogExtinction();
-  if (ImGui::DragFloat("Height Extinction##LocalFog", &height_extinction, 0.001F,
-        0.0F, 10.0F, "%.4f")) {
+  if (ImGui::DragFloat("Height Extinction##LocalFog", &height_extinction,
+        0.001F, 0.0F, 10.0F, "%.4f")) {
     environment_vm_->SetSelectedLocalFogVolumeHeightFogExtinction(
       height_extinction);
   }
@@ -540,19 +535,22 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
     environment_vm_->SetSelectedLocalFogVolumeHeightFogFalloff(height_falloff);
   }
 
-  float height_offset = environment_vm_->GetSelectedLocalFogVolumeHeightFogOffset();
-  if (ImGui::DragFloat(
-        "Height Offset##LocalFog", &height_offset, 0.05F, -1000.0F, 1000.0F, "%.2f")) {
+  float height_offset
+    = environment_vm_->GetSelectedLocalFogVolumeHeightFogOffset();
+  if (ImGui::DragFloat("Height Offset##LocalFog", &height_offset, 0.05F,
+        -1000.0F, 1000.0F, "%.2f")) {
     environment_vm_->SetSelectedLocalFogVolumeHeightFogOffset(height_offset);
   }
 
   float fog_phase_g = environment_vm_->GetSelectedLocalFogVolumeFogPhaseG();
-  if (ImGui::SliderFloat("Phase g##LocalFog", &fog_phase_g, -0.99F, 0.99F, "%.2f")) {
+  if (ImGui::SliderFloat(
+        "Phase g##LocalFog", &fog_phase_g, -0.99F, 0.99F, "%.2f")) {
     environment_vm_->SetSelectedLocalFogVolumeFogPhaseG(fog_phase_g);
   }
 
   auto fog_albedo = environment_vm_->GetSelectedLocalFogVolumeFogAlbedo();
-  if (ImGui::ColorEdit3("Albedo##LocalFog", &fog_albedo.x, ImGuiColorEditFlags_Float)) {
+  if (ImGui::ColorEdit3(
+        "Albedo##LocalFog", &fog_albedo.x, ImGuiColorEditFlags_Float)) {
     environment_vm_->SetSelectedLocalFogVolumeFogAlbedo(fog_albedo);
   }
 
@@ -698,10 +696,10 @@ void EnvironmentDebugPanel::DrawSunSection()
   ImGui::EndDisabled();
 
   ImGui::Separator();
-  float sun_disk_radius_deg = environment_vm_->GetSunDiskRadiusDeg();
-  if (ImGui::DragFloat("Disk radius (deg)", &sun_disk_radius_deg, 0.01F, 0.01F,
-        5.0F, "%.3F")) {
-    environment_vm_->SetSunDiskRadiusDeg(sun_disk_radius_deg);
+  float sun_source_angle_deg = environment_vm_->GetSunSourceAngleDeg();
+  if (ImGui::DragFloat("Source angle (deg)", &sun_source_angle_deg, 0.01F,
+        0.01F, 5.0F, "%.3F")) {
+    environment_vm_->SetSunSourceAngleDeg(sun_source_angle_deg);
   }
 
   ImGui::SeparatorText("Atmosphere Light");
@@ -713,8 +711,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   int atmosphere_light_slot = environment_vm_->GetSunAtmosphereLightSlot();
   ImGui::SetNextItemWidth(180.0F);
   if (ImGui::Combo("Atmosphere Slot", &atmosphere_light_slot,
-        kAtmosphereLightSlotLabels,
-        IM_ARRAYSIZE(kAtmosphereLightSlotLabels))) {
+        kAtmosphereLightSlotLabels, IM_ARRAYSIZE(kAtmosphereLightSlotLabels))) {
     environment_vm_->SetSunAtmosphereLightSlot(atmosphere_light_slot);
   }
   bool use_per_pixel_atmosphere_transmittance
@@ -726,11 +723,17 @@ void EnvironmentDebugPanel::DrawSunSection()
   }
   auto disk_luminance_scale
     = environment_vm_->GetSunAtmosphereDiskLuminanceScale();
-  if (ImGui::ColorEdit3("Atmosphere Disk Luminance",
-        &disk_luminance_scale.x,
-        ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetSunAtmosphereDiskLuminanceScale(
-      disk_luminance_scale);
+  constexpr auto kSunDiskColorScaleFlags = ImGuiColorEditFlags_DisplayRGB
+    | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float
+    | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_NoOptions;
+  if (ImGui::ColorEdit4("Atmosphere Sun Disk Color Scale",
+        &disk_luminance_scale.x, kSunDiskColorScaleFlags)) {
+    environment_vm_->SetSunAtmosphereDiskLuminanceScale(disk_luminance_scale);
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary)) {
+    ImGui::SetTooltip(
+      "Linear RGB multiplier applied only to the visible atmosphere sun disk.\n"
+      "Effective disk color also depends on the sun light color and intensity.");
   }
 
   ImGui::SeparatorText("Directional Shadows");
@@ -855,8 +858,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     "Planet Center @ Component",
   };
   int transform_mode = environment_vm_->GetSkyAtmosphereTransformMode();
-  if (ImGui::Combo(
-        "Transform Mode", &transform_mode, transform_modes, 3)) {
+  if (ImGui::Combo("Transform Mode", &transform_mode, transform_modes, 3)) {
     environment_vm_->SetSkyAtmosphereTransformMode(transform_mode);
   }
 
@@ -1072,10 +1074,9 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
         0.0F, 16.0F, "%.2F")) {
     environment_vm_->SetHeightFogContribution(height_fog_contribution);
   }
-  float trace_sample_count_scale
-    = environment_vm_->GetTraceSampleCountScale();
-  if (ImGui::SliderFloat("Trace Sample Scale", &trace_sample_count_scale, 0.25F,
-        8.0F, "%.2F")) {
+  float trace_sample_count_scale = environment_vm_->GetTraceSampleCountScale();
+  if (ImGui::SliderFloat(
+        "Trace Sample Scale", &trace_sample_count_scale, 0.25F, 8.0F, "%.2F")) {
     environment_vm_->SetTraceSampleCountScale(trace_sample_count_scale);
   }
   float transmittance_min_light_elevation
@@ -1359,8 +1360,7 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     environment_vm_->SetSkyLightSpecular(sky_light_specular);
   }
 
-  bool real_time_capture
-    = environment_vm_->GetSkyLightRealTimeCaptureEnabled();
+  bool real_time_capture = environment_vm_->GetSkyLightRealTimeCaptureEnabled();
   if (ImGui::Checkbox("Real-Time Capture", &real_time_capture)) {
     environment_vm_->SetSkyLightRealTimeCaptureEnabled(real_time_capture);
   }

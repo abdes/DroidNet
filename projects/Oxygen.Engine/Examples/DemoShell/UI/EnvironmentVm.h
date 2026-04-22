@@ -301,14 +301,14 @@ public:
   auto SetSunUseTemperature(bool enabled) -> void;
   [[nodiscard]] auto GetSunTemperatureKelvin() const -> float;
   auto SetSunTemperatureKelvin(float value) -> void;
-  [[nodiscard]] auto GetSunDiskRadiusDeg() const -> float;
-  auto SetSunDiskRadiusDeg(float value) -> void;
+  [[nodiscard]] auto GetSunSourceAngleDeg() const -> float;
+  auto SetSunSourceAngleDeg(float value) -> void;
   [[nodiscard]] auto GetSunAtmosphereLightSlot() const -> int;
   auto SetSunAtmosphereLightSlot(int value) -> void;
   [[nodiscard]] auto GetSunUsePerPixelAtmosphereTransmittance() const -> bool;
   auto SetSunUsePerPixelAtmosphereTransmittance(bool enabled) -> void;
-  [[nodiscard]] auto GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3;
-  auto SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSunAtmosphereDiskLuminanceScale() const -> glm::vec4;
+  auto SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value) -> void;
   [[nodiscard]] auto GetSunShadowBias() const -> float;
   auto SetSunShadowBias(float value) -> void;
   [[nodiscard]] auto GetSunShadowNormalBias() const -> float;

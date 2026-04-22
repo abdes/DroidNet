@@ -62,6 +62,12 @@ namespace oxygen::vortex {
 namespace {
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
+  constexpr std::uint32_t kDirectionalLightFlagAffectsWorld = 1U << 0U;
+  constexpr std::uint32_t kDirectionalLightFlagEnvContribution = 1U << 3U;
+  constexpr std::uint32_t kDirectionalLightFlagSunLight = 1U << 4U;
+  constexpr std::uint32_t kDirectionalLightFlagPerPixelAtmosphereTransmittance
+    = 1U << 5U;
+
   constexpr SceneRenderer::StageOrder kAuthoredStageOrder {
     1,
     2,
@@ -291,8 +297,8 @@ namespace {
     return request;
   }
 
-  auto ResolveLateOverlayTarget(
-    const RenderContext& ctx) -> observer_ptr<const graphics::Framebuffer>
+  auto ResolveLateOverlayTarget(const RenderContext& ctx)
+    -> observer_ptr<const graphics::Framebuffer>
   {
     if (const auto* active_view = ctx.GetActiveViewEntry();
       active_view != nullptr) {
@@ -379,12 +385,19 @@ namespace {
         .shadow_flags = 0U,
         .light_function_atlas_index = 0xFFFFFFFFU,
         .cascade_count = primary.Light().CascadedShadows().cascade_count,
+        .light_flags = kDirectionalLightFlagAffectsWorld
+          | (primary.Light().GetEnvironmentContribution()
+              ? kDirectionalLightFlagEnvContribution
+              : 0U)
+          | (primary.Light().IsSunLight() ? kDirectionalLightFlagSunLight : 0U)
+          | (primary.Light().GetUsePerPixelAtmosphereTransmittance()
+              ? kDirectionalLightFlagPerPixelAtmosphereTransmittance
+              : 0U),
       };
     }
 
     const auto visitor
-      = [&selection, &scene_ref](
-          const scene::ConstVisitedNode& visited,
+      = [&selection, &scene_ref](const scene::ConstVisitedNode& visited,
           const bool dry_run) -> scene::VisitResult {
       static_cast<void>(dry_run);
 
@@ -1216,7 +1229,7 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     PrimePreparedView(ctx);
   }
 
-    if (lighting_ != nullptr
+  if (lighting_ != nullptr
     && lighting_grid_built_sequence_ != ctx.frame_sequence) {
     if (auto* scene_mutable = ctx.GetSceneMutable().get();
       scene_mutable != nullptr) {

@@ -406,6 +406,10 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(catalog_source.contains("VortexLocalFogVolumeComposePS"));
   EXPECT_TRUE(catalog_source.contains("VortexIblIrradianceCS"));
   EXPECT_TRUE(catalog_source.contains("VortexIblPrefilterCS"));
+  EXPECT_FALSE(catalog_source.contains("Atmosphere/SkySphere_VS.hlsl"));
+  EXPECT_FALSE(catalog_source.contains("Atmosphere/SkySphere_PS.hlsl"));
+  EXPECT_FALSE(catalog_source.contains("Atmosphere/SkyCapture_VS.hlsl"));
+  EXPECT_FALSE(catalog_source.contains("Atmosphere/SkyCapture_PS.hlsl"));
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
@@ -437,6 +441,16 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
       "AtmosphereCameraAerialPerspective.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl"));
+  EXPECT_FALSE(std::filesystem::exists(
+    source_root / "Graphics/Direct3D12/Shaders/Atmosphere/SkyColor.hlsli"));
+  EXPECT_FALSE(std::filesystem::exists(
+    source_root / "Graphics/Direct3D12/Shaders/Atmosphere/SkySphere_VS.hlsl"));
+  EXPECT_FALSE(std::filesystem::exists(
+    source_root / "Graphics/Direct3D12/Shaders/Atmosphere/SkySphere_PS.hlsl"));
+  EXPECT_FALSE(std::filesystem::exists(
+    source_root / "Graphics/Direct3D12/Shaders/Atmosphere/SkyCapture_VS.hlsl"));
+  EXPECT_FALSE(std::filesystem::exists(
+    source_root / "Graphics/Direct3D12/Shaders/Atmosphere/SkyCapture_PS.hlsl"));
   EXPECT_TRUE(std::filesystem::exists(source_root
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/"
       "LocalFogVolumeTiledCulling.hlsl"));
@@ -564,12 +578,13 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl");
 
   EXPECT_TRUE(sky_source.contains("EvaluateFarBackgroundMask"));
-  EXPECT_TRUE(
-    sky_source.contains("env_data.atmosphere.sky_view_lut_slot"));
+  EXPECT_TRUE(sky_source.contains("env_data.atmosphere.sky_view_lut_slot"));
   EXPECT_TRUE(
     sky_source.contains("env_data.atmosphere.transmittance_lut_slot"));
   EXPECT_TRUE(sky_source.contains("ApplySkyViewLutReferential"));
   EXPECT_TRUE(sky_source.contains("SkyViewLutParamsToUv"));
+  EXPECT_TRUE(sky_source.contains("planet_center_to_camera,"));
+  EXPECT_TRUE(sky_source.contains("world_dir,"));
   EXPECT_FALSE(sky_source.contains("view_direction.y * 0.5f + 0.5f"));
   EXPECT_FALSE(sky_source.contains("normalize(float3(0.25f, 0.9f, 0.35f))"));
   EXPECT_FALSE(sky_source.contains("horizon_color"));
@@ -753,8 +768,10 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(main_impl.contains(".Long(\"with-height-fog\")"));
   EXPECT_TRUE(main_impl.contains(".Long(\"with-local-fog\")"));
   EXPECT_TRUE(main_impl.contains(".DefaultValue(false)"));
-  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_atmosphere = true;"));
-  EXPECT_TRUE(main_module.contains("view_ctx.metadata.with_height_fog = false;"));
+  EXPECT_TRUE(
+    main_module.contains("view_ctx.metadata.with_atmosphere = true;"));
+  EXPECT_TRUE(
+    main_module.contains("view_ctx.metadata.with_height_fog = false;"));
   EXPECT_TRUE(main_module.contains(
     "view_ctx.metadata.with_local_fog = app_.with_local_fog;"));
   EXPECT_TRUE(main_module.contains("if (app_.with_local_fog) {"));
@@ -919,18 +936,17 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto atmosphere
     = environment->TryGetSystem<oxygen::scene::environment::SkyAtmosphere>();
   ASSERT_NE(atmosphere, nullptr);
-  atmosphere->SetTransformMode(
-    oxygen::scene::environment::SkyAtmosphereTransformMode::
-      kPlanetCenterAtComponentTransform);
+  atmosphere->SetTransformMode(oxygen::scene::environment::
+      SkyAtmosphereTransformMode::kPlanetCenterAtComponentTransform);
   atmosphere->SetPlanetAnchorWorldPosition({ 1000.0F, 2000.0F, 3000.0F });
   scene->Update();
 
   const auto camera_position = glm::vec3 { 1400.0F, 2600.0F, 7200300.0F };
   const auto center = camera_position + glm::vec3 { 1.0F, 0.0F, 0.0F };
-  const auto view_matrix = glm::lookAtRH(
-    camera_position, center, glm::vec3 { 0.0F, 0.0F, 1.0F });
-  auto resolved_view = MakeResolvedView(
-    64.0F, 64.0F, 0.0F, 0.0F, camera_position, view_matrix);
+  const auto view_matrix
+    = glm::lookAtRH(camera_position, center, glm::vec3 { 0.0F, 0.0F, 1.0F });
+  auto resolved_view
+    = MakeResolvedView(64.0F, 64.0F, 0.0F, 0.0F, camera_position, view_matrix);
   auto composition_view = oxygen::vortex::CompositionView {};
   composition_view.id = ViewId { 20U };
   composition_view.with_atmosphere = true;
@@ -947,9 +963,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FLOAT_EQ(view_data->planet_center_ws_pad.z, 3000.0F);
   EXPECT_GT(view_data->sky_planet_translated_world_center_and_view_height.w,
     7000000.0F);
-  EXPECT_NEAR(view_data->sky_camera_translated_world_origin_pad.x, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_camera_translated_world_origin_pad.y, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_camera_translated_world_origin_pad.z, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(
+    view_data->sky_camera_translated_world_origin_pad.x, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(
+    view_data->sky_camera_translated_world_origin_pad.y, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(
+    view_data->sky_camera_translated_world_origin_pad.z, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.x, 1.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);
@@ -985,10 +1004,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   static_cast<void>(service.PublishEnvironmentBindings(ctx));
 
-    const auto& light_state = service.InspectAtmosphereLightState();
-    const auto& atmosphere_state = service.InspectAtmosphereState();
-    const auto* view_data = service.InspectEnvironmentViewData(ViewId { 21U });
-    ASSERT_NE(view_data, nullptr);
+  const auto& light_state = service.InspectAtmosphereLightState();
+  const auto& atmosphere_state = service.InspectAtmosphereState();
+  const auto* view_data = service.InspectEnvironmentViewData(ViewId { 21U });
+  ASSERT_NE(view_data, nullptr);
 
   // slot 0 is the primary atmosphere light, slot 1 is the optional secondary.
   EXPECT_TRUE(light_state.atmosphere_lights[0].enabled);
@@ -1008,11 +1027,11 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(
     atmosphere_state.view_products.conventional_shadow_authority_slot, 0U);
 
-    const auto* bindings = service.InspectBindings(ViewId { 21U });
-    ASSERT_NE(bindings, nullptr);
-    EXPECT_NE(bindings->contract_flags
-        & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight0Enabled,
-      0U);
+  const auto* bindings = service.InspectBindings(ViewId { 21U });
+  ASSERT_NE(bindings, nullptr);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight0Enabled,
+    0U);
   EXPECT_NE(bindings->contract_flags
       & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight1Enabled,
     0U);
@@ -1021,34 +1040,34 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     0U);
 
   constexpr auto kPi = 3.14159265358979323846F;
-  const auto primary_angular_radius
-    = light_state.atmosphere_lights[0].angular_size_radians;
+  const auto primary_half_apex_angle
+    = 0.5F * light_state.atmosphere_lights[0].angular_size_radians;
   const auto primary_solid_angle
-    = 2.0F * kPi * (1.0F - std::cos(primary_angular_radius));
-  const auto expected_primary_disk_luminance = glm::vec3(
-    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.x
-      * light_state.atmosphere_lights[0].illuminance_rgb_lux.x,
-    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.y
-      * light_state.atmosphere_lights[0].illuminance_rgb_lux.y,
-    light_state.atmosphere_lights[0].disk_luminance_scale_rgb.z
-      * light_state.atmosphere_lights[0].illuminance_rgb_lux.z)
+    = 2.0F * kPi * (1.0F - std::cos(primary_half_apex_angle));
+  const auto expected_primary_disk_luminance
+    = glm::vec3(light_state.atmosphere_lights[0].disk_luminance_scale_rgb.x
+          * light_state.atmosphere_lights[0].illuminance_rgb_lux.x,
+        light_state.atmosphere_lights[0].disk_luminance_scale_rgb.y
+          * light_state.atmosphere_lights[0].illuminance_rgb_lux.y,
+        light_state.atmosphere_lights[0].disk_luminance_scale_rgb.z
+          * light_state.atmosphere_lights[0].illuminance_rgb_lux.z)
     / primary_solid_angle;
-    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.x,
-      light_state.atmosphere_lights[0].direction_to_light_ws.x, 1.0e-5F);
-    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.y,
-      light_state.atmosphere_lights[0].direction_to_light_ws.y, 1.0e-5F);
-    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.z,
-      light_state.atmosphere_lights[0].direction_to_light_ws.z, 1.0e-5F);
-    EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.w,
-      light_state.atmosphere_lights[0].angular_size_radians, 1.0e-6F);
-    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.x,
-      expected_primary_disk_luminance.x, 1.0e-2F);
-    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.y,
-      expected_primary_disk_luminance.y, 1.0e-2F);
-    EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.z,
-      expected_primary_disk_luminance.z, 1.0e-2F);
-    EXPECT_FLOAT_EQ(view_data->atmosphere_light0_disk_luminance_rgb.w, 1.0F);
-  }
+  EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.x,
+    light_state.atmosphere_lights[0].direction_to_light_ws.x, 1.0e-5F);
+  EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.y,
+    light_state.atmosphere_lights[0].direction_to_light_ws.y, 1.0e-5F);
+  EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.z,
+    light_state.atmosphere_lights[0].direction_to_light_ws.z, 1.0e-5F);
+  EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.w,
+    primary_half_apex_angle, 1.0e-6F);
+  EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.x,
+    expected_primary_disk_luminance.x, 1.0e-2F);
+  EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.y,
+    expected_primary_disk_luminance.y, 1.0e-2F);
+  EXPECT_NEAR(view_data->atmosphere_light0_disk_luminance_rgb.z,
+    expected_primary_disk_luminance.z, 1.0e-2F);
+  EXPECT_FLOAT_EQ(view_data->atmosphere_light0_disk_luminance_rgb.w, 1.0F);
+}
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   AtmosphereLightStatePublishesDirectionTowardSourceFromNodeForward)
@@ -1067,7 +1086,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto composition_view = oxygen::vortex::CompositionView {};
   composition_view.id = ViewId { 210U };
   composition_view.with_atmosphere = true;
-  auto ctx = MakeRenderContext(ViewId { 210U }, resolved_view, composition_view);
+  auto ctx
+    = MakeRenderContext(ViewId { 210U }, resolved_view, composition_view);
   ctx.scene = oxygen::observer_ptr { scene.get() };
 
   static_cast<void>(service.PublishEnvironmentBindings(ctx));
@@ -1075,9 +1095,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   const auto& light_state = service.InspectAtmosphereLightState();
   ASSERT_TRUE(light_state.atmosphere_lights[0].enabled);
   EXPECT_EQ(light_state.source_nodes[0].Index(), sun.GetHandle().Index());
-  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.x, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.y, 0.0F, 1.0e-5F);
-  EXPECT_NEAR(light_state.atmosphere_lights[0].direction_to_light_ws.z, -1.0F, 1.0e-5F);
+  EXPECT_NEAR(
+    light_state.atmosphere_lights[0].direction_to_light_ws.x, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(
+    light_state.atmosphere_lights[0].direction_to_light_ws.y, 0.0F, 1.0e-5F);
+  EXPECT_NEAR(
+    light_state.atmosphere_lights[0].direction_to_light_ws.z, -1.0F, 1.0e-5F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

@@ -50,7 +50,7 @@ namespace {
       = resolved.Light().Common().color_rgb
       * resolved.Light().GetIntensityLux();
     model.illuminance_lux = resolved.Light().GetIntensityLux();
-    model.disk_luminance_scale_rgb
+    model.disk_luminance_scale_rgba
       = resolved.Light().GetAtmosphereDiskLuminanceScale();
     model.slot_index = slot_index;
     state.atmosphere_lights[slot_index] = model;
@@ -85,9 +85,10 @@ namespace {
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.y));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_rgb_lux.z));
       seed = HashCombineU64(seed, FloatBits(light.illuminance_lux));
-      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgb.x));
-      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgb.y));
-      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgb.z));
+      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.x));
+      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.y));
+      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.z));
+      seed = HashCombineU64(seed, FloatBits(light.disk_luminance_scale_rgba.w));
 
       seed = HashCombineU64(
         seed, static_cast<std::uint64_t>(state.source_nodes[index].Index()));
