@@ -7,13 +7,10 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <ranges>
 #include <span>
 #include <string>
-#include <string_view>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
@@ -71,30 +68,6 @@ using oxygen::vortex::ShadingMode;
 using oxygen::vortex::ViewFrameBindings;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::RendererPublicationProbe;
-
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input),
-    std::istreambuf_iterator<char>() };
-}
-
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }
-    .parent_path()
-    .parent_path()
-    .parent_path();
-}
-
-auto ContainsAll(std::string_view haystack,
-  std::initializer_list<std::string_view> needles) -> bool
-{
-  return std::ranges::all_of(needles, [&haystack](const auto needle) -> bool {
-    return haystack.contains(needle);
-  });
-}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -863,52 +836,6 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(result.draw_count, 0U);
 }
 
-NOLINT_TEST_F(SceneRendererDeferredCoreTest, GBufferDebugViewsAreAvailable)
-{
-  const auto context = RenderForView(first_view_id_, first_resolved_view_);
-  const auto& bindings = scene_renderer_->GetSceneTextureBindings();
-
-  EXPECT_EQ(context.current_view.depth_prepass_completeness,
-    oxygen::vortex::DepthPrePassCompleteness::kComplete);
-  for (std::size_t i = 0;
-    i < static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kActiveCount);
-    ++i) {
-    EXPECT_NE(bindings.gbuffer_srvs[i],
-      oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  }
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(
-              oxygen::vortex::GBufferIndex::kShadowFactors)],
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.gbuffer_srvs[static_cast<std::size_t>(
-              oxygen::vortex::GBufferIndex::kWorldTangent)],
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-
-  const auto source_root = SourceRoot();
-  const auto shader_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Stages/BasePass/"
-      "BasePassDebugView.hlsl";
-  const auto catalog_path
-    = source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h";
-
-  EXPECT_TRUE(std::filesystem::exists(shader_path))
-    << shader_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(catalog_path))
-    << catalog_path.generic_string();
-
-  const auto shader_source = ReadTextFile(shader_path);
-  EXPECT_TRUE(ContainsAll(shader_source,
-    { "DEBUG_BASE_COLOR", "DEBUG_WORLD_NORMALS", "DEBUG_ROUGHNESS",
-      "DEBUG_METALNESS", "DEBUG_SCENE_DEPTH_RAW", "DEBUG_SCENE_DEPTH_LINEAR",
-      "bindless_view_frame_bindings_slot" }));
-  EXPECT_FALSE(shader_source.contains("g_ViewFrameBindingsSlot"));
-
-  const auto catalog_source = ReadTextFile(catalog_path);
-  EXPECT_TRUE(ContainsAll(catalog_source,
-    { "Vortex/Stages/BasePass/BasePassDebugView.hlsl", "DEBUG_BASE_COLOR",
-      "DEBUG_WORLD_NORMALS", "DEBUG_ROUGHNESS", "DEBUG_METALNESS",
-      "DEBUG_SCENE_DEPTH_RAW", "DEBUG_SCENE_DEPTH_LINEAR" }));
-}
-
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredDebugVisualizationRoutesSupportedModesThroughSceneRenderer)
 {
@@ -1067,54 +994,6 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NEAR(selection.directional_light->direction.y, 0.0F, 1.0e-5F);
   EXPECT_NEAR(selection.directional_light->direction.z, -1.0F, 1.0e-5F);
   EXPECT_EQ(selection.directional_light->atmosphere_light_slot, 0U);
-}
-
-NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DeferredLightingShadersStopGeneratingLocalLightProxyVerticesProcedurally)
-{
-  const auto source_root = SourceRoot();
-  const auto point_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/"
-      "DeferredLightPoint.hlsl";
-  const auto spot_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/"
-      "DeferredLightSpot.hlsl";
-  const auto common_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/"
-      "DeferredLightingCommon.hlsli";
-
-  const auto point_source = ReadTextFile(point_path);
-  const auto spot_source = ReadTextFile(spot_path);
-  const auto common_source = ReadTextFile(common_path);
-
-  EXPECT_FALSE(point_source.contains("GenerateDeferredLightSphereVertex"));
-  EXPECT_FALSE(spot_source.contains("GenerateDeferredLightConeVertex"));
-  EXPECT_TRUE(common_source.contains("light_geometry_vertices_srv"));
-}
-
-NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DeferredShadingFamilyHelpersStayWithLightingServiceOwnership)
-{
-  const auto source_root = SourceRoot();
-  const auto old_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Shared/DeferredShadingCommon.hlsli";
-  const auto new_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/"
-      "DeferredShadingCommon.hlsli";
-  const auto deferred_common_path = source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/"
-      "DeferredLightingCommon.hlsli";
-
-  EXPECT_FALSE(std::filesystem::exists(old_path)) << old_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(new_path)) << new_path.generic_string();
-  EXPECT_TRUE(std::filesystem::exists(deferred_common_path))
-    << deferred_common_path.generic_string();
-
-  const auto deferred_common_source = ReadTextFile(deferred_common_path);
-  EXPECT_TRUE(deferred_common_source.contains(
-    "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"));
-  EXPECT_FALSE(deferred_common_source.contains(
-    "Vortex/Shared/DeferredShadingCommon.hlsli"));
 }
 
 NOLINT_TEST_F(

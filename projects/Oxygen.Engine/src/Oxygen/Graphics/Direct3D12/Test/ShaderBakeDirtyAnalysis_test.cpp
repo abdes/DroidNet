@@ -180,7 +180,7 @@ protected:
 NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ReusesCleanArtifactWhenInputsMatch)
 {
   const auto request = MakeExpandedRequest(
-    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto source_file = shader_root_ / request.request.source_path;
   const auto dependency_file = shader_root_ / "Common" / "Lighting.hlsli";
 
@@ -212,7 +212,7 @@ NOLINT_TEST_F(
   ShaderBakeDirtyAnalysisTest, MarksRequestDirtyWhenDependencyChanges)
 {
   const auto request = MakeExpandedRequest(
-    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto source_file = shader_root_ / request.request.source_path;
   const auto dependency_file = shader_root_ / "Common" / "Lighting.hlsli";
 
@@ -240,7 +240,7 @@ NOLINT_TEST_F(
   ShaderBakeDirtyAnalysisTest, MarksRequestDirtyWhenManifestAddsRequest)
 {
   const auto request = MakeExpandedRequest(
-    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto source_file = shader_root_ / request.request.source_path;
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 
@@ -265,7 +265,7 @@ NOLINT_TEST_F(
   ShaderBakeDirtyAnalysisTest, ReportsStaleArtifactsFromPriorBuildState)
 {
   const auto current_request = MakeExpandedRequest(
-    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto stale_request
     = MakeExpandedRequest("Ui/ImGui.hlsl", "PS", ShaderType::kPixel);
 
@@ -310,7 +310,7 @@ NOLINT_TEST_F(
   }
 
   const auto request = MakeExpandedRequest(
-    "Forward/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
   const auto source_file = shader_root_ / request.request.source_path;
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 

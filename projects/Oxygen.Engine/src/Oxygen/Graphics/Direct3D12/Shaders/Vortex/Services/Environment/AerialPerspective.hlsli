@@ -21,20 +21,20 @@
 #ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 #define OXYGEN_D3D12_SHADERS_ATMOSPHERE_AERIAL_PERSPECTIVE_HLSLI
 
-#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
-#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
-#include "Renderer/LightingHelpers.hlsli"
-#include "Renderer/ViewConstants.hlsli"
-#include "Renderer/DrawHelpers.hlsli"
-#include "Renderer/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
 #include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 #include "Vortex/Services/Environment/AtmospherePhase.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
-#include "Common/Geometry.hlsli"
-#include "Common/Lighting.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
+#include "Vortex/Shared/Lighting.hlsli"
 
 //! Result of aerial perspective computation.
 struct AerialPerspectiveResult

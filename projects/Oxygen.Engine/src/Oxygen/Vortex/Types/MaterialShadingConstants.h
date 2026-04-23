@@ -28,7 +28,7 @@ namespace oxygen::vortex {
 
  @note Layout mirrors HLSL
  * `MaterialShadingConstants` in
- `Renderer/MaterialShadingConstants.hlsli`.
+ `Vortex/Contracts/Draw/MaterialShadingConstants.hlsli`.
 
  * @note Opacity is implicitly sampled from the alpha channel of the base color
 

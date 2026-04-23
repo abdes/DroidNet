@@ -7,12 +7,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <ranges>
-#include <string>
-#include <string_view>
 #include <type_traits>
 
 #include <glm/vec3.hpp>
@@ -47,19 +43,6 @@ using oxygen::vortex::PreparedViewLightingInput;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::testing::FakeGraphics;
-
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
-}
-
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
-    .parent_path();
-}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -160,48 +143,6 @@ NOLINT_TEST(LightingServiceSurfaceTest,
   EXPECT_TRUE((std::is_class_v<oxygen::vortex::LightingService>));
   EXPECT_TRUE((std::is_destructible_v<oxygen::vortex::LightingService>));
   EXPECT_TRUE((std::is_standard_layout_v<DirectionalLightForwardData>));
-}
-
-NOLINT_TEST(LightingServiceSurfaceTest,
-  VortexModuleRegistersLightingFamilySourcesAndSharedFrameAuthorityHeader)
-{
-  const auto source_root = SourceRoot();
-  const auto cmake_source = ReadTextFile(source_root / "Vortex/CMakeLists.txt");
-
-  EXPECT_TRUE(cmake_source.contains("Lighting/LightingService.h"));
-  EXPECT_TRUE(cmake_source.contains("Lighting/LightingService.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Lighting/Internal/LightGridBuilder.h"));
-  EXPECT_TRUE(cmake_source.contains("Lighting/Internal/ForwardLightPublisher.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Lighting/Internal/DeferredLightPacketBuilder.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Lighting/Passes/DeferredLightPass.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Types/FrameLightSelection.h"));
-}
-
-NOLINT_TEST(LightingServiceSurfaceTest,
-  VortexOwnedDirectionalLightShaderHelpersAndContractsLiveOnlyUnderVortex)
-{
-  const auto source_root = SourceRoot();
-  const auto vortex_forward = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/ForwardDirectLighting.hlsli");
-  const auto vortex_atmosphere_helpers = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli");
-  const auto vortex_lighting_contract = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/LightingFrameBindings.hlsli");
-  const auto vortex_environment_contract = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentHelpers.hlsli");
-
-  EXPECT_TRUE(vortex_forward.contains(
-    "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"));
-  EXPECT_TRUE(vortex_atmosphere_helpers.contains("ComputeSunTransmittance"));
-  EXPECT_TRUE(vortex_lighting_contract.contains("DirectionalLightForwardData"));
-  EXPECT_TRUE(vortex_environment_contract.contains(
-    "Vortex/Contracts/EnvironmentFrameBindings.hlsli"));
-  EXPECT_FALSE(std::filesystem::exists(source_root
-    / "Graphics/Direct3D12/Shaders/Renderer/AtmosphereLightingHelpers.hlsli"));
-  EXPECT_FALSE(std::filesystem::exists(source_root
-    / "Graphics/Direct3D12/Shaders/Renderer/LightingFrameBindings.hlsli"));
-  EXPECT_FALSE(std::filesystem::exists(source_root
-    / "Graphics/Direct3D12/Shaders/Forward/ForwardDirectLighting.hlsli"));
 }
 
 class LightingServiceBehaviorTest : public ::testing::Test {

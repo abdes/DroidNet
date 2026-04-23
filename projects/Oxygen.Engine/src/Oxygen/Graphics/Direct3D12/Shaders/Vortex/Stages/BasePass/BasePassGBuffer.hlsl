@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/DrawHelpers.hlsli"
-#include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/Vertex.hlsli"
+#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
+#include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
+#include "Vortex/Contracts/Draw/Vertex.hlsli"
 
 #include "Vortex/Materials/MaterialTemplateAdapter.hlsli"
 

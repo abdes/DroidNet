@@ -7,9 +7,9 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDLIGHTINGCOMMON_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDLIGHTINGCOMMON_HLSLI
 
-#include "Renderer/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 
 struct DeferredLightConstants

@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/DrawHelpers.hlsli"
-#include "Renderer/DrawMetadata.hlsli"
-#include "Renderer/MaskedAlphaTest.hlsli"
-#include "Renderer/Vertex.hlsli"
+#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
+#include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
+#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Contracts/Draw/Vertex.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"

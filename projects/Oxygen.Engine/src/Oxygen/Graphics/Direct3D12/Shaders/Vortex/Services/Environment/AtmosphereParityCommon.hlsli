@@ -9,10 +9,10 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
-#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
-#include "Vortex/Contracts/EnvironmentViewData.hlsli"
-#include "Common/Geometry.hlsli"
-#include "Common/Math.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 static const float kVortexPi = 3.14159265359f;

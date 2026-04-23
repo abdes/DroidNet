@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Vortex/Contracts/GBufferHelpers.hlsli"
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
-#include "Renderer/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 static float3 EvaluateBasePassDebugView(
     float2 uv, SceneTextureBindingData bindings)

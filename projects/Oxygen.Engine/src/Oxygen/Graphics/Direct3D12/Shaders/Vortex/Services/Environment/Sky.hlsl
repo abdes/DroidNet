@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
-#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
-#include "Renderer/ViewColorHelpers.hlsli"
-#include "Renderer/ViewConstants.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
-#include "Vortex/Contracts/SceneTextures.hlsli"
+#include "Vortex/Contracts/Scene/SceneTextures.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"

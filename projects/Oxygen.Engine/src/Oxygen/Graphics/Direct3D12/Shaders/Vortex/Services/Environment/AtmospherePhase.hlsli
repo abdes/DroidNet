@@ -13,7 +13,7 @@
 #ifndef OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_PHASE_HLSLI
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_PHASE_HLSLI
 
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 //------------------------------------------------------------------------------

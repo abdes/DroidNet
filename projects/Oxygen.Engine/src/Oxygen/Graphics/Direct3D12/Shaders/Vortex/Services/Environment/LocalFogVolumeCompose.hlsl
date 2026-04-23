@@ -5,10 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Renderer/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
-#include "Vortex/Contracts/SceneTextures.hlsli"
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/Scene/SceneTextures.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 

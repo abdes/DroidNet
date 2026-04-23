@@ -370,3 +370,123 @@ Public headers should minimize transitive surface area:
    but service implementation details stay in `.cpp` files.
 4. If a header needs too many unrelated includes, that is a placement smell;
    split the contract or move shared types to `Types/`.
+
+## 7. Direct3D12 Shader Tree
+
+This section defines the **target** organization for
+`src/Oxygen/Graphics/Direct3D12/Shaders/`. It is the authoritative file-home
+contract for the shader migration. The current filesystem still diverges from
+this target in several places, so shader-tree restructuring remains
+`in_progress` until catalog paths, include paths, and validation evidence land
+together.
+
+### 7.1 Shader Root Layout
+
+```text
+src/Oxygen/Graphics/Direct3D12/Shaders/
+│
+├── CMakeLists.txt                     ← engine-owned build integration
+├── README.md                          ← operator/build notes
+├── EngineShaders.h/.cpp               ← engine-owned runtime archive loader
+├── EngineShaderCatalog.h              ← authoritative catalog registration
+├── ShaderCatalogBuilder.h             ← compile-time catalog builder
+├── Ui/                                ← engine-owned non-Vortex UI shaders
+│     ImGui.hlsl
+│
+└── Vortex/                            ← all Vortex shader contracts + implementation
+    │
+    ├── RendererCore/                 ← Renderer Core-owned shader families
+    │   └── Compositing/                 copy/blend/composition execution
+    │
+    ├── Contracts/                    ← stable published structs + binding accessors
+    │   ├── Definitions/                 scene/light/material/shared enums + ABI constants
+    │   ├── Draw/                        draw metadata, vertex/material payloads
+    │   ├── View/                        view/view-history/view-color contracts
+    │   ├── Scene/                       scene textures, GBuffer, HZB contracts
+    │   ├── Lighting/                    published lighting-frame contracts
+    │   ├── Environment/                 published environment-frame contracts
+    │   ├── Shadows/                     published shadow/VSM contracts
+    │   └── Diagnostics/                published debug-frame contracts
+    │
+    ├── Shared/                       ← truly renderer-wide helpers with no single owner
+    ├── Materials/                    ← material template adapters and shared material helpers
+    │
+    ├── Stages/                       ← stage-module-owned shader families
+    │   ├── DepthPrepass/
+    │   ├── Occlusion/                   stage-5 HZB / occlusion ownership
+    │   ├── BasePass/
+    │   ├── Translucency/                forward-lit special-case material path
+    │   ├── Distortion/                  reserved
+    │   └── LightShaftBloom/            reserved
+    │
+    └── Services/                     ← subsystem-service-owned shader families
+        ├── Lighting/
+        ├── Shadows/
+        │   ├── Conventional/
+        │   └── Vsm/
+        ├── Environment/
+        ├── PostProcess/
+        ├── Diagnostics/
+        ├── MaterialComposition/        reserved
+        ├── IndirectLighting/           reserved
+        ├── Water/                      reserved
+        └── GeometryVirtualization/     reserved
+```
+
+### 7.2 Root Rules
+
+The shader root exists to make runtime ownership obvious.
+
+1. No Vortex shader family may live directly under
+   `Shaders/Forward/`, `Shaders/Depth/`, `Shaders/Lighting/`,
+   `Shaders/Renderer/`, `Shaders/Compositing/`, or `Shaders/Common/`.
+2. `Ui/` is the only permitted non-Vortex shader family root today because it
+   is engine-owned rather than Vortex-owned.
+3. Renderer-Core-owned shader entrypoints belong under
+   `Vortex/RendererCore/`, not under `Vortex/Services/PostProcess/`.
+   Composition is a Renderer Core responsibility, not a post-process service.
+4. Shared structs, frame bindings, descriptor-routing helpers, and typed
+   accessors belong under `Vortex/Contracts/`, not under a generic
+   `Renderer/` bucket.
+5. Truly renderer-wide math/helper code belongs under `Vortex/Shared/`.
+   Family-local common code stays with its stage or service owner.
+6. Reserved or inactive families may exist only under their final owner
+   directory. Inactive code must not remain parked in anonymous legacy roots.
+
+### 7.3 Current Root-to-Owner Mapping
+
+| Current family/root | Target owner/home |
+| - | - |
+| `Forward/ForwardMesh_*.hlsl`, `Forward/ForwardDebug_PS.hlsl`, `Forward/ForwardWireframe_PS.hlsl`, `Forward/ForwardPbr.hlsli` | `Vortex/Stages/Translucency/` |
+| `Forward/ForwardMaterialEval.hlsli` | `Vortex/Materials/` |
+| `Depth/DepthPrePass.hlsl` | replace with `Vortex/Stages/DepthPrepass/DepthPrepass.hlsl`, then remove old file |
+| `Lighting/LightCulling.hlsl`, `Lighting/ClusterLookup.hlsli` | `Vortex/Services/Lighting/` |
+| `Lighting/IblFiltering.hlsl` | environment-owned family; if retained, move under `Vortex/Services/Environment/`, otherwise remove after parity review |
+| `Compositing/Compositing_*.hlsl` | `Vortex/RendererCore/Compositing/` |
+| `Compositing/ToneMap_*.hlsl`, `Compositing/AutoExposure_*.hlsl` | replace with `Vortex/Services/PostProcess/`, then remove old files |
+| `Renderer/GroundGrid_*.hlsl` | replace with `Vortex/Services/PostProcess/GroundGrid.hlsl`, then remove old files |
+| `Renderer/ScreenHzbBuild.hlsl` | replace with `Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl`, then remove old file |
+| `Renderer/GpuDebug*.hlsl`, `Renderer/Debug*.hlsli` | `Vortex/Services/Diagnostics/` |
+| `Renderer/ConventionalShadow*.hlsl`, `Renderer/ConventionalShadow*.hlsli` | `Vortex/Services/Shadows/Conventional/` if retained, otherwise remove |
+| `Renderer/Vsm/*` | `Vortex/Services/Shadows/Vsm/` if retained, otherwise remove |
+| `Renderer/*.hlsli` draw/view/frame-binding payloads | split into `Vortex/Contracts/`, `Vortex/Shared/`, or the owning stage/service family |
+| `Common/*.hlsli` | move live reusable helpers to `Vortex/Shared/`; remove unused leftovers |
+
+### 7.4 Shader-Cleanup Rules
+
+Shader-tree cleanup is not a blind move-only exercise.
+
+1. A file is **live** if current production code requests it directly, or if a
+   catalog-registered live entrypoint reaches it through includes.
+2. A file is **reserved** only if it already belongs to a named Vortex owner in
+   architecture or LLD documents and the file can be placed under that final
+   owner without inventing a second legacy path.
+3. A file is **dead** if it is not runtime-referenced, is not needed by any
+   retained catalog family, and does not map cleanly to a named Vortex owner.
+   Dead files should be deleted rather than re-homed.
+4. Duplicate legacy and Vortex implementations must not coexist long term.
+   When a Vortex-owned replacement exists, callers move first and the legacy
+   duplicate is then removed.
+5. New shader work must register only the final target path in
+   `EngineShaderCatalog.h`; catalog aliases or doubled registrations are not
+   allowed.

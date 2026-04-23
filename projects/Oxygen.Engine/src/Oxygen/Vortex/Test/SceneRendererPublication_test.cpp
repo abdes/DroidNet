@@ -830,7 +830,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.Stage5.ScreenHzbBuild"
         && bind.desc.ComputeShader().source_path
-          == "Vortex/Stages/Hzb/ScreenHzbBuild.hlsl"
+          == "Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl"
         && bind.desc.ComputeShader().entry_point == "VortexScreenHzbBuildCS";
     }));
   EXPECT_GE(graphics_->texture_copy_log_.copies.size(), screen_hzb.mip_count * 2U);

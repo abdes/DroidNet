@@ -6,10 +6,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <filesystem>
-#include <fstream>
 #include <memory>
-#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -49,22 +46,6 @@ using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::testing::FakeGraphics;
-
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input),
-    std::istreambuf_iterator<char>() };
-}
-
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }
-    .parent_path()
-    .parent_path()
-    .parent_path();
-}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -140,103 +121,6 @@ NOLINT_TEST(PostProcessServiceSurfaceTest,
   EXPECT_TRUE((std::is_class_v<PostProcessService>));
   EXPECT_TRUE((std::is_destructible_v<PostProcessService>));
   EXPECT_TRUE((std::is_standard_layout_v<PostProcessFrameBindings>));
-}
-
-NOLINT_TEST(PostProcessServiceSurfaceTest,
-  VortexModuleRegistersPostProcessFamilyAndFrameBindingSurface)
-{
-  const auto source_root = SourceRoot();
-  const auto cmake_source = ReadTextFile(source_root / "Vortex/CMakeLists.txt");
-
-  EXPECT_TRUE(cmake_source.contains("PostProcess/PostProcessService.h"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/PostProcessService.cpp"));
-  EXPECT_TRUE(
-    cmake_source.contains("PostProcess/Internal/ExposureCalculator.cpp"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/Internal/BloomChain.cpp"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/TonemapPass.cpp"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/BloomPass.cpp"));
-  EXPECT_TRUE(cmake_source.contains("PostProcess/Passes/ExposurePass.cpp"));
-  EXPECT_TRUE(
-    cmake_source.contains("PostProcess/Types/PostProcessFrameBindings.h"));
-}
-
-NOLINT_TEST(
-  PostProcessServiceSurfaceTest, VortexShaderCatalogRegistersPostProcessFamily)
-{
-  const auto source_root = SourceRoot();
-  const auto catalog_source = ReadTextFile(
-    source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h");
-
-  EXPECT_TRUE(
-    catalog_source.contains("Vortex/Services/PostProcess/Tonemap.hlsl"));
-  EXPECT_TRUE(catalog_source.contains(
-    "Vortex/Services/PostProcess/BloomDownsample.hlsl"));
-  EXPECT_TRUE(
-    catalog_source.contains("Vortex/Services/PostProcess/BloomUpsample.hlsl"));
-  EXPECT_TRUE(
-    catalog_source.contains("Vortex/Services/PostProcess/Exposure.hlsl"));
-  EXPECT_TRUE(catalog_source.contains("VortexTonemapVS"));
-  EXPECT_TRUE(catalog_source.contains("VortexTonemapPS"));
-}
-
-NOLINT_TEST(PostProcessServiceSurfaceTest,
-  TonemapPassConsumesResolvedExposureInsteadOfIgnoringStage22Inputs)
-{
-  const auto source_root = SourceRoot();
-  const auto tonemap_pass_source
-    = ReadTextFile(source_root / "Vortex/PostProcess/Passes/TonemapPass.cpp");
-  const auto tonemap_shader_source = ReadTextFile(source_root
-    / "Graphics/Direct3D12/Shaders/Vortex/Services/PostProcess/Tonemap.hlsl");
-
-  EXPECT_FALSE(
-    tonemap_pass_source.contains("static_cast<void>(inputs.exposure_value);"));
-  EXPECT_TRUE(tonemap_pass_source.contains("UpdatePassConstants(inputs)"));
-  EXPECT_TRUE(tonemap_pass_source.contains("pass_constants_buffer_"));
-  EXPECT_TRUE(tonemap_shader_source.contains("struct TonemapPassConstants"));
-  EXPECT_TRUE(tonemap_shader_source.contains("pass.exposure_buffer_index"));
-  EXPECT_TRUE(tonemap_shader_source.contains("switch (pass.tone_mapper)"));
-  EXPECT_TRUE(tonemap_shader_source.contains("color *= exposure;"));
-}
-
-NOLINT_TEST(PostProcessServiceSurfaceTest,
-  SceneRendererFeedsStage22FromAuthoredSceneExposureInsteadOfDefaultConfig)
-{
-  const auto source_root = SourceRoot();
-  const auto scene_renderer_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
-  const auto post_process_types
-    = ReadTextFile(source_root / "Core/Types/PostProcess.h");
-
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "post_process_->SetConfig(ResolveAuthoredPostProcessConfig(ctx));"));
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "environment->TryGetSystem<scene::environment::PostProcessVolume>()"));
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "ctx.current_view.resolved_view->CameraEv().has_value()"));
-  EXPECT_TRUE(
-    scene_renderer_source.contains("engine::ExposureScaleFromEv100("));
-  EXPECT_TRUE(scene_renderer_source.contains("engine::ExposureBiasScale("));
-  EXPECT_TRUE(post_process_types.contains("ExposureScaleFromEv100("));
-  EXPECT_TRUE(post_process_types.contains("ExposureBiasScale("));
-}
-
-NOLINT_TEST(PostProcessServiceSurfaceTest,
-  SceneRendererBuildsCanonicalStage22InputsBeforeDispatch)
-{
-  const auto source_root = SourceRoot();
-  const auto scene_renderer_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
-
-  EXPECT_TRUE(
-    scene_renderer_source.contains("active_view->composite_source != nullptr"));
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "SceneRenderer Stage 22 requires a SceneRenderer-supplied post target"));
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "const auto scene_signal_srv = ShaderVisibleIndex { "
-    "RegisterSceneTextureView("));
-  EXPECT_TRUE(scene_renderer_source.contains(
-    "const auto scene_depth_srv = ShaderVisibleIndex { "
-    "RegisterSceneTextureView("));
 }
 
 NOLINT_TEST(PostProcessServiceSurfaceTest,

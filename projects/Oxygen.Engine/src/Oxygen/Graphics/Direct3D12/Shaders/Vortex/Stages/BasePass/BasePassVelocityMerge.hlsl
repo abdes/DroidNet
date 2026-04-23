@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Renderer/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
-#include "Vortex/Contracts/SceneTextureBindings.hlsli"
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/Scene/SceneTextureBindings.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {

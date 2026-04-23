@@ -12,7 +12,7 @@
 #ifndef OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_CONSTANTS_HLSLI
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_CONSTANTS_HLSLI
 
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 
 // =============================================================================
