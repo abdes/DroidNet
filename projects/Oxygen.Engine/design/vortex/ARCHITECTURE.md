@@ -25,9 +25,9 @@ Reference:
 
 ## Mandatory Vortex Rule
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-   code. It is not production, not a reference implementation, not a fallback,
-   and not a simplification path for any Vortex task.
+- For Vortex planning and implementation, Vortex is the renderer architecture
+   in scope. No alternate renderer product, fallback path, or reference
+   implementation defines Vortex requirements or lowers its parity bar.
 - Every Vortex task must be designed and implemented as a new Vortex-native
    system that targets maximum parity with UE5.7, grounded in
    `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
@@ -92,7 +92,7 @@ This document does not define:
 - detailed solution design
 - implementation sequencing or task breakdown
 - low-level API surface design unless it is architecturally decisive
-- temporary migration tactics that would weaken the target architecture
+- temporary compatibility tactics that would weaken the target architecture
 
 If a design or implementation proposal conflicts with this document, the
 proposal must be revised or this document must be updated explicitly first.
@@ -285,11 +285,11 @@ rendering stack. This architecture is therefore driven by:
 Vortex must stand as an independent renderer architecture. That requirement
 drives several structural decisions:
 
-- no dependency on the legacy renderer module
-- no compatibility-shaped public API obligations
-- no renderer-to-renderer bridge architecture
-- no architectural backflow from legacy assumptions into Vortex ownership or
-  module boundaries
+- Vortex-owned renderer module boundaries
+- public API obligations shaped by Vortex's renderer needs
+- one renderer ownership path with no bridge architecture or split ownership
+- ownership and module boundaries shaped by current Vortex architecture rather
+   than by unrelated subsystem constraints
 
 ### 3.4 Operational Integrity
 
@@ -312,9 +312,9 @@ engine/module/view/composition seams. The architecture therefore needs to
 support:
 
 - runtime use by real applications and examples
-- renderer replacement behind Oxygen-native integration surfaces
-- migration without temporary compatibility clutter becoming part of the target
-  architecture
+- stable renderer realization behind Oxygen-native integration surfaces
+- validation and refinement without temporary compatibility clutter becoming
+   part of the target architecture
 
 This is an architectural driver because it constrains how Vortex must expose and
 realize integration surfaces inside Oxygen.
@@ -369,8 +369,8 @@ These are binding architectural laws for Vortex.
    not.
 10. Reserved future desktop stages must remain architecturally accounted for
     even before they are active.
-11. Vortex must remain hermetically independent from the legacy renderer
-    module.
+11. Vortex must remain hermetically self-contained at the renderer module,
+   API-contract, and runtime-ownership levels.
 
 ## 5. Architectural Model
 
@@ -535,7 +535,7 @@ a "render graph"; the execution semantics are fundamentally different.
 | `LightGridInjection` | `LightingService` shared light-grid stage | Same architectural role, explicitly demoted from frame spine to shared supporting subsystem. |
 | `CompositionLighting` (pre-base-pass) | reserved `MaterialCompositionService` pre-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessBeforeBasePass(...)`. UE's family spans deferred decals and AO-related work. Vortex intentionally maps only the material-surface modification subset here. |
 | `CompositionLighting` (post-base-pass) | reserved `MaterialCompositionService` post-base-pass stage | UE 5.7 really has `FCompositionLighting::ProcessAfterBasePass(...)`. Vortex keeps deferred decal application and material classification here, while AO remains owned by `IndirectLightingService`. |
-| `LightRendering` | `LightingService` deferred direct-lighting stage | Same role: consume GBuffers, shadows, and direct-light data. Owns the permanent bounded-volume point/spot proxy geometry and deferred-light shader families. The retained Phase 03 `SV_VertexID` procedural point/spot proxy generation is temporary delivery scaffolding only and must be removed during Phase 4A when CPU-side ownership moves into `LightingService`. If an early migration phase needs a bounded environment-ambient bridge before stage 13 exists, that exception must be documented explicitly and must not redefine stage 12 as the canonical indirect-light owner. ~3.3k lines in UE5. |
+| `LightRendering` | `LightingService` deferred direct-lighting stage | Same role: consume GBuffers, shadows, and direct-light data. Owns the permanent bounded-volume point/spot proxy geometry and deferred-light shader families. The Phase 03 `SV_VertexID` procedural point/spot proxy generation is temporary delivery scaffolding only and must be removed during Phase 4A when CPU-side ownership moves into `LightingService`. If an early capability phase needs a bounded environment-ambient bridge before stage 13 exists, that exception must be documented explicitly and must not redefine stage 12 as the canonical indirect-light owner. ~3.3k lines in UE5. |
 | `IndirectLightRendering` | reserved `IndirectLightingService` stage | GI, reflections, SSR, subsurface scattering, and canonical skylight / indirect environment evaluation. Owns AO framework, indirect/reflection shader families, temporal history. Produces `ScreenSpaceAO` into `SceneTextures`. Consumes environment-owned probe / IBL products published by `EnvironmentLightingService`. ~3.6k lines in UE5. |
 | `ShadowDepthRendering` + `ShadowRendering` | `ShadowService` | Same split between shadow-map production and later lighting consumption. |
 | `SkyAtmosphereRendering` + `FogRendering` | `EnvironmentLightingService` | Same family role, grouped under one Oxygen service for bounded ownership. |
@@ -602,9 +602,9 @@ Allowed architectural differences:
 | 18 | `RenderTranslucency` | `TranslucencyModule::Execute` | TranslucencyModule | Forward-lit translucency consuming prior opaque products and shared forward light data from `LightingService`. |
 | 19 | `RenderDistortion` / translucent `RenderVelocities` | reserved `DistortionModule::Execute` | future DistortionModule | Distortion mesh processing, intermediate resources, and late translucent velocity production when required. |
 | 20 | `RenderLightShaftBloom` / translucency upscale | reserved `LightShaftBloomModule::Execute` | future LightShaftBloomModule | Post-translucency image-space light-shaft effects and related upscale work. |
-| 21 | `AddResolveSceneColorPass` | `ResolveSceneColor` file-separated method | SceneRenderer | ~180 lines. Implemented in a dedicated file, not a standalone module. Already active on the retained Phase 03 runtime branch. |
+| 21 | `AddResolveSceneColorPass` | `ResolveSceneColor` file-separated method | SceneRenderer | ~180 lines. Implemented in a dedicated file, not a standalone module. Already active in the current Vortex runtime path. |
 | 22 | Post processing | `PostProcessService::Execute` | PostProcessService | Tone map, exposure, AA/TSR slot (consumes `SceneVelocity`), bloom, debug post. |
-| 23 | `OnRenderFinish` / `QueueSceneTextureExtractions` | `PostRenderCleanup` file-separated method | SceneRenderer | SceneRenderer-owned post-render cleanup stage that invokes Renderer Core extraction/handoff helpers for history export, cleanup, and handoff completion. Already active on the retained Phase 03 runtime branch. |
+| 23 | `OnRenderFinish` / `QueueSceneTextureExtractions` | `PostRenderCleanup` file-separated method | SceneRenderer | SceneRenderer-owned post-render cleanup stage that invokes Renderer Core extraction/handoff helpers for history export, cleanup, and handoff completion. Already active in the current Vortex runtime path. |
 
 ### 5.2 Layer Model
 
@@ -717,45 +717,45 @@ The runtime contract is the authoritative per-stage behavior. The stage numbers
 are fixed. A stage may be active, stubbed, conditional, or split internally,
 but its architectural position must not move.
 
-| # | Stage | Primary Scope | Primary Owner | Runtime Realization | UE 5.7 Check | Legacy Oxygen Check | Vortex Architecture Finding |
+| # | Stage | Primary Scope | Primary Owner | Runtime Realization | UE 5.7 Check | Oxygen Check | Vortex Architecture Finding |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | scene renderer bootstrap / frame setup | bootstrap | `Renderer Core` | no RDG | `FSceneRenderBuilder` + `CreateSceneRenderer(...)` are real bootstrap-time UE terms, not normal frame passes | `Renderer` owns engine-module lifetime; no separate scene-renderer shell exists yet | Keep bootstrap outside the 23-stage render work; treat this as a pre-frame bootstrap anchor rather than a normal runtime render stage |
-| 2 | InitViews | per frame with per-view outputs | `InitViewsModule` | orchestration-first; may dispatch render work later | `BeginInitViews(...)` and `SceneVisibility` are real UE families | Legacy path splits this across view publication/planning plus per-view graph setup; there is no unified deferred-first `InitViews` stage | Keep as a first-class orchestration stage above RDG in Vortex |
-| 3 | depth prepass and early velocity | per view | `DepthPrepassModule` | render-capable | UE runs `RenderPrePass(...)`; opaque velocity can be early depending on policy | Legacy has `DepthPrePass` with `DepthPrePassMode` / completeness state | Strong alignment; Vortex should keep depth and early velocity coupled at stage-family level |
-| 4 | geometry virtualization slot | conditional / reserved | future `GeometryVirtualizationService` | reserved | UE uses Nanite / `RenderNanite(...)` as a real stage family | Legacy Oxygen has no equivalent | Correctly reserved as a future stateful service, not a SceneRenderer detail |
-| 5 | occlusion and HZB | per view with history | `OcclusionModule` | render-capable | UE runs `RenderOcclusion(...)` plus HZB-related work | Legacy uses `ScreenHzbBuildPass`; occlusion/HZB exists but is forward-pipeline-shaped | Keep as its own stage module with per-view history/state |
-| 6 | forward light data / light grid | per frame shared product | `LightingService` | render-capable | UE uses `PrepareForwardLightData(...)`, `ComputeLightGrid(...)`, `LightGridInjection` | Legacy uses `LightCullingPass` as a major forward-spine stage | Vortex should demote this to shared supporting data, not frame architecture |
-| 7 | before-base-pass material composition | conditional / reserved | future `MaterialCompositionService` | render-capable when active | UE has `FCompositionLighting::ProcessBeforeBasePass(...)`; family includes decals and AO-adjacent work | Legacy has no equivalent deferred material-composition family | Correct to reserve as a separate material-surface domain; do not fold into lighting |
-| 8 | shadow depth / shadow setup | per frame shared product | `ShadowService` | render-capable | UE uses `FinishInitDynamicShadows(...)` and `RenderShadowDepthMaps(...)` before later lighting use | Legacy has `ShadowManager` plus conventional/VSM shadow passes | Keep as a shared-product service separate from lighting evaluation |
-| 9 | base pass | per view | `BasePassModule` | render-capable | UE has `RenderBasePass(...)` as a major family boundary | Legacy has opaque shading in the Forward pipeline, but not a deferred GBuffer base pass | Correct Vortex spine: this becomes the canonical opaque material stage |
-| 10 | rebuild scene textures with GBuffers | per frame state transition | `SceneRenderer` | no RDG | UE updates `SceneTextures.SetupMode` / uniform buffers after GBuffer activation rather than exposing a named top-level stage | Legacy has no equivalent scene-texture promotion boundary | Keep as a strict SceneRenderer-owned product-setup transition only. This slot must not accumulate arbitrary fixup logic, late feature repair, or unrelated cross-stage work |
-| 11 | after-base-pass material composition / classification | conditional / reserved | future `MaterialCompositionService` | render-capable when active | UE has `FCompositionLighting::ProcessAfterBasePass(...)` for deferred decals / classification | Legacy has no equivalent deferred post-base-pass composition family | Correctly reserved as material-surface work, not lighting |
-| 12 | deferred direct lighting | per view | `LightingService` | render-capable | UE uses `RenderLights(...)` | Legacy renderer is forward-lit; there is no deferred direct-lighting stage | Correct Vortex owner and role |
-| 13 | indirect lighting / reflections / subsurface | conditional / reserved | future `IndirectLightingService` | render-capable when active | UE splits this family across `RenderDeferredReflectionsAndSkyLighting(...)`, `AddSubsurfacePass(...)`, and AO-related passes | Legacy has no equivalent deferred indirect-light family | Correctly grouped as one future indirect-lighting service in Vortex |
-| 14 | volumetrics / heterogeneous volumes / clouds | conditional / reserved | future `EnvironmentLightingService` stages | render-capable when active | UE splits this across `ComputeVolumetricFog(...)`, `RenderHeterogeneousVolumes(...)`, `RenderVolumetricCloud(...)` | Legacy has no equivalent volumetric stage family | ⚠ Correct to keep under Environment ownership for now, but likely future split point if the environment family grows too broad |
-| 15 | sky atmosphere / fog / cloud composition | per view | `EnvironmentLightingService` | render-capable | UE uses `RenderSkyAtmosphere(...)` and `RenderFog(...)` | Legacy has `SkyPass` plus `EnvironmentLightingService`-driven per-view products | Good alignment; keep environment integration here |
-| 16 | single-layer water | conditional / reserved | future `WaterService` | render-capable when active | UE has `RenderSingleLayerWater(...)` as a dedicated family | Legacy has no equivalent dedicated water family | Correctly isolated from generic translucency |
-| 17 | opaque FX / post-opaque extensions | conditional / reserved | `SceneRenderer` stage slot | optional render work | UE exposes `RenderPostOpaqueExtensions(...)` / scene-extension hooks | Legacy has renderer/pipeline-local extension points but not this deferred-stage slot | Correct as a reserved slot, not a fixed subsystem yet. If multiple unrelated feature families begin accumulating here, Vortex must promote a dedicated owner before further implementation continues |
-| 18 | translucency | per view | `TranslucencyModule` | render-capable | UE uses `RenderTranslucency(...)` as a distinct family after opaque lighting/environment stages | Legacy has `TransparentPass` as a major forward-pipeline stage | Keep as its own stage module consuming shared forward light data |
-| 19 | distortion and translucent velocities | conditional / reserved | future `DistortionModule` | render-capable when active | UE uses `RenderDistortion(...)` plus late translucent `RenderVelocities(...)` | Legacy has no distortion/velocity family split like this | Correct reserved late-stage family in Vortex |
-| 20 | light shaft bloom / translucency upscale | conditional / reserved | future `LightShaftBloomModule` | render-capable when active | UE uses `RenderLightShaftBloom(...)` and translucency upscale-related work late | Legacy has no equivalent dedicated family | Correct as reserved image-space late stage |
-| 21 | resolve scene color | per frame / per target | `SceneRenderer` | optional render work | UE uses `AddResolveSceneColorPass(...)` | Legacy resolves/tonemaps as part of the forward pipeline and compositing path | Correct as a thin SceneRenderer-owned stage. This stage is already live on the retained Phase 03 branch; later phases validate or extend it rather than introducing it from scratch |
-| 22 | post processing | per view | `PostProcessService` | render-capable | UE has a broad `PostProcessing` family | Legacy has `ToneMapPass` + `AutoExposurePass` and related post work in `ForwardPipeline` | Correct service boundary for Vortex |
-| 23 | post-render / extraction / cleanup | per frame | `SceneRenderer` using `Renderer Core` helpers | optional render work plus handoff | UE uses `OnRenderFinish(...)` and `QueueSceneTextureExtractions(...)` | Legacy renderer finishes with `OnCompositing(...)` and `OnFrameEnd(...)`; extraction/handoff is less explicit but still end-of-frame | Correct end-of-frame owner for Vortex. `SceneRenderer` may invoke Renderer Core helper APIs for extraction/handoff, but Renderer Core must not gain scene-policy ownership and must not call back upward into scene-stage logic. This stage is already live on the retained Phase 03 branch; later phases validate or extend it rather than introducing it from scratch |
+| 1 | scene renderer bootstrap / frame setup | bootstrap | `Renderer Core` | no RDG | `FSceneRenderBuilder` + `CreateSceneRenderer(...)` are real bootstrap-time UE terms, not normal frame passes | Oxygen already keeps engine-module lifetime and renderer bootstrap outside per-frame stage dispatch | Keep bootstrap outside the 23-stage render work; treat this as a pre-frame bootstrap anchor rather than a normal runtime render stage |
+| 2 | InitViews | per frame with per-view outputs | `InitViewsModule` | orchestration-first; may dispatch render work later | `BeginInitViews(...)` and `SceneVisibility` are real UE families | Oxygen already separates view publication/planning from per-view graph realization and keeps orchestration above render-graph execution | Keep as a first-class orchestration stage above RDG in Vortex |
+| 3 | depth prepass and early velocity | per view | `DepthPrepassModule` | render-capable | UE runs `RenderPrePass(...)`; opaque velocity can be early depending on policy | Oxygen already carries depth-prepass completeness/state tracking and view-scoped depth orchestration patterns | Strong alignment; Vortex should keep depth and early velocity coupled at stage-family level |
+| 4 | geometry virtualization slot | conditional / reserved | future `GeometryVirtualizationService` | reserved | UE uses Nanite / `RenderNanite(...)` as a real stage family | Oxygen has no active virtualization family today, so reservation must be an explicit Vortex architecture commitment | Correctly reserved as a future stateful service, not a SceneRenderer detail |
+| 5 | occlusion and HZB | per view with history | `OcclusionModule` | render-capable | UE runs `RenderOcclusion(...)` plus HZB-related work | Oxygen already has HZB build and per-view history patterns that support a dedicated occlusion stage | Keep as its own stage module with per-view history/state |
+| 6 | forward light data / light grid | per frame shared product | `LightingService` | render-capable | UE uses `PrepareForwardLightData(...)`, `ComputeLightGrid(...)`, `LightGridInjection` | Oxygen already builds shared light-culling/light-grid data; Vortex repositions that capability as shared support rather than the frame spine | Vortex should demote this to shared supporting data, not frame architecture |
+| 7 | before-base-pass material composition | conditional / reserved | future `MaterialCompositionService` | render-capable when active | UE has `FCompositionLighting::ProcessBeforeBasePass(...)`; family includes decals and AO-adjacent work | Oxygen has no current material-composition family, so ownership must start cleanly under Vortex | Correct to reserve as a separate material-surface domain; do not fold into lighting |
+| 8 | shadow depth / shadow setup | per frame shared product | `ShadowService` | render-capable | UE uses `FinishInitDynamicShadows(...)` and `RenderShadowDepthMaps(...)` before later lighting use | Oxygen already uses dedicated shadow-domain managers and pass families for shared shadow products | Keep as a shared-product service separate from lighting evaluation |
+| 9 | base pass | per view | `BasePassModule` | render-capable | UE has `RenderBasePass(...)` as a major family boundary | Oxygen already separates opaque material execution from later transparency, but Vortex defines opaque as deferred GBuffer production | Correct Vortex spine: this becomes the canonical opaque material stage |
+| 10 | rebuild scene textures with GBuffers | per frame state transition | `SceneRenderer` | no RDG | UE updates `SceneTextures.SetupMode` / uniform buffers after GBuffer activation rather than exposing a named top-level stage | Oxygen's publication model already supports explicit product-setup boundaries even though this exact scene-texture promotion family is new | Keep as a strict SceneRenderer-owned product-setup transition only. This slot must not accumulate arbitrary fixup logic, late feature repair, or unrelated cross-stage work |
+| 11 | after-base-pass material composition / classification | conditional / reserved | future `MaterialCompositionService` | render-capable when active | UE has `FCompositionLighting::ProcessAfterBasePass(...)` for deferred decals / classification | Oxygen has no current deferred post-base-pass material-composition family, so the owner stays explicitly reserved | Correctly reserved as material-surface work, not lighting |
+| 12 | deferred direct lighting | per view | `LightingService` | render-capable | UE uses `RenderLights(...)` | Oxygen lighting substrate and published-product patterns support this owner; deferred direct lighting is a Vortex-native family | Correct Vortex owner and role |
+| 13 | indirect lighting / reflections / subsurface | conditional / reserved | future `IndirectLightingService` | render-capable when active | UE splits this family across `RenderDeferredReflectionsAndSkyLighting(...)`, `AddSubsurfacePass(...)`, and AO-related passes | Oxygen has no current deferred indirect-light family, so Vortex reserves an explicit future owner now | Correctly grouped as one future indirect-lighting service in Vortex |
+| 14 | volumetrics / heterogeneous volumes / clouds | conditional / reserved | future `EnvironmentLightingService` stages | render-capable when active | UE splits this across `ComputeVolumetricFog(...)`, `RenderHeterogeneousVolumes(...)`, `RenderVolumetricCloud(...)` | Oxygen has no active volumetric stage family yet, so Environment ownership is an explicit future-facing reservation | ⚠ Correct to keep under Environment ownership for now, but likely future split point if the environment family grows too broad |
+| 15 | sky atmosphere / fog / cloud composition | per view | `EnvironmentLightingService` | render-capable | UE uses `RenderSkyAtmosphere(...)` and `RenderFog(...)` | Oxygen already has environment-domain products and per-view publication patterns that fit this owner | Good alignment; keep environment integration here |
+| 16 | single-layer water | conditional / reserved | future `WaterService` | render-capable when active | UE has `RenderSingleLayerWater(...)` as a dedicated family | Oxygen has no current dedicated water family, so Vortex keeps an explicit service slot | Correctly isolated from generic translucency |
+| 17 | opaque FX / post-opaque extensions | conditional / reserved | `SceneRenderer` stage slot | optional render work | UE exposes `RenderPostOpaqueExtensions(...)` / scene-extension hooks | Oxygen already supports renderer-owned extension and tool seams; Vortex keeps this as an explicit post-opaque slot | Correct as a reserved slot, not a fixed subsystem yet. If multiple unrelated feature families begin accumulating here, Vortex must promote a dedicated owner before further implementation continues |
+| 18 | translucency | per view | `TranslucencyModule` | render-capable | UE uses `RenderTranslucency(...)` as a distinct family after opaque lighting/environment stages | Oxygen already supports a distinct transparency family and shared lighting products for later consumers | Keep as its own stage module consuming shared forward light data |
+| 19 | distortion and translucent velocities | conditional / reserved | future `DistortionModule` | render-capable when active | UE uses `RenderDistortion(...)` plus late translucent `RenderVelocities(...)` | Oxygen has no current distortion/late-velocity family, so Vortex keeps an explicit reserved late-stage owner | Correct reserved late-stage family in Vortex |
+| 20 | light shaft bloom / translucency upscale | conditional / reserved | future `LightShaftBloomModule` | render-capable when active | UE uses `RenderLightShaftBloom(...)` and translucency upscale-related work late | Oxygen has no current dedicated light-shaft or translucency-upscale family, so Vortex reserves the image-space late stage explicitly | Correct as reserved image-space late stage |
+| 21 | resolve scene color | per frame / per target | `SceneRenderer` | optional render work | UE uses `AddResolveSceneColorPass(...)` | Oxygen already supports resolve/compositing work as thin renderer-owned end stages | Correct as a thin SceneRenderer-owned stage. This stage is already live in the current Vortex runtime path; later phases validate or extend it rather than introducing it from scratch |
+| 22 | post processing | per view | `PostProcessService` | render-capable | UE has a broad `PostProcessing` family | Oxygen already exposes the post-process substrate and per-view publication needed for a dedicated service family | Correct service boundary for Vortex |
+| 23 | post-render / extraction / cleanup | per frame | `SceneRenderer` using `Renderer Core` helpers | optional render work plus handoff | UE uses `OnRenderFinish(...)` and `QueueSceneTextureExtractions(...)` | Oxygen already separates end-of-frame handoff and cleanup concerns from scene-stage work | Correct end-of-frame owner for Vortex. `SceneRenderer` may invoke Renderer Core helper APIs for extraction/handoff, but Renderer Core must not gain scene-policy ownership and must not call back upward into scene-stage logic. This stage is already live in the current Vortex runtime path; later phases validate or extend it rather than introducing it from scratch |
 
 ### 6.3 Runtime Rules
 
-| Rule | UE 5.7 Check | Legacy Oxygen Check | Vortex Architecture Finding |
+| Rule | UE 5.7 Check | Oxygen Check | Vortex Architecture Finding |
 | --- | --- | --- | --- |
-| The 23-stage order is architecturally fixed; activation may vary | UE has a stable deferred-family ordering, but many families are conditional and internally split | Legacy runtime uses a different Forward+-first order centered on light culling, depth, opaque, transparent | Keep the fixed Vortex 23-stage order as the architectural contract |
-| `SceneRenderer` owns stage ordering and dispatch | UE ordering is owned by `FDeferredShadingSceneRenderer::Render(...)` rather than by individual passes | Legacy ordering is owned by `ForwardPipeline` / renderer orchestration, not by passes | Correct; Vortex needs one explicit stage owner |
-| Stubbed stages remain present as no-ops | UE keeps many conditional families in place even when they do not execute | Legacy lacks many of these stage families entirely | Correct; reservation beats deletion for long-horizon architecture |
-| `RenderGraph` is below orchestration | UE RDG is broader and contains more renderer orchestration than Oxygen should copy | Legacy Oxygen render graph is a coroutine below renderer/pipeline orchestration | Vortex should follow Oxygen’s model, not UE’s broader RDG ownership |
-| Orchestration-only stages may remain above `RenderGraph` | UE often performs broader orchestration inside RDG-driven render bodies | Legacy already orchestrates around the graph rather than forcing everything into it | Correct and necessary to preserve the Oxygen render-graph model |
-| Velocity uses an explicit opaque-pass policy plus reserved late-stage ownership | UE velocity chooses depth/base/separate opaque production by policy, then keeps late translucent handling separate | Legacy has no equivalent deferred velocity policy surface | Correct; keep velocity policy explicit, do not reintroduce a standalone velocity stage module, and do not publish `SceneVelocity` from a stage that did not actually produce it |
-| Shared products must be set up before downstream use | UE explicitly promotes scene-texture setup modes/uniforms as products become bindable | Legacy uses pass registration and published outputs to make dependencies explicit | Scene-texture setup state is a hard runtime invariant. Architecture, design, and tests must all treat early consumption before setup as a defect, not a recoverable convenience case |
-| Multi-view execution must preserve stage-family order | UE preserves family order while varying internal pass structure and per-view branches | Legacy executes per-view render graphs under renderer-owned ordering | Correct; Vortex may vary realization strategy, not the stage spine |
-| Post-render extraction/handoff happen after scene-stage work | UE has explicit render-finish and scene-texture extraction steps at the end | Legacy finishes through compositing/frame-end paths rather than mid-scene stages | Correct; extraction/composition concerns must stay out of lighting/base/translucency families |
+| The 23-stage order is architecturally fixed; activation may vary | UE has a stable deferred-family ordering, but many families are conditional and internally split | Oxygen's engine phase model allows a renderer-owned stage order; Vortex standardizes one deferred-first spine on that substrate | Keep the fixed Vortex 23-stage order as the architectural contract |
+| `SceneRenderer` owns stage ordering and dispatch | UE ordering is owned by `FDeferredShadingSceneRenderer::Render(...)` rather than by individual passes | Oxygen already keeps ordering in renderer orchestration rather than in passes | Correct; Vortex needs one explicit stage owner |
+| Stubbed stages remain present as no-ops | UE keeps many conditional families in place even when they do not execute | Oxygen service and module seams tolerate dormant owners and reserved slots cleanly | Correct; reservation beats deletion for long-horizon architecture |
+| `RenderGraph` is below orchestration | UE RDG is broader and contains more renderer orchestration than Oxygen should copy | Oxygen render graphs are coroutine execution mechanisms below renderer orchestration | Vortex should follow Oxygen’s model, not UE’s broader RDG ownership |
+| Orchestration-only stages may remain above `RenderGraph` | UE often performs broader orchestration inside RDG-driven render bodies | Oxygen already orchestrates around the graph rather than forcing everything through it | Correct and necessary to preserve the Oxygen render-graph model |
+| Velocity uses an explicit opaque-pass policy plus reserved late-stage ownership | UE velocity chooses depth/base/separate opaque production by policy, then keeps late translucent handling separate | Oxygen already distinguishes product publication from pass ownership; Vortex applies that discipline to velocity | Correct; keep velocity policy explicit, do not reintroduce a standalone velocity stage module, and do not publish `SceneVelocity` from a stage that did not actually produce it |
+| Shared products must be set up before downstream use | UE explicitly promotes scene-texture setup modes/uniforms as products become bindable | Oxygen's publication and binding model already treats produced outputs as explicit dependencies | Scene-texture setup state is a hard runtime invariant. Architecture, design, and tests must all treat early consumption before setup as a defect, not a recoverable convenience case |
+| Multi-view execution must preserve stage-family order | UE preserves family order while varying internal pass structure and per-view branches | Oxygen already executes per-view work under renderer-owned ordering | Correct; Vortex may vary realization strategy, not the stage spine |
+| Post-render extraction/handoff happen after scene-stage work | UE has explicit render-finish and scene-texture extraction steps at the end | Oxygen already keeps composition and handoff concerns after scene work rather than inside mid-scene families | Correct; extraction/composition concerns must stay out of lighting/base/translucency families |
 
 ### 6.3.1 Deferred-Core Invariants
 
@@ -787,17 +787,17 @@ Cross-frame state is allowed only where it has a stable architectural owner.
 This is the runtime rule that prevents stage-local logic from quietly becoming
 hidden subsystem state.
 
-| Runtime State Family | Owner | Lifetime | UE 5.7 Check | Legacy Oxygen Check | Vortex Architecture Finding |
+| Runtime State Family | Owner | Lifetime | UE 5.7 Check | Oxygen Check | Vortex Architecture Finding |
 | --- | --- | --- | --- | --- | --- |
-| renderer shell lifetime / module attachment | `Renderer Core` | session | UE has no direct `Renderer Core` equivalent; renderer/bootstrap lifetime is broader engine infrastructure | Legacy `Renderer` is an engine module and owns attachment/shutdown hooks | Keep in Renderer Core; this is a pure Oxygen concern |
-| `RenderContext` instances | `Renderer Core` | frame-slot scoped | UE has no direct equivalent; execution context is spread across renderer state, view state, and RDG context | Legacy `RenderContext` is explicitly allocated/reset/materialized by `Renderer` | Strongly validated by legacy Oxygen; keep Core ownership |
-| canonical runtime views / registration | `Renderer Core` | cross-frame | UE keeps canonical views in `ViewFamily` / renderer-owned view structures rather than in a separate core layer | Legacy renderer explicitly owns published runtime views / registration | Keep in Renderer Core to preserve clean layering |
-| `SceneTextures` allocation and setup transitions | `SceneRenderer` | persistent allocation, per-frame setup changes | UE `FSceneTextures` is renderer-owned and setup-mode transitions happen during render orchestration | Legacy has no unified deferred `SceneTextures` family | `SceneRenderer` is the only owner of canonical `SceneTextures` allocation and setup state. Services may consume and publish against the family, but must not redefine setup state, replace the canonical family, or allocate competing scene-texture ownership paths |
-| stage-local transient resources | owning stage module | frame-local | UE creates many stage-local RDG resources inside family functions/passes | Legacy passes also own frame-local config/resources and register outputs into context | Correct; transients stay local to the stage owner |
-| domain caches / managers / histories | owning subsystem service | cross-frame | UE keeps cross-frame state in dedicated domain systems/managers | Legacy already has `ShadowManager` and `EnvironmentLightingService` with cross-frame state | Correct; persistent domain state belongs in services, not stages |
-| renderer-owned motion history caches | `Renderer Core` / scene-renderer-adjacent renderer state | cross-frame | UE keeps previous transform history in renderer-owned scene velocity data and previous view data in renderer/view state | Legacy Oxygen already retains renderer-owned per-view products/histories | Correct; current/previous transform and view history needed for `SceneVelocity` must not be hidden inside upload helpers or pass-local caches |
-| per-view history owned by a stage family | owning service or published view state | cross-frame | UE stores histories in view state / domain-specific managers (HZB, exposure, shadows, etc.) | Legacy environment and shadow systems already retain per-view products/histories | Correct; do not let anonymous per-stage state accumulate outside a stable owner |
-| extracted handoff/history outputs | `SceneRenderer` invoking `Renderer Core` helpers | end-of-frame to next-frame handoff | UE explicitly queues extractions and render-finish handoff near the end of the render | Legacy handoff is split across compositing and frame-end cleanup | Extraction is a post-render contract owned by SceneRenderer. Renderer Core may provide helper surfaces for handoff, but the handoff boundary must remain one-way and helper-only |
+| renderer shell lifetime / module attachment | `Renderer Core` | session | UE has no direct `Renderer Core` equivalent; renderer/bootstrap lifetime is broader engine infrastructure | Oxygen engine modules already own attachment, shutdown hooks, and runtime lifecycle | Keep in Renderer Core; this is a pure Oxygen concern |
+| `RenderContext` instances | `Renderer Core` | frame-slot scoped | UE has no direct equivalent; execution context is spread across renderer state, view state, and RDG context | Oxygen's explicit `RenderContext` pattern already allocates, resets, and materializes per-view execution state | Keep Core ownership |
+| canonical runtime views / registration | `Renderer Core` | cross-frame | UE keeps canonical views in `ViewFamily` / renderer-owned view structures rather than in a separate core layer | Oxygen already publishes canonical runtime views and registration through renderer-core-adjacent infrastructure | Keep in Renderer Core to preserve clean layering |
+| `SceneTextures` allocation and setup transitions | `SceneRenderer` | persistent allocation, per-frame setup changes | UE `FSceneTextures` is renderer-owned and setup-mode transitions happen during render orchestration | Oxygen's publication and setup model supports explicit shared product ownership even though the full family is Vortex-specific | `SceneRenderer` is the only owner of canonical `SceneTextures` allocation and setup state. Services may consume and publish against the family, but must not redefine setup state, replace the canonical family, or allocate competing scene-texture ownership paths |
+| stage-local transient resources | owning stage module | frame-local | UE creates many stage-local RDG resources inside family functions/passes | Oxygen passes already own frame-local config/resources and register outputs explicitly | Correct; transients stay local to the stage owner |
+| domain caches / managers / histories | owning subsystem service | cross-frame | UE keeps cross-frame state in dedicated domain systems/managers | Oxygen already keeps cross-frame state in domain systems such as shadow and environment services | Correct; persistent domain state belongs in services, not stages |
+| renderer-owned motion history caches | `Renderer Core` / scene-renderer-adjacent renderer state | cross-frame | UE keeps previous transform history in renderer-owned scene velocity data and previous view data in renderer/view state | Oxygen already retains renderer-owned per-view products and histories | Correct; current/previous transform and view history needed for `SceneVelocity` must not be hidden inside upload helpers or pass-local caches |
+| per-view history owned by a stage family | owning service or published view state | cross-frame | UE stores histories in view state / domain-specific managers (HZB, exposure, shadows, etc.) | Oxygen already keeps per-view histories on domain services or published view state | Correct; do not let anonymous per-stage state accumulate outside a stable owner |
+| extracted handoff/history outputs | `SceneRenderer` invoking `Renderer Core` helpers | end-of-frame to next-frame handoff | UE explicitly queues extractions and render-finish handoff near the end of the render | Oxygen already separates handoff and compositing cleanup from in-frame stage execution | Extraction is a post-render contract owned by SceneRenderer. Renderer Core may provide helper surfaces for handoff, but the handoff boundary must remain one-way and helper-only |
 
 Runtime constraint:
 
@@ -878,13 +878,13 @@ Primary architectural rule:
 In Vortex, `RenderContext` is the authoritative per-view execution substrate.
 It is not a bag of scene products and it is not a hidden service locator.
 
-| Concern | UE 5.7 Evidence | Legacy Oxygen Evidence | Vortex Contract |
+| Concern | UE 5.7 Evidence | Oxygen Evidence | Vortex Contract |
 | --- | --- | --- | --- |
-| authoritative execution substrate | UE spreads this across renderer state, view state, and RDG context rather than one single struct | `RenderContext` is the explicit per-view pass-execution context | keep one explicit Vortex `RenderContext`; do not smear execution state across passes |
-| frame-slot / frame-sequence lifecycle | UE ties transient state to frame-scoped renderer execution | `RenderContext` stores frame slot/sequence and is reset by the renderer | Renderer Core owns allocation, reset, and materialization |
-| current-view specific state | UE keeps per-view state on renderer/view structures | legacy `RenderContext` has `current_view`, prepared-frame pointers, depth-prepass completeness, output maps | Vortex `RenderContext` remains the per-view substrate, not a scene-global state object |
-| pass-to-pass dependency seam | UE uses RDG resources / renderer-managed pass families | legacy `RenderContext` has typed pass registration/lookup (`RegisterPass`, `GetPass`) | preserve explicit pass-family dependency seams in Vortex where needed |
-| renderer/bindings indirection | UE passes consume renderer-prepared uniform/binding packages | legacy renderer wires constants, frame bindings, and published slots before pass execution | passes consume `RenderContext`; they do not build the execution substrate themselves |
+| authoritative execution substrate | UE spreads this across renderer state, view state, and RDG context rather than one single struct | Oxygen already uses `RenderContext` as the explicit per-view pass-execution context | keep one explicit Vortex `RenderContext`; do not smear execution state across passes |
+| frame-slot / frame-sequence lifecycle | UE ties transient state to frame-scoped renderer execution | Oxygen `RenderContext` already stores frame slot/sequence and is reset by the renderer | Renderer Core owns allocation, reset, and materialization |
+| current-view specific state | UE keeps per-view state on renderer/view structures | Oxygen `RenderContext` already carries current-view routing, prepared-frame references, and stage-state details | Vortex `RenderContext` remains the per-view substrate, not a scene-global state object |
+| pass-to-pass dependency seam | UE uses RDG resources / renderer-managed pass families | Oxygen `RenderContext` already supports typed pass registration and lookup when a pass-family seam is warranted | preserve explicit pass-family dependency seams in Vortex where needed |
+| renderer/bindings indirection | UE passes consume renderer-prepared uniform/binding packages | Oxygen already wires constants, frame bindings, and published slots before pass execution | passes consume `RenderContext`; they do not build the execution substrate themselves |
 
 Required Vortex properties:
 
@@ -1009,7 +1009,7 @@ Bindless architecture rules:
 | pass contract | passes consume shared bindless routing prepared by the renderer layers |
 | pass-local ownership | passes may allocate and manage their own local descriptors/views for pass execution without taking ownership of the shared scene-texture family |
 | root binding entry | `ViewConstants` remains the stable root CBV entry point for one view and routes to bindless payloads such as `ViewFrameBindings` |
-| non-goal | no parallel legacy non-bindless scene-texture binding path |
+| non-goal | no parallel non-bindless scene-texture binding path |
 
 Current Oxygen evidence:
 
@@ -1200,7 +1200,7 @@ Non-goals:
 - no duplicated light-grid metadata in unrelated systems
 - no alternate forward-light family owned by translucency, environment, or
   diagnostics
-- no regression to legacy `LightCullingPass` as the architectural frame root
+- no regression to a light-culling-first frame root
 
 ### 7.6 Extraction and Handoff Contract
 
@@ -1216,12 +1216,12 @@ Vortex needs this boundary to keep:
 separate from each other.
 
 UE 5.7 validates this strongly through `FSceneTextureExtracts` and
-`QueueExtractions(...)`. Legacy Oxygen validates the need for an explicit
-end-of-frame handoff through `OnCompositing(...)` and `OnFrameEnd(...)`.
-The retained current Vortex runtime branch already implements this boundary
-through Stage 21 `ResolveSceneColor` and Stage 23 `PostRenderCleanup`; Phase 4F
-deepens end-to-end validation of that existing contract instead of introducing
-those stages for the first time.
+`QueueExtractions(...)`. Oxygen's composition and frame-end handoff model also
+validates the need for an explicit end-of-frame extraction boundary. The
+current Vortex runtime path already implements this boundary through Stage 21
+`ResolveSceneColor` and Stage 23 `PostRenderCleanup`; Phase 4F deepens
+end-to-end validation of that existing contract instead of introducing those
+stages for the first time.
 
 #### 7.6.1 Stable Contract
 
@@ -1522,7 +1522,7 @@ The Vortex shader architecture must guarantee all of the following:
    - renderer-wide contracts and routing helpers
    - domain-local common libraries
    - pass entrypoint shaders
-5. no legacy `Oxygen.Renderer` shader-path dependency
+5. one Vortex-owned shader path with no external shader-path dependency
 6. no ad hoc root-signature expansion per subsystem
 7. one authoritative engine-owned shader catalog for Vortex entrypoints and
    permutations
@@ -1792,8 +1792,8 @@ Anti-patterns:
    convenient today
 4. letting material-generated code define renderer-owned scene contracts
 5. bypassing `EngineShaderCatalog` with ad hoc compile requests
-6. introducing legacy-path shader includes or compatibility wrappers back to
-   `Oxygen.Renderer`
+6. introducing compatibility shader includes or wrappers outside Vortex-owned
+   shader families
 
 ### 10.10 Initial Family Map for Vortex
 
@@ -1899,7 +1899,7 @@ The debug-mode contract is:
 4. mode selection must never require runtime shader compilation
 5. when debug mode is disabled, the production path remains canonical
 
-Vortex should preserve the proven legacy pattern:
+Vortex should preserve the proven Oxygen pattern:
 
 1. simple visualization modes may compile as catalog-backed define variants
 2. semantically different debug output may use dedicated debug shaders instead

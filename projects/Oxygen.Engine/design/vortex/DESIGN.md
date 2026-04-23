@@ -23,9 +23,9 @@ Related documents:
 
 ## Mandatory Vortex Rule
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-   code. It is not production, not a reference implementation, not a fallback,
-   and not a simplification path for any Vortex task.
+- For Vortex planning and implementation, Vortex requirements are defined by
+   this design set, the Vortex architecture package, and the UE5.7 parity
+   target.
 - Every Vortex task must be designed and implemented as a new Vortex-native
    system that targets maximum parity with UE5.7, grounded in
    `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
@@ -47,7 +47,7 @@ Vortex organizes around:
 - capability-family subsystem services that own domain-specific GPU work
 - a Vortex-owned Renderer Core substrate (frame loop, views, composition,
    facades, publication, upload) that may retain only architecture-neutral
-   concepts after they are requalified against the UE5.7 parity target
+   concepts after they are validated against the UE5.7 parity target
 - a shared forward light data service that lives inside the Lighting subsystem
 
 The design should be read through the scene-renderer mental model:
@@ -64,7 +64,6 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 
 | Topic | LLD |
 | --- | --- |
-| Phase 1 substrate migration | [`substrate-migration-guide.md`](lld/substrate-migration-guide.md) |
 | ScenePrep refactor and publication contract | [`sceneprep-refactor.md`](lld/sceneprep-refactor.md) |
 | SceneTextures four-part contract | [`scene-textures.md`](lld/scene-textures.md) |
 | SceneRenderBuilder + SceneRenderer shell | [`scene-renderer-shell.md`](lld/scene-renderer-shell.md) |
@@ -77,7 +76,6 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 | PostProcessService | [`post-process-service.md`](lld/post-process-service.md) |
 | ShadowService | [`shadow-service.md`](lld/shadow-service.md) |
 | EnvironmentLightingService | [`environment-service.md`](lld/environment-service.md) |
-| Examples/Async migration | [`migration-playbook.md`](lld/migration-playbook.md) |
 | DiagnosticsService | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 | Translucency (stage 18) | [`translucency.md`](lld/translucency.md) |
 | Occlusion / HZB (stage 5) | [`occlusion.md`](lld/occlusion.md) |
@@ -86,22 +84,22 @@ See [`lld/README.md`](lld/README.md) for the full index. The key mappings:
 
 ## 3. SceneRenderer Overview
 
-The scene renderer is owned by `Renderer` as a delegate — not a replacement.
-Renderer retains ownership of the frame loop, `RenderContext` allocation, view
-management, upload/staging, publication substrate, and composition execution.
-The scene renderer dispatches stage modules and subsystem services in 23-stage
-order (ARCHITECTURE.md §6).
+The scene renderer is the scene-layer dispatcher owned by Vortex Renderer Core.
+Renderer Core retains ownership of the frame loop, `RenderContext` allocation,
+view management, upload/staging, publication substrate, and composition
+execution. The scene renderer dispatches stage modules and subsystem services
+in 23-stage order (ARCHITECTURE.md §6).
 
 See [`lld/scene-renderer-shell.md`](lld/scene-renderer-shell.md) for the full
 class shape, dispatch skeleton, and bootstrap via `SceneRenderBuilder`.
 
 ### 3.1 Ownership Rules
 
-1. The scene renderer is created by the Renderer during initialization, based
+1. The scene renderer is created by Renderer Core during initialization, based
    on the active `CapabilitySet`.
 2. The scene renderer owns `SceneTextures`, all stage module instances, and all
    subsystem service instances.
-3. The Renderer delegates frame-phase work to the scene renderer after its own
+3. Renderer Core hands scene-phase work to the scene renderer after its own
    substrate-level work (context allocation, view management, upload staging).
 4. The scene renderer dispatches stage modules and subsystem services in the
    correct frame-stage order. Neither stage modules nor subsystems control
@@ -225,12 +223,11 @@ See [`lld/deferred-lighting.md`](lld/deferred-lighting.md) for the
 directional fullscreen plus bounded-volume local-light deferred-light contract,
 and the shader contracts that support it.
 
-## 8. Inherited Substrate Adaptation
+## 8. Renderer Core Substrate Baseline
 
-The following substrate carries over with mechanical changes only (namespace,
-export macros, include paths). See
-[`lld/substrate-migration-guide.md`](lld/substrate-migration-guide.md) for the
-complete migration checklist.
+Vortex Renderer Core owns the following substrate components and applies the
+local changes needed for Vortex-specific namespaces, exports, include paths,
+and parity validation.
 
 | Substrate | Adaptation |
 | --- | --- |
@@ -242,12 +239,12 @@ complete migration checklist.
 | Upload/staging | Unchanged |
 
 See [`lld/offscreen-rendering.md`](lld/offscreen-rendering.md) for the
-three non-runtime facade shapes adapted for Vortex.
+three non-runtime facade shapes used by Vortex.
 
 ## 9. Capability Declaration
 
-Vortex retains the capability-family vocabulary from modular-renderer and adds
-scene-renderer-level capabilities:
+Vortex uses the capability-family vocabulary already established in Oxygen and
+adds scene-renderer-level capabilities:
 
 ```cpp
 enum class RendererCapabilityFamily : std::uint32_t {
@@ -262,8 +259,8 @@ enum class RendererCapabilityFamily : std::uint32_t {
 };
 ```
 
-The `kDeferredShading` family gates the scene renderer's deferred path. When
-absent, the scene renderer falls back to forward-only mode.
+The `kDeferredShading` family gates the scene renderer's deferred path.
+Configurations without that family use Vortex forward-only mode.
 
 ## 10. Shader Module Organization
 
@@ -297,7 +294,8 @@ EngineShaderCatalog registration table.
 11. Permutation identity must reuse Oxygen's canonical request rules from
     `src/Oxygen/Graphics/Common/Shaders.cpp`.
 12. ShaderBake remains the only compilation path for Vortex shaders.
-13. No shader file depends on legacy `Oxygen.Renderer` shader paths.
+13. All shader-file dependencies stay within Vortex-owned shader paths and the
+   shared engine shader substrate.
 
 ## 11. Cross-Subsystem Data Flow
 
@@ -380,16 +378,15 @@ Rationale:
 
 The Vortex design is shaped around:
 
-- `SceneRenderer` as a delegate owned by `Renderer`
+- `SceneRenderer` as the scene-layer dispatcher owned by Renderer Core
 - `SceneTextures` as the canonical texture product owned by the scene renderer
 - subsystem services with concrete classes and domain-specific execution methods
-- GBuffer base pass with MRT output replacing the legacy forward ShaderPass
-  contract
+- GBuffer base pass with MRT output as the canonical opaque material contract
 - directional fullscreen plus bounded-volume local-light deferred lighting as
   the initial approach
 - shared forward light data inside LightingService for translucency consumers
-- inherited substrate (facades, composition, publication, upload) adapted
-  mechanically
+- Renderer Core substrate (facades, composition, publication, upload)
+   retained with bounded Vortex adaptation
 - shader modules organized by subsystem, mirroring UE5 ownership boundaries
 
 All per-subsystem and per-stage designs are captured in the 18 LLD documents
