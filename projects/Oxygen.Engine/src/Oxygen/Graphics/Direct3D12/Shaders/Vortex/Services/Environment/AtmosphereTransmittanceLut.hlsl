@@ -6,6 +6,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/EnvironmentStaticData.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 #include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"
@@ -100,7 +101,17 @@ static float3 IntegrateOpticalDepth(
     [loop]
     for (uint step_index = 0u; step_index < integration_step_count; ++step_index)
     {
-        float ray_distance = (float(step_index) + 0.5f) * integration_step_size;
+        // Mirrors UE5.7 SkyAtmosphere.usf::IntegrateSingleScatteredLuminance
+        // uniform-step branch (line ~638):
+        //   t = tMax * (SampleI + PixelNoise) / SampleCount;
+        // with PixelNoise = DEFAULT_SAMPLE_OFFSET = 0.3f
+        // (SkyAtmosphere.usf:403,611). The transmittance LUT pass sets
+        // VariableSampleCount = false and PER_PIXEL_NOISE is off in LUT
+        // passes, so the constant 0.3f offset applies. The 0.3 bias reduces
+        // the systematic under-integration of exponentially-decaying
+        // atmosphere density vs. a 0.5 midpoint.
+        float ray_distance = (float(step_index) + kSegmentSampleOffset)
+            * integration_step_size;
         float3 sample_position = origin + dir * ray_distance;
         float altitude_km = max(length(sample_position) - atmo.planet_radius_km, 0.0f);
         optical_depth.x += AtmosphereExponentialDensity(altitude_km, atmo.rayleigh_scale_height_km) * integration_step_size;

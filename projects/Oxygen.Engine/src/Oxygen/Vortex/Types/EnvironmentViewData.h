@@ -112,7 +112,7 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
   glm::vec4
     trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass {
       1.0F,
-      -6.0F,
+      -90.0F,
       0.0F,
       1.0F,
     };

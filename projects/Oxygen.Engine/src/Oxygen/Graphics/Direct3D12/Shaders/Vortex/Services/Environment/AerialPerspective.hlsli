@@ -72,14 +72,10 @@ float4 SampleCameraVolumeLut(
         return float4(0.0, 0.0, 0.0, 1.0);
     }
 
-    // User controls from resolved environment view data.
-    // Note: the camera-volume LUT itself is generated at a fixed max distance;
-    // this scale remaps view distance to the LUT slice distribution.
-    float distance_scale = max(GetAerialPerspectiveDistanceScale(), 0.0);
-
-    // Effective path length with user scaling.
-    float effective_distance = view_distance * distance_scale;
-    float view_distance_km = WorldMetersToAtmosphereKm(effective_distance);
+    // UE5.7 applies AerialPespectiveViewDistanceScale during volume generation.
+    // Do not rescale the lookup distance here or the camera volume contract
+    // drifts and below-horizon fog bands over-brighten.
+    float view_distance_km = WorldMetersToAtmosphereKm(view_distance);
 
     const EnvironmentViewData view_data = LoadResolvedEnvironmentViewData();
     const float depth_resolution = view_data.camera_aerial_volume_depth_params.x;
@@ -126,7 +122,7 @@ float4 SampleCameraVolumeLut(
             inverse_view_projection_matrix);
         const float3 ortho_camera_offset = near_world_position - camera_pos;
         view_distance = max(0.0f, length((world_pos - camera_pos) + ortho_camera_offset) - 0.0f);
-        t_depth = max(0.0f, WorldMetersToAtmosphereKm(view_distance * distance_scale) - start_depth_km);
+        t_depth = max(0.0f, WorldMetersToAtmosphereKm(view_distance) - start_depth_km);
         linear_slice = t_depth * depth_slice_length_km_inv;
         linear_w = linear_slice * depth_resolution_inv;
         non_linear_w = sqrt(saturate(linear_w));

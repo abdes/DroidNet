@@ -579,7 +579,6 @@
                 "second_fog_height_offset",
                 "fog_inscattering_luminance",
                 "sky_atmosphere_ambient_contribution_color_scale",
-                "inscattering_color_cubemap_ref",
                 "inscattering_color_cubemap_angle",
                 "inscattering_texture_tint",
                 "fully_directional_inscattering_color_distance",
@@ -651,7 +650,6 @@
             "required": [
                 "enabled",
                 "source",
-                "cubemap_ref",
                 "intensity",
                 "tint_rgb",
                 "diffuse_intensity",

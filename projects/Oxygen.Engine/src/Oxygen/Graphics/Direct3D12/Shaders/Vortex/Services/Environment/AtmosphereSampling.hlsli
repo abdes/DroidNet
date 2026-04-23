@@ -61,104 +61,17 @@ float2 GetTransmittanceLutUv(
     return saturate(float2(x_mu, x_r));
 }
 
-//! Applies half-texel offset for proper bilinear filtering.
+//! Applies half-texel offset for proper bilinear filtering of sky-view LUTs.
 //!
 //! @param uv Raw UV coordinates [0, 1].
 //! @param lut_width LUT texture width.
 //! @param lut_height LUT texture height.
 //! @return UV with half-texel offset applied.
-static inline float2 ApplyHalfTexelOffset(float2 uv, float lut_width, float lut_height)
+static inline float2 ApplySkyViewHalfTexelOffset(float2 uv, float lut_width, float lut_height)
 {
     uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
     uv += float2(0.5 / lut_width, 0.5 / lut_height);
     return uv;
-}
-
-//! Samples the transmittance LUT.
-//!
-//! @param lut_slot Bindless SRV index for the transmittance LUT.
-//! @param lut_width LUT texture width.
-//! @param lut_height LUT texture height.
-//! @param cos_zenith Cosine of zenith angle.
-//! @param altitude_km Height above planet surface in km.
-//! @param planet_radius_km Planet radius in km.
-//! @param atmosphere_height_km Total atmosphere thickness in km.
-//! @return RGB transmittance.
-float3 SampleTransmittanceOpticalDepthLut(
-    uint lut_slot,
-    float lut_width,
-    float lut_height,
-    float cos_zenith,
-    float altitude_km,
-    float planet_radius_km,
-    float atmosphere_height_km)
-{
-    if (lut_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        // No LUT available, return zero optical depth.
-        return float3(0.0, 0.0, 0.0);
-    }
-
-    // Geometric horizon check: if looking below the horizon, the planet
-    // blocks all light (infinite optical depth).
-    float cos_horizon = HorizonCosineFromAltitude(planet_radius_km, altitude_km);
-    if (cos_zenith < cos_horizon)
-    {
-        return float3(kInfiniteOpticalDepth, kInfiniteOpticalDepth, kInfiniteOpticalDepth);
-    }
-
-    float2 uv = GetTransmittanceLutUv(
-        cos_zenith, altitude_km, planet_radius_km, atmosphere_height_km);
-
-    // Apply half-texel offset for proper filtering.
-    uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
-
-    // RGB stores optical depth integrals for Rayleigh/Mie/Absorption.
-    Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-
-    return lut.SampleLevel(linear_sampler, uv, 0).rgb;
-}
-
-
-
-//! Samples a transmittance LUT that stores resolved RGB transmittance.
-//!
-//! @param atmo Atmosphere parameters.
-//! @param lut_slot Bindless SRV index.
-//! @param lut_width LUT texture width.
-//! @param lut_height LUT texture height.
-//! @param cos_zenith Cosine of zenith angle.
-//! @param altitude_km Height above planet surface in km.
-//! @param atmosphere_height_km Total atmosphere thickness in km.
-//! @return RGB transmittance.
-float3 SampleTransmittanceLut(
-    GpuSkyAtmosphereParams atmo,
-    uint lut_slot,
-    float lut_width,
-    float lut_height,
-    float cos_zenith,
-    float altitude_km,
-    float atmosphere_height_km)
-{
-    if (lut_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        return float3(1.0, 1.0, 1.0);
-    }
-
-    float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_km, altitude_km);
-    if (cos_zenith < cos_horizon)
-    {
-        return 0.0.xxx;
-    }
-
-    float2 uv = GetTransmittanceLutUv(
-        cos_zenith, altitude_km, atmo.planet_radius_km, atmosphere_height_km);
-    uv = ApplyHalfTexelOffset(uv, lut_width, lut_height);
-
-    Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return lut.SampleLevel(linear_sampler, uv, 0).rgb;
 }
 
 //! Computes sky-view LUT UV from view direction using UE-style azimuth mapping.
@@ -343,7 +256,7 @@ float4 SampleSkyViewLut(
     }
 
     float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius_km, camera_altitude_km);
-    float2 uv = ApplyHalfTexelOffset(uv_base, lut_width, lut_height);
+    float2 uv = ApplySkyViewHalfTexelOffset(uv_base, lut_width, lut_height);
 
     if (slices <= 1u)
     {

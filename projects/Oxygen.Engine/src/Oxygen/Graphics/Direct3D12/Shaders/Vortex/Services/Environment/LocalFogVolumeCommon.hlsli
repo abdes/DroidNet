@@ -95,6 +95,8 @@ struct DecodedLocalFogVolumeInstanceData
     float3x3 pre_translated_inv_transform;
 };
 
+static const uint kLocalFogDirectionalLightAtmosphereAuthority = 1u << 0u;
+
 static inline uint PackLocalFogTile(uint2 tile_coord)
 {
     return (tile_coord.x & 0xFFFFu) | ((tile_coord.y & 0xFFFFu) << 16u);
@@ -185,6 +187,37 @@ static inline DecodedLocalFogVolumeInstanceData DecodeLocalFogVolumeInstanceData
     decoded.phase_g = packed_albedo_phase.a;
     decoded.height_fog_offset = asfloat(instance.data2.w);
     return decoded;
+}
+
+static inline bool GetLocalFogDirectionalLight(
+    out float3 directional_light_color,
+    out float3 directional_light_direction)
+{
+    const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
+    if (lighting.has_directional_light == 0u)
+    {
+        directional_light_color = 0.0f.xxx;
+        directional_light_direction = float3(0.0f, 0.0f, 1.0f);
+        return false;
+    }
+
+    directional_light_color = lighting.directional.color
+        * lighting.directional.illuminance_lux;
+    directional_light_direction = lighting.directional.direction;
+
+    if ((lighting.directional.atmosphere_mode_flags
+            & kLocalFogDirectionalLightAtmosphereAuthority) != 0u)
+    {
+        // Match UE5.7 local-fog lighting: the local fog path consumes the
+        // directional light color after the atmosphere proxy has published the
+        // baked ground-level transmittance. For per-pixel atmosphere lights UE
+        // still applies the baked transmittance here as an approximation to
+        // avoid a transmittance texture sample in the local-fog shader.
+        directional_light_color
+            *= lighting.directional.transmittance_toward_sun_rgb;
+    }
+
+    return true;
 }
 
 static inline float3 TransformTranslatedWorldVectorToLocal(
@@ -473,10 +506,16 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
 {
     float3 in_scattering = 0.0f.xxx;
 
-    if (HasSunLight())
+    float3 directional_light_color = 0.0f.xxx;
+    float3 directional_light_direction = 0.0f.xxx;
+    if (GetLocalFogDirectionalLight(
+            directional_light_color,
+            directional_light_direction))
     {
-        in_scattering += GetSunLuminanceRGB()
-            * HenyeyGreensteinPhase(-instance.phase_g, dot(ray_dir_world, GetSunDirectionWS()));
+        in_scattering += directional_light_color
+            * HenyeyGreensteinPhase(
+                -instance.phase_g,
+                dot(ray_dir_world, directional_light_direction));
     }
 
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;

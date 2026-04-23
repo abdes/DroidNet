@@ -125,6 +125,7 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
     sampling.MinSampleCount = 1.0f;
     sampling.MaxSampleCount = 1.0f;
     sampling.DistanceToSampleCountMaxInv = 0.0f;
+    sampling.SampleSegmentOffset = kSegmentSampleOffset;
 
     const VortexSingleScatteringResult r0 = VortexIntegrateSingleScatteredLuminance(
         0.0f.xx,

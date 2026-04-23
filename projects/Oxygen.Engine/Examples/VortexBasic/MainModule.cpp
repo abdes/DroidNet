@@ -611,7 +611,7 @@ auto MainModule::EnsureScene() -> void
     atmosphere->SetAerialScatteringStrength(1.0F);
     atmosphere->SetHeightFogContribution(1.0F);
     atmosphere->SetTraceSampleCountScale(1.0F);
-    atmosphere->SetTransmittanceMinLightElevationDeg(-6.0F);
+    atmosphere->SetTransmittanceMinLightElevationDeg(-90.0F);
 
     auto* sky_light
       = environment->TryGetSystem<scene::environment::SkyLight>().get();
