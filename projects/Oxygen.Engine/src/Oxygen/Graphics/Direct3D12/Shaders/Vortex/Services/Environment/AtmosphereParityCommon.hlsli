@@ -13,6 +13,7 @@
 #include "Vortex/Contracts/EnvironmentViewData.hlsli"
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 static const float kVortexPi = 3.14159265359f;
 
@@ -131,7 +132,12 @@ static bool MoveToTopAtmosphere(
         return false;
     }
 
-    world_position += world_direction * top_intersection;
+    // Mirrors UE5.7 SkyAtmosphere.usf::MoveToTopAtmosphere. The small inward
+    // offset after the top-shell intersection avoids precision edge cases when
+    // later sphere tests run exactly on the boundary.
+    const float3 up_vector = world_position / view_height;
+    const float3 up_offset = up_vector * -PLANET_RADIUS_OFFSET;
+    world_position = world_position + world_direction * top_intersection + up_offset;
     return true;
 }
 

@@ -261,7 +261,8 @@ float4 SampleSkyViewLut(
     if (slices <= 1u)
     {
         Texture2D<float4> lut_2d = ResourceDescriptorHeap[lut_slot];
-        SamplerState linear_sampler = SamplerDescriptorHeap[0];
+        SamplerState linear_sampler
+            = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
         return lut_2d.SampleLevel(linear_sampler, uv, 0.0f);
     }
 

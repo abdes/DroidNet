@@ -166,7 +166,8 @@ void VortexDistantSkyLightLutCS(
     GpuSkyAtmosphereParams atmosphere_parameters = BuildAtmosphereParameters(pass_constants);
     RWStructuredBuffer<float4> output_buffer = ResourceDescriptorHeap[pass_constants.output_buffer_uav];
     Texture2D<float4> multi_scattering_lut = ResourceDescriptorHeap[pass_constants.multi_scattering_lut_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
 
     const uint thread_linear_index = group_thread_id.y * 8u + group_thread_id.x;
     const uint sphere_sample_count = max(pass_constants.integration_sample_count, 64u);

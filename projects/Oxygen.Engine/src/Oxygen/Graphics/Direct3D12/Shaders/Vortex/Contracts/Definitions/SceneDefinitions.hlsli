@@ -25,5 +25,8 @@ static const uint SHADING_MODEL_CLOTH = 3u;
 
 static const uint INVALID_BINDLESS_INDEX = K_INVALID_BINDLESS_INDEX;
 static const uint VORTEX_SAMPLER_POINT_CLAMP = 2u;
+// Keep sampler slot 3 aligned with Graphics.cpp. Atmosphere shaders depend on
+// this being bilinear clamp, not wrap, to preserve UE5.7 LUT sampling parity.
+static const uint VORTEX_SAMPLER_LINEAR_CLAMP = 3u;
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_CONTRACTS_DEFINITIONS_SCENEDEFINITIONS_HLSLI

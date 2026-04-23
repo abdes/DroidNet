@@ -220,7 +220,8 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
     float sample_count)
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = false;

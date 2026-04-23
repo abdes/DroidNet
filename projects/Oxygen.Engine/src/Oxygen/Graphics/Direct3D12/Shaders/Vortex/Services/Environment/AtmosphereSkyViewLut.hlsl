@@ -182,7 +182,8 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     float ray_length)
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     const float output_pre_exposure = max(GetVortexExposure(), 1.0e-6f);
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = true;
@@ -279,7 +280,7 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         pass,
         ray_origin,
         ray_direction,
-        9000.0f);
+        9000000.0f);
     const float transmittance = dot(
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
