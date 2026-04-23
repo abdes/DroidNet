@@ -210,17 +210,17 @@ void AxesWidget::Draw(observer_ptr<scene::SceneNode> camera)
   }
 
   const auto& tf = camera->GetTransform();
-  const auto world_rotation = tf.GetWorldRotation();
-  if (!world_rotation.has_value()) {
+  const auto local_rotation = tf.GetLocalRotation();
+  if (!local_rotation.has_value()) {
     return;
   }
 
-  // Camera rotations in DemoShell/controllers map view-space basis vectors
-  // (look::Forward = -Z, look::Up = +Y) into world space. The widget needs the
-  // inverse mapping so it can express world axes in the exact basis currently
-  // seen on screen.
+  // The widget runs during GUI update, before the renderer's scene traversal
+  // owns world-transform synchronization. DemoShell camera controllers write
+  // the active camera's local rotation directly, and the main camera is a root
+  // node in these demos, so local rotation is the correct GUI-stage basis.
   const glm::mat3 world_to_view_rotation
-    = glm::mat3_cast(glm::conjugate(*world_rotation));
+    = glm::mat3_cast(glm::conjugate(*local_rotation));
   Draw(world_to_view_rotation);
 }
 
