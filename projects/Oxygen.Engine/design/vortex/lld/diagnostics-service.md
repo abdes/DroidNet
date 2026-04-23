@@ -51,6 +51,14 @@ DiagnosticsService **must NOT own:**
 - [ARCHITECTURE.md §8](../ARCHITECTURE.md) — subsystem services
 - Design principle: diagnostics-only seam, no production-path coupling
 
+### 1.4 Verification Boundary
+
+This LLD defines the **product surface** of `DiagnosticsService`. It does **not** define the cross-cutting milestone verification policy for unrelated lanes.
+
+Later milestones may use logs, RenderDoc captures, analyzer scripts, assertion scripts, debugger audits, or similar proof tooling to verify some other feature without claiming `DiagnosticsService` delivery. A milestone owns diagnostics delivery only when it changes diagnostics-owned runtime behavior such as overlays, shader-debug routing, panel infrastructure, telemetry sinks, or debug primitives.
+
+Conversely, a future milestone that does implement `DiagnosticsService` still owes milestone-specific parity/proof evidence for those diagnostics behaviors; shipping the service is not self-verifying.
+
 ## 2. Interface Contracts
 
 ### 2.1 File Placement
