@@ -1,4 +1,8 @@
-# Vortex Renderer Project Rules
+# Vortex Rules
+
+This document centralizes the mandatory execution rules for the Vortex design
+package. Use it when a task contract or planning artifact refers to
+`design/vortex/RULES.md`.
 
 ## Mandatory Vortex Rule
 
@@ -14,6 +18,26 @@
 - If maximum parity cannot yet be achieved, the task remains incomplete until
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
+
+## Related Truth Surfaces
+
+- [PRD.md](./PRD.md) — stable product requirements
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — stable structural architecture
+- [DESIGN.md](./DESIGN.md) — top-level design entry point
+- [PLAN.md](./PLAN.md) — active execution plan and phase ordering
+- [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) — current-state and
+  resumability ledger
+- [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — target file-placement reference
+- [lld/README.md](./lld/README.md) — low-level design package index
+
+## Usage Notes
+
+- `IMPLEMENTATION-STATUS.md` is the current-state truth surface when a planning
+  document and the live branch disagree.
+- `PLAN.md` remains the roadmap and claim surface; do not treat it as proof of
+  implementation by itself.
+- `PROJECT-LAYOUT.md` defines intended placement and organization, not proof
+  that every illustrated future file already exists on the branch.
 
 ## Ledger Rules
 

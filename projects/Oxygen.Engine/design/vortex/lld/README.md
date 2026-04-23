@@ -70,6 +70,7 @@ reviewed.
 | Document | Deliverable | Covers |
 | -------- | ----------- | ------ |
 | [sceneprep-refactor.md](sceneprep-refactor.md) | cross-cutting support LLD | Authoritative ScenePrep -> InitViews -> PreparedSceneFrame contract, traversal budget, publication model, multi-view-safe state ownership |
+| [runtime-motion-producers.md](runtime-motion-producers.md) | cross-cutting support LLD | Runtime producer architecture for rigid, skinned, morph, WPO, and MVWO motion inputs needed for truthful Stage-9 opaque velocity parity |
 | [shader-contracts.md](shader-contracts.md) | D.7 | Vortex shader directory setup, Contracts/, narrow renderer-wide Shared/, family-local deferred-light helpers, GBuffer encode/decode, position reconstruction, BRDF core, EngineShaderCatalog registration |
 | [init-views.md](init-views.md) | D.8 | InitViewsModule, visibility/culling orchestration, ScenePrep integration, per-view prepared-scene publication |
 | [depth-prepass.md](depth-prepass.md) | D.4 | DepthPrepassModule, depth-only pass, mesh processor, partial velocity writes, DepthPrePassPolicy |
@@ -93,6 +94,7 @@ reviewed.
 | [diagnostics-service.md](diagnostics-service.md) | D.14 | GPU debug overlay, ImGui panel infra, profiler port, debug-mode vocabulary |
 | [translucency.md](translucency.md) | D.15 | Forward-lit translucency passes consuming published lighting/shadow/environment bindings |
 | [occlusion.md](occlusion.md) | D.16 | HZB generation, occlusion queries, temporal handoff |
+| [hzb.md](hzb.md) | D.16 supplement | Generic Stage-5 screen-HZB production, publication, history handoff, and consumer-facing bindings separate from occlusion policy |
 | [multi-view-composition.md](multi-view-composition.md) | D.17 | Multi-view dispatch, per-view ShadingMode, multi-surface output, PiP, editor viewport |
 | [offscreen-rendering.md](offscreen-rendering.md) | D.18 | ForOffscreenScene facade, deferred/forward mode selection, thumbnail/preview |
 | [shadow-local-lights.md](shadow-local-lights.md) | reserved future LLD | ShadowService expansion for spot-light and point-light conventional shadows after the directional-first baseline |
