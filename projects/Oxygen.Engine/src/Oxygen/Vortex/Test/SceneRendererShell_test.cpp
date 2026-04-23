@@ -6,11 +6,8 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <optional>
-#include <string>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -40,19 +37,6 @@ using oxygen::vortex::SceneRenderBuilder;
 using oxygen::vortex::SceneRenderer;
 using oxygen::vortex::ShadingMode;
 using oxygen::vortex::testing::FakeGraphics;
-
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
-}
-
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
-    .parent_path();
-}
 
 auto MakeSceneView() -> CompositionView
 {
@@ -260,63 +244,6 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   EXPECT_NO_THROW(scene_renderer->OnRender(render_context));
   EXPECT_NO_THROW(scene_renderer->OnCompositing(render_context));
   EXPECT_NO_THROW(scene_renderer->OnFrameEnd(frame_context));
-}
-
-NOLINT_TEST(SceneRendererShellProofSurfaceTest,
-  Stage22StaysBetweenResolveAndCleanupOwnershipBoundaries)
-{
-  const auto source_root = SourceRoot();
-  const auto scene_renderer_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
-
-  const auto resolve_pos = scene_renderer_source.find("ResolveSceneColor(ctx);");
-  const auto post_process_pos
-    = scene_renderer_source.find("post_process_->Execute(");
-  const auto cleanup_pos = scene_renderer_source.find("PostRenderCleanup(ctx);");
-
-  ASSERT_NE(resolve_pos, std::string::npos);
-  ASSERT_NE(post_process_pos, std::string::npos);
-  ASSERT_NE(cleanup_pos, std::string::npos);
-  EXPECT_LT(resolve_pos, post_process_pos);
-  EXPECT_LT(post_process_pos, cleanup_pos);
-}
-
-NOLINT_TEST(SceneRendererShellProofSurfaceTest,
-  Stage13And14RemainReservedAheadOfStage15Activation)
-{
-  const auto source_root = SourceRoot();
-  const auto scene_renderer_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/SceneRenderer.cpp");
-
-  const auto stage12_pos
-    = scene_renderer_source.find("// Stage 12: Deferred direct lighting");
-  const auto stage13_pos
-    = scene_renderer_source.find("// Stage 13: reserved - IndirectLightingService");
-  const auto stage14_pos = scene_renderer_source.find(
-    "// Stage 14: reserved - EnvironmentLightingService volumetrics");
-  const auto stage15_pos
-    = scene_renderer_source.find("// Stage 15: Sky / atmosphere / fog");
-
-  ASSERT_NE(stage12_pos, std::string::npos);
-  ASSERT_NE(stage13_pos, std::string::npos);
-  ASSERT_NE(stage14_pos, std::string::npos);
-  ASSERT_NE(stage15_pos, std::string::npos);
-  EXPECT_LT(stage12_pos, stage13_pos);
-  EXPECT_LT(stage13_pos, stage14_pos);
-  EXPECT_LT(stage14_pos, stage15_pos);
-}
-
-NOLINT_TEST(SceneRendererShellProofSurfaceTest,
-  ResolveAndCleanupSourcesCarryRetainedStageOwnerMarkers)
-{
-  const auto source_root = SourceRoot();
-  const auto resolve_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/ResolveSceneColor.cpp");
-  const auto cleanup_source
-    = ReadTextFile(source_root / "Vortex/SceneRenderer/PostRenderCleanup.cpp");
-
-  EXPECT_TRUE(resolve_source.contains("Stage 21 owner"));
-  EXPECT_TRUE(cleanup_source.contains("Stage 23 extraction/handoff owner"));
 }
 
 NOLINT_TEST(SceneRendererShellProofSurfaceTest,

@@ -115,10 +115,11 @@ src/Oxygen/Graphics/Direct3D12/
 └── Shaders/
     └── Vortex/
         ├── Stages/
-        │   └── Hzb/
+        │   └── Occlusion/
         │       └── ScreenHzbBuild.hlsl
         └── Contracts/
-            └── ScreenHzbBindings.hlsli
+            └── Scene/
+                └── ScreenHzbBindings.hlsli
 ```
 
 ### 2.2 C++ Module API

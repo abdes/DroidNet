@@ -4,13 +4,25 @@ This folder contains the HLSL sources used by the Direct3D12 backend.
 
 ## Source Layout
 
-Shader entrypoints live under:
+Engine-owned infrastructure lives at shader-root:
 
-- `Passes/**/<Name>.hlsl`
+- `EngineShaderCatalog.h`
+- `EngineShaders.*`
+- `ShaderCatalogBuilder.h`
+- `Ui/`
 
-Shared includes live under:
+Vortex-owned shader families live under `Vortex/`:
 
-- `**/*.hlsli`
+- `Vortex/RendererCore/` for renderer-core-owned shader entrypoints such as
+  compositing
+- `Vortex/Contracts/` for published GPU contracts and typed binding accessors
+- `Vortex/Shared/` for renderer-wide helpers
+- `Vortex/Materials/` for material template adapters and shared material
+  helpers
+- `Vortex/Stages/` for stage-module-owned shader entrypoints
+- `Vortex/Services/` for subsystem-service-owned shader entrypoints
+
+Shader entrypoints are `*.hlsl` files. Shared includes are `*.hlsli` files.
 
 ## Build Outputs
 

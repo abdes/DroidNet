@@ -141,7 +141,7 @@ auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
   return graphics::ComputePipelineDesc::Builder()
     .SetComputeShader({
       .stage = ShaderType::kCompute,
-      .source_path = "Vortex/Stages/Hzb/ScreenHzbBuild.hlsl",
+      .source_path = "Vortex/Stages/Occlusion/ScreenHzbBuild.hlsl",
       .entry_point = "VortexScreenHzbBuildCS",
     })
     .SetRootBindings(std::span<const graphics::RootBindingItem>(

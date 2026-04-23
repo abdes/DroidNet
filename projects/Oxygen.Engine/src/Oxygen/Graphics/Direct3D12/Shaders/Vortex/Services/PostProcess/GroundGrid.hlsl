@@ -6,9 +6,9 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
-#include "Renderer/ViewConstants.hlsli"
-#include "Renderer/PristineGrid.hlsli"
-#include "Common/Math.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Shared/PristineGrid.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {

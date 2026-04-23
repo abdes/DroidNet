@@ -9,7 +9,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
-#include "Common/Geometry.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 // Mirrors the transmittance helpers in UE5.7 SkyAtmosphereCommon.ush and
 // SkyAtmosphere.usf.

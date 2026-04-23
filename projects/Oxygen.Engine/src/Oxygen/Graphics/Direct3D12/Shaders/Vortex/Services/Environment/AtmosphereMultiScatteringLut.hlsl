@@ -5,12 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
-#include "Common/Geometry.hlsli"
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {

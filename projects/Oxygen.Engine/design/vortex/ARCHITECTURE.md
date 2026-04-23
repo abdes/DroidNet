@@ -1691,7 +1691,8 @@ Inside the Vortex shader root, ownership is by runtime owner:
 
 | Vortex Area | Runtime Owner | Role |
 | --- | --- | --- |
-| `Contracts/` | renderer architecture layer | scene textures, GBuffer contracts, typed binding accessors, stable shared structs |
+| `RendererCore/` | Renderer Core | composition execution and other renderer-core-owned shader families that are not stage/service shader families |
+| `Contracts/` | renderer architecture layer | scene textures, GBuffer contracts, typed binding accessors, stable shared structs; organized by contract domain such as `Definitions/`, `Draw/`, `View/`, `Scene/`, `Lighting/`, `Environment/`, `Shadows/`, and `Diagnostics/` |
 | `Shared/` | renderer architecture layer | truly renderer-wide helpers with no single family owner |
 | `Stages/<StageName>/` | stage module | depth prepass, base pass, occlusion, translucency, distortion, light-shaft bloom |
 | `Services/<ServiceName>/` | subsystem service | lighting, shadows, environment, post-process, diagnostics, future material composition / indirect lighting / water / geometry virtualization |
@@ -1799,6 +1800,7 @@ Anti-patterns:
 | Vortex Family | Architectural Owner | File Home | UE 5.7 Reference Families |
 | --- | --- | --- | --- |
 | bindless/bootstrap | engine-global shader infrastructure | `Core/Bindless/` | `Public/Platform.ush`, `Public/RootConstants.ush`, `Public/BindlessResources.ush` |
+| renderer-core compositing | `Renderer Core` | `Vortex/RendererCore/Compositing/` | renderer-owned fullscreen copy/blend/composition families |
 | shared scene / draw / material contracts | renderer architecture layer | `Vortex/Contracts/` | `Shared/SceneDefinitions.h`, `Shared/LightDefinitions.h`, `Private/SceneTexturesCommon.ush` |
 | renderer-wide helpers | renderer architecture layer | `Vortex/Shared/` | `Common.ush`, `ShadingCommon.ush`, `PositionReconstructionCommon.ush` |
 | depth prepass shaders | `DepthPrepassModule` | `Vortex/Stages/DepthPrepass/` | `DepthOnly*`, `ShadowDepthCommon` |

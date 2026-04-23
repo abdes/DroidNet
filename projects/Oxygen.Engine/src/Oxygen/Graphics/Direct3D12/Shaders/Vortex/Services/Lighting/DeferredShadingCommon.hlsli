@@ -7,10 +7,10 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDSHADINGCOMMON_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDSHADINGCOMMON_HLSLI
 
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 
-#include "Vortex/Contracts/GBufferHelpers.hlsli"
-#include "Vortex/Contracts/SceneTextures.hlsli"
+#include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
+#include "Vortex/Contracts/Scene/SceneTextures.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 

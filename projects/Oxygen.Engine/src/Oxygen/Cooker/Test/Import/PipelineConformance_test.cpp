@@ -141,14 +141,14 @@ auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
   item.shader_requests = {
     ShaderRequest {
       .shader_type = 1,
-      .source_path = "Forward/ForwardMesh_VS.hlsl",
+      .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
       .entry_point = "VS",
       .defines = {},
       .shader_hash = 0,
     },
     ShaderRequest {
       .shader_type = 2,
-      .source_path = "Forward/ForwardMesh_PS.hlsl",
+      .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
       .entry_point = "PS",
       .defines = {},
       .shader_hash = 0,

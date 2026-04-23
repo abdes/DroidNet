@@ -93,13 +93,13 @@ protected:
       .primary_hash = 0xFEDCBA9876543210ULL,
       .dependencies = {
         DependencyFingerprint {
-          .path = "src/Oxygen/Graphics/Direct3D12/Shaders/Common/Lighting.hlsli",
+          .path = "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Shared/Lighting.hlsli",
           .content_hash = 0x0102030405060708ULL,
           .size_bytes = 128,
           .write_time_utc = 123456789,
         },
         DependencyFingerprint {
-          .path = "src/Oxygen/Graphics/Direct3D12/Shaders/Common/Math.hlsli",
+          .path = "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Shared/Math.hlsli",
           .content_hash = 0x1112131415161718ULL,
           .size_bytes = 512,
           .write_time_utc = 987654321,

@@ -7,8 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHERELIGHTINGHELPERS_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHERELIGHTINGHELPERS_HLSLI
 
-#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
-#include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 
 // Cross-domain bridge:

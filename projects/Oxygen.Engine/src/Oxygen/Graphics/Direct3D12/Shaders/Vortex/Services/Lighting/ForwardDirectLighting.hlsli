@@ -1,12 +1,12 @@
 #ifndef OXYGEN_VORTEX_SERVICES_LIGHTING_FORWARDDIRECTLIGHTING_HLSLI
 #define OXYGEN_VORTEX_SERVICES_LIGHTING_FORWARDDIRECTLIGHTING_HLSLI
 
-#include "Renderer/PositionalLightData.hlsli"
-#include "Forward/ForwardPbr.hlsli"
-#include "Renderer/LightingHelpers.hlsli"
-#include "Renderer/ShadowHelpers.hlsli"
-#include "Common/Lighting.hlsli"
-#include "Common/Geometry.hlsli"
+#include "Vortex/Contracts/Lighting/PositionalLightData.hlsli"
+#include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowHelpers.hlsli"
+#include "Vortex/Shared/Lighting.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 
 #ifndef MAX_POSITIONAL_LIGHTS

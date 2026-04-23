@@ -7,8 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHEREDIRECTIONALLIGHTSHARED_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_ATMOSPHEREDIRECTIONALLIGHTSHARED_HLSLI
 
-#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
-#include "Common/Geometry.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereLightingHelpers.hlsli"
 
 static const uint kDirectionalLightAtmosphereModeFlagAuthority = 1u << 0u;

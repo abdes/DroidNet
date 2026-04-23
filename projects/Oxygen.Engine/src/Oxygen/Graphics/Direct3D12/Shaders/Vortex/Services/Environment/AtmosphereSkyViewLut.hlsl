@@ -8,8 +8,8 @@
 
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
-#include "Renderer/ViewColorData.hlsli"
-#include "Renderer/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewColorData.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {

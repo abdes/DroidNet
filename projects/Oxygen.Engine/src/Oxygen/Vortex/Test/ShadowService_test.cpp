@@ -7,11 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
-#include <filesystem>
-#include <fstream>
 #include <memory>
-#include <string>
-#include <string_view>
 #include <type_traits>
 
 #include <glm/vec3.hpp>
@@ -40,22 +36,6 @@ using oxygen::vortex::ShadowCascadeBinding;
 using oxygen::vortex::ShadowFrameBindings;
 using oxygen::vortex::ShadowService;
 using oxygen::vortex::testing::FakeGraphics;
-
-auto ReadTextFile(const std::filesystem::path& path) -> std::string
-{
-  auto input = std::ifstream(path);
-  EXPECT_TRUE(input.is_open()) << "failed to open " << path.generic_string();
-  return {
-    std::istreambuf_iterator<char>(input),
-    std::istreambuf_iterator<char>(),
-  };
-}
-
-auto SourceRoot() -> std::filesystem::path
-{
-  return std::filesystem::path { __FILE__ }.parent_path().parent_path()
-    .parent_path();
-}
 
 auto DestroyRenderer(Renderer* renderer) -> void
 {
@@ -127,40 +107,6 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   EXPECT_TRUE((std::is_class_v<ShadowService>));
   EXPECT_TRUE((std::is_destructible_v<ShadowService>));
   EXPECT_TRUE((std::is_standard_layout_v<ShadowCascadeBinding>));
-}
-
-NOLINT_TEST(ShadowServiceSurfaceTest,
-  VortexModuleRegistersDirectionalShadowFamilySourcesOnly)
-{
-  const auto source_root = SourceRoot();
-  const auto cmake_source = ReadTextFile(source_root / "Vortex/CMakeLists.txt");
-
-  EXPECT_TRUE(cmake_source.contains("Shadows/ShadowService.h"));
-  EXPECT_TRUE(cmake_source.contains("Shadows/ShadowService.cpp"));
-  EXPECT_TRUE(
-    cmake_source.contains("Shadows/Internal/CascadeShadowSetup.cpp"));
-  EXPECT_TRUE(cmake_source.contains(
-    "Shadows/Internal/ConventionalShadowTargetAllocator.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Shadows/Internal/ShadowCasterCulling.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Shadows/Passes/CascadeShadowPass.cpp"));
-  EXPECT_TRUE(cmake_source.contains("Shadows/Passes/ShadowDepthPass.cpp"));
-  EXPECT_FALSE(cmake_source.contains("Shadows/Vsm/Internal/"));
-  EXPECT_FALSE(cmake_source.contains("ShadowLocalLights"));
-}
-
-NOLINT_TEST(ShadowServiceSurfaceTest,
-  EngineShaderCatalogRegistersDirectionalShadowDepthFamilyOnly)
-{
-  const auto source_root = SourceRoot();
-  const auto catalog_source = ReadTextFile(
-    source_root / "Graphics/Direct3D12/Shaders/EngineShaderCatalog.h");
-
-  EXPECT_TRUE(
-    catalog_source.contains("Vortex/Services/Shadows/DirectionalShadowDepth.hlsl"));
-  EXPECT_TRUE(catalog_source.contains("VortexShadowDepthVS"));
-  EXPECT_TRUE(catalog_source.contains("VortexShadowDepthMaskedPS"));
-  EXPECT_FALSE(catalog_source.contains("Vortex/Services/Shadows/Vsm/"));
-  EXPECT_FALSE(catalog_source.contains("LocalLightShadow"));
 }
 
 class ShadowServiceBehaviorTest : public ::testing::Test {

@@ -9,11 +9,11 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
-#include "Renderer/DrawHelpers.hlsli"
-#include "Vortex/Contracts/EnvironmentViewData.hlsli"
-#include "Vortex/Contracts/EnvironmentFrameBindings.hlsli"
-#include "Renderer/ViewColorData.hlsli"
-#include "Renderer/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewColorData.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {

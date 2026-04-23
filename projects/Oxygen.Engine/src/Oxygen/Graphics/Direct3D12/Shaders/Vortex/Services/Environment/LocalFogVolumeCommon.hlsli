@@ -8,12 +8,12 @@
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_ENVIRONMENT_LOCALFOGVOLUMECOMMON_HLSLI
 
 #include "Vortex/Services/Environment/AtmospherePhase.hlsli"
-#include "Vortex/Contracts/EnvironmentHelpers.hlsli"
-#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
-#include "Renderer/LightingHelpers.hlsli"
-#include "Renderer/ViewConstants.hlsli"
-#include "Vortex/Contracts/ScreenHzbBindings.hlsli"
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Contracts/Scene/ScreenHzbBindings.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 struct LocalFogVolumeInstanceData
 {

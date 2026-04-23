@@ -9,8 +9,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
-#include "Renderer/ViewConstants.hlsli"
-#include "Vortex/Contracts/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 static const uint VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL = 1u << 0u;
 

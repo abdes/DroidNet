@@ -8,8 +8,8 @@
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_MEDIUM_HLSLI
 
 // Common math functions (saturate, max, etc. are intrinsics, but we might need others)
-#include "Common/Math.hlsli"
-#include "Vortex/Contracts/EnvironmentStaticData.hlsli"
+#include "Vortex/Shared/Math.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 
 
 //------------------------------------------------------------------------------

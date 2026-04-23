@@ -7,12 +7,12 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
 
-#include "Renderer/MaskedAlphaTest.hlsli"
-#include "Forward/ForwardMaterialEval.hlsli"
+#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Materials/ForwardMaterialEval.hlsli"
 
-#include "../Contracts/Definitions/SceneDefinitions.hlsli"
-#include "../Contracts/GBufferHelpers.hlsli"
-#include "../Shared/BRDFCommon.hlsli"
+#include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
+#include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
+#include "Vortex/Shared/BRDFCommon.hlsli"
 
 static inline uint ResolveVortexShadingModel(uint draw_index)
 {

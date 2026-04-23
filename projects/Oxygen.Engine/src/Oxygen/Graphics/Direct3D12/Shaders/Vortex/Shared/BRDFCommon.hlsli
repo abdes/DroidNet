@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_SHARED_BRDFCOMMON_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_SHARED_BRDFCOMMON_HLSLI
 
-#include "Common/Math.hlsli"
+#include "Vortex/Shared/Math.hlsli"
 
 static const float kVortexDefaultSpecular = 0.5f;
 
