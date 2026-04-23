@@ -42,6 +42,97 @@ Related:
 5. **Per-session update.** Each implementation session must update this file
    with: changed files, commands run, results, and remaining blockers.
 
+### 2026-04-22 — corrected the sunset remediation LLD and prepared the full remaining implementation plan
+
+### 2026-04-22 — fixed local-fog sky leakage in the active sunset lane and corrected the plan scope
+
+- Scope:
+  - verified that `LocalFogVolumeCompose.hlsl` sampled far-depth sky pixels,
+    reconstructed a bogus far-plane world position, and then integrated local
+    fog volumes against that fake endpoint
+  - traced UE5.7 `LocalFogVolumeRendering.cpp` and
+    `LocalFogVolumeCommon.ush` to confirm that local fog also consumes a
+    directional-light color already reconciled with sky-atmosphere
+    transmittance, while Vortex had been using raw sun luminance
+  - added a projection-aware far-depth early-out so local fog no longer
+    contributes over sky pixels
+  - rewired Vortex local-fog directional in-scattering to consume the
+    atmosphere-aware directional-light contract, including UE's baked
+    transmittance approximation for per-pixel atmosphere lights
+  - added a shader-surface regression test for the far-depth early-out
+  - corrected the sunset remediation LLD and execution plan so they now track
+    the real dominant visual regression instead of the previously wrong
+    jitter-focused task
+- Files changed:
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCompose.hlsl`
+  - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli`
+  - `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`
+  - `design/vortex/lld/environment-below-horizon-remediation.md`
+  - `design/vortex/PLAN.md`
+  - `.planning/phases/04-migration-critical-services-and-first-migration/04-32-PLAN.md`
+- Commands used for evidence:
+  - `Get-Content src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCompose.hlsl`
+  - `Get-Content src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli`
+  - `cmake --build out/build-ninja --target oxygen-graphics-direct3d12 oxygen-vortex oxygen-examples-vortexbasic --parallel 4`
+  - `cmake --build out/build-ninja --config Debug --target oxygen-graphics-direct3d12_shaders --parallel 4`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.EnvironmentLightingService.Tests.exe`
+  - `out/build-ninja/bin/Debug/Oxygen.Vortex.SceneRendererPublication.Tests.exe`
+- Result:
+  - local fog composition now exits immediately on far-depth sky pixels before
+    reconstructing a world position
+  - local fog directional in-scattering no longer uses raw sun luminance; it
+    now follows the atmosphere-aware directional-light contract traced from
+    UE5.7 local-fog setup
+  - the shader-surface tests and focused environment publication tests pass on
+    `out/build-ninja`
+  - the sunset remediation documents now record the local-fog sky-leak failure
+    mode explicitly
+- Remaining validation delta:
+  - no new runtime capture was produced in this session
+  - the user-reported `-11 deg` visual failure is not yet proven resolved until
+    a fresh capture confirms the bright local-fog blobs are gone
+  - broader below-horizon parity remains `in_progress` until the capture-backed
+    gate closes
+
+- Scope:
+  - audited the user-edited sunset/below-horizon remediation LLD against the
+    current codebase and corrected the inaccurate path/default/ownership claims
+  - tightened the main Phase 4 plan so it no longer lists already-landed
+    sunset tasks as still-open blockers
+  - created a dedicated execution plan for the remaining sunset lane:
+    transmittance-helper parity split, sunset jitter parity, authored default
+    propagation, and capture-backed closeout
+- Files changed:
+  - `design/vortex/lld/environment-below-horizon-remediation.md`
+  - `design/vortex/PLAN.md`
+  - `.planning/phases/04-migration-critical-services-and-first-migration/04-32-PLAN.md`
+  - `design/vortex/IMPLEMENTATION-STATUS.md`
+- Commands used for evidence:
+  - `rg -n "transmittance_min_light_elevation_deg|EnvironmentViewData.hlsli|SceneDescriptorJsonSchema_test|SettingsService|demo_settings.json|InterleavedGradientNoise|StateFrameIndexMod8|frame index|AtmosphereSampling.hlsli" src/Oxygen Examples design/vortex -g "*.cpp" -g "*.h" -g "*.hlsl" -g "*.hlsli" -g "*.md" -g "*.json"`
+  - `rg -n "InterleavedGradientNoise|0\\.06711056|0\\.00583715|52\\.9829189|5\\.588238" src/Oxygen -g "*.hlsl" -g "*.hlsli"`
+  - targeted `Get-Content` audits for:
+    - `design/vortex/lld/environment-below-horizon-remediation.md`
+    - `design/vortex/PLAN.md`
+    - `src/Oxygen/Scene/Environment/SkyAtmosphere.h`
+    - `src/Oxygen/Vortex/Types/EnvironmentViewData.h`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/EnvironmentViewData.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/AtmosphereSampling.hlsli`
+    - `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli`
+    - `src/Oxygen/Vortex/Lighting/Passes/DeferredLightPass.cpp`
+    - `Examples/DemoShell/Services/EnvironmentSettingsService.h`
+    - `Examples/DemoShell/Services/EnvironmentSettingsService.cpp`
+- Result:
+  - the sunset remediation LLD now reflects the actual current tree
+  - the already-landed direct-light authority and km-unit migration work is no
+    longer listed as future sunset implementation work
+  - the repo now has a concrete remaining-work execution plan in `04-32-PLAN`
+- Remaining validation delta:
+  - no implementation code changed in this session
+  - no build/test/capture commands were run for the sunset lane in this
+    planning session
+  - the sunset/below-horizon remediation remains `in_progress` until the new
+    execution plan is implemented and validated
+
 ### 2026-04-22 — sunset / below-horizon atmosphere parity re-opened; previous active-lane closeout was too narrow
 
 - Correction:

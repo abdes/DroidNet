@@ -236,7 +236,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
         "aerial_perspective_start_depth_m": 100.0,
         "height_fog_contribution": 1.0,
         "trace_sample_count_scale": 1.0,
-        "transmittance_min_light_elevation_deg": -6.0,
+        "transmittance_min_light_elevation_deg": -90.0,
         "sun_disk_enabled": true,
         "holdout": false,
         "render_in_main_pass": true

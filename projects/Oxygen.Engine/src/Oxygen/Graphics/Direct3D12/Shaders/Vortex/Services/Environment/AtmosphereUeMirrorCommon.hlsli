@@ -14,9 +14,9 @@
 #include "Common/Geometry.hlsli"
 #include "Common/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
+#include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 
 static const float kVortexSkyPi = 3.14159265359f;
-static const float kVortexSegmentSampleOffset = 0.3f;
 
 struct VortexSingleScatteringResult
 {
@@ -37,6 +37,7 @@ struct VortexSamplingSetup
     float MinSampleCount;
     float MaxSampleCount;
     float DistanceToSampleCountMaxInv;
+    float SampleSegmentOffset;
 };
 
 static float VortexAtmosphereExponentialDensity(float altitude_km, float scale_height_km)
@@ -73,38 +74,15 @@ static float VortexRayleighPhase(float cosine_angle)
 
 static float VortexHenyeyGreensteinPhase(float anisotropy, float cosine_angle)
 {
+    // Mirrors UE5.7 ParticipatingMediaCommon.ush::HenyeyGreensteinPhase:
+    //   Numer = 1 - G*G
+    //   Denom = 1 + G*G + 2*G*CosTheta   (NOTE: +2*G*CosTheta)
+    //   return Numer / (4*PI * Denom * sqrt(Denom))
+    // Call sites pass -CosTheta (because WorldDir is an "in" direction),
+    // matching UE exactly.
     const float g = clamp(anisotropy, -0.99f, 0.99f);
-    const float denom = max(1.0f + g * g - 2.0f * g * cosine_angle, 1.0e-5f);
+    const float denom = max(1.0f + g * g + 2.0f * g * cosine_angle, 1.0e-5f);
     return ((1.0f - g * g) / (4.0f * kVortexSkyPi)) / pow(denom, 1.5f);
-}
-
-static float VortexHorizonCosineFromAltitude(float planet_radius_km, float altitude_km)
-{
-    const float radius = planet_radius_km + max(altitude_km, 0.0f);
-    const float rho = planet_radius_km / max(radius, 1.0f);
-    return -sqrt(max(0.0f, 1.0f - rho * rho));
-}
-
-static float2 VortexGetTransmittanceLutUv(
-    float cos_zenith,
-    float altitude_km,
-    float planet_radius_km,
-    float atmosphere_height_km)
-{
-    const float bottom_radius = planet_radius_km;
-    const float top_radius = planet_radius_km + atmosphere_height_km;
-    const float view_height = planet_radius_km + altitude_km;
-    const float H = sqrt(max(0.0f, top_radius * top_radius - bottom_radius * bottom_radius));
-    const float rho = sqrt(max(0.0f, view_height * view_height - bottom_radius * bottom_radius));
-
-    const float discriminant = view_height * view_height * (cos_zenith * cos_zenith - 1.0f)
-        + top_radius * top_radius;
-    const float d = max(0.0f, (-view_height * cos_zenith + sqrt(max(discriminant, 0.0f))));
-    const float d_min = top_radius - view_height;
-    const float d_max = rho + H;
-    const float x_mu = (d - d_min) / max(d_max - d_min, 1.0e-4f);
-    const float x_r = rho / max(H, 1.0e-4f);
-    return saturate(float2(x_mu, x_r));
 }
 
 static float VortexRaySphereIntersectNearestOffset(
@@ -123,36 +101,6 @@ static float VortexRaySphereIntersectNearestOffset(
         return hits.y;
     }
     return -1.0f;
-}
-
-static float3 VortexSampleTransmittanceLut(
-    uint lut_slot,
-    float lut_width,
-    float lut_height,
-    float cos_zenith,
-    float altitude_km,
-    float planet_radius_km,
-    float atmosphere_height_km)
-{
-    if (lut_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        return 1.0f.xxx;
-    }
-
-    const float cos_horizon = VortexHorizonCosineFromAltitude(planet_radius_km, altitude_km);
-    if (cos_zenith < cos_horizon)
-    {
-        return 0.0f.xxx;
-    }
-
-    // Match UE5.7 GetTransmittance(): sample the transmittance LUT with the raw
-    // getTransmittanceLutUvs() result. UE explicitly leaves the sub-texel remap off here.
-    const float2 uv = VortexGetTransmittanceLutUv(
-        cos_zenith, altitude_km, planet_radius_km, atmosphere_height_km);
-
-    Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    return lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
 }
 
 static float3 VortexGetMultipleScattering(
@@ -259,20 +207,9 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
 
     const uint sample_count_u = max(1u, (uint)ceil(sample_count));
     float dt = t_max / max(sample_count, 1.0f);
-    // Scattering-angle contract:
-    // - light*_dir is the normalized direction from the sample/view point
-    //   toward the light source
-    // - world_dir is the normalized direction from the camera through the sky
-    //   sample
-    // - the atmosphere phase functions in the active Vortex path use
-    //   cos(theta) = dot(world_dir, light_dir) directly
-    //
-    // Do not negate cos(theta) here. A previous sign flip mirrored the Mie
-    // forward-scattering lobe to the opposite side of the sun, which left
-    // scene lighting correct but placed the sky halo on the wrong horizon side.
     const float cos_theta0 = dot(world_dir, light0_dir);
     const float rayleigh_phase0 = VortexRayleighPhase(cos_theta0);
-    const float mie_phase0 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, cos_theta0);
+    const float mie_phase0 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, -cos_theta0);
     const float uniform_phase = 1.0f / (4.0f * kVortexSkyPi);
     const bool second_light_enabled = any(light1_illuminance > 1.0e-6f.xxx);
     float rayleigh_phase1 = 0.0f;
@@ -281,7 +218,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     {
         const float cos_theta1 = dot(world_dir, light1_dir);
         rayleigh_phase1 = VortexRayleighPhase(cos_theta1);
-        mie_phase1 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, cos_theta1);
+        mie_phase1 = VortexHenyeyGreensteinPhase(atmosphere.mie_g, -cos_theta1);
     }
 
     float3 throughput = 1.0f.xxx;
@@ -310,12 +247,12 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
             {
                 t1 = t_max_floor * t1;
             }
-            t = t0 + (t1 - t0) * kVortexSegmentSampleOffset;
+            t = t0 + (t1 - t0) * sampling.SampleSegmentOffset;
             dt = t1 - t0;
         }
         else
         {
-            t = t_max * (float(i) + kVortexSegmentSampleOffset) / max(sample_count, 1.0f);
+            t = t_max * (float(i) + sampling.SampleSegmentOffset) / max(sample_count, 1.0f);
         }
         const float3 sample_pos = world_pos + world_dir * t;
         const float altitude_km = max(length(sample_pos) - atmosphere.planet_radius_km, 0.0f);
@@ -339,7 +276,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
 
         const float3 sample_up = normalize(sample_pos);
         const float cos_sun_zenith0 = dot(sample_up, light0_dir);
-        const float3 sun_t0 = VortexSampleTransmittanceLut(
+        const float3 sun_t0 = ParityTransmittanceLutSample(
             transmittance_lut_srv, transmittance_width, transmittance_height,
             cos_sun_zenith0, altitude_km, atmosphere.planet_radius_km, atmosphere.atmosphere_height_km);
 
@@ -389,7 +326,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         if (second_light_enabled)
         {
             const float cos_sun_zenith1 = dot(sample_up, light1_dir);
-            const float3 sun_t1 = VortexSampleTransmittanceLut(
+            const float3 sun_t1 = ParityTransmittanceLutSample(
                 transmittance_lut_srv, transmittance_width, transmittance_height,
                 cos_sun_zenith1, altitude_km, atmosphere.planet_radius_km, atmosphere.atmosphere_height_km);
             const float3 phase_times_scattering1 = mie_ray_phase
@@ -444,7 +381,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         const float ground_height = length(ground_pos);
         const float3 up_vector = ground_pos / max(ground_height, 1.0e-6f);
         const float light0_zenith_cos_angle = dot(light0_dir, up_vector);
-        const float3 transmittance_to_light0 = VortexSampleTransmittanceLut(
+        const float3 transmittance_to_light0 = ParityTransmittanceLutSample(
             transmittance_lut_srv,
             transmittance_width,
             transmittance_height,
@@ -459,7 +396,7 @@ static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
         if (second_light_enabled)
         {
             const float light1_zenith_cos_angle = dot(light1_dir, up_vector);
-            const float3 transmittance_to_light1 = VortexSampleTransmittanceLut(
+            const float3 transmittance_to_light1 = ParityTransmittanceLutSample(
                 transmittance_lut_srv,
                 transmittance_width,
                 transmittance_height,

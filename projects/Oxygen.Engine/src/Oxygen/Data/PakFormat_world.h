@@ -334,7 +334,7 @@ struct SkyAtmosphereEnvironmentRecord {
   float aerial_perspective_start_depth_m = 0.0F;
   float height_fog_contribution = 1.0F;
   float trace_sample_count_scale = 1.0F;
-  float transmittance_min_light_elevation_deg = -6.0F;
+  float transmittance_min_light_elevation_deg = -90.0F;
 
   uint32_t sun_disk_enabled = 1;
   uint32_t holdout = 0;

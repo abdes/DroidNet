@@ -513,11 +513,9 @@ sun-at/below-horizon parity gaps remain open. The authoritative scope correction
 and remediation sequence are recorded in
 `design/vortex/lld/environment-below-horizon-remediation.md`, including:
 
-- non-per-pixel ground-transmittance clamp parity
-- retirement of the legacy direct-light authority path in favor of the
-  atmosphere-light model
-- transmittance LUT smooth-horizon/no-baked-occlusion parity
-- sunset ray-march jitter / TAA-friendly sampling parity
+- active transmittance-sampling parity split
+- removal of horizon-branching / half-texel transmittance helper drift
+- local-fog compose sky-depth termination to prevent emissive leakage onto sky
 - authored default parity for `transmittance_min_light_elevation_deg`
 
 ### 4E: First Migration — `Examples/Async`

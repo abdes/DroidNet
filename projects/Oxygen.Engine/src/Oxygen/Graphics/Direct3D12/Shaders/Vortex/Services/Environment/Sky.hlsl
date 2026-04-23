@@ -11,6 +11,7 @@
 
 #include "Vortex/Contracts/SceneTextures.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
+#include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
@@ -144,29 +145,14 @@ static float3 GetAtmosphereTransmittance(
     GpuSkyAtmosphereParams atmo,
     uint transmittance_lut_srv)
 {
-    const float ground_hit = RaySphereIntersectNearest(
+    return AnalyticalPlanetOccludedTransmittance(
         planet_center_to_world_pos,
         world_dir,
-        atmo.planet_radius_km);
-    if (ground_hit > 0.0f)
-    {
-        return 0.0f.xxx;
-    }
-
-    const float p_height = length(planet_center_to_world_pos);
-    const float3 up_vector = planet_center_to_world_pos / max(p_height, 1.0e-4f);
-    const float light_zenith_cos_angle = dot(world_dir, up_vector);
-    const float altitude_km = max(p_height - atmo.planet_radius_km, 0.0f);
-
-    const float3 transmittance_to_light = VortexSampleTransmittanceLut(
         transmittance_lut_srv,
         atmo.transmittance_lut_width,
         atmo.transmittance_lut_height,
-        light_zenith_cos_angle,
-        altitude_km,
         atmo.planet_radius_km,
         atmo.atmosphere_height_km);
-    return transmittance_to_light;
 }
 
 static float3 GetLightDiskLuminance(
@@ -290,6 +276,11 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             disk_luminance_pre_exposed);
     }
 
+    // Mirrors UE5.7 SkyAtmosphere.usf::PrepareOutput (line 869): clamp the
+    // pre-exposed luminance per channel to Max10BitsFloat*0.5 (32256) so the
+    // sky stays within fp10 range and leaves headroom for bloom/clouds/etc.
+    // Max10BitsFloat is defined in UE Common.ush:144 as 64512.0f.
+    sky_color = min(sky_color, 32256.0f.xxx);
     return float4(sky_color * view_one_over_pre_exposure, sky_sample.a);
 }
 

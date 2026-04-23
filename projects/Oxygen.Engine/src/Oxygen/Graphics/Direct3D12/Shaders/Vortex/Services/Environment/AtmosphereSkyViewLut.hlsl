@@ -190,6 +190,7 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     sampling.MinSampleCount = max(PassSampleCountMin(pass), 1.0f);
     sampling.MaxSampleCount = max(PassSampleCountMax(pass), PassSampleCountMin(pass));
     sampling.DistanceToSampleCountMaxInv = PassDistanceToSampleCountMaxInv(pass);
+    sampling.SampleSegmentOffset = kSegmentSampleOffset;
     return VortexIntegrateSingleScatteredLuminance(
         0.0f.xx,
         ray_origin,
@@ -247,13 +248,23 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
     const float2 lut_size = float2(output_width, output_height);
     const float2 lut_inv_size = 1.0f.xx / lut_size;
-    float2 uv = (float2(dispatch_id.xy) + 0.5f) / lut_size;
-    uv = saturate(VortexFromSubUvsToUnit(uv, lut_size, lut_inv_size));
+    // Mirrors UE5.7 SkyAtmosphere.usf::RenderSkyViewLutCS (lines 1328-1329,
+    // 1345): PixPos = ThreadId + 0.5; UV = PixPos * InvSize; then the LUT
+    // parameter decode applies FromSubUvsToUnit internally (UE line 217,
+    // replicated inside AtmosphereParityCommon.hlsli::UvToSkyViewLutParams).
+    const float2 uv = (float2(dispatch_id.xy) + 0.5f) * lut_inv_size;
 
     const float view_height = PassPlanetRadiusKm(pass) + max(PassCameraAltitudeKm(pass), 0.0f);
     float3 ray_origin = float3(0.0f, 0.0f, view_height);
     float3 ray_direction = 0.0f.xxx;
-    UvToSkyViewLutParams(ray_direction, view_height, PassPlanetRadiusKm(pass), uv);
+    UvToSkyViewLutParams(
+        ray_direction,
+        view_height,
+        PassPlanetRadiusKm(pass),
+        uv,
+        lut_size,
+        lut_inv_size);
+    ray_direction = VortexSafeNormalize(ray_direction);
     ray_direction = VortexSafeNormalize(ray_direction);
 
     const float atmosphere_radius = PassPlanetRadiusKm(pass) + PassAtmosphereHeightKm(pass);

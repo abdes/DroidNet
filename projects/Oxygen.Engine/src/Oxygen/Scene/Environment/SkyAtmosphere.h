@@ -361,7 +361,7 @@ private:
   float aerial_scattering_strength_ = 1.0F;
   float height_fog_contribution_ = 1.0F;
   float trace_sample_count_scale_ = 1.0F;
-  float transmittance_min_light_elevation_deg_ = -6.0F;
+  float transmittance_min_light_elevation_deg_ = -90.0F;
   bool holdout_ = false;
   bool render_in_main_pass_ = true;
 };

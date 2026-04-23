@@ -9,7 +9,7 @@
 
 #include "Vortex/Contracts/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/EnvironmentViewHelpers.hlsli"
-#include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
+#include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 
 // Cross-domain bridge:
 // - world_pos and planet center remain authored/published in world-space meters
@@ -17,6 +17,11 @@
 // This helper converts the non-atmosphere consumer's world-space distance into
 // the atmosphere-space unit expected by the LUT samplers.
 static inline float WorldMetersToAtmosphereKmForLighting(float meters)
+{
+    return meters * 1.0e-3f;
+}
+
+static inline float3 WorldMetersToAtmosphereKmForLighting(float3 meters)
 {
     return meters * 1.0e-3f;
 }
@@ -32,28 +37,17 @@ float3 ComputeSunTransmittance(
 
     const float3 planet_center = GetPlanetCenterWS();
     const float3 to_surface = world_pos - planet_center;
-    const float height_m = length(to_surface);
-    const float height_km = WorldMetersToAtmosphereKmForLighting(height_m);
-    const float altitude_km = max(height_km - atmo.planet_radius_km, 0.0);
-    const float3 local_up = to_surface / max(height_m, 1e-6);
-    const float cos_sun_zenith = dot(local_up, sun_dir);
-
-    const float cos_horizon = HorizonCosineFromAltitude(atmo.planet_radius_km, altitude_km);
-    if (cos_sun_zenith < cos_horizon) {
-        return float3(0.0, 0.0, 0.0);
-    }
-
     if (atmo.transmittance_lut_slot == K_INVALID_BINDLESS_INDEX) {
         return float3(1.0, 1.0, 1.0);
     }
 
-    return SampleTransmittanceLut(
-        atmo,
+    return AnalyticalPlanetOccludedTransmittance(
+        WorldMetersToAtmosphereKmForLighting(to_surface),
+        sun_dir,
         atmo.transmittance_lut_slot,
         atmo.transmittance_lut_width,
         atmo.transmittance_lut_height,
-        cos_sun_zenith,
-        altitude_km,
+        atmo.planet_radius_km,
         atmo.atmosphere_height_km);
 }
 

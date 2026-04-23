@@ -509,8 +509,12 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_TRUE(common_source.contains("GetLocalFogVolumeInstanceContribution"));
   EXPECT_TRUE(common_source.contains("HenyeyGreensteinPhase"));
   EXPECT_TRUE(common_source.contains("EvaluateLocalFogVolumeInScattering"));
+  EXPECT_TRUE(common_source.contains("GetLocalFogDirectionalLight"));
+  EXPECT_TRUE(
+    common_source.contains("lighting.directional.transmittance_toward_sun_rgb"));
+  EXPECT_TRUE(
+    common_source.contains("kLocalFogDirectionalLightAtmosphereAuthority"));
   EXPECT_TRUE(common_source.contains("LoadEnvironmentStaticData"));
-  EXPECT_TRUE(common_source.contains("GetSunLuminanceRGB"));
   EXPECT_TRUE(screen_hzb_contract.contains("GetViewportUvToHzbBufferUv"));
   EXPECT_TRUE(screen_hzb_contract.contains("GetHzbSize"));
   EXPECT_TRUE(screen_hzb_contract.contains("GetHzbViewRect"));
@@ -546,6 +550,21 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     compose_pass_source.contains("GetLocalFogGlobalStartDistanceMeters"));
   EXPECT_TRUE(compose_pass_source.contains("ComputeLocalFogStartDepthZ"));
   EXPECT_FALSE(compose_pass_source.contains("Draw(3U, 1U, 0U, 0U)"));
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  LocalFogComposeSkipsFarDepthSkyPixels)
+{
+  const auto source_root = SourceRoot();
+  const auto compose_source = ReadTextFile(source_root
+    / "Graphics/Direct3D12/Shaders/Vortex/Services/Environment/"
+      "LocalFogVolumeCompose.hlsl");
+
+  EXPECT_TRUE(compose_source.contains("ResolveFarDepthReference"));
+  EXPECT_TRUE(compose_source.contains("IsFarBackgroundPixel"));
+  EXPECT_TRUE(compose_source.contains("if (IsFarBackgroundPixel(raw_depth))"));
+  EXPECT_TRUE(
+    compose_source.contains("return float4(0.0f, 0.0f, 0.0f, 1.0f);"));
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,

@@ -25,6 +25,16 @@ struct LocalFogTileVertexOutput
     nointerpolation uint packed_tile : TEXCOORD1;
 };
 
+static inline float ResolveFarDepthReference()
+{
+    return reverse_z != 0u ? 0.0f : 1.0f;
+}
+
+static inline bool IsFarBackgroundPixel(float scene_depth)
+{
+    return abs(scene_depth - ResolveFarDepthReference()) <= 1.0e-6f;
+}
+
 [shader("vertex")]
 LocalFogTileVertexOutput VortexLocalFogVolumeComposeVS(
     uint vertex_id : SV_VertexID,
@@ -97,6 +107,10 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     const float raw_depth = SampleSceneDepth(input.uv, bindings);
+    if (IsFarBackgroundPixel(raw_depth))
+    {
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
     const float3 world_position = ReconstructWorldPosition(
         input.uv, raw_depth, inverse_view_projection_matrix);
     const float3 translated_world_position = world_position - camera_position;

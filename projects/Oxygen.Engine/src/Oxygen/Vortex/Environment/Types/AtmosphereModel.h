@@ -57,7 +57,7 @@ struct AtmosphereModel {
   float aerial_perspective_start_depth_m { 100.0F };
   float height_fog_contribution { 1.0F };
   float trace_sample_count_scale { 1.0F };
-  float transmittance_min_light_elevation_deg { -6.0F };
+  float transmittance_min_light_elevation_deg { -90.0F };
   bool sun_disk_enabled { true };
   bool holdout { false };
   bool render_in_main_pass { true };

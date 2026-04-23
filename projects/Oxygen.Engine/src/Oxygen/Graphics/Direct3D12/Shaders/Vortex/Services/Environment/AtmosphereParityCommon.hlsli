@@ -139,8 +139,19 @@ static void UvToSkyViewLutParams(
     out float3 view_direction,
     float view_height,
     float planet_radius,
-    float2 uv)
+    float2 uv,
+    float2 lut_size,
+    float2 lut_inv_size)
 {
+    // Mirrors UE5.7 SkyAtmosphere.usf::UvToSkyViewLutParams (line 217):
+    //   UV = FromSubUvsToUnit(UV, SkyViewLutSizeAndInvSize);
+    // applied internally so callers pass the raw (PixPos+0.5)*InvSize UV,
+    // matching RenderSkyViewLutCS (SkyAtmosphere.usf:1328-1345). This keeps
+    // gen and sample symmetric inverses, since the sample-side
+    // SkyViewLutParamsToUv ends with FromUnitToSubUvs
+    // (SkyAtmosphereCommon.ush:224).
+    uv = VortexFromSubUvsToUnit(uv, lut_size, lut_inv_size);
+
     const float horizon_distance = sqrt(max(
         view_height * view_height - planet_radius * planet_radius,
         0.0f));

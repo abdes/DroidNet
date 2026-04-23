@@ -519,7 +519,7 @@ private:
     float aerial_scattering_strength { 0.0F };
     float height_fog_contribution { 1.0F };
     float trace_sample_count_scale { 1.0F };
-    float transmittance_min_light_elevation_deg { -6.0F };
+    float transmittance_min_light_elevation_deg { -90.0F };
     bool holdout { false };
     bool render_in_main_pass { true };
   };
@@ -648,7 +648,7 @@ private:
   float aerial_scattering_strength_ { 1.0F };
   float height_fog_contribution_ { 1.0F };
   float trace_sample_count_scale_ { 1.0F };
-  float transmittance_min_light_elevation_deg_ { -6.0F };
+  float transmittance_min_light_elevation_deg_ { -90.0F };
   bool atmosphere_holdout_ { false };
   bool atmosphere_render_in_main_pass_ { true };
   int sky_view_lut_slices_ { 16 };
