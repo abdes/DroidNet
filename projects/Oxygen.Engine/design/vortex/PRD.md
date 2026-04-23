@@ -28,7 +28,7 @@ Related:
 
 ## 1. Problem Statement
 
-Oxygen has a new renderer— **Vortex** (`Oxygen.Vortex`) — that:
+Oxygen's desktop renderer is **Vortex** (`Oxygen.Vortex`) and it:
 
 1. Adopts a **deferred-first opaque path** with GBuffer-backed base pass as the
    default desktop contract.
@@ -43,8 +43,11 @@ Oxygen has a new renderer— **Vortex** (`Oxygen.Vortex`) — that:
    coroutines, bindless descriptor model, uploaders, binders, frame/view
    lifecycle services, and composition infrastructure.
 
-Vortex is under development and still requires several features, enhancements
-and adjustments to be developed.
+Vortex is the active renderer and continues through structured capability
+completion and refinement so it can meet current production needs and the
+reserved future requirements captured by this PRD. The phase model in this PRD
+describes staged activation of remaining capabilities on the active renderer,
+not staged replacement of parallel renderer products.
 
 ## 3. Goals
 
@@ -77,9 +80,10 @@ and adjustments to be developed.
 6. **Reserved future slots.** On-frame orchestration reserves clean integration
    slots for geometry virtualization, GI/reflections, heterogeneous volumes,
    and advanced lighting extensions — initially as no-ops behind feature gates.
-7. **No legacy baggage.** The monolithic renderer, its inline domain
-   orchestration, and the Forward+-first frame contract are not carried forward.
-   Only architecture-neutral substrate migrates.
+7. **Deferred-first architectural discipline.** Vortex is shaped by
+   deferred-first desktop requirements rather than monolithic inline domain
+   orchestration or a Forward+-first frame contract. The durable Oxygen
+   substrate remains foundational.
 8. **UE5-aligned module naming.** Subsystem names prefer UE5 conventions where
    the term preserves the architectural role without colliding with Oxygen
    terminology: `SceneRenderer`, `BasePassRendering`, `LightGridInjection`,
@@ -90,15 +94,16 @@ and adjustments to be developed.
 9. **Incremental build-up.** The initial module compiles and links with zero
    domain systems. Each subsystem is added as a self-contained vertical slice.
 10. **Preserve Oxygen substrate.** Render-graph-as-coroutine model, bindless
-    descriptors, pass base classes, composition infrastructure, facade
-    patterns, and reusable upload/bind subsystems carry over from the legacy
-    renderer.
-11. **Migration-capable first milestone.** The first meaningful product gate is
-    not just a compiling shell; it is a Vortex runtime path strong enough to
-    migrate a real existing example.
-12. **Behavior-preserving migration.** The first migrated example should keep
-    its important visible behavior and integrate through stable engine/renderer
-    seams rather than forcing renderer-specific application rewrites.
+   descriptors, pass base classes, composition infrastructure, facade
+   patterns, and reusable upload/bind subsystems remain core Vortex
+   substrate.
+11. **Runtime-capable milestone gates.** Meaningful product gates are Vortex
+   runtime slices that execute real engine scenarios, not just compiling
+   shells or placeholder scaffolding.
+12. **Behavior-preserving runtime validation.** Representative runtime
+   examples should keep their important visible behavior and integrate through
+   stable engine/renderer seams rather than forcing renderer-specific
+   application rewrites.
 13. **Phase-traceable feature activation.** Every major feature family must be
     traceable in the design and plan documents to a specific activation phase,
     current activation state, and intended final target state.
@@ -120,10 +125,10 @@ and adjustments to be developed.
 5. Build a separate desktop "ForwardPipeline" and "DeferredPipeline" as parallel
    products. One desktop scene renderer with branches.
 6. Finalize every future pipeline, subsystem, or advanced feature up front.
-7. Introduce long-lived temporary compatibility mess just to force early
-   migration success. No duplicated scene logic, no parallel legacy/Vortex
-   behavior paths inside migrated examples, and no durable bridge layer whose
-   only purpose is to mask architectural indecision.
+7. Introduce long-lived compatibility or validation clutter in the name of
+   short-term progress. No duplicated scene logic, no parallel behavior paths
+   for the same scenario, and no durable bridge layer whose only purpose is to
+   mask architectural indecision.
 8. Treat whole-scene forward rendering as a co-equal desktop product target for
    Vortex.
 
@@ -162,8 +167,8 @@ Minimal non-runtime harness for:
 - focused GPU pass tests
 - contract validation for one pass
 
-Carries over from the modular-renderer design. The Vortex renderer inherits
-the `ForSinglePassHarness()` facade pattern.
+This remains part of Vortex through the `ForSinglePassHarness()` facade
+pattern.
 
 ### 6.3 Render Graph Harness
 
@@ -172,8 +177,8 @@ Low-level non-runtime harness for:
 - executing one explicit caller-authored render-graph coroutine
 - graph-level validation without the full runtime stack
 
-Carries over from the modular-renderer design. The Vortex renderer inherits
-the `ForRenderGraphHarness()` facade pattern.
+This remains part of Vortex through the `ForRenderGraphHarness()` facade
+pattern.
 
 ### 6.4 Offscreen Scene Renderer
 
@@ -182,8 +187,7 @@ Higher-level non-runtime path for:
 - material preview, thumbnail generation, scene captures, editor previews
 - can optionally use deferred or forward path depending on scenario
 
-Carries over from the modular-renderer design. The Vortex renderer inherits
-the `ForOffscreenScene()` facade pattern.
+This remains part of Vortex through the `ForOffscreenScene()` facade pattern.
 
 ### 6.5 Editor Multi-View and Multi-Surface Renderer
 
@@ -233,22 +237,22 @@ The Vortex renderer must deliver these architectural outcomes:
 10. **Non-runtime facades.** ForSinglePassHarness, ForRenderGraphHarness,
     ForOffscreenScene.
 11. **Substrate preservation.** Render-graph coroutines, bindless descriptors,
-    pass base classes, upload/bind infrastructure, composition queue, facade
-    patterns migrate from legacy.
+    pass base classes, upload/bind infrastructure, composition queue, and
+    facade patterns remain part of the Vortex foundation.
 12. **No Forward+-first constraints.** Frame ordering, pass ownership, and
     shader module boundaries are not constrained by Forward+ assumptions.
-13. **Real migration proof.** `Examples/Async` runs on Vortex as the first
-    migrated runtime example.
-14. **Migration without compatibility clutter.** The Async migration does not
-    depend on long-lived dual-path hacks, duplicated scene logic, or a
-    temporary bridge architecture that would need later cleanup before Vortex
-    can be treated as the real successor.
+13. **Real runtime proof.** `Examples/Async` runs on Vortex as a maintained
+   runtime validation example.
+14. **Runtime validation without architecture clutter.** The Async runtime
+   path does not depend on long-lived dual-path hacks, duplicated scene logic,
+   or temporary bridge architecture; it uses stable engine/renderer seams
+   suitable for continued use.
 15. **Phase-traceable activation.** Design and planning artifacts explicitly map
     each major feature family to a phase, activation status, and final intended
     target state.
-16. **Hermetic renderer separation.** Vortex has no dependency on
-    `Oxygen.Renderer` at module, API-contract, runtime-ownership, or migration
-    bridge level.
+16. **Hermetic renderer separation.** Vortex owns its renderer module,
+   API-contract, and runtime-ownership boundaries without split ownership or
+   compatibility bridges.
 17. **Phase-1 active scene-texture subset.** The first active `SceneTextures`
     set includes `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`,
     `Stencil`, `Velocity`, and `CustomDepth`. `SSAO`,
@@ -274,23 +278,25 @@ The Vortex renderer must deliver these architectural outcomes:
    high bar: unavoidable, or clearly better for Oxygen.
 7. Phase-1 architecture should favor bounded, production-shaped progress over
    maximal generality.
-8. The first meaningful success gate is migration-capable runtime use, not just
-   a compiling architectural shell.
-9. The first migration target is `Examples/Async`.
-10. The first migration must optimize for behavior stability and integration
-    stability over example-local convenience rewrites.
-11. Legacy renderer support continues for a while after the first migrated
-    example; first migration is a proof point, not an immediate removal gate.
+8. Meaningful success gates are runtime-capable Vortex slices, not just
+   compiling architectural shells.
+9. `Examples/Async` is the canonical runtime validation example.
+10. Runtime validation must optimize for behavior stability and integration
+   stability over example-local convenience rewrites.
+11. A successful runtime example validates renderer usability, but it is not a
+   blanket completion gate for the rest of Vortex.
 12. The PRD commits to the full logical desktop `SceneTextures` family early,
     while design/plan artifacts define the phased active subset.
 13. Design and plan documents must maintain explicit phase-by-phase traceability
     for feature activation and final target state.
-14. Vortex has no compatibility obligation to legacy renderer API or type
-    shapes.
-15. Vortex must not depend on the legacy renderer module in any form.
-16. Legacy knowledge may inform Vortex decisions, but Vortex should be authored
-    as an independent renderer architecture rather than a transplanted legacy
-    code shape.
+14. Vortex API and type shapes are owned by current Vortex architecture and may
+   evolve to satisfy its requirements rather than preserve superseded
+   contracts.
+15. Vortex must own its renderer boundaries and must not introduce external
+   compatibility layers, bridge ownership, or split renderer products.
+16. Prior engine experience may inform Vortex decisions, but Vortex is
+   authored as an independent renderer architecture shaped by current and
+   future requirements rather than by inherited code shape.
 17. The first active `SceneTextures` subset is
     `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`,
     `Velocity`, and `CustomDepth`.
@@ -299,7 +305,7 @@ The Vortex renderer must deliver these architectural outcomes:
     planned and traceable. The planned owning phases are:
     `SSAO` → `7B`, `LightingChannelsTexture` → `7E`, `GBufferE/F` → `7E`.
 19. The initial deferred-lighting path prioritizes correctness, debuggability,
-    and migration safety over first-pass optimization complexity.
+    and integration safety over first-pass optimization complexity.
 20. Tiled or clustered deferred are optimization candidates only after the
     baseline deferred path is proven and profiled.
 
@@ -319,19 +325,20 @@ The Vortex renderer is successful when:
 8. Each subsystem is a self-contained capability-family service.
 9. The initial module compiles and links with zero domain systems.
 10. All three non-runtime facades work against the Vortex substrate.
-11. `Examples/Async` runs on Vortex after a clean migration.
-12. That migration preserves the important visible behavior of the example and
+11. `Examples/Async` runs on Vortex as a maintained runtime validation example.
+12. That example preserves the important visible behavior it exercises and
     occurs through stable engine/renderer seams.
-13. The migration closes the owning UE5.7 parity gate for the important
-   visual, workflow, and operational behavior of the example.
-14. The migration does not introduce long-lived compatibility clutter.
-15. Legacy `Oxygen.Renderer` code may remain in the tree temporarily during
-   broader rollout, but it is not a supported parallel production path and it
-   does not relax any Vortex parity gate.
+13. That example closes the owning UE5.7 parity gate for the important visual,
+    workflow, and operational behavior it exercises.
+14. That example path does not introduce long-lived compatibility clutter,
+    duplicated scene logic, or disposable bridge architecture.
+15. Vortex is the supported renderer path; no alternate scene renderer product
+   relaxes any Vortex parity gate.
 16. The design and plan package explicitly shows which `SceneTextures`
     attachments and feature families activate in which phase, with the end
     target remaining the full intended desktop feature set.
-17. Vortex remains hermetically independent from the legacy renderer module.
+17. Vortex remains hermetically self-contained at the renderer module,
+    API-contract, and runtime-ownership levels.
 18. The first active `SceneTextures` subset provides
     `SceneColor`, `SceneDepth`, `PartialDepth`, `GBufferA-D`, `Stencil`,
     `Velocity`, and `CustomDepth`.
