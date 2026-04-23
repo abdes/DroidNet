@@ -16,9 +16,6 @@ Related:
 
 ## Mandatory Vortex Rule
 
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-   code. It is not production, not a reference implementation, not a fallback,
-   and not a simplification path for any Vortex task.
 - Every Vortex task must be designed and implemented as a new Vortex-native
    system that targets maximum parity with UE5.7, grounded in
    `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
@@ -31,29 +28,7 @@ Related:
 
 ## 1. Problem Statement
 
-Oxygen's current rendering layer (`Oxygen.Renderer`) is structurally
-Forward+-first:
-
-- the desktop frame is sequenced around
-  `LightCulling → Z-Prepass → Opaque → Transparent` as the main contract
-- `ForwardPipeline` is the only concrete pipeline, and the renderer's frame
-  loop embeds orchestration assumptions specific to that pipeline
-- the monolithic `Renderer` class (~4800 lines, ~65 member variables, ~136
-  methods) directly owns and inlines domain-specific orchestration for
-  environment lighting, shadows, diagnostics, and lighting data
-- introducing a deferred opaque path, GBuffer-based shading, or additional
-  pipeline modes requires fighting the existing architectural spine rather
-  than extending it
-- the modular-renderer Phase 1/2 work improved internal modularity but did not
-  change the top-level architectural identity away from Forward+
-
-These constraints mean Oxygen cannot reach desktop parity with modern
-UE5-class renderer structure through incremental patching alone.
-
-## 2. Decision
-
-Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
-(`Oxygen.Vortex`) — that:
+Oxygen has a new renderer— **Vortex** (`Oxygen.Vortex`) — that:
 
 1. Adopts a **deferred-first opaque path** with GBuffer-backed base pass as the
    default desktop contract.
@@ -67,12 +42,9 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
 5. Preserves and reuses Oxygen's **architecture-neutral substrate**: render-graph
    coroutines, bindless descriptor model, uploaders, binders, frame/view
    lifecycle services, and composition infrastructure.
-6. Is the **only production target** for new renderer work. Legacy
-   `Oxygen.Renderer` code may remain in the tree temporarily as dead-code seam
-   inventory, but it must not guide design, fallback behavior, or completion
-   claims for Vortex.
-7. Defines Vortex as an **independent renderer architecture**, not a
-   compatibility-shaped evolution of the legacy renderer.
+
+Vortex is under development and still requires several features, enhancements
+and adjustments to be developed.
 
 ## 3. Goals
 
@@ -127,17 +99,10 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
 12. **Behavior-preserving migration.** The first migrated example should keep
     its important visible behavior and integrate through stable engine/renderer
     seams rather than forcing renderer-specific application rewrites.
-13. **Strict legacy separation.** Vortex must stand as a hermetically separate
-    renderer architecture with no dependency on the legacy renderer module at
-    build, runtime, ownership, API-contract, or transitional bridge level.
-14. **Knowledge transfer without code obligation.** Legacy code is a reference
-    source for knowledge, validation, and proven ideas, but Vortex is not
-    required to preserve legacy code shape, legacy API shape, or legacy type
-    compatibility.
-15. **Phase-traceable feature activation.** Every major feature family must be
+13. **Phase-traceable feature activation.** Every major feature family must be
     traceable in the design and plan documents to a specific activation phase,
     current activation state, and intended final target state.
-16. **Correctness-first deferred lighting policy.** The initial deferred
+14. **Correctness-first deferred lighting policy.** The initial deferred
     lighting implementation follows the proven desktop-engine pattern:
     fullscreen lighting for directional lights and bounded deferred/light-volume
     passes for local lights first; tiled or clustered deferred are later
@@ -159,16 +124,8 @@ Replace `Oxygen.Renderer` with a new rendering module — **Vortex**
    migration success. No duplicated scene logic, no parallel legacy/Vortex
    behavior paths inside migrated examples, and no durable bridge layer whose
    only purpose is to mask architectural indecision.
-8. Force immediate retirement of `Oxygen.Renderer` after the first successful
-   Vortex migration target. Early migration proves viability; it does not by
-   itself require immediate legacy removal.
-9. Treat whole-scene forward rendering as a co-equal desktop product target for
+8. Treat whole-scene forward rendering as a co-equal desktop product target for
    Vortex.
-10. Preserve source compatibility with the legacy renderer API or type system
-    as a product requirement.
-11. Allow Vortex to depend on the legacy renderer module through shared
-    contracts, transitional renderer-to-renderer bridges, or temporary
-    interoperability seams.
 
 ## 5. Stakeholders and Users
 
@@ -196,27 +153,6 @@ The target production renderer:
 - fog, atmosphere, volumetrics
 - post-processing and tone mapping
 - composition and presentation
-
-### 6.1.1 First Runtime Migration Target
-
-The first required migration target is the existing `Examples/Async` demo.
-
-This target is not a toy validation surface. It is the first proof that Vortex
-can support a real Oxygen runtime flow without relying on temporary
-compatibility clutter.
-
-Migration intent for `Examples/Async`:
-
-- preserve the demo's important visible behavior and workflows
-- preserve clean engine/renderer integration seams
-- avoid long-lived duplicate renderer paths or compatibility scaffolding inside
-  the example
-- hold the first migrated result to maximum parity proven against the relevant
-   UE5.7 source/shader references rather than accepting a visually plausible but
-   operationally degraded port
-- allow legacy code to remain in the tree temporarily only as migration
-   inventory while additional examples and tests move over; it is not a
-   supported production path, reference implementation, or fallback for Vortex
 
 ### 6.2 Single Pass Harness
 
@@ -295,7 +231,7 @@ The Vortex renderer must deliver these architectural outcomes:
 9. **Capability-family services.** Subsystems are self-contained services with
    own Internal/Passes/Types directories.
 10. **Non-runtime facades.** ForSinglePassHarness, ForRenderGraphHarness,
-    ForOffscreenScene carry over from legacy substrate.
+    ForOffscreenScene.
 11. **Substrate preservation.** Render-graph coroutines, bindless descriptors,
     pass base classes, upload/bind infrastructure, composition queue, facade
     patterns migrate from legacy.
@@ -418,10 +354,3 @@ The following are intentionally deferred:
 - richer inter-view dependency mechanisms beyond composition ordering and
   exposure sharing
 - mobile renderer path
-
-## 11. Open Product Questions
-
-1. At what point should the legacy `Oxygen.Renderer` module be deprecated and
-   removed from the build?
-2. After `Examples/Async`, what is the second migration target that best
-   validates Vortex for broader production rollout?
