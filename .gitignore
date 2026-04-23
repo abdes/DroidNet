@@ -452,3 +452,6 @@ vendor/
 coverage/
 .cache/
 tmp/
+
+# ── GSD baseline (auto-generated) ──
+.mcp.json
