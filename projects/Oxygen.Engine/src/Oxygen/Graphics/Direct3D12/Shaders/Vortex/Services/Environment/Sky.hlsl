@@ -62,25 +62,12 @@ static inline bool IsReflectionCaptureView(EnvironmentViewData environment_view)
     return (environment_view.flags & kEnvironmentViewFlagReflectionCapture) != 0u;
 }
 
-static float3 ClampPreExposedDiskLuminancePreserveChromaticity(float3 pre_exposed_luminance)
+static float3 ClampPreExposedDiskLuminance(float3 pre_exposed_luminance)
 {
-    // Oxygen keeps the sun in physical lux. After converting illuminance to
-    // disk luminance via solid angle, the visible disk can reach values far
-    // above the FP16 scene-color range. A per-channel clamp destroys the RGB
-    // ratios and makes the disk turn white or behave erratically when multiple
-    // channels are driven. Clamp uniformly instead so chromaticity is preserved.
-    const float max_pre_exposed_component = max(
-        max(pre_exposed_luminance.x, pre_exposed_luminance.y),
-        pre_exposed_luminance.z);
-    const float safe_max_pre_exposed_luminance = 64000.0f;
-    if (max_pre_exposed_component <= safe_max_pre_exposed_luminance)
-    {
-        return pre_exposed_luminance;
-    }
-
-    const float scale = safe_max_pre_exposed_luminance
-        / max(max_pre_exposed_component, 1.0e-6f);
-    return pre_exposed_luminance * scale;
+    // Mirrors UE5.7 SkyAtmosphere.usf::GetLightDiskLuminance: clamp the
+    // pre-exposed disk luminance per channel to 64000 to avoid overflow and
+    // pathological TAA input from the solar disk.
+    return min(pre_exposed_luminance, 64000.0f.xxx);
 }
 
 static inline float2 ResolveSkyViewUvFromLocalDirection(
@@ -222,7 +209,12 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         top_radius);
 
     Texture2D<float4> sky_view_lut = ResourceDescriptorHeap[env_data.atmosphere.sky_view_lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    // UE5.7 samples the sky-view LUT with bilinear clamp. Even though sky-view
+    // azimuth is conceptually circular, keeping the shared clamp sampler here
+    // avoids drifting away from the LUT contract used by the rest of the
+    // atmosphere pipeline.
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     const float view_pre_exposure = max(GetExposure(), 1.0e-6f);
     const float view_one_over_pre_exposure = rcp(view_pre_exposure);
     const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
@@ -255,7 +247,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             light_direction_local,
             cos_half_apex,
             environment_view.atmosphere_light0_disk_luminance_rgb.xyz) * view_pre_exposure;
-        sky_color += ClampPreExposedDiskLuminancePreserveChromaticity(
+        sky_color += ClampPreExposedDiskLuminance(
             disk_luminance_pre_exposed);
     }
     if (light1_disk_enabled)
@@ -272,7 +264,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             light_direction_local,
             cos_half_apex,
             environment_view.atmosphere_light1_disk_luminance_rgb.xyz) * view_pre_exposure;
-        sky_color += ClampPreExposedDiskLuminancePreserveChromaticity(
+        sky_color += ClampPreExposedDiskLuminance(
             disk_luminance_pre_exposed);
     }
 

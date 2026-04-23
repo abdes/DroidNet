@@ -99,7 +99,8 @@ void VortexAtmosphereMultiScatteringLutCS(uint3 dispatch_id : SV_DispatchThreadI
     // Bind a real SRV, never the output UAV index. Using the UAV bindless slot
     // here is an invalid descriptor-type mismatch and can trigger device removal.
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[pass_constants.transmittance_lut_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
 
     float2 texel_center_uv = (float2(dispatch_id.xy) + 0.5f)
         / float2(pass_constants.output_width, pass_constants.output_height);

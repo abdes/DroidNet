@@ -130,7 +130,10 @@ float4 SampleCameraVolumeLut(
     }
 
     Texture3D<float4> camera_volume = ResourceDescriptorHeap[atmo.camera_volume_lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    // The aerial-perspective volume is camera-aligned, not tileable. Using the
+    // wrap sampler here reintroduces sunset / below-horizon ghosting.
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     float4 aerial = camera_volume.SampleLevel(
         linear_sampler, float3(screen_uv, non_linear_w), 0);
     aerial.rgb *= weight;

@@ -13,6 +13,7 @@
 #define OXYGEN_GRAPHICS_SHADERS_ATMOSPHERE_CONSTANTS_HLSLI
 
 #include "Common/Math.hlsli"
+#include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 
 // =============================================================================
 // UE5 Reference Constants (from RenderSkyRayMarching.hlsl)
@@ -60,6 +61,11 @@ static const float kZenithFilterThreshold = 0.05;
 //! Sun disk edge softness for anti-aliasing in ANGLE space (radians).
 //! Keep this small; larger values turn the solar disk into a visible blob.
 static const float kSunDiskEdgeSoftness = 0.0005;
+//! UE5.7 parity sampler for atmosphere LUTs.
+//! Do not replace with the default wrap sampler: transmittance and camera
+//! aerial LUTs are non-periodic, and wrap creates the below-horizon elliptical
+//! bands / bright artifacts that showed up around sunset.
+static const uint kAtmosphereLinearClampSampler = VORTEX_SAMPLER_LINEAR_CLAMP;
 
 // =============================================================================
 // Physical Defaults (Artist Overridable via GpuSkyAtmosphereParams)

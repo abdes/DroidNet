@@ -10,6 +10,7 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Common/Geometry.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 // Mirrors the transmittance helpers in UE5.7 SkyAtmosphereCommon.ush and
 // SkyAtmosphere.usf.
 static float2 ParityGetTransmittanceLutUv(
@@ -59,7 +60,10 @@ static float3 ParityTransmittanceLutSample(
     }
 
     Texture2D<float4> lut = ResourceDescriptorHeap[lut_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    // Transmittance UVs are not periodic. Clamp is required for UE5.7 parity
+    // and to prevent opposite-edge bleed near the horizon.
+    SamplerState linear_sampler
+        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
     const float bottom_radius_km = planet_radius_km;
     const float top_radius_km = planet_radius_km + atmosphere_height_km;
     const float view_height_km = planet_radius_km + altitude_km;
