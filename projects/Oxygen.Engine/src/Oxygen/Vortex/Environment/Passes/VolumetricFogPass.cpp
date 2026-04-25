@@ -352,8 +352,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     volumetric.distance > start_distance ? volumetric.distance
                                          : fallback_distance,
     start_distance + 1.0F);
-  const auto base_extinction = std::max(height_fog.fog_density, 0.000001F)
-    * std::max(volumetric.extinction_scale, 0.0F);
+  const auto height_fog_media_requested = height_fog.enabled
+    && height_fog.enable_height_fog
+    && (height_fog.fog_density > 0.0F || height_fog.second_fog_density > 0.0F);
 
   auto constants = PassConstants {};
   constants.output_header.output_texture_uav = integrated_uav.get();
@@ -364,7 +365,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.grid.end_distance_m = end_distance;
   constants.grid.near_fade_in_distance_m
     = std::max(volumetric.near_fade_in_distance, 0.0F);
-  constants.grid.base_extinction_per_m = base_extinction;
+  constants.grid.global_extinction_scale
+    = std::max(volumetric.extinction_scale, 0.0F);
   const auto grid_z_params = CalculateUeGridZParams(start_distance,
     resolved_view.NearPlane(), end_distance, depth);
   constants.grid_z.grid_z_params[0] = grid_z_params.x;
@@ -382,6 +384,22 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.media1.emissive_rgb[2] = volumetric.emissive.z;
   constants.media1.static_lighting_scattering_intensity
     = std::max(volumetric.static_lighting_scattering_intensity, 0.0F);
+  if (height_fog_media_requested) {
+    constants.height_fog0.primary_density
+      = std::max(height_fog.fog_density, 0.0F);
+    constants.height_fog0.primary_height_falloff
+      = std::max(height_fog.fog_height_falloff, 0.0F);
+    constants.height_fog0.primary_height_offset_m
+      = height_fog.fog_height_offset;
+    constants.height_fog0.secondary_density
+      = std::max(height_fog.second_fog_density, 0.0F);
+    constants.height_fog1.secondary_height_falloff
+      = std::max(height_fog.second_fog_height_falloff, 0.0F);
+    constants.height_fog1.secondary_height_offset_m
+      = height_fog.second_fog_height_offset;
+    constants.height_fog1.match_height_fog_factor = 0.5F;
+    constants.height_fog1.enabled = 1U;
+  }
   const auto local_fog_ready = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared
     && local_fog_products->buffer_ready && local_fog_products->tile_data_ready
@@ -475,6 +493,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.ue_log_depth_distribution = true;
   state.directional_shadowed_light_injection_requested
     = constants.grid_z.shadowed_directional_light0_enabled > 0.0F;
+  state.height_fog_media_requested = height_fog_media_requested;
+  state.height_fog_media_executed = constants.height_fog1.enabled != 0U;
   state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared;
   state.local_fog_injection_executed = local_fog_ready;

@@ -30,7 +30,7 @@ struct VolumetricFogGridControl
     float start_distance_m;
     float end_distance_m;
     float near_fade_in_distance_m;
-    float base_extinction_per_m;
+    float global_extinction_scale;
 };
 
 struct VolumetricFogMediaControl0
@@ -75,6 +75,22 @@ struct VolumetricFogLocalFogControl2
     float _pad2;
 };
 
+struct VolumetricFogHeightFogMediaControl0
+{
+    float primary_density;
+    float primary_height_falloff;
+    float primary_height_offset_m;
+    float secondary_density;
+};
+
+struct VolumetricFogHeightFogMediaControl1
+{
+    float secondary_height_falloff;
+    float secondary_height_offset_m;
+    float match_height_fog_factor;
+    uint enabled;
+};
+
 struct VolumetricFogPassConstants
 {
     VolumetricFogOutputHeader output_header;
@@ -82,6 +98,8 @@ struct VolumetricFogPassConstants
     VolumetricFogGridZControl grid_z;
     VolumetricFogMediaControl0 media0;
     VolumetricFogMediaControl1 media1;
+    VolumetricFogHeightFogMediaControl0 height_fog0;
+    VolumetricFogHeightFogMediaControl1 height_fog1;
     VolumetricFogLocalFogControl0 local_fog0;
     VolumetricFogLocalFogControl1 local_fog1;
     VolumetricFogLocalFogControl2 local_fog2;
@@ -131,6 +149,47 @@ static float ComputeDeviceDepthFromViewDepth(float view_depth)
     return abs(clip_position.w) > 1.0e-6f
         ? clip_position.z / clip_position.w
         : (reverse_z != 0u ? 0.0f : 1.0f);
+}
+
+static float EvaluateHeightFogLayerDensity(
+    float density,
+    float height_falloff,
+    float height_offset_m,
+    float world_position_z)
+{
+    if (density <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    const float exponent = clamp(
+        -max(height_falloff, 0.0f) * (world_position_z - height_offset_m),
+        -125.0f,
+        126.0f);
+    return density * exp2(exponent);
+}
+
+static float EvaluateHeightFogMediaDensity(
+    VolumetricFogPassConstants pass,
+    float world_position_z)
+{
+    if (pass.height_fog1.enabled == 0u)
+    {
+        return 0.0f;
+    }
+
+    const float primary_density = EvaluateHeightFogLayerDensity(
+        pass.height_fog0.primary_density,
+        pass.height_fog0.primary_height_falloff,
+        pass.height_fog0.primary_height_offset_m,
+        world_position_z);
+    const float secondary_density = EvaluateHeightFogLayerDensity(
+        pass.height_fog0.secondary_density,
+        pass.height_fog1.secondary_height_falloff,
+        pass.height_fog1.secondary_height_offset_m,
+        world_position_z);
+    return max(primary_density + secondary_density, 0.0f)
+        * pass.height_fog1.match_height_fog_factor;
 }
 
 static VolumetricLocalFogMedia EvaluateLocalFogVolumeFroxelMedia(
@@ -297,8 +356,10 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             translated_world_position,
             front_distance,
             back_distance);
+    const float height_fog_density =
+        EvaluateHeightFogMediaDensity(pass, world_position.z);
     const float extinction =
-        max(pass.grid.base_extinction_per_m, 0.0f) * near_fade
+        height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade
         + max(local_fog_media.extinction, 0.0f);
     const float transmittance = exp(-extinction * ray_length);
     const float opacity = saturate(1.0f - transmittance);
