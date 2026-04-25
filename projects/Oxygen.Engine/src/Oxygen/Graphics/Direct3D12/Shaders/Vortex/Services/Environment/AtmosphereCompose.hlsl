@@ -34,25 +34,6 @@ static inline float EvaluateFarBackgroundMask(float scene_depth)
     return saturate(1.0f - abs(scene_depth - far_depth) / epsilon);
 }
 
-static inline EnvironmentFrameBindings LoadResolvedEnvironmentBindings()
-{
-    const ViewFrameBindingsData view_bindings = LoadVortexViewFrameBindings(
-        bindless_view_frame_bindings_slot);
-    return LoadEnvironmentFrameBindings(view_bindings.environment_frame_slot);
-}
-
-static inline float3 ResolveViewDirection(float2 uv, float raw_depth)
-{
-    const float reconstruct_depth = EvaluateFarBackgroundMask(raw_depth) > 0.0f
-        ? ResolveFarDepthReference()
-        : raw_depth;
-    const float3 world_position = ReconstructWorldPosition(
-        uv,
-        reconstruct_depth,
-        inverse_view_projection_matrix);
-    return VortexSafeNormalize(world_position - camera_position);
-}
-
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexAtmosphereComposeVS(uint vertex_id : SV_VertexID)
 {
@@ -80,16 +61,6 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
         input.uv,
         reconstruct_depth,
         inverse_view_projection_matrix);
-    const float3 view_vector = world_position - camera_position;
-    const float distance_to_sample = length(view_vector);
-    const float3 view_direction = distance_to_sample > 1.0e-4f
-        ? view_vector / distance_to_sample
-        : ResolveViewDirection(input.uv, raw_depth);
-
-    const EnvironmentFrameBindings environment_bindings = LoadResolvedEnvironmentBindings();
-    (void)environment_bindings;
-    const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
-    (void)environment_view;
 
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;
     if (!LoadEnvironmentStaticData(env_data))
@@ -98,12 +69,11 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
     }
 
     const float3 sun_dir = GetSunDirectionWS();
-    const AerialPerspectiveResult aerial = ComputeAerialPerspectiveLut(
-        env_data.atmosphere,
+    const AerialPerspectiveResult aerial = ComputeAerialPerspective(
+        env_data,
         world_position,
         camera_position,
-        sun_dir,
-        distance_to_sample);
+        sun_dir);
 
     const float3 inscatter = aerial.inscatter;
     const float transmittance = saturate(dot(aerial.transmittance, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f)));

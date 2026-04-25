@@ -811,7 +811,9 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetAtmosphereHeightKm(120.0F);
   service_.SetSkyLuminanceFactor({ 1.1F, 1.2F, 1.3F });
   service_.SetSkyAndAerialPerspectiveLuminanceFactor({ 0.8F, 0.9F, 1.0F });
-  service_.SetAerialPerspectiveStartDepthMeters(250.0F);
+  service_.SetAerialPerspectiveScale(750.0F);
+  service_.SetAerialPerspectiveStartDepthMeters(0.0F);
+  service_.SetAerialScatteringStrength(3.5F);
   service_.SetHeightFogContribution(0.4F);
   service_.SetTraceSampleCountScale(2.0F);
   service_.SetTransmittanceMinLightElevationDeg(-8.0F);
@@ -843,7 +845,9 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(atmo->GetSkyLuminanceFactorRgb(), glm::vec3(1.1F, 1.2F, 1.3F));
   EXPECT_EQ(atmo->GetSkyAndAerialPerspectiveLuminanceFactorRgb(),
     glm::vec3(0.8F, 0.9F, 1.0F));
-  EXPECT_FLOAT_EQ(atmo->GetAerialPerspectiveStartDepthMeters(), 250.0F);
+  EXPECT_FLOAT_EQ(atmo->GetAerialPerspectiveDistanceScale(), 750.0F);
+  EXPECT_FLOAT_EQ(atmo->GetAerialPerspectiveStartDepthMeters(), 0.0F);
+  EXPECT_FLOAT_EQ(atmo->GetAerialScatteringStrength(), 3.5F);
   EXPECT_FLOAT_EQ(atmo->GetHeightFogContribution(), 0.4F);
   EXPECT_FLOAT_EQ(atmo->GetTraceSampleCountScale(), 2.0F);
   EXPECT_FLOAT_EQ(atmo->GetTransmittanceMinLightElevationDeg(), -8.0F);
@@ -862,6 +866,56 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(sky_light->GetVolumetricScatteringIntensity(), 0.6F);
   EXPECT_FALSE(sky_light->GetAffectReflections());
   EXPECT_FALSE(sky_light->GetAffectGlobalIllumination());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  AerialPerspectiveVisualVerificationSettingsPersistSupportedControls)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.AerialPerspectiveVisualPersistence");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.SetSkyAtmosphereEnabled(true);
+  service_.SetSkyAndAerialPerspectiveLuminanceFactor({ 1.2F, 1.1F, 1.0F });
+  service_.SetAerialPerspectiveScale(1000.0F);
+  service_.SetAerialPerspectiveStartDepthMeters(0.0F);
+  service_.SetAerialScatteringStrength(2.5F);
+  service_.SetHeightFogContribution(0.75F);
+  service_.SetTraceSampleCountScale(1.5F);
+  service_.SetTransmittanceMinLightElevationDeg(-5.0F);
+  service_.SetAtmosphereRenderInMainPass(true);
+
+  EXPECT_TRUE(service_.GetAerialPerspectiveEnabled());
+  service_.SetAerialPerspectiveEnabled(false);
+  EXPECT_FALSE(service_.GetAerialPerspectiveEnabled());
+  EXPECT_FLOAT_EQ(service_.GetAerialScatteringStrength(), 0.0F);
+
+  PersistPendingSettings(service_);
+
+  EnvironmentSettingsService loaded {};
+  auto loaded_scene
+    = MakeScene("DemoShell.AerialPerspectiveVisualPersistence.Loaded");
+  loaded.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { loaded_scene.get() },
+  });
+
+  EXPECT_TRUE(loaded.GetSkyAtmosphereEnabled());
+  EXPECT_EQ(loaded.GetSkyAndAerialPerspectiveLuminanceFactor(),
+    glm::vec3(1.2F, 1.1F, 1.0F));
+  EXPECT_FLOAT_EQ(loaded.GetAerialPerspectiveScale(), 1000.0F);
+  EXPECT_FLOAT_EQ(loaded.GetAerialPerspectiveStartDepthMeters(), 0.0F);
+  EXPECT_FALSE(loaded.GetAerialPerspectiveEnabled());
+  EXPECT_FLOAT_EQ(loaded.GetAerialScatteringStrength(), 0.0F);
+  EXPECT_FLOAT_EQ(loaded.GetHeightFogContribution(), 0.75F);
+  EXPECT_FLOAT_EQ(loaded.GetTraceSampleCountScale(), 1.5F);
+  EXPECT_FLOAT_EQ(loaded.GetTransmittanceMinLightElevationDeg(), -5.0F);
+  EXPECT_TRUE(loaded.GetAtmosphereRenderInMainPass());
+
+  loaded.SetAerialPerspectiveEnabled(true);
+  EXPECT_TRUE(loaded.GetAerialPerspectiveEnabled());
+  EXPECT_FLOAT_EQ(loaded.GetAerialScatteringStrength(), 1.0F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

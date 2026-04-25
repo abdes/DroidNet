@@ -571,6 +571,14 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogUseHzb() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto GetAerialPerspectiveLutWidth() const noexcept
+    -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetAerialPerspectiveLutDepthResolution() const noexcept -> std::uint32_t;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetAerialPerspectiveLutDepthKm() const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept -> float;
   OXGN_VRTX_NDAPI auto GetStagingProvider() -> upload::StagingProvider&;
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;

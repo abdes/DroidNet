@@ -1191,6 +1191,22 @@ auto EnvironmentSettingsService::SetAerialPerspectiveScale(const float value)
   MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
+auto EnvironmentSettingsService::GetAerialPerspectiveEnabled() const -> bool
+{
+  return aerial_scattering_strength_ > 0.0F;
+}
+
+auto EnvironmentSettingsService::SetAerialPerspectiveEnabled(const bool enabled)
+  -> void
+{
+  const bool current = GetAerialPerspectiveEnabled();
+  if (current == enabled) {
+    return;
+  }
+  aerial_scattering_strength_ = enabled ? 1.0F : 0.0F;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
 auto EnvironmentSettingsService::GetAerialPerspectiveStartDepthMeters() const
   -> float
 {
@@ -1313,6 +1329,41 @@ auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
     "SkyView LUT slices are renderer-owned; ignoring UI write {} "
     "(current={})",
     value, sky_view_lut_slices_);
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutWidth() const -> int
+{
+  if (config_.renderer != nullptr) {
+    return static_cast<int>(config_.renderer->GetAerialPerspectiveLutWidth());
+  }
+  return 32;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthResolution() const
+  -> int
+{
+  if (config_.renderer != nullptr) {
+    return static_cast<int>(
+      config_.renderer->GetAerialPerspectiveLutDepthResolution());
+  }
+  return 16;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthKm() const -> float
+{
+  if (config_.renderer != nullptr) {
+    return config_.renderer->GetAerialPerspectiveLutDepthKm();
+  }
+  return 96.0F;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutSampleCountMaxPerSlice()
+  const -> float
+{
+  if (config_.renderer != nullptr) {
+    return config_.renderer->GetAerialPerspectiveLutSampleCountMaxPerSlice();
+  }
+  return 2.0F;
 }
 
 auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
@@ -3626,6 +3677,8 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   auto clamp_float = [](float& value, float min_v, float max_v) {
     value = std::clamp(value, min_v, max_v);
   };
+  auto clamp_float_min
+    = [](float& value, float min_v) { value = std::max(value, min_v); };
   auto clamp_int = [](int& value, int min_v, int max_v) {
     value = std::clamp(value, min_v, max_v);
   };
@@ -3648,11 +3701,11 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_vec3_min(sky_luminance_factor_, 0.0F);
   clamp_vec3_min(sky_and_aerial_perspective_luminance_factor_, 0.0F);
   clamp_vec3_min(ozone_rgb_, 0.0F);
-  clamp_float(aerial_perspective_scale_, 0.0F, 16.0F);
-  clamp_float(aerial_perspective_start_depth_m_, 1.0F, 1000000.0F);
-  clamp_float(aerial_scattering_strength_, 0.0F, 16.0F);
-  clamp_float(height_fog_contribution_, 0.0F, 16.0F);
-  clamp_float(trace_sample_count_scale_, 0.25F, 8.0F);
+  clamp_float_min(aerial_perspective_scale_, 0.0F);
+  clamp_float(aerial_perspective_start_depth_m_, 0.0F, 1000000.0F);
+  clamp_float_min(aerial_scattering_strength_, 0.0F);
+  clamp_float(height_fog_contribution_, 0.0F, 1.0F);
+  clamp_float_min(trace_sample_count_scale_, 0.25F);
   clamp_float(transmittance_min_light_elevation_deg_, -90.0F, 90.0F);
 
   clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 120000.0F);

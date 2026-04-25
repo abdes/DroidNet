@@ -41,8 +41,14 @@ namespace {
     float mie_scale_height_km;
     float mie_anisotropy;
     float multi_scattering;
+    glm::vec3 sky_and_aerial_luminance_factor;
     float aerial_perspective_scale;
+    float aerial_perspective_start_depth_m;
     float aerial_scattering_strength;
+    float height_fog_contribution;
+    float trace_sample_count_scale;
+    float transmittance_min_light_elevation_deg;
+    bool atmosphere_render_in_main_pass;
     glm::vec3 ozone_rgb;
     float ozone_bottom_km;
     float ozone_peak_km;
@@ -93,8 +99,14 @@ namespace {
       .mie_scale_height_km = 1.2F,
       .mie_anisotropy = 0.8F,
       .multi_scattering = 1.0F,
+      .sky_and_aerial_luminance_factor = { 1.0F, 1.0F, 1.0F },
       .aerial_perspective_scale = 1.0F,
+      .aerial_perspective_start_depth_m = 100.0F,
       .aerial_scattering_strength = 1.0F,
+      .height_fog_contribution = 1.0F,
+      .trace_sample_count_scale = 1.0F,
+      .transmittance_min_light_elevation_deg = -90.0F,
+      .atmosphere_render_in_main_pass = true,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
       .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomKm,
       .ozone_peak_km = engine::atmos::kDefaultOzonePeakKm,
@@ -140,8 +152,14 @@ namespace {
       .mie_scale_height_km = 1.5F,
       .mie_anisotropy = 0.75F,
       .multi_scattering = 1.2F,
+      .sky_and_aerial_luminance_factor = { 1.0F, 1.0F, 1.0F },
       .aerial_perspective_scale = 1.0F,
+      .aerial_perspective_start_depth_m = 100.0F,
       .aerial_scattering_strength = 1.1F,
+      .height_fog_contribution = 1.0F,
+      .trace_sample_count_scale = 1.0F,
+      .transmittance_min_light_elevation_deg = -90.0F,
+      .atmosphere_render_in_main_pass = true,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
       .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomKm,
       .ozone_peak_km = engine::atmos::kDefaultOzonePeakKm,
@@ -187,8 +205,14 @@ namespace {
       .mie_scale_height_km = 1.2F,
       .mie_anisotropy = 0.8F,
       .multi_scattering = 1.0F,
-      .aerial_perspective_scale = 1.0F,
-      .aerial_scattering_strength = 1.0F,
+      .sky_and_aerial_luminance_factor = { 1.0F, 1.0F, 1.0F },
+      .aerial_perspective_scale = 4.0F,
+      .aerial_perspective_start_depth_m = 0.0F,
+      .aerial_scattering_strength = 2.0F,
+      .height_fog_contribution = 1.0F,
+      .trace_sample_count_scale = 1.0F,
+      .transmittance_min_light_elevation_deg = -90.0F,
+      .atmosphere_render_in_main_pass = true,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
       .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomKm,
       .ozone_peak_km = engine::atmos::kDefaultOzonePeakKm,
@@ -234,8 +258,14 @@ namespace {
       .mie_scale_height_km = 1.2F,
       .mie_anisotropy = 0.8F,
       .multi_scattering = 1.0F,
+      .sky_and_aerial_luminance_factor = { 1.0F, 1.0F, 1.0F },
       .aerial_perspective_scale = 1.0F,
+      .aerial_perspective_start_depth_m = 100.0F,
       .aerial_scattering_strength = 1.0F,
+      .height_fog_contribution = 1.0F,
+      .trace_sample_count_scale = 1.0F,
+      .transmittance_min_light_elevation_deg = -90.0F,
+      .atmosphere_render_in_main_pass = true,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
       .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomKm,
       .ozone_peak_km = engine::atmos::kDefaultOzonePeakKm,
@@ -281,8 +311,14 @@ namespace {
       .mie_scale_height_km = 1.2F,
       .mie_anisotropy = 0.8F,
       .multi_scattering = 1.0F,
+      .sky_and_aerial_luminance_factor = { 1.0F, 1.0F, 1.0F },
       .aerial_perspective_scale = 1.0F,
+      .aerial_perspective_start_depth_m = 100.0F,
       .aerial_scattering_strength = 1.0F,
+      .height_fog_contribution = 1.0F,
+      .trace_sample_count_scale = 1.0F,
+      .transmittance_min_light_elevation_deg = -90.0F,
+      .atmosphere_render_in_main_pass = true,
       .ozone_rgb = engine::atmos::kDefaultOzoneAbsorptionRgb,
       .ozone_bottom_km = engine::atmos::kDefaultOzoneBottomKm,
       .ozone_peak_km = engine::atmos::kDefaultOzonePeakKm,
@@ -427,6 +463,7 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   LOG_F(1, "applying built-in preset (index={}, name='{}')", preset_index,
     preset.name.data());
   service_->BeginUpdate();
+  applying_preset_ = true;
   service_->SetPresetIndex(preset_index);
 
   // 1. Disable all systems to prevent intermediate state updates
@@ -457,8 +494,16 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetMieScaleHeightKm(preset.mie_scale_height_km);
   SetMieAnisotropy(preset.mie_anisotropy);
   SetMultiScattering(preset.multi_scattering);
+  SetSkyAndAerialPerspectiveLuminanceFactor(
+    preset.sky_and_aerial_luminance_factor);
   SetAerialPerspectiveScale(preset.aerial_perspective_scale);
+  SetAerialPerspectiveStartDepthMeters(preset.aerial_perspective_start_depth_m);
   SetAerialScatteringStrength(preset.aerial_scattering_strength);
+  SetHeightFogContribution(preset.height_fog_contribution);
+  SetTraceSampleCountScale(preset.trace_sample_count_scale);
+  SetTransmittanceMinLightElevationDeg(
+    preset.transmittance_min_light_elevation_deg);
+  SetAtmosphereRenderInMainPass(preset.atmosphere_render_in_main_pass);
   SetOzoneRgb(preset.ozone_rgb);
   // Presets use the canonical Earth-like ozone profile to stay physically
   // consistent with renderer assumptions and service validation bounds.
@@ -499,6 +544,7 @@ auto EnvironmentVm::ApplyPreset(int index) -> void
   SetSkyLightEnabled(preset.sky_light_enabled);
 
   service_->EndUpdate();
+  applying_preset_ = false;
 
   // 4. Apply PostProcess settings (outside of EnvironmentSettingsService
   // batch)
@@ -572,7 +618,10 @@ auto EnvironmentVm::PrepareForManualOverride() -> void
   if (service_ == nullptr) {
     return;
   }
-  if (service_->GetPresetIndex() == kPresetUseScene) {
+  if (applying_preset_) {
+    return;
+  }
+  if (service_->GetPresetIndex() != kPresetCustom) {
     service_->ActivateCustomMode();
   }
 }
@@ -707,6 +756,7 @@ auto EnvironmentVm::GetSkyAndAerialPerspectiveLuminanceFactor() const
 auto EnvironmentVm::SetSkyAndAerialPerspectiveLuminanceFactor(
   const glm::vec3& value) -> void
 {
+  PrepareForManualOverride();
   service_->SetSkyAndAerialPerspectiveLuminanceFactor(value);
 }
 
@@ -727,7 +777,19 @@ auto EnvironmentVm::GetAerialPerspectiveScale() const -> float
 
 auto EnvironmentVm::SetAerialPerspectiveScale(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetAerialPerspectiveScale(value);
+}
+
+auto EnvironmentVm::GetAerialPerspectiveEnabled() const -> bool
+{
+  return service_->GetAerialPerspectiveEnabled();
+}
+
+auto EnvironmentVm::SetAerialPerspectiveEnabled(bool enabled) -> void
+{
+  PrepareForManualOverride();
+  service_->SetAerialPerspectiveEnabled(enabled);
 }
 
 auto EnvironmentVm::GetAerialPerspectiveStartDepthMeters() const -> float
@@ -737,6 +799,7 @@ auto EnvironmentVm::GetAerialPerspectiveStartDepthMeters() const -> float
 
 auto EnvironmentVm::SetAerialPerspectiveStartDepthMeters(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetAerialPerspectiveStartDepthMeters(value);
 }
 
@@ -747,6 +810,7 @@ auto EnvironmentVm::GetAerialScatteringStrength() const -> float
 
 auto EnvironmentVm::SetAerialScatteringStrength(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetAerialScatteringStrength(value);
 }
 
@@ -757,6 +821,7 @@ auto EnvironmentVm::GetHeightFogContribution() const -> float
 
 auto EnvironmentVm::SetHeightFogContribution(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetHeightFogContribution(value);
 }
 
@@ -767,6 +832,7 @@ auto EnvironmentVm::GetTraceSampleCountScale() const -> float
 
 auto EnvironmentVm::SetTraceSampleCountScale(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetTraceSampleCountScale(value);
 }
 
@@ -777,6 +843,7 @@ auto EnvironmentVm::GetTransmittanceMinLightElevationDeg() const -> float
 
 auto EnvironmentVm::SetTransmittanceMinLightElevationDeg(float value) -> void
 {
+  PrepareForManualOverride();
   service_->SetTransmittanceMinLightElevationDeg(value);
 }
 
@@ -797,6 +864,7 @@ auto EnvironmentVm::GetAtmosphereRenderInMainPass() const -> bool
 
 auto EnvironmentVm::SetAtmosphereRenderInMainPass(bool enabled) -> void
 {
+  PrepareForManualOverride();
   service_->SetAtmosphereRenderInMainPass(enabled);
 }
 
@@ -820,6 +888,27 @@ auto EnvironmentVm::GetSkyViewLutSlices() const -> int
 auto EnvironmentVm::SetSkyViewLutSlices(int value) -> void
 {
   service_->SetSkyViewLutSlices(value);
+}
+
+auto EnvironmentVm::GetAerialPerspectiveLutWidth() const -> int
+{
+  return service_->GetAerialPerspectiveLutWidth();
+}
+
+auto EnvironmentVm::GetAerialPerspectiveLutDepthResolution() const -> int
+{
+  return service_->GetAerialPerspectiveLutDepthResolution();
+}
+
+auto EnvironmentVm::GetAerialPerspectiveLutDepthKm() const -> float
+{
+  return service_->GetAerialPerspectiveLutDepthKm();
+}
+
+auto EnvironmentVm::GetAerialPerspectiveLutSampleCountMaxPerSlice() const
+  -> float
+{
+  return service_->GetAerialPerspectiveLutSampleCountMaxPerSlice();
 }
 
 auto EnvironmentVm::GetSkyViewAltMappingMode() const -> int

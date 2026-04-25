@@ -182,6 +182,8 @@ public:
 
   [[nodiscard]] virtual auto GetAerialPerspectiveScale() const -> float;
   virtual auto SetAerialPerspectiveScale(float value) -> void;
+  [[nodiscard]] virtual auto GetAerialPerspectiveEnabled() const -> bool;
+  virtual auto SetAerialPerspectiveEnabled(bool enabled) -> void;
   [[nodiscard]] virtual auto GetAerialPerspectiveStartDepthMeters() const
     -> float;
   virtual auto SetAerialPerspectiveStartDepthMeters(float value) -> void;
@@ -203,6 +205,13 @@ public:
   // Sky-View LUT slicing
   [[nodiscard]] virtual auto GetSkyViewLutSlices() const -> int;
   virtual auto SetSkyViewLutSlices(int value) -> void;
+
+  [[nodiscard]] virtual auto GetAerialPerspectiveLutWidth() const -> int;
+  [[nodiscard]] virtual auto GetAerialPerspectiveLutDepthResolution() const
+    -> int;
+  [[nodiscard]] virtual auto GetAerialPerspectiveLutDepthKm() const -> float;
+  [[nodiscard]] virtual auto
+  GetAerialPerspectiveLutSampleCountMaxPerSlice() const -> float;
 
   [[nodiscard]] virtual auto GetSkyViewAltMappingMode() const -> int;
   virtual auto SetSkyViewAltMappingMode(int value) -> void;

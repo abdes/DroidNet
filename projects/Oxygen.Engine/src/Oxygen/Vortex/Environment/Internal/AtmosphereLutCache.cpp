@@ -373,7 +373,11 @@ auto AtmosphereLutCache::BuildInternalParameters(
     = atmosphere.sky_and_aerial_perspective_luminance_factor_rgb;
   params.aerial_perspective_distance_scale
     = atmosphere.aerial_perspective_distance_scale;
-  params.aerial_scattering_strength = atmosphere.aerial_scattering_strength;
+  params.camera_aerial_width = renderer_.GetAerialPerspectiveLutWidth();
+  params.camera_aerial_height = params.camera_aerial_width;
+  params.camera_aerial_depth_resolution
+    = renderer_.GetAerialPerspectiveLutDepthResolution();
+  params.camera_aerial_depth_km = renderer_.GetAerialPerspectiveLutDepthKm();
   params.transmittance_sample_count
     = std::clamp(10.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
   params.multi_scattering_sample_count
@@ -383,8 +387,11 @@ auto AtmosphereLutCache::BuildInternalParameters(
   params.sky_view_sample_count_max
     = std::clamp(32.0F * atmosphere.trace_sample_count_scale,
       params.sky_view_sample_count_min + 1.0F, 128.0F);
-  params.camera_aerial_sample_count_per_slice
-    = std::clamp(2.0F * atmosphere.trace_sample_count_scale, 1.0F, 8.0F);
+  const float camera_aerial_sample_count_max
+    = renderer_.GetAerialPerspectiveLutSampleCountMaxPerSlice();
+  params.camera_aerial_sample_count_per_slice = std::max(1.0F,
+    std::min(2.0F * atmosphere.trace_sample_count_scale,
+      camera_aerial_sample_count_max));
   params.camera_aerial_depth_slice_length_km = params.camera_aerial_depth_km
     / static_cast<float>(std::max(params.camera_aerial_depth_resolution, 1U));
   return params;
@@ -427,7 +434,6 @@ auto AtmosphereLutCache::HashInternalParameters(
     seed, FloatBits(params.sky_and_aerial_perspective_luminance_factor_rgb.z));
   seed
     = CombineHashU64(seed, FloatBits(params.aerial_perspective_distance_scale));
-  seed = CombineHashU64(seed, FloatBits(params.aerial_scattering_strength));
   return seed;
 }
 

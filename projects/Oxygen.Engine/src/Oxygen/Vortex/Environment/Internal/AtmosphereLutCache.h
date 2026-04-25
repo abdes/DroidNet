@@ -53,7 +53,6 @@ public:
       1.0F,
     };
     float aerial_perspective_distance_scale { 1.0F };
-    float aerial_scattering_strength { 1.0F };
   };
 
   struct State {
@@ -166,7 +165,7 @@ private:
   auto EnsureStructuredBuffer(std::shared_ptr<graphics::Buffer>& buffer,
     BufferSlots& slots, std::string_view debug_name, std::uint64_t size_bytes,
     std::uint32_t stride) -> bool;
-  [[nodiscard]] static auto BuildInternalParameters(
+  [[nodiscard]] auto BuildInternalParameters(
     const StableAtmosphereState& stable_state) -> InternalParameters;
   [[nodiscard]] static auto HashInternalParameters(
     const InternalParameters& params) -> std::uint64_t;

@@ -65,7 +65,7 @@ struct CameraAerialAtmosphereScales0
 {
     float atmosphere_height_km;
     float aerial_perspective_distance_scale;
-    float aerial_scattering_strength;
+    float _pad0;
     float rayleigh_scale_height_km;
 };
 
@@ -123,7 +123,6 @@ static float PassStartDepthKm(AtmosphereCameraAerialPerspectivePassConstants pas
 static float PassPlanetRadiusKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.depth_control1.planet_radius_km; }
 static float PassAtmosphereHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.atmosphere_height_km; }
 static float PassAerialPerspectiveDistanceScale(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_perspective_distance_scale; }
-static float PassAerialScatteringStrength(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.aerial_scattering_strength; }
 static float PassRayleighScaleHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales0.rayleigh_scale_height_km; }
 static float PassMieScaleHeightKm(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.mie_scale_height_km; }
 static float PassMultiScatteringFactor(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.atmosphere_scales1.multi_scattering_factor; }
@@ -422,6 +421,6 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     output_texture[dispatch_id] = float4(
-        max(luminance * PassAerialScatteringStrength(pass), 0.0f.xxx),
+        max(luminance, 0.0f.xxx),
         saturate(transmittance));
 }

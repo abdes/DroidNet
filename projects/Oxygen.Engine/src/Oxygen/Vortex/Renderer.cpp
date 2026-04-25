@@ -103,6 +103,14 @@ namespace {
   constexpr auto kCVarVortexLocalFogUseHzb = "vtx.local_fog.use_hzb";
   constexpr auto kCVarVortexLocalFogHalfResolution
     = "vtx.local_fog.half_resolution";
+  constexpr auto kCVarVortexAerialPerspectiveLutWidth
+    = "vtx.sky_atmosphere.aerial_perspective_lut.width";
+  constexpr auto kCVarVortexAerialPerspectiveLutDepthResolution
+    = "vtx.sky_atmosphere.aerial_perspective_lut.depth_resolution";
+  constexpr auto kCVarVortexAerialPerspectiveLutDepthKm
+    = "vtx.sky_atmosphere.aerial_perspective_lut.depth_km";
+  constexpr auto kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice
+    = "vtx.sky_atmosphere.aerial_perspective_lut.sample_count_max_per_slice";
 
   constexpr auto kRendererStagingAlignment
     = packing::kStructuredBufferAlignment;
@@ -483,6 +491,42 @@ auto Renderer::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexAerialPerspectiveLutWidth),
+    .help = "Sky atmosphere aerial perspective LUT screen resolution",
+    .default_value = int64_t { 32 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 4.0,
+    .max_value = 256.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexAerialPerspectiveLutDepthResolution),
+    .help = "Sky atmosphere aerial perspective LUT depth resolution",
+    .default_value = int64_t { 16 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 4.0,
+    .max_value = 256.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexAerialPerspectiveLutDepthKm),
+    .help = "Sky atmosphere aerial perspective LUT depth in kilometers",
+    .default_value = 96.0,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 0.1,
+    .max_value = 100000.0,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice),
+    .help = "Sky atmosphere aerial perspective LUT max samples per depth slice",
+    .default_value = 2.0,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1.0,
+    .max_value = 64.0,
   });
 }
 
@@ -1471,7 +1515,7 @@ auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTileMaxInstanceCount, value)) {
       return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 1, 256));
+        std::clamp<std::int64_t>(value, 4, 256));
     }
   }
   return 32U;
@@ -1486,6 +1530,58 @@ auto Renderer::GetLocalFogUseHzb() const noexcept -> bool
     }
   }
   return true;
+}
+
+auto Renderer::GetAerialPerspectiveLutWidth() const noexcept -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 32 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexAerialPerspectiveLutWidth, value)) {
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 4, 256));
+    }
+  }
+  return 32U;
+}
+
+auto Renderer::GetAerialPerspectiveLutDepthResolution() const noexcept
+  -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 16 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexAerialPerspectiveLutDepthResolution, value)) {
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 1, 256));
+    }
+  }
+  return 16U;
+}
+
+auto Renderer::GetAerialPerspectiveLutDepthKm() const noexcept -> float
+{
+  if (console_ != nullptr) {
+    double value = 96.0;
+    if (console_->TryGetCVarValue<double>(
+          kCVarVortexAerialPerspectiveLutDepthKm, value)) {
+      return static_cast<float>(std::clamp(value, 0.1, 100000.0));
+    }
+  }
+  return 96.0F;
+}
+
+auto Renderer::GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept
+  -> float
+{
+  if (console_ != nullptr) {
+    double value = 2.0;
+    if (console_->TryGetCVarValue<double>(
+          kCVarVortexAerialPerspectiveLutSampleCountMaxPerSlice, value)) {
+      return static_cast<float>(std::clamp(value, 1.0, 64.0));
+    }
+  }
+  return 2.0F;
 }
 
 auto Renderer::GetStagingProvider() -> upload::StagingProvider&

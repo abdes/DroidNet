@@ -129,6 +129,7 @@ public:
     std::uint32_t camera_aerial_width { 0U };
     std::uint32_t camera_aerial_height { 0U };
     std::uint32_t camera_aerial_depth { 0U };
+    float camera_aerial_sample_count_per_slice { 0.0F };
     std::uint32_t camera_aerial_dispatch_count_x { 0U };
     std::uint32_t camera_aerial_dispatch_count_y { 0U };
     std::uint32_t camera_aerial_dispatch_count_z { 0U };
@@ -206,8 +207,8 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
     -> const EnvironmentFrameBindings*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewData(ViewId view_id) const
-    -> const EnvironmentViewData*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewData(
+    ViewId view_id) const -> const EnvironmentViewData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentStaticData(
     ViewId view_id) const -> const EnvironmentStaticData*;
   [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewProducts(
