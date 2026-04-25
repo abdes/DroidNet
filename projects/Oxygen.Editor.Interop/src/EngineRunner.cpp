@@ -101,11 +101,33 @@ namespace Oxygen::Interop {
     render_thread_context_ = nullptr;
   }
 
+  auto EngineRunner::CreateEngine(EditorEngineConfigManaged^ engine_cfg)
+    -> EngineContext^ {
+    return CreateEngine(engine_cfg, IntPtr::Zero);
+  }
+
   auto EngineRunner::CreateEngine(EngineConfig^ engine_cfg) -> EngineContext^ {
     return CreateEngine(engine_cfg, IntPtr::Zero);
   }
 
   auto EngineRunner::CreateEngine(EngineConfig^ engine_cfg,
+    IntPtr swapChainPanel) -> EngineContext
+    ^ {
+    auto editor_cfg = ConfigFactory::CreateDefaultEditorEngineConfig();
+    editor_cfg->Engine = engine_cfg;
+    if (engine_cfg != nullptr) {
+      if (engine_cfg->Graphics != nullptr) {
+        editor_cfg->Platform->Headless = engine_cfg->Graphics->Headless;
+        editor_cfg->Renderer->EnableImGui = engine_cfg->Graphics->EnableImGui;
+      }
+      if (engine_cfg->PathFinder != nullptr) {
+        editor_cfg->Renderer->PathFinder = engine_cfg->PathFinder;
+      }
+    }
+    return CreateEngine(editor_cfg, swapChainPanel);
+  }
+
+  auto EngineRunner::CreateEngine(EditorEngineConfigManaged^ engine_cfg,
     IntPtr swapChainPanel) -> EngineContext
     ^ {
     using namespace oxygen::graphics;
@@ -118,14 +140,19 @@ namespace Oxygen::Interop {
     ui_dispatcher_->CaptureCurrent(gcnew String(L"CreateEngine"));
 
     try {
-      // Translate managed EngineConfig into native config.
-      oxygen::EngineConfig native_cfg = engine_cfg->ToNative();
+      // Translate managed editor startup config into native config.
+      auto effective_cfg = engine_cfg != nullptr
+        ? engine_cfg
+        : ConfigFactory::CreateDefaultEditorEngineConfig();
+      oxygen::engine::interop::EditorEngineConfig native_cfg =
+        effective_cfg->ToNative();
 
       // If we have a swap chain panel, we are in editor mode.
       // We need to configure the engine to be headless (no SDL window)
       if (swapChainPanel != IntPtr::Zero) {
-        native_cfg.graphics.headless = true;
-        native_cfg.enable_asset_loader = true;
+        native_cfg.platform.headless = true;
+        native_cfg.engine.graphics.headless = true;
+        native_cfg.engine.enable_asset_loader = true;
       }
 
       // Create the native engine context (unique ownership from factory).
@@ -145,16 +172,15 @@ namespace Oxygen::Interop {
         interop::LogInfoMessage(
           "Registering renderer and EditorModule with surface registry.");
 
-        // Create the renderer module and register it with the engine.
-        // Required by the EditorModule.
-        oxygen::RendererConfig renderer_config{
-            .upload_queue_key =
-                shared->queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-        };
+        auto renderer_config = shared->renderer_config;
+        if (renderer_config.upload_queue_key.empty()) {
+          renderer_config.upload_queue_key =
+            shared->queue_strategy.KeyFor(QueueRole::kTransfer).get();
+        }
+
         auto renderer_unique =
           std::make_unique<oxygen::vortex::Renderer>(
-            shared->gfx_weak, renderer_config);
-        // Store observer ptr in the EngineContext so managed code can access it
+            shared->gfx_weak, std::move(renderer_config));
         shared->renderer = oxygen::observer_ptr<oxygen::vortex::Renderer>(
           renderer_unique.get());
         shared->engine->RegisterModule(std::move(renderer_unique));
