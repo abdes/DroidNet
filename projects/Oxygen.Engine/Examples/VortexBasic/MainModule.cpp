@@ -45,6 +45,8 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
@@ -126,6 +128,18 @@ auto LookRotation(const glm::vec3& position, const glm::vec3& target)
 {
   return RotationFromDirToDir(oxygen::space::move::Forward,
     oxygen::space::move::Forward, oxygen::space::move::Up, target - position);
+}
+
+auto SetShadowParticipation(oxygen::scene::SceneNode& node,
+  const bool casts_shadows, const bool receives_shadows) -> void
+{
+  if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
+    auto& flags = flags_ref->get();
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+  }
 }
 
 auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
@@ -667,6 +681,7 @@ auto MainModule::EnsureScene() -> void
 
   cube_node_ = scene_->CreateNode("Cube");
   cube_node_.GetRenderable().SetGeometry(std::move(cube_geo));
+  SetShadowParticipation(cube_node_, true, true);
   cube_node_.GetTransform().SetLocalPosition(kCubeCenter);
   cube_rotation_ = glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
   cube_rotation_axis_ = RandomUnitAxis(cube_rotation_rng_);
@@ -674,6 +689,7 @@ auto MainModule::EnsureScene() -> void
 
   floor_node_ = scene_->CreateNode("Floor");
   floor_node_.GetRenderable().SetGeometry(std::move(floor_geo));
+  SetShadowParticipation(floor_node_, true, true);
   floor_node_.GetTransform().SetLocalScale(kFloorScale);
   floor_node_.GetTransform().SetLocalPosition(kFloorCenter);
 
@@ -709,6 +725,7 @@ auto MainModule::EnsureLighting() -> void
     directional_light_node_ = scene_->CreateNode("SunLight");
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
+    light->Common().casts_shadows = true;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);

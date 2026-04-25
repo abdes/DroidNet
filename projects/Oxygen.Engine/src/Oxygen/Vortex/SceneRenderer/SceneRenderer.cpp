@@ -36,6 +36,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
@@ -381,6 +382,8 @@ namespace {
     const auto& atmosphere_lights = resolver.ResolveAtmosphereLights();
     if (atmosphere_lights.slots[0].has_value()) {
       const auto& primary = *atmosphere_lights.slots[0];
+      const auto csm = scene::CanonicalizeCascadedShadowSettings(
+        primary.Light().CascadedShadows());
       const auto primary_atmosphere_light
         = environment::internal::BuildAtmosphereLightModel(
           primary, 0U, atmosphere);
@@ -409,9 +412,13 @@ namespace {
         .specular_scale = 1.0F,
         .atmosphere_light_slot = 0U,
         .atmosphere_mode_flags = atmosphere_mode_flags,
-        .shadow_flags = 0U,
+        .shadow_flags = primary.Light().Common().casts_shadows
+          ? kDirectionalLightShadowFlagCastsShadows
+          : 0U,
         .light_function_atlas_index = 0xFFFFFFFFU,
-        .cascade_count = primary.Light().CascadedShadows().cascade_count,
+        .cascade_count = primary.Light().Common().casts_shadows
+          ? csm.cascade_count
+          : 0U,
         .light_flags = kDirectionalLightFlagAffectsWorld
           | (primary.Light().GetEnvironmentContribution()
               ? kDirectionalLightFlagEnvContribution
@@ -420,6 +427,17 @@ namespace {
           | (primary.Light().GetUsePerPixelAtmosphereTransmittance()
               ? kDirectionalLightFlagPerPixelAtmosphereTransmittance
               : 0U),
+        .cascade_split_mode
+        = csm.split_mode == scene::DirectionalCsmSplitMode::kManualDistances
+          ? FrameDirectionalCsmSplitMode::kManualDistances
+          : FrameDirectionalCsmSplitMode::kGenerated,
+        .max_shadow_distance = csm.max_shadow_distance,
+        .cascade_distances = csm.cascade_distances,
+        .distribution_exponent = csm.distribution_exponent,
+        .transition_fraction = csm.transition_fraction,
+        .distance_fadeout_fraction = csm.distance_fadeout_fraction,
+        .shadow_bias = primary.Light().Common().shadow.bias,
+        .shadow_normal_bias = primary.Light().Common().shadow.normal_bias,
       };
     }
 

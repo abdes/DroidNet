@@ -263,6 +263,7 @@ protected:
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<DirectionalLight>();
     light->Common().affects_world = true;
+    light->Common().casts_shadows = true;
     light->Common().color_rgb = { 1.0F, 0.95F, 0.8F };
     light->SetIntensityLux(1500.0F);
     light->SetEnvironmentContribution(true);
@@ -945,6 +946,17 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DirectionalLightBindingsPublishDirectionTowardSourceFromNodeForward)
 {
   auto sun = AddDirectionalLight("Sun");
+  auto sun_light = sun.GetLightAs<DirectionalLight>();
+  ASSERT_TRUE(sun_light.has_value());
+  auto& csm = sun_light->get().CascadedShadows();
+  csm.cascade_count = 3U;
+  csm.split_mode = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
+  csm.max_shadow_distance = 96.0F;
+  csm.cascade_distances = { 12.0F, 36.0F, 96.0F, 160.0F };
+  csm.transition_fraction = 0.2F;
+  csm.distance_fadeout_fraction = 0.25F;
+  sun_light->get().Common().shadow.bias = 0.001F;
+  sun_light->get().Common().shadow.normal_bias = 0.04F;
   sun.GetTransform().SetLocalRotation(
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
   UpdateSceneTransforms();
@@ -961,6 +973,19 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_NE(selection.directional_light->atmosphere_mode_flags
       & oxygen::vortex::kDirectionalLightAtmosphereModeFlagAuthority,
     0U);
+  EXPECT_NE(selection.directional_light->shadow_flags
+      & oxygen::vortex::kDirectionalLightShadowFlagCastsShadows,
+    0U);
+  EXPECT_EQ(selection.directional_light->cascade_count, 3U);
+  EXPECT_EQ(selection.directional_light->cascade_split_mode,
+    oxygen::vortex::FrameDirectionalCsmSplitMode::kManualDistances);
+  EXPECT_FLOAT_EQ(selection.directional_light->max_shadow_distance, 96.0F);
+  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances[1], 36.0F);
+  EXPECT_FLOAT_EQ(selection.directional_light->transition_fraction, 0.2F);
+  EXPECT_FLOAT_EQ(selection.directional_light->distance_fadeout_fraction,
+    0.25F);
+  EXPECT_FLOAT_EQ(selection.directional_light->shadow_bias, 0.001F);
+  EXPECT_FLOAT_EQ(selection.directional_light->shadow_normal_bias, 0.04F);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

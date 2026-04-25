@@ -28,6 +28,7 @@ using oxygen::Graphics;
 using oxygen::RendererConfig;
 using oxygen::kInvalidShaderVisibleIndex;
 using oxygen::vortex::DirectionalShadowFrameData;
+using oxygen::vortex::FrameDirectionalCsmSplitMode;
 using oxygen::vortex::FrameDirectionalLightSelection;
 using oxygen::vortex::FrameLightSelection;
 using oxygen::vortex::Renderer;
@@ -35,6 +36,7 @@ using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ShadowCascadeBinding;
 using oxygen::vortex::ShadowFrameBindings;
 using oxygen::vortex::ShadowService;
+using oxygen::vortex::kDirectionalLightShadowFlagCastsShadows;
 using oxygen::vortex::testing::FakeGraphics;
 
 auto DestroyRenderer(Renderer* renderer) -> void
@@ -93,11 +95,25 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     .direction = glm::vec3 { 0.0F, -1.0F, 0.0F },
     .color = glm::vec3 { 1.0F, 0.95F, 0.8F },
     .illuminance_lux = 1400.0F,
+    .shadow_flags = kDirectionalLightShadowFlagCastsShadows,
     .cascade_count = 4U,
+    .cascade_split_mode = FrameDirectionalCsmSplitMode::kManualDistances,
+    .max_shadow_distance = 128.0F,
+    .cascade_distances = { 16.0F, 32.0F, 64.0F, 128.0F },
+    .transition_fraction = 0.2F,
+    .distance_fadeout_fraction = 0.15F,
+    .shadow_bias = 0.001F,
+    .shadow_normal_bias = 0.03F,
   };
 
   ASSERT_TRUE(selection.directional_light.has_value());
   EXPECT_EQ(selection.directional_light->cascade_count, 4U);
+  EXPECT_NE(selection.directional_light->shadow_flags
+      & kDirectionalLightShadowFlagCastsShadows,
+    0U);
+  EXPECT_EQ(selection.directional_light->cascade_split_mode,
+    FrameDirectionalCsmSplitMode::kManualDistances);
+  EXPECT_FLOAT_EQ(selection.directional_light->cascade_distances[3], 128.0F);
   EXPECT_TRUE(selection.local_lights.empty());
 }
 
