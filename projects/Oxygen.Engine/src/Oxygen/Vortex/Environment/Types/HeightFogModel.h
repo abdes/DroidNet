@@ -19,13 +19,13 @@ struct HeightFogModel {
   std::uint32_t legacy_model { 0U };
   bool enable_height_fog { true };
   bool enable_volumetric_fog { false };
-  float fog_density { 0.01F };
-  float fog_height_falloff { 0.2F };
+  float fog_density { 0.002F };
+  float fog_height_falloff { 0.02F };
   float fog_height_offset { 0.0F };
   float second_fog_density { 0.0F };
   float second_fog_height_falloff { 0.0F };
   float second_fog_height_offset { 0.0F };
-  glm::vec3 fog_inscattering_luminance { 1.0F, 1.0F, 1.0F };
+  glm::vec3 fog_inscattering_luminance { 0.0F, 0.0F, 0.0F };
   glm::vec3 sky_atmosphere_ambient_contribution_color_scale {
     1.0F,
     1.0F,
@@ -36,9 +36,9 @@ struct HeightFogModel {
   glm::vec3 inscattering_texture_tint { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance { 0.0F };
   float non_directional_inscattering_color_distance { 0.0F };
-  glm::vec3 directional_inscattering_luminance { 1.0F, 1.0F, 1.0F };
-  float directional_inscattering_exponent { 0.0F };
-  float directional_inscattering_start_distance { 0.0F };
+  glm::vec3 directional_inscattering_luminance { 0.0F, 0.0F, 0.0F };
+  float directional_inscattering_exponent { 4.0F };
+  float directional_inscattering_start_distance { 10000.0F };
   float fog_max_opacity { 1.0F };
   float start_distance { 0.0F };
   float end_distance { 0.0F };

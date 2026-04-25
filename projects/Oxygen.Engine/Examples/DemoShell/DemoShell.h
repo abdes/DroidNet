@@ -229,6 +229,9 @@ public:
   [[nodiscard]] auto GetLightCullingVisualizationMode() const
     -> engine::ShaderDebugMode;
 
+  //! Returns true when the main Vortex scene view should request height fog.
+  [[nodiscard]] auto IsHeightFogPassRequested() const -> bool;
+
   //! Returns the content loader view model (may be null).
   [[nodiscard]] auto GetContentVm() const -> observer_ptr<ui::ContentVm>;
 

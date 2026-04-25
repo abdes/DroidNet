@@ -292,6 +292,7 @@ public:
   // Fog
   [[nodiscard]] virtual auto GetFogEnabled() const -> bool;
   virtual auto SetFogEnabled(bool enabled) -> void;
+  [[nodiscard]] virtual auto GetHeightFogPassRequested() const -> bool;
 
   [[nodiscard]] virtual auto GetFogModel() const -> int;
   virtual auto SetFogModel(int model) -> void;
@@ -698,8 +699,8 @@ private:
   // Fog
   bool fog_enabled_ { false };
   int fog_model_ { 0 }; // 0 = exponential height, 1 = volumetric
-  float fog_extinction_sigma_t_per_m_ { 0.01F };
-  float fog_height_falloff_per_m_ { 0.2F };
+  float fog_extinction_sigma_t_per_m_ { 0.002F };
+  float fog_height_falloff_per_m_ { 0.02F };
   float fog_height_offset_m_ { 0.0F };
   float fog_start_distance_m_ { 0.0F };
   float second_fog_density_ { 0.0F };
@@ -707,7 +708,7 @@ private:
   float second_fog_height_offset_ { 0.0F };
   float fog_max_opacity_ { 1.0F };
   glm::vec3 fog_single_scattering_albedo_rgb_ { 1.0F, 1.0F, 1.0F };
-  glm::vec3 fog_inscattering_luminance_ { 1.0F, 1.0F, 1.0F };
+  glm::vec3 fog_inscattering_luminance_ { 0.0F, 0.0F, 0.0F };
   glm::vec3 sky_atmosphere_ambient_contribution_color_scale_ {
     1.0F,
     1.0F,
@@ -717,9 +718,9 @@ private:
   glm::vec3 inscattering_texture_tint_ { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance_ { 0.0F };
   float non_directional_inscattering_color_distance_ { 0.0F };
-  glm::vec3 directional_inscattering_luminance_ { 1.0F, 1.0F, 1.0F };
-  float directional_inscattering_exponent_ { 0.0F };
-  float directional_inscattering_start_distance_ { 0.0F };
+  glm::vec3 directional_inscattering_luminance_ { 0.0F, 0.0F, 0.0F };
+  float directional_inscattering_exponent_ { 4.0F };
+  float directional_inscattering_start_distance_ { 10000.0F };
   float fog_end_distance_m_ { 0.0F };
   float fog_cutoff_distance_m_ { 0.0F };
   float volumetric_fog_scattering_distribution_ { 0.0F };

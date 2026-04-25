@@ -94,7 +94,7 @@ runtime proof can observe before deeper fog parity work lands.
 
 **Next work package:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`.
 
-**Detailed plan:** [plan/VTX-M04D.1-environment-publication-truth.md](./plan/VTX-M04D.1-environment-publication-truth.md)
+**Detailed plan:** [plan/VTX-M04D.2-exponential-height-fog-parity.md](./plan/VTX-M04D.2-exponential-height-fog-parity.md)
 
 **In scope:**
 

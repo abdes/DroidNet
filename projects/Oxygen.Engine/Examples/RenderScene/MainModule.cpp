@@ -927,6 +927,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   auto main_comp
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
+  main_comp.with_height_fog = shell.IsHeightFogPassRequested();
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 

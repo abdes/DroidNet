@@ -8,8 +8,6 @@
 
 #include <cmath>
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -70,6 +68,15 @@ using oxygen::vortex::EnvironmentLightingService;
 using oxygen::vortex::EnvironmentProbeBindings;
 using oxygen::vortex::EnvironmentProbeState;
 using oxygen::vortex::EnvironmentStaticData;
+using oxygen::vortex::kGpuFogFlagCubemapAuthored;
+using oxygen::vortex::kGpuFogFlagCubemapUsable;
+using oxygen::vortex::kGpuFogFlagDirectionalInscattering;
+using oxygen::vortex::kGpuFogFlagEnabled;
+using oxygen::vortex::kGpuFogFlagHeightFogEnabled;
+using oxygen::vortex::kGpuFogFlagHoldout;
+using oxygen::vortex::kGpuFogFlagRenderInMainPass;
+using oxygen::vortex::kGpuFogFlagVisibleInRealTimeSkyCaptures;
+using oxygen::vortex::kGpuFogFlagVisibleInReflectionCaptures;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -300,6 +307,20 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(
     static_data.sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
   EXPECT_EQ(static_data.sky_light.ibl_generation, 0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  EnvironmentStaticHeightFogDefaultsExposeInactiveFogPayload)
+{
+  const auto static_data = EnvironmentStaticData {};
+
+  EXPECT_EQ(sizeof(static_data.fog), 128U);
+  EXPECT_EQ(static_data.fog.flags, 0U);
+  EXPECT_EQ(static_data.fog.primary_density, 0.0F);
+  EXPECT_EQ(static_data.fog.secondary_density, 0.0F);
+  EXPECT_EQ(static_data.fog.cubemap_srv, oxygen::kInvalidBindlessIndex);
+  EXPECT_FLOAT_EQ(static_data.fog.max_opacity, 1.0F);
+  EXPECT_FLOAT_EQ(static_data.fog.min_transmittance, 0.0F);
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -1229,12 +1250,19 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
             || std::ranges::all_of(blend_state,
               [](const auto& target) { return !target.blend_enable; });
         }
+        const auto expected_src_blend
+          = pipeline_name == "Vortex.Environment.Fog"
+          ? oxygen::graphics::BlendFactor::kOne
+          : oxygen::graphics::BlendFactor::kSrcAlpha;
+        const auto expected_dest_blend
+          = pipeline_name == "Vortex.Environment.Fog"
+          ? oxygen::graphics::BlendFactor::kSrcAlpha
+          : oxygen::graphics::BlendFactor::kInvSrcAlpha;
         return !blend_state.empty()
-          && std::ranges::all_of(blend_state, [](const auto& target) {
+          && std::ranges::all_of(blend_state, [&](const auto& target) {
                return target.blend_enable
-                 && target.src_blend == oxygen::graphics::BlendFactor::kSrcAlpha
-                 && target.dest_blend
-                 == oxygen::graphics::BlendFactor::kInvSrcAlpha
+                 && target.src_blend == expected_src_blend
+                 && target.dest_blend == expected_dest_blend
                  && target.src_blend_alpha
                  == oxygen::graphics::BlendFactor::kOne
                  && target.dest_blend_alpha
@@ -1257,6 +1285,167 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     "VortexAtmosphereComposePS", true));
   EXPECT_TRUE(has_pipeline("Vortex.Environment.Fog",
     "Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS", true));
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  PublishedHeightFogStaticDataPreservesUe57AuthoredParameters)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 12U }, oxygen::frame::Slot { 0U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto fog = scene->GetEnvironment()
+               ->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetExtinctionSigmaTPerMeter(0.04F);
+  fog->SetHeightFalloffPerMeter(0.35F);
+  fog->SetHeightOffsetMeters(12.0F);
+  fog->SetSecondFogDensity(0.015F);
+  fog->SetSecondFogHeightFalloff(0.14F);
+  fog->SetSecondFogHeightOffset(-8.0F);
+  fog->SetFogInscatteringLuminance({ 0.2F, 0.3F, 0.4F });
+  fog->SetSkyAtmosphereAmbientContributionColorScale({ 0.5F, 0.6F, 0.7F });
+  fog->SetDirectionalInscatteringLuminance({ 3.0F, 4.0F, 5.0F });
+  fog->SetDirectionalInscatteringExponent(8.0F);
+  fog->SetDirectionalInscatteringStartDistance(77.0F);
+  fog->SetStartDistanceMeters(23.0F);
+  fog->SetEndDistanceMeters(450.0F);
+  fog->SetFogCutoffDistanceMeters(900.0F);
+  fog->SetMaxOpacity(0.65F);
+  fog->SetHoldout(true);
+  fog->SetVisibleInReflectionCaptures(false);
+  fog->SetVisibleInRealTimeSkyCaptures(false);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 30U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 30U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* static_data = service.InspectEnvironmentStaticData(ViewId { 30U });
+  ASSERT_NE(static_data, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 30U });
+  ASSERT_NE(products, nullptr);
+  const auto& gpu_fog = static_data->fog;
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagEnabled, 0U);
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagHeightFogEnabled, 0U);
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagRenderInMainPass, 0U);
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagDirectionalInscattering, 0U);
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagHoldout, 0U);
+  EXPECT_EQ(gpu_fog.flags & kGpuFogFlagVisibleInReflectionCaptures, 0U);
+  EXPECT_EQ(gpu_fog.flags & kGpuFogFlagVisibleInRealTimeSkyCaptures, 0U);
+  EXPECT_FLOAT_EQ(gpu_fog.primary_density, 0.04F);
+  EXPECT_FLOAT_EQ(gpu_fog.primary_height_falloff, 0.35F);
+  EXPECT_FLOAT_EQ(gpu_fog.primary_height_offset_m, 12.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.secondary_density, 0.015F);
+  EXPECT_FLOAT_EQ(gpu_fog.secondary_height_falloff, 0.14F);
+  EXPECT_FLOAT_EQ(gpu_fog.secondary_height_offset_m, -8.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.start_distance_m, 23.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.end_distance_m, 450.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.cutoff_distance_m, 900.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.max_opacity, 0.65F);
+  EXPECT_FLOAT_EQ(gpu_fog.min_transmittance, 0.35F);
+  EXPECT_FLOAT_EQ(gpu_fog.directional_start_distance_m, 77.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.directional_exponent, 8.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.fog_inscattering_luminance_rgb[0], 0.2F);
+  EXPECT_FLOAT_EQ(gpu_fog.fog_inscattering_luminance_rgb[1], 0.3F);
+  EXPECT_FLOAT_EQ(gpu_fog.fog_inscattering_luminance_rgb[2], 0.4F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.directional_inscattering_luminance_rgb[0], 3.0F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.directional_inscattering_luminance_rgb[1], 4.0F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.directional_inscattering_luminance_rgb[2], 5.0F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.sky_atmosphere_ambient_contribution_color_scale_rgb[0], 0.5F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.sky_atmosphere_ambient_contribution_color_scale_rgb[1], 0.6F);
+  EXPECT_FLOAT_EQ(
+    gpu_fog.sky_atmosphere_ambient_contribution_color_scale_rgb[2], 0.7F);
+  EXPECT_FLOAT_EQ(products->height_fog.second_fog_density, 0.015F);
+  EXPECT_FLOAT_EQ(products->height_fog.directional_inscattering_exponent, 8.0F);
+  EXPECT_FALSE(products->height_fog.visible_in_reflection_captures);
+  EXPECT_FALSE(products->height_fog.visible_in_real_time_sky_captures);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  DisabledHeightFogDoesNotPublishActiveGpuFog)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 13U }, oxygen::frame::Slot { 0U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto fog = scene->GetEnvironment()
+               ->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableHeightFog(false);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 31U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 31U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+
+  const auto* static_data = service.InspectEnvironmentStaticData(ViewId { 31U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_EQ(static_data->fog.flags & kGpuFogFlagEnabled, 0U);
+  EXPECT_EQ(static_data->fog.flags & kGpuFogFlagHeightFogEnabled, 0U);
+  EXPECT_FLOAT_EQ(static_data->fog.primary_density, 0.05F);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  CubemapInscatteringPublishesAuthoredButUnavailableResourceState)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 14U }, oxygen::frame::Slot { 0U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto fog = scene->GetEnvironment()
+               ->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetInscatteringColorCubemapResource(
+    oxygen::content::ResourceKey { 123U });
+  fog->SetInscatteringColorCubemapAngle(90.0F);
+  fog->SetInscatteringTextureTint({ 0.25F, 0.5F, 0.75F });
+  fog->SetNonDirectionalInscatteringColorDistance(1000.0F);
+  fog->SetFullyDirectionalInscatteringColorDistance(5000.0F);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 32U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 32U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  static_cast<void>(service.PublishEnvironmentBindings(ctx));
+
+  const auto* static_data = service.InspectEnvironmentStaticData(ViewId { 32U });
+  ASSERT_NE(static_data, nullptr);
+  const auto& gpu_fog = static_data->fog;
+  EXPECT_NE(gpu_fog.flags & kGpuFogFlagCubemapAuthored, 0U);
+  EXPECT_EQ(gpu_fog.flags & kGpuFogFlagCubemapUsable, 0U);
+  EXPECT_EQ(gpu_fog.flags & kGpuFogFlagDirectionalInscattering, 0U);
+  EXPECT_EQ(gpu_fog.cubemap_srv, oxygen::kInvalidBindlessIndex);
+  EXPECT_FLOAT_EQ(gpu_fog.cubemap_angle_radians,
+    3.14159265358979323846F * 0.5F);
+  EXPECT_FLOAT_EQ(gpu_fog.cubemap_fade_inv_range, 1.0F / 4000.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.cubemap_fade_bias, -1000.0F / 4000.0F);
+  EXPECT_FLOAT_EQ(gpu_fog.inscattering_texture_tint_rgb[0], 0.25F);
+  EXPECT_FLOAT_EQ(gpu_fog.inscattering_texture_tint_rgb[1], 0.5F);
+  EXPECT_FLOAT_EQ(gpu_fog.inscattering_texture_tint_rgb[2], 0.75F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

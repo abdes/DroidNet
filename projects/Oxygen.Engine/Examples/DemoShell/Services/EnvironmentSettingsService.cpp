@@ -1751,6 +1751,11 @@ auto EnvironmentSettingsService::GetFogEnabled() const -> bool
   return fog_enabled_;
 }
 
+auto EnvironmentSettingsService::GetHeightFogPassRequested() const -> bool
+{
+  return fog_enabled_ && fog_render_in_main_pass_;
+}
+
 auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
 {
   if (fog_enabled_ == enabled) {
@@ -3962,9 +3967,40 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_float(kFogHeightFalloffKey, fog_height_falloff_per_m_);
     any_loaded |= load_float(kFogHeightOffsetKey, fog_height_offset_m_);
     any_loaded |= load_float(kFogStartDistanceKey, fog_start_distance_m_);
+    any_loaded |= load_float(kSecondFogDensityKey, second_fog_density_);
+    any_loaded
+      |= load_float(kSecondFogHeightFalloffKey, second_fog_height_falloff_);
+    any_loaded
+      |= load_float(kSecondFogHeightOffsetKey, second_fog_height_offset_);
     any_loaded |= load_float(kFogMaxOpacityKey, fog_max_opacity_);
     any_loaded |= load_vec3(
       kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
+    any_loaded
+      |= load_vec3(kFogInscatteringLuminanceKey, fog_inscattering_luminance_);
+    any_loaded |= load_vec3(kFogSkyAtmosphereAmbientContributionKey,
+      sky_atmosphere_ambient_contribution_color_scale_);
+    any_loaded |= load_float(
+      kFogInscatteringColorCubemapAngleKey, inscattering_color_cubemap_angle_);
+    any_loaded
+      |= load_vec3(kFogInscatteringTextureTintKey, inscattering_texture_tint_);
+    any_loaded |= load_float(kFogFullyDirectionalColorDistanceKey,
+      fully_directional_inscattering_color_distance_);
+    any_loaded |= load_float(kFogNonDirectionalColorDistanceKey,
+      non_directional_inscattering_color_distance_);
+    any_loaded |= load_vec3(kFogDirectionalInscatteringLuminanceKey,
+      directional_inscattering_luminance_);
+    any_loaded |= load_float(kFogDirectionalInscatteringExponentKey,
+      directional_inscattering_exponent_);
+    any_loaded |= load_float(kFogDirectionalInscatteringStartDistanceKey,
+      directional_inscattering_start_distance_);
+    any_loaded |= load_float(kFogEndDistanceKey, fog_end_distance_m_);
+    any_loaded |= load_float(kFogCutoffDistanceKey, fog_cutoff_distance_m_);
+    any_loaded |= load_bool(kFogHoldoutKey, fog_holdout_);
+    any_loaded |= load_bool(kFogRenderInMainPassKey, fog_render_in_main_pass_);
+    any_loaded |= load_bool(
+      kFogVisibleInReflectionCapturesKey, fog_visible_in_reflection_captures_);
+    any_loaded |= load_bool(kFogVisibleInRealTimeSkyCapturesKey,
+      fog_visible_in_real_time_sky_captures_);
 
     any_loaded |= load_bool(kSunEnabledKey, sun_enabled_);
     any_loaded |= load_float(kSunAzimuthKey, sun_azimuth_deg_);
@@ -4186,8 +4222,35 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kFogHeightFalloffKey, fog_height_falloff_per_m_);
   save_float(kFogHeightOffsetKey, fog_height_offset_m_);
   save_float(kFogStartDistanceKey, fog_start_distance_m_);
+  save_float(kSecondFogDensityKey, second_fog_density_);
+  save_float(kSecondFogHeightFalloffKey, second_fog_height_falloff_);
+  save_float(kSecondFogHeightOffsetKey, second_fog_height_offset_);
   save_float(kFogMaxOpacityKey, fog_max_opacity_);
   save_vec3(kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
+  save_vec3(kFogInscatteringLuminanceKey, fog_inscattering_luminance_);
+  save_vec3(kFogSkyAtmosphereAmbientContributionKey,
+    sky_atmosphere_ambient_contribution_color_scale_);
+  save_float(
+    kFogInscatteringColorCubemapAngleKey, inscattering_color_cubemap_angle_);
+  save_vec3(kFogInscatteringTextureTintKey, inscattering_texture_tint_);
+  save_float(kFogFullyDirectionalColorDistanceKey,
+    fully_directional_inscattering_color_distance_);
+  save_float(kFogNonDirectionalColorDistanceKey,
+    non_directional_inscattering_color_distance_);
+  save_vec3(kFogDirectionalInscatteringLuminanceKey,
+    directional_inscattering_luminance_);
+  save_float(
+    kFogDirectionalInscatteringExponentKey, directional_inscattering_exponent_);
+  save_float(kFogDirectionalInscatteringStartDistanceKey,
+    directional_inscattering_start_distance_);
+  save_float(kFogEndDistanceKey, fog_end_distance_m_);
+  save_float(kFogCutoffDistanceKey, fog_cutoff_distance_m_);
+  save_bool(kFogHoldoutKey, fog_holdout_);
+  save_bool(kFogRenderInMainPassKey, fog_render_in_main_pass_);
+  save_bool(
+    kFogVisibleInReflectionCapturesKey, fog_visible_in_reflection_captures_);
+  save_bool(kFogVisibleInRealTimeSkyCapturesKey,
+    fog_visible_in_real_time_sky_captures_);
 
   save_bool(kSunEnabledKey, sun_enabled_);
   save_float(kSunAzimuthKey, sun_azimuth_deg_);

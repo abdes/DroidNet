@@ -26,19 +26,62 @@ struct alignas(packing::kShaderDataFieldAlignment) AtmosphereDensityProfileGpu {
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuFogParams {
-  std::array<float, 3> single_scattering_albedo_rgb { 1.0F, 1.0F, 1.0F };
-  float extinction_sigma_t_per_m { 0.0F };
+  std::array<float, 3> fog_inscattering_luminance_rgb {
+    1.0F,
+    1.0F,
+    1.0F,
+  };
+  float primary_density { 0.0F };
 
-  float height_falloff_per_m { 0.0F };
-  float height_offset_m { 0.0F };
+  float primary_height_falloff { 0.0F };
+  float primary_height_offset_m { 0.0F };
+  float secondary_density { 0.0F };
+  float secondary_height_falloff { 0.0F };
+
+  float secondary_height_offset_m { 0.0F };
   float start_distance_m { 0.0F };
-  float max_opacity { 1.0F };
+  float end_distance_m { 0.0F };
+  float cutoff_distance_m { 0.0F };
 
-  float anisotropy_g { 0.0F };
-  float pad0 { 0.0F };
+  float max_opacity { 1.0F };
+  float min_transmittance { 0.0F };
+  float directional_start_distance_m { 0.0F };
+  float directional_exponent { 1.0F };
+
+  std::array<float, 3> directional_inscattering_luminance_rgb {
+    0.0F,
+    0.0F,
+    0.0F,
+  };
+  float cubemap_angle_radians { 0.0F };
+
+  std::array<float, 3> sky_atmosphere_ambient_contribution_color_scale_rgb {
+    1.0F,
+    1.0F,
+    1.0F,
+  };
+  float cubemap_fade_inv_range { 0.0F };
+
+  std::array<float, 3> inscattering_texture_tint_rgb { 1.0F, 1.0F, 1.0F };
+  float cubemap_fade_bias { 0.0F };
+
+  float cubemap_num_mips { 0.0F };
+  std::uint32_t cubemap_srv { kInvalidBindlessIndex };
+  std::uint32_t flags { 0U };
   std::uint32_t model { 0U };
-  std::uint32_t enabled { 0U };
 };
+
+inline constexpr std::uint32_t kGpuFogFlagEnabled = 1U << 0U;
+inline constexpr std::uint32_t kGpuFogFlagHeightFogEnabled = 1U << 1U;
+inline constexpr std::uint32_t kGpuFogFlagVolumetricFogAuthored = 1U << 2U;
+inline constexpr std::uint32_t kGpuFogFlagRenderInMainPass = 1U << 3U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInReflectionCaptures = 1U << 4U;
+inline constexpr std::uint32_t kGpuFogFlagVisibleInRealTimeSkyCaptures
+  = 1U << 5U;
+inline constexpr std::uint32_t kGpuFogFlagHoldout = 1U << 6U;
+inline constexpr std::uint32_t kGpuFogFlagDirectionalInscattering = 1U << 7U;
+inline constexpr std::uint32_t kGpuFogFlagCubemapAuthored = 1U << 8U;
+inline constexpr std::uint32_t kGpuFogFlagCubemapUsable = 1U << 9U;
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   float planet_radius_km { engine::atmos::kDefaultPlanetRadiusKm };
@@ -74,7 +117,7 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyAtmosphereParams {
   std::uint32_t sky_irradiance_lut_slot { kInvalidBindlessIndex };
   std::uint32_t multi_scat_lut_slot { kInvalidBindlessIndex };
   std::uint32_t camera_volume_lut_slot { kInvalidBindlessIndex };
-  std::uint32_t blue_noise_slot { kInvalidBindlessIndex };
+  std::uint32_t distant_sky_light_lut_slot { kInvalidBindlessIndex };
 
   float transmittance_lut_width { 0.0F };
   float transmittance_lut_height { 0.0F };
@@ -171,12 +214,12 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
 
 static_assert(sizeof(AtmosphereDensityLayerGpu) == 16);
 static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
-static_assert(sizeof(GpuFogParams) == 48);
+static_assert(sizeof(GpuFogParams) == 128);
 static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
 static_assert(sizeof(GpuSkyLightParams) == 64);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
-static_assert(sizeof(EnvironmentStaticData) == 496);
+static_assert(sizeof(EnvironmentStaticData) == 576);
 
 } // namespace oxygen::vortex

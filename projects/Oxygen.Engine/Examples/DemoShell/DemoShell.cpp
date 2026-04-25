@@ -518,6 +518,11 @@ auto DemoShell::GetLightCullingVisualizationMode() const
   return vm->GetVisualizationMode();
 }
 
+auto DemoShell::IsHeightFogPassRequested() const -> bool
+{
+  return impl_->environment_settings_service.GetHeightFogPassRequested();
+}
+
 auto DemoShell::SyncRuntimeState() -> void
 {
   if (!impl_->initialized) {

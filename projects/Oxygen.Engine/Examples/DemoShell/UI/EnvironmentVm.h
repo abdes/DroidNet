@@ -183,6 +183,7 @@ public:
   // Fog
   [[nodiscard]] auto GetFogEnabled() const -> bool;
   auto SetFogEnabled(bool enabled) -> void;
+  [[nodiscard]] auto GetHeightFogPassRequested() const -> bool;
   [[nodiscard]] auto GetFogModel() const -> int;
   auto SetFogModel(int model) -> void;
   [[nodiscard]] auto GetFogExtinctionSigmaTPerMeter() const -> float;

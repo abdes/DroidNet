@@ -41,6 +41,7 @@ namespace {
 
   constexpr std::uint32_t kEnvironmentViewFlagAtmosphereEnabled = 1U << 0U;
   constexpr std::uint32_t kEnvironmentViewFlagReflectionCapture = 1U << 1U;
+  constexpr float kPi = 3.14159265358979323846F;
 
   auto ResolvePlanetCenterWs(const environment::AtmosphereModel& atmosphere)
     -> glm::vec3
@@ -128,7 +129,6 @@ namespace {
   auto ComputeSunDiskLuminanceRgb(
     const environment::AtmosphereLightModel& light) -> glm::vec3
   {
-    constexpr auto kPi = 3.14159265358979323846F;
     const auto angular_radius_radians
       = 0.5F * std::max(0.0F, light.angular_size_radians);
     const auto solid_angle
@@ -523,26 +523,99 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
 {
   auto data = EnvironmentStaticData {};
 
-  data.fog.single_scattering_albedo_rgb = {
-    view_products.height_fog.fog_density > 0.0F
-      ? view_products.height_fog.fog_inscattering_luminance.x
-      : 1.0F,
-    view_products.height_fog.fog_density > 0.0F
-      ? view_products.height_fog.fog_inscattering_luminance.y
-      : 1.0F,
-    view_products.height_fog.fog_density > 0.0F
-      ? view_products.height_fog.fog_inscattering_luminance.z
-      : 1.0F,
+  const auto& height_fog = view_products.height_fog;
+  const auto fog_max_opacity = std::clamp(height_fog.fog_max_opacity, 0.0F, 1.0F);
+  const auto primary_density = std::max(height_fog.fog_density, 0.0F);
+  const auto secondary_density = std::max(height_fog.second_fog_density, 0.0F);
+  const auto any_layer_density = primary_density > 0.0F || secondary_density > 0.0F;
+  const auto cubemap_authored
+    = height_fog.inscattering_color_cubemap_resource.get() != 0U;
+  const auto cubemap_usable = false;
+  const auto active_height_fog = height_fog.enabled
+    && height_fog.enable_height_fog && height_fog.render_in_main_pass
+    && any_layer_density && fog_max_opacity > 0.0F;
+  auto fog_flags = std::uint32_t { 0U };
+  if (active_height_fog) {
+    fog_flags |= kGpuFogFlagEnabled;
+  }
+  if (height_fog.enable_height_fog) {
+    fog_flags |= kGpuFogFlagHeightFogEnabled;
+  }
+  if (height_fog.enable_volumetric_fog) {
+    fog_flags |= kGpuFogFlagVolumetricFogAuthored;
+  }
+  if (height_fog.render_in_main_pass) {
+    fog_flags |= kGpuFogFlagRenderInMainPass;
+  }
+  if (height_fog.visible_in_reflection_captures) {
+    fog_flags |= kGpuFogFlagVisibleInReflectionCaptures;
+  }
+  if (height_fog.visible_in_real_time_sky_captures) {
+    fog_flags |= kGpuFogFlagVisibleInRealTimeSkyCaptures;
+  }
+  if (height_fog.holdout) {
+    fog_flags |= kGpuFogFlagHoldout;
+  }
+  if (height_fog.directional_inscattering_exponent > 0.0F
+    && !cubemap_authored) {
+    fog_flags |= kGpuFogFlagDirectionalInscattering;
+  }
+  if (cubemap_authored) {
+    fog_flags |= kGpuFogFlagCubemapAuthored;
+  }
+  if (cubemap_usable) {
+    fog_flags |= kGpuFogFlagCubemapUsable;
+  }
+  const auto cubemap_fade_range
+    = height_fog.fully_directional_inscattering_color_distance
+    - height_fog.non_directional_inscattering_color_distance;
+  const auto cubemap_fade_inv_range = 1.0F / std::max(cubemap_fade_range, 0.00001F);
+  data.fog.fog_inscattering_luminance_rgb = {
+    height_fog.fog_inscattering_luminance.x,
+    height_fog.fog_inscattering_luminance.y,
+    height_fog.fog_inscattering_luminance.z,
   };
-  data.fog.extinction_sigma_t_per_m = view_products.height_fog.fog_density;
-  data.fog.height_falloff_per_m = view_products.height_fog.fog_height_falloff;
-  data.fog.height_offset_m = view_products.height_fog.fog_height_offset;
-  data.fog.start_distance_m = view_products.height_fog.start_distance;
-  data.fog.max_opacity = view_products.height_fog.fog_max_opacity;
-  data.fog.anisotropy_g
-    = view_products.height_fog.directional_inscattering_exponent;
-  data.fog.model = view_products.height_fog.legacy_model;
-  data.fog.enabled = view_products.height_fog.enabled ? 1U : 0U;
+  data.fog.primary_density = primary_density;
+  data.fog.primary_height_falloff = std::max(height_fog.fog_height_falloff, 0.0F);
+  data.fog.primary_height_offset_m = height_fog.fog_height_offset;
+  data.fog.secondary_density = secondary_density;
+  data.fog.secondary_height_falloff
+    = std::max(height_fog.second_fog_height_falloff, 0.0F);
+  data.fog.secondary_height_offset_m = height_fog.second_fog_height_offset;
+  data.fog.start_distance_m = std::max(height_fog.start_distance, 0.0F);
+  data.fog.end_distance_m = std::max(height_fog.end_distance, 0.0F);
+  data.fog.cutoff_distance_m = std::max(height_fog.fog_cutoff_distance, 0.0F);
+  data.fog.max_opacity = fog_max_opacity;
+  data.fog.min_transmittance = 1.0F - fog_max_opacity;
+  data.fog.directional_start_distance_m
+    = std::max(height_fog.directional_inscattering_start_distance, 0.0F);
+  data.fog.directional_exponent = std::clamp(
+    height_fog.directional_inscattering_exponent, 0.000001F, 1000.0F);
+  data.fog.directional_inscattering_luminance_rgb = {
+    height_fog.directional_inscattering_luminance.x,
+    height_fog.directional_inscattering_luminance.y,
+    height_fog.directional_inscattering_luminance.z,
+  };
+  data.fog.cubemap_angle_radians
+    = height_fog.inscattering_color_cubemap_angle * (kPi / 180.0F);
+  data.fog.sky_atmosphere_ambient_contribution_color_scale_rgb = {
+    height_fog.sky_atmosphere_ambient_contribution_color_scale.x,
+    height_fog.sky_atmosphere_ambient_contribution_color_scale.y,
+    height_fog.sky_atmosphere_ambient_contribution_color_scale.z,
+  };
+  data.fog.cubemap_fade_inv_range = cubemap_fade_inv_range;
+  data.fog.inscattering_texture_tint_rgb = {
+    height_fog.inscattering_texture_tint.x,
+    height_fog.inscattering_texture_tint.y,
+    height_fog.inscattering_texture_tint.z,
+  };
+  data.fog.cubemap_fade_bias
+    = -height_fog.non_directional_inscattering_color_distance
+    * cubemap_fade_inv_range;
+  data.fog.cubemap_num_mips = 0.0F;
+  data.fog.cubemap_srv = kInvalidBindlessIndex;
+  data.fog.flags = fog_flags;
+  data.fog.model = height_fog.legacy_model;
 
   const auto& atmo = view_products.atmosphere;
   const auto primary_sun_disk_enabled
@@ -623,7 +696,8 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     = view_products.multi_scattering_lut_srv.get();
   data.atmosphere.camera_volume_lut_slot
     = view_products.camera_aerial_perspective_srv.get();
-  data.atmosphere.blue_noise_slot = kInvalidBindlessIndex;
+  data.atmosphere.distant_sky_light_lut_slot
+    = view_products.distant_sky_light_lut_srv.get();
   const auto& internal_params
     = atmosphere_lut_cache_->GetState().internal_parameters;
   data.atmosphere.transmittance_lut_width

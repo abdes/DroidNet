@@ -382,8 +382,8 @@ struct FogEnvironmentRecord {
   uint32_t enabled = 1; //!< Whether this system is enabled (boolean).
 
   uint32_t model = 0; //!< FogModel (0=ExponentialHeight, 1=Volumetric).
-  float extinction_sigma_t_per_m = 0.01F;
-  float height_falloff_per_m = 0.2F;
+  float extinction_sigma_t_per_m = 0.002F;
+  float height_falloff_per_m = 0.02F;
   float height_offset_m = 0.0F;
   float start_distance_m = 0.0F;
   float max_opacity = 1.0F;
@@ -397,7 +397,7 @@ struct FogEnvironmentRecord {
   float second_fog_height_falloff = 0.0F;
   float second_fog_height_offset = 0.0F;
 
-  float fog_inscattering_luminance[3] = { 1.0F, 1.0F, 1.0F };
+  float fog_inscattering_luminance[3] = { 0.0F, 0.0F, 0.0F };
   float sky_atmosphere_ambient_contribution_color_scale[3]
     = { 1.0F, 1.0F, 1.0F };
   AssetKey inscattering_color_cubemap_asset;
@@ -405,9 +405,9 @@ struct FogEnvironmentRecord {
   float inscattering_texture_tint[3] = { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance = 0.0F;
   float non_directional_inscattering_color_distance = 0.0F;
-  float directional_inscattering_luminance[3] = { 1.0F, 1.0F, 1.0F };
-  float directional_inscattering_exponent = 0.0F;
-  float directional_inscattering_start_distance = 0.0F;
+  float directional_inscattering_luminance[3] = { 0.0F, 0.0F, 0.0F };
+  float directional_inscattering_exponent = 4.0F;
+  float directional_inscattering_start_distance = 10000.0F;
   float end_distance_m = 0.0F;
   float fog_cutoff_distance_m = 0.0F;
 
