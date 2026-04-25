@@ -1,0 +1,16 @@
+{
+  "name": "MatCityCeramicWhite",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.88,
+      0.86,
+      0.8,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.38,
+    "ambient_occlusion": 1.0
+  }
+}
