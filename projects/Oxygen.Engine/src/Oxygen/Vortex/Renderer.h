@@ -43,10 +43,6 @@
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
-#include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
-#include <Oxygen/Vortex/Upload/RingBufferStaging.h>
-#include <Oxygen/Vortex/Upload/StagingProvider.h>
-#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/api_export.h>
 
 struct ImGuiContext;
@@ -89,6 +85,12 @@ class ImGuiRuntime;
 class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
+
+namespace oxygen::vortex::upload {
+class InlineTransfersCoordinator;
+class StagingProvider;
+class UploadCoordinator;
+} // namespace oxygen::vortex::upload
 
 namespace oxygen::vortex {
 
