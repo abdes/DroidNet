@@ -149,8 +149,8 @@ struct ShadowCascadeBinding {
   glm::mat4 light_view_projection;
   float split_near{0.0f};
   float split_far{0.0f};
-  glm::vec4 sampling_metadata0{0.0f};  // service-defined consumer metadata
-  glm::vec4 sampling_metadata1{0.0f};  // service-defined consumer metadata
+  glm::vec4 sampling_metadata0{0.0f};
+  glm::vec4 sampling_metadata1{0.0f};
 };
 
 struct ShadowFrameBindings {
@@ -171,6 +171,24 @@ struct DirectionalShadowFrameData {
 };
 ```
 
+For the conventional directional `Texture2DArray` path, Vortex currently
+defines the metadata as:
+
+| Field | Meaning |
+| --- | --- |
+| `sampling_metadata0.x` | array layer / cascade index |
+| `sampling_metadata0.yz` | inverse shadow resolution |
+| `sampling_metadata0.w` | cascade world texel size |
+| `sampling_metadata1.x` | cascade-transition width in view-depth units |
+| `sampling_metadata1.y` | last-cascade fade-begin depth |
+| `sampling_metadata1.z` | authored constant receiver bias |
+| `sampling_metadata1.w` | authored normal receiver bias |
+
+These fields follow the UE-shaped contract in which cascade distribution,
+transition, fade, and bias are published by the shadow setup stage and consumed
+by the receiver shader. They are part of the current conventional directional
+CSM ABI, not a local-light or VSM payload.
+
 ### 2.4 Directional-Light Authority
 
 Phase 4C does not run an independent directional-light election.
@@ -178,6 +196,16 @@ Phase 4C does not run an independent directional-light election.
 `ShadowService` consumes the per-frame directional-light selection already
 resolved earlier in frame execution. If no selected directional light exists
 for a view, the published `ShadowFrameBindings` payload for that view is empty.
+If the selected directional light is not authored with `casts_shadows`, the
+payload is also empty; Stage 8 must not silently render shadow maps for lights
+that opted out of shadow participation.
+
+The directional-light selection is also the source of authored CSM settings:
+cascade count, manual/generated split mode, maximum shadow distance, manual
+cascade distances, distribution exponent, transition fraction, distance-fade
+fraction, and receiver bias terms. `SceneRenderer` canonicalizes the scene
+settings before publishing them into Vortex frame-light selection so
+`ShadowService` and `LightingService` consume the same directional authority.
 
 ### 2.5 Per-View Publication
 
@@ -206,6 +234,7 @@ interim shape is not the long-lived Phase 4 contract.
 | Source | Data | Purpose |
 | ------ | ---- | ------- |
 | Renderer Core frame-light selection | selected directional light | authoritative light source for the directional baseline consumed by Stage 8 |
+| Renderer Core frame-light selection | authored directional CSM settings | cascade split, transition/fade, and receiver-bias publication |
 | Active prepared views | per-view frusta and publication targets | cascade split computation and per-view publication |
 | Scene / prepared-scene draw source | shadow-casting geometry references | directional shadow depth draws |
 
@@ -227,10 +256,11 @@ payload.
 ShadowService::RenderShadowDepths(frame_shadow_inputs)
   |
   |- Resolve selected directional light from the frame-light selection
+  |- Skip directional CSM work unless the selected light casts shadows
   |
   |- For each active view:
-  |    |- Compute directional cascade splits
-  |    |- Compute light-space matrices and consumer-facing addressing metadata
+  |    |- Compute manual or generated directional cascade splits
+  |    |- Compute light-space matrices and consumer-facing addressing/bias metadata
   |    |- Allocate / reference conventional backing resources
   |    |- Cull shadow casters to the directional cascade frusta
   |    |- Render depth-only directional shadow draws
@@ -355,7 +385,8 @@ Requires `kShadowing`.
 1. **Directional cascade validation:** single directional light, known scene ->
    verify cascade splits cover the camera frustum correctly.
 2. **Directional shadow visual:** ground plane under the selected directional
-   light -> visible occluder shadow.
+   light -> visible occluder shadow. This requires user visual confirmation
+   before the VTX-M04D.4 blocker can be considered closed.
 3. **Per-view publication:** inspect `ShadowFrameBindings` for multiple views ->
    verify view-specific matrices/addressing metadata remain isolated.
 4. **RenderDoc:** inspect conventional shadow backing resources and verify

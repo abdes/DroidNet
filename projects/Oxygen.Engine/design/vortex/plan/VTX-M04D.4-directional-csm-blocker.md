@@ -18,6 +18,9 @@ directional baseline before volumetric fog consumes it.
   - cascade projection parameters, depth-bias scaling, and depth-bounds use
 - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Renderer\Private\ShadowDepthRendering.cpp`
   - conventional shadow-depth pass ownership and cached split behavior
+- `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Engine\Private\Components\DirectionalLightComponent.cpp`
+  - `ComputeAccumulatedScale`, dynamic shadow distance, cascade transition
+    fraction, and last-cascade fade-plane behavior
 - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\ForwardShadowingCommon.ush`
   - directional cascade selection and world-to-shadow projection sampling
 - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\ShadowFilteringCommon.ush`
@@ -55,6 +58,31 @@ scope is:
 - verify Stage 12 produces a measurable projected-shadow attenuation in runtime
   or capture proof
 
+## Implementation Slice Evidence
+
+The current CSM implementation slice exists but does not close this blocker:
+
+- `FrameLightSelection` now carries authored directional CSM settings:
+  shadow participation, split mode, max distance, cascade distances,
+  distribution exponent, transition/fade fractions, and bias terms
+- `SceneRenderer` canonicalizes authored directional-light CSM settings and
+  gates cascade publication on `Common().casts_shadows`
+- `ShadowService` skips conventional CSM rendering when the selected
+  directional light is not authored to cast shadows
+- `CascadeShadowSetup` builds UE-shaped generated/manual split distances,
+  per-cascade light matrices, world texel size, transition width, fade begin,
+  and receiver-bias metadata
+- `DirectionalShadowCommon.hlsli` consumes the published metadata for cascade
+  selection, receiver bias, cascade transition blending, last-cascade fade, and
+  3x3 conventional shadow sampling
+- `VortexBasic` now authors its sun as shadow-casting so the runtime proof scene
+  exercises the conventional directional CSM path
+
+Validation recorded in `IMPLEMENTATION_STATUS.md` covers focused build,
+ShaderBake/catalog, unit tests, and a bounded Direct3D12 VortexBasic startup /
+frame / shutdown smoke. This is not projected-shadow closure because no
+receiver-pixel attenuation capture and no user visual confirmation are recorded.
+
 ## Exit Gate
 
 This blocker remains `in_progress` until all of the following are recorded in
@@ -65,6 +93,7 @@ This blocker remains `in_progress` until all of the following are recorded in
 - runtime or RenderDoc proof that Stage 8 renders directional cascade depths,
   Stage 12 consumes the conventional shadow product, and projected shadows
   affect receiver pixels
+- user visual confirmation of projected shadows in the target scene
 
 No VTX-M04D.4 shadowed-light or volumetric-fog parity claim may rely on the
 current directional CSM path before this proof exists.

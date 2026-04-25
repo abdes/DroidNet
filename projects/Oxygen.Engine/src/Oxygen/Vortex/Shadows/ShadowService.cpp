@@ -79,6 +79,10 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 
   const auto* directional_light = inputs.frame_light_set != nullptr
       && inputs.frame_light_set->directional_light.has_value()
+      && inputs.frame_light_set->directional_light->cascade_count > 0U
+      && (inputs.frame_light_set->directional_light->shadow_flags
+          & kDirectionalLightShadowFlagCastsShadows)
+        != 0U
     ? &*inputs.frame_light_set->directional_light
     : nullptr;
   for (const auto& view_input : inputs.active_views) {
