@@ -40,6 +40,11 @@ static inline bool FogFlagEnabled(uint flags, uint bit)
     return (flags & bit) != 0u;
 }
 
+static inline bool VolumetricFogFlagEnabled(uint flags, uint bit)
+{
+    return (flags & bit) != 0u;
+}
+
 static float CalculateLineIntegralShared(
     float fog_height_falloff,
     float ray_direction_z,
@@ -271,6 +276,40 @@ static float4 EvaluateExponentialHeightFog(
     return float4(fog_color, transmittance);
 }
 
+static float4 SampleIntegratedVolumetricFog(
+    GpuVolumetricFogParams volumetric_fog,
+    float2 uv,
+    float ray_length_m)
+{
+    if (!VolumetricFogFlagEnabled(volumetric_fog.flags, GPU_VOLUMETRIC_FOG_FLAG_ENABLED)
+        || !VolumetricFogFlagEnabled(
+            volumetric_fog.flags,
+            GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID)
+        || volumetric_fog.integrated_light_scattering_srv == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(volumetric_fog.integrated_light_scattering_srv)) {
+        return float4(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+    const float depth_span =
+        max(volumetric_fog.distance_m - volumetric_fog.start_distance_m, 1.0f);
+    const float depth_fraction =
+        saturate((ray_length_m - volumetric_fog.start_distance_m) / depth_span);
+    Texture3D<float4> integrated_light_scattering =
+        ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv];
+    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    return integrated_light_scattering.SampleLevel(
+        linear_sampler,
+        float3(uv, sqrt(depth_fraction)),
+        0.0f);
+}
+
+static float4 ComposeFogResults(float4 height_fog, float4 volumetric_fog)
+{
+    return float4(
+        volumetric_fog.rgb + height_fog.rgb * volumetric_fog.a,
+        saturate(height_fog.a * volumetric_fog.a));
+}
+
 [shader("vertex")]
 VortexFullscreenTriangleOutput VortexFogPassVS(uint vertex_id : SV_VertexID)
 {
@@ -312,5 +351,19 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         input.uv,
         raw_depth,
         inverse_view_projection_matrix);
-    return EvaluateExponentialHeightFog(fog, env_data, environment_view, world_position);
+    const float ray_length_m = length(world_position - camera_position);
+    float4 height_fog = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    if (FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HEIGHT_FOG_ENABLED)
+        && (fog.primary_density > 0.0f || fog.secondary_density > 0.0f)) {
+        height_fog = EvaluateExponentialHeightFog(
+            fog,
+            env_data,
+            environment_view,
+            world_position);
+    }
+    const float4 volumetric_fog = SampleIntegratedVolumetricFog(
+        env_data.volumetric_fog,
+        input.uv,
+        ray_length_m);
+    return ComposeFogResults(height_fog, volumetric_fog);
 }

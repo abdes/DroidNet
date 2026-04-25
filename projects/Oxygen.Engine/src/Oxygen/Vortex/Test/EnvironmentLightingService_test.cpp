@@ -79,6 +79,8 @@ using oxygen::vortex::kGpuFogFlagHoldout;
 using oxygen::vortex::kGpuFogFlagRenderInMainPass;
 using oxygen::vortex::kGpuFogFlagVisibleInRealTimeSkyCaptures;
 using oxygen::vortex::kGpuFogFlagVisibleInReflectionCaptures;
+using oxygen::vortex::kGpuVolumetricFogFlagEnabled;
+using oxygen::vortex::kGpuVolumetricFogFlagIntegratedScatteringValid;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -314,12 +316,16 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   const auto static_data = EnvironmentStaticData {};
 
   EXPECT_EQ(sizeof(static_data.fog), 128U);
+  EXPECT_EQ(sizeof(static_data.volumetric_fog), 80U);
   EXPECT_EQ(static_data.fog.flags, 0U);
   EXPECT_EQ(static_data.fog.primary_density, 0.0F);
   EXPECT_EQ(static_data.fog.secondary_density, 0.0F);
   EXPECT_EQ(static_data.fog.cubemap_srv, oxygen::kInvalidBindlessIndex);
   EXPECT_FLOAT_EQ(static_data.fog.max_opacity, 1.0F);
   EXPECT_FLOAT_EQ(static_data.fog.min_transmittance, 0.0F);
+  EXPECT_EQ(static_data.volumetric_fog.flags, 0U);
+  EXPECT_EQ(static_data.volumetric_fog.integrated_light_scattering_srv,
+    oxygen::kInvalidBindlessIndex);
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -1849,7 +1855,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
-  AuthoredVolumetricFogDoesNotPublishIntegratedScatteringBeforeRuntimePathExists)
+  AuthoredVolumetricFogStaysUnavailableWhenCurrentViewDoesNotRequestFog)
 {
   auto service = EnvironmentLightingService(*renderer_);
   service.OnFrameStart(
@@ -1898,6 +1904,93 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     service.GetLastPublicationState().integrated_light_scattering_valid);
   EXPECT_TRUE(
     service.GetLastPublicationState().integrated_light_scattering_unavailable);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogPublishesIntegratedScatteringForFogView)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 11U }, oxygen::frame::Slot { 2U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(50.0F);
+  fog->SetVolumetricFogNearFadeInDistance(100.0F);
+  fog->SetVolumetricFogAlbedo({ 0.6F, 0.7F, 0.8F });
+  fog->SetVolumetricFogEmissive({ 0.01F, 0.02F, 0.03F });
+  fog->SetVolumetricFogExtinctionScale(1.5F);
+  scene->Update();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 31U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 31U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 31U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 31U });
+  ASSERT_NE(products, nullptr);
+  const auto* static_data = service.InspectEnvironmentStaticData(ViewId { 31U });
+  ASSERT_NE(static_data, nullptr);
+  EXPECT_TRUE(products->volumetric_fog.enabled);
+  EXPECT_NE(
+    products->integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::
+        kEnvironmentContractFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringValid,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_EQ(static_data->volumetric_fog.integrated_light_scattering_srv,
+    products->integrated_light_scattering_srv.get());
+  EXPECT_NE(
+    static_data->volumetric_fog.flags & kGpuVolumetricFogFlagEnabled, 0U);
+  EXPECT_NE(static_data->volumetric_fog.flags
+      & kGpuVolumetricFogFlagIntegratedScatteringValid,
+    0U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_width, 8U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_height, 8U);
+  EXPECT_EQ(static_data->volumetric_fog.grid_depth, 32U);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.distance_m, 96000.0F);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.start_distance_m, 50.0F);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().volumetric_fog_authored_enabled);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().integrated_light_scattering_valid);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().integrated_light_scattering_unavailable);
+  EXPECT_TRUE(graphics_->dispatch_log_.dispatches.size() >= 1U);
+
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(generation.integrated_light_scattering_valid);
+  EXPECT_FALSE(generation.integrated_light_scattering_unavailable);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

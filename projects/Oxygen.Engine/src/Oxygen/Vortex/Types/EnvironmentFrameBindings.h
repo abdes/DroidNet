@@ -36,6 +36,9 @@ inline constexpr std::uint32_t
 inline constexpr std::uint32_t
   kEnvironmentContractFlagIntegratedLightScatteringUnavailable
   = 1U << 7U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagIntegratedLightScatteringValid
+  = 1U << 8U;
 
 //! Bindless environment-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {

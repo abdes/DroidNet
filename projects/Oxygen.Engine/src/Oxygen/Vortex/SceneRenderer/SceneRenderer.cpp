@@ -1548,6 +1548,26 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = stage14_state.local_fog_dispatch_count_y;
     environment_lighting_state_.stage14_local_fog_dispatch_count_z
       = stage14_state.local_fog_dispatch_count_z;
+    environment_lighting_state_.stage14_volumetric_fog_requested
+      = stage14_state.volumetric_fog_requested;
+    environment_lighting_state_.stage14_volumetric_fog_executed
+      = stage14_state.volumetric_fog_executed;
+    environment_lighting_state_.stage14_integrated_light_scattering_valid
+      = stage14_state.integrated_light_scattering_valid;
+    environment_lighting_state_.stage14_integrated_light_scattering_srv
+      = stage14_state.integrated_light_scattering_srv;
+    environment_lighting_state_.stage14_volumetric_fog_grid_width
+      = stage14_state.volumetric_fog_grid_width;
+    environment_lighting_state_.stage14_volumetric_fog_grid_height
+      = stage14_state.volumetric_fog_grid_height;
+    environment_lighting_state_.stage14_volumetric_fog_grid_depth
+      = stage14_state.volumetric_fog_grid_depth;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_x
+      = stage14_state.volumetric_fog_dispatch_count_x;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_y
+      = stage14_state.volumetric_fog_dispatch_count_y;
+    environment_lighting_state_.stage14_volumetric_fog_dispatch_count_z
+      = stage14_state.volumetric_fog_dispatch_count_z;
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
     environment_lighting_state_.stage15_requested = stage15_state.requested;
