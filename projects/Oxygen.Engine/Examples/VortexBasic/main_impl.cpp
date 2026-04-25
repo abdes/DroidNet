@@ -287,6 +287,31 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("intensity")
         .StoreTo(&app.vortex_sky_light_volumetric_scattering_intensity)
         .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("local-fog-volumetric-max-density")
+        .About("Clamp used when injecting local fog into volumetric fog")
+        .Long("local-fog-volumetric-max-density")
+        .WithValue<float>()
+        .DefaultValue(0.01F)
+        .UserFriendlyName("density")
+        .StoreTo(&app.vortex_local_fog_volumetric_max_density)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("local-fog-emissive-scale")
+        .About("Scale the VortexBasic local-fog emissive proof volume")
+        .Long("local-fog-emissive-scale")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("scale")
+        .StoreTo(&app.vortex_local_fog_emissive_scale)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("volumetric-fog-emissive-scale")
+        .About("Scale the base volumetric-fog emissive term")
+        .Long("volumetric-fog-emissive-scale")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("scale")
+        .StoreTo(&app.vortex_volumetric_fog_emissive_scale)
+        .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
@@ -329,6 +354,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       app.vortex_local_fog_into_volumetric);
     LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
       app.vortex_sky_light_volumetric_scattering_intensity);
+    LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
+      app.vortex_local_fog_volumetric_max_density);
+    LOG_F(INFO, "Parsed local-fog-emissive-scale option = {}",
+      app.vortex_local_fog_emissive_scale);
+    LOG_F(INFO, "Parsed volumetric-fog-emissive-scale option = {}",
+      app.vortex_volumetric_fog_emissive_scale);
     const auto shader_debug_mode
       = ParseVortexShaderDebugMode(shader_debug_mode_name);
     LOG_F(INFO, "Parsed Vortex shader debug mode = {}",
@@ -406,6 +437,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
         oxygen::console::CVarValue {
           app.vortex_local_fog_into_volumetric });
+      startup_cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
+        oxygen::console::CVarValue {
+          app.vortex_local_fog_volumetric_max_density });
       app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
     }
 

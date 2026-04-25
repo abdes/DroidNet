@@ -157,7 +157,13 @@ local-fog compose draw is expected to be absent for the volumetric proof path.
 term-variant captures: `--volumetric-local-fog false` disables local-fog
 injection into the volumetric product, and
 `--sky-light-volumetric-scattering 0` disables the SkyLight volumetric
-ambient term while preserving the rest of the validation scene.
+ambient term while preserving the rest of the validation scene. Focused proof
+runs can amplify or isolate the terms with
+`--local-fog-volumetric-max-density`, `--local-fog-emissive-scale`, and
+`--volumetric-fog-emissive-scale`; the normal defaults remain unchanged.
+`Compare-VortexBasicVolumetricTermReports.ps1` compares paired reports and
+requires both the runtime term gates and a positive enabled-minus-disabled
+increase in the sampled integrated-scattering volume.
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the

@@ -36,6 +36,9 @@ struct DistantSkyLightLutPassConstants
     float mie_scale_height_km;
     float mie_anisotropy;
     float _pad0;
+    float _pad1;
+    float _pad2;
+    float _pad3;
     float4 light0_direction_ws;
     float4 light1_direction_ws;
     float4 light0_illuminance_rgb;

@@ -70,6 +70,9 @@ private:
     float mie_scale_height_km { 1.2F };
     float mie_anisotropy { 0.8F };
     float _pad0 { 0.0F };
+    float _pad1 { 0.0F };
+    float _pad2 { 0.0F };
+    float _pad3 { 0.0F };
     float light0_direction_ws[4] { 0.0F, 0.0F, 1.0F, 0.0F };
     float light1_direction_ws[4] { 0.0F, 0.0F, 1.0F, 0.0F };
     float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
@@ -85,6 +88,7 @@ private:
     float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
     float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
   };
+  static_assert(sizeof(PassConstants) == 272U);
 
   Renderer& renderer_;
   upload::TransientStructuredBuffer pass_constants_buffer_;

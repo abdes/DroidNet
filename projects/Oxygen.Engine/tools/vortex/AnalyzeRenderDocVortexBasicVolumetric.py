@@ -70,6 +70,7 @@ DRAW_NAME = "ID3D12GraphicsCommandList::DrawInstanced()"
 VOLUMETRIC_SCOPE = "Vortex.Stage14.VolumetricFog"
 FOG_SCOPE = "Vortex.Stage15.Fog"
 INTEGRATED_LIGHT_SCATTERING_TOKEN = "vortex.environment.integratedlightscattering"
+DISTANT_SKY_LIGHT_LUT_TOKEN = "vortex.environment.distantskylightlut"
 ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
 ENVIRONMENT_STATIC_DATA_U32_COUNT = ENVIRONMENT_STATIC_DATA_BYTE_SIZE // 4
 VOLUMETRIC_FOG_U32_OFFSET = 128 // 4
@@ -139,8 +140,15 @@ def sample_integrated_volume(controller, rd, texture_descs, resource_id):
     height = max(height, 1)
     depth = max(depth, 1)
     candidate_slices = sorted(set([0, depth // 2, depth - 1]))
+    probe_slices = sorted(set([0, depth // 4, depth // 2, (depth * 3) // 4, depth - 1]))
+    probe_columns = 7
+    probe_rows = 5
     all_min = [float("inf")] * 4
     all_max = [float("-inf")] * 4
+    probe_sum = [0.0, 0.0, 0.0, 0.0]
+    probe_min = [float("inf")] * 4
+    probe_max = [float("-inf")] * 4
+    probe_count = 0
     slice_reports = []
     for slice_index in candidate_slices:
         sub = rd.Subresource()
@@ -170,11 +178,35 @@ def sample_integrated_volume(controller, rd, texture_descs, resource_id):
                 "center": center_values,
             }
         )
+    for slice_index in probe_slices:
+        sub = rd.Subresource()
+        sub.mip = 0
+        sub.slice = int(slice_index)
+        sub.sample = 0
+        for row in range(probe_rows):
+            y = 0 if probe_rows == 1 else int(round(((height - 1) * row) / float(probe_rows - 1)))
+            for col in range(probe_columns):
+                x = 0 if probe_columns == 1 else int(round(((width - 1) * col) / float(probe_columns - 1)))
+                value = float4_values(controller.PickPixel(
+                    resource_id, x, y, sub, rd.CompType.Typeless
+                ))
+                probe_count += 1
+                probe_sum = [probe_sum[i] + value[i] for i in range(4)]
+                probe_min = [min(probe_min[i], value[i]) for i in range(4)]
+                probe_max = [max(probe_max[i], value[i]) for i in range(4)]
 
     rgb_nonzero = max(abs(value) for value in all_max[:3]) > 1.0e-6 or max(
         abs(all_max[index] - all_min[index]) for index in range(3)
     ) > 1.0e-6
     alpha_valid = all_min[3] >= -1.0e-5 and all_max[3] <= 1.0 + 1.0e-5
+    if probe_count == 0:
+        probe_min = [0.0, 0.0, 0.0, 0.0]
+        probe_max = [0.0, 0.0, 0.0, 0.0]
+    probe_avg = (
+        [value / float(probe_count) for value in probe_sum]
+        if probe_count > 0
+        else [0.0, 0.0, 0.0, 0.0]
+    )
     return {
         "sampled": len(slice_reports) > 0,
         "width": width,
@@ -183,6 +215,12 @@ def sample_integrated_volume(controller, rd, texture_descs, resource_id):
         "slices": slice_reports,
         "min": all_min,
         "max": all_max,
+        "probe_count": probe_count,
+        "probe_min": probe_min,
+        "probe_max": probe_max,
+        "probe_avg": probe_avg,
+        "probe_rgb_sum": sum(probe_sum[:3]),
+        "probe_rgb_max": max(probe_max[:3]),
         "rgb_nonzero": rgb_nonzero,
         "alpha_valid": alpha_valid,
     }
@@ -285,6 +323,45 @@ def read_stage15_fog_environment_static_data(controller, rd, event_id, resource_
     return None
 
 
+def read_first_float4_buffer_by_name(controller, resource_records, *tokens):
+    for resource in resource_records:
+        resource_id = safe_getattr(resource, "resourceId")
+        name = safe_getattr(resource, "name", "")
+        if resource_id is None or not name:
+            continue
+        lower_name = name.lower()
+        if not all(token.lower() in lower_name for token in tokens):
+            continue
+        try:
+            raw = controller.GetBufferData(resource_id, 0, 16)
+        except Exception:
+            continue
+        blob = bytes(raw)
+        if len(blob) < 16:
+            continue
+        return {
+            "resource_id": resource_id,
+            "name": name,
+            "value": struct.unpack("<4f", blob[:16]),
+        }
+    return None
+
+
+def read_float4_buffer(controller, resource_id, resource_names):
+    try:
+        raw = controller.GetBufferData(resource_id, 0, 16)
+    except Exception:
+        return None
+    blob = bytes(raw)
+    if len(blob) < 16:
+        return None
+    return {
+        "resource_id": resource_id,
+        "name": resource_names.get(str(resource_id), str(resource_id)),
+        "value": struct.unpack("<4f", blob[:16]),
+    }
+
+
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
@@ -331,6 +408,19 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         if volumetric_dispatch is not None
         else []
     )
+    distant_sky_light_bound = (
+        bound_named_resources(
+            controller,
+            rd,
+            resource_names,
+            volumetric_dispatch.event_id,
+            rd.ShaderStage.Compute,
+            False,
+            DISTANT_SKY_LIGHT_LUT_TOKEN,
+        )
+        if volumetric_dispatch is not None
+        else []
+    )
     consumed = (
         bound_named_resources(
             controller,
@@ -373,6 +463,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "slices": [],
         "min": [0.0, 0.0, 0.0, 0.0],
         "max": [0.0, 0.0, 0.0, 0.0],
+        "probe_count": 0,
+        "probe_min": [0.0, 0.0, 0.0, 0.0],
+        "probe_max": [0.0, 0.0, 0.0, 0.0],
+        "probe_avg": [0.0, 0.0, 0.0, 0.0],
+        "probe_rgb_sum": 0.0,
+        "probe_rgb_max": 0.0,
         "rgb_nonzero": False,
         "alpha_valid": False,
     }
@@ -422,6 +518,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_grid_z_params[1] < 1.0
         and abs(stage15_grid_z_params[2] - 32.0) < 0.001
     )
+    distant_sky_light_lut = (
+        read_float4_buffer(
+            controller, distant_sky_light_bound[0]["resource_id"], resource_names
+        )
+        if distant_sky_light_bound
+        else read_first_float4_buffer_by_name(
+            controller,
+            resource_records,
+            DISTANT_SKY_LIGHT_LUT_TOKEN,
+        )
+    )
 
     report.append("analysis_profile=vortexbasic_volumetric_fog")
     report.append("capture_path={}".format(capture_path))
@@ -464,6 +571,36 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "integrated_light_scattering_volume_max={}".format(
             format_values(integrated_volume["max"])
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_count={}".format(
+            integrated_volume["probe_count"]
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_min={}".format(
+            format_values(integrated_volume["probe_min"])
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_max={}".format(
+            format_values(integrated_volume["probe_max"])
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_avg={}".format(
+            format_values(integrated_volume["probe_avg"])
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_rgb_sum={:.9g}".format(
+            integrated_volume["probe_rgb_sum"]
+        )
+    )
+    report.append(
+        "integrated_light_scattering_probe_rgb_max={:.9g}".format(
+            integrated_volume["probe_rgb_max"]
         )
     )
     for index, slice_report in enumerate(integrated_volume["slices"]):
@@ -523,6 +660,23 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             stage15_grid_z_params[0],
             stage15_grid_z_params[1],
             stage15_grid_z_params[2],
+        )
+    )
+    report.append(
+        "distant_sky_light_lut_resource={}".format(
+            distant_sky_light_lut["name"] if distant_sky_light_lut else ""
+        )
+    )
+    report.append(
+        "distant_sky_light_lut_bound_resource={}".format(
+            distant_sky_light_bound[0]["name"] if distant_sky_light_bound else ""
+        )
+    )
+    report.append(
+        "distant_sky_light_lut_value={}".format(
+            format_values(distant_sky_light_lut["value"])
+            if distant_sky_light_lut
+            else ""
         )
     )
 
