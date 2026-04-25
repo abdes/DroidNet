@@ -1,0 +1,181 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/UploadCoordinatorTest.h>
+#include <Oxygen/Vortex/Upload/StagingProvider.h>
+
+using oxygen::SizeBytes;
+using oxygen::frame::SlotCount;
+using oxygen::vortex::upload::UploadError;
+
+namespace {
+
+constexpr uint32_t kTestAlignment = 256U;
+constexpr float kTestSlack = 0.5F;
+constexpr SizeBytes kTestAllocationSize { 64 };
+constexpr SizeBytes kSmallAllocationSize { 32 };
+constexpr uint32_t kSmallTestAlignment = 64U;
+constexpr SizeBytes kGrowthPadding { 128 };
+
+// Error and death fixture
+class RingBufferStagingErrorTest
+  : public oxygen::vortex::upload::testing::UploadCoordinatorTest { };
+
+/*!
+ CreateBuffer throwing should surface as a staging allocation failure.
+*/
+NOLINT_TEST_F(RingBufferStagingErrorTest, CreateBuffer_Throws_ReturnsError)
+{
+  // Arrange: force CreateBuffer to throw
+  Gfx().SetThrowOnCreateBuffer(true);
+
+  // Recreate uploader/provider after changing gfx behaviour
+  auto& uploader = Uploader();
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kTestAlignment, kTestSlack);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  // Act
+  auto alloc = provider->Allocate(kTestAllocationSize, "throw-test");
+
+  // Assert
+  ASSERT_FALSE(alloc.has_value());
+  EXPECT_EQ(alloc.error(), UploadError::kStagingAllocFailed);
+}
+
+/*!
+ If Map returns null, Allocate should fail with kStagingAllocFailed.
+*/
+NOLINT_TEST_F(RingBufferStagingErrorTest, Map_ReturnsNull_ReturnsError)
+{
+  // Arrange: force Map to return nullptr
+  Gfx().SetFailMap(true);
+
+  // Recreate uploader/provider after changing gfx behaviour
+  auto& uploader = Uploader();
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kTestAlignment, kTestSlack);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  // Act
+  auto alloc = provider->Allocate(kTestAllocationSize, "map-null-test");
+
+  // Assert
+  ASSERT_FALSE(alloc.has_value());
+  EXPECT_EQ(alloc.error(), UploadError::kStagingMapFailed);
+}
+
+/*!
+ Destroying a provider that never allocated a backing buffer must remain
+ well-defined.
+*/
+NOLINT_TEST(RingBufferStaging, DestroyWithoutAllocationDoesNotCrash)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+    auto provider = uploader->CreateRingBufferStaging(
+      SlotCount { 1 }, kTestAlignment, kTestSlack, "RingBufferStaging.NoAlloc");
+
+    provider.reset();
+    uploader.reset();
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
+/*!
+ Destroying a provider after allocation setup failed must not dereference a null
+ backing buffer during teardown.
+*/
+NOLINT_TEST(RingBufferStaging, DestroyAfterFailedAllocationDoesNotCrash)
+{
+  auto run_teardown = []() {
+    auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+    gfx->SetThrowOnCreateBuffer(true);
+    gfx->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+
+    auto uploader = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr<oxygen::Graphics> { gfx.get() },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+    auto provider = uploader->CreateRingBufferStaging(
+      SlotCount { 1 }, kTestAlignment, kTestSlack,
+      "RingBufferStaging.FailAlloc");
+
+    const auto alloc = provider->Allocate(kTestAllocationSize, "fail-alloc");
+    EXPECT_FALSE(alloc.has_value());
+
+    provider.reset();
+    uploader.reset();
+    gfx.reset();
+  };
+
+  ASSERT_NO_FATAL_FAILURE(run_teardown());
+}
+
+/*!
+ Allocation construction is invalid with null buffer/ptr; ensure checks fire.
+*/
+NOLINT_TEST_F(RingBufferStagingErrorTest, Allocation_Construct_Invalid_Deaths)
+{
+  // This is a death-test: attempt to construct Allocation with invalid args.
+  // Use EXPECT_DEATH to validate CHECK failures.
+
+  // Note: allocation ctor is OXGN_RNDR_API and enforces CHECKs; craft a
+  // minimal scenario to trigger them.
+  EXPECT_DEATH(
+    {
+      // Create a bogus Allocation by invoking constructor with nullptr buffer
+      oxygen::vortex::upload::StagingProvider::Allocation(
+        nullptr, oxygen::OffsetBytes { 0 }, oxygen::SizeBytes { 1 }, nullptr);
+    },
+    "");
+}
+
+// Edge fixture for capacity and growth tests
+class RingBufferStagingEdgeTest
+  : public oxygen::vortex::upload::testing::UploadCoordinatorTest { };
+
+/*!
+ Ensure capacity grows when a large allocation is requested.
+*/
+NOLINT_TEST_F(RingBufferStagingEdgeTest, EnsureCapacity_GrowsBuffer)
+{
+  auto& uploader = Uploader();
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount { 1 }, kSmallTestAlignment, kTestSlack);
+  ASSERT_NE(provider, nullptr);
+  SetStagingProvider(provider);
+
+  // Arrange: small allocation to initialize
+  auto a1 = provider->Allocate(kSmallAllocationSize, "init");
+  ASSERT_TRUE(a1.has_value());
+  const SizeBytes before_size { provider->GetStats().current_buffer_size };
+
+  // Act: allocate a larger size to force growth
+  auto a2 = provider->Allocate(before_size + kGrowthPadding, "grow");
+
+  // Assert
+  ASSERT_TRUE(a2.has_value());
+  EXPECT_GT(provider->GetStats().current_buffer_size, before_size.get());
+
+  // Drain deferred buffer-release callbacks deterministically to avoid
+  // teardown-time lifetime coupling between UploadCoordinator and Graphics.
+  Gfx().Flush();
+}
+
+} // namespace

@@ -19,14 +19,14 @@ class Platform;
 class Graphics;
 class AsyncEngine;
 
-} // namespace oxygen
-
-namespace oxygen::engine {
-
-class InputSystem;
-class Renderer;
-
+namespace engine {
+  class InputSystem;
 } // namespace oxygen::engine
+namespace vortex {
+  class Renderer;
+} // namespace oxygen::vortex
+
+} // namespace oxygen
 
 namespace oxygen::examples {
 
@@ -39,6 +39,9 @@ class DemoAppContext {
 public:
   bool headless { false };
   bool fullscreen { false };
+  bool with_atmosphere { false };
+  bool with_height_fog { false };
+  bool with_local_fog { false };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
@@ -52,7 +55,7 @@ public:
   std::shared_ptr<AsyncEngine> engine;
 
   // Observed modules (non-owning).
-  observer_ptr<engine::Renderer> renderer;
+  observer_ptr<vortex::Renderer> renderer;
   observer_ptr<engine::InputSystem> input_system;
 
   //! Flag toggled to request loop continue/stop.

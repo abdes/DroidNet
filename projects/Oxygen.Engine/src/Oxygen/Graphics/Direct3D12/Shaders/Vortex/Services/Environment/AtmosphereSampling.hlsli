@@ -1,0 +1,286 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+//! Sky Atmosphere LUT Sampling Helpers
+//!
+//! Provides functions to sample precomputed transmittance and sky-view LUTs
+//! for physically-based atmospheric scattering.
+//!
+//! === LUT UV Parameterizations ===
+//! Transmittance LUT (Bruneton/UE5 distance-based mapping):
+//!   u = x_mu mapping (interpolated distance to atmosphere top)
+//!   v = x_r mapping (normalized altitude relative to top)
+//!
+//! Sky-View LUT (UE5 sun-relative mapping):
+//!   u = azimuth / (2 * PI)
+//!   v = (cos_zenith + 1) / 2
+
+#ifndef OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
+#define OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI
+
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
+#include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
+#include "Vortex/Shared/Math.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
+#include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
+
+//! Computes transmittance LUT UV from altitude and cos_zenith.
+//!
+//! @param cos_zenith Cosine of zenith angle (view direction dot up).
+//! @param altitude_km Height above planet surface in km.
+//! @param atmosphere_height_km Total atmosphere thickness in km.
+//! @return UV coordinates for transmittance LUT sampling.
+float2 GetTransmittanceLutUv(
+    float cos_zenith,
+    float altitude_km,
+    float planet_radius_km,
+    float atmosphere_height_km)
+{
+    float view_height = planet_radius_km + altitude_km;
+    float top_radius = planet_radius_km + atmosphere_height_km;
+    float H = sqrt(max(0.0, top_radius * top_radius
+        - planet_radius_km * planet_radius_km));
+    float rho = sqrt(max(0.0, view_height * view_height
+        - planet_radius_km * planet_radius_km));
+
+    float discriminant = view_height * view_height
+        * (cos_zenith * cos_zenith - 1.0)
+        + top_radius * top_radius;
+    float d = max(0.0, (-view_height * cos_zenith + sqrt(discriminant)));
+
+    float d_min = top_radius - view_height;
+    float d_max = rho + H;
+    float x_mu = (d - d_min) / (d_max - d_min);
+    float x_r = rho / H;
+
+    return saturate(float2(x_mu, x_r));
+}
+
+//! Applies half-texel offset for proper bilinear filtering of sky-view LUTs.
+//!
+//! @param uv Raw UV coordinates [0, 1].
+//! @param lut_width LUT texture width.
+//! @param lut_height LUT texture height.
+//! @return UV with half-texel offset applied.
+static inline float2 ApplySkyViewHalfTexelOffset(float2 uv, float lut_width, float lut_height)
+{
+    uv = uv * float2((lut_width - 1.0) / lut_width, (lut_height - 1.0) / lut_height);
+    uv += float2(0.5 / lut_width, 0.5 / lut_height);
+    return uv;
+}
+
+//! Computes sky-view LUT UV from view direction using UE-style azimuth mapping.
+//!
+//! This mirrors UE's `SkyViewLutParamsToUv`: U is full azimuth around the local
+//! sky referential and V uses the horizon-aware zenith-angle mapping.
+//!
+//! @param view_dir Normalized world-space view direction.
+//! @param sun_dir Normalized world-space sun direction.
+//! @param planet_radius_km Planet radius in km.
+//! @param camera_altitude_km Camera altitude above surface in km.
+//! @return UV coordinates for sky-view LUT sampling.
+float2 GetSkyViewLutUv(float3 view_dir, float3 sun_dir, float planet_radius_km, float camera_altitude_km)
+{
+    (void)sun_dir;
+    // cos_zenith from Z component (Z is up).
+    float cos_zenith = view_dir.z;
+
+    // Compute horizon angle for this altitude.
+    float r = planet_radius_km + camera_altitude_km;
+    float rho = planet_radius_km / r;
+    float cos_horizon = -sqrt(max(0.0, 1.0 - rho * rho));
+
+    float zenith_horizon_angle = acos(cos_horizon);
+    float beta = PI - zenith_horizon_angle;
+    float view_zenith_angle = acos(clamp(cos_zenith, -1.0, 1.0));
+    bool intersect_ground = RaySphereIntersectNearest(
+        float3(0.0f, 0.0f, r),
+        view_dir,
+        planet_radius_km) >= 0.0f;
+
+    float v;
+    if (!intersect_ground)
+    {
+        float coord = view_zenith_angle / zenith_horizon_angle;
+        coord = 1.0 - coord;
+        coord = sqrt(max(0.0, coord));
+        coord = 1.0 - coord;
+        v = coord * 0.5;
+    }
+    else
+    {
+        float coord = (view_zenith_angle - zenith_horizon_angle) / beta;
+        coord = sqrt(max(0.0, coord));
+        v = (coord + 1.0) * 0.5;
+    }
+
+    float u = (atan2(-view_dir.y, -view_dir.x) + PI) / TWO_PI;
+
+    return float2(u, v);
+}
+
+
+//! Converts a camera altitude (meters) to a fractional slice index.
+//!
+//! Uses the inverse of the mapping used during LUT generation (centered bins):
+//!   Linear (mode 0): t = h / H                -> slice_frac = t * slices - 0.5
+//!   Log    (mode 1): t = log2(1 + h / H)      -> slice_frac = t * slices - 0.5
+//!
+//! The -0.5 accounts for the centered-bin convention where slice i represents
+//! altitude at (i + 0.5) / slices. The result is clamped to [0, slices - 1].
+//!
+//! @param altitude_km      Camera altitude above ground in km.
+//! @param atmosphere_h_km  Total atmosphere height in km.
+//! @param slices           Number of altitude slices in the LUT.
+//! @param mapping_mode     0 = linear, 1 = log.
+//! @return Fractional slice index (e.g. 3.7 means lerp 70% from slice 3 to 4).
+float AltitudeToSliceFrac(float altitude_km, float atmosphere_h_km,
+                          uint slices, uint mapping_mode)
+{
+    // Clamp altitude into valid range to avoid out-of-bounds slice.
+    float h = clamp(altitude_km, 0.0, atmosphere_h_km);
+
+    float t;
+    if (mapping_mode == 1)
+    {
+        // Inverse of h = H * (2^t - 1) → t = log2(1 + h / H).
+        t = log2(1.0 + h / atmosphere_h_km);
+    }
+    else
+    {
+        // Inverse of h = H * t → t = h / H.
+        t = h / atmosphere_h_km;
+    }
+
+    // Convert normalised t back to centered-bin slice index.
+    // During generation: t_gen = (slice + 0.5) / slices
+    // Inverse: slice_frac = t * slices - 0.5
+    float slice_frac = t * float(slices) - 0.5;
+    return clamp(slice_frac, 0.0, float(slices) - 1.0);
+}
+
+//! Loads a single texel from a Texture2DArray using integer coordinates.
+//!
+//! Uses Load() instead of SampleLevel() so that slice blending is fully
+//! manual (no HW trilinear ambiguity) [P7].
+static inline float4 LoadSkyViewTexel(Texture2DArray<float4> lut,
+                                       int2 texel, int slice)
+{
+    return lut.Load(int4(texel, slice, 0));
+}
+
+//! Samples a single slice of the sky-view LUT with bilinear filtering.
+//!
+//! Manually performs bilinear interpolation using four Load() calls so that
+//! the slice index is exactly controlled (avoids hardware trilinear across
+//! array slices which is undefined for Texture2DArray).
+//!
+//! @param lut          The sky-view Texture2DArray.
+//! @param uv           Normalised UV for the slice (after half-texel offset).
+//! @param lut_width    Width of the LUT in texels.
+//! @param lut_height   Height of the LUT in texels.
+//! @param slice        Integer slice index.
+//! @return Bilinearly filtered float4.
+static inline float4 SampleSliceBilinear(Texture2DArray<float4> lut,
+                                          float2 uv, float lut_width,
+                                          float lut_height, int slice)
+{
+    // Convert UV to texel-space (origin at texel center 0).
+    float tx = uv.x * lut_width  - 0.5;
+    float ty = uv.y * lut_height - 0.5;
+
+    int x0 = (int)floor(tx);
+    int y0 = (int)floor(ty);
+    int x1 = x0 + 1;
+    int y1 = y0 + 1;
+
+    float fx = tx - float(x0);
+    float fy = ty - float(y0);
+
+    // Clamp to valid texel range.
+    x0 = clamp(x0, 0, (int)lut_width  - 1);
+    x1 = clamp(x1, 0, (int)lut_width  - 1);
+    y0 = clamp(y0, 0, (int)lut_height - 1);
+    y1 = clamp(y1, 0, (int)lut_height - 1);
+
+    float4 s00 = LoadSkyViewTexel(lut, int2(x0, y0), slice);
+    float4 s10 = LoadSkyViewTexel(lut, int2(x1, y0), slice);
+    float4 s01 = LoadSkyViewTexel(lut, int2(x0, y1), slice);
+    float4 s11 = LoadSkyViewTexel(lut, int2(x1, y1), slice);
+
+    return lerp(lerp(s00, s10, fx), lerp(s01, s11, fx), fy);
+}
+
+//! Samples the sky-view LUT array with manual two-slice altitude blending.
+//!
+//! The sky-view LUT is now a Texture2DArray where each slice covers a
+//! different altitude band. This function:
+//!   1. Computes the fractional slice from camera altitude [P9].
+//!   2. Bilinearly samples the two neighboring integer slices.
+//!   3. Lerps between them by the fractional part.
+//!   4. Applies the zenith azimuth-averaging filter using the same array
+//!      sampling path [P8].
+//!
+//! @param lut_slot         Bindless SRV index for the sky-view LUT array.
+//! @param lut_width        LUT texture width (per slice).
+//! @param lut_height       LUT texture height (per slice).
+//! @param view_dir         Normalized world-space view direction.
+//! @param sun_dir          Normalized world-space sun direction.
+//! @param planet_radius_km Planet radius in km.
+//! @param camera_altitude_km Camera altitude above surface in km.
+//! @param slices           Number of altitude slices in the array.
+//! @param alt_mapping_mode Altitude mapping mode (0 = linear, 1 = log).
+//! @param atmosphere_height_km Total atmosphere height in km.
+//! @return float4(inscattered_radiance.rgb, transmittance).
+float4 SampleSkyViewLut(
+    uint lut_slot,
+    float lut_width,
+    float lut_height,
+    float3 view_dir,
+    float3 sun_dir,
+    float planet_radius_km,
+    float camera_altitude_km,
+    uint slices,
+    uint alt_mapping_mode,
+    float atmosphere_height_km)
+{
+    if (lut_slot == K_INVALID_BINDLESS_INDEX)
+    {
+        // No LUT available, return zero inscatter, full transmittance.
+        return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float2 uv_base = GetSkyViewLutUv(view_dir, sun_dir, planet_radius_km, camera_altitude_km);
+    float2 uv = ApplySkyViewHalfTexelOffset(uv_base, lut_width, lut_height);
+
+    if (slices <= 1u)
+    {
+        Texture2D<float4> lut_2d = ResourceDescriptorHeap[lut_slot];
+        SamplerState linear_sampler
+            = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
+        return lut_2d.SampleLevel(linear_sampler, uv, 0.0f);
+    }
+
+    // Load the Texture2DArray instead of Texture2D [P7].
+    Texture2DArray<float4> lut = ResourceDescriptorHeap[lut_slot];
+
+    // Compute fractional slice index from camera altitude.
+    float slice_frac = AltitudeToSliceFrac(
+        camera_altitude_km, atmosphere_height_km, slices, alt_mapping_mode);
+
+    int slice_lo = (int)floor(slice_frac);
+    int slice_hi = min(slice_lo + 1, (int)slices - 1);
+    float blend = slice_frac - float(slice_lo);
+
+    // Sample both neighboring slices and lerp.
+    float4 sample_lo = SampleSliceBilinear(lut, uv, lut_width, lut_height, slice_lo);
+    float4 sample_hi = SampleSliceBilinear(lut, uv, lut_width, lut_height, slice_hi);
+    return lerp(sample_lo, sample_hi, blend);
+}
+
+#endif // OXYGEN_D3D12_SHADERS_ATMOSPHERE_SAMPLING_HLSLI

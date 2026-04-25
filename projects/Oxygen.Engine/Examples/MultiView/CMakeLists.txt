@@ -62,7 +62,7 @@ target_link_libraries(
     oxygen::clap
     oxygen::engine
     oxygen::graphics-direct3d12
-    oxygen::renderer
+    oxygen::vortex
     oxygen::loader
 )
 

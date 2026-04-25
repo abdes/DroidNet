@@ -7,8 +7,8 @@
 #pragma once
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
 
+#include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::examples::ui {

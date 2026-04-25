@@ -21,6 +21,7 @@
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -36,17 +37,14 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoSettingsService.h"
@@ -63,13 +61,13 @@ using oxygen::Scissors;
 using oxygen::ViewPort;
 using oxygen::data::Mesh;
 using oxygen::data::Vertex;
-using oxygen::engine::RenderItem;
-using oxygen::graphics::Buffer;
-using oxygen::graphics::Framebuffer;
 using oxygen::scene::DistancePolicy;
 using oxygen::scene::PerspectiveCamera;
 
 namespace {
+
+constexpr uint32_t kDefaultOffscreenWidth = 1280U;
+constexpr uint32_t kDefaultOffscreenHeight = 720U;
 
 struct LocalTimeOfDay {
   int hour = 0;
@@ -78,10 +76,23 @@ struct LocalTimeOfDay {
   double day_fraction = 0.0;
 };
 
+auto SetShadowParticipation(oxygen::scene::SceneNode& node,
+  const bool casts_shadows, const bool receives_shadows) -> void
+{
+  if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
+    auto& flags = flags_ref->get();
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
+    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
+      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
+  }
+}
+
 // Helper: make a solid-color material asset snapshot
 auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque,
-  bool double_sided = false)
+  bool double_sided = false, const float metalness = 0.0F,
+  const float roughness = 0.9F)
 {
   // NOLINTBEGIN(*-magic-numbers)
   namespace d = oxygen::data;
@@ -105,8 +116,8 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = d::Unorm16 { 0.0F };
-  desc.roughness = d::Unorm16 { 0.9F };
+  desc.metalness = d::Unorm16 { metalness };
+  desc.roughness = d::Unorm16 { roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
   // Leave texture indices at default invalid (no textures)
   const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
@@ -231,7 +242,10 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 } });
-  std::vector<uint32_t> indices { 0, 1, 2, 2, 1, 3 };
+  // Keep triangle winding consistent with the authored +Z normals. The
+  // previous ordering faced -Z, which made the double-sided shading path treat
+  // the visible side as a backface and flip the normal away from the light.
+  std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
 
   // Create two distinct solid-color materials
   const auto red = MakeSolidColorMaterial("Red", { 1.0F, 0.1F, 0.1F, 1.0F },
@@ -347,10 +361,6 @@ auto MainModule::OnAttachedImpl(
 {
   DCHECK_NOTNULL_F(engine);
 
-  // Create Pipeline
-  pipeline_ = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
-
   auto shell = std::make_unique<DemoShell>();
 
   settings_service_ = std::make_shared<AsyncDemoSettingsService>();
@@ -362,6 +372,7 @@ auto MainModule::OnAttachedImpl(
 
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { app_.engine.get() };
+  shell_config.enable_renderer_bound_panels = false;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
     .camera_controls = true,
@@ -372,8 +383,6 @@ auto MainModule::OnAttachedImpl(
     .ground_grid = true,
   };
   shell_config.enable_camera_rig = true;
-  shell_config.get_active_pipeline
-    = [this]() { return observer_ptr { pipeline_.get() }; };
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "Async: DemoShell initialization failed");
@@ -382,19 +391,12 @@ auto MainModule::OnAttachedImpl(
 
   if (!shell->RegisterPanel(async_panel_)) {
     LOG_F(WARNING, "Async: failed to register Async panel");
+  } else if (!shell->GetActivePanelName().has_value()) {
+    shell->SetActivePanel(async_panel_->GetName());
   }
 
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
-
-  // --- ImGuiPass configuration ---
-  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (app_window_) {
-      imgui_module.SetWindowId(app_window_->GetWindowId());
-    }
-  }
 
   // ConfigureDrone moved to OnFrameStart
 
@@ -430,6 +432,9 @@ auto MainModule::BuildDefaultWindowProperties() const
 
 void MainModule::OnShutdown() noexcept
 {
+  ReleasePublishedRuntimeView();
+  ClearSceneFramebuffer();
+
   auto& shell = GetShell();
   shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
@@ -441,9 +446,7 @@ void MainModule::OnShutdown() noexcept
 
 auto MainModule::ClearBackbufferReferences() -> void
 {
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
+  ClearSceneFramebuffer();
 }
 
 auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -466,8 +469,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   StartFrameTracking();
   TrackFrameAction("Frame started");
 
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
+  if (app_window_ != nullptr && !app_window_->GetWindow()) {
     TrackFrameAction("GUI update skipped - app window not available");
     // continue to Base to ensure cleanup
   }
@@ -477,12 +479,21 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   // Call base to handle window lifecycle and surface setup
   Base::OnFrameStart(context);
 
+  if (!HasRenderableWindow()) {
+    ReleasePublishedRuntimeView(context);
+    return;
+  }
+
   LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
 
   // Register scene with frame context (required for rendering)
   const auto scene_ptr = shell.TryGetScene();
   if (scene_ptr) {
     context->SetScene(oxygen::observer_ptr { scene_ptr.get() });
+  }
+
+  if (app_window_ != nullptr && !app_window_->GetWindow()) {
+    ReleasePublishedRuntimeView(context);
   }
 
   // Ensure drone is configured once the rig is available
@@ -500,9 +511,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-
-  if (!app_window_->GetWindow()) {
+  if (app_window_ != nullptr && !app_window_->GetWindow()) {
     // Window invalid, skip update
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
     TrackFrameAction("Scene mutation skipped - app window not available");
@@ -522,9 +531,9 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  const auto extent = app_window_->GetWindow()->Size();
-  const int width = static_cast<int>(extent.width);
-  const int height = static_cast<int>(extent.height);
+  const auto extent = ResolveViewExtent();
+  const auto width = static_cast<int>(extent.x);
+  const auto height = static_cast<int>(extent.y);
 
   EnsureMainCamera(width, height);
   EnsureCameraSpotLight();
@@ -535,9 +544,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   UpdateSceneMutations(delta_time);
 
   TrackFrameAction("Scene mutations updated");
-
-  // Delegate to base class to register views with the pipeline and renderer
-  co_await Base::OnSceneMutation(context);
 
   TrackPhaseEnd();
   co_return;
@@ -640,13 +646,120 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
+auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  TrackPhaseStart("Publish Views");
+  auto& shell = GetShell();
+
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer) {
+    TrackFrameAction("Publish views skipped - Vortex renderer unavailable");
+    TrackPhaseEnd();
+    co_return;
+  }
+  if (!main_camera_.IsAlive()) {
+    ReleasePublishedRuntimeView(context);
+    TrackFrameAction("Publish views skipped - main camera not ready");
+    TrackPhaseEnd();
+    co_return;
+  }
+  if (app_window_ != nullptr
+    && (!app_window_->GetWindow() || app_window_->IsShuttingDown())) {
+    ReleasePublishedRuntimeView(context);
+    TrackFrameAction("Publish views skipped - app window not available");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  const auto extent = ResolveViewExtent();
+  if (extent.x == 0 || extent.y == 0) {
+    ReleasePublishedRuntimeView(context);
+    TrackFrameAction("Publish views skipped - invalid extent");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  EnsureSceneFramebuffer(extent.x, extent.y);
+  if (!scene_fb_) {
+    TrackFrameAction("Publish views skipped - scene framebuffer unavailable");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  const auto main_viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(extent.x),
+    .height = static_cast<float>(extent.y),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  engine::ViewContext view_ctx {};
+  view_ctx.view.viewport = main_viewport;
+  view_ctx.metadata.name = "MainView";
+  view_ctx.metadata.purpose = "primary";
+  view_ctx.metadata.is_scene_view = true;
+  view_ctx.metadata.with_atmosphere = true;
+  view_ctx.render_target = observer_ptr { scene_fb_.get() };
+  view_ctx.composite_source = observer_ptr { scene_fb_.get() };
+  shell.OnRuntimeMainViewReady(main_view_id_, main_camera_, main_viewport);
+
+  renderer->UpsertPublishedRuntimeView(
+    *context, main_view_id_, std::move(view_ctx), vortex::ShadingMode::kDeferred);
+  const auto published_view_id
+    = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
+  if (published_view_id != kInvalidViewId) {
+    if (const auto resolved_view = BuildResolvedView(extent.x, extent.y);
+      resolved_view.has_value()) {
+      renderer->RegisterResolvedView(
+        published_view_id, std::move(*resolved_view));
+    }
+  }
+  TrackFrameAction("Published Vortex runtime view");
+
+  if (!app_.headless && app_window_ != nullptr && app_window_->GetWindow()
+    && !app_window_->IsShuttingDown()) {
+    auto target_fb = app_window_->GetCurrentFrameBuffer().lock();
+    auto surface = app_window_->GetSurface().lock();
+    if (target_fb && surface) {
+      if (published_view_id == kInvalidViewId) {
+        TrackFrameAction(
+          "Publish views skipped composition registration - published view unavailable");
+        TrackPhaseEnd();
+        co_return;
+      }
+      renderer->RegisterRuntimeComposition(
+        vortex::Renderer::RuntimeCompositionInput {
+          .layers = {
+            vortex::Renderer::RuntimeCompositionLayer {
+              .intent_view_id = main_view_id_,
+              .viewport = main_viewport,
+              .opacity = 1.0F,
+            },
+          },
+          .composite_target = std::move(target_fb),
+          .target_surface = std::move(surface),
+        });
+      TrackFrameAction("Registered Vortex composition submission");
+    } else {
+      TrackFrameAction(
+        "Publish views skipped composition registration - target unavailable");
+    }
+  }
+
+  TrackPhaseEnd();
+  co_return;
+}
+
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   TrackPhaseStart("PreRender");
 
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
+  static_cast<void>(context);
+
+  if (app_window_ != nullptr && !app_window_->GetWindow()) {
     DLOG_F(1, "OnPreRender: no valid window - skipping");
     TrackPhaseEnd();
     co_return;
@@ -654,53 +767,13 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 
   LOG_SCOPE_F(3, "MainModule::OnPreRender");
 
-  auto imgui_module_ref = app_.engine->GetModule<engine::imgui::ImGuiModule>();
-  if (imgui_module_ref) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (auto* imgui_context = imgui_module.GetImGuiContext()) {
-      ImGui::SetCurrentContext(imgui_context);
-    }
-  }
-
   current_frame_tracker_.frame_graph_setup = true;
   TrackFrameAction("Pre-render setup started");
-
-  // Configure pass-specific settings (clear color, debug names, etc.)
-  if (pipeline_) {
-    oxygen::engine::ShaderPassConfig config;
-    config.clear_color = oxygen::graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
-    config.debug_name = "ShaderPass";
-    pipeline_->UpdateShaderPassConfig(config);
-  }
-
-  TrackFrameAction("Frame graph and render passes configured");
-
-  // Delegate to base class to execute pipeline OnPreRender (which configures
-  // passes)
-  co_await Base::OnPreRender(context);
+  TrackFrameAction("Vortex runtime seam prepared");
 
   TrackPhaseEnd();
   co_return;
 }
-
-// auto MainModule::OnCompositing(observer_ptr<engine::FrameContext> context)
-//   -> co::Co<>
-// {
-//   TrackPhaseStart("Compositing");
-
-//   // Ensure framebuffers are created after a resize
-//   DCHECK_NOTNULL_F(app_window_);
-//   if (!app_window_->GetWindow()) {
-//     DLOG_F(1, "OnCompositing: no valid window - skipping");
-//     TrackFrameAction("Compositing skipped - app window not available");
-//     TrackPhaseEnd();
-//     co_return;
-//   }
-
-//   co_await Base::OnCompositing(context);
-//   TrackPhaseEnd();
-//   co_return;
-// }
 
 auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
@@ -708,8 +781,8 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   TrackPhaseStart("GUI Update");
 
   // Window must be available to render GUI
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow() || app_window_->IsShuttingDown()) {
+  if (app_window_ == nullptr || !app_window_->GetWindow()
+    || app_window_->IsShuttingDown()) {
     TrackFrameAction("GUI update skipped - app window not available/closing");
     TrackPhaseEnd();
     co_return;
@@ -785,6 +858,7 @@ auto MainModule::EnsureExampleScene() -> void
     const std::string name = std::string("Sphere_") + std::to_string(i);
     auto node = scene_raw->CreateNode(name);
     node.GetRenderable().SetGeometry(sphere_geo);
+    SetShadowParticipation(node, true, true);
 
     // Enlarge sphere to better showcase transparency layering against
     // background
@@ -809,11 +883,11 @@ auto MainModule::EnsureExampleScene() -> void
     const double init_angle = base_phase + jitter;
     const double speed = speed_dist(rng);
     const double radius = radius_dist(rng);
-    const double hue = hue_dist(rng);
 
     // Apply per-sphere material override (transparent glass-like)
     auto r = node.GetRenderable();
     const std::string mat_name = std::string("SphereMat_") + std::to_string(i);
+    const double hue = hue_dist(rng);
     const auto rgb = ColorFromHue(hue);
     const bool is_transparent
       = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
@@ -821,7 +895,12 @@ auto MainModule::EnsureExampleScene() -> void
     const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
                                        : data::MaterialDomain::kOpaque;
     const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
-    const auto mat = MakeSolidColorMaterial(mat_name.c_str(), color, domain);
+    const float roughness
+      = 0.08F + (0.84F * static_cast<float>(i % 4) / 3.0F);
+    const float metalness
+      = static_cast<float>((i / 4) % 4) / 3.0F;
+    const auto mat = MakeSolidColorMaterial(
+      mat_name.c_str(), color, domain, false, metalness, roughness);
     // Apply override for submesh index 0 across all LODs so switching LOD
     // retains the material override. Use EffectiveLodCount() to iterate.
     const std::size_t lod_count
@@ -845,6 +924,7 @@ auto MainModule::EnsureExampleScene() -> void
   // Multi-submesh quad centered at origin facing +Z (already in XY plane)
   multisubmesh_ = scene_raw->CreateNode("MultiSubmesh");
   multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
+  SetShadowParticipation(multisubmesh_, false, true);
   multisubmesh_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
   multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
 
@@ -957,37 +1037,110 @@ auto MainModule::ConfigureDrone() -> void
   // NOLINTEND(*-magic-numbers)
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+auto MainModule::ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>
 {
-  auto& shell = GetShell();
-  if (!main_camera_.IsAlive()) {
+  if (app_.engine == nullptr) {
+    return nullptr;
+  }
+  if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
+    return observer_ptr { &renderer->get() };
+  }
+  return nullptr;
+}
+
+auto MainModule::ReleasePublishedRuntimeView(
+  const observer_ptr<engine::FrameContext> context) -> void
+{
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer || main_view_id_ == kInvalidViewId) {
     return;
   }
 
-  View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(extent.width),
-      .height = static_cast<float>(extent.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
+  if (context != nullptr) {
+    renderer->RemovePublishedRuntimeView(*context, main_view_id_);
+  } else {
+    renderer->RemovePublishedRuntimeView(main_view_id_);
+  }
+}
+
+auto MainModule::BuildResolvedView(const uint32_t width, const uint32_t height)
+  -> std::optional<ResolvedView>
+{
+  if (!main_camera_.IsAlive() || !main_camera_.HasCamera()) {
+    return std::nullopt;
   }
 
-  // Create the main scene view intent
-  auto main_comp
-    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_comp.with_atmosphere = true;
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  const auto viewport = ViewPort {
+    .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
+    .width = static_cast<float>(width),
+    .height = static_cast<float>(height),
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  };
+  auto camera_node = main_camera_;
+  auto resolver = vortex::SceneCameraViewResolver {
+    [camera_node](const ViewId& /*unused*/) { return camera_node; },
+    viewport,
+  };
+  return resolver(main_view_id_);
+}
 
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
+auto MainModule::ResolveViewExtent() const noexcept -> glm::uvec2
+{
+  if (!app_.headless && app_window_ != nullptr && app_window_->GetWindow()) {
+    const auto extent = app_window_->GetWindow()->Size();
+    return { extent.width, extent.height };
+  }
+
+  return { kDefaultOffscreenWidth, kDefaultOffscreenHeight };
+}
+
+auto MainModule::EnsureSceneFramebuffer(
+  const uint32_t width, const uint32_t height) -> void
+{
+  if (scene_fb_ && scene_fb_width_ == width && scene_fb_height_ == height) {
+    return;
+  }
+
+  ClearSceneFramebuffer();
+
+  auto gfx = app_.gfx_weak.lock();
+  if (!gfx) {
+    return;
+  }
+
+  graphics::TextureDesc color_desc {};
+  color_desc.width = width;
+  color_desc.height = height;
+  color_desc.format = Format::kRGBA8UNorm;
+  color_desc.texture_type = TextureType::kTexture2D;
+  color_desc.is_render_target = true;
+  color_desc.is_shader_resource = true;
+  color_desc.initial_state = graphics::ResourceStates::kCommon;
+  color_desc.use_clear_value = true;
+  color_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  color_desc.debug_name = "Async.SceneColor";
+
+  auto color_texture = gfx->CreateTexture(color_desc);
+  CHECK_F(
+    static_cast<bool>(color_texture), "Failed to create Async scene texture");
+
+  auto framebuffer_desc = graphics::FramebufferDesc {};
+  framebuffer_desc.AddColorAttachment({ .texture = std::move(color_texture) });
+  scene_fb_ = gfx->CreateFramebuffer(framebuffer_desc);
+  CHECK_F(static_cast<bool>(scene_fb_),
+    "Failed to create Async scene framebuffer");
+
+  scene_fb_width_ = width;
+  scene_fb_height_ = height;
+}
+
+auto MainModule::ClearSceneFramebuffer() -> void
+{
+  scene_fb_.reset();
+  scene_fb_width_ = 0;
+  scene_fb_height_ = 0;
 }
 
 auto MainModule::UpdateAnimations(double delta_time) -> void
@@ -1052,24 +1205,8 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
       last_ovr_toggle_ = ovr_phase;
       const bool apply_override = (ovr_phase % 2) == 1;
       if (apply_override) {
-        data::pak::render::MaterialAssetDesc desc {};
-        desc.header.asset_type
-          = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
-        const auto* name = "BlueOverride";
-        constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-        const std::size_t n = (std::min)(maxn, std::strlen(name));
-        std::memcpy(desc.header.name, name, n);
-        desc.header.name[n] = '\0';
-        desc.material_domain
-          = static_cast<uint8_t>(data::MaterialDomain::kOpaque);
-        desc.base_color[0] = 0.2F;
-        desc.base_color[1] = 0.3F;
-        desc.base_color[2] = 1.0F;
-        desc.base_color[3] = 1.0F;
-        const data::AssetKey asset_key = data::AssetKey::FromVirtualPath(
-          "/Engine/Examples/Async/Materials/BlueOverride.omat");
-        auto blue = std::make_shared<const data::MaterialAsset>(
-          asset_key, desc, std::vector<data::ShaderReference> {});
+        const auto blue = MakeSolidColorMaterial("BlueOverride",
+          { 0.2F, 0.3F, 1.0F, 1.0F }, data::MaterialDomain::kOpaque, true);
         r.SetMaterialOverride(lod, 1, blue);
       } else {
         r.ClearMaterialOverride(lod, 1);

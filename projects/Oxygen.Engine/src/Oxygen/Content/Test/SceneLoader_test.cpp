@@ -88,7 +88,8 @@ protected:
   }
 
   auto WriteMinimalSceneWithRenderable(
-    const oxygen::data::AssetKey geometry_key) -> void
+    const oxygen::data::AssetKey geometry_key,
+    const oxygen::data::AssetKey material_key = {}) -> void
   {
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::RenderableRecord;
@@ -157,6 +158,7 @@ protected:
     RenderableRecord renderable {};
     renderable.node_index = 0;
     renderable.geometry_key = geometry_key;
+    renderable.material_key = material_key;
 
     auto rend_write = writer_.WriteBlob(std::span<const std::byte>(
       reinterpret_cast<const std::byte*>(&renderable), sizeof(renderable)));
@@ -183,22 +185,27 @@ NOLINT_TEST_F(SceneLoaderTest, LoadSceneParseOnlySucceeds)
   EXPECT_EQ(asset->GetNodeName(asset->GetRootNode()), "root");
 }
 
-NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsGeometryDependencies)
+NOLINT_TEST_F(SceneLoaderTest, LoadSceneDecodeCollectsRenderableDependencies)
 {
   auto geom_bytes
     = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   geom_bytes[0] = 0xABU;
   geom_bytes[1] = 0xCDU;
   const auto geom = oxygen::data::AssetKey::FromBytes(geom_bytes);
+  auto material_bytes
+    = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+  material_bytes[0] = 0x12U;
+  material_bytes[1] = 0x34U;
+  const auto material = oxygen::data::AssetKey::FromBytes(material_bytes);
 
-  WriteMinimalSceneWithRenderable(geom);
+  WriteMinimalSceneWithRenderable(geom, material);
 
   auto [context, collector] = MakeContextDecode();
   auto asset = LoadSceneAsset(context);
   ASSERT_NE(asset, nullptr);
 
-  ASSERT_THAT(collector->AssetDependencies(), ::testing::SizeIs(1));
-  EXPECT_EQ(collector->AssetDependencies().front(), geom);
+  EXPECT_THAT(collector->AssetDependencies(),
+    ::testing::UnorderedElementsAre(geom, material));
 }
 
 } // namespace

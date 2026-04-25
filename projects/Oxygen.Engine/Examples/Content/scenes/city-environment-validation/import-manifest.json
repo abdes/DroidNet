@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked",
+  "jobs": [
+    {
+      "id": "material.MatCityGlassBlue",
+      "type": "material-descriptor",
+      "source": "./MatCityGlassBlue.material.json",
+      "name": "MatCityGlassBlue",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityGlassTeal",
+      "type": "material-descriptor",
+      "source": "./MatCityGlassTeal.material.json",
+      "name": "MatCityGlassTeal",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityConcreteWarm",
+      "type": "material-descriptor",
+      "source": "./MatCityConcreteWarm.material.json",
+      "name": "MatCityConcreteWarm",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityConcreteCool",
+      "type": "material-descriptor",
+      "source": "./MatCityConcreteCool.material.json",
+      "name": "MatCityConcreteCool",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityBrickRed",
+      "type": "material-descriptor",
+      "source": "./MatCityBrickRed.material.json",
+      "name": "MatCityBrickRed",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityCopperGreen",
+      "type": "material-descriptor",
+      "source": "./MatCityCopperGreen.material.json",
+      "name": "MatCityCopperGreen",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCitySlateDark",
+      "type": "material-descriptor",
+      "source": "./MatCitySlateDark.material.json",
+      "name": "MatCitySlateDark",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCitySafetyYellow",
+      "type": "material-descriptor",
+      "source": "./MatCitySafetyYellow.material.json",
+      "name": "MatCitySafetyYellow",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityCeramicWhite",
+      "type": "material-descriptor",
+      "source": "./MatCityCeramicWhite.material.json",
+      "name": "MatCityCeramicWhite",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityNightWindows",
+      "type": "material-descriptor",
+      "source": "./MatCityNightWindows.material.json",
+      "name": "MatCityNightWindows",
+      "content_hashing": true
+    },
+    {
+      "id": "material.MatCityAsphalt",
+      "type": "material-descriptor",
+      "source": "./MatCityAsphalt.material.json",
+      "name": "MatCityAsphalt",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.GeoCityCube",
+      "type": "geometry-descriptor",
+      "source": "./GeoCityCube.geometry.json",
+      "name": "GeoCityCube",
+      "content_hashing": true,
+      "depends_on": [
+        "material.MatCityConcreteWarm"
+      ]
+    },
+    {
+      "id": "scene.CityEnvironmentValidation",
+      "type": "scene-descriptor",
+      "source": "./CityEnvironmentValidation.scene.json",
+      "name": "CityEnvironmentValidation",
+      "content_hashing": true,
+      "depends_on": [
+        "geometry.GeoCityCube",
+        "material.MatCityGlassBlue",
+        "material.MatCityGlassTeal",
+        "material.MatCityConcreteWarm",
+        "material.MatCityConcreteCool",
+        "material.MatCityBrickRed",
+        "material.MatCityCopperGreen",
+        "material.MatCitySlateDark",
+        "material.MatCitySafetyYellow",
+        "material.MatCityCeramicWhite",
+        "material.MatCityNightWindows",
+        "material.MatCityAsphalt"
+      ]
+    }
+  ]
+}

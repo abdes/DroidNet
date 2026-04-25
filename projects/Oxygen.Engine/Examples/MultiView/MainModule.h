@@ -114,7 +114,7 @@ protected:
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
+    std::vector<vortex::CompositionView>& views) -> void override;
 
   // EngineModule phase handlers
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)

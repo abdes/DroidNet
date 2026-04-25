@@ -33,6 +33,9 @@ public:
   OXGN_HDLS_NDAPI auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager> override;
 
+  [[nodiscard]] OXGN_HDLS_NDAPI auto CreateImGuiGraphicsBackend() const
+    -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> override;
+
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<Texture> override;
 

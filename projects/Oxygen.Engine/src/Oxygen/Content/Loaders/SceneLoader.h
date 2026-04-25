@@ -401,6 +401,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   // Validate known component tables and (optionally) collect dependencies.
   const uint32_t node_count = desc.nodes.count;
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
+  std::unordered_set<oxygen::data::AssetKey> material_deps;
   std::unordered_set<oxygen::data::AssetKey> script_deps;
   bool has_scripting_table = false;
 
@@ -431,6 +432,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
             .data(),
           sizeof(record));
         geometry_deps.insert(record.geometry_key);
+        if (record.material_key != oxygen::data::AssetKey {}) {
+          material_deps.insert(record.material_key);
+        }
       }
     } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {
       detail::ValidateComponentTable<
@@ -498,6 +502,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
 
     for (const auto& dep : geometry_deps) {
+      context.dependency_collector->AddAssetDependency(dep);
+    }
+    for (const auto& dep : material_deps) {
       context.dependency_collector->AddAssetDependency(dep);
     }
     if (has_scripting_table) {

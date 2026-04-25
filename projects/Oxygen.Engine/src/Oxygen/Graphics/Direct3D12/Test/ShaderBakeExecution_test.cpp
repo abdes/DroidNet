@@ -281,25 +281,29 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
   PublishedDebugArtifactsUseEntryPointInFilenameInsteadOfDirectory)
 {
   const auto request = MakeExpandedRequest(
-    "Atmosphere/MultiScatLut_CS.hlsl", "CS", ShaderType::kCompute);
+    "Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl",
+    "VortexAtmosphereMultiScatteringLutCS", ShaderType::kCompute);
   const auto key_hex = RequestKeyToHex(request.request_key);
 
   const auto dxil_path
     = GetRequestDxilPath(out_file_, request.request.source_path,
       request.request.entry_point, request.request_key);
-  const auto expected_dxil = out_file_.parent_path() / "dxil" / "Atmosphere"
-    / "MultiScatLut_CS.hlsl" / ("CS__" + key_hex + ".dxil");
+  const auto expected_dxil = out_file_.parent_path() / "dxil" / "Vortex"
+    / "Services" / "Environment" / "AtmosphereMultiScatteringLut.hlsl"
+    / ("VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".dxil");
 
   EXPECT_EQ(dxil_path, expected_dxil);
   EXPECT_EQ(dxil_path.parent_path().filename().generic_string(),
-    "MultiScatLut_CS.hlsl");
-  EXPECT_EQ(dxil_path.filename().generic_string(), "CS__" + key_hex + ".dxil");
+    "AtmosphereMultiScatteringLut.hlsl");
+  EXPECT_EQ(dxil_path.filename().generic_string(),
+    "VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".dxil");
 
   const auto pdb_path
     = GetRequestPdbPath(out_file_, request.request.source_path,
       request.request.entry_point, request.request_key);
-  const auto expected_pdb = out_file_.parent_path() / "pdb" / "Atmosphere"
-    / "MultiScatLut_CS.hlsl" / ("CS__" + key_hex + ".pdb");
+  const auto expected_pdb = out_file_.parent_path() / "pdb" / "Vortex"
+    / "Services" / "Environment" / "AtmosphereMultiScatteringLut.hlsl"
+    / ("VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".pdb");
   EXPECT_EQ(pdb_path, expected_pdb);
 }
 

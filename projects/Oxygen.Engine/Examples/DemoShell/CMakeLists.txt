@@ -65,6 +65,8 @@ set(
   "PanelRegistry.h"
   "Runtime/AppWindow.h"
   "Runtime/DemoAppContext.h"
+  "Runtime/MainViewContract.h"
+  "Runtime/RendererUiTypes.h"
   "Runtime/DemoModuleBase.h"
   "Runtime/PathNormalization.h"
   "Services/CameraSettingsService.h"
@@ -212,9 +214,9 @@ target_link_libraries(
     oxygen::input
     oxygen::platform
     oxygen::physicsmodule
-    oxygen::renderer
     oxygen::scene
     oxygen::scripting
+    oxygen::vortex
     fmt::fmt-header-only
     nlohmann_json::nlohmann_json
 )

@@ -17,6 +17,7 @@
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
@@ -97,6 +98,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   , mutation_dispatcher_(internal::CreateMutationDispatcher(
       observer_ptr<internal::IScriptSlotMutationProcessor>(
         script_slot_processor_.get())))
+  , directional_light_resolver_(std::make_unique<DirectionalLightResolver>())
 {
   LOG_SCOPE_F(INFO, "Scene creation");
   LOG_F(2, "name: '{}'", name);
@@ -115,6 +117,7 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
   scene_id_ = *id;
 
   SetName(name);
+  directional_light_resolver_->Bind(observer_ptr<Scene> { this });
   UpdateMutationCollectionState(false);
   LOG_F(INFO, "mutation collection default state: enabled={}",
     mutation_collector_ != nullptr && mutation_collector_->IsEnabled());
@@ -123,6 +126,9 @@ Scene::Scene(const std::string& name, size_t initial_capacity)
 Scene::~Scene()
 {
   LOG_SCOPE_F(INFO, "Scene destruction");
+  if (directional_light_resolver_ != nullptr) {
+    directional_light_resolver_->Unbind();
+  }
   nodes_->Clear();
   // Release the scene ID for reuse
   SceneIdManager::Instance().ReleaseId(scene_id_);
@@ -131,6 +137,20 @@ Scene::~Scene()
 auto Scene::GetName() const noexcept -> std::string_view
 {
   return GetComponent<ObjectMetadata>().GetName();
+}
+
+auto Scene::GetDirectionalLightResolver() noexcept
+  -> DirectionalLightResolver&
+{
+  DCHECK_NOTNULL_F(directional_light_resolver_.get());
+  return *directional_light_resolver_;
+}
+
+auto Scene::GetDirectionalLightResolver() const noexcept
+  -> const DirectionalLightResolver&
+{
+  DCHECK_NOTNULL_F(directional_light_resolver_.get());
+  return *directional_light_resolver_;
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <functional>
 
 #include <Oxygen/Composition/Component.h>
@@ -90,14 +91,16 @@ public:
   auto SetInnerConeAngleRadians(const float inner_cone_angle_radians) noexcept
     -> void
   {
-    inner_cone_angle_radians_ = inner_cone_angle_radians;
+    inner_cone_angle_radians_
+      = std::clamp(inner_cone_angle_radians, 0.0F, outer_cone_angle_radians_);
   }
 
   //! Sets the outer cone angle in radians.
   auto SetOuterConeAngleRadians(const float outer_cone_angle_radians) noexcept
     -> void
   {
-    outer_cone_angle_radians_ = outer_cone_angle_radians;
+    outer_cone_angle_radians_
+      = std::max(outer_cone_angle_radians, inner_cone_angle_radians_);
   }
 
   //! Gets the inner cone angle in radians.

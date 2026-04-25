@@ -18,7 +18,6 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 
@@ -381,18 +380,6 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
   }
 
   cube_material_ = std::move(new_cube_material);
-}
-
-auto SceneSetup::UpdateUvTransform(engine::Renderer& renderer,
-  const glm::vec2& scale, const glm::vec2& offset) -> void
-{
-  if (sphere_material_) {
-    (void)renderer.OverrideMaterialUvTransform(
-      *sphere_material_, scale, offset);
-  }
-  if (cube_material_) {
-    (void)renderer.OverrideMaterialUvTransform(*cube_material_, scale, offset);
-  }
 }
 
 auto SceneSetup::EnsureFillLight() -> void

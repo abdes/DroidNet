@@ -19,12 +19,6 @@ namespace engine {
   class FrameContext;
   struct ShaderPassConfig;
 }
-namespace imgui {
-  class ImGuiModule;
-}
-namespace renderer {
-  class RenderingPipeline;
-}
 } // namespace oxygen
 
 namespace oxygen::examples {
@@ -52,14 +46,9 @@ namespace ui {
   class CameraRigController;
   class GridVm;
 
-  //! UI shell hosting the side bar and side panel.
-  /*!
-   Provides a reusable UI layout for demos, consisting of a left-docked
-   `PanelSideBar` and a `SidePanel` hosting a single active panel.
+  [[nodiscard]] auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
+    bool enable_renderer_bound_panels) -> DemoShellPanelConfig;
 
-   Also owns the ViewModels for rendering and lighting panels, creating them
-   lazily when the pass configs become available.
-  */
   class DemoShellUi {
   public:
     DemoShellUi(observer_ptr<IAsyncEngine> engine,
@@ -80,37 +69,15 @@ namespace ui {
     OXYGEN_MAKE_NON_COPYABLE(DemoShellUi)
     OXYGEN_DEFAULT_MOVABLE(DemoShellUi)
 
-    //! Draws the side bar and side panel.
     auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
-
-    //! Ensures rendering panel is created when pass config is available.
-    auto EnsureRenderingPanelReady(renderer::RenderingPipeline& pipeline)
-      -> void;
-
-    //! Ensures lighting panel is created when pass configs are available.
-    auto EnsureLightingPanelReady(renderer::RenderingPipeline& pipeline)
-      -> void;
-
-    //! Registers a custom panel with the shared panel registry.
     auto RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
-    //! Returns the rendering view model (may be null if not yet created).
     [[nodiscard]] auto GetRenderingVm() const -> observer_ptr<RenderingVm>;
-
-    //! Returns the light culling view model (may be null if not yet created).
     [[nodiscard]] auto GetLightCullingVm() const
       -> observer_ptr<LightCullingVm>;
-
-    //! Returns the camera view model.
     [[nodiscard]] auto GetCameraVm() const -> observer_ptr<CameraVm>;
-
-    //! Returns the content view model.
     [[nodiscard]] auto GetContentVm() const -> observer_ptr<ContentVm>;
-
-    //! Returns the environment view model.
     [[nodiscard]] auto GetEnvironmentVm() const -> observer_ptr<EnvironmentVm>;
-
-    //! Returns the last mouse-down position captured by the UI.
     [[nodiscard]] auto GetLastMouseDownPosition() const
       -> std::optional<SubPixelPosition>;
 
@@ -121,5 +88,4 @@ namespace ui {
   };
 
 } // namespace ui
-
 } // namespace oxygen::examples

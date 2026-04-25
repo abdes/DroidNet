@@ -52,6 +52,13 @@ constexpr ModulePriority kScriptingModulePriority { 1U };
 constexpr ModulePriority kPhysicsModulePriority {
   (std::numeric_limits<std::uint32_t>::max)() - 2U
 };
+// Runtime motion producers freeze current authoritative deformation/material
+// motion state late in ordered phases, immediately ahead of the renderer.
+// The module must not rely on ordered execution in kSceneMutation because that
+// phase is barriered concurrency.
+constexpr ModulePriority kRuntimeMotionProducerModulePriority {
+  (std::numeric_limits<std::uint32_t>::max)() - 3U
+};
 // Scene observer sync should run near the end, after mutators, but before
 // renderer.
 constexpr ModulePriority kSceneObserverSyncModulePriority {

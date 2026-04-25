@@ -60,18 +60,18 @@ NOLINT_TEST_F(
   const auto workspace_root = root_ / "workspace";
   const auto first_root = workspace_root / "includes-first";
   const auto second_root = workspace_root / "includes-second";
-  const auto candidate_rel = std::filesystem::path("Common/Math.hlsli");
+  const auto candidate_rel = std::filesystem::path("Vortex/Shared/Math.hlsli");
   const auto first_file = first_root / candidate_rel;
   const auto second_file = second_root / candidate_rel;
   WriteTextFile(first_file, "first");
   WriteTextFile(second_file, "second");
 
-  const auto resolved = ResolveTrackedInclude(L"Common/Math.hlsli",
+  const auto resolved = ResolveTrackedInclude(L"Vortex/Shared/Math.hlsli",
     workspace_root, std::array { first_root, second_root });
 
   ASSERT_TRUE(resolved.has_value());
   EXPECT_EQ(resolved->absolute_path, first_file.lexically_normal());
-  EXPECT_EQ(resolved->fingerprint.path, "includes-first/Common/Math.hlsli");
+  EXPECT_EQ(resolved->fingerprint.path, "includes-first/Vortex/Shared/Math.hlsli");
 }
 
 NOLINT_TEST_F(ShaderBakeDependenciesTest,
@@ -84,7 +84,7 @@ NOLINT_TEST_F(ShaderBakeDependenciesTest,
 
   const auto fingerprint = ComputeFileFingerprint(file_path, workspace_root);
 
-  EXPECT_EQ(fingerprint.path, "src/Shaders/Common/Lighting.hlsli");
+  EXPECT_EQ(fingerprint.path, "src/Shaders/Vortex/Shared/Lighting.hlsli");
   EXPECT_EQ(fingerprint.size_bytes, std::filesystem::file_size(file_path));
   EXPECT_NE(fingerprint.content_hash, 0U);
 }
@@ -94,27 +94,27 @@ NOLINT_TEST(
 {
   TrackingDependencyRecorder recorder;
   recorder.RecordDependency(DependencyFingerprint {
-    .path = "Shaders/Common/Math.hlsli",
+    .path = "Shaders/Vortex/Shared/Math.hlsli",
     .content_hash = 1,
     .size_bytes = 10,
     .write_time_utc = 20,
   });
   recorder.RecordDependency(DependencyFingerprint {
-    .path = "Shaders/Common/Math.hlsli",
+    .path = "Shaders/Vortex/Shared/Math.hlsli",
     .content_hash = 99,
     .size_bytes = 999,
     .write_time_utc = 999,
   });
   recorder.RecordDependency(DependencyFingerprint {
-    .path = "Shaders/Common/Lighting.hlsli",
+    .path = "Shaders/Vortex/Shared/Lighting.hlsli",
     .content_hash = 2,
     .size_bytes = 20,
     .write_time_utc = 30,
   });
 
   ASSERT_EQ(recorder.Dependencies().size(), 2U);
-  EXPECT_EQ(recorder.Dependencies()[0].path, "Shaders/Common/Math.hlsli");
-  EXPECT_EQ(recorder.Dependencies()[1].path, "Shaders/Common/Lighting.hlsli");
+  EXPECT_EQ(recorder.Dependencies()[0].path, "Shaders/Vortex/Shared/Math.hlsli");
+  EXPECT_EQ(recorder.Dependencies()[1].path, "Shaders/Vortex/Shared/Lighting.hlsli");
 }
 
 NOLINT_TEST_F(ShaderBakeDependenciesTest, ResolveTrackedIncludeFailsWhenMissing)

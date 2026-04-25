@@ -1,0 +1,21 @@
+{
+  "name": "MatCityNightWindows",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.03,
+      0.04,
+      0.08,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.3,
+    "ambient_occlusion": 1.0,
+    "emissive_factor": [
+      2.2,
+      1.6,
+      0.55
+    ]
+  }
+}

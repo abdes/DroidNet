@@ -27,6 +27,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
@@ -254,6 +255,14 @@ protected:
       // Current contracts:
       // - SamplerDescriptorHeap[0] = default linear wrap sampler
       // - SamplerDescriptorHeap[1] = shadow comparison sampler
+      // - SamplerDescriptorHeap[2] = point clamp sampler for depth/GBuffer reads
+      // - SamplerDescriptorHeap[3] = linear clamp sampler for atmosphere LUTs
+      //
+      // Keep this ordering stable. The atmosphere shaders hardcode sampler slot
+      // 3 as the UE5.7-parity sampler for transmittance / sky-view / aerial
+      // perspective LUT sampling. Using the default wrap sampler there
+      // reintroduces the sunset below-horizon ellipse/banding artifacts because
+      // those LUT domains are not periodic.
       if (!default_sampler_.IsValid()) {
         default_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
@@ -311,6 +320,64 @@ protected:
             shadow_comparison_sampler_.GetBindlessHandle().get());
         }
       }
+
+      if (!point_clamp_sampler_.IsValid()) {
+        point_clamp_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
+        if (point_clamp_sampler_.IsValid()) {
+          D3D12_SAMPLER_DESC sampler_desc {};
+          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.MipLODBias = 0.0f;
+          sampler_desc.MaxAnisotropy = 1;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+          sampler_desc.BorderColor[0] = 0.0f;
+          sampler_desc.BorderColor[1] = 0.0f;
+          sampler_desc.BorderColor[2] = 0.0f;
+          sampler_desc.BorderColor[3] = 0.0f;
+          sampler_desc.MinLOD = 0.0f;
+          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+
+          device->CreateSampler(
+            &sampler_desc, allocator_->GetCpuHandle(point_clamp_sampler_));
+          DLOG_F(2, "Point clamp sampler created at bindless index {}",
+            point_clamp_sampler_.GetBindlessHandle().get());
+        }
+      }
+
+      if (!linear_clamp_sampler_.IsValid()) {
+        linear_clamp_sampler_ = allocator_->AllocateBindless(
+          oxygen::bindless::generated::kSamplersDomain,
+          ResourceViewType::kSampler);
+        if (linear_clamp_sampler_.IsValid()) {
+          // Mirrors UE5.7's TStaticSamplerState<SF_Bilinear> use for the sky
+          // atmosphere LUT family. Clamp is critical here: transmittance and
+          // camera-aerial LUTs are non-periodic, so wrap pulls energy from the
+          // opposite edge and causes visible horizon artifacts.
+          D3D12_SAMPLER_DESC sampler_desc {};
+          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+          sampler_desc.MipLODBias = 0.0f;
+          sampler_desc.MaxAnisotropy = 1;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+          sampler_desc.BorderColor[0] = 0.0f;
+          sampler_desc.BorderColor[1] = 0.0f;
+          sampler_desc.BorderColor[2] = 0.0f;
+          sampler_desc.BorderColor[3] = 0.0f;
+          sampler_desc.MinLOD = 0.0f;
+          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+
+          device->CreateSampler(
+            &sampler_desc, allocator_->GetCpuHandle(linear_clamp_sampler_));
+          DLOG_F(2, "Linear clamp sampler created at bindless index {}",
+            linear_clamp_sampler_.GetBindlessHandle().get());
+        }
+      }
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
         ex.what());
@@ -321,6 +388,8 @@ private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
   oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
   oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_ {};
+  oxygen::graphics::DescriptorAllocationHandle linear_clamp_sampler_ {};
 };
 
 } // namespace
@@ -364,6 +433,12 @@ auto Graphics::GetFrameCaptureController() const
 {
   return observer_ptr<graphics::FrameCaptureController>(
     frame_capture_controller_.get());
+}
+
+auto Graphics::CreateImGuiGraphicsBackend() const
+  -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>
+{
+  return std::make_unique<D3D12ImGuiGraphicsBackend>();
 }
 
 auto Graphics::GetCurrentDevice() const -> dx::IDevice*

@@ -68,8 +68,8 @@ auto MakeBaseItem() -> MaterialPipeline::WorkItem
   item.storage_material_name = "Material_0";
   item.request = MakeRequest();
   item.shader_requests = {
-    MakeShaderRequest(ShaderType::kVertex, "Forward/ForwardMesh_VS.hlsl", "VS"),
-    MakeShaderRequest(ShaderType::kPixel, "Forward/ForwardMesh_PS.hlsl", "PS"),
+    MakeShaderRequest(ShaderType::kVertex, "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl", "VS"),
+    MakeShaderRequest(ShaderType::kPixel, "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS"),
   };
   return item;
 }
@@ -437,8 +437,8 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
   // Arrange
   auto item = MakeBaseItem();
   item.shader_requests = {
-    MakeShaderRequest(ShaderType::kPixel, "Forward/ForwardMesh_PS.hlsl", "PS"),
-    MakeShaderRequest(ShaderType::kVertex, "Forward/ForwardMesh_VS.hlsl", "VS"),
+    MakeShaderRequest(ShaderType::kPixel, "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS"),
+    MakeShaderRequest(ShaderType::kVertex, "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl", "VS"),
   };
   const auto expected_stages = ExpectedShaderStages(item.shader_requests);
 

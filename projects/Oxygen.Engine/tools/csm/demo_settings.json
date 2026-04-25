@@ -351,7 +351,7 @@
         "y": 1.0,
         "z": 1.0
       },
-      "disk_radius_deg": 0.27250000834465027,
+      "source_angle_deg": 0.5450000166893005,
       "elevation_deg": 55.0,
       "enabled": true,
       "illuminance_lx": 120000.0,

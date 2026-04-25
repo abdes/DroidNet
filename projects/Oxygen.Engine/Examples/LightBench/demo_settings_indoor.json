@@ -87,7 +87,7 @@
       "planet_radius_km": 6360.0107421875,
       "rayleigh_scale_height_km": 8.0,
       "sun_disk_enabled": true,
-      "sun_disk_radius_deg": 0.26799994707107544
+      "sun_source_angle_deg": 0.5359998941421509
     },
     "debug": {
       "force_analytic": false,
@@ -133,7 +133,7 @@
         "y": 0.94589763879776,
         "z": 0.9327245950698853
       },
-      "disk_radius_deg": 0.2779998779296875,
+      "source_angle_deg": 0.555999755859375,
       "elevation_deg": 46.0,
       "enabled": false,
       "illuminance_lx": 150000.0,

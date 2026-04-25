@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -61,6 +60,37 @@ auto RenderingVm::GetShadowQualityTier() -> ShadowQualityTier
     Refresh();
   }
   return shadow_quality_tier_;
+}
+
+auto RenderingVm::SupportsRenderModeControls() const -> bool
+{
+  return service_->SupportsRenderModeControls();
+}
+
+auto RenderingVm::SupportsWireframeColorControl() const -> bool
+{
+  return service_->SupportsWireframeColorControl();
+}
+
+auto RenderingVm::SupportsGpuDebugPassControl() const -> bool
+{
+  return service_->SupportsGpuDebugPassControl();
+}
+
+auto RenderingVm::SupportsAtmosphereBlueNoiseControl() const -> bool
+{
+  return service_->SupportsAtmosphereBlueNoiseControl();
+}
+
+auto RenderingVm::SupportsDebugMode(const engine::ShaderDebugMode mode) const
+  -> bool
+{
+  return service_->SupportsDebugMode(mode);
+}
+
+auto RenderingVm::IsVortexRuntimeBound() const -> bool
+{
+  return service_->IsVortexRuntimeBound();
 }
 
 auto RenderingVm::SetRenderMode(renderer::RenderMode mode) -> void

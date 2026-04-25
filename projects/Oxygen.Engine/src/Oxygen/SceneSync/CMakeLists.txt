@@ -31,10 +31,12 @@ set_target_properties(
 set(
   OXYGEN_SCENE_SYNC_HEADERS
   "api_export.h"
+  "RuntimeMotionProducerModule.h"
   "SceneObserverSyncModule.h"
 )
 set(
   OXYGEN_SCENE_SYNC_PRIVATE_SOURCES
+  "RuntimeMotionProducerModule.cpp"
   "SceneObserverSyncModule.cpp"
 )
 
@@ -64,9 +66,14 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::core
+    oxygen::data
     oxygen::engine
     oxygen::scene
 )
+
+if(OXYGEN_BUILD_TESTS)
+  add_subdirectory("Test")
+endif()
 
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}

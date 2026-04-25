@@ -1,0 +1,16 @@
+{
+  "name": "MatCitySlateDark",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.12,
+      0.13,
+      0.16,
+      1.0
+    ],
+    "metalness": 0.2,
+    "roughness": 0.46,
+    "ambient_occlusion": 1.0
+  }
+}

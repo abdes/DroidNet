@@ -74,14 +74,15 @@ set(
   "Camera/Perspective.h"
   "Environment/EnvironmentSystem.h"
   "Environment/Fog.h"
+  "Environment/LocalFogVolume.h"
   "Environment/PostProcessVolume.h"
   "Environment/SceneEnvironment.h"
-  "Environment/Sun.h"
   "Environment/SkyAtmosphere.h"
   "Environment/SkyLight.h"
   "Environment/SkySphere.h"
   "Environment/VolumetricClouds.h"
   "Light/DirectionalLight.h"
+  "Light/DirectionalLightResolver.h"
   "Light/LightCommon.h"
   "Light/PointLight.h"
   "Light/SpotLight.h"
@@ -119,6 +120,7 @@ set(
   "Camera/Orthographic.cpp"
   "Camera/Perspective.cpp"
   "Light/DirectionalLight.cpp"
+  "Light/DirectionalLightResolver.cpp"
   "Light/PointLight.cpp"
   "Light/SpotLight.cpp"
   "Detail/PathParser.cpp"
@@ -136,7 +138,7 @@ set(
   "Internal/MutationTypes.h"
   "Internal/ScriptSlotMutationProcessor.cpp"
   "Internal/ScriptSlotMutationProcessor.h"
-  "Environment/Sun.cpp"
+  "Environment/LocalFogVolume.cpp"
 )
 
 target_sources(

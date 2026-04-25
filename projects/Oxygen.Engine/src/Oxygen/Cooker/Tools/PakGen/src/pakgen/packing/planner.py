@@ -1630,6 +1630,19 @@ def compute_pak_plan(
         if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
             geometry_name_to_key[name] = bytes(asset_key)
 
+    material_name_to_key: Dict[str, bytes] = {}
+    for material in materials:
+        if isinstance(material, dict):
+            material_spec = material.get("spec")
+            asset_key = material.get("asset_key")
+        else:
+            material_spec, asset_key, _asset_type, _alignment = material
+        if not isinstance(material_spec, dict):
+            continue
+        name = material_spec.get("name")
+        if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
+            material_name_to_key[name] = bytes(asset_key)
+
     script_name_to_key: Dict[str, bytes] = {}
     for script_spec, asset_key, _asset_type, _alignment in scripts:
         if not isinstance(script_spec, dict):
@@ -1655,6 +1668,7 @@ def compute_pak_plan(
             scene_for_pack,
             header_builder=lambda _a: b"\x00" * ASSET_HEADER_SIZE,
             geometry_name_to_key=geometry_name_to_key,
+            material_name_to_key=material_name_to_key,
             script_name_to_key=script_name_to_key,
             scripting_slot_base_index=0,
         )

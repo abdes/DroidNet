@@ -4,21 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/Services/GridSettingsService.h"
+
 #include <algorithm>
 #include <cmath>
 
-#include <Oxygen/Renderer/Passes/GroundGridPass.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 
-#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
 
 namespace oxygen::examples {
 
 namespace {
-  const engine::GroundGridPassConfig kDefaultConfig;
+  const vortex::GroundGridConfig kDefaultConfig {};
 
   constexpr float kMinSpacing = 1e-4F;
   constexpr float kMinThickness = 0.0F;
@@ -57,12 +57,12 @@ namespace {
   constexpr std::string_view kOriginColorBKey = "ground_grid.origin_color.b";
   constexpr std::string_view kOriginColorAKey = "ground_grid.origin_color.a";
 
-  auto ClampFloat(float value, float min_value) -> float
+  auto ClampFloat(const float value, const float min_value) -> float
   {
     return std::max(value, min_value);
   }
 
-  auto ClampFade(float start) -> float
+  auto ClampFade(const float start) -> float
   {
     return std::max(start, kMinFadeDistance);
   }
@@ -80,11 +80,11 @@ struct GridSettingsService::GridConfig {
   float fade_start {};
   float fade_power {};
   float horizon_boost {};
-  graphics::Color minor_color;
-  graphics::Color major_color;
-  graphics::Color axis_color_x;
-  graphics::Color axis_color_y;
-  graphics::Color origin_color;
+  graphics::Color minor_color {};
+  graphics::Color major_color {};
+  graphics::Color axis_color_x {};
+  graphics::Color axis_color_y {};
+  graphics::Color origin_color {};
 };
 
 auto GridSettingsService::BindCameraRig(
@@ -93,11 +93,12 @@ auto GridSettingsService::BindCameraRig(
   camera_rig_ = camera_rig;
 }
 
-auto GridSettingsService::Initialize(
-  observer_ptr<renderer::RenderingPipeline> pipeline) -> void
+auto GridSettingsService::BindVortexRenderer(
+  observer_ptr<vortex::Renderer> renderer) -> void
 {
-  DCHECK_NOTNULL_F(pipeline);
-  pipeline_ = pipeline;
+  DCHECK_NOTNULL_F(renderer);
+  vortex_renderer_ = renderer;
+  ApplyGridConfig(ReadConfig());
 }
 
 auto GridSettingsService::GetEnabled() const -> bool
@@ -155,9 +156,9 @@ auto GridSettingsService::GetLineThickness() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value = settings->GetFloat(kLineThicknessKey)
-                        .value_or(kDefaultConfig.line_thickness);
-  return ClampFloat(value, kMinThickness);
+  return ClampFloat(settings->GetFloat(kLineThicknessKey)
+                      .value_or(kDefaultConfig.line_thickness),
+    kMinThickness);
 }
 
 auto GridSettingsService::SetLineThickness(const float thickness) -> void
@@ -172,9 +173,9 @@ auto GridSettingsService::GetMajorThickness() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value = settings->GetFloat(kMajorThicknessKey)
-                        .value_or(kDefaultConfig.major_thickness);
-  return ClampFloat(value, kMinThickness);
+  return ClampFloat(settings->GetFloat(kMajorThicknessKey)
+                      .value_or(kDefaultConfig.major_thickness),
+    kMinThickness);
 }
 
 auto GridSettingsService::SetMajorThickness(const float thickness) -> void
@@ -189,9 +190,9 @@ auto GridSettingsService::GetAxisThickness() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value = settings->GetFloat(kAxisThicknessKey)
-                        .value_or(kDefaultConfig.axis_thickness);
-  return ClampFloat(value, kMinThickness);
+  return ClampFloat(settings->GetFloat(kAxisThicknessKey)
+                      .value_or(kDefaultConfig.axis_thickness),
+    kMinThickness);
 }
 
 auto GridSettingsService::SetAxisThickness(const float thickness) -> void
@@ -222,9 +223,9 @@ auto GridSettingsService::GetSmoothTime() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value
-    = settings->GetFloat(kSmoothTimeKey).value_or(kDefaultConfig.smooth_time);
-  return ClampFloat(value, kMinSmoothTime);
+  return ClampFloat(
+    settings->GetFloat(kSmoothTimeKey).value_or(kDefaultConfig.smooth_time),
+    kMinSmoothTime);
 }
 
 auto GridSettingsService::SetSmoothTime(const float time) -> void
@@ -239,16 +240,15 @@ auto GridSettingsService::GetFadeStart() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const auto value
-    = settings->GetFloat(kFadeStartKey).value_or(kDefaultConfig.fade_start);
-  return ClampFade(value);
+  return ClampFade(
+    settings->GetFloat(kFadeStartKey).value_or(kDefaultConfig.fade_start));
 }
 
 auto GridSettingsService::SetFadeStart(const float distance) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetFloat(kFadeStartKey, ClampFloat(distance, kMinFadeDistance));
+  settings->SetFloat(kFadeStartKey, ClampFade(distance));
   epoch_++;
 }
 
@@ -256,16 +256,14 @@ auto GridSettingsService::GetFadePower() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value
-    = settings->GetFloat(kFadePowerKey).value_or(kDefaultConfig.fade_power);
-  return ClampFloat(value, 0.0F);
+  return settings->GetFloat(kFadePowerKey).value_or(kDefaultConfig.fade_power);
 }
 
 auto GridSettingsService::SetFadePower(const float power) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetFloat(kFadePowerKey, ClampFloat(power, 0.0F));
+  settings->SetFloat(kFadePowerKey, power);
   epoch_++;
 }
 
@@ -273,16 +271,15 @@ auto GridSettingsService::GetHorizonBoost() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float value = settings->GetFloat(kHorizonBoostKey)
-                        .value_or(kDefaultConfig.horizon_boost);
-  return ClampFloat(value, 0.0F);
+  return settings->GetFloat(kHorizonBoostKey)
+    .value_or(kDefaultConfig.horizon_boost);
 }
 
 auto GridSettingsService::SetHorizonBoost(const float boost) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetFloat(kHorizonBoostKey, ClampFloat(boost, 0.0F));
+  settings->SetFloat(kHorizonBoostKey, boost);
   epoch_++;
 }
 
@@ -290,15 +287,12 @@ auto GridSettingsService::GetMinorColor() const -> graphics::Color
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float r = settings->GetFloat(kMinorColorRKey)
-                    .value_or(kDefaultConfig.minor_color.r);
-  const float g = settings->GetFloat(kMinorColorGKey)
-                    .value_or(kDefaultConfig.minor_color.g);
-  const float b = settings->GetFloat(kMinorColorBKey)
-                    .value_or(kDefaultConfig.minor_color.b);
-  const float a = settings->GetFloat(kMinorColorAKey)
-                    .value_or(kDefaultConfig.minor_color.a);
-  return graphics::Color { r, g, b, a };
+  return {
+    settings->GetFloat(kMinorColorRKey).value_or(kDefaultConfig.minor_color.r),
+    settings->GetFloat(kMinorColorGKey).value_or(kDefaultConfig.minor_color.g),
+    settings->GetFloat(kMinorColorBKey).value_or(kDefaultConfig.minor_color.b),
+    settings->GetFloat(kMinorColorAKey).value_or(kDefaultConfig.minor_color.a),
+  };
 }
 
 auto GridSettingsService::SetMinorColor(const graphics::Color& color) -> void
@@ -316,15 +310,12 @@ auto GridSettingsService::GetMajorColor() const -> graphics::Color
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float r = settings->GetFloat(kMajorColorRKey)
-                    .value_or(kDefaultConfig.major_color.r);
-  const float g = settings->GetFloat(kMajorColorGKey)
-                    .value_or(kDefaultConfig.major_color.g);
-  const float b = settings->GetFloat(kMajorColorBKey)
-                    .value_or(kDefaultConfig.major_color.b);
-  const float a = settings->GetFloat(kMajorColorAKey)
-                    .value_or(kDefaultConfig.major_color.a);
-  return graphics::Color { r, g, b, a };
+  return {
+    settings->GetFloat(kMajorColorRKey).value_or(kDefaultConfig.major_color.r),
+    settings->GetFloat(kMajorColorGKey).value_or(kDefaultConfig.major_color.g),
+    settings->GetFloat(kMajorColorBKey).value_or(kDefaultConfig.major_color.b),
+    settings->GetFloat(kMajorColorAKey).value_or(kDefaultConfig.major_color.a),
+  };
 }
 
 auto GridSettingsService::SetMajorColor(const graphics::Color& color) -> void
@@ -342,15 +333,12 @@ auto GridSettingsService::GetAxisColorX() const -> graphics::Color
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float r = settings->GetFloat(kAxisColorXRKey)
-                    .value_or(kDefaultConfig.axis_color_x.r);
-  const float g = settings->GetFloat(kAxisColorXGKey)
-                    .value_or(kDefaultConfig.axis_color_x.g);
-  const float b = settings->GetFloat(kAxisColorXBKey)
-                    .value_or(kDefaultConfig.axis_color_x.b);
-  const float a = settings->GetFloat(kAxisColorXAKey)
-                    .value_or(kDefaultConfig.axis_color_x.a);
-  return graphics::Color { r, g, b, a };
+  return {
+    settings->GetFloat(kAxisColorXRKey).value_or(kDefaultConfig.axis_color_x.r),
+    settings->GetFloat(kAxisColorXGKey).value_or(kDefaultConfig.axis_color_x.g),
+    settings->GetFloat(kAxisColorXBKey).value_or(kDefaultConfig.axis_color_x.b),
+    settings->GetFloat(kAxisColorXAKey).value_or(kDefaultConfig.axis_color_x.a),
+  };
 }
 
 auto GridSettingsService::SetAxisColorX(const graphics::Color& color) -> void
@@ -368,15 +356,12 @@ auto GridSettingsService::GetAxisColorY() const -> graphics::Color
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float r = settings->GetFloat(kAxisColorYRKey)
-                    .value_or(kDefaultConfig.axis_color_y.r);
-  const float g = settings->GetFloat(kAxisColorYGKey)
-                    .value_or(kDefaultConfig.axis_color_y.g);
-  const float b = settings->GetFloat(kAxisColorYBKey)
-                    .value_or(kDefaultConfig.axis_color_y.b);
-  const float a = settings->GetFloat(kAxisColorYAKey)
-                    .value_or(kDefaultConfig.axis_color_y.a);
-  return graphics::Color { r, g, b, a };
+  return {
+    settings->GetFloat(kAxisColorYRKey).value_or(kDefaultConfig.axis_color_y.r),
+    settings->GetFloat(kAxisColorYGKey).value_or(kDefaultConfig.axis_color_y.g),
+    settings->GetFloat(kAxisColorYBKey).value_or(kDefaultConfig.axis_color_y.b),
+    settings->GetFloat(kAxisColorYAKey).value_or(kDefaultConfig.axis_color_y.a),
+  };
 }
 
 auto GridSettingsService::SetAxisColorY(const graphics::Color& color) -> void
@@ -394,15 +379,16 @@ auto GridSettingsService::GetOriginColor() const -> graphics::Color
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const float r = settings->GetFloat(kOriginColorRKey)
-                    .value_or(kDefaultConfig.origin_color.r);
-  const float g = settings->GetFloat(kOriginColorGKey)
-                    .value_or(kDefaultConfig.origin_color.g);
-  const float b = settings->GetFloat(kOriginColorBKey)
-                    .value_or(kDefaultConfig.origin_color.b);
-  const float a = settings->GetFloat(kOriginColorAKey)
-                    .value_or(kDefaultConfig.origin_color.a);
-  return graphics::Color { r, g, b, a };
+  return {
+    settings->GetFloat(kOriginColorRKey)
+      .value_or(kDefaultConfig.origin_color.r),
+    settings->GetFloat(kOriginColorGKey)
+      .value_or(kDefaultConfig.origin_color.g),
+    settings->GetFloat(kOriginColorBKey)
+      .value_or(kDefaultConfig.origin_color.b),
+    settings->GetFloat(kOriginColorAKey)
+      .value_or(kDefaultConfig.origin_color.a),
+  };
 }
 
 auto GridSettingsService::SetOriginColor(const graphics::Color& color) -> void
@@ -424,12 +410,7 @@ auto GridSettingsService::GetEpoch() const noexcept -> std::uint64_t
 auto GridSettingsService::OnFrameStart(const engine::FrameContext& /*context*/)
   -> void
 {
-  if (!pipeline_) {
-    return;
-  }
-
-  GridConfig config = ReadConfig();
-
+  auto config = ReadConfig();
   UpdateGridOrigin(config);
   ApplyGridConfig(config);
 }
@@ -442,77 +423,64 @@ auto GridSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 
 auto GridSettingsService::OnMainViewReady(
   const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& /*view*/) -> void
+  const vortex::CompositionView& /*view*/) -> void
 {
-  if (!pipeline_) {
-    return;
-  }
-  GridConfig config = ReadConfig();
-  ApplyGridConfig(config);
+  ApplyGridConfig(ReadConfig());
 }
 
 auto GridSettingsService::ReadConfig() const -> GridConfig
 {
-  GridConfig config {};
-  config.enabled = GetEnabled();
-  config.spacing = GetGridSpacing();
-  config.major_every = GetMajorEvery();
-  config.line_thickness = GetLineThickness();
-  config.major_thickness = GetMajorThickness();
-  config.axis_thickness = GetAxisThickness();
-  config.smooth_motion = GetSmoothMotion();
-  config.smooth_time = GetSmoothTime();
-  config.fade_power = GetFadePower();
-  config.horizon_boost = GetHorizonBoost();
-
-  const float fade_start = GetFadeStart();
-  config.fade_start = ClampFade(fade_start);
-
-  config.minor_color = GetMinorColor();
-  config.major_color = GetMajorColor();
-  config.axis_color_x = GetAxisColorX();
-  config.axis_color_y = GetAxisColorY();
-  config.origin_color = GetOriginColor();
-  return config;
+  return {
+    .enabled = GetEnabled(),
+    .spacing = GetGridSpacing(),
+    .major_every = GetMajorEvery(),
+    .line_thickness = GetLineThickness(),
+    .major_thickness = GetMajorThickness(),
+    .axis_thickness = GetAxisThickness(),
+    .smooth_motion = GetSmoothMotion(),
+    .smooth_time = GetSmoothTime(),
+    .fade_start = ClampFade(GetFadeStart()),
+    .fade_power = GetFadePower(),
+    .horizon_boost = GetHorizonBoost(),
+    .minor_color = GetMinorColor(),
+    .major_color = GetMajorColor(),
+    .axis_color_x = GetAxisColorX(),
+    .axis_color_y = GetAxisColorY(),
+    .origin_color = GetOriginColor(),
+  };
 }
 
-auto GridSettingsService::UpdateGridOrigin(const GridConfig& config) -> void
+auto GridSettingsService::UpdateGridOrigin(const GridConfig& /*config*/) -> void
 {
-  (void)config;
   grid_origin_ = { 0.0F, 0.0F };
   has_origin_ = true;
 }
 
 auto GridSettingsService::ApplyGridConfig(const GridConfig& config) -> void
 {
-  if (!pipeline_) {
-    LOG_F(WARNING,
-      "GridSettingsService: no pipeline bound; cannot apply grid config");
+  if (!vortex_renderer_) {
     return;
   }
 
-  engine::GroundGridPassConfig pass_config {};
-  pass_config.enabled = config.enabled;
-  pass_config.spacing = config.spacing;
-  pass_config.major_every
-    = static_cast<uint32_t>(std::max(1, config.major_every));
-  pass_config.line_thickness = config.line_thickness;
-  pass_config.major_thickness = config.major_thickness;
-  pass_config.axis_thickness = config.axis_thickness;
-  pass_config.smooth_motion = config.smooth_motion;
-  pass_config.smooth_time = config.smooth_time;
-  pass_config.fade_start = config.fade_start;
-  pass_config.fade_power = config.fade_power;
-  pass_config.horizon_boost = config.horizon_boost;
-  pass_config.origin = grid_origin_;
-
-  pass_config.minor_color = config.minor_color;
-  pass_config.major_color = config.major_color;
-  pass_config.axis_color_x = config.axis_color_x;
-  pass_config.axis_color_y = config.axis_color_y;
-  pass_config.origin_color = config.origin_color;
-
-  pipeline_->SetGroundGridConfig(pass_config);
+  vortex_renderer_->SetGroundGridConfig(vortex::GroundGridConfig {
+    .enabled = config.enabled,
+    .spacing = config.spacing,
+    .major_every = static_cast<std::uint32_t>(std::max(1, config.major_every)),
+    .line_thickness = config.line_thickness,
+    .major_thickness = config.major_thickness,
+    .axis_thickness = config.axis_thickness,
+    .fade_start = config.fade_start,
+    .fade_power = config.fade_power,
+    .horizon_boost = config.horizon_boost,
+    .origin = grid_origin_,
+    .smooth_motion = config.smooth_motion,
+    .smooth_time = config.smooth_time,
+    .minor_color = config.minor_color,
+    .major_color = config.major_color,
+    .axis_color_x = config.axis_color_x,
+    .axis_color_y = config.axis_color_y,
+    .origin_color = config.origin_color,
+  });
 }
 
 } // namespace oxygen::examples

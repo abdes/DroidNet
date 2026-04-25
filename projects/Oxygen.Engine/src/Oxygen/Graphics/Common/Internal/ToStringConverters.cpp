@@ -490,6 +490,32 @@ auto oxygen::graphics::to_string(const BlendOp value) -> std::string
   return "__NotSupported__";
 }
 
+auto oxygen::graphics::to_string(const StencilOp value) -> std::string
+{
+  switch (value) { // NOLINT(clang-diagnostic-switch)
+  case StencilOp::kKeep:
+    return "Keep";
+  case StencilOp::kZero:
+    return "Zero";
+  case StencilOp::kReplace:
+    return "Replace";
+  case StencilOp::kIncrSat:
+    return "IncrSat";
+  case StencilOp::kDecrSat:
+    return "DecrSat";
+  case StencilOp::kInvert:
+    return "Invert";
+  case StencilOp::kIncr:
+    return "Incr";
+  case StencilOp::kDecr:
+    return "Decr";
+  default:
+    break;
+  }
+
+  return "__NotSupported__";
+}
+
 auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
 {
   if (value == ColorWriteMask::kAll) {

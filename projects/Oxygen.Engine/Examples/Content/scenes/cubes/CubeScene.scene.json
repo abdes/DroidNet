@@ -1,4 +1,5 @@
 {
+  "version": 3,
   "name": "CubeScene",
   "nodes": [
     {
@@ -272,7 +273,7 @@
           "mobility": 0,
           "casts_shadows": true
         },
-        "angular_size_radians": 0.004675,
+        "angular_size_radians": 0.00935,
         "environment_contribution": true,
         "is_sun_light": true,
         "intensity_lux": 150000.0

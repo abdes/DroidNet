@@ -74,11 +74,15 @@ namespace oxygen::time {
 class SimulationClock {
 public:
   static constexpr uint64_t kDefaultFixedTimestepUs = 16667;
+  inline static const CanonicalDuration kMinDeltaTime {
+    std::chrono::microseconds(kDefaultFixedTimestepUs)
+  };
+  static constexpr float kMinDeltaTimeSeconds
+    = static_cast<float>(kDefaultFixedTimestepUs) / 1'000'000.0F;
   static constexpr uint64_t kDefaultMaxAccumulatorNs = 50'000'000;
 
   OXGN_CORE_API explicit SimulationClock(
-    CanonicalDuration fixed_timestep = CanonicalDuration {
-      std::chrono::microseconds(kDefaultFixedTimestepUs) }) noexcept;
+    CanonicalDuration fixed_timestep = kMinDeltaTime) noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(SimulationClock)
   OXYGEN_MAKE_NON_MOVABLE(SimulationClock)

@@ -55,7 +55,6 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::content {
 

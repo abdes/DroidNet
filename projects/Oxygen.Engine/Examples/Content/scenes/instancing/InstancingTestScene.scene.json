@@ -1,4 +1,5 @@
 {
+  "version": 3,
   "name": "InstancingTestScene",
   "nodes": [
     {
@@ -17150,7 +17151,7 @@
           "mobility": 0,
           "casts_shadows": false
         },
-        "angular_size_radians": 0.01,
+        "angular_size_radians": 0.02,
         "environment_contribution": true,
         "intensity_lux": 2.5
       }

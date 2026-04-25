@@ -17,12 +17,8 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
@@ -73,17 +69,11 @@ struct DemoShell::Impl {
   FileBrowserService file_browser_service;
   internal::SceneControlBlock scene_control;
 
-  // Track the pipeline we've initialized the services with
-  observer_ptr<renderer::RenderingPipeline> bound_pipeline;
-
-  bool pending_init { false };
   bool logged_missing_env_vm_runtime_route { false };
   bool logged_missing_ui_runtime_route { false };
 
   mutable std::once_flag input_system_flag;
   mutable observer_ptr<engine::InputSystem> input_system;
-  mutable observer_ptr<engine::Renderer> renderer;
-  AsyncEngine::ModuleSubscription renderer_subscription;
 
   auto GetInputSystem() const -> observer_ptr<engine::InputSystem>
   {
@@ -95,12 +85,6 @@ struct DemoShell::Impl {
       }
     });
     return input_system;
-  }
-
-  auto GetRenderer() const -> observer_ptr<engine::Renderer>
-  {
-    DCHECK_NOTNULL_F(renderer, "Renderer module not attached");
-    return renderer;
   }
 
   auto GetSkyboxService(observer_ptr<scene::Scene> scene)
@@ -150,25 +134,8 @@ auto DemoShell::Initialize(const DemoShellConfig& config) -> bool
   impl_->config = config;
   DCHECK_NOTNULL_F(impl_->config.engine,
     "DemoShell::Initialize requires a valid engine pointer");
-  impl_->pending_init = true;
-  impl_->renderer_subscription = impl_->config.engine->SubscribeModuleAttached(
-    [this](const engine::ModuleEvent& event) {
-      if (event.type_id != engine::Renderer::ClassTypeId()) {
-        return;
-      }
-      impl_->renderer = observer_ptr {
-        // NOLINTNEXTLINE(*-static-cast-downcast)
-        static_cast<engine::Renderer*>(event.module.get()),
-      };
-      if (!impl_->pending_init) {
-        return;
-      }
-      impl_->pending_init = false;
-      (void)CompleteInitialization();
-    },
-    true);
 
-  return true;
+  return CompleteInitialization();
 }
 
 auto DemoShell::CompleteInitialization() -> bool
@@ -183,6 +150,17 @@ auto DemoShell::CompleteInitialization() -> bool
 
   impl_->file_browser_service.ConfigureContentRoots(
     impl_->config.content_roots);
+
+  const auto runtime_panel_config = ui::MakeRuntimePanelConfig(
+    impl_->config.panel_config, impl_->config.enable_renderer_bound_panels);
+  if (runtime_panel_config.rendering != impl_->config.panel_config.rendering
+    || runtime_panel_config.lighting != impl_->config.panel_config.lighting
+    || runtime_panel_config.ground_grid
+      != impl_->config.panel_config.ground_grid) {
+    LOG_F(INFO,
+      "DemoShell: disabled renderer-bound panels for the active runtime seam");
+  }
+  impl_->config.panel_config = runtime_panel_config;
 
   if (impl_->config.enable_camera_rig) {
     auto input_system = impl_->GetInputSystem();
@@ -301,16 +279,17 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnFrameStart(context);
   }
+  SyncRuntimeState();
 }
 
 auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
-  const renderer::CompositionView& view) -> void
+  const vortex::MainViewContract& view) -> void
 {
   if (!impl_->initialized) {
     return;
   }
 
-  UpdatePanels();
+  SyncRuntimeState();
 
   impl_->camera_settings_service.OnMainViewReady(context, view);
   impl_->rendering_settings_service.OnMainViewReady(context, view);
@@ -319,6 +298,17 @@ auto DemoShell::OnMainViewReady(const engine::FrameContext& context,
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnMainViewReady(context, view);
   }
+}
+
+auto DemoShell::OnRuntimeMainViewReady(const ViewId view_id,
+  scene::SceneNode camera, const ViewPort& viewport) -> void
+{
+  if (!impl_->initialized) {
+    return;
+  }
+
+  impl_->camera_settings_service.OnRuntimeMainViewReady(camera, viewport);
+  impl_->environment_settings_service.OnRuntimeMainViewReady(view_id);
 }
 
 auto DemoShell::RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool
@@ -528,40 +518,33 @@ auto DemoShell::GetLightCullingVisualizationMode() const
   return vm->GetVisualizationMode();
 }
 
-auto DemoShell::UpdatePanels() -> void
+auto DemoShell::IsHeightFogPassRequested() const -> bool
 {
-  auto pipeline = impl_->config.get_active_pipeline
-    ? impl_->config.get_active_pipeline()
-    : observer_ptr<renderer::RenderingPipeline> { nullptr };
+  return impl_->environment_settings_service.GetHeightFogPassRequested();
+}
 
-  if (pipeline && impl_->demo_shell_ui) {
-    pipeline->SetGpuDebugMouseDownPosition(
-      impl_->demo_shell_ui->GetLastMouseDownPosition());
+auto DemoShell::IsLocalFogPassRequested() const -> bool
+{
+  return impl_->environment_settings_service.GetLocalFogPassRequested();
+}
 
-    // If the pipeline has changed, re-initialize services
-    if (impl_->bound_pipeline != pipeline) {
-      impl_->rendering_settings_service.Initialize(pipeline);
-      impl_->light_culling_settings_service.Initialize(pipeline);
-      impl_->post_process_settings_service.Initialize(pipeline);
-      if (impl_->config.panel_config.ground_grid) {
-        impl_->grid_settings_service.Initialize(pipeline);
-      }
-      impl_->bound_pipeline = pipeline;
-    }
-
-    if (impl_->config.panel_config.rendering) {
-      impl_->demo_shell_ui->EnsureRenderingPanelReady(*pipeline);
-    }
-    if (impl_->config.panel_config.lighting) {
-      impl_->demo_shell_ui->EnsureLightingPanelReady(*pipeline);
-    }
+auto DemoShell::SyncRuntimeState() -> void
+{
+  if (!impl_->initialized) {
+    return;
   }
 
   EnvironmentRuntimeConfig runtime_config {};
   runtime_config.scene = TryGetScene();
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
-  const auto renderer = impl_->GetRenderer();
-  runtime_config.renderer = renderer;
+  runtime_config.force_environment_override
+    = impl_->config.force_environment_override;
+  if (impl_->config.engine) {
+    if (auto renderer_ref
+      = impl_->config.engine->GetModule<vortex::Renderer>()) {
+      runtime_config.renderer = observer_ptr { &renderer_ref->get() };
+    }
+  }
   runtime_config.on_atmosphere_params_changed = nullptr;
   runtime_config.on_exposure_changed
     = [] { LOG_F(INFO, "Exposure settings changed"); };

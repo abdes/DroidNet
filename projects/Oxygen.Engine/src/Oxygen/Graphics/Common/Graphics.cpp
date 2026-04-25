@@ -18,6 +18,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -334,10 +335,10 @@ auto Graphics::PresentSurfaces(
   const auto frame_capture = GetFrameCaptureController();
   for (const auto& surface : surfaces) {
     try {
+      surface->Present();
       if (frame_capture != nullptr) {
         frame_capture->OnPresentSurface(surface);
       }
-      surface->Present();
     } catch (const std::exception& e) {
       LOG_F(WARNING, "Present on surface `{}` failed; frame discarded: {}",
         surface->GetName(), e.what());
@@ -664,6 +665,12 @@ auto Graphics::GetTimestampQueryProvider() const
 
 auto Graphics::GetFrameCaptureController() const
   -> observer_ptr<graphics::FrameCaptureController>
+{
+  return {};
+}
+
+auto Graphics::CreateImGuiGraphicsBackend() const
+  -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>
 {
   return {};
 }

@@ -346,7 +346,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
   using Traits = ContainerTraits<Order>;
   typename Traits::template container_type<TraversalEntry> container;
 
-  InitializeTraversal<Order>(roots, container); // NOLINT
+  this->template InitializeTraversal<Order>(roots, container); // NOLINT
 
   while (!Traits::empty(container)) {
     // Peek at the entry without removing it
@@ -381,7 +381,8 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
       Traits::pop(container);
       // Still traverse children for rejected nodes
       CollectChildrenToBuffer(node, current_depth);
-      QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
+      this->template QueueChildrenForTraversal<Order>( // NOLINT
+        filter_result, container);
       continue;
     }
 
@@ -403,7 +404,8 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
         // Continue with children - mark as processed and add children
         entry_ref.state = TraversalEntry::ProcessingState::kChildrenProcessed;
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
+        this->template QueueChildrenForTraversal<Order>( // NOLINT
+          filter_result, container);
         continue;
       }
     }
@@ -429,7 +431,8 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
       if (visit_result != VisitResult::kSkipSubtree) {
         // Use the saved node pointer and current depth
         CollectChildrenToBuffer(node, current_depth);
-        QueueChildrenForTraversal<Order>(filter_result, container); // NOLINT
+        this->template QueueChildrenForTraversal<Order>( // NOLINT
+          filter_result, container);
       }
     }
   }

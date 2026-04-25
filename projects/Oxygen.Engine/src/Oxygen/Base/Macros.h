@@ -32,8 +32,8 @@
   auto operator=(Type&&)->Type& = default;
 // NOLINTEND
 
-// Make a bit flag
-#define OXYGEN_FLAG(x) (1 << (x))
+// Make a bit flag using an unsigned base to avoid signed-shift semantics.
+#define OXYGEN_FLAG(x) (1U << static_cast<unsigned>(x))
 
 // NOLINTBEGIN
 #define OXYGEN_DEFINE_FLAGS_OPERATORS(EnumType)                                \

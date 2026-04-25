@@ -21,6 +21,25 @@
 
 namespace oxygen::graphics::headless {
 
+namespace {
+
+using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
+
+auto ToKnownStates(
+  std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
+  -> std::vector<QueueStateEntry>
+{
+  auto known_states = std::vector<QueueStateEntry> {};
+  known_states.reserve(states.size());
+  for (const auto& state : states) {
+    known_states.push_back(
+      { .resource = state.resource, .state = state.state });
+  }
+  return known_states;
+}
+
+} // namespace
+
 CommandQueue::~CommandQueue()
 {
   if (executor_) {
@@ -138,8 +157,10 @@ auto CommandQueue::Submit(
 
     auto* hdls = static_cast<CommandList*>(base_ptr.get());
     try {
+      auto known_states = ToKnownStates(base_ptr->TakeRecordedResourceStates());
       submission_chunks.push_back(internal::SubmissionChunk {
         .submit_actions = base_ptr->TakeSubmitQueueActions(),
+        .known_states = std::move(known_states),
         .commands = hdls->StealCommands(),
       });
     } catch (const std::exception& e) {
