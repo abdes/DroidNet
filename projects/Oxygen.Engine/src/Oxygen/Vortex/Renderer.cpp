@@ -1492,6 +1492,18 @@ auto Renderer::GetLocalFogGlobalStartDistanceMeters() const noexcept -> float
   return 20.0F;
 }
 
+auto Renderer::GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexLocalFogRenderIntoVolumetricFog, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
 auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
 {
   if (console_ != nullptr) {

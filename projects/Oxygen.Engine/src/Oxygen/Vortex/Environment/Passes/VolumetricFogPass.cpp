@@ -261,7 +261,9 @@ auto VolumetricFogPass::OnFrameStart(
 }
 
 auto VolumetricFogPass::Record(RenderContext& ctx,
-  const internal::StableAtmosphereState& stable_state) -> RecordState
+  const internal::StableAtmosphereState& stable_state,
+  const internal::LocalFogVolumeState::ViewProducts* local_fog_products)
+  -> RecordState
 {
   const auto& volumetric = stable_state.view_products.volumetric_fog;
   auto state = RecordState {
@@ -380,6 +382,33 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.media1.emissive_rgb[2] = volumetric.emissive.z;
   constants.media1.static_lighting_scattering_intensity
     = std::max(volumetric.static_lighting_scattering_intensity, 0.0F);
+  const auto local_fog_ready = renderer_.GetLocalFogRenderIntoVolumetricFog()
+    && local_fog_products != nullptr && local_fog_products->prepared
+    && local_fog_products->buffer_ready && local_fog_products->tile_data_ready
+    && local_fog_products->instance_buffer_slot.IsValid()
+    && local_fog_products->tile_data_texture_slot.IsValid()
+    && local_fog_products->instance_count > 0U
+    && local_fog_products->tile_resolution_x > 0U
+    && local_fog_products->tile_resolution_y > 0U
+    && local_fog_products->max_instances_per_tile > 0U;
+  if (local_fog_ready) {
+    constants.local_fog0.instance_buffer_slot
+      = local_fog_products->instance_buffer_slot.get();
+    constants.local_fog0.tile_data_texture_slot
+      = local_fog_products->tile_data_texture_slot.get();
+    constants.local_fog0.instance_count = local_fog_products->instance_count;
+    constants.local_fog0.enabled = 1U;
+    constants.local_fog1.tile_resolution_x
+      = local_fog_products->tile_resolution_x;
+    constants.local_fog1.tile_resolution_y
+      = local_fog_products->tile_resolution_y;
+    constants.local_fog1.max_instances_per_tile
+      = local_fog_products->max_instances_per_tile;
+    constants.local_fog1.global_start_distance_m
+      = renderer_.GetLocalFogGlobalStartDistanceMeters();
+    constants.local_fog2.max_density_into_volumetric_fog
+      = renderer_.GetLocalFogMaxDensityIntoVolumetricFog();
+  }
   PopulateLight(constants.light0_direction_enabled,
     constants.light0_illuminance_rgb,
     stable_state.view_products.atmosphere_lights[0]);
@@ -446,6 +475,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.ue_log_depth_distribution = true;
   state.directional_shadowed_light_injection_requested
     = constants.grid_z.shadowed_directional_light0_enabled > 0.0F;
+  state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
+    && local_fog_products != nullptr && local_fog_products->prepared;
+  state.local_fog_injection_executed = local_fog_ready;
+  state.local_fog_instance_count
+    = local_fog_products != nullptr ? local_fog_products->instance_count : 0U;
   state.grid_z_params[0] = grid_z_params.x;
   state.grid_z_params[1] = grid_z_params.y;
   state.grid_z_params[2] = grid_z_params.z;

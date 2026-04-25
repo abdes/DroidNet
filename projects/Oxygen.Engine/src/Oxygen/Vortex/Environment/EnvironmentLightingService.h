@@ -12,6 +12,8 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
@@ -148,6 +150,9 @@ public:
     bool volumetric_fog_view_constants_bound { false };
     bool volumetric_fog_ue_log_depth_distribution { false };
     bool volumetric_fog_directional_shadowed_light_requested { false };
+    bool volumetric_fog_local_fog_injection_requested { false };
+    bool volumetric_fog_local_fog_injection_executed { false };
+    std::uint32_t volumetric_fog_local_fog_instance_count { 0U };
   };
 
   struct Stage15State {
@@ -196,6 +201,9 @@ public:
     bool volumetric_fog_view_constants_bound { false };
     bool volumetric_fog_ue_log_depth_distribution { false };
     bool volumetric_fog_directional_shadowed_light_requested { false };
+    bool volumetric_fog_local_fog_injection_requested { false };
+    bool volumetric_fog_local_fog_injection_executed { false };
+    std::uint32_t volumetric_fog_local_fog_instance_count { 0U };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);
@@ -221,7 +229,8 @@ public:
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
     ShaderVisibleIndex environment_view_slot = kInvalidShaderVisibleIndex,
-    bool enable_ambient_bridge = false) -> ShaderVisibleIndex;
+    bool enable_ambient_bridge = false,
+    const SceneTextures* scene_textures = nullptr) -> ShaderVisibleIndex;
   OXGN_VRTX_API auto RenderSkyAndFog(
     RenderContext& ctx, const SceneTextures& scene_textures) -> void;
 
@@ -281,6 +290,9 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
+  auto PrepareLocalFogForStage14(RenderContext& ctx,
+    const SceneTextures& scene_textures)
+    -> const environment::internal::LocalFogVolumeState::ViewProducts&;
   [[nodiscard]] auto BuildEnvironmentStaticData(
     const environment::EnvironmentViewProducts& view_products) const
     -> EnvironmentStaticData;
@@ -332,6 +344,10 @@ private:
     camera_aerial_perspective_pass_ {};
   std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_ {};
   environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
+  environment::LocalFogVolumeTiledCullingPass::RecordState
+    pending_local_fog_culling_state_ {};
+  ViewId pending_local_fog_view_id_ { kInvalidViewId };
+  frame::SequenceNumber pending_local_fog_sequence_ { 0U };
   std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
 };
 
