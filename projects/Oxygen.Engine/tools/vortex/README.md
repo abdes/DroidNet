@@ -17,6 +17,8 @@ This directory contains Vortex-specific capture analysis and probe scripts.
 - `Assert-VortexBasicDebugLayerAudit.ps1`
   - asserts the debugger-backed no-capture D3D12 audit from the `cdb.exe`
     transcript
+  - accepts `-RuntimeLogPath` for validation runs, such as RenderScene, where
+    application stdout/stderr is redirected outside the debugger transcript
   - fails on breakpoint exceptions, D3D12/DXGI errors, or untriaged warnings
   - explicitly documents the shutdown `DXGI WARNING: Live IDXGIFactory ...`
     line as normal and accepted for this audit surface

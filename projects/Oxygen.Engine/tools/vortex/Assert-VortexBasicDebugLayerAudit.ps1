@@ -1,16 +1,18 @@
 <#
 .SYNOPSIS
-Asserts debugger-backed D3D12 debug-layer cleanliness for the VortexBasic runtime.
+Asserts debugger-backed D3D12 debug-layer cleanliness for a Vortex runtime.
 
 .DESCRIPTION
-Consumes the combined WinDbg/CDB audit transcript generated from a no-capture
-VortexBasic run with the D3D12 debug layer enabled.
+Consumes the WinDbg/CDB audit transcript generated from a no-capture Vortex run
+with the D3D12 debug layer enabled. If application stdout/stderr is redirected
+outside the debugger transcript, pass those files through `-RuntimeLogPath` so
+the audit can also prove the runtime exit code.
 
 The audit fails on:
 - breakpoint exceptions
 - any D3D12/DXGI errors
 - any D3D12/DXGI warnings that are not explicitly triaged as accepted
-- missing or nonzero VortexBasic exit code
+- missing or nonzero runtime exit code
 
 The normal shutdown `DXGI WARNING: Live IDXGIFactory ...` line is treated as an
 accepted artifact for this audit surface and is reported explicitly rather than
@@ -20,6 +22,9 @@ failing the validation.
 param(
   [Parameter(Mandatory = $true)]
   [string]$DebuggerLogPath,
+
+  [Parameter()]
+  [string[]]$RuntimeLogPath = @(),
 
   [Parameter()]
   [string]$ReportPath = ''
@@ -42,12 +47,23 @@ function Format-Bool {
 }
 
 $debuggerLogFullPath = (Resolve-Path $DebuggerLogPath).Path
+$runtimeLogFullPaths = @(
+  foreach ($path in $RuntimeLogPath) {
+    if (-not [string]::IsNullOrWhiteSpace($path)) {
+      (Resolve-Path $path).Path
+    }
+  }
+)
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
   $ReportPath = "$debuggerLogFullPath.report.txt"
 }
 $reportFullPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReportPath)
 
 $logLines = Get-Content -LiteralPath $debuggerLogFullPath
+$runtimeLogLines = @()
+foreach ($runtimeLogFullPath in $runtimeLogFullPaths) {
+  $runtimeLogLines += Get-Content -LiteralPath $runtimeLogFullPath
+}
 
 $breakLines = @(
   $logLines | Select-String -Pattern 'Break instruction exception - code 80000003' | ForEach-Object { $_.Line } | Select-Object -Unique
@@ -92,7 +108,7 @@ foreach ($warningLine in $warningLines) {
 }
 
 $exitCodeMatches = @(
-  $logLines | Select-String -Pattern '\bexit code:\s*(\d+)'
+  ($logLines + $runtimeLogLines) | Select-String -Pattern '\bexit code:\s*(\d+)'
 )
 $runtimeExitCode = $null
 if ($exitCodeMatches.Count -gt 0) {
@@ -101,9 +117,9 @@ if ($exitCodeMatches.Count -gt 0) {
 
 $failureReasons = New-Object System.Collections.Generic.List[string]
 if ($null -eq $runtimeExitCode) {
-  $failureReasons.Add('missing_vortexbasic_exit_code')
+  $failureReasons.Add('missing_runtime_exit_code')
 } elseif ($runtimeExitCode -ne 0) {
-  $failureReasons.Add("nonzero_vortexbasic_exit_code:$runtimeExitCode")
+  $failureReasons.Add("nonzero_runtime_exit_code:$runtimeExitCode")
 }
 if ($breakLines.Count -gt 0) {
   $failureReasons.Add("break_instruction_count:$($breakLines.Count)")
@@ -125,6 +141,9 @@ $reportLines = New-Object System.Collections.Generic.List[string]
 $reportLines.Add("analysis_result=$analysisResult")
 $reportLines.Add('analysis_profile=vortexbasic_debug_layer_audit')
 $reportLines.Add("debugger_log_path=$debuggerLogFullPath")
+foreach ($runtimeLogFullPath in $runtimeLogFullPaths) {
+  $reportLines.Add("runtime_log_path=$runtimeLogFullPath")
+}
 $reportLines.Add("runtime_exit_code=$(if ($null -eq $runtimeExitCode) { '' } else { $runtimeExitCode })")
 $reportLines.Add("debugger_break_detected=$(Format-Bool -Value ($breakLines.Count -gt 0))")
 $reportLines.Add("break_instruction_count=$($breakLines.Count)")

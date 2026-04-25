@@ -62,9 +62,10 @@ Important baseline facts:
 - `LightingService`, `ShadowService`, `PostProcessService`, and
   `EnvironmentLightingService` are real code owners, not empty future names.
 - `EnvironmentLightingService` is substantial but not fully parity-closed.
-  Sky/atmosphere and below-horizon handling are advanced; height fog, local
-  fog, volumetric fog, and real SkyLight capture/filtering remain open parity
-  work.
+  Sky/atmosphere and below-horizon handling are advanced; local fog and
+  volumetric fog are validated in VTX-M04D.3/VTX-M04D.4, while height fog,
+  aerial perspective proof, full runtime closure, and real SkyLight
+  capture/filtering remain open work.
 - `DiagnosticsService`, `TranslucencyModule`, and the full `OcclusionModule`
   are not concrete runtime closures yet, even though supporting substrate and
   some placeholder directories exist.
@@ -89,13 +90,13 @@ behavior really is. Keep the work inside Phase 4D and do not advance to Async
 migration or Phase 5 until the environment/fog parity gates have evidence.
 
 **Completed work packages:** `VTX-M04D.1 — Environment Publication And Sky/Fog
-Contract Truth` and `VTX-M04D.3 — UE5.7 Local Fog Volume Parity`. These
-stabilize truthful environment publication and the analytical local-fog volume
-path before deeper volumetric-fog parity work lands.
+Contract Truth`, `VTX-M04D.3 — UE5.7 Local Fog Volume Parity`, and
+`VTX-M04D.4 — UE5.7 Volumetric Fog Parity`. These stabilize truthful
+environment publication, analytical local-fog volumes, and the validated
+integrated volumetric-fog product path before full runtime closure.
 
-**Active work packages:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`,
-`VTX-M04D.4 — UE5.7 Volumetric Fog Parity`, and `VTX-M04D.6 — UE5.7 Aerial
-Perspective Parity`.
+**Active work packages:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`
+and `VTX-M04D.6 — UE5.7 Aerial Perspective Parity`.
 
 **Detailed plan:** [plan/VTX-M04D.2-exponential-height-fog-parity.md](./plan/VTX-M04D.2-exponential-height-fog-parity.md)
 **Detailed local-fog plan:** [plan/VTX-M04D.3-local-fog-volume-parity.md](./plan/VTX-M04D.3-local-fog-volume-parity.md)
@@ -136,7 +137,12 @@ volumetric shadow visibility during follow-up captures. Paired focused
 RenderDoc captures now prove measurable local-fog, SkyLight,
 directional-shadow, and temporal deltas in `IntegratedLightScattering`; the
 SkyLight proof also caught and fixed a DistantSkyLight structured-buffer ABI
-alignment bug.
+alignment bug. RenderScene now has deterministic `--scene` startup loading for
+`CityEnvironmentValidation`; stale persisted scenes are discarded, validation
+CVars are explicitly seeded, and the city-scale frame-90 capture validates the
+320x175x32 integrated-scattering product, Stage-15 fog payload, three
+local-fog volumes, SkyLight LUT, temporal reprojection, and debug-layer-clean
+D3D12 execution.
 
 **In scope:**
 
@@ -205,8 +211,8 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M04D | Environment / fog parity closure | `in_progress` | VTX-M02, VTX-M03 validation context | Parent milestone for environment publication truth, aerial perspective, height fog, local fog, volumetric fog, and runtime proof. |
 | VTX-M04D.1 | Environment publication and sky/fog contract truth | `validated` | VTX-M02, current environment code | Truthful environment binding/publication state, SkyLight/IBL truth, Stage 14 observability. |
 | VTX-M04D.2 | UE5.7 exponential height fog parity | `in_progress` | VTX-M04D.1 | Height fog authored parameters, algorithms, shaders, sky/lighting coupling, tests/proof. |
-| VTX-M04D.3 | UE5.7 local fog volume parity | `validated` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Analytical local-fog volume path is implemented and proven: UE-shaped authoring sanitization, sorting/capping, HZB-backed tiled culling, single draw-indirect compose, SceneColor contribution, far-depth no-op behavior, focused tests, shader validation, and VortexBasic runtime/capture proof. Local-fog volumetric injection remains VTX-M04D.4 scope. |
-| VTX-M04D.4 | UE5.7 volumetric fog parity | `in_progress` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3, VTX-M03 directional CSM proof | First integrated-light-scattering runtime product path exists with focused Stage-14 RenderDoc proof, captured Stage-15 fog static-data SRV/flag proof, and focused integrated-volume sampling proof. UE5.7-style log froxel depth, primary/secondary height-fog spatial media density, primary directional CSM shadowed-light sampling, first Oxygen distant-SkyLight volumetric ambient injection, first local-fog participating-media injection, and UE-shaped temporal jitter/reset/history-miss reprojection now exist with focused CPU/shader/runtime-smoke evidence. Term-isolated local-fog, SkyLight, directional-shadow, and temporal artifact proof now exists from paired VortexBasic RenderDoc captures. Real SkyLight cubemap capture/filtering is an IBL/indirect-lighting resource milestone, not a VTX-M04D.4 closure gate; VTX-M04D.4 still needs the accepted temporal-divergence note and city-scale volumetric capture proof. |
+| VTX-M04D.3 | UE5.7 local fog volume parity | `validated` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Analytical local-fog volume path is implemented and proven: UE-shaped authoring sanitization, sorting/capping, HZB-backed tiled culling, single draw-indirect compose, SceneColor contribution, far-depth no-op behavior, focused tests, shader validation, and VortexBasic runtime/capture proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
+| VTX-M04D.4 | UE5.7 volumetric fog parity | `validated` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3, VTX-M03 directional CSM proof | Integrated-light-scattering runtime product path is implemented and proven with focused Stage-14 RenderDoc proof, captured Stage-15 fog static-data SRV/flag proof, focused integrated-volume sampling proof, and city-scale RenderScene capture proof. UE5.7-style log froxel depth, primary/secondary height-fog spatial media density, primary directional CSM shadowed-light sampling, Oxygen distant-SkyLight volumetric ambient injection, local-fog participating-media injection, and UE-shaped temporal jitter/reset/history-miss reprojection have focused CPU/shader/runtime-smoke evidence. Term-isolated local-fog, SkyLight, directional-shadow, and temporal artifact proof exists from paired VortexBasic RenderDoc captures. Accepted Oxygen divergences are documented for UE conservative-depth history fixup, pre-exposure transfer, and UE's separate light-scattering history product. Real SkyLight cubemap capture/filtering is an IBL/indirect-lighting resource milestone, not a VTX-M04D.4 closure gate. |
 | VTX-M04D.5 | Environment runtime proof and Async preparation | `planned` | VTX-M04D.2, VTX-M04D.3, VTX-M04D.4, VTX-M04D.6 | One runtime proof path exercises atmosphere, aerial perspective, height fog, local fog, volumetric fog, and authored SkyLight state. Real SkyLight cubemap capture/filtering remains a separate IBL/indirect-lighting resource implementation before usable IBL output can be claimed. |
 | VTX-M04D.6 | UE5.7 aerial perspective parity | `in_progress` | VTX-M04D.1, VTX-M04D.2 | Camera aerial-perspective volume generation/sampling, main-pass application, height-fog coupling, and capture/test proof. |
 | VTX-M04E | Async migration parity gate | `planned` | VTX-M03, VTX-M04D.5 | `Examples/Async` runs through Vortex with no long-lived compatibility clutter and captures proof. |
@@ -302,15 +308,16 @@ Required work:
   participation according to the selected parity contract.
 - Treat conventional directional CSM projection proof as a closed prerequisite,
   not as remaining volumetric-fog parity. VTX-M04D.4 shadowed-light work must
-  consume the validated CSM product; the first primary directional volumetric
-  CSM sampling path exists, but volumetric shadow quality still needs
-  runtime/capture artifact proof before closure.
+  consume the validated CSM product; the primary directional volumetric CSM
+  sampling path now has focused term proof and city-scale capture proof.
 - Integrate scattering and transmittance into a published
   integrated-light-scattering product.
 - Add temporal reprojection/history, jitter policy, reset conditions, and
-  per-view resource ownership. A first per-view history resource and reprojection
-  slice exists for matching integrated-scattering grids; full UE policy still
-  needs jitter/miss handling, camera-cut/reset parity, and artifact proof.
+  per-view resource ownership. VTX-M04D.4 implements UE-shaped Halton jitter,
+  reset, history-miss supersampling, and reprojection for Oxygen's single
+  integrated-scattering product; UE conservative-depth history fixup,
+  pre-exposure transfer, and separate `LightScattering` history are documented
+  accepted divergences.
 - Keep CPU/HLSL ABI and publication contracts lockstep.
 
 Exit gate:
@@ -319,6 +326,12 @@ Exit gate:
 - Integrated light scattering is published truthfully.
 - Tests and capture analysis cover enabled, disabled, history-reset, and
   lighting-participation cases.
+- City-scale RenderScene proof covers `CityEnvironmentValidation` with local
+  fog, directional volumetric shadows, SkyLight, temporal reprojection, and a
+  debugger-backed D3D12 debug-layer audit.
+
+Status: `validated` on 2026-04-26. Evidence is recorded in
+`IMPLEMENTATION_STATUS.md`.
 
 ### 6.5 VTX-M04D.5 — Runtime Proof
 
@@ -562,9 +575,9 @@ Parallelism rules:
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `in_progress` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; aerial perspective has focused implementation evidence and RenderScene visual confirmation but still needs capture/reflection proof. |
 | SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
 | Exponential height fog | VTX-M04D.2 | `in_progress` | UE5.7-grade authored parameters, algorithms, shaders, and coupling. |
-| City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `in_progress` | `CityEnvironmentValidation` banding/quality fixes: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, city-scale directional CSM hydration, and first volumetric integrated-scattering runtime behavior now have implementation/test/runtime-smoke/focused RenderDoc evidence. The broader VortexBasic runtime wrapper also passes for the small validation scene with point/spot/directional lighting, local fog, volumetric fog, sky/fog, and composition. City-scale capture/analyzer visual proof and full fog parity remain open. Cubemap fog is deferred. |
-| Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection remains VTX-M04D.4. |
-| Volumetric fog | VTX-M04D.4 | `in_progress` | First integrated-light-scattering runtime path exists with focused RenderDoc proof for Stage-14 dispatch/product write plus captured Stage-15 fog `EnvironmentStaticData` SRV/flag/grid proof and integrated-volume min/max/slice proof. UE5.7-style log froxel depth, spatial primary/secondary height-fog media density, primary directional CSM shadowed-light sampling, local-fog participating-media injection through validated Stage-14 tiled products, Oxygen distant-SkyLight volumetric ambient injection, and UE-shaped temporal jitter/reset/history-miss reprojection now exist with focused CPU/shader/runtime-smoke evidence. Paired VortexBasic RenderDoc captures now prove local-fog, SkyLight, directional-shadow, and temporal term deltas in the integrated-scattering product. Accepted temporal-divergence documentation and city-scale capture proof remain open. Real SkyLight cubemap capture/filtering is deferred to the IBL/indirect-lighting resource track. |
+| City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `in_progress` | `CityEnvironmentValidation` banding/quality fixes: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, city-scale directional CSM hydration, and city-scale volumetric integrated-scattering runtime behavior now have implementation/test/runtime-smoke/focused RenderDoc evidence. The broader VortexBasic runtime wrapper also passes for the small validation scene with point/spot/directional lighting, local fog, volumetric fog, sky/fog, and composition. Remaining city-scale closure belongs to VTX-M04D.2/VTX-M04D.6 and VTX-M04D.5 runtime proof. Cubemap fog is deferred. |
+| Local fog volumes | VTX-M04D.3 | `validated` | Analytical local-fog volume path has UE5.7 source grounding, focused tests, shader validation, VortexBasic runtime/capture proof, draw-args probe evidence, SceneColor contribution proof, and far-depth no-op proof. Local-fog volumetric injection is validated separately under VTX-M04D.4. |
+| Volumetric fog | VTX-M04D.4 | `validated` | Integrated-light-scattering runtime path is proven with focused RenderDoc proof for Stage-14 dispatch/product write, captured Stage-15 fog `EnvironmentStaticData` SRV/flag/grid proof, integrated-volume min/max/slice proof, term-isolated VortexBasic captures, and city-scale RenderScene capture proof. UE5.7-style log froxel depth, spatial primary/secondary height-fog media density, primary directional CSM shadowed-light sampling, local-fog participating-media injection through validated Stage-14 tiled products, Oxygen distant-SkyLight volumetric ambient injection, and UE-shaped temporal jitter/reset/history-miss reprojection are validated for the Oxygen product shape. Real SkyLight cubemap capture/filtering is deferred to the IBL/indirect-lighting resource track. |
 | Async runtime migration | VTX-M04E | `planned` | Canonical runtime proof path with no compatibility clutter. |
 | DiagnosticsService | VTX-M05A | `planned` | Product diagnostics surface, overlays/panels/timeline/debug bindings. |
 | OcclusionModule | VTX-M05B | `planned` | Full occlusion query/consumer policy over Screen HZB. |
