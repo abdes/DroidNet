@@ -46,12 +46,6 @@ reviewed.
 
 ## Document Index
 
-### Cross-Phase Design Remediation
-
-| Document | Deliverable | Covers |
-| -------- | ----------- | ------ |
-| [phase4-lld-remediation-program.md](phase4-lld-remediation-program.md) | cross-phase remediation program | Complete tracked remediation series for the Phase 4 LLD package plus the immediate collateral design-doc sync required to keep the design package truthful |
-
 ### Phase 1 — Substrate Migration
 
 | Document | Deliverable | Covers |
@@ -84,7 +78,7 @@ reviewed.
 | [lighting-service.md](lighting-service.md) | D.9 | Light grid build, published forward-light package, deferred-lighting ownership transfer, per-view publication |
 | [post-process-service.md](post-process-service.md) | D.10 | Branched post family: tonemap, exposure, bloom, temporal AA/TSR slot, post-owned histories |
 | [shadow-service.md](shadow-service.md) | D.11 | Conventional shadow map rendering, shadow data product, shadow-to-lighting wire, VSM slot reservation |
-| [environment-service.md](environment-service.md) | D.12 | Sky/atmosphere/fog composition, environment-probe / IBL publication, stage 14 reservation |
+| [environment-service.md](environment-service.md) | D.12 | Sky/atmosphere/fog composition, Stage 14 local/volumetric fog ownership, environment-probe / IBL publication |
 | [migration-playbook.md](migration-playbook.md) | D.13 | Examples/Async analysis, runtime seam mapping, behavior parity checklist, visual baseline capture |
 
 ### Phase 5 — Remaining Services and Scenarios
@@ -115,5 +109,5 @@ reviewed.
   prerequisites per phase
 - **[PROJECT-LAYOUT.md](../PROJECT-LAYOUT.md)** — authoritative file placement;
   LLDs reference it for file locations
-- **[IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md)** — tracks
+- **[IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md)** — tracks
   deliverable completion status

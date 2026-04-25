@@ -31,8 +31,9 @@ This document started as the Phase 2 shell contract. On the current retained
 Phase 03 branch, the shell has progressed into a real deferred-core runtime:
 Renderer Core materializes the eligible frame views and selects the current
 scene-view cursor in `RenderContext`, while `SceneRenderer` owns the stage
-chain for that selected current view (currently Stage 2/3/9/10/12 plus
-resolve/cleanup). The later reserved stage/service slots remain future-facing.
+chain for that selected current view. Several later service slots are now
+active or active-in-progress; environment Stage 14/15 work is owned by
+`EnvironmentLightingService`, while fog parity remains incomplete.
 
 ### 1.2 What It Replaces
 
@@ -100,8 +101,8 @@ public:
 3. Construct `SceneTextures`.
 4. Initialize empty `SceneTextureBindings` routing state owned by the
    `SceneRenderer`.
-5. Construct stage modules based on capabilities (all null in Phase 2 shell).
-6. Construct subsystem services based on capabilities (all null in Phase 2).
+5. Construct stage modules based on capabilities.
+6. Construct subsystem services based on capabilities.
 7. Return assembled `SceneRenderer` instance.
 
 **Capability interpretation (Phase 2 shell):**
@@ -109,17 +110,18 @@ public:
 | Capability | Effect |
 | ---------- | ------ |
 | `kDeferredShading` | Sets default `ShadingMode::kDeferred` |
-| `kScenePreparation` | Enables InitViews (future) |
-| `kLightingData` | Enables LightingService (future) |
-| `kShadowing` | Enables ShadowService (future) |
-| `kEnvironmentLighting` | Enables EnvironmentLightingService (future) |
-| `kDiagnosticsAndProfiling` | Enables DiagnosticsService (future) |
+| `kScenePreparation` | Enables InitViews |
+| `kLightingData` | Enables LightingService |
+| `kShadowing` | Enables ShadowService |
+| `kEnvironmentLighting` | Enables EnvironmentLightingService |
+| `kDiagnosticsAndProfiling` | Enables DiagnosticsService |
 
-In Phase 2, all capability checks populate null unique_ptrs. The shell
-validates that capabilities are recognized but does not construct services.
-`Build(...)` still returns a `SceneRenderer` for the desktop runtime path even
-when the capability set is empty; an empty set yields the shell with no domain
-systems active and the default shading mode derived from the capability policy.
+The original Phase 2 shell used null service pointers for every capability.
+Current Vortex phases construct active services for implemented capability
+families. `Build(...)` still returns a `SceneRenderer` for the desktop runtime
+path even when the capability set is empty; an empty set yields the shell with
+no domain systems active and the default shading mode derived from the
+capability policy.
 
 ### 2.3 SceneRenderer
 
@@ -237,7 +239,7 @@ void SceneRenderer::OnFrameStart(const FrameContext& frame) {
   setup_mode_.Reset();
   scene_texture_bindings_ = {};
 
-  // 3. Notify active services (future)
+  // 3. Notify active services
   // if (lighting_) lighting_->OnFrameStart(frame);
   // if (shadows_) shadows_->OnFrameStart(frame);
   // if (environment_) environment_->OnFrameStart(frame);
@@ -285,7 +287,10 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
 
   // === Stage 13: reserved — IndirectLightingService ===
 
-  // === Stage 14: reserved — EnvironmentLightingService volumetrics ===
+  // === Stage 14: EnvironmentLightingService local / volumetric fog ===
+  // Current service entrypoint records Stage 14 local-fog culling internally.
+  // Split to a dedicated Stage-14 method when runtime volumetric fog passes
+  // are implemented and enabled.
 
   // === Stage 15: Sky / atmosphere / fog ===
   // if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);
