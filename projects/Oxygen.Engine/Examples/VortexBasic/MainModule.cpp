@@ -667,7 +667,12 @@ auto MainModule::EnsureScene() -> void
     fog->SetDirectionalInscatteringStartDistance(0.0F);
     fog->SetVolumetricFogScatteringDistribution(0.20F);
     fog->SetVolumetricFogAlbedo({ 0.62F, 0.70F, 0.82F });
-    fog->SetVolumetricFogEmissive({ 0.20F, 0.26F, 0.32F });
+    const auto volumetric_emissive_scale = std::max(
+      app_.vortex_volumetric_fog_emissive_scale, 0.0F);
+    fog->SetVolumetricFogEmissive(
+      { 0.20F * volumetric_emissive_scale,
+        0.26F * volumetric_emissive_scale,
+        0.32F * volumetric_emissive_scale });
     fog->SetVolumetricFogExtinctionScale(1.50F);
     fog->SetVolumetricFogDistance(120.0F);
     fog->SetVolumetricFogStartDistance(0.0F);
@@ -707,7 +712,11 @@ auto MainModule::EnsureScene() -> void
       local_fog.SetHeightFogOffset(-0.5F);
       local_fog.SetFogPhaseG(0.15F);
       local_fog.SetFogAlbedo({ 0.10F, 0.92F, 0.86F });
-      local_fog.SetFogEmissive({ 7.5F, 0.4F, 5.5F });
+      const auto local_fog_emissive_scale
+        = std::max(app_.vortex_local_fog_emissive_scale, 0.0F);
+      local_fog.SetFogEmissive({ 7.5F * local_fog_emissive_scale,
+        0.4F * local_fog_emissive_scale,
+        5.5F * local_fog_emissive_scale });
       local_fog.SetSortPriority(2);
     }
     local_fog_volume_node_.GetTransform().SetLocalPosition(
