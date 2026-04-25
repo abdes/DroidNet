@@ -117,10 +117,10 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
       1.0F,
     };
   glm::vec4 camera_aerial_volume_depth_params {
-    16.0F,
-    1.0F / 16.0F,
-    6.0F,
-    1.0F / 6.0F,
+    32.0F,
+    1.0F / 32.0F,
+    3.0F,
+    1.0F / 3.0F,
   };
 };
 

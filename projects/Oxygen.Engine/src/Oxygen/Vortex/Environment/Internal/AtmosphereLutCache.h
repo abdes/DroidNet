@@ -37,11 +37,11 @@ public:
     float sky_view_sample_count_min { 4.0F };
     float sky_view_sample_count_max { 32.0F };
     float sky_view_distance_to_sample_count_max_m { 150000.0F };
-    std::uint32_t camera_aerial_width { 32U };
-    std::uint32_t camera_aerial_height { 32U };
-    std::uint32_t camera_aerial_depth_resolution { 16U };
+    std::uint32_t camera_aerial_width { 64U };
+    std::uint32_t camera_aerial_height { 64U };
+    std::uint32_t camera_aerial_depth_resolution { 32U };
     float camera_aerial_depth_km { 96.0F };
-    float camera_aerial_depth_slice_length_km { 6.0F };
+    float camera_aerial_depth_slice_length_km { 3.0F };
     float camera_aerial_sample_count_per_slice { 2.0F };
     float transmittance_sample_count { 10.0F };
     float multi_scattering_sample_count { 15.0F };

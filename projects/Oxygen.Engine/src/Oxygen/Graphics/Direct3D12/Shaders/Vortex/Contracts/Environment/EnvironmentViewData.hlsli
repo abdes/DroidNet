@@ -63,7 +63,7 @@ static EnvironmentViewData LoadEnvironmentViewData(uint slot)
     invalid_data.atmosphere_light1_disk_luminance_rgb = float4(0.0f, 0.0f, 0.0f, 0.0f);
     invalid_data.sky_aerial_luminance_aerial_start_depth_km = float4(1.0f, 1.0f, 1.0f, 0.1f);
     invalid_data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass = float4(1.0f, -90.0f, 0.0f, 1.0f);
-    invalid_data.camera_aerial_volume_depth_params = float4(16.0f, 1.0f / 16.0f, 6.0f, 1.0f / 6.0f);
+    invalid_data.camera_aerial_volume_depth_params = float4(32.0f, 1.0f / 32.0f, 3.0f, 1.0f / 3.0f);
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_data;

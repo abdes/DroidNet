@@ -1219,10 +1219,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     view_data->sky_aerial_luminance_aerial_start_depth_km.w, 0.25F);
   EXPECT_FLOAT_EQ(
     view_data->sky_luminance_factor_height_fog_contribution.w, 0.35F);
-  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.x, 16.0F);
-  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.y, 1.0F / 16.0F);
-  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.z, 6.0F);
-  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.w, 1.0F / 6.0F);
+  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.x, 32.0F);
+  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.y, 1.0F / 32.0F);
+  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.z, 3.0F);
+  EXPECT_FLOAT_EQ(view_data->camera_aerial_volume_depth_params.w, 1.0F / 3.0F);
   EXPECT_FLOAT_EQ(
     view_data
       ->trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.w,
@@ -1236,13 +1236,13 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   const auto& generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(generation.camera_aerial_perspective_requested);
   EXPECT_TRUE(generation.camera_aerial_perspective_executed);
-  EXPECT_EQ(generation.camera_aerial_width, 32U);
-  EXPECT_EQ(generation.camera_aerial_height, 32U);
-  EXPECT_EQ(generation.camera_aerial_depth, 16U);
+  EXPECT_EQ(generation.camera_aerial_width, 64U);
+  EXPECT_EQ(generation.camera_aerial_height, 64U);
+  EXPECT_EQ(generation.camera_aerial_depth, 32U);
   EXPECT_FLOAT_EQ(generation.camera_aerial_sample_count_per_slice, 2.0F);
-  EXPECT_EQ(generation.camera_aerial_dispatch_count_x, 8U);
-  EXPECT_EQ(generation.camera_aerial_dispatch_count_y, 8U);
-  EXPECT_EQ(generation.camera_aerial_dispatch_count_z, 4U);
+  EXPECT_EQ(generation.camera_aerial_dispatch_count_x, 16U);
+  EXPECT_EQ(generation.camera_aerial_dispatch_count_y, 16U);
+  EXPECT_EQ(generation.camera_aerial_dispatch_count_z, 8U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
