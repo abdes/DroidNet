@@ -64,6 +64,11 @@ $expectedChecks = @{
   'stage15_fog_draw_valid' = 'true'
   'volumetric_fog_before_stage15_fog' = 'true'
   'integrated_light_scattering_written' = 'true'
+  'stage15_fog_environment_static_data_bound' = 'true'
+  'stage15_fog_integrated_light_scattering_srv_valid' = 'true'
+  'stage15_fog_volumetric_enabled_flag' = 'true'
+  'stage15_fog_integrated_scattering_valid_flag' = 'true'
+  'stage15_fog_volumetric_grid_valid' = 'true'
   'overall_verdict' = 'pass'
 }
 
@@ -92,7 +97,12 @@ foreach ($key in @(
     'stage15_fog_draw_count',
     'integrated_light_scattering_written_resource',
     'integrated_light_scattering_consumed_resource',
-    'integrated_light_scattering_consumed_by_fog'
+    'integrated_light_scattering_consumed_by_fog',
+    'stage15_fog_environment_static_resource',
+    'stage15_fog_environment_static_byte_size',
+    'stage15_fog_integrated_light_scattering_srv',
+    'stage15_fog_volumetric_flags',
+    'stage15_fog_volumetric_grid'
   )) {
   if ($captureReportMap.ContainsKey($key)) {
     $reportLines += "$key=$($captureReportMap[$key])"

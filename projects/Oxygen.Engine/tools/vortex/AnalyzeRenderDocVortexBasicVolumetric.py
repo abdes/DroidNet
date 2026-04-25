@@ -1,6 +1,7 @@
 """RenderDoc UI analyzer for the focused VortexBasic volumetric-fog proof."""
 
 import builtins
+import struct
 import sys
 from pathlib import Path
 
@@ -69,6 +70,19 @@ DRAW_NAME = "ID3D12GraphicsCommandList::DrawInstanced()"
 VOLUMETRIC_SCOPE = "Vortex.Stage14.VolumetricFog"
 FOG_SCOPE = "Vortex.Stage15.Fog"
 INTEGRATED_LIGHT_SCATTERING_TOKEN = "vortex.environment.integratedlightscattering"
+ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 656
+ENVIRONMENT_STATIC_DATA_U32_COUNT = ENVIRONMENT_STATIC_DATA_BYTE_SIZE // 4
+VOLUMETRIC_FOG_U32_OFFSET = 128 // 4
+VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = (
+    VOLUMETRIC_FOG_U32_OFFSET + 12
+)
+VOLUMETRIC_FOG_FLAGS_U32 = VOLUMETRIC_FOG_U32_OFFSET + 13
+VOLUMETRIC_FOG_GRID_WIDTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 14
+VOLUMETRIC_FOG_GRID_HEIGHT_U32 = VOLUMETRIC_FOG_U32_OFFSET + 15
+VOLUMETRIC_FOG_GRID_DEPTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 16
+GPU_VOLUMETRIC_FOG_FLAG_ENABLED = 1 << 0
+GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID = 1 << 1
+INVALID_BINDLESS_INDEX = 0xFFFFFFFF
 
 
 def records_with_name(action_records, name):
@@ -131,6 +145,43 @@ def bound_named_resources(controller, rd, resource_names, event_id, shader_stage
 
 def append_bool(report, key, value):
     report.append("{}={}".format(key, str(bool(value)).lower()))
+
+
+def read_stage15_fog_environment_static_data(controller, rd, event_id, resource_names):
+    controller.SetFrameEvent(event_id, True)
+    state = controller.GetPipelineState()
+    for used_descriptor in state.GetReadOnlyResources(rd.ShaderStage.Pixel, True):
+        descriptor = used_descriptor.descriptor
+        byte_size = int(safe_getattr(descriptor, "byteSize", 0) or 0)
+        if byte_size != ENVIRONMENT_STATIC_DATA_BYTE_SIZE:
+            continue
+        resource_id = safe_getattr(descriptor, "resource")
+        byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)
+        if resource_id is None:
+            continue
+        raw = controller.GetBufferData(resource_id, byte_offset, byte_size)
+        blob = bytes(raw)
+        u32_count = len(blob) // 4
+        if u32_count < ENVIRONMENT_STATIC_DATA_U32_COUNT:
+            continue
+        values_u32 = struct.unpack(
+            "<{}I".format(u32_count),
+            blob[: u32_count * 4],
+        )
+        return {
+            "resource_id": resource_id,
+            "resource_name": resource_names.get(str(resource_id), str(resource_id)),
+            "byte_offset": byte_offset,
+            "byte_size": byte_size,
+            "integrated_light_scattering_srv": values_u32[
+                VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32
+            ],
+            "flags": values_u32[VOLUMETRIC_FOG_FLAGS_U32],
+            "grid_width": values_u32[VOLUMETRIC_FOG_GRID_WIDTH_U32],
+            "grid_height": values_u32[VOLUMETRIC_FOG_GRID_HEIGHT_U32],
+            "grid_depth": values_u32[VOLUMETRIC_FOG_GRID_DEPTH_U32],
+        }
+    return None
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -207,6 +258,44 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     integrated_light_scattering_written = len(written) > 0
     integrated_light_scattering_consumed_by_fog = len(consumed) > 0
+    stage15_static_data = (
+        read_stage15_fog_environment_static_data(
+            controller,
+            rd,
+            fog_draw.event_id,
+            resource_names,
+        )
+        if fog_draw is not None
+        else None
+    )
+    stage15_static_data_bound = stage15_static_data is not None
+    stage15_integrated_srv = (
+        stage15_static_data["integrated_light_scattering_srv"]
+        if stage15_static_data_bound
+        else INVALID_BINDLESS_INDEX
+    )
+    stage15_volumetric_flags = (
+        stage15_static_data["flags"] if stage15_static_data_bound else 0
+    )
+    stage15_grid_width = (
+        stage15_static_data["grid_width"] if stage15_static_data_bound else 0
+    )
+    stage15_grid_height = (
+        stage15_static_data["grid_height"] if stage15_static_data_bound else 0
+    )
+    stage15_grid_depth = (
+        stage15_static_data["grid_depth"] if stage15_static_data_bound else 0
+    )
+    stage15_integrated_srv_valid = stage15_integrated_srv != INVALID_BINDLESS_INDEX
+    stage15_volumetric_enabled = (
+        stage15_volumetric_flags & GPU_VOLUMETRIC_FOG_FLAG_ENABLED
+    ) != 0
+    stage15_integrated_flag_valid = (
+        stage15_volumetric_flags & GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID
+    ) != 0
+    stage15_grid_valid = (
+        stage15_grid_width > 0 and stage15_grid_height > 0 and stage15_grid_depth > 0
+    )
 
     report.append("analysis_profile=vortexbasic_volumetric_fog")
     report.append("capture_path={}".format(capture_path))
@@ -234,6 +323,33 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             consumed[0]["name"] if consumed else ""
         )
     )
+    report.append(
+        "stage15_fog_environment_static_resource={}".format(
+            stage15_static_data["resource_name"] if stage15_static_data_bound else ""
+        )
+    )
+    report.append(
+        "stage15_fog_environment_static_byte_size={}".format(
+            stage15_static_data["byte_size"] if stage15_static_data_bound else 0
+        )
+    )
+    report.append(
+        "stage15_fog_integrated_light_scattering_srv={}".format(
+            stage15_integrated_srv if stage15_static_data_bound else ""
+        )
+    )
+    report.append(
+        "stage15_fog_volumetric_flags={}".format(
+            stage15_volumetric_flags if stage15_static_data_bound else ""
+        )
+    )
+    report.append(
+        "stage15_fog_volumetric_grid={}x{}x{}".format(
+            stage15_grid_width,
+            stage15_grid_height,
+            stage15_grid_depth,
+        )
+    )
 
     append_bool(report, "stage14_volumetric_fog_scope_present", volumetric_scope_present)
     append_bool(report, "stage14_volumetric_fog_dispatch_valid", volumetric_dispatch_valid)
@@ -246,6 +362,27 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "integrated_light_scattering_consumed_by_fog",
         integrated_light_scattering_consumed_by_fog,
     )
+    append_bool(
+        report,
+        "stage15_fog_environment_static_data_bound",
+        stage15_static_data_bound,
+    )
+    append_bool(
+        report,
+        "stage15_fog_integrated_light_scattering_srv_valid",
+        stage15_integrated_srv_valid,
+    )
+    append_bool(
+        report,
+        "stage15_fog_volumetric_enabled_flag",
+        stage15_volumetric_enabled,
+    )
+    append_bool(
+        report,
+        "stage15_fog_integrated_scattering_valid_flag",
+        stage15_integrated_flag_valid,
+    )
+    append_bool(report, "stage15_fog_volumetric_grid_valid", stage15_grid_valid)
 
     overall = (
         volumetric_scope_present
@@ -254,6 +391,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and fog_draw_valid
         and volumetric_before_fog
         and integrated_light_scattering_written
+        and stage15_static_data_bound
+        and stage15_integrated_srv_valid
+        and stage15_volumetric_enabled
+        and stage15_integrated_flag_valid
+        and stage15_grid_valid
     )
     report.append("overall_verdict={}".format("pass" if overall else "fail"))
 

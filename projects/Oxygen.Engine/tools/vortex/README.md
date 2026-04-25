@@ -140,12 +140,18 @@ with `diagnostic_products_` prefixes in the final validation report.
     one later `Vortex.Stage15.Fog` draw, and a named
     `Vortex.Environment.IntegratedLightScattering` resource bound as the
     Stage-14 compute UAV
+  - asserts the Stage-15 fog draw has a captured 656-byte
+    `EnvironmentStaticData` payload with a valid
+    `volumetric_fog.integrated_light_scattering_srv`, enabled/valid
+    volumetric flags, and nonzero grid dimensions
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the
 focused validation report leaves
 `integrated_light_scattering_consumed_by_fog=false` as a diagnostic instead of
-treating it as a closure gate.
+treating it as a closure gate. The accepted focused proof for Stage-15 wiring
+is the captured static payload plus the fog shader contract that samples
+`ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv]`.
 
 ## Historical Frame-10 Closeout Pack
 
