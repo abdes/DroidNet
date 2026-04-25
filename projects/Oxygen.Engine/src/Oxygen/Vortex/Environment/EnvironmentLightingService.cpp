@@ -1059,6 +1059,28 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .volumetric_fog_local_fog_instance_count
     = pending_volumetric_fog_state_.local_fog_instance_count,
   };
+  LOG_F(INFO,
+    "environment_products_published={} environment_view_published={} "
+    "atmosphere_lut_cache_valid={} "
+    "transmittance_lut_published={} multi_scattering_lut_published={} "
+    "distant_sky_light_lut_published={} sky_view_lut_published={} "
+    "camera_aerial_perspective_published={} "
+    "sky_light_authored_enabled={} sky_light_ibl_valid={} "
+    "sky_light_ibl_unavailable={} volumetric_fog_authored_enabled={} "
+    "integrated_light_scattering_valid={}",
+    last_view_product_generation_state_.environment_view_products_published,
+    last_view_product_generation_state_.environment_view_published,
+    last_view_product_generation_state_.atmosphere_lut_cache_valid,
+    last_view_product_generation_state_.transmittance_lut_srv.IsValid(),
+    last_view_product_generation_state_.multi_scattering_lut_srv.IsValid(),
+    last_view_product_generation_state_.distant_sky_light_lut_srv.IsValid(),
+    last_view_product_generation_state_.sky_view_lut_srv.IsValid(),
+    last_view_product_generation_state_.camera_aerial_perspective_srv.IsValid(),
+    last_view_product_generation_state_.sky_light_authored_enabled,
+    last_view_product_generation_state_.sky_light_ibl_valid,
+    last_view_product_generation_state_.sky_light_ibl_unavailable,
+    last_view_product_generation_state_.volumetric_fog_authored_enabled,
+    last_view_product_generation_state_.integrated_light_scattering_valid);
 
   return slot;
 }

@@ -96,6 +96,12 @@ $expectedDebugChecks = @{
 
 $expectedProductChecks = @{
   'stage3_depth_ok' = 'true'
+  'transmittance_lut_published' = 'true'
+  'multi_scattering_lut_published' = 'true'
+  'distant_sky_light_lut_published' = 'true'
+  'sky_view_lut_published' = 'true'
+  'camera_aerial_perspective_published' = 'true'
+  'atmosphere_lut_cache_valid' = 'true'
   'atmosphere_sky_view_lut_scope_count_match' = 'true'
   'atmosphere_sky_view_lut_dispatch_count_match' = 'true'
   'atmosphere_camera_aerial_scope_count_match' = 'true'
@@ -112,6 +118,7 @@ $expectedProductChecks = @{
   'stage12_point_scene_color_nonzero' = 'true'
   'stage12_directional_scene_color_nonzero' = 'true'
   'stage15_sky_scene_color_changed' = 'true'
+  'stage15_atmosphere_scene_color_changed' = 'true'
   'stage15_fog_scene_color_changed' = 'true'
   'final_present_nonzero' = 'true'
 }
@@ -127,16 +134,9 @@ $diagnosticProductKeys = @(
   'atmosphere_multi_scattering_lut_scope_count_match'
   'atmosphere_multi_scattering_lut_dispatch_count_match'
   'atmosphere_camera_aerial_consumed'
-  'transmittance_lut_published'
-  'multi_scattering_lut_published'
-  'distant_sky_light_lut_published'
-  'sky_view_lut_published'
-  'camera_aerial_perspective_published'
-  'atmosphere_lut_cache_valid'
   'distant_sky_light_lut_scope_count_match'
   'distant_sky_light_lut_dispatch_count_match'
   'integrated_light_scattering_consumed_by_fog'
-  'stage15_atmosphere_scene_color_changed'
   'stage15_local_fog_scene_color_changed'
   'stage15_local_fog_far_depth_unchanged'
   'overall_verdict'
@@ -232,6 +232,52 @@ $runtimeAtmosphereLutCacheValid = @(
 $runtimeIntegratedLightScatteringValid = @(
   $runtimeLogLines | Select-String -Pattern 'integrated_light_scattering_valid=true'
 ).Count -gt 0
+$runtimeChecks = @{
+  'runtime_cli_with_atmosphere' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-atmosphere option = true'
+  ).Count -gt 0
+  'runtime_cli_with_height_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-height-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_with_local_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-local-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_with_volumetric_fog' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed with-volumetric-fog option = true'
+  ).Count -gt 0
+  'runtime_cli_aerial_start_depth_zero' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed aerial-start-depth option = 0'
+  ).Count -gt 0
+  'runtime_cli_aerial_scattering_strength_one' = @(
+    $runtimeLogLines | Select-String -Pattern 'Parsed aerial-scattering-strength option = 1'
+  ).Count -gt 0
+  'runtime_environment_products_published' = @(
+    $runtimeLogLines | Select-String -Pattern 'environment_products_published=true'
+  ).Count -gt 0
+  'runtime_sky_light_authored_enabled' = @(
+    $runtimeLogLines | Select-String -Pattern 'sky_light_authored_enabled=true'
+  ).Count -gt 0
+  'runtime_sky_light_ibl_unavailable' = @(
+    $runtimeLogLines | Select-String -Pattern 'sky_light_ibl_unavailable=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_height_fog_media_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_height_fog_media_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_sky_light_injection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_sky_light_injection_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_local_fog_injection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_local_fog_injection_executed=true'
+  ).Count -gt 0
+  'runtime_volumetric_fog_temporal_reprojection_executed' = @(
+    $runtimeLogLines | Select-String -Pattern 'volumetric_fog_temporal_history_reprojection_executed=true'
+  ).Count -gt 0
+}
+foreach ($key in $runtimeChecks.Keys) {
+  if (-not $runtimeChecks[$key]) {
+    throw "Runtime log check failed or missing: $key"
+  }
+}
 
 $captureReportLines = Get-Content -LiteralPath $captureReportFullPath
 $captureReportMap = @{}
@@ -415,6 +461,9 @@ $reportLines = @(
 
 foreach ($key in ($localFogValidationResults.Keys | Sort-Object)) {
   $reportLines += "$key=$($localFogValidationResults[$key])"
+}
+foreach ($key in ($runtimeChecks.Keys | Sort-Object)) {
+  $reportLines += "$key=$($runtimeChecks[$key].ToString().ToLowerInvariant())"
 }
 
 foreach ($key in ($expectedChecks.Keys | Sort-Object)) {
