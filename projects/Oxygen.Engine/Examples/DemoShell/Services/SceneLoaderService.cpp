@@ -2728,11 +2728,17 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     auto& csm = light->CascadedShadows();
     csm.cascade_count = std::clamp<std::uint32_t>(
       rec.cascade_count, 1U, scene::kMaxShadowCascades);
+    csm.split_mode
+      = static_cast<scene::DirectionalCsmSplitMode>(rec.split_mode);
+    csm.max_shadow_distance = rec.max_shadow_distance;
     for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
       // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
       csm.cascade_distances[i] = rec.cascade_distances[i];
     }
     csm.distribution_exponent = rec.distribution_exponent;
+    csm.transition_fraction = rec.transition_fraction;
+    csm.distance_fadeout_fraction = rec.distance_fadeout_fraction;
+    light->CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
 
     const bool attached
       = runtime_nodes_[node_index].ReplaceLight(std::move(light));
