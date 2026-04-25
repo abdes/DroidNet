@@ -64,6 +64,9 @@ $expectedChecks = @{
   'stage15_fog_draw_valid' = 'true'
   'volumetric_fog_before_stage15_fog' = 'true'
   'integrated_light_scattering_written' = 'true'
+  'integrated_light_scattering_volume_sampled' = 'true'
+  'integrated_light_scattering_volume_rgb_nonzero' = 'true'
+  'integrated_light_scattering_volume_alpha_valid' = 'true'
   'stage15_fog_environment_static_data_bound' = 'true'
   'stage15_fog_integrated_light_scattering_srv_valid' = 'true'
   'stage15_fog_volumetric_enabled_flag' = 'true'
@@ -99,6 +102,21 @@ foreach ($key in @(
     'integrated_light_scattering_written_resource',
     'integrated_light_scattering_consumed_resource',
     'integrated_light_scattering_consumed_by_fog',
+    'integrated_light_scattering_volume_dims',
+    'integrated_light_scattering_volume_min',
+    'integrated_light_scattering_volume_max',
+    'integrated_light_scattering_slice_0_index',
+    'integrated_light_scattering_slice_0_min',
+    'integrated_light_scattering_slice_0_max',
+    'integrated_light_scattering_slice_0_center',
+    'integrated_light_scattering_slice_1_index',
+    'integrated_light_scattering_slice_1_min',
+    'integrated_light_scattering_slice_1_max',
+    'integrated_light_scattering_slice_1_center',
+    'integrated_light_scattering_slice_2_index',
+    'integrated_light_scattering_slice_2_min',
+    'integrated_light_scattering_slice_2_max',
+    'integrated_light_scattering_slice_2_center',
     'stage15_fog_environment_static_resource',
     'stage15_fog_environment_static_byte_size',
     'stage15_fog_integrated_light_scattering_srv',

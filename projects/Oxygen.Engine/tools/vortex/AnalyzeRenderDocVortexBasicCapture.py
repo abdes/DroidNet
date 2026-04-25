@@ -89,7 +89,7 @@ EXPECTED_STAGE14_VOLUMETRIC_FOG_DISPATCH_COUNT = 1
 EXPECTED_STAGE15_SKY_DRAW_COUNT = 1
 EXPECTED_STAGE15_ATMOSPHERE_DRAW_COUNT = 1
 EXPECTED_STAGE15_FOG_DRAW_COUNT = 1
-EXPECTED_STAGE15_LOCAL_FOG_DRAW_COUNT = 1
+EXPECTED_STAGE15_LOCAL_FOG_DRAW_COUNT = 0
 STAGE15_LOCAL_FOG_PRESENT_NAMES = {
     "ID3D12GraphicsCommandList::DrawInstanced()",
     "ExecuteIndirect()",
@@ -233,7 +233,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     append_exact_count_check(report, "stage15_fog_scope_count", len(stage15_fog_scope), 1)
     append_exact_count_check(
-        report, "stage15_local_fog_scope_count", len(stage15_local_fog_scope), 1
+        report, "stage15_local_fog_scope_count", len(stage15_local_fog_scope), 0
     )
     append_exact_count_check(report, "compositing_scope_count", len(compositing_scope), 1)
 
@@ -406,12 +406,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         report,
         "stage15_runtime_stage_order",
         [
-            stage12_scope[0].event_id,
             stage14_local_fog_scope[0].event_id,
+            stage14_volumetric_fog_scope[0].event_id,
+            stage12_scope[0].event_id,
             stage15_sky_scope[0].event_id,
             stage15_atmosphere_scope[0].event_id,
             stage15_fog_scope[0].event_id,
-            stage15_local_fog_scope[0].event_id,
             compositing_scope[0].event_id,
         ],
     )

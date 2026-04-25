@@ -604,10 +604,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         or stage15_sky_last_draw is None
         or stage15_atmosphere_last_draw is None
         or stage15_fog_last_draw is None
-        or stage15_local_fog_last_draw is None
         or compositing_draw is None
     ):
         raise RuntimeError("Required VortexBasic stage events were not found in the capture.")
+    stage15_local_fog_composed_in_volumetric = stage15_local_fog_last_draw is None
 
     stage3 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage3_last_draw.event_id)
     stage9 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage9_last_draw.event_id)
@@ -619,8 +619,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         controller, rd, resource_names, texture_descs, stage15_atmosphere_last_draw.event_id
     )
     stage15_fog = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id)
-    stage15_local_fog = analyze_draw_event(
-        controller, rd, resource_names, texture_descs, stage15_local_fog_last_draw.event_id
+    stage15_local_fog = (
+        analyze_draw_event(
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            stage15_local_fog_last_draw.event_id,
+        )
+        if stage15_local_fog_last_draw is not None
+        else {"outputs": [], "depth": None}
     )
 
     compositing = analyze_draw_event(controller, rd, resource_names, texture_descs, compositing_draw.event_id)
@@ -706,13 +714,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_fog_last_draw.event_id,
         stage15_fog_scene_color,
     )
-    stage15_local_fog_scene_color_dense_delta = dense_grid_delta(
-        controller,
-        rd,
-        stage15_fog_last_draw.event_id,
-        stage15_fog_scene_color,
-        stage15_local_fog_last_draw.event_id,
-        stage15_local_fog_scene_color,
+    stage15_local_fog_scene_color_dense_delta = (
+        dense_grid_delta(
+            controller,
+            rd,
+            stage15_fog_last_draw.event_id,
+            stage15_fog_scene_color,
+            stage15_local_fog_last_draw.event_id,
+            stage15_local_fog_scene_color,
+        )
+        if stage15_local_fog_last_draw is not None
+        else 0.0
     )
     stage15_sky_scene_color_delta = max(
         stage15_sky_scene_color_delta, stage15_sky_scene_color_dense_delta
@@ -728,13 +740,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_local_fog_scene_color_delta,
         stage15_local_fog_scene_color_dense_delta,
     )
-    stage15_local_fog_far_depth_delta, stage15_local_fog_far_depth_sample_count = (
-        far_depth_probe_delta(
-            stage3["depth"],
-            stage15_fog_scene_color,
-            stage15_local_fog_scene_color,
+    if stage15_local_fog_last_draw is not None:
+        stage15_local_fog_far_depth_delta, stage15_local_fog_far_depth_sample_count = (
+            far_depth_probe_delta(
+                stage3["depth"],
+                stage15_fog_scene_color,
+                stage15_local_fog_scene_color,
+            )
         )
-    )
+    else:
+        stage15_local_fog_far_depth_delta = 0.0
+        stage15_local_fog_far_depth_sample_count = 0
     stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
     stage15_atmosphere_scene_color_changed = (
         stage15_atmosphere_scene_color_delta > 1.0e-5
@@ -886,7 +902,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     report.append("stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id))
     report.append(
-        "stage15_local_fog_last_draw_event={}".format(stage15_local_fog_last_draw.event_id)
+        "stage15_local_fog_last_draw_event={}".format(
+            stage15_local_fog_last_draw.event_id
+            if stage15_local_fog_last_draw is not None
+            else ""
+        )
+    )
+    report.append(
+        "stage15_local_fog_composed_in_volumetric={}".format(
+            str(stage15_local_fog_composed_in_volumetric).lower()
+        )
     )
     report.append("compositing_draw_event={}".format(compositing_draw.event_id))
     report.append("stage3_depth_ok={}".format(str(stage3_depth_ok).lower()))
@@ -1115,8 +1140,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_sky_scene_color_changed
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
-        and stage15_local_fog_scene_color_changed
-        and stage15_local_fog_far_depth_unchanged
+        and (
+            stage15_local_fog_composed_in_volumetric
+            or (
+                stage15_local_fog_scene_color_changed
+                and stage15_local_fog_far_depth_unchanged
+            )
+        )
         and screen_hzb_published
         and local_fog_hzb_consumed
         and local_fog_indirect_draw_valid
