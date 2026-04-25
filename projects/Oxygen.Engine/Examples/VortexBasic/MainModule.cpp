@@ -495,7 +495,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
   view_ctx.metadata.with_atmosphere = true;
-  view_ctx.metadata.with_height_fog = false;
+  view_ctx.metadata.with_height_fog = app_.with_height_fog;
   view_ctx.metadata.with_local_fog = app_.with_local_fog;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
   view_ctx.composite_source = observer_ptr { scene_fb_.get() };
@@ -634,9 +634,9 @@ auto MainModule::EnsureScene() -> void
     if (fog == nullptr) {
       fog = &environment->AddSystem<scene::environment::Fog>();
     }
-    fog->SetEnabled(false);
-    fog->SetEnableHeightFog(false);
-    fog->SetEnableVolumetricFog(false);
+    fog->SetEnabled(app_.with_height_fog || app_.with_volumetric_fog);
+    fog->SetEnableHeightFog(app_.with_height_fog);
+    fog->SetEnableVolumetricFog(app_.with_volumetric_fog);
     fog->SetRenderInMainPass(true);
     fog->SetVisibleInReflectionCaptures(true);
     fog->SetVisibleInRealTimeSkyCaptures(true);
@@ -650,6 +650,14 @@ auto MainModule::EnsureScene() -> void
     fog->SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.9F });
     fog->SetDirectionalInscatteringExponent(8.0F);
     fog->SetDirectionalInscatteringStartDistance(0.0F);
+    fog->SetVolumetricFogScatteringDistribution(0.20F);
+    fog->SetVolumetricFogAlbedo({ 0.62F, 0.70F, 0.82F });
+    fog->SetVolumetricFogEmissive({ 0.20F, 0.26F, 0.32F });
+    fog->SetVolumetricFogExtinctionScale(1.50F);
+    fog->SetVolumetricFogDistance(120.0F);
+    fog->SetVolumetricFogStartDistance(0.0F);
+    fog->SetVolumetricFogNearFadeInDistance(8.0F);
+    fog->SetVolumetricFogStaticLightingScatteringIntensity(1.0F);
   }
 
   auto cube_geo = BuildCubeGeometry(

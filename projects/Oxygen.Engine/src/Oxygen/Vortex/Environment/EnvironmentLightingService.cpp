@@ -1051,6 +1051,19 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .volumetric_fog_dispatch_count_z
     = pending_volumetric_fog_state_.dispatch_count_z,
   };
+  LOG_F(INFO,
+    "volumetric_fog_requested={} volumetric_fog_executed={} "
+    "integrated_light_scattering_valid={} volumetric_fog_grid={}x{}x{} "
+    "volumetric_fog_dispatch={}x{}x{}",
+    last_stage14_state_.volumetric_fog_requested,
+    last_stage14_state_.volumetric_fog_executed,
+    last_stage14_state_.integrated_light_scattering_valid,
+    last_stage14_state_.volumetric_fog_grid_width,
+    last_stage14_state_.volumetric_fog_grid_height,
+    last_stage14_state_.volumetric_fog_grid_depth,
+    last_stage14_state_.volumetric_fog_dispatch_count_x,
+    last_stage14_state_.volumetric_fog_dispatch_count_y,
+    last_stage14_state_.volumetric_fog_dispatch_count_z);
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = sky_state.requested || atmosphere_state.requested

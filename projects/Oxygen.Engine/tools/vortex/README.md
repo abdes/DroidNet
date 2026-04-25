@@ -122,6 +122,25 @@ flow. Use `Verify-VortexBasicRuntimeProof.ps1` only when you already have a
 capture and runtime log that need replay. Use the probes when a bug needs
 focused inspection that the durable analyzers do not already explain.
 
+## Focused Volumetric Fog Proof
+
+- `Verify-VortexBasicVolumetricProof.ps1`
+  - focused VTX-M04D.4 wrapper for an existing VortexBasic capture and runtime
+    log
+  - runs `AnalyzeRenderDocVortexBasicVolumetric.py`
+  - asserts runtime `volumetric_fog_executed=true` and
+    `integrated_light_scattering_valid=true`
+  - asserts the capture contains one `Vortex.Stage14.VolumetricFog` dispatch,
+    one later `Vortex.Stage15.Fog` draw, and a named
+    `Vortex.Environment.IntegratedLightScattering` resource bound as the
+    Stage-14 compute UAV
+
+Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
+shader SRV read for `IntegratedLightScattering` through this analyzer, so the
+focused validation report leaves
+`integrated_light_scattering_consumed_by_fog=false` as a diagnostic instead of
+treating it as a closure gate.
+
 ## Historical Frame-10 Closeout Pack
 
 These scripts are preserved only for historical comparison with the older

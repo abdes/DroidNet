@@ -85,6 +85,7 @@ EXPECTED_STAGE12_SPOT_DRAW_COUNT = 1
 EXPECTED_STAGE12_SPOT_STENCIL_CLEAR_COUNT = 0
 EXPECTED_COMPOSITING_PRESENT_OPERATION_COUNT = 1
 EXPECTED_STAGE14_LOCAL_FOG_DISPATCH_COUNT = 1
+EXPECTED_STAGE14_VOLUMETRIC_FOG_DISPATCH_COUNT = 1
 EXPECTED_STAGE15_SKY_DRAW_COUNT = 1
 EXPECTED_STAGE15_ATMOSPHERE_DRAW_COUNT = 1
 EXPECTED_STAGE15_FOG_DRAW_COUNT = 1
@@ -180,6 +181,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_point_scope_name = "Vortex.Stage12.PointLight"
     stage12_directional_scope_name = "Vortex.Stage12.DirectionalLight"
     stage14_local_fog_scope_name = "Vortex.Stage14.LocalFogTiledCulling"
+    stage14_volumetric_fog_scope_name = "Vortex.Stage14.VolumetricFog"
     stage15_sky_scope_name = "Vortex.Stage15.Sky"
     stage15_atmosphere_scope_name = "Vortex.Stage15.Atmosphere"
     stage15_fog_scope_name = "Vortex.Stage15.Fog"
@@ -196,6 +198,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         action_records, stage12_directional_scope_name
     )
     stage14_local_fog_scope = records_with_name(action_records, stage14_local_fog_scope_name)
+    stage14_volumetric_fog_scope = records_with_name(
+        action_records, stage14_volumetric_fog_scope_name
+    )
     stage15_sky_scope = records_with_name(action_records, stage15_sky_scope_name)
     stage15_atmosphere_scope = records_with_name(
         action_records, stage15_atmosphere_scope_name
@@ -215,6 +220,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     append_exact_count_check(
         report, "stage14_local_fog_scope_count", len(stage14_local_fog_scope), 1
+    )
+    append_exact_count_check(
+        report,
+        "stage14_volumetric_fog_scope_count",
+        len(stage14_volumetric_fog_scope),
+        1,
     )
     append_exact_count_check(report, "stage15_sky_scope_count", len(stage15_sky_scope), 1)
     append_exact_count_check(
@@ -245,6 +256,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         action_records, stage12_scope_name + " > " + stage12_directional_scope_name
     )
     stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_scope_name)
+    stage14_volumetric_fog_records = records_under_prefix(
+        action_records, stage14_volumetric_fog_scope_name
+    )
     stage15_sky_records = records_under_prefix(action_records, stage15_sky_scope_name)
     stage15_atmosphere_records = records_under_prefix(
         action_records, stage15_atmosphere_scope_name
@@ -331,6 +345,15 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     append_exact_count_check(
         report,
+        "stage14_volumetric_fog_dispatch_count",
+        count_named_records(
+            stage14_volumetric_fog_records,
+            "ID3D12GraphicsCommandList::Dispatch()",
+        ),
+        EXPECTED_STAGE14_VOLUMETRIC_FOG_DISPATCH_COUNT,
+    )
+    append_exact_count_check(
+        report,
         "stage15_sky_draw_count",
         count_named_records(stage15_sky_records, "ID3D12GraphicsCommandList::DrawInstanced()"),
         EXPECTED_STAGE15_SKY_DRAW_COUNT,
@@ -390,6 +413,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             stage15_fog_scope[0].event_id,
             stage15_local_fog_scope[0].event_id,
             compositing_scope[0].event_id,
+        ],
+    )
+    append_order_check(
+        report,
+        "volumetric_fog_runtime_stage_order",
+        [
+            stage14_volumetric_fog_scope[0].event_id,
+            stage15_fog_scope[0].event_id,
         ],
     )
 
