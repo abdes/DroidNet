@@ -79,8 +79,7 @@ static inline float SampleDirectionalShadowSurface(
     float2 shadow_uv,
     float receiver_depth)
 {
-    if (bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX
-        || !BX_IN_GLOBAL_SRV(bindings.conventional_shadow_surface_handle)) {
+    if (bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
         return 1.0f;
     }
 
@@ -103,7 +102,7 @@ static inline float SampleDirectionalShadowSurface(
         for (int x = -1; x <= 1; ++x) {
             const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
             const float stored_depth = shadow_surface.Load(int4(coord, (int)layer, 0));
-            visibility += receiver_depth <= stored_depth + 0.0008f ? 1.0f : 0.0f;
+            visibility += receiver_depth >= stored_depth - 0.0008f ? 1.0f : 0.0f;
         }
     }
 

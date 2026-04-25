@@ -36,11 +36,16 @@ namespace {
 
 namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
+constexpr std::uint32_t kShadowPassConstantsStride
+  = packing::kConstantBufferAlignment;
+
 struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
   glm::mat4 light_view_projection { 1.0F };
   float depth_bias { 0.0006F };
   float normal_bias { 0.02F };
-  float _padding0 { 0.0F };
+  std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
+  std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
   float _padding1 { 0.0F };
 };
 
@@ -174,7 +179,7 @@ auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
     .SetDepthStencilState(graphics::DepthStencilStateDesc {
       .depth_test_enable = true,
       .depth_write_enable = true,
-      .depth_func = graphics::CompareOp::kLessOrEqual,
+      .depth_func = graphics::CompareOp::kGreaterOrEqual,
       .stencil_enable = false,
     })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
@@ -319,8 +324,8 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
 
     auto desc = graphics::BufferDesc {};
     desc.size_bytes
-      = static_cast<std::uint64_t>(required_slots) * sizeof(ShadowPassConstants);
-    desc.usage = graphics::BufferUsage::kNone;
+      = static_cast<std::uint64_t>(required_slots) * kShadowPassConstantsStride;
+    desc.usage = graphics::BufferUsage::kConstant;
     desc.memory = graphics::BufferMemory::kUpload;
     desc.debug_name = "ShadowService.DirectionPassConstants";
     pass_constants_buffer_ = gfx->CreateBuffer(desc);
@@ -335,11 +340,10 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     for (std::uint32_t i = 0U; i < required_slots; ++i) {
       pass_constants_srvs_.push_back(RegisterBufferViewIndex(*gfx,
         *pass_constants_buffer_, graphics::BufferViewDescription {
-          .view_type = graphics::ResourceViewType::kStructuredBuffer_SRV,
+          .view_type = graphics::ResourceViewType::kConstantBuffer,
           .visibility = graphics::DescriptorVisibility::kShaderVisible,
-          .range = { static_cast<std::uint64_t>(i) * sizeof(ShadowPassConstants),
-            sizeof(ShadowPassConstants) },
-          .stride = static_cast<std::uint32_t>(sizeof(ShadowPassConstants)),
+          .range = { static_cast<std::uint64_t>(i) * kShadowPassConstantsStride,
+            kShadowPassConstantsStride },
         }));
     }
     pass_constants_slot_count_ = required_slots;
@@ -353,8 +357,11 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     auto constants = ShadowPassConstants {
       .light_view_projection
       = frame_data.bindings.cascades[cascade_index].light_view_projection,
+      .draw_metadata_slot = view_input.prepared_scene->bindless_draw_metadata_slot.get(),
+      .current_worlds_slot = view_input.prepared_scene->bindless_worlds_slot.get(),
+      .instance_data_slot = view_input.prepared_scene->bindless_instance_data_slot.get(),
     };
-    std::memcpy(mapped_bytes + cascade_index * sizeof(ShadowPassConstants),
+    std::memcpy(mapped_bytes + cascade_index * kShadowPassConstantsStride,
       &constants, sizeof(ShadowPassConstants));
   }
 
@@ -384,7 +391,7 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     recorder->FlushBarriers();
     recorder->SetRenderTargets({}, dsv);
     recorder->ClearDepthStencilView(*shadow_surface, dsv,
-      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 1.0F,
+      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 0.0F,
       0U);
     recorder->SetViewport({
       .top_left_x = 0.0F,
