@@ -919,6 +919,55 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  SceneAuthoredEnvironmentModeSyncsAtmosphereFogAndLocalFogRequests)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SceneAuthoredEnvironmentMode");
+
+  auto environment = std::make_unique<scene::SceneEnvironment>();
+  auto& atmosphere
+    = environment->AddSystem<scene::environment::SkyAtmosphere>();
+  atmosphere.SetEnabled(true);
+  atmosphere.SetAerialPerspectiveDistanceScale(700.0F);
+  atmosphere.SetAerialPerspectiveStartDepthMeters(40.0F);
+  atmosphere.SetAerialScatteringStrength(1.0F);
+
+  auto& fog = environment->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetModel(scene::environment::FogModel::kVolumetric);
+  fog.SetRenderInMainPass(true);
+  fog.SetExtinctionSigmaTPerMeter(0.00028F);
+  fog.SetHeightFalloffPerMeter(0.02F);
+  scene->SetEnvironment(std::move(environment));
+
+  auto local_fog_node = scene->CreateNode("SceneLocalFog");
+  const auto impl_opt = local_fog_node.GetImpl();
+  ASSERT_TRUE(impl_opt.has_value());
+  impl_opt->get().AddComponent<scene::environment::LocalFogVolume>();
+  auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  local_fog.SetEnabled(true);
+  local_fog.SetRadialFogExtinction(0.02F);
+
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+    .force_environment_override = false,
+  });
+
+  EXPECT_FALSE(service_.HasPendingChanges());
+  EXPECT_FLOAT_EQ(service_.GetAerialPerspectiveScale(), 700.0F);
+  EXPECT_FLOAT_EQ(service_.GetAerialPerspectiveStartDepthMeters(), 40.0F);
+  EXPECT_EQ(service_.GetFogModel(),
+    static_cast<int>(scene::environment::FogModel::kVolumetric));
+  EXPECT_FLOAT_EQ(service_.GetFogExtinctionSigmaTPerMeter(), 0.00028F);
+  EXPECT_FLOAT_EQ(service_.GetFogHeightFalloffPerMeter(), 0.02F);
+  EXPECT_TRUE(service_.GetHeightFogPassRequested());
+  EXPECT_TRUE(service_.GetLocalFogPassRequested());
+  EXPECT_EQ(service_.GetLocalFogVolumeCount(), 1);
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   AddedLocalFogVolumeStartsFromSceneComponentDefaults)
 {
   auto scene = MakeScene("DemoShell.LocalFogDefaults");

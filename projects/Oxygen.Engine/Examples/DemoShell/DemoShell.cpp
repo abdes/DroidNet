@@ -523,6 +523,11 @@ auto DemoShell::IsHeightFogPassRequested() const -> bool
   return impl_->environment_settings_service.GetHeightFogPassRequested();
 }
 
+auto DemoShell::IsLocalFogPassRequested() const -> bool
+{
+  return impl_->environment_settings_service.GetLocalFogPassRequested();
+}
+
 auto DemoShell::SyncRuntimeState() -> void
 {
   if (!impl_->initialized) {
@@ -532,6 +537,8 @@ auto DemoShell::SyncRuntimeState() -> void
   EnvironmentRuntimeConfig runtime_config {};
   runtime_config.scene = TryGetScene();
   runtime_config.skybox_service = impl_->GetSkyboxService(runtime_config.scene);
+  runtime_config.force_environment_override
+    = impl_->config.force_environment_override;
   if (impl_->config.engine) {
     if (auto renderer_ref
       = impl_->config.engine->GetModule<vortex::Renderer>()) {

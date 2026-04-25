@@ -53,6 +53,7 @@ struct EnvironmentRuntimeConfig {
   observer_ptr<scene::Scene> scene { nullptr };
   observer_ptr<SkyboxService> skybox_service { nullptr };
   observer_ptr<vortex::Renderer> renderer { nullptr };
+  bool force_environment_override { true };
   std::function<void()> on_atmosphere_params_changed;
   std::function<void()> on_exposure_changed;
 };
@@ -302,6 +303,7 @@ public:
   [[nodiscard]] virtual auto GetFogEnabled() const -> bool;
   virtual auto SetFogEnabled(bool enabled) -> void;
   [[nodiscard]] virtual auto GetHeightFogPassRequested() const -> bool;
+  [[nodiscard]] virtual auto GetLocalFogPassRequested() const -> bool;
 
   [[nodiscard]] virtual auto GetFogModel() const -> int;
   virtual auto SetFogModel(int model) -> void;

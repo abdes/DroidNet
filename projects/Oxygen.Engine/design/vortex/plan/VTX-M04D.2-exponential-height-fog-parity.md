@@ -17,9 +17,10 @@ environment runtime closure.
   directional inscattering luminance, exponent, and start distance;
   sky-atmosphere ambient contribution color scale; visibility flags already
   present in the model.
-- Implement cubemap inscattering controls where current resource
-  infrastructure allows; otherwise publish and document explicit unavailable
-  resource behavior without implying usable cubemap fog.
+- Preserve explicit unavailable cubemap-resource behavior without implying
+  usable cubemap fog. Runtime cubemap sampling is deferred until after the
+  environment/fog runtime artifacts that affect current validation scenes are
+  closed.
 - Replace simplified height-fog shader/math behavior with a
   `FogRendering` / `HeightFogCommon`-shaped implementation.
 - Keep far-depth sky pixels excluded from fog contribution.
@@ -46,8 +47,7 @@ Implementation and review must check:
 4. Add focused EnvironmentLightingService tests for enabled and disabled
    height fog, authored parameter changes, secondary layer, directional
    inscattering, start/end/cutoff/max-opacity semantics, sky-depth exclusion,
-   cubemap unavailable behavior if resources are not bindable, and publication
-   truth preservation.
+   deferred cubemap unavailable behavior, and publication truth preservation.
 5. Extend SceneRenderer publication tests only if the renderer boundary needs
    additional assertions beyond the VTX-M04D.1 Stage 14 baseline.
 6. Record changed files, UE5.7 references checked, build/test results,
@@ -73,16 +73,14 @@ bake/catalog validation and record the exact command and result.
 - Cubemap inscattering authoring is translated into the GPU contract and
   published as authored, but Vortex does not yet have a bindable height-fog
   cubemap resource path. Runtime cubemap sampling remains explicitly
-  unavailable, with `CubemapAuthored` set and `CubemapUsable` unset. Closing
-  this gap requires resolving
-  `HeightFogModel::inscattering_color_cubemap_resource` to a loaded cubemap
-  texture, publishing a truthful bindless `TextureCube` SRV plus mip count in
-  `GpuFogParams::cubemap_srv` / `cubemap_num_mips`, invalidating stale or
-  missing resources instead of reusing old bindings, sampling the cubemap in
-  `Fog.hlsl` using Vortex cubemap direction conventions, applying cubemap angle
-  rotation, texture tint, and near-to-far directional fade, and adding focused
-  tests for authored, usable, missing-resource, stale-resource, and shader-bake
-  behavior.
+  unavailable, with `CubemapAuthored` set and `CubemapUsable` unset. This is a
+  deferred nice-to-have, not the current priority for VTX-M04D closure. It must
+  not block city-scale atmosphere/fog artifact work, aerial-perspective proof,
+  local-fog proof, volumetric-fog proof, or environment runtime proof.
+- Current visual priority: diagnose and fix the city-scale environment path
+  where long far planes, aerial-perspective volume resolution/depth mapping,
+  DemoShell environment overrides, height fog, local fog, and volumetric fog
+  interact to produce banding or unstable atmosphere/fog output.
 - UE5.7 local fog volume parity.
 - UE5.7 volumetric fog parity.
 - Real SkyLight capture/filtering.
@@ -131,5 +129,7 @@ bake/catalog validation and record the exact command and result.
   and direct `ShaderBake update`; the direct run reported
   `expanded_requests=182`, `dirty_requests=0`, `clean_requests=182`, and
   `stale_requests=0`.
-- Completion status remains `in_progress` because cubemap inscattering resource
-  binding/sampling is not implemented.
+- Completion status remains `in_progress` because city-scale runtime/capture
+  proof is not closed and the environment/fog artifacts seen in the city
+  validation scene have not been diagnosed and fixed. Cubemap inscattering
+  resource binding/sampling remains explicitly deferred.

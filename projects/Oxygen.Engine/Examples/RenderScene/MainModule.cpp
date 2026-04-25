@@ -235,6 +235,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
+  shell_config.force_environment_override = false;
   shell_config.on_scene_load_requested = [this](const ui::SceneEntry& entry) {
     pending_scene_load_ = SceneLoadRequest {
       .key = entry.key,
@@ -928,6 +929,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   main_comp.with_height_fog = shell.IsHeightFogPassRequested();
+  main_comp.with_local_fog = shell.IsLocalFogPassRequested();
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
