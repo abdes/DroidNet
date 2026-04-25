@@ -607,9 +607,6 @@ namespace {
   constexpr float kCurrentSettingsSchemaVersion = 5.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
-  // Demo policy: UI environment settings are authoritative and always
-  // override scene environment data.
-  constexpr bool kForceEnvironmentOverride = true;
   constexpr std::uint32_t kFogDirtyMask = (1u << 2u) | (1u << 3u);
   constexpr std::uint32_t kSunDirtyMask = (1u << 8u) | (1u << 1u);
 
@@ -761,7 +758,7 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       return;
     }
 
-    if (kForceEnvironmentOverride) {
+    if (config_.force_environment_override) {
       pending_changes_ = true;
       dirty_domains_ = ToMask(DirtyDomain::kAll);
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -889,7 +886,7 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
 
 auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 {
-  if (kForceEnvironmentOverride) {
+  if (config_.force_environment_override) {
     pending_changes_ = true;
     dirty_domains_ = ToMask(DirtyDomain::kAll);
     batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -914,7 +911,7 @@ auto EnvironmentSettingsService::ActivateCustomMode() -> void
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
-  if (kForceEnvironmentOverride) {
+  if (config_.force_environment_override) {
     needs_sync_ = false;
     return;
   }
@@ -1805,6 +1802,12 @@ auto EnvironmentSettingsService::GetFogEnabled() const -> bool
 auto EnvironmentSettingsService::GetHeightFogPassRequested() const -> bool
 {
   return fog_enabled_ && fog_render_in_main_pass_;
+}
+
+auto EnvironmentSettingsService::GetLocalFogPassRequested() const -> bool
+{
+  return std::ranges::any_of(local_fog_volumes_,
+    [](const LocalFogVolumeUiState& entry) { return entry.enabled; });
 }
 
 auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
@@ -4117,7 +4120,7 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
-    if (kForceEnvironmentOverride) {
+    if (config_.force_environment_override) {
       needs_sync_ = false;
       pending_changes_ = true;
       dirty_domains_ = ToMask(DirtyDomain::kAll);

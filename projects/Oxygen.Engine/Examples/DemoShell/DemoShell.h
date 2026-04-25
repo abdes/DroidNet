@@ -90,6 +90,7 @@ struct DemoShellConfig {
   observer_ptr<IAsyncEngine> engine { nullptr };
   bool enable_camera_rig { true };
   bool enable_renderer_bound_panels { true };
+  bool force_environment_override { true };
 
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};
@@ -231,6 +232,9 @@ public:
 
   //! Returns true when the main Vortex scene view should request height fog.
   [[nodiscard]] auto IsHeightFogPassRequested() const -> bool;
+
+  //! Returns true when the main Vortex scene view should request local fog.
+  [[nodiscard]] auto IsLocalFogPassRequested() const -> bool;
 
   //! Returns the content loader view model (may be null).
   [[nodiscard]] auto GetContentVm() const -> observer_ptr<ui::ContentVm>;

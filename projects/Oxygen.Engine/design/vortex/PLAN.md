@@ -97,6 +97,13 @@ and `VTX-M04D.6 — UE5.7 Aerial Perspective Parity`.
 
 **Detailed plan:** [plan/VTX-M04D.2-exponential-height-fog-parity.md](./plan/VTX-M04D.2-exponential-height-fog-parity.md)
 
+**Immediate priority correction:** Do not spend the next VTX-M04D iteration on
+height-fog cubemap inscattering. Cubemap fog is explicitly deferred until after
+current city-scale environment artifacts are fixed. The next implementation
+focus is the `CityEnvironmentValidation` path: AP LUT resolution/depth mapping,
+DemoShell override behavior, local-fog request plumbing, volumetric-fog runtime
+behavior, and capture/analyzer proof.
+
 **In scope:**
 
 - Preserve the stable sky/atmosphere and below-horizon invariants captured in
@@ -216,7 +223,8 @@ Required work:
 - Implement UE5.7-grade authored parameter coverage for primary and secondary
   fog layers.
 - Match the relevant `FogRendering` / `HeightFogCommon` algorithms for
-  density, falloff, directional inscattering, cubemap inscattering, start/cut
+  density, falloff, directional inscattering, deferred cubemap inscattering
+  state, start/cut
   distance, max opacity, and sky-atmosphere coupling.
 - Preserve disabled/no-fog fast paths without turning them into fake parity.
 - Add shader tests or capture analysis that prove height fog modifies the
@@ -510,6 +518,7 @@ Parallelism rules:
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `in_progress` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; aerial perspective has focused implementation evidence and RenderScene visual confirmation but still needs capture/reflection proof. |
 | SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
 | Exponential height fog | VTX-M04D.2 | `in_progress` | UE5.7-grade authored parameters, algorithms, shaders, and coupling. |
+| City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `in_progress` | `CityEnvironmentValidation` banding/quality fixes: DemoShell override behavior and local-fog request plumbing now have implementation/test evidence; AP LUT resolution/depth mapping, volumetric-fog runtime behavior, and capture/analyzer proof remain open. Cubemap fog is deferred. |
 | Local fog volumes | VTX-M04D.3 | `in_progress` | UE5.7-grade authoring, culling, splat/compose, HZB, sky exclusion, proof. |
 | Volumetric fog | VTX-M04D.4 | `in_progress` | UE5.7-grade froxel, injection, lighting, history, integrated scattering. |
 | Async runtime migration | VTX-M04E | `planned` | Canonical runtime proof path with no compatibility clutter. |
