@@ -2,7 +2,7 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** `ready`
+**Status:** `in_progress`
 
 ## Mandatory Vortex Rule
 
@@ -324,10 +324,20 @@ ShadowVSOutput ShadowDepthVS(float3 pos : POSITION,
   float4 world_pos = mul(world, float4(pos, 1.0));
   ShadowVSOutput output;
   output.position = mul(LightViewProjection, world_pos);
-  output.position.z += DepthBias;
+  output.position.z -= DepthBias;
   return output;
 }
 ```
+
+Oxygen's conventional directional CSM path uses reversed-Z depth. The shadow
+surface clears to `0.0`, the depth compare is `GreaterOrEqual`, light-space
+orthographic projection is built with the engine reversed-Z helper, and the
+receiver comparison treats larger stored depth as closer to the light.
+
+The shadow-depth pass constants are bound as a per-cascade CBV through
+`g_PassConstantsIndex`. They carry the light view-projection matrix plus direct
+draw metadata, current-worlds, and instance-data slots. The depth shader must
+not reload draw bindings through mutable per-view frame binding payloads.
 
 ### 5.2 Directional Shadow Sampling Contract
 

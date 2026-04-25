@@ -77,11 +77,25 @@ The current CSM implementation slice exists but does not close this blocker:
   3x3 conventional shadow sampling
 - `VortexBasic` now authors its sun as shadow-casting so the runtime proof scene
   exercises the conventional directional CSM path
+- Oxygen reversed-Z conventions are now carried through the conventional CSM
+  path: the directional shadow surface clears to `0.0`, the shadow-depth PSO
+  uses `GreaterOrEqual`, the light projection uses the reversed-Z orthographic
+  helper, and shader compare/bias signs follow reversed-Z depth.
+- `ShadowDepthPass` now publishes a per-cascade pass-constants CBV containing
+  direct draw metadata, world-matrix, and instance-data slots. The shadow-depth
+  shader no longer routes through mutable `ViewFrameBindings` for draw payloads,
+  avoiding the later-frame binding hazard found in RenderDoc inspection.
+- Directional CSM shader bindless guards now match Oxygen's heap conventions:
+  pass constants are checked for a valid CBV handle instead of a generated
+  `GLOBAL_SRV` domain, and the directional shadow texture is checked for a
+  valid handle instead of the stale generated texture-domain range.
 
 Validation recorded in `IMPLEMENTATION_STATUS.md` covers focused build,
-ShaderBake/catalog, unit tests, and a bounded Direct3D12 VortexBasic startup /
-frame / shutdown smoke. This is not projected-shadow closure because no
-receiver-pixel attenuation capture and no user visual confirmation are recorded.
+ShaderBake/catalog, unit tests, a bounded Direct3D12 VortexBasic startup /
+frame / shutdown smoke, a debugger-backed D3D12 debug-layer audit, and a focused
+RenderDoc probe showing non-clear Stage-8 writes in cascades 2 and 3. This is
+not projected-shadow closure because receiver-pixel attenuation proof and user
+visual confirmation are not recorded.
 
 ## Exit Gate
 

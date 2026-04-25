@@ -16,6 +16,7 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
@@ -167,7 +168,8 @@ auto BuildCascadeMatrix(const ResolvedView& resolved_view,
   const auto near_plane = (std::max)(0.1F, -max_bounds.z - kShadowDepthPadding);
   const auto far_plane
     = (std::max)(near_plane + kMinCascadeSpan, -min_bounds.z + kShadowDepthPadding);
-  const auto light_projection = glm::orthoRH_ZO(min_bounds.x, max_bounds.x,
+  const auto light_projection = MakeReversedZOrthographicProjectionRH_ZO(
+    min_bounds.x, max_bounds.x,
     min_bounds.y, max_bounds.y, near_plane, far_plane);
   const auto width = (std::max)(max_bounds.x - min_bounds.x, kMinCascadeSpan);
   const auto height = (std::max)(max_bounds.y - min_bounds.y, kMinCascadeSpan);

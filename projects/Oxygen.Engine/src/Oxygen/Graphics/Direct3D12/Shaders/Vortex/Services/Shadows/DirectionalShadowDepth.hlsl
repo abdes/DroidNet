@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
@@ -23,7 +22,9 @@ struct ShadowPassConstants
     float4x4 light_view_projection;
     float depth_bias;
     float normal_bias;
-    float _padding0;
+    uint draw_metadata_slot;
+    uint current_worlds_slot;
+    uint instance_data_slot;
     float _padding1;
 };
 
@@ -41,13 +42,13 @@ static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
         0.0f, 1.0f, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f);
-    if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
+    if (slot == K_INVALID_BINDLESS_INDEX) {
         return constants;
     }
 
-    StructuredBuffer<ShadowPassConstants> constants_buffer =
+    ConstantBuffer<ShadowPassConstants> constants_buffer =
         ResourceDescriptorHeap[slot];
-    return constants_buffer[0];
+    return constants_buffer;
 }
 
 [shader("vertex")]
@@ -57,10 +58,12 @@ ShadowDepthVSOutput VortexShadowDepthVS(
     ShadowDepthVSOutput output = (ShadowDepthVSOutput)0;
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
 
-    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    const ShadowPassConstants pass_constants =
+        LoadShadowPassConstants(g_PassConstantsIndex);
 
     DrawMetadata metadata;
-    if (!BX_LoadDrawMetadata(draw_bindings.draw_metadata_slot, g_DrawIndex, metadata)) {
+    if (!BX_LoadDrawMetadata(
+            pass_constants.draw_metadata_slot, g_DrawIndex, metadata)) {
         return output;
     }
 
@@ -71,13 +74,11 @@ ShadowDepthVSOutput VortexShadowDepthVS(
     output.uv = vertex.texcoord;
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
+        pass_constants.current_worlds_slot, pass_constants.instance_data_slot, metadata,
         instance_id);
-    const ShadowPassConstants pass_constants =
-        LoadShadowPassConstants(g_PassConstantsIndex);
     float4 world_position = mul(world_matrix, float4(vertex.position, 1.0f));
     output.position = mul(pass_constants.light_view_projection, world_position);
-    output.position.z += pass_constants.depth_bias;
+    output.position.z -= pass_constants.depth_bias;
     return output;
 }
 

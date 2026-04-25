@@ -97,7 +97,7 @@ auto ConventionalShadowTargetAllocator::EnsureDirectionalSurface(
   desc.is_render_target = true;
   desc.is_typeless = true;
   desc.use_clear_value = true;
-  desc.clear_value = graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
+  desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
   desc.initial_state = graphics::ResourceStates::kDepthWrite;
 
   directional_surface_ = gfx->CreateTexture(desc);
