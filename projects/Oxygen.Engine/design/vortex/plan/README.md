@@ -13,6 +13,8 @@ implementation-ready workstream.
 | --- | --- |
 | [milestone-planning-workflow.md](milestone-planning-workflow.md) | Standard workflow for preparing any Vortex milestone for implementation. |
 | [VTX-M04D.1-environment-publication-truth.md](VTX-M04D.1-environment-publication-truth.md) | Detailed implementation plan for the next environment work package. |
+| [VTX-M04D.2-exponential-height-fog-parity.md](VTX-M04D.2-exponential-height-fog-parity.md) | Detailed implementation plan for UE5.7 exponential height fog parity. |
+| [VTX-M04D.6-aerial-perspective-parity.md](VTX-M04D.6-aerial-perspective-parity.md) | Detailed remediation plan for UE5.7 aerial perspective parity proof. |
 
 ## Planning Rule
 
