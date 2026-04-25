@@ -122,6 +122,12 @@ flow. Use `Verify-VortexBasicRuntimeProof.ps1` only when you already have a
 capture and runtime log that need replay. Use the probes when a bug needs
 focused inspection that the durable analyzers do not already explain.
 
+The normal VortexBasic validation combines runtime logs, action-scope counts,
+and products analysis. Capture-only product fields that RenderDoc cannot
+observe reliably in this path, such as bindless SRV consumption, cached LUT
+dispatches, and zero-delta Stage-15 atmosphere/local-fog samples, are emitted
+with `diagnostic_products_` prefixes in the final validation report.
+
 ## Focused Volumetric Fog Proof
 
 - `Verify-VortexBasicVolumetricProof.ps1`

@@ -720,10 +720,39 @@ auto MainModule::EnsureLighting() -> void
     CHECK_F(directional_light_node_.AttachLight(std::move(light)),
       "Failed to attach DirectionalLight to SunLight");
   }
+  if (!point_light_node_.IsAlive()) {
+    point_light_node_ = scene_->CreateNode("PointFillLight");
+    auto light = std::make_unique<scene::PointLight>();
+    light->Common().affects_world = true;
+    light->Common().color_rgb = { 0.35F, 0.60F, 1.0F };
+    light->SetRange(8.0F);
+    light->SetLuminousFluxLm(1800.0F);
+    CHECK_F(point_light_node_.AttachLight(std::move(light)),
+      "Failed to attach PointLight to PointFillLight");
+  }
+  if (!spot_light_node_.IsAlive()) {
+    spot_light_node_ = scene_->CreateNode("SpotRimLight");
+    auto light = std::make_unique<scene::SpotLight>();
+    light->Common().affects_world = true;
+    light->Common().color_rgb = { 1.0F, 0.58F, 0.24F };
+    light->SetRange(10.0F);
+    light->SetLuminousFluxLm(1400.0F);
+    light->SetInnerConeAngleRadians(0.35F);
+    light->SetOuterConeAngleRadians(0.70F);
+    CHECK_F(spot_light_node_.AttachLight(std::move(light)),
+      "Failed to attach SpotLight to SpotRimLight");
+  }
 
   directional_light_node_.GetTransform().SetLocalPosition(kSunPosition);
   directional_light_node_.GetTransform().SetLocalRotation(
     LookRotation(kSunPosition, kSceneFocusPoint));
+  point_light_node_.GetTransform().SetLocalPosition(
+    kSceneFocusPoint + glm::vec3 { kPointLightOrbitRadius, 0.0F, 1.2F });
+  const auto initial_spot_position
+    = kSceneFocusPoint + glm::vec3 { -3.0F, -5.0F, 4.0F };
+  spot_light_node_.GetTransform().SetLocalPosition(initial_spot_position);
+  spot_light_node_.GetTransform().SetLocalRotation(
+    LookRotation(initial_spot_position, kSceneFocusPoint));
 }
 
 auto MainModule::UpdateValidationScene(
@@ -749,6 +778,28 @@ auto MainModule::UpdateValidationScene(
     directional_light_node_.GetTransform().SetLocalPosition(kSunPosition);
     directional_light_node_.GetTransform().SetLocalRotation(
       LookRotation(kSunPosition, kSceneFocusPoint));
+  }
+  if (point_light_node_.IsAlive()) {
+    const float point_phase = (animation_time_seconds_
+                                / kPointLightOrbitPeriodSeconds)
+      * oxygen::math::TwoPi;
+    const auto offset = glm::vec3 { std::cos(point_phase),
+      std::sin(point_phase), 0.65F }
+      * kPointLightOrbitRadius;
+    point_light_node_.GetTransform().SetLocalPosition(
+      kSceneFocusPoint + offset);
+  }
+  if (spot_light_node_.IsAlive()) {
+    const float spot_phase = (animation_time_seconds_
+                               / kSpotlightOscillationPeriodSeconds)
+      * oxygen::math::TwoPi;
+    const auto spot_position = kSceneFocusPoint
+      + glm::vec3 { -3.0F, -5.0F + std::sin(spot_phase)
+            * kSpotlightOscillationAmplitude,
+        4.0F };
+    spot_light_node_.GetTransform().SetLocalPosition(spot_position);
+    spot_light_node_.GetTransform().SetLocalRotation(
+      LookRotation(spot_position, kSceneFocusPoint));
   }
 }
 

@@ -105,8 +105,11 @@ focus is the `CityEnvironmentValidation` path: AP LUT resolution/depth mapping,
 DemoShell override behavior, local-fog request plumbing, volumetric-fog runtime
 behavior, and capture/analyzer proof. A first Vortex-native
 integrated-light-scattering runtime path now exists for volumetric fog, with
-focused VortexBasic RenderDoc proof for the Stage-14 dispatch and named product
-write; full UE5.7 volumetric parity and city-scale visual proof remain open.
+focused VortexBasic RenderDoc proof and the broader VortexBasic runtime wrapper
+now proving Stage 12 point/spot/directional lighting, Stage 14 local and
+volumetric fog dispatch, Stage 15 sky/fog/local-fog scopes, and final
+composition. Full UE5.7 volumetric parity and city-scale visual proof remain
+open.
 
 **In scope:**
 
@@ -526,7 +529,7 @@ Parallelism rules:
 | Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `in_progress` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; aerial perspective has focused implementation evidence and RenderScene visual confirmation but still needs capture/reflection proof. |
 | SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
 | Exponential height fog | VTX-M04D.2 | `in_progress` | UE5.7-grade authored parameters, algorithms, shaders, and coupling. |
-| City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `in_progress` | `CityEnvironmentValidation` banding/quality fixes: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, and first volumetric integrated-scattering runtime behavior now have implementation/test/runtime-smoke/focused RenderDoc evidence; city-scale capture/analyzer visual proof and full fog parity remain open. Cubemap fog is deferred. |
+| City-scale AP/fog artifact remediation | VTX-M04D.2 / VTX-M04D.3 / VTX-M04D.4 / VTX-M04D.6 | `in_progress` | `CityEnvironmentValidation` banding/quality fixes: DemoShell override behavior, local-fog request plumbing, AP LUT resolution/depth defaults, and first volumetric integrated-scattering runtime behavior now have implementation/test/runtime-smoke/focused RenderDoc evidence. The broader VortexBasic runtime wrapper also passes for the small validation scene with point/spot/directional lighting, local fog, volumetric fog, sky/fog, and composition. City-scale capture/analyzer visual proof and full fog parity remain open. Cubemap fog is deferred. |
 | Local fog volumes | VTX-M04D.3 | `in_progress` | UE5.7-grade authoring, culling, splat/compose, HZB, sky exclusion, proof. |
 | Volumetric fog | VTX-M04D.4 | `in_progress` | First integrated-light-scattering runtime path exists with focused RenderDoc proof for Stage-14 dispatch/product write; UE5.7-grade froxel distribution, injection, lighting, history, bindless Stage-15 SRV-read proof, and city-scale visual proof remain open. |
 | Async runtime migration | VTX-M04E | `planned` | Canonical runtime proof path with no compatibility clutter. |
