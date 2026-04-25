@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -51,6 +52,9 @@ namespace environment {
       bool view_constants_bound { false };
       bool ue_log_depth_distribution { false };
       bool directional_shadowed_light_injection_requested { false };
+      bool local_fog_injection_requested { false };
+      bool local_fog_injection_executed { false };
+      std::uint32_t local_fog_instance_count { 0U };
       float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
     };
 
@@ -65,7 +69,9 @@ namespace environment {
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
-      const internal::StableAtmosphereState& stable_state) -> RecordState;
+      const internal::StableAtmosphereState& stable_state,
+      const internal::LocalFogVolumeState::ViewProducts* local_fog_products
+      = nullptr) -> RecordState;
 
   private:
     struct alignas(16) OutputHeader {
@@ -97,12 +103,36 @@ namespace environment {
       float static_lighting_scattering_intensity { 1.0F };
     };
 
+    struct alignas(16) LocalFogControl0 {
+      std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t instance_count { 0U };
+      std::uint32_t enabled { 0U };
+    };
+
+    struct alignas(16) LocalFogControl1 {
+      std::uint32_t tile_resolution_x { 0U };
+      std::uint32_t tile_resolution_y { 0U };
+      std::uint32_t max_instances_per_tile { 0U };
+      float global_start_distance_m { 0.0F };
+    };
+
+    struct alignas(16) LocalFogControl2 {
+      float max_density_into_volumetric_fog { 0.0F };
+      float _pad0 { 0.0F };
+      float _pad1 { 0.0F };
+      float _pad2 { 0.0F };
+    };
+
     struct alignas(16) PassConstants {
       OutputHeader output_header {};
       GridControl grid {};
       GridZControl grid_z {};
       MediaControl0 media0 {};
       MediaControl1 media1 {};
+      LocalFogControl0 local_fog0 {};
+      LocalFogControl1 local_fog1 {};
+      LocalFogControl2 local_fog2 {};
       float light0_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
       float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
       float light1_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };

@@ -7,6 +7,7 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 
@@ -50,6 +51,30 @@ struct VolumetricFogMediaControl1
     float static_lighting_scattering_intensity;
 };
 
+struct VolumetricFogLocalFogControl0
+{
+    uint instance_buffer_slot;
+    uint tile_data_texture_slot;
+    uint instance_count;
+    uint enabled;
+};
+
+struct VolumetricFogLocalFogControl1
+{
+    uint tile_resolution_x;
+    uint tile_resolution_y;
+    uint max_instances_per_tile;
+    float global_start_distance_m;
+};
+
+struct VolumetricFogLocalFogControl2
+{
+    float max_density_into_volumetric_fog;
+    float _pad0;
+    float _pad1;
+    float _pad2;
+};
+
 struct VolumetricFogPassConstants
 {
     VolumetricFogOutputHeader output_header;
@@ -57,20 +82,21 @@ struct VolumetricFogPassConstants
     VolumetricFogGridZControl grid_z;
     VolumetricFogMediaControl0 media0;
     VolumetricFogMediaControl1 media1;
+    VolumetricFogLocalFogControl0 local_fog0;
+    VolumetricFogLocalFogControl1 local_fog1;
+    VolumetricFogLocalFogControl2 local_fog2;
     float4 light0_direction_enabled;
     float4 light0_illuminance_rgb;
     float4 light1_direction_enabled;
     float4 light1_illuminance_rgb;
 };
 
-static const float kPi = 3.14159265358979323846f;
-
-static float HenyeyGreensteinPhase(float cos_theta, float g)
+struct VolumetricLocalFogMedia
 {
-    const float g2 = g * g;
-    const float denom = max(1.0f + g2 - 2.0f * g * cos_theta, 1.0e-4f);
-    return (1.0f - g2) / (4.0f * kPi * denom * sqrt(denom));
-}
+    float extinction;
+    float3 scattering;
+    float3 emissive;
+};
 
 static float3 EvaluateDirectionalContribution(
     float4 direction_enabled,
@@ -107,6 +133,111 @@ static float ComputeDeviceDepthFromViewDepth(float view_depth)
         : (reverse_z != 0u ? 0.0f : 1.0f);
 }
 
+static VolumetricLocalFogMedia EvaluateLocalFogVolumeFroxelMedia(
+    LocalFogVolumeInstanceData encoded_instance,
+    float3 translated_world_position,
+    float soft_density_scale,
+    float max_density)
+{
+    VolumetricLocalFogMedia media = (VolumetricLocalFogMedia)0;
+    const DecodedLocalFogVolumeInstanceData instance
+        = DecodeLocalFogVolumeInstanceData(encoded_instance);
+    const float3 unit_space_position
+        = TransformTranslatedWorldPositionToLocal(instance, translated_world_position);
+    const float sphere_fade = saturate(1.0f - length(unit_space_position));
+    if (sphere_fade <= 0.0f)
+    {
+        return media;
+    }
+
+    const float height_extinction = instance.height_fog_extinction
+        * exp(-instance.height_fog_falloff
+            * (unit_space_position.z - instance.height_fog_offset));
+    const float radial_extinction = instance.radial_fog_extinction
+        * pow(sphere_fade, 0.82f);
+    const float height_transmittance = exp(-max(height_extinction, 0.0f));
+    const float radial_transmittance = exp(-max(radial_extinction, 0.0f));
+    const float combined_transmittance = max(
+        height_transmittance
+            - height_transmittance * radial_transmittance
+            + radial_transmittance,
+        1.0e-6f);
+
+    const float extinction = min(max(max_density, 0.0f),
+        max(-log(combined_transmittance), 0.0f)) * saturate(soft_density_scale);
+    media.extinction = extinction;
+    media.scattering = extinction * max(instance.albedo, 0.0f.xxx);
+    media.emissive = extinction * max(instance.emissive, 0.0f.xxx);
+    return media;
+}
+
+static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
+    VolumetricFogPassConstants pass,
+    float2 screen_uv,
+    float3 translated_world_position,
+    float front_distance,
+    float back_distance)
+{
+    VolumetricLocalFogMedia accumulated = (VolumetricLocalFogMedia)0;
+    if (pass.local_fog0.enabled == 0u
+        || pass.local_fog0.instance_buffer_slot == K_INVALID_BINDLESS_INDEX
+        || pass.local_fog0.tile_data_texture_slot == K_INVALID_BINDLESS_INDEX
+        || pass.local_fog0.instance_count == 0u
+        || pass.local_fog1.tile_resolution_x == 0u
+        || pass.local_fog1.tile_resolution_y == 0u
+        || pass.local_fog1.max_instances_per_tile == 0u
+        || back_distance <= pass.local_fog1.global_start_distance_m)
+    {
+        return accumulated;
+    }
+
+    const float froxel_depth = max(back_distance - front_distance, 1.0e-4f);
+    const float soft_density_scale
+        = front_distance < pass.local_fog1.global_start_distance_m
+        ? saturate((back_distance - pass.local_fog1.global_start_distance_m)
+            / froxel_depth)
+        : 1.0f;
+    if (soft_density_scale <= 0.0f)
+    {
+        return accumulated;
+    }
+
+    const uint2 tile_resolution = uint2(
+        pass.local_fog1.tile_resolution_x, pass.local_fog1.tile_resolution_y);
+    const uint2 tile_coord = min(
+        (uint2)floor(saturate(screen_uv) * float2(tile_resolution)),
+        tile_resolution - 1u);
+
+    StructuredBuffer<LocalFogVolumeInstanceData> instances
+        = ResourceDescriptorHeap[pass.local_fog0.instance_buffer_slot];
+    Texture2DArray<uint> tile_data_texture
+        = ResourceDescriptorHeap[pass.local_fog0.tile_data_texture_slot];
+    const uint tile_count = min(
+        tile_data_texture[uint3(tile_coord, 0u)],
+        pass.local_fog1.max_instances_per_tile);
+
+    [loop]
+    for (uint tile_index = 0u; tile_index < tile_count; ++tile_index)
+    {
+        const uint instance_index
+            = tile_data_texture[uint3(tile_coord, 1u + tile_index)];
+        if (instance_index >= pass.local_fog0.instance_count)
+        {
+            continue;
+        }
+        const VolumetricLocalFogMedia media = EvaluateLocalFogVolumeFroxelMedia(
+            instances[instance_index],
+            translated_world_position,
+            soft_density_scale,
+            pass.local_fog2.max_density_into_volumetric_fog);
+        accumulated.extinction += media.extinction;
+        accumulated.scattering += media.scattering;
+        accumulated.emissive += media.emissive;
+    }
+
+    return accumulated;
+}
+
 [shader("compute")]
 [numthreads(4, 4, 4)]
 void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
@@ -128,6 +259,14 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     RWTexture3D<float4> output_texture =
         ResourceDescriptorHeap[pass.output_header.output_texture_uav];
 
+    const float front_distance = clamp(
+        ComputeDepthFromZSlice(float(dispatch_id.z), pass.grid_z.grid_z_params),
+        pass.grid.start_distance_m,
+        pass.grid.end_distance_m);
+    const float back_distance = clamp(
+        ComputeDepthFromZSlice(float(dispatch_id.z) + 1.0f, pass.grid_z.grid_z_params),
+        pass.grid.start_distance_m,
+        pass.grid.end_distance_m);
     const float slice_distance = clamp(
         ComputeDepthFromZSlice(float(dispatch_id.z) + 0.5f, pass.grid_z.grid_z_params),
         pass.grid.start_distance_m,
@@ -137,11 +276,6 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         ? saturate(ray_length / pass.grid.near_fade_in_distance_m)
         : 1.0f;
 
-    const float extinction =
-        max(pass.grid.base_extinction_per_m, 0.0f) * near_fade;
-    const float transmittance = exp(-extinction * ray_length);
-    const float opacity = saturate(1.0f - transmittance);
-
     const float2 screen_uv =
         (float2(dispatch_id.xy) + float2(0.5f, 0.5f))
         / max(float2(pass.output_header.output_width, pass.output_header.output_height),
@@ -149,11 +283,25 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     const float device_depth = ComputeDeviceDepthFromViewDepth(slice_distance);
     const float3 world_position =
         ReconstructWorldPosition(screen_uv, device_depth, inverse_view_projection_matrix);
+    const float3 translated_world_position = world_position - camera_position;
     const float3 camera_delta = camera_position - world_position;
     const float camera_delta_length_sq = dot(camera_delta, camera_delta);
     const float3 view_direction_to_camera = camera_delta_length_sq > 1.0e-8f
         ? camera_delta * rsqrt(camera_delta_length_sq)
         : float3(0.0f, 0.0f, 1.0f);
+
+    const VolumetricLocalFogMedia local_fog_media =
+        EvaluateLocalFogVolumesForFroxel(
+            pass,
+            screen_uv,
+            translated_world_position,
+            front_distance,
+            back_distance);
+    const float extinction =
+        max(pass.grid.base_extinction_per_m, 0.0f) * near_fade
+        + max(local_fog_media.extinction, 0.0f);
+    const float transmittance = exp(-extinction * ray_length);
+    const float opacity = saturate(1.0f - transmittance);
 
     float light0_shadow_visibility = 1.0f;
     if (pass.grid_z.shadowed_directional_light0_enabled > 0.0f
@@ -180,8 +328,10 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         directional_lighting * (2.0e-5f * pass.media1.static_lighting_scattering_intensity);
     const float3 scattering =
         max(pass.media0.albedo_rgb, 0.0f.xxx) * bounded_lighting
+        + local_fog_media.scattering * bounded_lighting
         + max(pass.media1.emissive_rgb, 0.0f.xxx);
-    const float3 integrated_luminance = scattering * opacity;
+    const float3 integrated_luminance =
+        (scattering + local_fog_media.emissive) * opacity;
 
     output_texture[dispatch_id] = float4(max(integrated_luminance, 0.0f.xxx),
         saturate(transmittance));

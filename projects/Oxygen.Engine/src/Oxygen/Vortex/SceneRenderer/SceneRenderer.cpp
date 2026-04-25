@@ -1493,7 +1493,8 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   }
   if (environment_ != nullptr) {
     published_view_frame_bindings_.environment_frame_slot
-      = environment_->PublishEnvironmentBindings(ctx);
+      = environment_->PublishEnvironmentBindings(ctx, kInvalidShaderVisibleIndex,
+        kInvalidShaderVisibleIndex, false, &scene_textures_);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -1589,6 +1590,15 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       = stage14_state.volumetric_fog_dispatch_count_y;
     environment_lighting_state_.stage14_volumetric_fog_dispatch_count_z
       = stage14_state.volumetric_fog_dispatch_count_z;
+    environment_lighting_state_
+      .stage14_volumetric_fog_local_fog_injection_requested
+      = stage14_state.volumetric_fog_local_fog_injection_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_local_fog_injection_executed
+      = stage14_state.volumetric_fog_local_fog_injection_executed;
+    environment_lighting_state_
+      .stage14_volumetric_fog_local_fog_instance_count
+      = stage14_state.volumetric_fog_local_fog_instance_count;
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
     environment_lighting_state_.stage15_requested = stage15_state.requested;

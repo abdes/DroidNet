@@ -567,6 +567,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogGlobalStartDistanceMeters() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto
+  GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;

@@ -2044,6 +2044,80 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogInjectsTiledLocalFogProductsWhenAvailable)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 12U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(10.0F);
+  fog->SetVolumetricFogNearFadeInDistance(50.0F);
+
+  auto local_fog_node = scene->CreateNode("VolumetricLocalFog");
+  const auto impl = local_fog_node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+  auto& local_fog
+    = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+  local_fog.SetEnabled(true);
+  local_fog.SetRadialFogExtinction(0.45F);
+  local_fog.SetHeightFogExtinction(0.25F);
+  local_fog.SetHeightFogFalloff(0.2F);
+  local_fog.SetFogAlbedo({ 0.7F, 0.8F, 0.9F });
+  local_fog.SetFogEmissive({ 0.1F, 0.2F, 0.3F });
+  local_fog_node.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 12.0F });
+  local_fog_node.GetTransform().SetLocalScale({ 4.0F, 4.0F, 4.0F });
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 32U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 32U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricLocalFog.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  const auto slot = service.PublishEnvironmentBindings(ctx,
+    kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, false,
+    &scene_textures);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto& generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(generation.integrated_light_scattering_valid);
+  EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_executed);
+  EXPECT_EQ(generation.volumetric_fog_local_fog_instance_count, 1U);
+  EXPECT_GE(graphics_->dispatch_log_.dispatches.size(), 2U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   LocalFogStage14AndStage15RunWhenSceneContainsLocalFogVolumes)
 {
   auto service = EnvironmentLightingService(*renderer_);

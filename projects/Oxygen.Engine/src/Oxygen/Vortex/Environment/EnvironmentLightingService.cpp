@@ -297,6 +297,9 @@ auto EnvironmentLightingService::OnFrameStart(
     volumetric_fog_pass_->OnFrameStart(sequence, slot);
   }
   pending_volumetric_fog_state_ = {};
+  pending_local_fog_culling_state_ = {};
+  pending_local_fog_view_id_ = kInvalidViewId;
+  pending_local_fog_sequence_ = frame::SequenceNumber { 0U };
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
     static_data_publisher_->OnFrameStart(sequence, slot);
@@ -396,6 +399,25 @@ auto EnvironmentLightingService::BuildBindings(
   }
 
   return bindings;
+}
+
+auto EnvironmentLightingService::PrepareLocalFogForStage14(
+  RenderContext& ctx, const SceneTextures& scene_textures)
+  -> const environment::internal::LocalFogVolumeState::ViewProducts&
+{
+  if (pending_local_fog_sequence_ == current_sequence_
+    && pending_local_fog_view_id_ == ctx.current_view.view_id) {
+    return local_fog_state_->GetCurrentProducts();
+  }
+
+  auto& local_fog_products = local_fog_state_->Prepare(ctx);
+  LOG_F(INFO, "local_fog_volume_instance_count={}",
+    local_fog_products.instance_count);
+  pending_local_fog_culling_state_
+    = local_fog_tiled_culling_->Record(ctx, scene_textures, local_fog_products);
+  pending_local_fog_view_id_ = ctx.current_view.view_id;
+  pending_local_fog_sequence_ = current_sequence_;
+  return local_fog_products;
 }
 
 auto EnvironmentLightingService::BuildEnvironmentViewData(
@@ -812,7 +834,8 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
 auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   const ShaderVisibleIndex environment_static_slot,
   const ShaderVisibleIndex environment_view_slot,
-  const bool enable_ambient_bridge) -> ShaderVisibleIndex
+  const bool enable_ambient_bridge,
+  const SceneTextures* scene_textures) -> ShaderVisibleIndex
 {
   RefreshStableAtmosphereState(ctx.GetScene().get());
   if (ctx.current_view.view_id == kInvalidViewId || !EnsurePublishResources()) {
@@ -855,8 +878,12 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     ctx, view_data, stable_state, *atmosphere_lut_cache_);
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
+  const auto* local_fog_products
+    = scene_textures != nullptr
+    ? &PrepareLocalFogForStage14(ctx, *scene_textures)
+    : nullptr;
   pending_volumetric_fog_state_
-    = volumetric_fog_pass_->Record(ctx, stable_state);
+    = volumetric_fog_pass_->Record(ctx, stable_state, local_fog_products);
   products.integrated_light_scattering_srv
     = pending_volumetric_fog_state_.integrated_light_scattering_srv;
   const auto sky_light_authored_enabled = products.sky_light.enabled;
@@ -1010,6 +1037,12 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .volumetric_fog_directional_shadowed_light_requested
     = pending_volumetric_fog_state_
         .directional_shadowed_light_injection_requested,
+    .volumetric_fog_local_fog_injection_requested
+    = pending_volumetric_fog_state_.local_fog_injection_requested,
+    .volumetric_fog_local_fog_injection_executed
+    = pending_volumetric_fog_state_.local_fog_injection_executed,
+    .volumetric_fog_local_fog_instance_count
+    = pending_volumetric_fog_state_.local_fog_instance_count,
   };
 
   return slot;
@@ -1019,16 +1052,18 @@ auto EnvironmentLightingService::RenderSkyAndFog(
   RenderContext& ctx, const SceneTextures& scene_textures) -> void
 {
   RefreshStableAtmosphereState(ctx.GetScene().get());
-  auto& local_fog_products = local_fog_state_->Prepare(ctx);
-  LOG_F(INFO, "local_fog_volume_instance_count={}",
-    local_fog_products.instance_count);
-  const auto local_fog_culling_state
-    = local_fog_tiled_culling_->Record(ctx, scene_textures, local_fog_products);
+  const auto& local_fog_products
+    = PrepareLocalFogForStage14(ctx, scene_textures);
+  const auto local_fog_culling_state = pending_local_fog_culling_state_;
   const auto sky_state = sky_->Render(ctx, scene_textures);
   const auto atmosphere_state = atmosphere_->Render(ctx, scene_textures);
   const auto fog_state = fog_->Render(ctx, scene_textures);
-  const auto local_fog_compose_state
-    = local_fog_compose_->Record(ctx, scene_textures, local_fog_products);
+  auto local_fog_compose_state
+    = environment::LocalFogVolumeComposePass::RecordState {};
+  if (!pending_volumetric_fog_state_.local_fog_injection_executed) {
+    local_fog_compose_state
+      = local_fog_compose_->Record(ctx, scene_textures, local_fog_products);
+  }
   last_stage14_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = local_fog_products.prepared
@@ -1069,6 +1104,12 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .volumetric_fog_directional_shadowed_light_requested
     = pending_volumetric_fog_state_
         .directional_shadowed_light_injection_requested,
+    .volumetric_fog_local_fog_injection_requested
+    = pending_volumetric_fog_state_.local_fog_injection_requested,
+    .volumetric_fog_local_fog_injection_executed
+    = pending_volumetric_fog_state_.local_fog_injection_executed,
+    .volumetric_fog_local_fog_instance_count
+    = pending_volumetric_fog_state_.local_fog_instance_count,
   };
   LOG_F(INFO,
     "volumetric_fog_requested={} volumetric_fog_executed={} "
@@ -1076,7 +1117,10 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     "volumetric_fog_dispatch={}x{}x{} "
     "volumetric_fog_view_constants_bound={} "
     "volumetric_fog_ue_log_depth_distribution={} "
-    "volumetric_fog_directional_shadowed_light_requested={}",
+    "volumetric_fog_directional_shadowed_light_requested={} "
+    "volumetric_fog_local_fog_injection_requested={} "
+    "volumetric_fog_local_fog_injection_executed={} "
+    "volumetric_fog_local_fog_instance_count={}",
     last_stage14_state_.volumetric_fog_requested,
     last_stage14_state_.volumetric_fog_executed,
     last_stage14_state_.integrated_light_scattering_valid,
@@ -1088,7 +1132,10 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     last_stage14_state_.volumetric_fog_dispatch_count_z,
     last_stage14_state_.volumetric_fog_view_constants_bound,
     last_stage14_state_.volumetric_fog_ue_log_depth_distribution,
-    last_stage14_state_.volumetric_fog_directional_shadowed_light_requested);
+    last_stage14_state_.volumetric_fog_directional_shadowed_light_requested,
+    last_stage14_state_.volumetric_fog_local_fog_injection_requested,
+    last_stage14_state_.volumetric_fog_local_fog_injection_executed,
+    last_stage14_state_.volumetric_fog_local_fog_instance_count);
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = sky_state.requested || atmosphere_state.requested
