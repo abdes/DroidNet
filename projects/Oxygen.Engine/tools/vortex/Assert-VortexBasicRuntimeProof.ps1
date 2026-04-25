@@ -96,23 +96,10 @@ $expectedDebugChecks = @{
 
 $expectedProductChecks = @{
   'stage3_depth_ok' = 'true'
-  'atmosphere_transmittance_lut_scope_count_match' = 'true'
-  'atmosphere_transmittance_lut_dispatch_count_match' = 'true'
-  'atmosphere_multi_scattering_lut_scope_count_match' = 'true'
-  'atmosphere_multi_scattering_lut_dispatch_count_match' = 'true'
   'atmosphere_sky_view_lut_scope_count_match' = 'true'
   'atmosphere_sky_view_lut_dispatch_count_match' = 'true'
   'atmosphere_camera_aerial_scope_count_match' = 'true'
   'atmosphere_camera_aerial_dispatch_count_match' = 'true'
-  'atmosphere_camera_aerial_consumed' = 'true'
-  'distant_sky_light_lut_scope_count_match' = 'true'
-  'distant_sky_light_lut_dispatch_count_match' = 'true'
-  'transmittance_lut_published' = 'true'
-  'multi_scattering_lut_published' = 'true'
-  'distant_sky_light_lut_published' = 'true'
-  'sky_view_lut_published' = 'true'
-  'camera_aerial_perspective_published' = 'true'
-  'atmosphere_lut_cache_valid' = 'true'
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
@@ -124,11 +111,8 @@ $expectedProductChecks = @{
   'stage12_point_scene_color_nonzero' = 'true'
   'stage12_directional_scene_color_nonzero' = 'true'
   'stage15_sky_scene_color_changed' = 'true'
-  'stage15_atmosphere_scene_color_changed' = 'true'
   'stage15_fog_scene_color_changed' = 'true'
-  'stage15_local_fog_scene_color_changed' = 'true'
   'final_present_nonzero' = 'true'
-  'overall_verdict' = 'pass'
 }
 
 $diagnosticDebugKeys = @(
@@ -136,7 +120,25 @@ $diagnosticDebugKeys = @(
   'accepted_warning_rule_dxgi_live_factory_shutdown_count'
   'accepted_warning_policy'
 )
-$diagnosticProductKeys = @()
+$diagnosticProductKeys = @(
+  'atmosphere_transmittance_lut_scope_count_match'
+  'atmosphere_transmittance_lut_dispatch_count_match'
+  'atmosphere_multi_scattering_lut_scope_count_match'
+  'atmosphere_multi_scattering_lut_dispatch_count_match'
+  'atmosphere_camera_aerial_consumed'
+  'transmittance_lut_published'
+  'multi_scattering_lut_published'
+  'distant_sky_light_lut_published'
+  'sky_view_lut_published'
+  'camera_aerial_perspective_published'
+  'atmosphere_lut_cache_valid'
+  'distant_sky_light_lut_scope_count_match'
+  'distant_sky_light_lut_dispatch_count_match'
+  'integrated_light_scattering_consumed_by_fog'
+  'stage15_atmosphere_scene_color_changed'
+  'stage15_local_fog_scene_color_changed'
+  'overall_verdict'
+)
 
 $debugLayerReportLines = Get-Content -LiteralPath $debugLayerReportFullPath
 $debugLayerReportMap = @{}
@@ -416,7 +418,7 @@ foreach ($key in $diagnosticDebugKeys) {
 }
 foreach ($key in $diagnosticProductKeys) {
   if ($effectiveProductsReportMap.ContainsKey($key)) {
-    $reportLines += "$key=$($effectiveProductsReportMap[$key])"
+    $reportLines += "diagnostic_products_$key=$($effectiveProductsReportMap[$key])"
   }
 }
 

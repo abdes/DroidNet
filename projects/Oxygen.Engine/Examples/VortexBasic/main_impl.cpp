@@ -23,6 +23,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -373,6 +374,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       if (const auto gfx = app.gfx_weak.lock()) {
         gfx->SetVSyncEnabled(enable_vsync);
       }
+    }
+    if (app.with_local_fog) {
+      auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
+      startup_cvars.Set(
+        "vtx.local_fog.enable", oxygen::console::CVarValue { true });
+      app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
     }
 
     const auto rc = co::Run(app, AsyncMain(app, frames, shader_debug_mode));
