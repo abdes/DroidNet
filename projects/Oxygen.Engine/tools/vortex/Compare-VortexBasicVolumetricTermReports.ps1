@@ -11,7 +11,7 @@ the integrated-light-scattering probe statistics.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('combined', 'local-fog', 'sky-light')]
+  [ValidateSet('combined', 'local-fog', 'sky-light', 'directional-shadow')]
   [string]$Term,
 
   [Parameter(Mandatory = $true)]
@@ -102,8 +102,11 @@ foreach ($label in @('enabled', 'disabled')) {
 $enabledProbeSum = [double]$enabledMap['integrated_light_scattering_probe_rgb_sum']
 $disabledProbeSum = [double]$disabledMap['integrated_light_scattering_probe_rgb_sum']
 $rgbSumIncrease = $enabledProbeSum - $disabledProbeSum
-if ($rgbSumIncrease -lt $MinRgbSumDelta) {
-  throw "Integrated-scattering probe RGB sum increase too small for $Term proof: $rgbSumIncrease < $MinRgbSumDelta"
+$rgbSumDecrease = $disabledProbeSum - $enabledProbeSum
+$requiredDelta = if ($Term -eq 'directional-shadow') { $rgbSumDecrease } else { $rgbSumIncrease }
+$deltaLabel = if ($Term -eq 'directional-shadow') { 'decrease' } else { 'increase' }
+if ($requiredDelta -lt $MinRgbSumDelta) {
+  throw "Integrated-scattering probe RGB sum $deltaLabel too small for $Term proof: $requiredDelta < $MinRgbSumDelta"
 }
 
 $enabledLogLines = Get-Content -LiteralPath $enabledRuntimeLogFullPath
@@ -116,6 +119,10 @@ if ($Term -eq 'combined' -or $Term -eq 'local-fog') {
 if ($Term -eq 'combined' -or $Term -eq 'sky-light') {
   Assert-LogPattern -Lines $enabledLogLines -Pattern 'volumetric_fog_sky_light_injection_executed=true' -Label 'enabled'
   Assert-LogPattern -Lines $disabledLogLines -Pattern 'volumetric_fog_sky_light_injection_executed=false' -Label 'disabled'
+}
+if ($Term -eq 'directional-shadow') {
+  Assert-LogPattern -Lines $enabledLogLines -Pattern 'volumetric_fog_directional_shadowed_light_requested=true' -Label 'enabled'
+  Assert-LogPattern -Lines $disabledLogLines -Pattern 'volumetric_fog_directional_shadowed_light_requested=false' -Label 'disabled'
 }
 
 $reportLines = @(
@@ -130,6 +137,7 @@ $reportLines = @(
   "disabled_probe_rgb_sum=$disabledProbeSum"
   "probe_rgb_sum_delta=$rgbSumIncrease"
   "probe_rgb_sum_increase=$rgbSumIncrease"
+  "probe_rgb_sum_decrease=$rgbSumDecrease"
   "min_probe_rgb_sum_delta=$MinRgbSumDelta"
 )
 

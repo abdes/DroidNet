@@ -417,8 +417,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.grid_z.grid_z_params[0] = grid_z_params.x;
   constants.grid_z.grid_z_params[1] = grid_z_params.y;
   constants.grid_z.grid_z_params[2] = grid_z_params.z;
+  const auto directional_volumetric_shadows_enabled
+    = renderer_.GetVolumetricFogDirectionalShadowsEnabled();
+  const auto shadowed_directional_light0_enabled
+    = directional_volumetric_shadows_enabled
+    && stable_state.view_products.atmosphere_lights[0].enabled;
   constants.grid_z.shadowed_directional_light0_enabled
-    = stable_state.view_products.atmosphere_lights[0].enabled ? 1.0F : 0.0F;
+    = shadowed_directional_light0_enabled ? 1.0F : 0.0F;
   constants.media0.albedo_rgb[0] = volumetric.albedo.x;
   constants.media0.albedo_rgb[1] = volumetric.albedo.y;
   constants.media0.albedo_rgb[2] = volumetric.albedo.z;

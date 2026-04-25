@@ -279,6 +279,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .StoreTo(&app.vortex_local_fog_into_volumetric)
         .Build());
     vortex_options->Add(
+      clap::Option::WithKey("volumetric-directional-shadows")
+        .About("Apply directional shadow-map visibility inside volumetric fog")
+        .Long("volumetric-directional-shadows")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_volumetric_directional_shadows)
+        .Build());
+    vortex_options->Add(
       clap::Option::WithKey("sky-light-volumetric-scattering")
         .About("SkyLight volumetric scattering intensity")
         .Long("sky-light-volumetric-scattering")
@@ -352,6 +361,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
     LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
       app.vortex_local_fog_into_volumetric);
+    LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
+      app.vortex_volumetric_directional_shadows);
     LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
       app.vortex_sky_light_volumetric_scattering_intensity);
     LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
@@ -430,8 +441,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         gfx->SetVSyncEnabled(enable_vsync);
       }
     }
+    auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
+    startup_cvars.Set("vtx.volumetric_fog.directional_shadows",
+      oxygen::console::CVarValue {
+        app.vortex_volumetric_directional_shadows });
     if (app.with_local_fog) {
-      auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
       startup_cvars.Set(
         "vtx.local_fog.enable", oxygen::console::CVarValue { true });
       startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
@@ -440,8 +454,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
         oxygen::console::CVarValue {
           app.vortex_local_fog_volumetric_max_density });
-      app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
     }
+    app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
 
     const auto rc = co::Run(app, AsyncMain(app, frames, shader_debug_mode));
 

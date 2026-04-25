@@ -570,6 +570,8 @@ public:
   GetLocalFogRenderIntoVolumetricFog() const noexcept -> bool;
   [[nodiscard]] OXGN_VRTX_API auto
   GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> bool;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto
