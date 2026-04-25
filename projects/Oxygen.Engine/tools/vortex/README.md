@@ -206,6 +206,30 @@ inscattering remains explicitly deferred: the analyzer requires
 `CubemapUsable=false` for the current validated path rather than treating a
 missing cubemap resource path as bound.
 
+## Focused Aerial Perspective Proof
+
+- `Verify-VortexAerialPerspectiveProof.ps1`
+  - focused VTX-M04D.6 wrapper for an existing VortexBasic or RenderScene
+    capture
+  - runs `AnalyzeRenderDocVortexAerialPerspective.py`
+  - asserts the `Vortex.Environment.AtmosphereCameraAerialPerspective` compute
+    dispatch, sampled nonzero `64x64x32` camera AP volume, Stage-15 atmosphere
+    draw ordering, captured `EnvironmentViewData`/`EnvironmentStaticData`,
+    valid atmosphere camera-volume SRV, bindless camera-volume consumption, and
+    nonzero Stage-15 atmosphere `SceneColor` delta
+  - supports `-ExpectDisabled` for strength-zero paired captures where the AP
+    volume still exists but Stage-15 atmosphere must not change `SceneColor`
+  - supports expected AP strength/start-depth checks and runtime CLI log
+    checks for VortexBasic proof runs
+
+The VTX-M04D.6 closure path uses paired VortexBasic captures with
+`--aerial-start-depth 0` and `--aerial-scattering-strength 1|0` to prove the
+enabled/disabled main-view AP gate. It also uses a city-scale
+`CityEnvironmentValidation` RenderScene frame-90 capture to prove authored
+scene AP values (`distance_scale=1`, `start_depth=40m`, strength `1`) bind and
+affect Stage-15 output. Reflection/360-view AP remains deferred to the future
+reflection-capture resource path and is not part of this focused proof.
+
 ## Historical Frame-10 Closeout Pack
 
 These scripts are preserved only for historical comparison with the older

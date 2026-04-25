@@ -51,6 +51,8 @@ public:
   float vortex_local_fog_emissive_scale { 1.0F };
   float vortex_volumetric_fog_emissive_scale { 1.0F };
   float vortex_sky_light_volumetric_scattering_intensity { 1.0F };
+  float vortex_aerial_scattering_strength { 1.0F };
+  float vortex_aerial_start_depth_m { 100.0F };
   std::string startup_scene_name;
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly

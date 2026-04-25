@@ -508,7 +508,7 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   view_ctx.metadata.name = "MainView";
   view_ctx.metadata.purpose = "primary";
   view_ctx.metadata.is_scene_view = true;
-  view_ctx.metadata.with_atmosphere = true;
+  view_ctx.metadata.with_atmosphere = app_.with_atmosphere;
   view_ctx.metadata.with_height_fog = app_.with_height_fog;
   view_ctx.metadata.with_local_fog = app_.with_local_fog;
   view_ctx.render_target = observer_ptr { scene_fb_.get() };
@@ -621,8 +621,10 @@ auto MainModule::EnsureScene() -> void
       { 1.0F, 1.0F, 1.0F });
     atmosphere->SetSunDiskEnabled(true);
     atmosphere->SetAerialPerspectiveDistanceScale(1.0F);
-    atmosphere->SetAerialPerspectiveStartDepthMeters(100.0F);
-    atmosphere->SetAerialScatteringStrength(1.0F);
+    atmosphere->SetAerialPerspectiveStartDepthMeters(
+      (std::max)(app_.vortex_aerial_start_depth_m, 0.0F));
+    atmosphere->SetAerialScatteringStrength(
+      (std::max)(app_.vortex_aerial_scattering_strength, 0.0F));
     atmosphere->SetHeightFogContribution(1.0F);
     atmosphere->SetTraceSampleCountScale(1.0F);
     atmosphere->SetTransmittanceMinLightElevationDeg(-90.0F);
