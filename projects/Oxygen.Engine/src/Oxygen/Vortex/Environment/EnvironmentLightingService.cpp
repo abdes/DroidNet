@@ -29,6 +29,7 @@
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
+#include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -195,6 +196,8 @@ EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
   , camera_aerial_perspective_pass_(
       std::make_unique<environment::AtmosphereCameraAerialPerspectivePass>(
         renderer))
+  , volumetric_fog_pass_(
+      std::make_unique<environment::VolumetricFogPass>(renderer))
   , ibl_(std::make_unique<environment::internal::IblProcessor>(renderer))
 {
 }
@@ -290,6 +293,10 @@ auto EnvironmentLightingService::OnFrameStart(
   if (camera_aerial_perspective_pass_ != nullptr) {
     camera_aerial_perspective_pass_->OnFrameStart(sequence, slot);
   }
+  if (volumetric_fog_pass_ != nullptr) {
+    volumetric_fog_pass_->OnFrameStart(sequence, slot);
+  }
+  pending_volumetric_fog_state_ = {};
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
     static_data_publisher_->OnFrameStart(sequence, slot);
@@ -364,7 +371,10 @@ auto EnvironmentLightingService::BuildBindings(
   if (view_products.volumetric_fog.enabled) {
     bindings.contract_flags
       |= kEnvironmentContractFlagVolumetricFogAuthoredEnabled;
-    if (!view_products.integrated_light_scattering_srv.IsValid()) {
+    if (view_products.integrated_light_scattering_srv.IsValid()) {
+      bindings.contract_flags
+        |= kEnvironmentContractFlagIntegratedLightScatteringValid;
+    } else {
       bindings.contract_flags
         |= kEnvironmentContractFlagIntegratedLightScatteringUnavailable;
     }
@@ -530,8 +540,11 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   const auto active_height_fog = height_fog.enabled
     && height_fog.enable_height_fog && height_fog.render_in_main_pass
     && any_layer_density && fog_max_opacity > 0.0F;
+  const auto active_volumetric_fog = view_products.volumetric_fog.enabled
+    && view_products.integrated_light_scattering_srv.IsValid()
+    && height_fog.render_in_main_pass;
   auto fog_flags = std::uint32_t { 0U };
-  if (active_height_fog) {
+  if (active_height_fog || active_volumetric_fog) {
     fog_flags |= kGpuFogFlagEnabled;
   }
   if (height_fog.enable_height_fog) {
@@ -614,6 +627,56 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.fog.cubemap_srv = kInvalidBindlessIndex;
   data.fog.flags = fog_flags;
   data.fog.model = height_fog.legacy_model;
+
+  const auto& volumetric = view_products.volumetric_fog;
+  data.volumetric_fog.albedo_rgb = {
+    volumetric.albedo.x,
+    volumetric.albedo.y,
+    volumetric.albedo.z,
+  };
+  data.volumetric_fog.scattering_distribution
+    = std::clamp(volumetric.scattering_distribution, -0.99F, 0.99F);
+  data.volumetric_fog.emissive_rgb = {
+    volumetric.emissive.x,
+    volumetric.emissive.y,
+    volumetric.emissive.z,
+  };
+  data.volumetric_fog.extinction_scale
+    = std::max(volumetric.extinction_scale, 0.0F);
+  data.volumetric_fog.distance_m = pending_volumetric_fog_state_.executed
+    ? pending_volumetric_fog_state_.end_distance_m
+    : std::max(volumetric.distance, 0.0F);
+  data.volumetric_fog.start_distance_m = pending_volumetric_fog_state_.executed
+    ? pending_volumetric_fog_state_.start_distance_m
+    : std::max(volumetric.start_distance, 0.0F);
+  data.volumetric_fog.near_fade_in_distance_m
+    = std::max(volumetric.near_fade_in_distance, 0.0F);
+  data.volumetric_fog.static_lighting_scattering_intensity
+    = std::max(volumetric.static_lighting_scattering_intensity, 0.0F);
+  data.volumetric_fog.integrated_light_scattering_srv
+    = view_products.integrated_light_scattering_srv.get();
+  data.volumetric_fog.flags = volumetric.enabled
+    ? kGpuVolumetricFogFlagEnabled
+    : 0U;
+  if (view_products.integrated_light_scattering_srv.IsValid()) {
+    data.volumetric_fog.flags
+      |= kGpuVolumetricFogFlagIntegratedScatteringValid;
+  }
+  data.volumetric_fog.grid_width = pending_volumetric_fog_state_.width;
+  data.volumetric_fog.grid_height = pending_volumetric_fog_state_.height;
+  data.volumetric_fog.grid_depth = pending_volumetric_fog_state_.depth;
+  const auto volumetric_depth_span = std::max(
+    data.volumetric_fog.distance_m - data.volumetric_fog.start_distance_m,
+    0.0F);
+  data.volumetric_fog.depth_slice_length_m
+    = pending_volumetric_fog_state_.depth > 0U
+    ? volumetric_depth_span
+      / static_cast<float>(pending_volumetric_fog_state_.depth)
+    : 0.0F;
+  data.volumetric_fog.inv_depth_slice_length_m
+    = data.volumetric_fog.depth_slice_length_m > 1.0e-6F
+    ? 1.0F / data.volumetric_fog.depth_slice_length_m
+    : 0.0F;
 
   const auto& atmo = view_products.atmosphere;
   const auto primary_sun_disk_enabled
@@ -787,6 +850,10 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     ctx, view_data, stable_state, *atmosphere_lut_cache_);
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
+  pending_volumetric_fog_state_
+    = volumetric_fog_pass_->Record(ctx, stable_state);
+  products.integrated_light_scattering_srv
+    = pending_volumetric_fog_state_.integrated_light_scattering_srv;
   const auto sky_light_authored_enabled = products.sky_light.enabled;
   const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
   if (sky_light_authored_enabled) {
@@ -952,7 +1019,8 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     = local_fog_compose_->Record(ctx, scene_textures, local_fog_products);
   last_stage14_state_ = {
     .view_id = ctx.current_view.view_id,
-    .requested = local_fog_products.prepared,
+    .requested = local_fog_products.prepared
+      || pending_volumetric_fog_state_.requested,
     .local_fog_requested = local_fog_culling_state.requested,
     .local_fog_executed = local_fog_culling_state.executed,
     .local_fog_hzb_consumed
@@ -967,6 +1035,21 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .local_fog_dispatch_count_x = local_fog_culling_state.dispatch_count_x,
     .local_fog_dispatch_count_y = local_fog_culling_state.dispatch_count_y,
     .local_fog_dispatch_count_z = local_fog_culling_state.dispatch_count_z,
+    .volumetric_fog_requested = pending_volumetric_fog_state_.requested,
+    .volumetric_fog_executed = pending_volumetric_fog_state_.executed,
+    .integrated_light_scattering_valid
+    = pending_volumetric_fog_state_.integrated_light_scattering_srv.IsValid(),
+    .integrated_light_scattering_srv
+    = pending_volumetric_fog_state_.integrated_light_scattering_srv,
+    .volumetric_fog_grid_width = pending_volumetric_fog_state_.width,
+    .volumetric_fog_grid_height = pending_volumetric_fog_state_.height,
+    .volumetric_fog_grid_depth = pending_volumetric_fog_state_.depth,
+    .volumetric_fog_dispatch_count_x
+    = pending_volumetric_fog_state_.dispatch_count_x,
+    .volumetric_fog_dispatch_count_y
+    = pending_volumetric_fog_state_.dispatch_count_y,
+    .volumetric_fog_dispatch_count_z
+    = pending_volumetric_fog_state_.dispatch_count_z,
   };
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,

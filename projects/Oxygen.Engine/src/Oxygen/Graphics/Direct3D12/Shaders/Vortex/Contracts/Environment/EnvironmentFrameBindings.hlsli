@@ -9,6 +9,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
+static const uint ENVIRONMENT_CONTRACT_FLAG_INTEGRATED_LIGHT_SCATTERING_VALID = 1u << 8u;
+
 struct EnvironmentFrameBindings
 {
     struct EnvironmentProbeBindings

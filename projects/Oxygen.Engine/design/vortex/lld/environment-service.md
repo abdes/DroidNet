@@ -171,6 +171,14 @@ Data-only volumetric-fog models do not satisfy this contract. The contract
 requires shader families, resources, history, publication, and capture/runtime
 validation.
 
+Current Vortex status: a first integrated-light-scattering runtime path exists
+for authored/requested volumetric fog. It allocates a 3D product, dispatches a
+Stage-14 compute pass, publishes SRV/static binding validity, and lets the
+Stage-15 fog pass consume the product. This is a partial implementation path,
+not full UE5.7 volumetric-fog parity: depth-aware froxel distribution,
+shadowed/local/sky-light injection, local-fog injection, temporal history, and
+capture/analyzer proof remain required.
+
 ## 1. Scope and Intent
 
 ### 1.1 Goal
@@ -1293,6 +1301,10 @@ only to prevent duplicate implementation; it is not a completion claim.
       perspective, and distant-sky-light LUT surfaces exist.
 - [x] Below-horizon sky invariants listed in this LLD are represented in the
       active sky path and must be preserved.
+- [x] First volumetric-fog integrated-light-scattering runtime path exists:
+      authored/requested volumetric fog allocates a 3D product, runs a Stage-14
+      compute pass, publishes SRV/static binding validity, and composes through
+      Stage 15 fog.
 
 ### 11.2 Blocking Work Before Fog Parity Can Close
 
@@ -1307,9 +1319,11 @@ only to prevent duplicate implementation; it is not a completion claim.
       atmosphere-aware lighting.
 - [ ] Implement local-fog injection into volumetric fog when volumetric fog is
       enabled.
-- [ ] Implement volumetric fog as a froxel system: grid allocation, light
-      injection, shadow/sky/local-light participation, temporal history, final
-      integration, and published `IntegratedLightScattering`-style product.
+- [ ] Complete volumetric fog as a UE5.7-informed froxel system: depth-aware
+      grid distribution, media/light injection, shadow/sky/local-light
+      participation, local-fog injection, temporal history/reprojection, final
+      integration, and capture/analyzer proof. The first Vortex integrated
+      scattering product path does not close this gate.
 - [ ] Publish complete environment frame/view products for height fog, local
       fog, volumetric fog, and sky-light coupling.
 - [ ] Validate the environment path against UE5.7 source/shader contracts and

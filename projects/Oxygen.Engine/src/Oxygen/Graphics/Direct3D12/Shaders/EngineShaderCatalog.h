@@ -406,6 +406,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kCompute, .name="VortexAtmosphereCameraAerialPerspectiveCS" } }
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Environment/VolumetricFog.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexVolumetricFogCS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Environment/Fog.hlsl",
     .entries=std::array {
       EntryPoint { .type=kVertex, .name="VortexFogPassVS" },

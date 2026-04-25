@@ -12,6 +12,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
@@ -44,6 +45,7 @@ namespace environment {
   class DistantSkyLightLutPass;
   class AtmosphereSkyViewLutPass;
   class AtmosphereCameraAerialPerspectivePass;
+  class VolumetricFogPass;
   namespace internal {
     struct StableAtmosphereState;
     struct ResolvedAtmosphereLightState;
@@ -176,6 +178,18 @@ public:
     std::uint32_t local_fog_dispatch_count_x { 0U };
     std::uint32_t local_fog_dispatch_count_y { 0U };
     std::uint32_t local_fog_dispatch_count_z { 0U };
+    bool volumetric_fog_requested { false };
+    bool volumetric_fog_executed { false };
+    bool integrated_light_scattering_valid { false };
+    ShaderVisibleIndex integrated_light_scattering_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t volumetric_fog_grid_width { 0U };
+    std::uint32_t volumetric_fog_grid_height { 0U };
+    std::uint32_t volumetric_fog_grid_depth { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_x { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_y { 0U };
+    std::uint32_t volumetric_fog_dispatch_count_z { 0U };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);
@@ -310,6 +324,8 @@ private:
   std::unique_ptr<environment::AtmosphereSkyViewLutPass> sky_view_lut_pass_ {};
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
     camera_aerial_perspective_pass_ {};
+  std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_ {};
+  environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
   std::unique_ptr<environment::internal::IblProcessor> ibl_ {};
 };
 

@@ -123,6 +123,18 @@ public:
     std::uint32_t stage14_local_fog_dispatch_count_x { 0U };
     std::uint32_t stage14_local_fog_dispatch_count_y { 0U };
     std::uint32_t stage14_local_fog_dispatch_count_z { 0U };
+    bool stage14_volumetric_fog_requested { false };
+    bool stage14_volumetric_fog_executed { false };
+    bool stage14_integrated_light_scattering_valid { false };
+    ShaderVisibleIndex stage14_integrated_light_scattering_srv {
+      kInvalidShaderVisibleIndex
+    };
+    std::uint32_t stage14_volumetric_fog_grid_width { 0U };
+    std::uint32_t stage14_volumetric_fog_grid_height { 0U };
+    std::uint32_t stage14_volumetric_fog_grid_depth { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_x { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_y { 0U };
+    std::uint32_t stage14_volumetric_fog_dispatch_count_z { 0U };
     bool stage15_requested { false };
     bool sky_requested { false };
     bool sky_executed { false };

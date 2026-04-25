@@ -196,7 +196,7 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
     .Build();
 }
 
-auto IsHeightFogEnabled(const RenderContext& ctx) -> bool
+auto IsFogEnabled(const RenderContext& ctx) -> bool
 {
   const auto scene = ctx.GetScene();
   if (scene == nullptr) {
@@ -207,7 +207,8 @@ auto IsHeightFogEnabled(const RenderContext& ctx) -> bool
     return false;
   }
   const auto fog = env->TryGetSystem<scene::environment::Fog>();
-  return fog != nullptr && fog->IsEnabled() && fog->GetEnableHeightFog();
+  return fog != nullptr && fog->IsEnabled()
+    && (fog->GetEnableHeightFog() || fog->GetEnableVolumetricFog());
 }
 
 } // namespace
@@ -220,7 +221,7 @@ auto FogPass::Record(
   RenderContext& ctx, const SceneTextures& scene_textures) const -> RecordState
 {
   const auto requested = ctx.current_view.view_id != kInvalidViewId
-    && ctx.current_view.with_height_fog && IsHeightFogEnabled(ctx);
+    && ctx.current_view.with_height_fog && IsFogEnabled(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested
