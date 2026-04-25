@@ -29,6 +29,7 @@ namespace {
 
 constexpr float kLocalFogSafeFalloffThreshold = 1.0F;
 constexpr float kLocalFogFalloffScaleUi = 0.01F;
+constexpr float kLocalFogMaxPhaseG = 0.999F;
 
 struct LocalFogVolumeSortKey {
   std::uint64_t packed_data { 0U };
@@ -67,6 +68,25 @@ auto PackUnorm8888(const glm::vec4& value) -> std::uint32_t
   return glm::packUnorm4x8(glm::clamp(value, 0.0F, 1.0F));
 }
 
+auto ClampNonNegative(const float value) -> float
+{
+  return std::max(value, 0.0F);
+}
+
+auto ClampNonNegative(const glm::vec3& value) -> glm::vec3
+{
+  return {
+    std::max(value.x, 0.0F),
+    std::max(value.y, 0.0F),
+    std::max(value.z, 0.0F),
+  };
+}
+
+auto Clamp01(const glm::vec3& value) -> glm::vec3
+{
+  return glm::clamp(value, 0.0F, 1.0F);
+}
+
 auto EncodeSortPriority(const int sort_priority) -> std::uint16_t
 {
   const auto clamped_priority = std::clamp(sort_priority, -127, 127);
@@ -102,6 +122,16 @@ auto MakeGpuInstance(const scene::environment::LocalFogVolume& local_fog,
     = glm::mat3_cast(glm::conjugate(glm::normalize(world_rotation)));
   const auto translated_world_position
     = world_position - resolved_view.CameraPosition();
+  const auto radial_fog_extinction
+    = ClampNonNegative(local_fog.GetRadialFogExtinction());
+  const auto height_fog_extinction
+    = ClampNonNegative(local_fog.GetHeightFogExtinction());
+  const auto height_fog_falloff
+    = ClampNonNegative(local_fog.GetHeightFogFalloff());
+  const auto emissive = ClampNonNegative(local_fog.GetFogEmissive());
+  const auto albedo = Clamp01(local_fog.GetFogAlbedo());
+  const auto phase_g
+    = std::clamp(local_fog.GetFogPhaseG(), 0.0F, kLocalFogMaxPhaseG);
   const auto x_vec = glm::vec3 {
     inverse_rotation[0][0],
     inverse_rotation[1][0],
@@ -127,17 +157,15 @@ auto MakeGpuInstance(const scene::environment::LocalFogVolume& local_fog,
     0U,
   };
   instance.data2 = {
-    PackFloat111110(local_fog.GetRadialFogExtinction(),
-      local_fog.GetHeightFogExtinction(),
-      std::max(local_fog.GetHeightFogFalloff(), kLocalFogSafeFalloffThreshold)
+    PackFloat111110(radial_fog_extinction, height_fog_extinction,
+      std::max(height_fog_falloff, kLocalFogSafeFalloffThreshold)
         * kLocalFogFalloffScaleUi),
-    PackFloat111110(local_fog.GetFogEmissive().x, local_fog.GetFogEmissive().y,
-      local_fog.GetFogEmissive().z),
+    PackFloat111110(emissive.x, emissive.y, emissive.z),
     PackUnorm8888(glm::vec4 {
-      local_fog.GetFogAlbedo().x,
-      local_fog.GetFogAlbedo().y,
-      local_fog.GetFogAlbedo().z,
-      local_fog.GetFogPhaseG(),
+      albedo.x,
+      albedo.y,
+      albedo.z,
+      phase_g,
     }),
     FloatBits(local_fog.GetHeightFogOffset()),
   };

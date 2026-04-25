@@ -1524,7 +1524,7 @@ auto Renderer::GetLocalFogTileMaxInstanceCount() const noexcept -> std::uint32_t
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexLocalFogTileMaxInstanceCount, value)) {
       return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 4, 256));
+        std::clamp<std::int64_t>(value, 1, 256));
     }
   }
   return 32U;

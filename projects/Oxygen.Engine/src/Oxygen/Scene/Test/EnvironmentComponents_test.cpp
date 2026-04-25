@@ -7,6 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -114,6 +115,35 @@ NOLINT_TEST(EnvironmentComponentsTest,
   EXPECT_FALSE(fog.GetRenderInMainPass());
   EXPECT_FALSE(fog.GetVisibleInReflectionCaptures());
   EXPECT_FALSE(fog.GetVisibleInRealTimeSkyCaptures());
+}
+
+NOLINT_TEST(EnvironmentComponentsTest,
+  LocalFogVolumeSanitizesUeShapedAuthoringRanges)
+{
+  auto local_fog = environment::LocalFogVolume {};
+  local_fog.SetRadialFogExtinction(-1.0F);
+  local_fog.SetHeightFogExtinction(-2.0F);
+  local_fog.SetHeightFogFalloff(-3.0F);
+  local_fog.SetHeightFogOffset(-1.25F);
+  local_fog.SetFogPhaseG(2.0F);
+  local_fog.SetFogAlbedo({ -0.5F, 0.5F, 1.5F });
+  local_fog.SetFogEmissive({ -1.0F, 2.0F, 3.0F });
+  local_fog.SetSortPriority(500);
+
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 0.0F);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), -1.25F);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.999F);
+  EXPECT_EQ(local_fog.GetFogAlbedo(), Vec3(0.0F, 0.5F, 1.0F));
+  EXPECT_EQ(local_fog.GetFogEmissive(), Vec3(0.0F, 2.0F, 3.0F));
+  EXPECT_EQ(local_fog.GetSortPriority(), 127);
+
+  local_fog.SetFogPhaseG(-0.25F);
+  local_fog.SetSortPriority(-500);
+
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.0F);
+  EXPECT_EQ(local_fog.GetSortPriority(), -127);
 }
 
 NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)

@@ -389,6 +389,36 @@ auto MakeSceneWithLocalFog() -> std::shared_ptr<oxygen::scene::Scene>
   return scene;
 }
 
+auto MakeSceneWithLocalFogVolumeCount(const std::uint32_t volume_count)
+  -> std::shared_ptr<oxygen::scene::Scene>
+{
+  auto scene = std::make_shared<oxygen::scene::Scene>("LocalFogCapScene", 32U);
+  auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
+  scene->SetEnvironment(std::move(environment));
+
+  for (std::uint32_t index = 0; index < volume_count; ++index) {
+    auto node = scene->CreateNode(
+      "LocalFogCap" + std::to_string(static_cast<unsigned long long>(index)));
+    const auto impl = node.GetImpl();
+    EXPECT_TRUE(impl.has_value());
+    if (!impl.has_value()) {
+      continue;
+    }
+    impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+    auto& fog
+      = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+    fog.SetEnabled(true);
+    fog.SetRadialFogExtinction(0.25F + static_cast<float>(index) * 0.01F);
+    fog.SetHeightFogExtinction(0.1F);
+    fog.SetSortPriority(static_cast<int>(index) - 1);
+    node.GetTransform().SetLocalPosition(
+      { static_cast<float>(index) * 4.0F, 0.0F, 1.0F });
+    node.GetTransform().SetLocalScale({ 2.0F, 2.0F, 2.0F });
+  }
+  scene->Update();
+  return scene;
+}
+
 auto MakeSceneWithAtmosphereEnvironment()
   -> std::shared_ptr<oxygen::scene::Scene>
 {
@@ -2128,6 +2158,44 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FALSE(stage14.local_fog_hzb_consumed);
   EXPECT_TRUE(stage14.local_fog_hzb_unavailable);
   EXPECT_FALSE(stage14.local_fog_skipped);
+  EXPECT_EQ(stage14.local_fog_instance_count, 1U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogStage14HonorsUeShapedPerViewInstanceCapOfOne)
+{
+  oxygen::console::Console console {};
+  renderer_->RegisterConsoleBindings(oxygen::observer_ptr { &console });
+  EXPECT_EQ(console.Execute("vtx.local_fog.tile_max_instance_count 1").status,
+    oxygen::console::ExecutionStatus::kOk);
+
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 12U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 29U };
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 29U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithLocalFogVolumeCount(3U);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_TRUE(stage14.local_fog_requested);
+  EXPECT_TRUE(stage14.local_fog_executed);
   EXPECT_EQ(stage14.local_fog_instance_count, 1U);
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
 }
