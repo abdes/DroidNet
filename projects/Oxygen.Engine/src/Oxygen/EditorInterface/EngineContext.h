@@ -10,6 +10,7 @@
 #include <memory>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 
 namespace oxygen {
@@ -37,6 +38,7 @@ struct EngineContext {
   std::shared_ptr<Platform> platform;
   std::weak_ptr<Graphics> gfx_weak;
   std::shared_ptr<AsyncEngine> engine;
+  RendererConfig renderer_config;
 
   // Observed modules (non-owning), owned by the AsyncEngine ModuleManager
   observer_ptr<vortex::Renderer> renderer { nullptr };

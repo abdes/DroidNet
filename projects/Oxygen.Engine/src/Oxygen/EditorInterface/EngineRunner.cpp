@@ -29,7 +29,6 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Vortex/Renderer.h>
 
 namespace {
 
@@ -97,33 +96,6 @@ auto RegisterEngineModules(oxygen::engine::interop::EngineContext& ctx) -> void
       ctx.platform->Input().ForRead());
     ctx.input_system = observer_ptr { input_sys.get() };
     register_module(std::move(input_sys));
-
-#if 0
-    oxygen::RendererConfig renderer_config {
-      .upload_queue_key = ctx.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-    };
-    // Create the Renderer - we need unique_ptr for registration and
-    // observer_ptr for MainModule
-    auto renderer_unique
-      = std::make_unique<engine::Renderer>(ctx.gfx_weak, renderer_config);
-
-    // Graphics main module (replaces RenderController/RenderThread pattern)
-    ctx.renderer = observer_ptr { renderer_unique.get() };
-    register_module(std::make_unique<oxygen::examples::async::MainModule>(ctx));
-
-    // Register as module
-    register_module(std::move(renderer_unique));
-
-    // ImGui module (last): only when not headless and when a graphics backend
-    // exists
-    if (!ctx.headless) {
-      auto imgui_backend = std::make_unique<
-        oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend>();
-      auto imgui_module = std::make_unique<oxygen::imgui::ImGuiModule>(
-        ctx.platform, std::move(imgui_backend));
-      register_module(std::move(imgui_module));
-    }
-#endif
   }
 }
 
@@ -164,7 +136,7 @@ auto AsyncMain(oxygen::engine::interop::EngineContext& ctx)
 
 namespace oxygen::engine::interop {
 
-auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
+auto CreateEngine(const EditorEngineConfig& config) -> std::unique_ptr<EngineContext>
 {
   // Pre-allocate static error messages when we are handling critical failures
   constexpr std::string_view kUnhandledException
@@ -190,31 +162,26 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
     auto ctx = std::make_unique<EngineContext>();
 
     // Create the platform
-    ctx->platform = std::make_shared<Platform>(PlatformConfig {
-      .headless = false,
-      .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
-    });
+    ctx->platform = std::make_shared<Platform>(config.platform);
 
     // Load the graphics backend
-    const GraphicsConfig gfx_config {
-      .enable_debug_layer = DefaultGraphicsDebugLayerEnabled(),
-      .enable_validation = false,
-      .enable_aftermath = DefaultGraphicsAftermathEnabled(),
-      .preferred_card_name = std::nullopt,
-      .headless = false,
-      .enable_vsync = false,
-      .extra = {},
-    };
     const auto& loader = GraphicsBackendLoader::GetInstanceRelaxed();
     ctx->gfx_weak = loader.LoadBackend(graphics::BackendType::kDirect3D12,
-      gfx_config, config.path_finder_config);
+      config.engine.graphics, config.engine.path_finder_config);
     CHECK_F(
       !ctx->gfx_weak.expired()); // Expect a valid graphics backend, or abort
     ctx->gfx_weak.lock()->CreateCommandQueues(ctx->queue_strategy);
 
+    ctx->renderer_config = config.renderer;
+    if (ctx->renderer_config.upload_queue_key.empty()) {
+      ctx->renderer_config.upload_queue_key =
+        ctx->queue_strategy.KeyFor(graphics::QueueRole::kTransfer).get();
+    }
+
     // Create the async engine
     ctx->engine
-      = std::make_shared<AsyncEngine>(ctx->platform, ctx->gfx_weak, config);
+      = std::make_shared<AsyncEngine>(ctx->platform, ctx->gfx_weak,
+        config.engine);
 
     return ctx;
   } catch (const std::exception& ex) {
@@ -234,6 +201,16 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
   }
 
   return {};
+}
+
+auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
+{
+  EditorEngineConfig editor_config;
+  editor_config.engine = config;
+  editor_config.platform.headless = config.graphics.headless;
+  editor_config.renderer.path_finder_config = config.path_finder_config;
+  editor_config.renderer.enable_imgui = config.graphics.enable_imgui;
+  return CreateEngine(editor_config);
 }
 
 auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void

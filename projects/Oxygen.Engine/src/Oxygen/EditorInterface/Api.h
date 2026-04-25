@@ -29,9 +29,17 @@ struct LoggingConfig {
   const char* vmodules { nullptr };
 };
 
+struct EditorEngineConfig {
+  PlatformConfig platform;
+  EngineConfig engine;
+  RendererConfig renderer;
+};
+
 OXGN_EI_API auto ConfigureLogging(const LoggingConfig& config) -> bool;
 OXGN_EI_API auto LogInfoMessage(const char* message) -> void;
 
+OXGN_EI_API auto CreateEngine(const EditorEngineConfig& config)
+  -> std::unique_ptr<EngineContext>;
 OXGN_EI_API auto CreateEngine(const EngineConfig& config)
   -> std::unique_ptr<EngineContext>;
 OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
