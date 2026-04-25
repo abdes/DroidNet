@@ -19,15 +19,17 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen {
   class Graphics;
   namespace engine {
-    class Renderer;
     struct RenderContext;
   } // namespace engine
+  namespace vortex {
+    class Renderer;
+  } // namespace vortex
   namespace graphics {
     class CommandRecorder;
     class Framebuffer;
@@ -108,7 +110,7 @@ namespace oxygen::interop::module {
     // Phase hooks
     void Initialize(scene::Scene& scene);
     void OnSceneMutation(); // Uses context from SetRenderingContext
-    auto OnPreRender(engine::Renderer& renderer) -> oxygen::co::Co<>;
+    auto OnPreRender(vortex::Renderer& renderer) -> oxygen::co::Co<>;
 
     // State management
     void Show();
@@ -163,12 +165,12 @@ namespace oxygen::interop::module {
     }
 
     // Renderer registration
-    void RegisterWithRenderer(engine::Renderer& renderer);
-    void UnregisterFromRenderer(engine::Renderer& renderer);
+    void RegisterWithRenderer(vortex::Renderer& renderer);
+    void UnregisterFromRenderer(vortex::Renderer& renderer);
 
     // Render graph customization
     void
-      SetRenderGraph(std::shared_ptr<engine::Renderer::RenderGraphFactory> factory);
+      SetRenderGraph(std::shared_ptr<vortex::Renderer::RenderGraphFactory> factory);
 
   public:
     //! Gets the current orthographic half-height used to derive extents.
@@ -204,11 +206,11 @@ namespace oxygen::interop::module {
 
     // Rendering
     std::unique_ptr<ViewRenderer> renderer_;
-    std::shared_ptr<engine::Renderer::RenderGraphFactory> render_graph_factory_;
+    std::shared_ptr<vortex::Renderer::RenderGraphFactory> render_graph_factory_;
 
     std::weak_ptr<Graphics> graphics_;
     std::weak_ptr<scene::Scene> scene_;
-    oxygen::observer_ptr<engine::Renderer> renderer_module_{ nullptr };
+    oxygen::observer_ptr<vortex::Renderer> renderer_module_{ nullptr };
 
     // Phase-specific context (valid only during OnSceneMutation)
     const EditorViewContext* current_context_{ nullptr };

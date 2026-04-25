@@ -11,9 +11,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/ViewResolver.h>
 
-namespace oxygen::engine {
+namespace oxygen::vortex {
 class Renderer;
-} // namespace oxygen::engine
+} // namespace oxygen::vortex
 
 namespace oxygen::graphics {
 class Framebuffer;
@@ -32,10 +32,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ViewRenderer)
 
   // Register this view with the engine's renderer module
-  void RegisterWithEngine(engine::Renderer& renderer, ViewId view_id, engine::ViewResolver resolver);
+  void RegisterWithEngine(vortex::Renderer& renderer, ViewId view_id,
+    ResolvedView resolved_view);
 
   // Unregister this view from the engine's renderer module
-  void UnregisterFromEngine(engine::Renderer& renderer);
+  void UnregisterFromEngine(vortex::Renderer& renderer);
 
   // Configure render passes (called during OnPreRender)
   void Configure();

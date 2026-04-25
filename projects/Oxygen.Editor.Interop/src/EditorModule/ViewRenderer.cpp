@@ -37,38 +37,42 @@ void ViewRenderer::SetFramebuffer(std::shared_ptr<graphics::Framebuffer> fb)
   }
 }
 
-void ViewRenderer::RegisterWithEngine(engine::Renderer& renderer, ViewId view_id, engine::ViewResolver resolver)
+void ViewRenderer::RegisterWithEngine(vortex::Renderer& renderer, ViewId view_id,
+  ResolvedView resolved_view)
 {
   if (registered_) {
     if (view_id_ != view_id) {
       LOG_F(ERROR, "ViewRenderer already registered with different ViewId!");
+      return;
     }
+    renderer.RegisterResolvedView(view_id, std::move(resolved_view));
     return;
   }
 
   view_id_ = view_id;
 
-  engine::Renderer::RenderGraphFactory factory = [this](ViewId id, const engine::RenderContext& ctx, graphics::CommandRecorder& rec) -> co::Co<void> {
+  vortex::Renderer::RenderGraphFactory factory = [this](ViewId id, const vortex::RenderContext& ctx, graphics::CommandRecorder& rec) -> co::Co<void> {
     if (render_graph_) {
       co_await render_graph_->RunPasses(ctx, rec);
     }
     co_return;
   };
 
-  renderer.RegisterView(view_id, std::move(resolver), std::move(factory));
+  renderer.RegisterViewRenderGraph(
+    view_id, std::move(factory), std::move(resolved_view));
 
   registered_ = true;
   LOG_F(INFO, "ViewRenderer registered with Engine for ViewId {}", view_id.get());
 }
 
-void ViewRenderer::UnregisterFromEngine(engine::Renderer& renderer)
+void ViewRenderer::UnregisterFromEngine(vortex::Renderer& renderer)
 {
   if (!registered_) {
     return;
   }
 
   try {
-    renderer.UnregisterView(view_id_);
+    renderer.UnregisterViewRenderGraph(view_id_);
   } catch (const std::exception& ex) {
     LOG_F(WARNING, "Failed to unregister view {}: {}", view_id_.get(), ex.what());
   }

@@ -90,16 +90,13 @@
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/InputEvent.h>
-#include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #pragma warning(pop)
 
 #pragma managed(pop)

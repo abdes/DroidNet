@@ -31,9 +31,10 @@ namespace oxygen {
   } // namespace scene
 
   namespace content {
-    class AssetLoader;
+    class IAssetLoader;
     class VirtualPathResolver;
   }
+  class IAsyncEngine;
 
   // AsyncEngine lives in the root oxygen namespace
   class AsyncEngine;
@@ -103,16 +104,16 @@ namespace oxygen::interop::module {
         oxygen::core::PhaseId::kSceneMutation>();
     }
 
-    auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+    auto OnAttached(oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
       -> bool override;
-    auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-    auto OnSceneMutation(oxygen::engine::FrameContext& context)
+    auto OnFrameStart(oxygen::observer_ptr<oxygen::engine::FrameContext> context) -> void override;
+    auto OnSceneMutation(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
-    auto OnPreRender(oxygen::engine::FrameContext& context)
+    auto OnPreRender(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
-    auto OnRender(oxygen::engine::FrameContext& context)
+    auto OnRender(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
-    auto OnCompositing(oxygen::engine::FrameContext& context)
+    auto OnCompositing(oxygen::observer_ptr<oxygen::engine::FrameContext> context)
       -> oxygen::co::Co<> override;
 
     // Ensure framebuffers for all registered surfaces (creates depth textures
@@ -181,10 +182,10 @@ namespace oxygen::interop::module {
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
-    oxygen::observer_ptr<oxygen::AsyncEngine> engine_{};
+    oxygen::observer_ptr<oxygen::IAsyncEngine> engine_{};
 
     std::shared_ptr<oxygen::scene::Scene> scene_;
-    oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader_{};
+    oxygen::observer_ptr<oxygen::content::IAssetLoader> asset_loader_{};
     std::unique_ptr<oxygen::content::VirtualPathResolver> path_resolver_;
 
     // Roots management for thread-safe AssetLoader initialization

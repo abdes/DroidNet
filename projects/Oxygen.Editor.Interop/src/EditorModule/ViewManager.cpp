@@ -40,8 +40,10 @@ namespace oxygen::interop::module {
               engine::ViewMetadata{
                   .name = config.name,
                   .purpose = config.purpose,
+                  .is_scene_view = true,
               },
-          .output = nullptr,
+          .render_target = {},
+          .composite_source = {},
       };
 
       ViewId engine_id = active_frame_ctx_->RegisterView(std::move(vc));
@@ -262,8 +264,10 @@ namespace oxygen::interop::module {
             .view = view,
             .metadata =
                 engine::ViewMetadata{.name = entry.view->GetConfig().name,
-                                     .purpose = entry.view->GetConfig().purpose},
-            .output = nullptr,
+                                     .purpose = entry.view->GetConfig().purpose,
+                                     .is_scene_view = true},
+            .render_target = {},
+            .composite_source = {},
         };
 
         active_frame_ctx_->UpdateView(id, std::move(vc));

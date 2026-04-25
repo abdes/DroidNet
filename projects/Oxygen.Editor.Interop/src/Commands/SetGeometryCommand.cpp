@@ -9,6 +9,8 @@
 #include "pch.h"
 
 #include <array>
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <mutex>
 #include <string_view>
@@ -17,32 +19,18 @@
 #include <Commands/SetGeometryCommand.h>
 #include <EditorModule/EditorCommand.h>
 
-#include <Oxygen/Base/Hash.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 
 namespace {
 
 auto MakeDeterministicAssetKey(std::string_view seed) -> oxygen::data::AssetKey
 {
-  oxygen::data::AssetKey key { };
-
-  const std::uint64_t h1 = oxygen::ComputeFNV1a64(seed.data(), seed.size());
-  const auto salted = std::string(seed) + "#generated_v1";
-  const std::uint64_t h2
-    = oxygen::ComputeFNV1a64(salted.data(), salted.size());
-
-  for (int i = 0; i < 8; ++i) {
-    key.guid[static_cast<std::size_t>(i)]
-      = static_cast<std::uint8_t>((h1 >> (i * 8)) & 0xFF);
-    key.guid[static_cast<std::size_t>(8 + i)]
-      = static_cast<std::uint8_t>((h2 >> (i * 8)) & 0xFF);
-  }
-
-  return key;
+  return oxygen::data::AssetKey::FromVirtualPath(seed);
 }
 
 auto TryGetCachedGeneratedGeometry(const oxygen::data::AssetKey& key)
@@ -121,7 +109,7 @@ namespace oxygen::interop::module {
         auto material = oxygen::data::MaterialAsset::CreateDefault();
 
         auto& [vertices, indices] = mesh_data.value();
-        oxygen::data::pak::MeshViewDesc view_desc{};
+        oxygen::data::pak::geometry::MeshViewDesc view_desc{};
         view_desc.first_vertex = 0;
         view_desc.vertex_count = static_cast<uint32_t>(vertices.size());
         view_desc.first_index = 0;
@@ -135,7 +123,7 @@ namespace oxygen::interop::module {
           .EndSubMesh()
           .Build();
 
-        oxygen::data::pak::GeometryAssetDesc geo_desc{};
+        oxygen::data::pak::geometry::GeometryAssetDesc geo_desc{};
         geo_desc.header.asset_type = 6; // Geometry type
         geo_desc.header.version = 1;
         strncpy_s(geo_desc.header.name, sizeof(geo_desc.header.name),
@@ -179,12 +167,12 @@ namespace oxygen::interop::module {
       auto key = context.PathResolver->ResolveAssetKey(virtualPath);
       if (key) {
         LOG_F(INFO, "SetGeometryCommand: resolved key, loading asset...");
-        geometry = context.AssetLoader->GetAsset<oxygen::data::GeometryAsset>(*key);
+        geometry = context.AssetLoader->GetGeometryAsset(*key);
         if (!geometry) {
           started_async_load = true;
           const auto asset_key = *key;
           const auto node = scene_node;
-          context.AssetLoader->StartLoadAsset<oxygen::data::GeometryAsset>(
+          context.AssetLoader->StartLoadGeometryAsset(
             asset_key,
             [node, asset_uri](
               std::shared_ptr<oxygen::data::GeometryAsset> loaded) {
