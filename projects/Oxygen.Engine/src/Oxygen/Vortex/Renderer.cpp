@@ -52,6 +52,10 @@
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewColorData.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
+#include <Oxygen/Vortex/Upload/RingBufferStaging.h>
+#include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::internal {
 
