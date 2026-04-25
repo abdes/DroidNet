@@ -2054,7 +2054,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->draw_log_.draws.clear();
   graphics_->dispatch_log_.dispatches.clear();
-  graphics_->indirect_log_.counted_draws.clear();
+  graphics_->indirect_log_.draws.clear();
 
   service.RenderSkyAndFog(ctx, scene_textures);
 
@@ -2075,11 +2075,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(stage15.local_fog_draw_count, 1U);
   EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
   EXPECT_EQ(graphics_->draw_log_.draws.size(), 3U);
-  ASSERT_EQ(graphics_->indirect_log_.counted_draws.size(), 1U);
-  EXPECT_EQ(graphics_->indirect_log_.counted_draws[0].command_desc.kind,
+  ASSERT_EQ(graphics_->indirect_log_.draws.size(), 1U);
+  EXPECT_EQ(graphics_->indirect_log_.draws[0].command_desc.kind,
     oxygen::graphics::CommandRecorder::IndirectCommandKind::kDraw);
-  EXPECT_NE(
-    graphics_->indirect_log_.counted_draws[0].execution_desc.count_buffer,
+  EXPECT_EQ(graphics_->indirect_log_.draws[0].execution_desc.command_count,
+    oxygen::graphics::CommandRecorder::IndirectCommandCount { 1U });
+  EXPECT_EQ(graphics_->indirect_log_.draws[0].execution_desc.count_buffer,
     nullptr);
 }
 
@@ -2228,7 +2229,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->draw_log_.draws.clear();
   graphics_->dispatch_log_.dispatches.clear();
-  graphics_->indirect_log_.counted_draws.clear();
+  graphics_->indirect_log_.draws.clear();
 
   service.RenderSkyAndFog(ctx, scene_textures);
 
@@ -2253,7 +2254,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(stage15.total_draw_count, 0U);
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
   EXPECT_TRUE(graphics_->dispatch_log_.dispatches.empty());
-  EXPECT_TRUE(graphics_->indirect_log_.counted_draws.empty());
+  EXPECT_TRUE(graphics_->indirect_log_.draws.empty());
 }
 
 } // namespace

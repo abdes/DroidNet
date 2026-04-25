@@ -35,7 +35,6 @@ void VortexLocalFogVolumeTiledCullingCS(uint3 dispatch_id : SV_DispatchThreadID)
         || pass.tile_data_texture_slot == K_INVALID_BINDLESS_INDEX
         || pass.occupied_tile_buffer_slot == K_INVALID_BINDLESS_INDEX
         || pass.indirect_args_buffer_slot == K_INVALID_BINDLESS_INDEX
-        || pass.indirect_count_buffer_slot == K_INVALID_BINDLESS_INDEX
         || pass.instance_count == 0u
         || dispatch_id.x >= pass.tile_resolution_x
         || dispatch_id.y >= pass.tile_resolution_y)
@@ -50,8 +49,6 @@ void VortexLocalFogVolumeTiledCullingCS(uint3 dispatch_id : SV_DispatchThreadID)
         = ResourceDescriptorHeap[pass.occupied_tile_buffer_slot];
     RWStructuredBuffer<uint> indirect_args
         = ResourceDescriptorHeap[pass.indirect_args_buffer_slot];
-    RWStructuredBuffer<uint> indirect_count
-        = ResourceDescriptorHeap[pass.indirect_count_buffer_slot];
     StructuredBuffer<LocalFogVolumeCullingData> culling_instances
         = ResourceDescriptorHeap[pass.instance_culling_buffer_slot];
 
@@ -131,12 +128,6 @@ void VortexLocalFogVolumeTiledCullingCS(uint3 dispatch_id : SV_DispatchThreadID)
     }
 
     uint write_index = 0u;
-    InterlockedAdd(indirect_count[0], 1u, write_index);
+    InterlockedAdd(indirect_args[1], 1u, write_index);
     occupied_tiles[write_index] = PackLocalFogTile(tile_coord);
-
-    const uint command_offset = write_index * 4u;
-    indirect_args[command_offset + 0u] = 6u;
-    indirect_args[command_offset + 1u] = 1u;
-    indirect_args[command_offset + 2u] = 0u;
-    indirect_args[command_offset + 3u] = write_index;
 }

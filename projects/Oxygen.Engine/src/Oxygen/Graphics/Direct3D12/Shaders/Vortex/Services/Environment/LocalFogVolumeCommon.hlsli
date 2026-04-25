@@ -52,12 +52,12 @@ struct LocalFogTiledCullingPassConstants
     uint tile_data_texture_slot;
     uint occupied_tile_buffer_slot;
     uint indirect_args_buffer_slot;
-    uint indirect_count_buffer_slot;
     uint instance_count;
     uint tile_resolution_x;
     uint tile_resolution_y;
     uint max_instances_per_tile;
     uint use_hzb;
+    uint _pad0;
     uint _pad1;
     float4 left_plane;
     float4 right_plane;
