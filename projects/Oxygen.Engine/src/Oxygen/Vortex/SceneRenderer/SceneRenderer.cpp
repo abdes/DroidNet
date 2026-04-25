@@ -944,14 +944,49 @@ namespace {
     };
   }
 
+  auto ResolveFramebufferExtent(const graphics::Framebuffer* framebuffer)
+    -> std::optional<glm::uvec2>
+  {
+    if (framebuffer == nullptr) {
+      return std::nullopt;
+    }
+
+    const auto& desc = framebuffer->GetDescriptor();
+    if (!desc.color_attachments.empty()
+      && desc.color_attachments.front().texture != nullptr) {
+      const auto& texture_desc
+        = desc.color_attachments.front().texture->GetDescriptor();
+      return glm::uvec2 {
+        std::max(1U, texture_desc.width),
+        std::max(1U, texture_desc.height),
+      };
+    }
+
+    if (desc.depth_attachment.IsValid()) {
+      const auto& texture_desc
+        = desc.depth_attachment.texture->GetDescriptor();
+      return glm::uvec2 {
+        std::max(1U, texture_desc.width),
+        std::max(1U, texture_desc.height),
+      };
+    }
+
+    return std::nullopt;
+  }
+
   auto ResolveFrameViewportExtent(const engine::FrameContext& frame)
     -> std::optional<glm::uvec2>
   {
     // Preserve the future multi-view shell by sizing against the maximum
-    // scene-view envelope. Only fall back to non-scene views when no scene
-    // views exist.
+    // scene-view viewport envelope only while views have not materialized
+    // targets yet. Once a view has target pointers, frame start deliberately
+    // avoids dereferencing them because resize can replace their owners before
+    // the view lifecycle republishes fresh frame-context targets. The
+    // render-time sync below uses the authoritative framebuffer extent.
     auto max_scene_extent = std::optional<glm::uvec2> {};
     auto max_non_scene_extent = std::optional<glm::uvec2> {};
+    auto has_scene_target = false;
+    auto has_non_scene_target = false;
 
     const auto accumulate = [](std::optional<glm::uvec2>& current,
                               const glm::uvec2 candidate) -> void {
@@ -965,6 +1000,17 @@ namespace {
 
     for (const auto& view_ref : frame.GetViews()) {
       const auto& view = view_ref.get();
+      const auto has_target
+        = view.render_target != nullptr || view.composite_source != nullptr;
+      if (view.metadata.is_scene_view) {
+        has_scene_target = has_scene_target || has_target;
+      } else {
+        has_non_scene_target = has_non_scene_target || has_target;
+      }
+      if (has_target) {
+        continue;
+      }
+
       const auto viewport_extent = ResolveViewportExtent(view);
       if (!viewport_extent.has_value()) {
         continue;
@@ -977,10 +1023,48 @@ namespace {
       }
     }
 
+    if (has_scene_target) {
+      return std::nullopt;
+    }
     if (max_scene_extent.has_value()) {
       return max_scene_extent;
     }
+    if (has_non_scene_target) {
+      return std::nullopt;
+    }
     return max_non_scene_extent;
+  }
+
+  auto ResolveRenderContextTargetExtent(const RenderContext& ctx)
+    -> std::optional<glm::uvec2>
+  {
+    auto extent = std::optional<glm::uvec2> {};
+    const auto accumulate = [&extent](const graphics::Framebuffer* framebuffer,
+                              const char* target_name) -> void {
+      const auto candidate = ResolveFramebufferExtent(framebuffer);
+      if (!candidate.has_value()) {
+        return;
+      }
+      if (!extent.has_value()) {
+        extent = candidate;
+        return;
+      }
+
+      CHECK_F(*extent == *candidate,
+        "SceneRenderer: current view render targets have inconsistent "
+        "extents while resolving {} ({}x{} vs {}x{})",
+        target_name, extent->x, extent->y, candidate->x, candidate->y);
+    };
+
+    if (const auto* active_view = ctx.GetActiveViewEntry();
+      active_view != nullptr) {
+      accumulate(active_view->render_target.get(), "render_target");
+      accumulate(active_view->composite_source.get(), "composite_source");
+      accumulate(active_view->primary_target.get(), "primary_target");
+    }
+    accumulate(ctx.pass_target.get(), "pass_target");
+
+    return extent;
   }
 
   auto ResolveDepthSrvFormat(const Format texture_format) -> Format
@@ -1193,7 +1277,7 @@ void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
 {
   if (const auto frame_extent = ResolveFrameViewportExtent(frame);
     frame_extent.has_value() && *frame_extent != scene_textures_.GetExtent()) {
-    scene_textures_.Resize(*frame_extent);
+    ResizeSceneTextureFamily(*frame_extent);
   }
 
   setup_mode_.Reset();
@@ -1243,6 +1327,11 @@ void SceneRenderer::PrimePreparedView(RenderContext& ctx)
 void SceneRenderer::OnRender(RenderContext& ctx)
 {
   deferred_lighting_state_ = {};
+  if (const auto target_extent = ResolveRenderContextTargetExtent(ctx);
+    target_extent.has_value() && *target_extent != scene_textures_.GetExtent()) {
+    ResizeSceneTextureFamily(*target_extent);
+  }
+
   const auto shading_mode = ResolveShadingModeForCurrentView(ctx);
   ctx.current_view.screen_hzb_request
     = ResolveScreenHzbRequest(ctx, shading_mode);
@@ -1832,6 +1921,22 @@ void SceneRenderer::RefreshSceneTextureBindings()
         texture, MakeSrvDesc(texture, texture.GetDescriptor().format));
     }
   }
+}
+
+void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
+{
+  if (new_extent == scene_textures_.GetExtent()) {
+    return;
+  }
+
+  LOG_F(INFO,
+    "SceneRenderer resizing scene textures from {}x{} to {}x{}",
+    scene_textures_.GetExtent().x, scene_textures_.GetExtent().y,
+    new_extent.x, new_extent.y);
+  scene_textures_.Resize(new_extent);
+  setup_mode_.Reset();
+  scene_texture_bindings_.Invalidate();
+  ResetExtractArtifacts();
 }
 
 void SceneRenderer::ResetExtractArtifacts()

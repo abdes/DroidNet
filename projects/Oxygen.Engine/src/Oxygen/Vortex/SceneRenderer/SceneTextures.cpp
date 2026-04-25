@@ -309,6 +309,11 @@ void SceneTextures::RegisterTexture(RegisteredTexture& texture)
   if (texture.resource == nullptr) {
     return;
   }
+  // Native resource handles can be reused by the backend after a resize. Drop
+  // any queue-level state keyed by the same native handle before the new scene
+  // texture participates in command recording; its descriptor initial_state is
+  // the authoritative starting state for this allocation.
+  gfx_.ForgetKnownResourceState(*texture.resource);
   gfx_.GetResourceRegistry().Register(texture.resource);
 }
 

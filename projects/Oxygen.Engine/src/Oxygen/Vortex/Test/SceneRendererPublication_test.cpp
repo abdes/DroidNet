@@ -392,8 +392,10 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
 
   PrepareFrameContext(
     frame_context, oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
-  auto resized_view
-    = MakeView(oxygen::observer_ptr { framebuffer.get() }, 128.0F, 72.0F, true);
+  auto resized_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Resize.NewTarget", 128U, 72U);
+  auto resized_view = MakeView(
+    oxygen::observer_ptr { resized_framebuffer.get() }, 128.0F, 72.0F, true);
   resized_view.id = view_id;
   frame_context.UpdateView(view_id, resized_view);
 
@@ -413,6 +415,77 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(scene_renderer->GetPublishedViewFrameBindings().scene_texture_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  RenderTimeResizeTracksTargetsUpdatedAfterFrameStart)
+{
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.LateResize", 16U);
+
+  auto first_frame = FrameContext {};
+  PrepareFrameContext(
+    first_frame, oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  first_frame.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  auto initial_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.LateResize.Initial", 96U, 54U);
+  auto initial_view = MakeView(
+    oxygen::observer_ptr { initial_framebuffer.get() }, 96.0F, 54.0F, true);
+  const auto view_id = first_frame.RegisterView(initial_view);
+  renderer_->RegisterResolvedView(view_id, MakeResolvedView(96.0F, 54.0F));
+
+  RunRendererFrame(first_frame);
+
+  auto* scene_renderer = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  ASSERT_NE(scene_renderer, nullptr);
+  ASSERT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 96U, 54U }));
+
+  auto resize_frame = FrameContext {};
+  PrepareFrameContext(
+    resize_frame, oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  resize_frame.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  auto old_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.LateResize.Old", 96U, 54U);
+  auto new_framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.LateResize.New", 192U, 108U);
+  auto stale_view = MakeView(
+    oxygen::observer_ptr { old_framebuffer.get() }, 96.0F, 54.0F, true);
+  const auto resize_view_id = resize_frame.RegisterView(stale_view);
+  renderer_->RegisterResolvedView(
+    resize_view_id, MakeResolvedView(96.0F, 54.0F));
+
+  renderer_->OnFrameStart(oxygen::observer_ptr<FrameContext> { &resize_frame });
+  ASSERT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 96U, 54U }));
+
+  auto resized_view = MakeView(
+    oxygen::observer_ptr { new_framebuffer.get() }, 96.0F, 54.0F, true);
+  resized_view.id = resize_view_id;
+  resize_frame.UpdateView(resize_view_id, resized_view);
+
+  auto loop = TestEventLoop {};
+  EXPECT_NO_THROW(
+    oxygen::co::Run(loop, RunRenderAsync(renderer_, &resize_frame)));
+  renderer_->OnFrameEnd(oxygen::observer_ptr<FrameContext> { &resize_frame });
+
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 192U, 108U }));
+
+  auto steady_frame = FrameContext {};
+  PrepareFrameContext(
+    steady_frame, oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  steady_frame.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+  auto steady_view = MakeView(
+    oxygen::observer_ptr { new_framebuffer.get() }, 96.0F, 54.0F, true);
+  const auto steady_view_id = steady_frame.RegisterView(steady_view);
+  renderer_->RegisterResolvedView(
+    steady_view_id, MakeResolvedView(96.0F, 54.0F));
+
+  renderer_->OnFrameStart(oxygen::observer_ptr<FrameContext> { &steady_frame });
+
+  EXPECT_EQ(scene_renderer->GetSceneTextures().GetExtent(),
+    (glm::uvec2 { 192U, 108U }));
 }
 
 NOLINT_TEST_F(SceneRendererPublicationTest,
