@@ -421,6 +421,32 @@ def max_sample_delta(a_sample, b_sample):
     return max(deltas) if deltas else 0.0
 
 
+def far_depth_probe_delta(depth_sample, a_sample, b_sample, far_depth=0.0, epsilon=1.0e-6):
+    if depth_sample is None or a_sample is None or b_sample is None:
+        return 0.0, 0
+
+    max_delta = 0.0
+    sample_count = 0
+    for probe_name, depth_values in depth_sample["probes"].items():
+        if abs(depth_values[0] - far_depth) > epsilon:
+            continue
+        if probe_name not in a_sample["probes"] or probe_name not in b_sample["probes"]:
+            continue
+        sample_count += 1
+        max_delta = max(
+            max_delta,
+            max(
+                abs(value)
+                for value in vec_diff(
+                    a_sample["probes"][probe_name],
+                    b_sample["probes"][probe_name],
+                )
+            ),
+        )
+
+    return max_delta, sample_count
+
+
 def make_sample_subresource(rd, sample):
     sub = rd.Subresource()
     sub.mip = int(sample["mip"])
@@ -702,12 +728,23 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_local_fog_scene_color_delta,
         stage15_local_fog_scene_color_dense_delta,
     )
+    stage15_local_fog_far_depth_delta, stage15_local_fog_far_depth_sample_count = (
+        far_depth_probe_delta(
+            stage3["depth"],
+            stage15_fog_scene_color,
+            stage15_local_fog_scene_color,
+        )
+    )
     stage15_sky_scene_color_changed = stage15_sky_scene_color_delta > 1.0e-5
     stage15_atmosphere_scene_color_changed = (
         stage15_atmosphere_scene_color_delta > 1.0e-5
     )
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
     stage15_local_fog_scene_color_changed = stage15_local_fog_scene_color_delta > 1.0e-5
+    stage15_local_fog_far_depth_unchanged = (
+        stage15_local_fog_far_depth_sample_count > 0
+        and stage15_local_fog_far_depth_delta <= 1.0e-5
+    )
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     stage3_depth_width = stage3["depth"]["width"] if stage3["depth"] is not None else 0
     stage3_depth_height = stage3["depth"]["height"] if stage3["depth"] is not None else 0
@@ -990,6 +1027,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append(
+        "stage15_local_fog_far_depth_delta_max={:.6f}".format(
+            stage15_local_fog_far_depth_delta
+        )
+    )
+    report.append(
+        "stage15_local_fog_far_depth_sample_count={}".format(
+            stage15_local_fog_far_depth_sample_count
+        )
+    )
+    report.append(
         "stage15_sky_scene_color_changed={}".format(
             str(stage15_sky_scene_color_changed).lower()
         )
@@ -1007,6 +1054,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "stage15_local_fog_scene_color_changed={}".format(
             str(stage15_local_fog_scene_color_changed).lower()
+        )
+    )
+    report.append(
+        "stage15_local_fog_far_depth_unchanged={}".format(
+            str(stage15_local_fog_far_depth_unchanged).lower()
         )
     )
     report.append("screen_hzb_expected_width={}".format(expected_screen_hzb_width))
@@ -1064,6 +1116,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and stage15_atmosphere_scene_color_changed
         and stage15_fog_scene_color_changed
         and stage15_local_fog_scene_color_changed
+        and stage15_local_fog_far_depth_unchanged
         and screen_hzb_published
         and local_fog_hzb_consumed
         and local_fog_indirect_draw_valid

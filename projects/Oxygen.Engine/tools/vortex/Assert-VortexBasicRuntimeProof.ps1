@@ -103,6 +103,8 @@ $expectedProductChecks = @{
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
+  'stage15_local_fog_scene_color_changed' = 'true'
+  'stage15_local_fog_far_depth_unchanged' = 'true'
   'integrated_light_scattering_published' = 'true'
   'stage9_has_expected_targets' = 'true'
   'stage9_gbuffer_base_color_nonzero' = 'true'
@@ -368,6 +370,7 @@ $localFogValidationResults = @{
   'local_fog_volume_instance_count_valid' = $localFogInstanceCountValid
   'local_fog_tiled_culling_valid' = $localFogTiledCullingValid
   'local_fog_scene_color_changed' = $effectiveProductsReportMap['stage15_local_fog_scene_color_changed']
+  'local_fog_far_depth_unchanged' = $effectiveProductsReportMap['stage15_local_fog_far_depth_unchanged']
 }
 
 $reportLines = @(

@@ -1,6 +1,6 @@
 # VTX-M04D.3 — UE5.7 Local Fog Volume Parity
 
-Status: `in_progress`
+Status: `validated`
 
 ## Purpose
 
@@ -86,14 +86,20 @@ against UE5.7:
 - RenderDoc proof tooling now validates the UE-shaped draw-args packet and
   records the captured occupied-tile instance count.
 
-## Exit Gate
+## Validation Closure
 
-VTX-M04D.3 remains `in_progress` until:
+VTX-M04D.3 is validated for Oxygen's analytical local-fog volume path as of
+2026-04-25:
 
-- implementation exists for every required local-fog parity item above;
-- PLAN and IMPLEMENTATION_STATUS list files changed, UE5.7 references checked,
-  validation commands, and remaining gaps;
-- focused unit tests, shader bake/catalog validation, runtime proof, and
-  capture/analyzer evidence all pass;
-- volumetric-fog local-fog injection is either implemented and proven in
-  VTX-M04D.4 or explicitly still blocked by a documented residual gap.
+- implementation exists for UE-shaped authoring sanitization, sorting/capping,
+  tiled culling, single draw-indirect tiled rendering, analytical integral,
+  lighting/albedo/emissive composition, and far-depth/sky exclusion;
+- focused Scene and EnvironmentLightingService tests pass, including authoring
+  clamps, cap behavior, HZB/no-HZB state, and sub-viewport tile resolution;
+- ShaderBake/catalog validation passes for the local-fog shader changes;
+- VortexBasic runtime/capture validation proves local-fog instance publication,
+  HZB-backed tiled culling, UE-shaped draw args, Stage 15 local-fog SceneColor
+  contribution, far-depth no-op behavior, Stage 15 ordering, and final
+  presentation;
+- VTX-M04D.4 remains the owner for injecting local-fog participating media into
+  volumetric fog.
