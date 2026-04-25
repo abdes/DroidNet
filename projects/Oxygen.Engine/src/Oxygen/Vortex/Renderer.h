@@ -7,7 +7,6 @@
 #pragma once
 
 #include <atomic>
-#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -21,6 +20,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -225,7 +225,7 @@ public:
     OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
-      -> std::expected<ValidatedSinglePassHarnessContext, ValidationReport>;
+      -> oxygen::Result<ValidatedSinglePassHarnessContext, ValidationReport>;
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
@@ -304,7 +304,7 @@ public:
     OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
-      -> std::expected<ValidatedRenderGraphHarness, ValidationReport>;
+      -> oxygen::Result<ValidatedRenderGraphHarness, ValidationReport>;
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
@@ -400,7 +400,7 @@ public:
     OXGN_VRTX_NDAPI auto CanFinalize() const -> bool;
     OXGN_VRTX_API auto Validate() const -> ValidationReport;
     OXGN_VRTX_API auto Finalize()
-      -> std::expected<ValidatedOffscreenSceneSession, ValidationReport>;
+      -> oxygen::Result<ValidatedOffscreenSceneSession, ValidationReport>;
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
