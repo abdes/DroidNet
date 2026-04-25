@@ -145,6 +145,14 @@ with `diagnostic_products_` prefixes in the final validation report.
     `volumetric_fog.integrated_light_scattering_srv`, enabled/valid
     volumetric flags, nonzero grid dimensions, and valid log-depth grid
     parameters
+  - samples the captured `Vortex.Environment.IntegratedLightScattering` 3D
+    resource on representative z slices and requires nonzero RGB with
+    transmittance alpha in range
+
+The broader `Run-VortexBasicRuntimeValidation.ps1` wrapper now reflects the
+VTX-M04D.4 local-fog ownership split: Stage 14 local-fog tiled culling still
+runs, local fog is injected into volumetric fog, and the old Stage 15
+local-fog compose draw is expected to be absent for the volumetric proof path.
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the

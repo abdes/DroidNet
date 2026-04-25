@@ -103,8 +103,7 @@ $expectedProductChecks = @{
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
-  'stage15_local_fog_scene_color_changed' = 'true'
-  'stage15_local_fog_far_depth_unchanged' = 'true'
+  'stage15_local_fog_composed_in_volumetric' = 'true'
   'integrated_light_scattering_published' = 'true'
   'stage9_has_expected_targets' = 'true'
   'stage9_gbuffer_base_color_nonzero' = 'true'
@@ -139,6 +138,7 @@ $diagnosticProductKeys = @(
   'integrated_light_scattering_consumed_by_fog'
   'stage15_atmosphere_scene_color_changed'
   'stage15_local_fog_scene_color_changed'
+  'stage15_local_fog_far_depth_unchanged'
   'overall_verdict'
 )
 
@@ -305,6 +305,16 @@ if (($effectiveProductsReportMap['local_fog_hzb_consumed'] -ne 'true') `
   $localFogHzbProofSource = 'runtime_log+capture_report'
 }
 
+$localFogIndirectDrawProofSource = 'products_report'
+if (($effectiveProductsReportMap['local_fog_indirect_draw_valid'] -ne 'true') `
+  -and $localFogInstanceCount -gt 0 `
+  -and $captureReportMap['stage14_local_fog_scope_count_match'] -eq 'true' `
+  -and $captureReportMap['stage14_local_fog_dispatch_count_match'] -eq 'true' `
+  -and $captureReportMap['stage15_local_fog_scope_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['local_fog_indirect_draw_valid'] = 'true'
+  $localFogIndirectDrawProofSource = 'runtime_log+capture_report'
+}
+
 $transmittanceLutProofSource = 'runtime_log'
 if ($runtimeTransmittanceLutPublished) {
   $effectiveProductsReportMap['transmittance_lut_published'] = 'true'
@@ -367,8 +377,10 @@ $localFogValidationResults = @{
   'local_fog_hzb_consumed' = $effectiveProductsReportMap['local_fog_hzb_consumed']
   'local_fog_hzb_proof_source' = $localFogHzbProofSource
   'local_fog_indirect_draw_valid' = $effectiveProductsReportMap['local_fog_indirect_draw_valid']
+  'local_fog_indirect_draw_proof_source' = $localFogIndirectDrawProofSource
   'local_fog_volume_instance_count_valid' = $localFogInstanceCountValid
   'local_fog_tiled_culling_valid' = $localFogTiledCullingValid
+  'local_fog_composed_in_volumetric' = $effectiveProductsReportMap['stage15_local_fog_composed_in_volumetric']
   'local_fog_scene_color_changed' = $effectiveProductsReportMap['stage15_local_fog_scene_color_changed']
   'local_fog_far_depth_unchanged' = $effectiveProductsReportMap['stage15_local_fog_far_depth_unchanged']
 }

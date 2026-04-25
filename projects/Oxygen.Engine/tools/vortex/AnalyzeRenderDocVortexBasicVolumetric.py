@@ -95,6 +95,99 @@ def records_under_prefix(action_records, prefix):
     return [record for record in action_records if record.path.startswith(prefix_with_sep)]
 
 
+def float4_values(pixel_value):
+    return [float(value) for value in list(pixel_value.floatValue)[:4]]
+
+
+def format_values(values):
+    return ",".join("{:.9g}".format(value) for value in values)
+
+
+def texture_desc_map(controller):
+    descriptions = {}
+    for desc in controller.GetTextures():
+        resource_id = safe_getattr(desc, "resourceId")
+        if resource_id is None:
+            continue
+        descriptions[str(resource_id)] = desc
+    return descriptions
+
+
+def sample_integrated_volume(controller, rd, texture_descs, resource_id):
+    texture_desc = texture_descs.get(str(resource_id))
+    if texture_desc is None:
+        return {
+            "sampled": False,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "slices": [],
+            "min": [0.0, 0.0, 0.0, 0.0],
+            "max": [0.0, 0.0, 0.0, 0.0],
+            "rgb_nonzero": False,
+            "alpha_valid": False,
+        }
+
+    width = int(safe_getattr(texture_desc, "width", 1) or 1)
+    height = int(safe_getattr(texture_desc, "height", 1) or 1)
+    depth = int(
+        safe_getattr(texture_desc, "depth", 0)
+        or safe_getattr(texture_desc, "arraysize", 1)
+        or 1
+    )
+    width = max(width, 1)
+    height = max(height, 1)
+    depth = max(depth, 1)
+    candidate_slices = sorted(set([0, depth // 2, depth - 1]))
+    all_min = [float("inf")] * 4
+    all_max = [float("-inf")] * 4
+    slice_reports = []
+    for slice_index in candidate_slices:
+        sub = rd.Subresource()
+        sub.mip = 0
+        sub.slice = int(slice_index)
+        sub.sample = 0
+        min_value, max_value = controller.GetMinMax(
+            resource_id, sub, rd.CompType.Typeless
+        )
+        min_values = float4_values(min_value)
+        max_values = float4_values(max_value)
+        center = controller.PickPixel(
+            resource_id,
+            max(0, min(width - 1, width // 2)),
+            max(0, min(height - 1, height // 2)),
+            sub,
+            rd.CompType.Typeless,
+        )
+        center_values = float4_values(center)
+        all_min = [min(all_min[i], min_values[i]) for i in range(4)]
+        all_max = [max(all_max[i], max_values[i]) for i in range(4)]
+        slice_reports.append(
+            {
+                "slice": slice_index,
+                "min": min_values,
+                "max": max_values,
+                "center": center_values,
+            }
+        )
+
+    rgb_nonzero = max(abs(value) for value in all_max[:3]) > 1.0e-6 or max(
+        abs(all_max[index] - all_min[index]) for index in range(3)
+    ) > 1.0e-6
+    alpha_valid = all_min[3] >= -1.0e-5 and all_max[3] <= 1.0 + 1.0e-5
+    return {
+        "sampled": len(slice_reports) > 0,
+        "width": width,
+        "height": height,
+        "depth": depth,
+        "slices": slice_reports,
+        "min": all_min,
+        "max": all_max,
+        "rgb_nonzero": rgb_nonzero,
+        "alpha_valid": alpha_valid,
+    }
+
+
 def collect_event_ids(scope_records, child_records):
     event_ids = {record.event_id for record in child_records}
     event_ids.update(record.event_id for record in scope_records)
@@ -197,6 +290,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     action_records = collect_action_records(controller)
     resource_records = collect_resource_records_raw(controller)
     resource_names = resource_id_to_name(controller)
+    texture_descs = texture_desc_map(controller)
 
     volumetric_scope = records_with_name(action_records, VOLUMETRIC_SCOPE)
     volumetric_records = records_under_prefix(action_records, VOLUMETRIC_SCOPE)
@@ -266,6 +360,22 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     integrated_light_scattering_written = len(written) > 0
     integrated_light_scattering_consumed_by_fog = len(consumed) > 0
+    integrated_volume = sample_integrated_volume(
+        controller,
+        rd,
+        texture_descs,
+        written[0]["resource_id"] if written else None,
+    ) if written else {
+        "sampled": False,
+        "width": 0,
+        "height": 0,
+        "depth": 0,
+        "slices": [],
+        "min": [0.0, 0.0, 0.0, 0.0],
+        "max": [0.0, 0.0, 0.0, 0.0],
+        "rgb_nonzero": False,
+        "alpha_valid": False,
+    }
     stage15_static_data = (
         read_stage15_fog_environment_static_data(
             controller,
@@ -340,6 +450,48 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append(
+        "integrated_light_scattering_volume_dims={}x{}x{}".format(
+            integrated_volume["width"],
+            integrated_volume["height"],
+            integrated_volume["depth"],
+        )
+    )
+    report.append(
+        "integrated_light_scattering_volume_min={}".format(
+            format_values(integrated_volume["min"])
+        )
+    )
+    report.append(
+        "integrated_light_scattering_volume_max={}".format(
+            format_values(integrated_volume["max"])
+        )
+    )
+    for index, slice_report in enumerate(integrated_volume["slices"]):
+        report.append(
+            "integrated_light_scattering_slice_{}_index={}".format(
+                index,
+                slice_report["slice"],
+            )
+        )
+        report.append(
+            "integrated_light_scattering_slice_{}_min={}".format(
+                index,
+                format_values(slice_report["min"]),
+            )
+        )
+        report.append(
+            "integrated_light_scattering_slice_{}_max={}".format(
+                index,
+                format_values(slice_report["max"]),
+            )
+        )
+        report.append(
+            "integrated_light_scattering_slice_{}_center={}".format(
+                index,
+                format_values(slice_report["center"]),
+            )
+        )
+    report.append(
         "stage15_fog_environment_static_resource={}".format(
             stage15_static_data["resource_name"] if stage15_static_data_bound else ""
         )
@@ -382,6 +534,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_bool(report, "integrated_light_scattering_written", integrated_light_scattering_written)
     append_bool(
         report,
+        "integrated_light_scattering_volume_sampled",
+        integrated_volume["sampled"],
+    )
+    append_bool(
+        report,
+        "integrated_light_scattering_volume_rgb_nonzero",
+        integrated_volume["rgb_nonzero"],
+    )
+    append_bool(
+        report,
+        "integrated_light_scattering_volume_alpha_valid",
+        integrated_volume["alpha_valid"],
+    )
+    append_bool(
+        report,
         "integrated_light_scattering_consumed_by_fog",
         integrated_light_scattering_consumed_by_fog,
     )
@@ -415,6 +582,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and fog_draw_valid
         and volumetric_before_fog
         and integrated_light_scattering_written
+        and integrated_volume["sampled"]
+        and integrated_volume["rgb_nonzero"]
+        and integrated_volume["alpha_valid"]
         and stage15_static_data_bound
         and stage15_integrated_srv_valid
         and stage15_volumetric_enabled
