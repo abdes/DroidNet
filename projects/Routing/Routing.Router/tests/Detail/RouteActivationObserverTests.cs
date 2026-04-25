@@ -90,7 +90,7 @@ public class RouteActivationObserverTests
     }
 
     [TestMethod]
-    public async Task OnActivated_SetsRouteAsActivated()
+    public void OnActivated_SetsRouteAsActivated()
     {
         // Arrange
         var route = MakeActiveRouteNoViewModel();
@@ -98,10 +98,27 @@ public class RouteActivationObserverTests
         var context = new Mock<INavigationContext>().Object;
 
         // Act
-        await this.observer.OnActivatedAsync(route, context).ConfigureAwait(false);
+        this.observer.OnActivated(route, context);
 
         // Assert
         _ = route.IsActivated.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task OnNavigatedTo_WithRoutingAwareViewModel_ForwardsRouteAndContext()
+    {
+        // Arrange
+        var route = MakeActiveRouteNoViewModel();
+        var context = new Mock<INavigationContext>().Object;
+        var viewModel = new Mock<IRoutingAware>();
+        _ = viewModel.Setup(vm => vm.OnNavigatedToAsync(route, context)).Returns(Task.CompletedTask);
+        route.ViewModel = viewModel.Object;
+
+        // Act
+        await this.observer.OnNavigatedToAsync(route, context).ConfigureAwait(false);
+
+        // Assert
+        viewModel.Verify(vm => vm.OnNavigatedToAsync(route, context), Times.Once());
     }
 
     private static ActiveRoute MakeActiveRouteNoViewModel() =>

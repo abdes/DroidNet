@@ -26,11 +26,19 @@ public interface IRouteActivationObserver
     public bool OnActivating(IActiveRoute route, INavigationContext context);
 
     /// <summary>
+    /// Invoked after a route's view model has been resolved and before the route is loaded into
+    /// its outlet.
+    /// </summary>
+    /// <param name="route">The route that is being activated.</param>
+    /// <param name="context">The navigation context associated with the activation.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext context);
+
+    /// <summary>
     /// Invoked after a route has been successfully activated.
     /// Allows the observer to perform any required post-activation updates or operations.
     /// </summary>
     /// <param name="route">The route that has been activated.</param>
     /// <param name="context">The navigation context associated with the activation.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public Task OnActivatedAsync(IActiveRoute route, INavigationContext context);
+    public void OnActivated(IActiveRoute route, INavigationContext context);
 }
