@@ -153,6 +153,11 @@ The broader `Run-VortexBasicRuntimeValidation.ps1` wrapper now reflects the
 VTX-M04D.4 local-fog ownership split: Stage 14 local-fog tiled culling still
 runs, local fog is injected into volumetric fog, and the old Stage 15
 local-fog compose draw is expected to be absent for the volumetric proof path.
+`Oxygen.Examples.VortexBasic.exe` also exposes narrow proof controls for
+term-variant captures: `--volumetric-local-fog false` disables local-fog
+injection into the volumetric product, and
+`--sky-light-volumetric-scattering 0` disables the SkyLight volumetric
+ambient term while preserving the rest of the validation scene.
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the

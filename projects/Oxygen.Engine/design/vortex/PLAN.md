@@ -127,6 +127,9 @@ separate `LightScattering` history product and also applies broader jitter,
 camera-cut/reset, and history-miss policies. Focused VortexBasic proof now
 also samples the captured `IntegratedLightScattering` 3D product itself across
 representative z slices and records nonzero RGB plus valid transmittance alpha.
+The small VortexBasic proof scene now has narrow term controls for disabling
+local-fog volumetric injection and SkyLight volumetric scattering during
+follow-up captures.
 
 **In scope:**
 
