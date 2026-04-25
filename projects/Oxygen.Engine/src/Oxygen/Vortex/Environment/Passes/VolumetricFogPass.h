@@ -54,6 +54,8 @@ namespace environment {
       bool directional_shadowed_light_injection_requested { false };
       bool height_fog_media_requested { false };
       bool height_fog_media_executed { false };
+      bool sky_light_injection_requested { false };
+      bool sky_light_injection_executed { false };
       bool local_fog_injection_requested { false };
       bool local_fog_injection_executed { false };
       std::uint32_t local_fog_instance_count { 0U };
@@ -72,6 +74,7 @@ namespace environment {
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
       const internal::StableAtmosphereState& stable_state,
+      ShaderVisibleIndex distant_sky_light_lut_srv,
       const internal::LocalFogVolumeState::ViewProducts* local_fog_products
       = nullptr) -> RecordState;
 
@@ -140,6 +143,20 @@ namespace environment {
       std::uint32_t enabled { 0U };
     };
 
+    struct alignas(16) SkyLightControl0 {
+      std::uint32_t distant_sky_light_lut_slot {
+        kInvalidShaderVisibleIndex.get()
+      };
+      std::uint32_t enabled { 0U };
+      float volumetric_scattering_intensity { 0.0F };
+      float diffuse_intensity { 0.0F };
+    };
+
+    struct alignas(16) SkyLightControl1 {
+      float tint_rgb[3] { 1.0F, 1.0F, 1.0F };
+      float intensity_mul { 1.0F };
+    };
+
     struct alignas(16) PassConstants {
       OutputHeader output_header {};
       GridControl grid {};
@@ -148,6 +165,8 @@ namespace environment {
       MediaControl1 media1 {};
       HeightFogMediaControl0 height_fog0 {};
       HeightFogMediaControl1 height_fog1 {};
+      SkyLightControl0 sky_light0 {};
+      SkyLightControl1 sky_light1 {};
       LocalFogControl0 local_fog0 {};
       LocalFogControl1 local_fog1 {};
       LocalFogControl2 local_fog2 {};

@@ -152,6 +152,8 @@ public:
     bool volumetric_fog_directional_shadowed_light_requested { false };
     bool volumetric_fog_height_fog_media_requested { false };
     bool volumetric_fog_height_fog_media_executed { false };
+    bool volumetric_fog_sky_light_injection_requested { false };
+    bool volumetric_fog_sky_light_injection_executed { false };
     bool volumetric_fog_local_fog_injection_requested { false };
     bool volumetric_fog_local_fog_injection_executed { false };
     std::uint32_t volumetric_fog_local_fog_instance_count { 0U };
@@ -205,6 +207,8 @@ public:
     bool volumetric_fog_directional_shadowed_light_requested { false };
     bool volumetric_fog_height_fog_media_requested { false };
     bool volumetric_fog_height_fog_media_executed { false };
+    bool volumetric_fog_sky_light_injection_requested { false };
+    bool volumetric_fog_sky_light_injection_executed { false };
     bool volumetric_fog_local_fog_injection_requested { false };
     bool volumetric_fog_local_fog_injection_executed { false };
     std::uint32_t volumetric_fog_local_fog_instance_count { 0U };

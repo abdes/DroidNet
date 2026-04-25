@@ -883,7 +883,8 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     ? &PrepareLocalFogForStage14(ctx, *scene_textures)
     : nullptr;
   pending_volumetric_fog_state_
-    = volumetric_fog_pass_->Record(ctx, stable_state, local_fog_products);
+    = volumetric_fog_pass_->Record(
+      ctx, stable_state, products.distant_sky_light_lut_srv, local_fog_products);
   products.integrated_light_scattering_srv
     = pending_volumetric_fog_state_.integrated_light_scattering_srv;
   const auto sky_light_authored_enabled = products.sky_light.enabled;
@@ -1041,6 +1042,10 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     = pending_volumetric_fog_state_.height_fog_media_requested,
     .volumetric_fog_height_fog_media_executed
     = pending_volumetric_fog_state_.height_fog_media_executed,
+    .volumetric_fog_sky_light_injection_requested
+    = pending_volumetric_fog_state_.sky_light_injection_requested,
+    .volumetric_fog_sky_light_injection_executed
+    = pending_volumetric_fog_state_.sky_light_injection_executed,
     .volumetric_fog_local_fog_injection_requested
     = pending_volumetric_fog_state_.local_fog_injection_requested,
     .volumetric_fog_local_fog_injection_executed
@@ -1112,6 +1117,10 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     = pending_volumetric_fog_state_.height_fog_media_requested,
     .volumetric_fog_height_fog_media_executed
     = pending_volumetric_fog_state_.height_fog_media_executed,
+    .volumetric_fog_sky_light_injection_requested
+    = pending_volumetric_fog_state_.sky_light_injection_requested,
+    .volumetric_fog_sky_light_injection_executed
+    = pending_volumetric_fog_state_.sky_light_injection_executed,
     .volumetric_fog_local_fog_injection_requested
     = pending_volumetric_fog_state_.local_fog_injection_requested,
     .volumetric_fog_local_fog_injection_executed
@@ -1128,6 +1137,8 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     "volumetric_fog_directional_shadowed_light_requested={} "
     "volumetric_fog_height_fog_media_requested={} "
     "volumetric_fog_height_fog_media_executed={} "
+    "volumetric_fog_sky_light_injection_requested={} "
+    "volumetric_fog_sky_light_injection_executed={} "
     "volumetric_fog_local_fog_injection_requested={} "
     "volumetric_fog_local_fog_injection_executed={} "
     "volumetric_fog_local_fog_instance_count={}",
@@ -1145,6 +1156,8 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     last_stage14_state_.volumetric_fog_directional_shadowed_light_requested,
     last_stage14_state_.volumetric_fog_height_fog_media_requested,
     last_stage14_state_.volumetric_fog_height_fog_media_executed,
+    last_stage14_state_.volumetric_fog_sky_light_injection_requested,
+    last_stage14_state_.volumetric_fog_sky_light_injection_executed,
     last_stage14_state_.volumetric_fog_local_fog_injection_requested,
     last_stage14_state_.volumetric_fog_local_fog_injection_executed,
     last_stage14_state_.volumetric_fog_local_fog_instance_count);
