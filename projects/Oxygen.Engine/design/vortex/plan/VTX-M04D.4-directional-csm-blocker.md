@@ -127,6 +127,9 @@ regression coverage builds a cooked directional-light component with manual
 city-scale CSM values and verifies the runtime `DirectionalLight` preserves the
 shadow-casting flag and full CSM setup.
 
+User visual confirmation on 2026-04-26: `CityEnvironmentValidation` now has
+shadows after the hydration fix.
+
 ## Exit Gate
 
 This blocker is validated because all of the following are recorded in
