@@ -167,7 +167,11 @@ namespace environment {
       };
       std::uint32_t enabled { 0U };
       float history_weight { 0.9F };
-      float _pad0 { 0.0F };
+      std::uint32_t history_miss_supersample_count { 1U };
+    };
+
+    struct alignas(16) TemporalHistoryControl1 {
+      float frame_jitter_offsets[16][4] {};
     };
 
     struct alignas(16) PassConstants {
@@ -181,6 +185,7 @@ namespace environment {
       SkyLightControl0 sky_light0 {};
       SkyLightControl1 sky_light1 {};
       TemporalHistoryControl0 temporal_history0 {};
+      TemporalHistoryControl1 temporal_history1 {};
       LocalFogControl0 local_fog0 {};
       LocalFogControl1 local_fog1 {};
       LocalFogControl2 local_fog2 {};

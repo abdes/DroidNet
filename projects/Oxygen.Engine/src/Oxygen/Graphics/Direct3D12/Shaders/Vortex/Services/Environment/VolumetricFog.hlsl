@@ -112,7 +112,12 @@ struct VolumetricFogTemporalHistoryControl0
     uint previous_integrated_light_scattering_srv;
     uint enabled;
     float history_weight;
-    float _pad0;
+    uint history_miss_supersample_count;
+};
+
+struct VolumetricFogTemporalHistoryControl1
+{
+    float4 frame_jitter_offsets[16];
 };
 
 struct VolumetricFogPassConstants
@@ -127,6 +132,7 @@ struct VolumetricFogPassConstants
     VolumetricFogSkyLightControl0 sky_light0;
     VolumetricFogSkyLightControl1 sky_light1;
     VolumetricFogTemporalHistoryControl0 temporal_history0;
+    VolumetricFogTemporalHistoryControl1 temporal_history1;
     VolumetricFogLocalFogControl0 local_fog0;
     VolumetricFogLocalFogControl1 local_fog1;
     VolumetricFogLocalFogControl2 local_fog2;
@@ -413,37 +419,24 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
     return accumulated;
 }
 
-[shader("compute")]
-[numthreads(4, 4, 4)]
-void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
+static float4 EvaluateVolumetricFogSample(
+    VolumetricFogPassConstants pass,
+    uint3 dispatch_id,
+    float3 cell_offset,
+    out float3 sample_world_position)
 {
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
-        return;
-    }
-
-    StructuredBuffer<VolumetricFogPassConstants> pass_buffer =
-        ResourceDescriptorHeap[g_PassConstantsIndex];
-    const VolumetricFogPassConstants pass = pass_buffer[0];
-    if (pass.output_header.output_texture_uav == K_INVALID_BINDLESS_INDEX
-        || dispatch_id.x >= pass.output_header.output_width
-        || dispatch_id.y >= pass.output_header.output_height
-        || dispatch_id.z >= pass.output_header.output_depth) {
-        return;
-    }
-
-    RWTexture3D<float4> output_texture =
-        ResourceDescriptorHeap[pass.output_header.output_texture_uav];
-
+    const float z_base = float(dispatch_id.z);
     const float front_distance = clamp(
-        ComputeDepthFromZSlice(float(dispatch_id.z), pass.grid_z.grid_z_params),
+        ComputeDepthFromZSlice(z_base, pass.grid_z.grid_z_params),
         pass.grid.start_distance_m,
         pass.grid.end_distance_m);
     const float back_distance = clamp(
-        ComputeDepthFromZSlice(float(dispatch_id.z) + 1.0f, pass.grid_z.grid_z_params),
+        ComputeDepthFromZSlice(z_base + 1.0f, pass.grid_z.grid_z_params),
         pass.grid.start_distance_m,
         pass.grid.end_distance_m);
     const float slice_distance = clamp(
-        ComputeDepthFromZSlice(float(dispatch_id.z) + 0.5f, pass.grid_z.grid_z_params),
+        ComputeDepthFromZSlice(z_base + saturate(cell_offset.z),
+            pass.grid_z.grid_z_params),
         pass.grid.start_distance_m,
         pass.grid.end_distance_m);
     const float ray_length = max(slice_distance - pass.grid.start_distance_m, 0.0f);
@@ -452,14 +445,14 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         : 1.0f;
 
     const float2 screen_uv =
-        (float2(dispatch_id.xy) + float2(0.5f, 0.5f))
+        (float2(dispatch_id.xy) + saturate(cell_offset.xy))
         / max(float2(pass.output_header.output_width, pass.output_header.output_height),
             float2(1.0f, 1.0f));
     const float device_depth = ComputeDeviceDepthFromViewDepth(slice_distance);
-    const float3 world_position =
+    sample_world_position =
         ReconstructWorldPosition(screen_uv, device_depth, inverse_view_projection_matrix);
-    const float3 translated_world_position = world_position - camera_position;
-    const float3 camera_delta = camera_position - world_position;
+    const float3 translated_world_position = sample_world_position - camera_position;
+    const float3 camera_delta = camera_position - sample_world_position;
     const float camera_delta_length_sq = dot(camera_delta, camera_delta);
     const float3 view_direction_to_camera = camera_delta_length_sq > 1.0e-8f
         ? camera_delta * rsqrt(camera_delta_length_sq)
@@ -473,7 +466,7 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             front_distance,
             back_distance);
     const float height_fog_density =
-        EvaluateHeightFogMediaDensity(pass, world_position.z);
+        EvaluateHeightFogMediaDensity(pass, sample_world_position.z);
     const float extinction =
         height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade
         + max(local_fog_media.extinction, 0.0f);
@@ -484,7 +477,7 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     if (pass.grid_z.shadowed_directional_light0_enabled > 0.0f
         && pass.light0_direction_enabled.w > 0.0f) {
         light0_shadow_visibility = ComputeDirectionalVolumetricShadowVisibility(
-            world_position, pass.light0_direction_enabled.xyz);
+            sample_world_position, pass.light0_direction_enabled.xyz);
     }
 
     float3 directional_lighting = 0.0f.xxx;
@@ -513,8 +506,36 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     const float3 integrated_luminance =
         (scattering + local_fog_media.emissive) * opacity;
 
-    float4 output_value = float4(max(integrated_luminance, 0.0f.xxx),
-        saturate(transmittance));
+    return float4(max(integrated_luminance, 0.0f.xxx), saturate(transmittance));
+}
+
+[shader("compute")]
+[numthreads(4, 4, 4)]
+void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+        return;
+    }
+
+    StructuredBuffer<VolumetricFogPassConstants> pass_buffer =
+        ResourceDescriptorHeap[g_PassConstantsIndex];
+    const VolumetricFogPassConstants pass = pass_buffer[0];
+    if (pass.output_header.output_texture_uav == K_INVALID_BINDLESS_INDEX
+        || dispatch_id.x >= pass.output_header.output_width
+        || dispatch_id.y >= pass.output_header.output_height
+        || dispatch_id.z >= pass.output_header.output_depth) {
+        return;
+    }
+
+    RWTexture3D<float4> output_texture =
+        ResourceDescriptorHeap[pass.output_header.output_texture_uav];
+
+    float3 world_position = 0.0f.xxx;
+    float4 output_value = EvaluateVolumetricFogSample(
+        pass,
+        dispatch_id,
+        pass.temporal_history1.frame_jitter_offsets[0].xyz,
+        world_position);
     float4 history_value = output_value;
     if (TrySampleTemporalHistory(pass, world_position, history_value))
     {
@@ -523,6 +544,27 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             max(history_value, 0.0f.xxxx),
             saturate(pass.temporal_history0.history_weight));
         output_value.a = saturate(output_value.a);
+    }
+    else
+    {
+        const uint sample_count = clamp(
+            pass.temporal_history0.history_miss_supersample_count, 1u, 16u);
+        if (sample_count > 1u)
+        {
+            float4 accumulated = output_value;
+            [loop]
+            for (uint sample_index = 1u; sample_index < sample_count; ++sample_index)
+            {
+                float3 unused_world_position = 0.0f.xxx;
+                accumulated += EvaluateVolumetricFogSample(
+                    pass,
+                    dispatch_id,
+                    pass.temporal_history1.frame_jitter_offsets[sample_index].xyz,
+                    unused_world_position);
+            }
+            output_value = accumulated / float(sample_count);
+            output_value.a = saturate(output_value.a);
+        }
     }
 
     output_texture[dispatch_id] = output_value;

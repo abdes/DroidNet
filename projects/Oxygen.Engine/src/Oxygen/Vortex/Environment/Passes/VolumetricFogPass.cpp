@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <glm/geometric.hpp>
+#include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
@@ -46,6 +47,32 @@ namespace {
   constexpr float kUeVolumetricFogDepthDistributionScale = 32.0F;
   constexpr float kUeFroxelNearOffsetMeters = 9.5F;
   constexpr float kUeVolumetricFogHistoryWeight = 0.9F;
+  constexpr std::uint32_t kUeVolumetricFogMaxHistoryMissSamples = 16U;
+
+  auto Halton(std::uint32_t index, const std::uint32_t base) noexcept -> float
+  {
+    auto result = 0.0F;
+    auto fraction = 1.0F / static_cast<float>(base);
+    while (index > 0U) {
+      result += fraction * static_cast<float>(index % base);
+      index /= base;
+      fraction /= static_cast<float>(base);
+    }
+    return result;
+  }
+
+  auto VolumetricFogTemporalRandom(
+    const std::uint32_t frame_number, const bool jitter_enabled) noexcept
+    -> glm::vec4
+  {
+    if (!jitter_enabled) {
+      return { 0.5F, 0.5F, 0.5F, 0.0F };
+    }
+
+    const auto halton_index = frame_number & 1023U;
+    return { Halton(halton_index, 2U), Halton(halton_index, 3U),
+      Halton(halton_index, 5U), 0.0F };
+  }
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -397,8 +424,27 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = std::max(volumetric.extinction_scale, 0.0F);
   const auto grid_z_params = CalculateUeGridZParams(start_distance,
     resolved_view.NearPlane(), end_distance, depth);
+  const auto temporal_reprojection_enabled
+    = renderer_.GetVolumetricFogTemporalReprojectionEnabled();
+  const auto temporal_jitter_enabled
+    = temporal_reprojection_enabled && renderer_.GetVolumetricFogJitterEnabled();
+  const auto history_miss_supersample_count
+    = std::min(renderer_.GetVolumetricFogHistoryMissSupersampleCount(),
+      kUeVolumetricFogMaxHistoryMissSamples);
+  for (std::uint32_t sample_index = 0U;
+    sample_index < kUeVolumetricFogMaxHistoryMissSamples; ++sample_index) {
+    const auto sample_frame = ctx.frame_sequence.get() > sample_index
+      ? static_cast<std::uint32_t>(ctx.frame_sequence.get() - sample_index)
+      : 0U;
+    const auto jitter = VolumetricFogTemporalRandom(
+      sample_frame, temporal_jitter_enabled);
+    constants.temporal_history1.frame_jitter_offsets[sample_index][0] = jitter.x;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][1] = jitter.y;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][2] = jitter.z;
+    constants.temporal_history1.frame_jitter_offsets[sample_index][3] = jitter.w;
+  }
   auto& history_entry = history_by_view_[ctx.current_view.view_id];
-  const auto history_matches = history_entry.valid
+  const auto history_matches = temporal_reprojection_enabled && history_entry.valid
     && history_entry.texture != nullptr && history_entry.srv.IsValid()
     && history_entry.width == width && history_entry.height == height
     && history_entry.depth == depth
@@ -414,6 +460,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.temporal_history0.history_weight
       = kUeVolumetricFogHistoryWeight;
   }
+  constants.temporal_history0.history_miss_supersample_count
+    = temporal_reprojection_enabled ? history_miss_supersample_count : 1U;
   constants.grid_z.grid_z_params[0] = grid_z_params.x;
   constants.grid_z.grid_z_params[1] = grid_z_params.y;
   constants.grid_z.grid_z_params[2] = grid_z_params.z;
@@ -559,10 +607,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.height_fog_media_executed = constants.height_fog1.enabled != 0U;
   state.sky_light_injection_requested = sky_light_injection_requested;
   state.sky_light_injection_executed = constants.sky_light0.enabled != 0U;
-  state.temporal_history_requested = true;
+  state.temporal_history_requested = temporal_reprojection_enabled;
   state.temporal_history_reprojection_executed
     = constants.temporal_history0.enabled != 0U;
-  state.temporal_history_reset = !state.temporal_history_reprojection_executed;
+  state.temporal_history_reset = temporal_reprojection_enabled
+    && !state.temporal_history_reprojection_executed;
   state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared;
   state.local_fog_injection_executed = local_fog_ready;
@@ -571,20 +620,27 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.grid_z_params[0] = grid_z_params.x;
   state.grid_z_params[1] = grid_z_params.y;
   state.grid_z_params[2] = grid_z_params.z;
-  if (history_entry.texture != nullptr) {
-    live_textures_.push_back(history_entry.texture);
+  if (temporal_reprojection_enabled) {
+    if (history_entry.texture != nullptr) {
+      live_textures_.push_back(history_entry.texture);
+    }
+    history_entry.texture = texture;
+    history_entry.srv = integrated_srv;
+    history_entry.width = width;
+    history_entry.height = height;
+    history_entry.depth = depth;
+    history_entry.start_distance_m = start_distance;
+    history_entry.end_distance_m = end_distance;
+    history_entry.grid_z_params[0] = grid_z_params.x;
+    history_entry.grid_z_params[1] = grid_z_params.y;
+    history_entry.grid_z_params[2] = grid_z_params.z;
+    history_entry.valid = true;
+  } else {
+    if (history_entry.texture != nullptr) {
+      live_textures_.push_back(history_entry.texture);
+    }
+    history_entry = HistoryEntry {};
   }
-  history_entry.texture = texture;
-  history_entry.srv = integrated_srv;
-  history_entry.width = width;
-  history_entry.height = height;
-  history_entry.depth = depth;
-  history_entry.start_distance_m = start_distance;
-  history_entry.end_distance_m = end_distance;
-  history_entry.grid_z_params[0] = grid_z_params.x;
-  history_entry.grid_z_params[1] = grid_z_params.y;
-  history_entry.grid_z_params[2] = grid_z_params.z;
-  history_entry.valid = true;
   return state;
 }
 

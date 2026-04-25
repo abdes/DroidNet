@@ -11,7 +11,7 @@ the integrated-light-scattering probe statistics.
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('combined', 'local-fog', 'sky-light', 'directional-shadow')]
+  [ValidateSet('combined', 'local-fog', 'sky-light', 'directional-shadow', 'temporal')]
   [string]$Term,
 
   [Parameter(Mandatory = $true)]
@@ -103,8 +103,21 @@ $enabledProbeSum = [double]$enabledMap['integrated_light_scattering_probe_rgb_su
 $disabledProbeSum = [double]$disabledMap['integrated_light_scattering_probe_rgb_sum']
 $rgbSumIncrease = $enabledProbeSum - $disabledProbeSum
 $rgbSumDecrease = $disabledProbeSum - $enabledProbeSum
-$requiredDelta = if ($Term -eq 'directional-shadow') { $rgbSumDecrease } else { $rgbSumIncrease }
-$deltaLabel = if ($Term -eq 'directional-shadow') { 'decrease' } else { 'increase' }
+$rgbSumAbsoluteDelta = [Math]::Abs($rgbSumIncrease)
+$requiredDelta = if ($Term -eq 'directional-shadow') {
+  $rgbSumDecrease
+} elseif ($Term -eq 'temporal') {
+  $rgbSumAbsoluteDelta
+} else {
+  $rgbSumIncrease
+}
+$deltaLabel = if ($Term -eq 'directional-shadow') {
+  'decrease'
+} elseif ($Term -eq 'temporal') {
+  'absolute delta'
+} else {
+  'increase'
+}
 if ($requiredDelta -lt $MinRgbSumDelta) {
   throw "Integrated-scattering probe RGB sum $deltaLabel too small for $Term proof: $requiredDelta < $MinRgbSumDelta"
 }
@@ -124,6 +137,10 @@ if ($Term -eq 'directional-shadow') {
   Assert-LogPattern -Lines $enabledLogLines -Pattern 'volumetric_fog_directional_shadowed_light_requested=true' -Label 'enabled'
   Assert-LogPattern -Lines $disabledLogLines -Pattern 'volumetric_fog_directional_shadowed_light_requested=false' -Label 'disabled'
 }
+if ($Term -eq 'temporal') {
+  Assert-LogPattern -Lines $enabledLogLines -Pattern 'volumetric_fog_temporal_history_reprojection_executed=true' -Label 'enabled'
+  Assert-LogPattern -Lines $disabledLogLines -Pattern 'volumetric_fog_temporal_history_requested=false' -Label 'disabled'
+}
 
 $reportLines = @(
   'analysis_result=success'
@@ -138,6 +155,7 @@ $reportLines = @(
   "probe_rgb_sum_delta=$rgbSumIncrease"
   "probe_rgb_sum_increase=$rgbSumIncrease"
   "probe_rgb_sum_decrease=$rgbSumDecrease"
+  "probe_rgb_sum_absolute_delta=$rgbSumAbsoluteDelta"
   "min_probe_rgb_sum_delta=$MinRgbSumDelta"
 )
 
