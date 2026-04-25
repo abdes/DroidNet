@@ -262,6 +262,7 @@ auto VolumetricFogPass::OnFrameStart(
 
 auto VolumetricFogPass::Record(RenderContext& ctx,
   const internal::StableAtmosphereState& stable_state,
+  const ShaderVisibleIndex distant_sky_light_lut_srv,
   const internal::LocalFogVolumeState::ViewProducts* local_fog_products)
   -> RecordState
 {
@@ -343,6 +344,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV));
 
   const auto& height_fog = stable_state.view_products.height_fog;
+  const auto& sky_light = stable_state.view_products.sky_light;
   const auto start_distance = std::max(volumetric.start_distance, 0.0F);
   const auto fallback_distance = ctx.current_view.resolved_view != nullptr
     ? std::max(ctx.current_view.resolved_view->FarPlane(),
@@ -355,6 +357,12 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto height_fog_media_requested = height_fog.enabled
     && height_fog.enable_height_fog
     && (height_fog.fog_density > 0.0F || height_fog.second_fog_density > 0.0F);
+  const auto sky_light_injection_requested = sky_light.enabled
+    && sky_light.affect_global_illumination
+    && sky_light.volumetric_scattering_intensity > 0.0F
+    && sky_light.diffuse_intensity > 0.0F;
+  const auto sky_light_injection_ready
+    = sky_light_injection_requested && distant_sky_light_lut_srv.IsValid();
 
   auto constants = PassConstants {};
   constants.output_header.output_texture_uav = integrated_uav.get();
@@ -399,6 +407,19 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       = height_fog.second_fog_height_offset;
     constants.height_fog1.match_height_fog_factor = 0.5F;
     constants.height_fog1.enabled = 1U;
+  }
+  if (sky_light_injection_ready) {
+    constants.sky_light0.distant_sky_light_lut_slot
+      = distant_sky_light_lut_srv.get();
+    constants.sky_light0.enabled = 1U;
+    constants.sky_light0.volumetric_scattering_intensity
+      = std::max(sky_light.volumetric_scattering_intensity, 0.0F);
+    constants.sky_light0.diffuse_intensity
+      = std::max(sky_light.diffuse_intensity, 0.0F);
+    constants.sky_light1.tint_rgb[0] = sky_light.tint_rgb.x;
+    constants.sky_light1.tint_rgb[1] = sky_light.tint_rgb.y;
+    constants.sky_light1.tint_rgb[2] = sky_light.tint_rgb.z;
+    constants.sky_light1.intensity_mul = std::max(sky_light.intensity_mul, 0.0F);
   }
   const auto local_fog_ready = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared
@@ -495,6 +516,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = constants.grid_z.shadowed_directional_light0_enabled > 0.0F;
   state.height_fog_media_requested = height_fog_media_requested;
   state.height_fog_media_executed = constants.height_fog1.enabled != 0U;
+  state.sky_light_injection_requested = sky_light_injection_requested;
+  state.sky_light_injection_executed = constants.sky_light0.enabled != 0U;
   state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared;
   state.local_fog_injection_executed = local_fog_ready;

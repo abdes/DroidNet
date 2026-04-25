@@ -2043,6 +2043,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.volumetric_fog_directional_shadowed_light_requested);
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2115,6 +2117,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.integrated_light_scattering_valid);
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
+  EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_requested);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_executed);
   EXPECT_EQ(generation.volumetric_fog_local_fog_instance_count, 1U);

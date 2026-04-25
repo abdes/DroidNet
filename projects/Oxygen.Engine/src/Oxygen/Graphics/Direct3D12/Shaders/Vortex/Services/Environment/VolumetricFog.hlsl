@@ -91,6 +91,20 @@ struct VolumetricFogHeightFogMediaControl1
     uint enabled;
 };
 
+struct VolumetricFogSkyLightControl0
+{
+    uint distant_sky_light_lut_slot;
+    uint enabled;
+    float volumetric_scattering_intensity;
+    float diffuse_intensity;
+};
+
+struct VolumetricFogSkyLightControl1
+{
+    float3 tint_rgb;
+    float intensity_mul;
+};
+
 struct VolumetricFogPassConstants
 {
     VolumetricFogOutputHeader output_header;
@@ -100,6 +114,8 @@ struct VolumetricFogPassConstants
     VolumetricFogMediaControl1 media1;
     VolumetricFogHeightFogMediaControl0 height_fog0;
     VolumetricFogHeightFogMediaControl1 height_fog1;
+    VolumetricFogSkyLightControl0 sky_light0;
+    VolumetricFogSkyLightControl1 sky_light1;
     VolumetricFogLocalFogControl0 local_fog0;
     VolumetricFogLocalFogControl1 local_fog1;
     VolumetricFogLocalFogControl2 local_fog2;
@@ -132,6 +148,24 @@ static float3 EvaluateDirectionalContribution(
         dot(view_direction_to_camera, light_direction),
         scattering_distribution);
     return max(illuminance_rgb.xyz, 0.0f.xxx) * phase * saturate(shadow_visibility);
+}
+
+static float3 EvaluateSkyLightContribution(VolumetricFogPassConstants pass)
+{
+    if (pass.sky_light0.enabled == 0u
+        || pass.sky_light0.distant_sky_light_lut_slot == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(pass.sky_light0.distant_sky_light_lut_slot))
+    {
+        return 0.0f.xxx;
+    }
+
+    StructuredBuffer<float4> distant_sky_light_lut =
+        ResourceDescriptorHeap[pass.sky_light0.distant_sky_light_lut_slot];
+    return max(distant_sky_light_lut[0].rgb, 0.0f.xxx)
+        * max(pass.sky_light1.tint_rgb, 0.0f.xxx)
+        * max(pass.sky_light1.intensity_mul, 0.0f)
+        * max(pass.sky_light0.diffuse_intensity, 0.0f)
+        * max(pass.sky_light0.volumetric_scattering_intensity, 0.0f);
 }
 
 static float ComputeDepthFromZSlice(float z_slice, float3 grid_z_params)
@@ -385,8 +419,11 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         view_direction_to_camera,
         1.0f);
 
+    const float3 sky_lighting = EvaluateSkyLightContribution(pass);
     const float3 bounded_lighting =
-        directional_lighting * (2.0e-5f * pass.media1.static_lighting_scattering_intensity);
+        (directional_lighting * pass.media1.static_lighting_scattering_intensity
+            + sky_lighting)
+        * 2.0e-5f;
     const float3 scattering =
         max(pass.media0.albedo_rgb, 0.0f.xxx) * bounded_lighting
         + local_fog_media.scattering * bounded_lighting
