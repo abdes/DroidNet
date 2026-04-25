@@ -234,8 +234,10 @@ void EditorView::OnSceneMutation() {
   engine::ViewContext vc{
       .view = view,
       .metadata = engine::ViewMetadata{.name = config_.name,
-                                       .purpose = config_.purpose},
-      .output = nullptr // Set later by Renderer or used internally
+                                       .purpose = config_.purpose,
+                                       .is_scene_view = true},
+      .render_target = {},
+      .composite_source = {}
   };
 
   // We must never register views from EditorView.
@@ -252,7 +254,7 @@ void EditorView::OnSceneMutation() {
   }
 }
 
-auto EditorView::OnPreRender(engine::Renderer &renderer) -> oxygen::co::Co<> {
+auto EditorView::OnPreRender(vortex::Renderer &renderer) -> oxygen::co::Co<> {
   LOG_SCOPE_F(4, "EditorView::OnPreRender");
   if (state_ != ViewState::kReady || !visible_) {
     co_return;
@@ -291,12 +293,12 @@ auto EditorView::OnPreRender(engine::Renderer &renderer) -> oxygen::co::Co<> {
   // our framebuffer. This centralizes the SetViewOutput call — preventing
   // duplicate updates from both the creation and the renderer-path.
   if (framebuffer_ && view_id_ != kInvalidViewId && current_context_) {
-    current_context_->frame_context.SetViewOutput(
+    current_context_->frame_context.SetViewRenderTarget(
         view_id_,
         oxygen::observer_ptr<graphics::Framebuffer>(framebuffer_.get()));
     // Ensure FrameContext now has the output populated
     DCHECK_NOTNULL_F(
-        current_context_->frame_context.GetViewContext(view_id_).output,
+        current_context_->frame_context.GetViewContext(view_id_).render_target,
         "EditorView::OnPreRender - framebuffer did not populate FrameContext "
         "output for view {}",
         view_id_);
@@ -575,36 +577,37 @@ auto EditorView::SetOrthoHalfHeight(const float half_height) noexcept -> void {
   ortho_half_height_ = std::max(0.001f, half_height);
 }
 
-void EditorView::RegisterWithRenderer(engine::Renderer &renderer) {
+void EditorView::RegisterWithRenderer(vortex::Renderer &renderer) {
   if (view_id_ == kInvalidViewId) {
     return;
   }
 
   // Store renderer for cleanup
-  renderer_module_ = oxygen::observer_ptr<engine::Renderer>(&renderer);
+  renderer_module_ = oxygen::observer_ptr<vortex::Renderer>(&renderer);
 
   if (renderer_) {
-    // Create resolver
     scene::SceneNode node = camera_node_;
-    oxygen::engine::ViewResolver resolver =
-        [node](const oxygen::engine::ViewContext &ctx) -> oxygen::ResolvedView {
-      renderer::SceneCameraViewResolver scene_resolver(
-          [node](const ViewId &) { return node; });
-      return scene_resolver(ctx.id);
-    };
+    std::optional<ViewPort> viewport_override;
+    if (current_context_) {
+      viewport_override =
+        current_context_->frame_context.GetViewContext(view_id_).view.viewport;
+    }
+    vortex::SceneCameraViewResolver scene_resolver(
+        [node](const ViewId &) { return node; }, viewport_override);
+    auto resolved_view = scene_resolver(view_id_);
 
-    renderer_->RegisterWithEngine(renderer, view_id_, std::move(resolver));
+    renderer_->RegisterWithEngine(renderer, view_id_, std::move(resolved_view));
   }
 }
 
-void EditorView::UnregisterFromRenderer(engine::Renderer &renderer) {
+void EditorView::UnregisterFromRenderer(vortex::Renderer &renderer) {
   if (renderer_) {
     renderer_->UnregisterFromEngine(renderer);
   }
 }
 
 void EditorView::SetRenderGraph(
-    std::shared_ptr<engine::Renderer::RenderGraphFactory> factory) {
+    std::shared_ptr<vortex::Renderer::RenderGraphFactory> factory) {
   render_graph_factory_ = std::move(factory);
 }
 

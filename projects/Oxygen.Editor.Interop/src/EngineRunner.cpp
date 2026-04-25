@@ -30,7 +30,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include <EditorModule/EditorModule.h>
 #include <EngineRunner.h>
@@ -152,9 +152,11 @@ namespace Oxygen::Interop {
                 shared->queue_strategy.KeyFor(QueueRole::kTransfer).get(),
         };
         auto renderer_unique =
-          std::make_unique<Renderer>(shared->gfx_weak, renderer_config);
+          std::make_unique<oxygen::vortex::Renderer>(
+            shared->gfx_weak, renderer_config);
         // Store observer ptr in the EngineContext so managed code can access it
-        shared->renderer = oxygen::observer_ptr<Renderer>(renderer_unique.get());
+        shared->renderer = oxygen::observer_ptr<oxygen::vortex::Renderer>(
+          renderer_unique.get());
         shared->engine->RegisterModule(std::move(renderer_unique));
 
         // Register the Editor module (requires surface registry)

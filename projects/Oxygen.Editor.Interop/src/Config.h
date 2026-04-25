@@ -129,6 +129,7 @@ namespace Oxygen::Interop {
   public:
     bool EnableDebug;
     bool EnableValidation;
+    bool EnableAftermath;
     System::String^ PreferredCardName;                // null => not specified
     System::Nullable<long long> PreferredCardDeviceId; // null => not specified
     bool Headless;
@@ -137,15 +138,17 @@ namespace Oxygen::Interop {
     System::String^ Extra; // JSON string
 
     GraphicsConfigManaged()
-      : EnableDebug(false), EnableValidation(false), PreferredCardName(nullptr),
-      PreferredCardDeviceId(), Headless(false), EnableImGui(false),
+      : EnableDebug(native::DefaultGraphicsDebugLayerEnabled()),
+      EnableValidation(false), EnableAftermath(native::DefaultGraphicsAftermathEnabled()),
+      PreferredCardName(nullptr), PreferredCardDeviceId(), Headless(false), EnableImGui(false),
       EnableVSync(true), Extra(gcnew System::String("{}")) {
     }
 
     static GraphicsConfigManaged^ FromNative(native::GraphicsConfig const& n) {
       auto m = gcnew GraphicsConfigManaged();
-      m->EnableDebug = n.enable_debug;
+      m->EnableDebug = n.enable_debug_layer;
       m->EnableValidation = n.enable_validation;
+      m->EnableAftermath = n.enable_aftermath;
       if (n.preferred_card_name.has_value()) {
         m->PreferredCardName = detail::ToManagedString(*n.preferred_card_name);
       }
@@ -162,8 +165,9 @@ namespace Oxygen::Interop {
 
     native::GraphicsConfig ToNative() {
       native::GraphicsConfig n;
-      n.enable_debug = EnableDebug;
+      n.enable_debug_layer = EnableDebug;
       n.enable_validation = EnableValidation;
+      n.enable_aftermath = EnableAftermath;
       if (!System::String::IsNullOrEmpty(PreferredCardName)) {
         n.preferred_card_name = detail::ToStdString(PreferredCardName);
       }

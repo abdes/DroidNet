@@ -25,11 +25,13 @@
 
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::interop::module {
 
   using namespace oxygen;
-  using namespace oxygen::renderer;
 
   namespace {
     class EditorInputWriter final : public IInputWriter {
@@ -111,12 +113,14 @@ namespace oxygen::interop::module {
 
   EditorModule::~EditorModule() { LOG_F(INFO, "EditorModule destroyed."); }
 
-  auto EditorModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+  auto EditorModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool {
     DCHECK_NOTNULL_F(engine);
 
+    auto platform = engine->GetPlatformShared();
+    DCHECK_NOTNULL_F(platform);
     auto writer = std::make_unique<EditorInputWriter>(
-      engine->GetPlatform().Input().ForWrite());
+      platform->Input().ForWrite());
     input_accumulator_adapter_ =
       std::make_unique<InputAccumulatorAdapter>(std::move(writer));
 
@@ -172,8 +176,11 @@ namespace oxygen::interop::module {
     return viewport_navigation_->InitializeBindings(input_system);
   }
 
-  auto EditorModule::OnFrameStart(engine::FrameContext& context) -> void {
+  auto EditorModule::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void {
     LOG_SCOPE_F(1, "EditorModule::OnFrameStart");
+    if (context == nullptr) {
+      return;
+    }
     DCHECK_NOTNULL_F(registry_);
     DCHECK_NOTNULL_F(view_manager_);
 
@@ -192,11 +199,6 @@ namespace oxygen::interop::module {
 
     if (roots_dirty_) {
       std::lock_guard lock(roots_mutex_);
-      if (!asset_loader_.get()->IsRunning()) {
-        LOG_F(INFO,
-          "Deferring cooked-roots sync: AssetLoader not activated yet");
-        return;
-      }
       LOG_F(INFO, "Syncing {} cooked roots to AssetLoader and PathResolver", mounted_roots_.size());
       asset_loader_.get()->ClearMounts();
       path_resolver_->ClearMounts();
@@ -210,12 +212,12 @@ namespace oxygen::interop::module {
     // Begin frame for the ViewManager: make the transient FrameContext
     // available so FrameStart commands (executed later in this method)
     // can perform immediate registration via ViewManager::CreateViewAsync.
-    view_manager_->OnFrameStart(context);
+    view_manager_->OnFrameStart(*context);
 
     ProcessSurfaceRegistrations();
     ProcessSurfaceDestructions();
     auto surfaces = ProcessResizeRequests();
-    SyncSurfacesWithFrameContext(context, surfaces);
+    SyncSurfacesWithFrameContext(*context, surfaces);
 
     // Drain and dispatch input from the accumulator to the engine's input
     // system.
@@ -306,7 +308,7 @@ namespace oxygen::interop::module {
         }
       });
 
-    context.SetScene(observer_ptr{ scene_.get() });
+    context->SetScene(observer_ptr{ scene_.get() });
     view_manager_->FinalizeViews();
   }
 
@@ -461,7 +463,10 @@ namespace oxygen::interop::module {
     return surfaces;
   }
 
-  auto EditorModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnSceneMutation(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    if (context == nullptr) {
+      co_return;
+    }
     // Drain only commands targeting SceneMutation. Leave other commands for
     // their appropriate phases so insertion order is preserved across phases.
     CommandContext cmd_context{
@@ -489,16 +494,16 @@ namespace oxygen::interop::module {
     if (scene_ && !graphics_.expired() && view_manager_) {
       auto gfx = graphics_.lock();
 
-      const auto input_blob = context.GetInputSnapshot();
+      const auto input_blob = context->GetInputSnapshot();
       const auto input_snapshot = input_blob
         ? std::static_pointer_cast<const input::InputSnapshot>(input_blob)
         : std::shared_ptr<const input::InputSnapshot> {};
 
       float dt_seconds =
-        std::chrono::duration<float>(context.GetGameDeltaTime().get()).count();
+        std::chrono::duration<float>(context->GetGameDeltaTime().get()).count();
       if (dt_seconds <= 0.0f) {
         dt_seconds =
-          std::chrono::duration<float>(context.GetFrameTiming().frameDuration)
+          std::chrono::duration<float>(context->GetFrameTiming().frame_duration)
             .count();
       }
 
@@ -510,7 +515,7 @@ namespace oxygen::interop::module {
 
         // Prepare context for this view (no recorder in this phase)
         EditorViewContext view_ctx{
-            .frame_context = context, .graphics = *gfx, .recorder = nullptr };
+            .frame_context = *context, .graphics = *gfx, .recorder = nullptr };
 
         view->SetRenderingContext(view_ctx);
         view->OnSceneMutation();
@@ -559,12 +564,15 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::OnPreRender(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    if (context == nullptr) {
+      co_return;
+    }
     // Ensure framebuffers are created for all surfaces
     EnsureFramebuffers();
 
     if (engine_ && view_manager_) {
-      auto renderer_opt = engine_->GetModule<oxygen::engine::Renderer>();
+      auto renderer_opt = engine_->GetModule<oxygen::vortex::Renderer>();
       if (renderer_opt.has_value()) {
         auto& renderer = renderer_opt->get();
         // Iterate over all registered views and allow them to prepare for
@@ -578,7 +586,7 @@ namespace oxygen::interop::module {
               continue;
 
             EditorViewContext view_ctx{
-                .frame_context = context, .graphics = *gfx, .recorder = nullptr };
+                .frame_context = *context, .graphics = *gfx, .recorder = nullptr };
             view->SetRenderingContext(view_ctx);
             co_await view->OnPreRender(renderer);
             // Clear the per-phase recorder/context pointer after PreRender
@@ -599,13 +607,15 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::OnRender(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    (void)context;
     // Rendering is handled by the Renderer module via registered views.
     // EditorModule participates in OnCompositing to blit results to surfaces.
     co_return;
   }
 
-  auto EditorModule::OnCompositing(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnCompositing(observer_ptr<engine::FrameContext> context) -> co::Co<> {
+    (void)context;
     if (!compositor_) {
       co_return;
     }
@@ -642,7 +652,7 @@ namespace oxygen::interop::module {
         scene_.reset();
       }
     }
-    scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name));
+    scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name), 1024U);
   }
 
   auto EditorModule::EnsureFramebuffers() -> bool {

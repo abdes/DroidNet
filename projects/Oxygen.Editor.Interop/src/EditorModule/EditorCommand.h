@@ -19,7 +19,7 @@ namespace oxygen {
   }
 
   namespace content {
-    class AssetLoader;
+    class IAssetLoader;
     class VirtualPathResolver;
   }
 } // namespace oxygen
@@ -31,7 +31,7 @@ namespace oxygen::interop::module {
     // Use observer_ptr to make volatility explicit (command handlers must
     // not retain or store the pointer beyond execution).
     oxygen::observer_ptr<oxygen::scene::Scene> Scene;
-    oxygen::observer_ptr<oxygen::content::AssetLoader> AssetLoader;
+    oxygen::observer_ptr<oxygen::content::IAssetLoader> AssetLoader;
     oxygen::observer_ptr<oxygen::content::VirtualPathResolver> PathResolver;
   };
 
