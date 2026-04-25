@@ -316,7 +316,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   const auto static_data = EnvironmentStaticData {};
 
   EXPECT_EQ(sizeof(static_data.fog), 128U);
-  EXPECT_EQ(sizeof(static_data.volumetric_fog), 80U);
+  EXPECT_EQ(sizeof(static_data.volumetric_fog), 96U);
   EXPECT_EQ(static_data.fog.flags, 0U);
   EXPECT_EQ(static_data.fog.primary_density, 0.0F);
   EXPECT_EQ(static_data.fog.secondary_density, 0.0F);
@@ -326,6 +326,9 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   EXPECT_EQ(static_data.volumetric_fog.flags, 0U);
   EXPECT_EQ(static_data.volumetric_fog.integrated_light_scattering_srv,
     oxygen::kInvalidBindlessIndex);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[0], 0.0F);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[1], 1.0F);
+  EXPECT_FLOAT_EQ(static_data.volumetric_fog.grid_z_params[2], 1.0F);
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -1943,6 +1946,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   service.OnFrameStart(
     oxygen::frame::SequenceNumber { 11U }, oxygen::frame::Slot { 2U });
   auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
   auto fog
     = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
   ASSERT_NE(fog.get(), nullptr);
@@ -1961,6 +1967,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   composition_view.with_height_fog = true;
   auto ctx = MakeRenderContext(ViewId { 31U }, resolved_view, composition_view);
   ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricFog.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
 
   graphics_->dispatch_log_.dispatches.clear();
 
@@ -2008,6 +2022,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(static_data->volumetric_fog.grid_width, 8U);
   EXPECT_EQ(static_data->volumetric_fog.grid_height, 8U);
   EXPECT_EQ(static_data->volumetric_fog.grid_depth, 32U);
+  EXPECT_GT(static_data->volumetric_fog.grid_z_params[0], 0.0F);
+  EXPECT_LT(static_data->volumetric_fog.grid_z_params[1], 1.0F);
+  EXPECT_FLOAT_EQ(static_data->volumetric_fog.grid_z_params[2], 32.0F);
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.distance_m, 96000.0F);
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.start_distance_m, 50.0F);
   EXPECT_TRUE(
@@ -2021,6 +2038,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   const auto& generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(generation.integrated_light_scattering_valid);
   EXPECT_FALSE(generation.integrated_light_scattering_unavailable);
+  EXPECT_TRUE(generation.volumetric_fog_view_constants_bound);
+  EXPECT_TRUE(generation.volumetric_fog_ue_log_depth_distribution);
+  EXPECT_TRUE(generation.volumetric_fog_directional_shadowed_light_requested);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

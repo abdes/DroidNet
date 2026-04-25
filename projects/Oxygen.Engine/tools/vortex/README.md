@@ -140,10 +140,11 @@ with `diagnostic_products_` prefixes in the final validation report.
     one later `Vortex.Stage15.Fog` draw, and a named
     `Vortex.Environment.IntegratedLightScattering` resource bound as the
     Stage-14 compute UAV
-  - asserts the Stage-15 fog draw has a captured 656-byte
+  - asserts the Stage-15 fog draw has a captured 672-byte
     `EnvironmentStaticData` payload with a valid
     `volumetric_fog.integrated_light_scattering_srv`, enabled/valid
-    volumetric flags, and nonzero grid dimensions
+    volumetric flags, nonzero grid dimensions, and valid log-depth grid
+    parameters
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the
