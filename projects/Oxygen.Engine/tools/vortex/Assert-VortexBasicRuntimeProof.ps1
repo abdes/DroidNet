@@ -69,6 +69,8 @@ $expectedChecks = @{
   'compositing_present_operation_count_match' = 'true'
   'stage14_local_fog_scope_count_match' = 'true'
   'stage14_local_fog_dispatch_count_match' = 'true'
+  'stage14_volumetric_fog_scope_count_match' = 'true'
+  'stage14_volumetric_fog_dispatch_count_match' = 'true'
   'phase03_runtime_stage_order_match' = 'true'
   'stage15_sky_scope_count_match' = 'true'
   'stage15_sky_draw_count_match' = 'true'
@@ -79,6 +81,7 @@ $expectedChecks = @{
   'stage15_local_fog_scope_count_match' = 'true'
   'stage15_local_fog_draw_count_match' = 'true'
   'stage15_runtime_stage_order_match' = 'true'
+  'volumetric_fog_runtime_stage_order_match' = 'true'
 }
 
 $expectedDebugChecks = @{
@@ -113,6 +116,7 @@ $expectedProductChecks = @{
   'screen_hzb_published' = 'true'
   'local_fog_hzb_consumed' = 'true'
   'local_fog_indirect_draw_valid' = 'true'
+  'integrated_light_scattering_published' = 'true'
   'stage9_has_expected_targets' = 'true'
   'stage9_gbuffer_base_color_nonzero' = 'true'
   'stage9_velocity_nonzero' = 'true'
@@ -221,6 +225,9 @@ $runtimeCameraAerialPerspectivePublished = @(
 $runtimeAtmosphereLutCacheValid = @(
   $runtimeLogLines | Select-String -Pattern 'atmosphere_lut_cache_valid=true'
 ).Count -gt 0
+$runtimeIntegratedLightScatteringValid = @(
+  $runtimeLogLines | Select-String -Pattern 'integrated_light_scattering_valid=true'
+).Count -gt 0
 
 $captureReportLines = Get-Content -LiteralPath $captureReportFullPath
 $captureReportMap = @{}
@@ -324,6 +331,15 @@ if ($runtimeAtmosphereLutCacheValid) {
   $effectiveProductsReportMap['atmosphere_lut_cache_valid'] = 'true'
 }
 
+$integratedLightScatteringProofSource = 'products_report'
+if (($effectiveProductsReportMap['integrated_light_scattering_published'] -ne 'true') `
+  -and $runtimeIntegratedLightScatteringValid `
+  -and $captureReportMap['stage14_volumetric_fog_scope_count_match'] -eq 'true' `
+  -and $captureReportMap['stage14_volumetric_fog_dispatch_count_match'] -eq 'true') {
+  $effectiveProductsReportMap['integrated_light_scattering_published'] = 'true'
+  $integratedLightScatteringProofSource = 'runtime_log+capture_report'
+}
+
 foreach ($key in $expectedProductChecks.Keys) {
   $actualValue = if ($effectiveProductsReportMap.ContainsKey($key)) { $effectiveProductsReportMap[$key] } else { '' }
   if ($actualValue -ne $expectedProductChecks[$key]) {
@@ -375,6 +391,9 @@ $reportLines = @(
   "camera_aerial_perspective_proof_source=$cameraAerialPerspectiveProofSource"
   "atmosphere_lut_cache_valid=$($effectiveProductsReportMap['atmosphere_lut_cache_valid'])"
   "atmosphere_lut_cache_proof_source=$atmosphereLutCacheProofSource"
+  "integrated_light_scattering_published=$($effectiveProductsReportMap['integrated_light_scattering_published'])"
+  "integrated_light_scattering_proof_source=$integratedLightScatteringProofSource"
+  "integrated_light_scattering_consumed_by_fog=$($effectiveProductsReportMap['integrated_light_scattering_consumed_by_fog'])"
 )
 
 foreach ($key in ($localFogValidationResults.Keys | Sort-Object)) {
