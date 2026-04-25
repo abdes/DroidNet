@@ -135,6 +135,8 @@ public:
     std::uint32_t stage14_volumetric_fog_dispatch_count_x { 0U };
     std::uint32_t stage14_volumetric_fog_dispatch_count_y { 0U };
     std::uint32_t stage14_volumetric_fog_dispatch_count_z { 0U };
+    bool stage14_volumetric_fog_height_fog_media_requested { false };
+    bool stage14_volumetric_fog_height_fog_media_executed { false };
     bool stage14_volumetric_fog_local_fog_injection_requested { false };
     bool stage14_volumetric_fog_local_fog_injection_executed { false };
     std::uint32_t stage14_volumetric_fog_local_fog_instance_count { 0U };

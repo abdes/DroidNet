@@ -2041,6 +2041,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.volumetric_fog_view_constants_bound);
   EXPECT_TRUE(generation.volumetric_fog_ue_log_depth_distribution);
   EXPECT_TRUE(generation.volumetric_fog_directional_shadowed_light_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2111,6 +2113,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ASSERT_NE(slot, kInvalidShaderVisibleIndex);
   const auto& generation = service.GetLastViewProductGenerationState();
   EXPECT_TRUE(generation.integrated_light_scattering_valid);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_requested);
+  EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_requested);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_executed);
   EXPECT_EQ(generation.volumetric_fog_local_fog_instance_count, 1U);

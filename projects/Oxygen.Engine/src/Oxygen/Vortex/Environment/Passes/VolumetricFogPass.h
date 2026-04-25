@@ -52,6 +52,8 @@ namespace environment {
       bool view_constants_bound { false };
       bool ue_log_depth_distribution { false };
       bool directional_shadowed_light_injection_requested { false };
+      bool height_fog_media_requested { false };
+      bool height_fog_media_executed { false };
       bool local_fog_injection_requested { false };
       bool local_fog_injection_executed { false };
       std::uint32_t local_fog_instance_count { 0U };
@@ -85,7 +87,7 @@ namespace environment {
       float start_distance_m { 0.0F };
       float end_distance_m { 1000.0F };
       float near_fade_in_distance_m { 0.0F };
-      float base_extinction_per_m { 0.0F };
+      float global_extinction_scale { 0.0F };
     };
 
     struct alignas(16) MediaControl0 {
@@ -124,12 +126,28 @@ namespace environment {
       float _pad2 { 0.0F };
     };
 
+    struct alignas(16) HeightFogMediaControl0 {
+      float primary_density { 0.0F };
+      float primary_height_falloff { 0.0F };
+      float primary_height_offset_m { 0.0F };
+      float secondary_density { 0.0F };
+    };
+
+    struct alignas(16) HeightFogMediaControl1 {
+      float secondary_height_falloff { 0.0F };
+      float secondary_height_offset_m { 0.0F };
+      float match_height_fog_factor { 0.5F };
+      std::uint32_t enabled { 0U };
+    };
+
     struct alignas(16) PassConstants {
       OutputHeader output_header {};
       GridControl grid {};
       GridZControl grid_z {};
       MediaControl0 media0 {};
       MediaControl1 media1 {};
+      HeightFogMediaControl0 height_fog0 {};
+      HeightFogMediaControl1 height_fog1 {};
       LocalFogControl0 local_fog0 {};
       LocalFogControl1 local_fog1 {};
       LocalFogControl2 local_fog2 {};

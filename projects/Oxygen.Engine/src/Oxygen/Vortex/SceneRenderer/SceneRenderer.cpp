@@ -1591,6 +1591,12 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     environment_lighting_state_.stage14_volumetric_fog_dispatch_count_z
       = stage14_state.volumetric_fog_dispatch_count_z;
     environment_lighting_state_
+      .stage14_volumetric_fog_height_fog_media_requested
+      = stage14_state.volumetric_fog_height_fog_media_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_height_fog_media_executed
+      = stage14_state.volumetric_fog_height_fog_media_executed;
+    environment_lighting_state_
       .stage14_volumetric_fog_local_fog_injection_requested
       = stage14_state.volumetric_fog_local_fog_injection_requested;
     environment_lighting_state_
