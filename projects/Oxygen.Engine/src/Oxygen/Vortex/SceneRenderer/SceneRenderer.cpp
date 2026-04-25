@@ -1437,6 +1437,28 @@ void SceneRenderer::OnRender(RenderContext& ctx)
   // Stage 15: Sky / atmosphere / fog
   if (environment_ != nullptr && !IsNonIblDebugMode(ctx.shader_debug_mode)) {
     environment_->RenderSkyAndFog(ctx, scene_textures_);
+    const auto& stage14_state = environment_->GetLastStage14State();
+    environment_lighting_state_.stage14_requested = stage14_state.requested;
+    environment_lighting_state_.stage14_local_fog_requested
+      = stage14_state.local_fog_requested;
+    environment_lighting_state_.stage14_local_fog_executed
+      = stage14_state.local_fog_executed;
+    environment_lighting_state_.stage14_local_fog_hzb_consumed
+      = stage14_state.local_fog_hzb_consumed;
+    environment_lighting_state_.stage14_local_fog_hzb_unavailable
+      = stage14_state.local_fog_hzb_unavailable;
+    environment_lighting_state_.stage14_local_fog_buffer_ready
+      = stage14_state.local_fog_buffer_ready;
+    environment_lighting_state_.stage14_local_fog_skipped
+      = stage14_state.local_fog_skipped;
+    environment_lighting_state_.stage14_local_fog_instance_count
+      = stage14_state.local_fog_instance_count;
+    environment_lighting_state_.stage14_local_fog_dispatch_count_x
+      = stage14_state.local_fog_dispatch_count_x;
+    environment_lighting_state_.stage14_local_fog_dispatch_count_y
+      = stage14_state.local_fog_dispatch_count_y;
+    environment_lighting_state_.stage14_local_fog_dispatch_count_z
+      = stage14_state.local_fog_dispatch_count_z;
     const auto& stage15_state = environment_->GetLastStage15State();
     environment_lighting_state_.owned_by_environment_service = true;
     environment_lighting_state_.stage15_requested = stage15_state.requested;

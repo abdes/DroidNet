@@ -19,6 +19,22 @@
 
 namespace oxygen::vortex::environment {
 
+inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightAuthoredEnabled
+  = 1U << 0U;
+inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightIblValid
+  = 1U << 1U;
+inline constexpr std::uint32_t kEnvironmentViewProductFlagSkyLightIblUnavailable
+  = 1U << 2U;
+inline constexpr std::uint32_t
+  kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled
+  = 1U << 3U;
+inline constexpr std::uint32_t
+  kEnvironmentViewProductFlagIntegratedLightScatteringValid
+  = 1U << 4U;
+inline constexpr std::uint32_t
+  kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable
+  = 1U << 5U;
+
 struct EnvironmentViewProducts {
   AtmosphereModel atmosphere {};
   AtmosphereLightSlots atmosphere_lights {};

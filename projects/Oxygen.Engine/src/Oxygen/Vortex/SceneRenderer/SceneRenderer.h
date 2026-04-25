@@ -112,6 +112,17 @@ public:
   struct EnvironmentLightingState {
     bool published_bindings { false };
     bool owned_by_environment_service { false };
+    bool stage14_requested { false };
+    bool stage14_local_fog_requested { false };
+    bool stage14_local_fog_executed { false };
+    bool stage14_local_fog_hzb_consumed { false };
+    bool stage14_local_fog_hzb_unavailable { false };
+    bool stage14_local_fog_buffer_ready { false };
+    bool stage14_local_fog_skipped { false };
+    std::uint32_t stage14_local_fog_instance_count { 0U };
+    std::uint32_t stage14_local_fog_dispatch_count_x { 0U };
+    std::uint32_t stage14_local_fog_dispatch_count_y { 0U };
+    std::uint32_t stage14_local_fog_dispatch_count_z { 0U };
     bool stage15_requested { false };
     bool sky_requested { false };
     bool sky_executed { false };

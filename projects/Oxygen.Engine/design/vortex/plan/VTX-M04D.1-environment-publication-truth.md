@@ -1,6 +1,6 @@
 # VTX-M04D.1 — Environment Publication And Sky/Fog Contract Truth
 
-Status: `in_progress`
+Status: `validated`
 
 This is the first work package inside `VTX-M04D — Environment / Fog Parity
 Closure`. It makes the active environment service truthful and inspectable
@@ -21,6 +21,11 @@ must be able to distinguish:
 
 This work package does not claim fog parity. It prepares the environment
 contract so later fog parity work can be implemented and verified reliably.
+
+Validation evidence is recorded in
+[../IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md). Real SkyLight
+capture/filtering resources, UE5.7 height fog parity, UE5.7 local fog parity,
+and UE5.7 volumetric fog parity remain outside this validated package.
 
 ## 2. Scope
 

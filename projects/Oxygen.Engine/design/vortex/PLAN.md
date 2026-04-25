@@ -61,9 +61,10 @@ Important baseline facts:
   deferred lighting are present in code.
 - `LightingService`, `ShadowService`, `PostProcessService`, and
   `EnvironmentLightingService` are real code owners, not empty future names.
-- `EnvironmentLightingService` is substantial but not closed. Sky/atmosphere
-  and below-horizon handling are advanced; height fog, local fog, volumetric
-  fog, and SkyLight/IBL publication remain open parity work.
+- `EnvironmentLightingService` is substantial but not fully parity-closed.
+  Sky/atmosphere and below-horizon handling are advanced; height fog, local
+  fog, volumetric fog, and real SkyLight capture/filtering remain open parity
+  work.
 - `DiagnosticsService`, `TranslucencyModule`, and the full `OcclusionModule`
   are not concrete runtime closures yet, even though supporting substrate and
   some placeholder directories exist.
@@ -87,9 +88,11 @@ the current publication surface can still look more complete than the runtime
 behavior really is. Keep the work inside Phase 4D and do not advance to Async
 migration or Phase 5 until the environment/fog parity gates have evidence.
 
-**First work package:** `VTX-M04D.1 — Environment Publication And Sky/Fog
-Contract Truth`. This stabilizes what downstream code, diagnostics, tests, and
+**Completed work package:** `VTX-M04D.1 — Environment Publication And Sky/Fog
+Contract Truth`. This stabilized what downstream code, diagnostics, tests, and
 runtime proof can observe before deeper fog parity work lands.
+
+**Next work package:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`.
 
 **Detailed plan:** [plan/VTX-M04D.1-environment-publication-truth.md](./plan/VTX-M04D.1-environment-publication-truth.md)
 
@@ -158,7 +161,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M02 | Deferred core visual path | `landed_needs_validation` | VTX-M01 | InitViews, depth prepass, generic HZB, base pass/GBuffer/velocity, Stage 10 publication, deferred lighting, debug views. |
 | VTX-M03 | Migration-critical non-environment services | `landed_needs_validation` | VTX-M02 | LightingService, ShadowService directional baseline, PostProcessService, and their publication seams. |
 | VTX-M04D | Environment / fog parity closure | `in_progress` | VTX-M02, VTX-M03 validation context | Parent milestone for environment publication truth, height fog, local fog, volumetric fog, and runtime proof. |
-| VTX-M04D.1 | Environment publication and sky/fog contract truth | `in_progress` | VTX-M02, current environment code | Truthful environment binding/publication state, SkyLight/IBL truth, Stage 14 observability. |
+| VTX-M04D.1 | Environment publication and sky/fog contract truth | `validated` | VTX-M02, current environment code | Truthful environment binding/publication state, SkyLight/IBL truth, Stage 14 observability. |
 | VTX-M04D.2 | UE5.7 exponential height fog parity | `in_progress` | VTX-M04D.1 | Height fog authored parameters, algorithms, shaders, sky/lighting coupling, tests/proof. |
 | VTX-M04D.3 | UE5.7 local fog volume parity | `in_progress` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Local fog authored components, tiled culling, HZB use, splat/compose, sky-depth exclusion, tests/proof. |
 | VTX-M04D.4 | UE5.7 volumetric fog parity | `in_progress` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3 | Froxel grid, media injection, lighting/shadowing, history/reprojection, integrated scattering product. |
@@ -451,8 +454,8 @@ Parallelism rules:
 | LightingService | VTX-M03 | `landed_needs_validation` | Light selection, forward light publication, light grid, Stage 12 service ownership. |
 | ShadowService directional baseline | VTX-M03 | `landed_needs_validation` | Directional conventional shadow data publication. |
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
-| Environment sky/atmosphere | VTX-M04D.1 | `in_progress` | Preserve advanced sky/atmosphere and below-horizon behavior with truthful publications. |
-| SkyLight / IBL | VTX-M04D.1 | `in_progress` | Real resource publication or explicit invalid state; no revision-only closure. |
+| Environment sky/atmosphere | VTX-M04D.1 | `validated` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful. |
+| SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
 | Exponential height fog | VTX-M04D.2 | `in_progress` | UE5.7-grade authored parameters, algorithms, shaders, and coupling. |
 | Local fog volumes | VTX-M04D.3 | `in_progress` | UE5.7-grade authoring, culling, splat/compose, HZB, sky exclusion, proof. |
 | Volumetric fog | VTX-M04D.4 | `in_progress` | UE5.7-grade froxel, injection, lighting, history, integrated scattering. |
