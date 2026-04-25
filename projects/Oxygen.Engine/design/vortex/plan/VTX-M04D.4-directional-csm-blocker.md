@@ -110,6 +110,23 @@ ShaderBake/catalog, unit tests, normal and `directional-shadow-mask` RenderDoc
 captures, receiver-pixel attenuation proof, debugger-backed D3D12 debug-layer
 audit, and user visual confirmation of projected shadows.
 
+## City-Scale Follow-Up
+
+`CityEnvironmentValidation` later exposed a separate data-hydration defect:
+the cooked directional-light record carried the authored 4.2 km manual CSM
+range, split mode, transition fraction, and fadeout fraction, but
+`SceneLoaderService` only copied cascade count, distances, and distribution
+exponent into the runtime `DirectionalLight`. Small scenes still projected
+shadows because the default 160 m generated CSM range was enough; the city
+scene effectively lost its authored city-scale CSM contract at load time.
+
+The corrective loader slice now hydrates and canonicalizes the full cooked CSM
+record: split mode, max shadow distance, manual cascade distances, distribution
+exponent, transition fraction, and distance fadeout fraction. Focused
+regression coverage builds a cooked directional-light component with manual
+city-scale CSM values and verifies the runtime `DirectionalLight` preserves the
+shadow-casting flag and full CSM setup.
+
 ## Exit Gate
 
 This blocker is validated because all of the following are recorded in
