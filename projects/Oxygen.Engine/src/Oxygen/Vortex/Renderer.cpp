@@ -2306,10 +2306,10 @@ auto Renderer::SinglePassHarnessFacade::Validate() const -> ValidationReport
 }
 
 auto Renderer::SinglePassHarnessFacade::Finalize()
-  -> std::expected<ValidatedSinglePassHarnessContext, ValidationReport>
+  -> oxygen::Result<ValidatedSinglePassHarnessContext, ValidationReport>
 {
   auto materializer = internal::RenderContextMaterializer(*renderer_);
-  return materializer.MaterializeSinglePass(
+  auto materialized = materializer.MaterializeSinglePass(
     internal::RenderContextMaterializer::SinglePassHarnessStaging {
       .frame_session = frame_session_,
       .output_target = output_target_,
@@ -2317,6 +2317,10 @@ auto Renderer::SinglePassHarnessFacade::Finalize()
       .prepared_frame = prepared_frame_,
       .core_shader_inputs = core_shader_inputs_,
     });
+  if (!materialized.has_value()) {
+    return oxygen::Err(std::move(materialized).error());
+  }
+  return oxygen::Ok(std::move(materialized).value());
 }
 
 Renderer::RenderGraphHarnessFacade::RenderGraphHarnessFacade(
@@ -2397,11 +2401,11 @@ auto Renderer::RenderGraphHarnessFacade::Validate() const -> ValidationReport
 }
 
 auto Renderer::RenderGraphHarnessFacade::Finalize()
-  -> std::expected<ValidatedRenderGraphHarness, ValidationReport>
+  -> oxygen::Result<ValidatedRenderGraphHarness, ValidationReport>
 {
   auto report = Validate();
   if (!report.Ok()) {
-    return std::unexpected<ValidationReport> { report };
+    return oxygen::Err(std::move(report));
   }
 
   auto materializer = internal::RenderContextMaterializer(*renderer_);
@@ -2414,7 +2418,7 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
       .core_shader_inputs = core_shader_inputs_,
     });
   if (!materialized.has_value()) {
-    return std::unexpected<ValidationReport> { materialized.error() };
+    return oxygen::Err(std::move(materialized).error());
   }
 
   CHECK_F(resolved_view_.has_value() || core_shader_inputs_.has_value(),
@@ -2423,8 +2427,8 @@ auto Renderer::RenderGraphHarnessFacade::Finalize()
   const auto view_id = resolved_view_.has_value()
     ? resolved_view_->view_id
     : core_shader_inputs_.value().view_id;
-  return ValidatedRenderGraphHarness(
-    std::move(materialized.value()), *render_graph_, view_id);
+  return oxygen::Ok(ValidatedRenderGraphHarness(
+    std::move(materialized).value(), *render_graph_, view_id));
 }
 
 Renderer::OffscreenSceneViewInput::OffscreenSceneViewInput()
@@ -2606,18 +2610,17 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
 }
 
 auto Renderer::OffscreenSceneFacade::Finalize()
-  -> std::expected<ValidatedOffscreenSceneSession, ValidationReport>
+  -> oxygen::Result<ValidatedOffscreenSceneSession, ValidationReport>
 {
   auto report = Validate();
   if (!report.Ok()) {
-    return std::unexpected<ValidationReport> { report };
+    return oxygen::Err(std::move(report));
   }
 
   const auto pipeline_input
     = pipeline_.has_value() ? *pipeline_ : OffscreenPipelineInput {};
-  return std::expected<ValidatedOffscreenSceneSession, ValidationReport>(
-    std::in_place, *renderer_, *frame_session_, *scene_source_, *view_intent_,
-    *output_target_, pipeline_input);
+  return oxygen::Ok(ValidatedOffscreenSceneSession(*renderer_, *frame_session_,
+    *scene_source_, *view_intent_, *output_target_, pipeline_input));
 }
 
 } // namespace oxygen::vortex
