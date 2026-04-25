@@ -496,7 +496,7 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutWidth),
     .help = "Sky atmosphere aerial perspective LUT screen resolution",
-    .default_value = int64_t { 32 },
+    .default_value = int64_t { 64 },
     .flags = console::CVarFlags::kArchive,
     .min_value = 4.0,
     .max_value = 256.0,
@@ -505,7 +505,7 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexAerialPerspectiveLutDepthResolution),
     .help = "Sky atmosphere aerial perspective LUT depth resolution",
-    .default_value = int64_t { 16 },
+    .default_value = int64_t { 32 },
     .flags = console::CVarFlags::kArchive,
     .min_value = 4.0,
     .max_value = 256.0,
@@ -1535,28 +1535,28 @@ auto Renderer::GetLocalFogUseHzb() const noexcept -> bool
 auto Renderer::GetAerialPerspectiveLutWidth() const noexcept -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 32 };
+    auto value = std::int64_t { 64 };
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexAerialPerspectiveLutWidth, value)) {
       return static_cast<std::uint32_t>(
         std::clamp<std::int64_t>(value, 4, 256));
     }
   }
-  return 32U;
+  return 64U;
 }
 
 auto Renderer::GetAerialPerspectiveLutDepthResolution() const noexcept
   -> std::uint32_t
 {
   if (console_ != nullptr) {
-    auto value = std::int64_t { 16 };
+    auto value = std::int64_t { 32 };
     if (console_->TryGetCVarValue<int64_t>(
           kCVarVortexAerialPerspectiveLutDepthResolution, value)) {
       return static_cast<std::uint32_t>(
-        std::clamp<std::int64_t>(value, 1, 256));
+        std::clamp<std::int64_t>(value, 4, 256));
     }
   }
-  return 16U;
+  return 32U;
 }
 
 auto Renderer::GetAerialPerspectiveLutDepthKm() const noexcept -> float
