@@ -117,7 +117,7 @@ src/Oxygen/Vortex/
 │
 │   ── Capability-Family Services ─────────────────────────────────────────
 │
-├── Environment/                       service: atmosphere, sky, IBL
+├── Environment/                       service: atmosphere, sky, height/local/volumetric fog, sky-light/IBL
 │   │  EnvironmentLightingService.h
 │   ├── Internal/
 │   ├── Passes/

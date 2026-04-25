@@ -92,7 +92,7 @@ For actual execution and sign-off, use these documents together:
 - this LLD for the stable migration contract
 - `design/vortex/PLAN.md` for phase/step ownership
 - `design/vortex/PROJECT-LAYOUT.md` for authoritative placements
-- `design/vortex/IMPLEMENTATION-STATUS.md` for current completion state and
+- `design/vortex/IMPLEMENTATION_STATUS.md` for current completion state and
   evidence ledger
 - `.planning/workstreams/vortex/phases/01-substrate-migration/01-RESEARCH.md`
   for exact dependency-order findings discovered from the real code graph
@@ -551,7 +551,7 @@ Phase 1 is not complete unless all of the following are true:
 4. the Vortex smoke path constructs `oxygen::vortex::Renderer` and exercises
    the stripped frame hooks
 5. the relevant legacy substrate regressions still pass
-6. `IMPLEMENTATION-STATUS.md` records the evidence literally and does not claim
+6. `IMPLEMENTATION_STATUS.md` records the evidence literally and does not claim
    completion on missing validation
 
 The authoritative executable command set, sampling cadence, and per-task proof
@@ -598,7 +598,7 @@ not instead of it.
    public contract remains intact and the ownership boundary becomes cleaner.
 
 9. **Using this LLD as live status instead of stable design.** Current
-   execution state must come from `IMPLEMENTATION-STATUS.md` and the active
+   execution state must come from `IMPLEMENTATION_STATUS.md` and the active
    Phase 1 planning pack. This LLD defines what is allowed and what must be
    true, not the minute-by-minute execution checkpoint.
 

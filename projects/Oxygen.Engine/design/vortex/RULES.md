@@ -25,14 +25,14 @@ package. Use it when a task contract or planning artifact refers to
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — stable structural architecture
 - [DESIGN.md](./DESIGN.md) — top-level design entry point
 - [PLAN.md](./PLAN.md) — active execution plan and phase ordering
-- [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) — current-state and
+- [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) — current-state and
   resumability ledger
 - [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — target file-placement reference
 - [lld/README.md](./lld/README.md) — low-level design package index
 
 ## Usage Notes
 
-- `IMPLEMENTATION-STATUS.md` is the current-state truth surface when a planning
+- `IMPLEMENTATION_STATUS.md` is the current-state truth surface when a planning
   document and the live branch disagree.
 - `PLAN.md` remains the roadmap and claim surface; do not treat it as proof of
   implementation by itself.

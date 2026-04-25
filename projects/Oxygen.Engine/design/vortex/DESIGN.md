@@ -18,7 +18,7 @@ Related documents:
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Stable conceptual architecture |
 | [PLAN.md](./PLAN.md) | Phased execution plan |
 | [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) | Authoritative file placement |
-| [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) | Tracker |
+| [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Tracker |
 | [lld/README.md](lld/README.md) | LLD package index and reserved future LLDs |
 
 ## Mandatory Vortex Rule
@@ -162,8 +162,10 @@ for the complete dispatch skeleton.
 1. Stage numbers correspond to ARCHITECTURE.md §6.2.
 2. Stage modules are dispatched via `Execute(RenderContext&, SceneTextures&)`.
    Subsystem services are dispatched via their domain-specific methods.
-3. Skipped stages (4, 7, 11, 13, 14, 16, 17, 19, 20) are reserved stubs.
+3. Skipped stages (4, 7, 11, 13, 16, 17, 19, 20) are reserved stubs.
    They become stage module or service dispatches when implemented.
+   Stage 14 is owned by `EnvironmentLightingService` for local and
+   volumetric fog work; parts of that scope are active but not parity-closed.
 4. Null subsystem pointers mean the stage is a no-op with zero overhead.
 5. The scene renderer owns stage ordering; it does not delegate ordering to
    stage modules or subsystems.
@@ -176,6 +178,7 @@ for the complete dispatch skeleton.
 | Light grid build | Occlusion / HZB |
 | | Base pass |
 | | Deferred lighting |
+| | Environment sky/fog |
 | | Translucency |
 | | Post-processing |
 
@@ -206,7 +209,7 @@ Per-subsystem detailed designs:
 | --- | --- | --- |
 | LightingService | 6, 12 | [`lighting-service.md`](lld/lighting-service.md) |
 | ShadowService | 8 | [`shadow-service.md`](lld/shadow-service.md) |
-| EnvironmentLightingService | 15 | [`environment-service.md`](lld/environment-service.md) |
+| EnvironmentLightingService | 14, 15 | [`environment-service.md`](lld/environment-service.md) |
 | PostProcessService | 22 | [`post-process-service.md`](lld/post-process-service.md) |
 | DiagnosticsService | overlay | [`diagnostics-service.md`](lld/diagnostics-service.md) |
 
@@ -391,5 +394,5 @@ The Vortex design is shaped around:
 
 All per-subsystem and per-stage designs are captured in the 18 LLD documents
 under [`lld/`](lld/README.md). See [PLAN.md](./PLAN.md) for phased execution
-and [IMPLEMENTATION-STATUS.md](./IMPLEMENTATION-STATUS.md) for progress
+and [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) for progress
 tracking.

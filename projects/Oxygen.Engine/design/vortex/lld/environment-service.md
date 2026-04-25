@@ -2,7 +2,7 @@
 
 **Phase:** 4D
 **Deliverable:** D.12
-**Status:** `needs-implementation`
+**Status:** `in_progress`
 
 ## Mandatory Vortex Rule
 
@@ -19,42 +19,157 @@
   explicit human approval records the accepted gap and the reason the parity
   gate cannot close.
 
-## Local Fog Correction (2026-04-19)
+## Current Implementation Status
 
-- The current Vortex local-fog runtime path is **not** at UE5.7 parity and
-  must not be described as an already-landed feature that only needs
-  hardening.
-- The authoritative local-fog contract is the UE5.7 implementation in:
-  - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Renderer\Private\LocalFogVolumeRendering.h`
-  - `F:\Epic Games\UE_5.7\Engine\Source\Runtime\Renderer\Private\LocalFogVolumeRendering.cpp`
-  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeCommon.ush`
-  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeTiledCulling.usf`
-  - `F:\Epic Games\UE_5.7\Engine\Shaders\Private\LocalFogVolumes\LocalFogVolumeSplat.usf`
-- The Vortex local-fog rewrite must mirror the UE5.7 per-view pack/sort/cap
-  flow, tile-texture culling contract, analytical integral, and composition
-  ordering.
-- The parity gate remains open until all required integration points are
-  evidenced:
-  - Stage 14 tiled culling path
-  - Stage 15 dedicated splat path
-  - height-fog inline composition parity when enabled
-  - volumetric-fog injection parity when volumetric fog is enabled
-- If Vortex still lacks the upstream height-fog or volumetric-fog subsystems
-  needed for those integration points, that is an explicit parity blocker, not
-  a reason to call local fog complete.
+This LLD is the continuation document for the active environment lane. It is
+not a completion record.
 
-## Sun At/Below Horizon Correction (2026-04-22)
+Current code contains substantial sky/atmosphere implementation:
 
-- The current Vortex atmosphere implementation is **not** parity-closed for the
-  UE5.7 sunset / below-horizon contract.
-- The earlier Vortex "active per-view atmosphere lane" closeout did **not**
-  assess the full direct-lighting, transmittance-LUT, and jitter contracts that
-  govern `mu <= 0` behavior.
-- The authoritative remediation for this gap now lives in:
-  - [environment-below-horizon-remediation.md](environment-below-horizon-remediation.md)
-- That remediation is a **blocking** sub-scope of Phase 4D and Phase 4E.
-- Do not describe Vortex sunset handling as parity-closed until that
-  remediation document's validation gate is satisfied with explicit evidence.
+- authored atmosphere state and Vortex runtime atmosphere models
+- dual atmosphere-light slot resolution
+- transmittance, multi-scattering, sky-view, camera aerial-perspective, and
+  distant sky-light LUT passes
+- Stage-15 sky/atmosphere rendering
+- stable below-horizon sky handling on the active path
+
+Current fog implementation is **not satisfactory** and must remain
+`in_progress` until the parity contract in this document is implemented and
+validated. This applies to:
+
+- exponential height fog
+- local fog volumes
+- volumetric fog
+- fog / sky-atmosphere coupling
+- fog / sky-light and fog / direct-light coupling
+
+No phase, task, or feature in the fog family may be described as complete until
+code exists, this LLD reflects the implemented scope, and validation evidence
+is recorded against the UE5.7 references listed below.
+
+## UE5.7 References For This LLD
+
+Environment implementation and validation must be checked against the relevant
+UE5.7 renderer and shader families, including:
+
+- `Renderer\Private\SkyAtmosphereRendering.cpp`
+- `Renderer\Private\FogRendering.cpp`
+- `Renderer\Private\VolumetricFog.cpp`
+- `Renderer\Private\LocalFogVolumeRendering.h`
+- `Renderer\Private\LocalFogVolumeRendering.cpp`
+- `Engine\Private\Components\SkyAtmosphereComponent.cpp`
+- `Engine\Private\Components\ExponentialHeightFogComponent.cpp`
+- `Engine\Private\Components\DirectionalLightComponent.cpp`
+- `Engine\Public\Rendering\SkyAtmosphereCommonData.cpp`
+- `Shaders\Private\SkyAtmosphere.usf`
+- `Shaders\Private\SkyAtmosphereCommon.ush`
+- `Shaders\Private\HeightFogCommon.ush`
+- `Shaders\Private\LocalFogVolumes\LocalFogVolumeCommon.ush`
+- `Shaders\Private\LocalFogVolumes\LocalFogVolumeTiledCulling.usf`
+- `Shaders\Private\LocalFogVolumes\LocalFogVolumeSplat.usf`
+- UE volumetric fog shader families used by `ComputeVolumetricFog(...)`
+
+## Sky / Below-Horizon Design Invariants
+
+The standalone below-horizon remediation scope has been absorbed into this
+LLD. The active Vortex sky path is stable enough that the design no longer
+needs a separate implementation-remediation document, but the following
+invariants remain non-negotiable:
+
+1. Raw atmosphere-light directions remain unclamped.
+2. The authored horizon floor is only
+   `TransmittanceMinLightElevationAngle`, and its UE5.7-aligned default is
+   `-90.0` degrees.
+3. The transmittance LUT spans the full `mu in [-1, 1]` domain and does not
+   bake planet occlusion.
+4. Planet/ground occlusion is reintroduced analytically only at consumers that
+   need it, such as sky/sun-disk and direct-light transmittance paths.
+5. Sky-view LUT parameterization keeps the UE-style split-horizon mapping and
+   sub-texel sky-view seam guard.
+6. Camera aerial-perspective voxels behind or below the horizon preserve the
+   mirrored tangent-point reconstruction.
+7. The sky camera is snapped above the virtual planet surface using the
+   1-meter `PLANET_RADIUS_OFFSET`-style safety behavior.
+8. Active LUT builders keep the UE5.7 deterministic sample-offset behavior;
+   do not add per-frame jitter to sky-view, camera-aerial, transmittance,
+   multi-scattering, or distant-sky-light LUT builders.
+9. Local fog and fog-volume composition must never inject emissive or
+   inscattering contributions onto far-depth sky pixels. Sky/atmosphere owns
+   the far-background path.
+
+These are design constraints, not optional implementation notes. Future sky,
+fog, lighting, and local-media changes must preserve them.
+
+## Fog UE5.7 Parity Contract
+
+Fog is part of the approved Phase 4D parity scope and is not accepted as
+complete in the current implementation. The target is precise UE5.7-informed
+parity, not a reduced haze approximation.
+
+### Exponential Height Fog
+
+The height-fog path must match the UE5.7 `ExponentialHeightFog` behavior for:
+
+- primary and secondary exponential fog layers
+- fog density, height falloff, and height offset
+- start distance, end distance, cutoff distance, and max opacity
+- fog inscattering luminance
+- cubemap inscattering, cubemap angle, texture tint, and near/far cubemap
+  blending distances
+- directional inscattering luminance, exponent, and start distance
+- sky-atmosphere ambient contribution color scale
+- support for the project-level sky-atmosphere-affects-height-fog behavior
+- holdout, main-pass visibility, reflection-capture visibility, and
+  real-time-sky-capture visibility semantics
+- optional consumption of volumetric fog / integrated light-scattering
+  products when the volumetric path is active
+
+The shader implementation must be a real height-fog shader family with shared
+fog math, not a hard-coded depth/height color blend. It must produce correct
+fog color and transmittance for opaque scene color, sky-background exclusion,
+translucent consumers where applicable, and capture views.
+
+### Local Fog Volumes
+
+The local-fog path must match the UE5.7 local-fog volume model for:
+
+- node-attached authored local volumes
+- per-view gather, deterministic sorting, capping, and GPU packing
+- tile-frustum classification before HZB occlusion
+- mandatory Stage-5 Screen HZB consumption with sub-viewport-safe view-rect
+  mapping
+- analytical local-media integral using radial and height terms
+- Henyey-Greenstein phase through authored `PhaseG`
+- albedo, emissive, directional-light, and sky-light scattering
+- atmosphere-aware directional-light color/transmittance
+- Stage-15 dedicated local-fog composition/splat path
+- no contribution on far-depth sky pixels
+- injection into volumetric fog when volumetric fog is enabled
+
+If height fog or volumetric fog is missing, local fog remains incomplete; the
+missing upstream path is a parity blocker, not an accepted simplification.
+
+### Volumetric Fog
+
+The volumetric-fog path must match the UE5.7 froxel model for:
+
+- froxel grid allocation driven by view resolution, depth distribution, view
+  distance, start distance, and scalability policy
+- scattering distribution, albedo, emissive, extinction scale, distance, start
+  distance, near fade, and static-lighting scattering intensity
+- light injection from atmosphere lights, local lights, sky light, and shadowed
+  lighting products where supported by the Vortex phase
+- local-fog injection when enabled
+- temporal reprojection with valid history ownership and rejection rules
+- final integration to an `IntegratedLightScattering`-style product consumed by
+  height fog, translucency, and later environment consumers
+- `override_light_colors_with_fog_inscattering_colors` behavior
+- explicit limitations where UE5.7 itself does not match analytic height fog
+  behavior
+
+Data-only volumetric-fog models do not satisfy this contract. The contract
+requires shader families, resources, history, publication, and capture/runtime
+validation.
 
 ## 1. Scope and Intent
 
@@ -194,7 +309,9 @@ It is **not** correct for local fog volumes, because local fog volumes are:
 
 #### 4.2.1 `scene::environment::SkyAtmosphere`
 
-Current `SkyAtmosphere` is too small. Expand it to cover the target design.
+`SkyAtmosphere` is the authored source of truth for the physical atmosphere.
+The current code already carries much of this surface; this section is the
+contract it must continue to satisfy as implementation proceeds.
 
 Required authored fields:
 
@@ -224,7 +341,7 @@ Required authored fields:
 - `holdout`
 - `render_in_main_pass`
 
-Current file to extend:
+Authoring file:
 
 - [SkyAtmosphere.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyAtmosphere.h>)
 
@@ -240,8 +357,9 @@ existing fields during implementation.
 
 #### 4.2.2 `scene::environment::Fog`
 
-Current `Fog` is much too small. It must become the authored source
-for both analytic height fog and volumetric-fog controls.
+`Fog` is the authored source for analytic height fog and volumetric-fog
+controls. The current implementation is not accepted as parity-complete; this
+section defines the authoring surface that the renderer must consume.
 
 `FogModel` cannot remain authoritative in its current meaning because
 volumetric fog is not an alternative to height fog — it is an additional system
@@ -308,13 +426,14 @@ Required authored fields:
   - `visible_in_reflection_captures`
   - `visible_in_real_time_sky_captures`
 
-Current file to expand:
+Authoring file:
 
 - [Fog.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/Fog.h>)
 
 #### 4.2.3 `scene::environment::SkyLight`
 
-Current `SkyLight` must be extended for environment-family coupling.
+`SkyLight` provides environment-family coupling for atmosphere, fog, local
+media, and later indirect-lighting consumers.
 
 Required authored fields:
 
@@ -331,7 +450,7 @@ Required authored fields:
 - `affect_reflections`
 - `affect_global_illumination`
 
-Current file to expand:
+Authoring file:
 
 - [SkyLight.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Environment/SkyLight.h>)
 
@@ -357,16 +476,16 @@ Current file:
 
 #### 4.2.5 `scene::DirectionalLight`
 
-Current `DirectionalLight` has:
+`DirectionalLight` participates in atmosphere-light resolution. It has:
 
 - `environment_contribution`
 - `is_sun_light`
 - cascaded-shadow settings
 
-For the full environment design, it must be extended to support explicit
-atmosphere-light slot selection.
+For the full environment design, it must support explicit atmosphere-light slot
+selection.
 
-Required new authored fields:
+Required authored fields:
 
 - `atmosphere_light_slot`
   - `none`
@@ -400,14 +519,14 @@ Rules:
 Deterministic traversal order for slot resolution must use the existing scene
 traversal surface, not ad-hoc container iteration.
 
-Current file to extend:
+Authoring file:
 
 - [DirectionalLight.h](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Scene/Light/DirectionalLight.h>)
 
-#### 4.2.6 New `scene::LocalFogVolume`
+#### 4.2.6 `scene::LocalFogVolume`
 
-Local fog volumes must be a new **node-attached** component, not a
-`SceneEnvironment` system.
+Local fog volumes are **node-attached** components, not `SceneEnvironment`
+systems.
 
 Required placement:
 
@@ -451,7 +570,7 @@ This component exists on scene nodes because:
 
 It does **not** own `LocalFogVolume` instances.
 
-This means the junior implementation must preserve:
+The environment implementation must preserve:
 
 - scene-global environment systems in `SceneEnvironment`
 - local media instances on regular scene nodes
@@ -466,16 +585,25 @@ This document does not require widening `PostProcessVolume` itself.
 
 ## 5. Serialized Data in `src/Oxygen/Data`
 
-### 5.1 Current Limitation
+### 5.1 Current Data-Layer Status
 
-Current `SceneAsset` environment records are too small for the target design:
+The scene-asset environment records have already been widened to the v3 shape
+needed by the current environment lane:
 
-- `SkyAtmosphereEnvironmentRecord` lacks many required atmosphere parameters
-- `FogEnvironmentRecord` lacks second layer, inscattering cubemap, directional
-  inscattering, atmosphere coupling, and volumetric fog settings
-- `SkyLightEnvironmentRecord` lacks real-time capture and volumetric-scattering
-  fields
-- there is no local fog volume record at all
+- `SkyAtmosphereEnvironmentRecord` carries the expanded sky/atmosphere
+  authored fields, including Mie absorption, luminance factors, aerial
+  controls, height-fog contribution, trace scale, transmittance minimum light
+  elevation, holdout, and main-pass visibility.
+- `FogEnvironmentRecord` carries height-fog, second-layer, cubemap,
+  directional-inscattering, sky-atmosphere coupling, volumetric-fog, and
+  visibility fields.
+- `SkyLightEnvironmentRecord` carries real-time capture, lower-hemisphere,
+  volumetric-scattering, reflection, and global-illumination fields.
+- `LocalFogVolumeRecord` exists as a node-attached component record.
+
+These records are not proof that renderer fog parity is complete. They only
+mean the data layer no longer blocks the renderer from consuming the required
+authored parameters.
 
 Relevant files:
 
@@ -502,42 +630,29 @@ Rules:
   count is derived from that reduced extent rather than from full-resolution
   SceneDepth.
 
-### 5.2 Required Serialization Changes
+### 5.2 Serialization Contract
 
 #### 5.2.1 Environment Block Versioning
 
-The current loader in
-[SceneAsset.cpp](</F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/SceneAsset.cpp>)
-validates environment record sizes with **exact** `record_size == sizeof(T)`
-checks.
+The environment data contract uses the v3 scene-asset shape. The loader
+validates environment record sizes with exact `record_size == sizeof(T)`
+checks, and the cooker emits records using the current v3 struct sizes.
 
-Because this design requires major record widening, the design chooses a
-**breaking scene-asset version bump** rather than pretending forward-compatible
-widening already exists.
-
-The junior implementation must:
-
-- bump `kSceneAssetVersion` from `2` to `3`
-- widen the environment record structs to their new v3 shapes
-- update the environment-block loader to accept only v3 record sizes for the
-  widened records
-- require a batch re-cook of existing scene assets
-
-This design does **not** rely on `>= sizeof(T)` validation or per-record
-version tags. If a future compatibility layer is wanted, it must be designed
-explicitly as a follow-up, not improvised during implementation.
+This design does **not** rely on `>= sizeof(T)` validation or per-record version
+tags. If a future compatibility layer is wanted, it must be designed explicitly
+as a follow-up, not improvised during fog implementation.
 
 #### 5.2.2 Expanded Environment Records
 
-Expand:
+The v3 environment records must continue to expose:
 
 - `SkyAtmosphereEnvironmentRecord`
 - `FogEnvironmentRecord`
 - `SkyLightEnvironmentRecord`
 
-Add fields matching the authored Scene types in Section 4.
+Fields must match the authored Scene types in Section 4.
 
-`SkyAtmosphereEnvironmentRecord` must explicitly add:
+`SkyAtmosphereEnvironmentRecord` must explicitly include:
 
 - `mie_absorption_rgb[3]`
 - `sky_luminance_factor_rgb[3]`
@@ -549,7 +664,7 @@ Add fields matching the authored Scene types in Section 4.
 - `transmittance_min_light_elevation_deg`
 - holdout / main-pass visibility flags
 
-`FogEnvironmentRecord` must explicitly add:
+`FogEnvironmentRecord` must explicitly include:
 
 - second fog layer fields
 - fog inscattering luminance
@@ -562,7 +677,7 @@ Add fields matching the authored Scene types in Section 4.
 - full volumetric-fog fields
 - holdout / main-pass / reflection-capture / real-time-sky-capture flags
 
-`SkyLightEnvironmentRecord` must explicitly add:
+`SkyLightEnvironmentRecord` must explicitly include:
 
 - `real_time_capture_enabled`
 - `lower_hemisphere_color`
@@ -572,7 +687,8 @@ Add fields matching the authored Scene types in Section 4.
 
 #### 5.2.3 Local Fog Volume Record
 
-Add a new component record for node-attached local fog volumes.
+`LocalFogVolumeRecord` is the component record for node-attached local fog
+volumes.
 
 This should be a **component table record**, not an environment-block record,
 because local fog volumes are:
@@ -581,13 +697,13 @@ because local fog volumes are:
 - spatially local
 - multiple per scene
 
-Required new data type:
+Required data type:
 
 - `pak::world::LocalFogVolumeRecord`
 - new `ComponentType::kLocalFogVolume`
   - FourCC: `0x474F464C` // `'LFOG'`
 
-Required loader/parser changes:
+Required loader/parser coverage:
 
 - `src/Oxygen/Core/Meta/Data/ComponentType.inc`
 - `src/Oxygen/Data/ComponentType.h`
@@ -606,22 +722,14 @@ Placement rule:
 
 #### 5.2.4 Migration Strategy
 
-This design requires an explicit migration path.
+The chosen strategy remains:
 
-Chosen strategy:
-
-1. introduce scene asset version `3`
-2. re-cook target scenes to v3
-3. runtime loader accepts v3 for the widened environment shapes
-4. v2 assets remain readable only by the pre-widening shape; they are not
-   considered valid for the widened environment design
-
-Implications:
-
-- batch re-cook is required
-- no hidden runtime widening/compatibility shim is assumed
-- tooling may offer offline migration helpers later, but implementation
-  must not depend on them
+1. v3 scene assets are the valid input shape for the widened environment lane.
+2. Target scenes must be cooked as v3 before they can exercise full
+   atmosphere/fog parity.
+3. No hidden runtime widening/compatibility shim is assumed.
+4. Tooling may offer offline migration helpers later, but renderer fog
+   implementation must not depend on them.
 
 ## 6. DemoShell Authoring and Runtime Surface
 
@@ -1000,9 +1108,12 @@ Required shader file families:
   - classification: cull against tile frustum planes before the HZB visibility
     test; do not fall back to screen-rect overlap as the primary tile test
   - output: tile lists / draw-indirect buffers
-- `LocalFogVolumeComposePS`
+- `LocalFogVolumeSplatPS` / `LocalFogVolumeComposePS`
   - input: SceneColor, SceneDepth, local fog tile/instance data
   - output: local fog composite into SceneColor
+  - parity target: UE5.7's dedicated local-fog splat/composition path; the
+    current Vortex compose naming is acceptable only if the shader behavior and
+    pass shape match the UE contract
 - `VolumetricFogInjectCS`
   - input: froxel grid + lights + shadows
   - output: scattering/extinction intermediates
@@ -1019,45 +1130,48 @@ Shader design rule:
   contract, including active view-rect mapping; it must not assume the HZB
   covers the full scene-texture extent for sub-viewport views
 
-## 8. Execution Order and File Ownership
+## 8. Continuation Order and File Ownership
 
-This is the implementation order a junior engineer should follow.
+This is the order for continuing the environment lane. Existing authoring,
+data, and DemoShell surfaces should be verified and preserved, not duplicated
+or replaced by parallel legacy paths.
 
 ### 8.1 Authoring Layer First
 
-1. widen Scene auth types:
+1. verify and preserve Scene auth types:
    - `SkyAtmosphere`
    - `Fog`
    - `SkyLight`
    - `DirectionalLight`
-2. add new node component:
+2. verify and preserve node component:
    - `LocalFogVolume`
-3. update Scene docs:
+3. keep Scene docs aligned:
    - `src/Oxygen/Scene/Environment/README.md`
 
 ### 8.2 Serialization Layer Second
 
-1. widen `PakFormat_world.h` environment records
-2. add `LocalFogVolumeRecord`
-3. update loaders and `SceneAsset`
-4. update scene-loader hydration
+1. preserve v3 `PakFormat_world.h` environment records
+2. preserve `LocalFogVolumeRecord`
+3. keep loaders and `SceneAsset` exact-size validation aligned with v3
+4. keep scene-loader hydration aligned with the authored surfaces
 
 ### 8.3 DemoShell Layer Third
 
-1. widen `EnvironmentSettingsService`
-2. widen `EnvironmentVm`
-3. widen `EnvironmentDebugPanel`
-4. bump persistence schema
-5. update presets
+1. keep `EnvironmentSettingsService` aligned with the full authored surface
+2. keep `EnvironmentVm` aligned with the full authored surface
+3. keep `EnvironmentDebugPanel` aligned with the full authored surface
+4. preserve the widened persistence schema
+5. keep presets explicit for atmosphere lights, fog modes, local fog, and
+   sky-light capture defaults
 
 ### 8.4 Renderer Layer Fourth
 
-1. implement stable environment-state translation
-2. implement atmosphere-light slot translation
-3. implement LUT pipeline
-4. implement sky-atmosphere rendering
-5. implement camera aerial perspective
-6. implement Stage 5 Screen HZB publication for environment consumers
+1. preserve stable environment-state translation
+2. preserve atmosphere-light slot translation
+3. preserve the atmosphere LUT pipeline
+4. preserve sky-atmosphere rendering
+5. preserve camera aerial perspective
+6. verify Stage 5 Screen HZB publication for environment consumers
    - this includes the active view-rect mapping surface and sub-viewport-safe
      Stage 14 local-fog consumption, not only raw HZB extents
 7. implement full height fog
@@ -1084,17 +1198,17 @@ Implementation note:
 
 ### 9.1 Scene Layer
 
-Add tests for:
+Maintain or add tests for:
 
 - widened `SkyAtmosphere`
 - widened `Fog`
 - widened `SkyLight`
 - `DirectionalLight` atmosphere-light slot behavior
-- new `LocalFogVolume`
+- `LocalFogVolume`
 
 ### 9.2 Data Layer
 
-Add tests for:
+Maintain or add tests for:
 
 - widened environment record round-tripping
 - `LocalFogVolumeRecord` parsing
@@ -1102,7 +1216,7 @@ Add tests for:
 
 ### 9.3 DemoShell Layer
 
-Add tests for:
+Maintain or add tests for:
 
 - `EnvironmentSettingsService` hydration and apply
 - dirty-domain behavior
@@ -1157,25 +1271,59 @@ Not deferred:
 - sky-light coupling
 - DemoShell authoring and diagnostics support
 
-## 11. Junior Implementation Checklist
+## 11. Continuation Checklist
 
-- [ ] Expand `scene::environment::SkyAtmosphere`
-- [ ] Expand `scene::environment::Fog`
-- [ ] Expand `scene::environment::SkyLight`
-- [ ] Expand `scene::DirectionalLight` with atmosphere-light slot support
-- [ ] Add `scene::LocalFogVolume`
-- [ ] Update `SceneEnvironment` docs
-- [ ] Widen `SceneAsset` environment records
-- [ ] Add `LocalFogVolumeRecord`
-- [ ] Update scene-loader hydration
-- [ ] Widen `EnvironmentSettingsService`
-- [ ] Widen `EnvironmentVm`
-- [ ] Widen `EnvironmentDebugPanel`
-- [ ] Bump environment settings persistence schema
-- [ ] Implement atmosphere/LUT/service runtime translation
-- [ ] Implement camera aerial perspective
-- [ ] Implement full height fog
-- [ ] Implement local fog volumes
-- [ ] Implement volumetric fog
-- [ ] Implement sky-light coupling
-- [ ] Add source-level, hydration, DemoShell, and runtime validation tests
+This checklist is intentionally split between surfaces that already exist and
+work that still blocks the Phase 4D parity gate. Existing code is listed here
+only to prevent duplicate implementation; it is not a completion claim.
+
+### 11.1 Existing Surfaces To Preserve
+
+- [x] Expanded `scene::environment::SkyAtmosphere` authoring surface exists.
+- [x] Expanded `scene::environment::Fog` authoring surface exists.
+- [x] Expanded `scene::environment::SkyLight` authoring surface exists.
+- [x] `scene::DirectionalLight` atmosphere-light slot authoring exists.
+- [x] `scene::LocalFogVolume` node component exists.
+- [x] Scene-asset environment records use the widened v3 shape.
+- [x] `LocalFogVolumeRecord` exists as a component-table record.
+- [x] Scene-loader hydration for local fog volumes exists.
+- [x] DemoShell environment settings, VM, and panel surfaces exist for the
+      widened authoring set.
+- [x] Atmosphere state translation, LUT cache, sky-view LUT, camera aerial
+      perspective, and distant-sky-light LUT surfaces exist.
+- [x] Below-horizon sky invariants listed in this LLD are represented in the
+      active sky path and must be preserved.
+
+### 11.2 Blocking Work Before Fog Parity Can Close
+
+- [ ] Replace the current simplified height-fog shader path with the UE5.7
+      parity-grade height-fog family described in Section 4.
+- [ ] Implement full height-fog use of second layer, cubemap inscattering,
+      directional inscattering, sky-atmosphere ambient contribution, start/end
+      distance, cutoff distance, max opacity, and visibility flags.
+- [ ] Bring local fog to the UE5.7 local-volume contract: per-view pack/sort,
+      tiled culling, Screen HZB consumption, analytic integral, dedicated
+      Stage-15 composition/splat behavior, sky-depth exclusion, and
+      atmosphere-aware lighting.
+- [ ] Implement local-fog injection into volumetric fog when volumetric fog is
+      enabled.
+- [ ] Implement volumetric fog as a froxel system: grid allocation, light
+      injection, shadow/sky/local-light participation, temporal history, final
+      integration, and published `IntegratedLightScattering`-style product.
+- [ ] Publish complete environment frame/view products for height fog, local
+      fog, volumetric fog, and sky-light coupling.
+- [ ] Validate the environment path against UE5.7 source/shader contracts and
+      RenderDoc/runtime captures before any completion claim.
+
+### 11.3 Validation Evidence Required For Closure
+
+- [ ] Scene component and data round-trip tests for all authored environment
+      fields.
+- [ ] DemoShell hydration, persistence, dirty-domain, and panel-facing tests.
+- [ ] Renderer publication tests for atmosphere, height fog, local fog,
+      volumetric fog, sky light, and Stage 14/15 handoff products.
+- [ ] Shader catalog tests for every required environment shader entrypoint.
+- [ ] Runtime capture evidence for sky atmosphere, aerial perspective,
+      height fog, local fog volumes, volumetric fog, and sky-light coupling.
+- [ ] Source-to-target parity review against the listed UE5.7 renderer and
+      shader files.

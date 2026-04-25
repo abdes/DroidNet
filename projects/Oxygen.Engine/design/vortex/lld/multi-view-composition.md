@@ -48,7 +48,8 @@ routes each view's output to the correct surface.
 | 8 (ShadowDepths) | Per frame setup + per-view publication | Shared allocation work is allowed; published shadow payload remains per view |
 | 9 (BasePass) | Per view | Separate GBuffers per view |
 | 12 (DeferredLighting) | Per view | Per-view SceneColor accumulation |
-| 15 (Environment) | Per view | Per-view sky/fog |
+| 14 (Environment volumetrics/local fog) | Per view | Per-view local-fog culling/composition inputs and volumetric-fog work when enabled |
+| 15 (Environment sky/fog) | Per view | Per-view sky, atmosphere, height-fog, and local-fog composition |
 | 18 (Translucency) | Per view | Per-view translucent compositing |
 | 22 (PostProcess) | Per view | Per-view tonemap |
 
@@ -84,7 +85,11 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
     PublishDeferredBasePassSceneTextures(ctx);                         // 10
 
     if (lighting_) lighting_->RenderDeferredLighting(ctx, scene_textures_); // 12
-    if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);  // 15
+    // Current EnvironmentLightingService entrypoint records active Stage 14
+    // local-fog culling before Stage 15 sky/fog composition. Split Stage 14
+    // into a dedicated service method when runtime volumetric fog passes are
+    // implemented and enabled.
+    if (environment_) environment_->RenderSkyAndFog(ctx, scene_textures_);  // 14/15
     if (translucency_) translucency_->Execute(ctx, scene_textures_);        // 18
 
     ResolveSceneColor(ctx);                                             // 21

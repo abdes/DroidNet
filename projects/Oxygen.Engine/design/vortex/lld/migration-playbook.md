@@ -55,7 +55,7 @@ migration gate unless product intent is explicitly widened.
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - runtime seam ownership,
   composition, resolve, extraction, and handoff boundaries
 - [PLAN.md](../PLAN.md) Section 6 - Phase 4 ordering and success criteria
-- [IMPLEMENTATION-STATUS.md](../IMPLEMENTATION-STATUS.md) - current truth
+- [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) - current truth
   ledger
 
 ## 2. UE5.7 Parity Evidence Pack
