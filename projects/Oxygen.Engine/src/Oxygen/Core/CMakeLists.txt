@@ -76,6 +76,7 @@ set(
   "Resources.h"
   "SafeCall.h"
   "Scripting/ScriptExecutable.h"
+  "Meta/Physics/Backend.h"
   "Meta/Scripting/ScriptCompileMode.h"
   "Types/Atmosphere.h"
   "Types/Bool32.h"
@@ -153,7 +154,6 @@ set(
   "Meta/Input/ActionTriggers.inc"
   "Meta/Input/ActionValue.inc"
   "Meta/Input/PakFormat.inc"
-  "Meta/Physics/Backend.h"
   "Meta/Physics/PakPhysics.inc"
   "Meta/Physics/PakPhysicsShape.inc"
   "Meta/Scripting/ScriptCompileMode.inc"
@@ -171,12 +171,11 @@ target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
     ${OXYGEN_CORE_PRIVATE_SOURCES}
-    ${OXYGEN_CORE_META_DEFS}
     ${OXYGEN_CORE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES ${OXYGEN_CORE_HEADERS}
+    FILES ${OXYGEN_CORE_HEADERS} ${OXYGEN_CORE_META_DEFS}
 )
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
