@@ -7,6 +7,7 @@
 #pragma once
 
 #include <glm/mat4x4.hpp>
+#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Constants.h>
@@ -19,10 +20,12 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowCascadeBinding {
   float split_far { 0.0F };
   glm::vec4 sampling_metadata0 { 0.0F };
   glm::vec4 sampling_metadata1 { 0.0F };
+  glm::vec2 _padding0 { 0.0F };
 };
 
 static_assert(
   alignof(ShadowCascadeBinding) == packing::kShaderDataFieldAlignment);
+static_assert(sizeof(ShadowCascadeBinding) == 112U);
 static_assert(
   sizeof(ShadowCascadeBinding) % packing::kShaderDataFieldAlignment == 0U);
 

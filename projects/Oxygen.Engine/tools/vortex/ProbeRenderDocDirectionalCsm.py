@@ -4,6 +4,7 @@ import builtins
 import struct
 import sys
 from pathlib import Path
+import math
 
 
 def resolve_script_dir():
@@ -144,6 +145,100 @@ def dump_u32_f32(controller, descriptor, max_dwords):
         list(struct.unpack("<{}I".format(dword_count), payload)),
         list(struct.unpack("<{}f".format(dword_count), payload)),
     )
+
+
+def mat4_mul_vec4_column_major(values, vector):
+    result = []
+    for row in range(4):
+        result.append(
+            values[row + 0] * vector[0]
+            + values[row + 4] * vector[1]
+            + values[row + 8] * vector[2]
+            + values[row + 12] * vector[3]
+        )
+    return result
+
+
+def vec3_normalize(values):
+    length_sq = sum(v * v for v in values)
+    if length_sq <= 1.0e-8:
+        return [0.0, 0.0, 1.0]
+    inv_len = 1.0 / math.sqrt(length_sq)
+    return [v * inv_len for v in values]
+
+
+def sample_shadow_point(
+    controller, rd, shadow_resource, shadow_frame_u32, shadow_frame_f32, point
+):
+    cascade_count = max(1, min(4, int(shadow_frame_u32[1])))
+    cascade_base = 8
+    splits = []
+    for cascade_index in range(cascade_count):
+        offset = cascade_base + cascade_index * 28
+        splits.append(shadow_frame_f32[offset + 17])
+
+    # VortexBasic proof camera: (0, 8, 4) looking at (0, 0, 1.5).
+    eye = [0.0, 8.0, 4.0]
+    target = [0.0, 0.0, 1.5]
+    forward = vec3_normalize([target[i] - eye[i] for i in range(3)])
+    view_depth = max(0.0, sum((point[i] - eye[i]) * forward[i] for i in range(3)))
+    cascade_index = cascade_count - 1
+    for index, split_far in enumerate(splits):
+        if view_depth <= split_far:
+            cascade_index = index
+            break
+
+    offset = cascade_base + cascade_index * 28
+    matrix = shadow_frame_f32[offset : offset + 16]
+    meta0 = shadow_frame_f32[offset + 18 : offset + 22]
+    meta1 = shadow_frame_f32[offset + 22 : offset + 26]
+    world_texel_size = max(meta0[3], 0.0)
+    normal_bias = max(meta1[3], 0.0) + world_texel_size * 0.55
+    constant_bias = max(meta1[2], 0.0) + world_texel_size * 0.03
+    light_dir = vec3_normalize(shadow_frame_f32[4:7])
+    normal = [0.0, 0.0, 1.0]
+    biased = [
+        point[i] + normal[i] * normal_bias + light_dir[i] * constant_bias
+        for i in range(3)
+    ]
+    clip = mat4_mul_vec4_column_major(matrix, [biased[0], biased[1], biased[2], 1.0])
+    if abs(clip[3]) <= 1.0e-6:
+        return {
+            "point": point,
+            "cascade": cascade_index,
+            "view_depth": view_depth,
+            "valid": False,
+            "reason": "zero_w",
+        }
+    ndc = [clip[i] / clip[3] for i in range(3)]
+    uv = [ndc[0] * 0.5 + 0.5, ndc[1] * -0.5 + 0.5]
+    valid = 0.0 <= uv[0] <= 1.0 and 0.0 <= uv[1] <= 1.0 and 0.0 <= ndc[2] <= 1.0
+    stored = None
+    visibility = None
+    if valid and shadow_resource is not None:
+        inverse_resolution = max(meta0[1], 1.0e-6)
+        texture_size = int(round(1.0 / inverse_resolution))
+        x = max(0, min(texture_size - 1, int(uv[0] * texture_size)))
+        y = max(0, min(texture_size - 1, int(uv[1] * texture_size)))
+        sub = rd.Subresource()
+        sub.mip = 0
+        sub.slice = cascade_index
+        sub.sample = 0
+        pixel = controller.PickPixel(
+            shadow_resource, x, y, sub, rd.CompType.Depth)
+        stored = float4_values(pixel)[0]
+        visibility = 1.0 if ndc[2] >= stored - 0.0008 else 0.0
+
+    return {
+        "point": point,
+        "cascade": cascade_index,
+        "view_depth": view_depth,
+        "valid": valid,
+        "uv": uv,
+        "receiver_depth": ndc[2],
+        "stored_depth": stored,
+        "visibility": visibility,
+    }
 
 
 def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
@@ -299,11 +394,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
                     index, ["{:.9f}".format(v) for v in values_f32]))
         pixel_readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
         report.append("stage12_pixel_readonly_count={}".format(len(pixel_readonly)))
+        shadow_frame_u32 = None
+        shadow_frame_f32 = None
+        shadow_surface_resource = None
         for index, used_descriptor in enumerate(pixel_readonly):
             descriptor = used_descriptor.descriptor
+            readonly_name = descriptor_name(resource_names, used_descriptor)
+            if readonly_name == "Vortex.DirectionalShadowSurface":
+                shadow_surface_resource = safe_getattr(descriptor, "resource")
             report.append(
                 "stage12_pixel_ro_{}={}".format(
-                    index, descriptor_name(resource_names, used_descriptor)
+                    index, readonly_name
                 )
             )
             report.append(
@@ -316,12 +417,38 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
                     int(safe_getattr(descriptor, "byteOffset", 0) or 0),
                 )
             )
+            max_dwords = 128 if index == 3 else 48
             if index < 8:
-                values_u32, values_f32 = dump_u32_f32(controller, descriptor, 48)
+                values_u32, values_f32 = dump_u32_f32(controller, descriptor, max_dwords)
                 report.append("stage12_pixel_ro_{}_u32={}".format(index, values_u32))
                 report.append(
                     "stage12_pixel_ro_{}_f32={}".format(
                         index, ["{:.9f}".format(v) for v in values_f32]))
+                if index == 3:
+                    shadow_frame_u32 = values_u32
+                    shadow_frame_f32 = values_f32
+        if shadow_frame_u32 is not None and shadow_frame_f32 is not None:
+            sample_points = [
+                (0.0, 0.5, 0.0),
+                (0.0, 1.0, 0.0),
+                (0.0, 1.5, 0.0),
+                (0.0, 2.0, 0.0),
+                (0.0, 2.5, 0.0),
+                (0.0, 3.0, 0.0),
+                (-0.5, 1.5, 0.0),
+                (0.5, 1.5, 0.0),
+            ]
+            for point in sample_points:
+                sample = sample_shadow_point(
+                    controller,
+                    rd,
+                    shadow_surface_resource,
+                    shadow_frame_u32,
+                    shadow_frame_f32,
+                    point,
+                )
+                label = "stage12_shadow_sample_{:.1f}_{:.1f}_{:.1f}".format(*point)
+                report.append("{}={}".format(label, sample))
 
 
 def main():

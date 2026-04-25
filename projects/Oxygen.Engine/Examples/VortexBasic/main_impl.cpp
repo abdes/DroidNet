@@ -72,6 +72,9 @@ auto ParseVortexShaderDebugMode(std::string_view text)
   if (text == "metalness") {
     return ShaderDebugMode::kMetalness;
   }
+  if (text == "directional-shadow-mask") {
+    return ShaderDebugMode::kDirectionalShadowMask;
+  }
   if (text == "scene-depth-raw") {
     return ShaderDebugMode::kSceneDepthRaw;
   }
@@ -227,8 +230,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     auto vortex_options = std::make_shared<clap::Options>("Vortex options");
     vortex_options->Add(clap::Option::WithKey("shader-debug-mode")
         .About("Deferred debug visualization mode: disabled, base-color, "
-               "world-normals, roughness, metalness, scene-depth-raw, or "
-               "scene-depth-linear")
+               "world-normals, roughness, metalness, scene-depth-raw, "
+               "scene-depth-linear, or directional-shadow-mask")
         .Long("shader-debug-mode")
         .WithValue<std::string>()
         .DefaultValue(std::string("disabled"))

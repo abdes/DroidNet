@@ -151,6 +151,7 @@ struct ShadowCascadeBinding {
   float split_far{0.0f};
   glm::vec4 sampling_metadata0{0.0f};
   glm::vec4 sampling_metadata1{0.0f};
+  glm::vec2 _padding0{0.0f};
 };
 
 struct ShadowFrameBindings {
@@ -160,6 +161,7 @@ struct ShadowFrameBindings {
   uint32_t cascade_count{0};
   uint32_t technique_flags{0};
   uint32_t sampling_contract_flags{0};
+  glm::vec4 light_direction_to_source{0.0f, -1.0f, 0.0f, 0.0f};
 
   ShadowCascadeBinding cascades[kMaxCascades];
 };
@@ -188,6 +190,11 @@ These fields follow the UE-shaped contract in which cascade distribution,
 transition, fade, and bias are published by the shadow setup stage and consumed
 by the receiver shader. They are part of the current conventional directional
 CSM ABI, not a local-light or VSM payload.
+
+The `light_direction_to_source` field mirrors the selected directional light
+authority into the shadow binding only for shadow-receiver/debug consumers that
+do not also bind the deferred-light payload. It is not an independent light
+selection path.
 
 ### 2.4 Directional-Light Authority
 

@@ -53,6 +53,7 @@ using enum ShaderType;
 //   DEBUG_DIRECT_LIGHT_GATES: R=shadow visibility, G=sun transmittance
 //   DEBUG_DIRECT_BRDF_CORE: Ungated directional BRDF core only
 //   DEBUG_VIRTUAL_SHADOW_MASK: Stage 15 VSM screen-space shadow mask
+//   DEBUG_DIRECTIONAL_SHADOW_MASK: Deferred conventional directional CSM mask
 //   DEBUG_SCENE_DEPTH_RAW: Published scene depth in reversed-Z space
 //   DEBUG_SCENE_DEPTH_LINEAR: Published scene depth reconstructed to eye depth
 //   DEBUG_SCENE_DEPTH_MISMATCH: Shading depth disagreement vs pre-pass depth
@@ -332,6 +333,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   RequiredDefineShaderFileSpec<1, 1> {
     .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
     .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
+    .required_defines=std::array<std::string_view, 1> { "DEBUG_DIRECTIONAL_SHADOW_MASK" }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Stages/BasePass/BasePassDebugView.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="BasePassDebugViewPS" } },
     .required_defines=std::array<std::string_view, 1> { "DEBUG_SCENE_DEPTH_RAW" }
   },
   RequiredDefineShaderFileSpec<1, 1> {
@@ -492,7 +498,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexBasePassVelocityAux: 4 (2 entries x required MVWO define x
 // ALPHA_TEST)
 // - VortexBasePassVelocityMerge: 1
-// - VortexBasePassDebugView: 7 (VS + 6 required debug PS variants)
+// - VortexBasePassDebugView: 8 (VS + 7 required debug PS variants)
 // - VortexShadowDepth: 4 (2 entries x ALPHA_TEST)
 // - VortexDeferredLightDirectional: 2 entries
 // - VortexDeferredLightPoint: 2 entries
@@ -507,6 +513,6 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 116
+// Total: 117
 
 } // namespace oxygen::graphics::d3d12
