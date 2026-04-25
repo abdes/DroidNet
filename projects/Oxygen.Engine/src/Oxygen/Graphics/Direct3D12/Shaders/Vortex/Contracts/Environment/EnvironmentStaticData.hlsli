@@ -38,21 +38,51 @@ static const uint TONEMAPPER_FILMIC = 3u;
 static const uint EXPOSURE_MODE_MANUAL = 0u;
 static const uint EXPOSURE_MODE_AUTO = 1u;
 
-// Mirrors oxygen::engine::GpuFogParams (sizeof = 48)
+static const uint GPU_FOG_FLAG_ENABLED = 1u << 0u;
+static const uint GPU_FOG_FLAG_HEIGHT_FOG_ENABLED = 1u << 1u;
+static const uint GPU_FOG_FLAG_VOLUMETRIC_FOG_AUTHORED = 1u << 2u;
+static const uint GPU_FOG_FLAG_RENDER_IN_MAIN_PASS = 1u << 3u;
+static const uint GPU_FOG_FLAG_VISIBLE_IN_REFLECTION_CAPTURES = 1u << 4u;
+static const uint GPU_FOG_FLAG_VISIBLE_IN_REAL_TIME_SKY_CAPTURES = 1u << 5u;
+static const uint GPU_FOG_FLAG_HOLDOUT = 1u << 6u;
+static const uint GPU_FOG_FLAG_DIRECTIONAL_INSCATTERING = 1u << 7u;
+static const uint GPU_FOG_FLAG_CUBEMAP_AUTHORED = 1u << 8u;
+static const uint GPU_FOG_FLAG_CUBEMAP_USABLE = 1u << 9u;
+
+// Mirrors oxygen::vortex::GpuFogParams (sizeof = 128)
 struct GpuFogParams
 {
-    float3 single_scattering_albedo_rgb;
-    float extinction_sigma_t_per_m;
+    float3 fog_inscattering_luminance_rgb;
+    float primary_density;
 
-    float height_falloff_per_m;
-    float height_offset_m;
+    float primary_height_falloff;
+    float primary_height_offset_m;
+    float secondary_density;
+    float secondary_height_falloff;
+
+    float secondary_height_offset_m;
     float start_distance_m;
-    float max_opacity;
+    float end_distance_m;
+    float cutoff_distance_m;
 
-    float anisotropy_g;
-    float _pad0;
+    float max_opacity;
+    float min_transmittance;
+    float directional_start_distance_m;
+    float directional_exponent;
+
+    float3 directional_inscattering_luminance_rgb;
+    float cubemap_angle_radians;
+
+    float3 sky_atmosphere_ambient_contribution_color_scale_rgb;
+    float cubemap_fade_inv_range;
+
+    float3 inscattering_texture_tint_rgb;
+    float cubemap_fade_bias;
+
+    float cubemap_num_mips;
+    uint cubemap_srv;
+    uint flags;
     uint model;
-    uint enabled;
 };
 
 // Mirrors oxygen::vortex::GpuSkyAtmosphereParams (sizeof = 208)
@@ -92,7 +122,7 @@ struct GpuSkyAtmosphereParams
     uint sky_irradiance_lut_slot;
     uint multi_scat_lut_slot;
     uint camera_volume_lut_slot;
-    uint blue_noise_slot;
+    uint distant_sky_light_lut_slot;
 
     float transmittance_lut_width;
     float transmittance_lut_height;
@@ -186,7 +216,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 496)
+// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 576)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;

@@ -510,8 +510,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
-  EXPECT_EQ(
-    service_.GetSunAtmosphereDiskLuminanceScale(),
+  EXPECT_EQ(service_.GetSunAtmosphereDiskLuminanceScale(),
     glm::vec4(1.4F, 1.1F, 0.7F, 0.25F));
 }
 
@@ -724,6 +723,78 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FALSE(fog->GetRenderInMainPass());
   EXPECT_FALSE(fog->GetVisibleInReflectionCaptures());
   EXPECT_FALSE(fog->GetVisibleInRealTimeSkyCaptures());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest,
+  HeightFogVisualVerificationSettingsPersistSupportedControls)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.HeightFogVisualPersistence");
+  service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { scene.get() },
+  });
+
+  service_.SetFogModel(
+    static_cast<int>(scene::environment::FogModel::kExponentialHeight));
+  service_.SetFogEnabled(true);
+  service_.SetFogExtinctionSigmaTPerMeter(0.125F);
+  service_.SetFogHeightFalloffPerMeter(0.031F);
+  service_.SetFogHeightOffsetMeters(-14.0F);
+  service_.SetFogStartDistanceMeters(40.0F);
+  service_.SetSecondFogDensity(0.018F);
+  service_.SetSecondFogHeightFalloff(0.044F);
+  service_.SetSecondFogHeightOffset(9.0F);
+  service_.SetFogMaxOpacity(0.72F);
+  service_.SetFogInscatteringLuminance({ 0.21F, 0.32F, 0.43F });
+  service_.SetSkyAtmosphereAmbientContributionColorScale({ 0.6F, 0.7F, 0.8F });
+  service_.SetDirectionalInscatteringLuminance({ 1.4F, 1.2F, 0.9F });
+  service_.SetDirectionalInscatteringExponent(15.0F);
+  service_.SetDirectionalInscatteringStartDistance(75.0F);
+  service_.SetFogEndDistanceMeters(800.0F);
+  service_.SetFogCutoffDistanceMeters(1800.0F);
+  service_.SetFogHoldout(true);
+  service_.SetFogRenderInMainPass(false);
+  service_.SetFogVisibleInReflectionCaptures(false);
+  service_.SetFogVisibleInRealTimeSkyCaptures(false);
+
+  EXPECT_FALSE(service_.GetHeightFogPassRequested());
+  service_.SetFogRenderInMainPass(true);
+  EXPECT_TRUE(service_.GetHeightFogPassRequested());
+
+  PersistPendingSettings(service_);
+
+  EnvironmentSettingsService loaded {};
+  auto loaded_scene = MakeScene("DemoShell.HeightFogVisualPersistence.Loaded");
+  loaded.SetRuntimeConfig(EnvironmentRuntimeConfig {
+    .scene = observer_ptr { loaded_scene.get() },
+  });
+
+  EXPECT_TRUE(loaded.GetFogEnabled());
+  EXPECT_TRUE(loaded.GetHeightFogPassRequested());
+  EXPECT_EQ(loaded.GetFogModel(),
+    static_cast<int>(scene::environment::FogModel::kExponentialHeight));
+  EXPECT_FLOAT_EQ(loaded.GetFogExtinctionSigmaTPerMeter(), 0.125F);
+  EXPECT_FLOAT_EQ(loaded.GetFogHeightFalloffPerMeter(), 0.031F);
+  EXPECT_FLOAT_EQ(loaded.GetFogHeightOffsetMeters(), -14.0F);
+  EXPECT_FLOAT_EQ(loaded.GetFogStartDistanceMeters(), 40.0F);
+  EXPECT_FLOAT_EQ(loaded.GetSecondFogDensity(), 0.018F);
+  EXPECT_FLOAT_EQ(loaded.GetSecondFogHeightFalloff(), 0.044F);
+  EXPECT_FLOAT_EQ(loaded.GetSecondFogHeightOffset(), 9.0F);
+  EXPECT_FLOAT_EQ(loaded.GetFogMaxOpacity(), 0.72F);
+  EXPECT_EQ(
+    loaded.GetFogInscatteringLuminance(), glm::vec3(0.21F, 0.32F, 0.43F));
+  EXPECT_EQ(loaded.GetSkyAtmosphereAmbientContributionColorScale(),
+    glm::vec3(0.6F, 0.7F, 0.8F));
+  EXPECT_EQ(
+    loaded.GetDirectionalInscatteringLuminance(), glm::vec3(1.4F, 1.2F, 0.9F));
+  EXPECT_FLOAT_EQ(loaded.GetDirectionalInscatteringExponent(), 15.0F);
+  EXPECT_FLOAT_EQ(loaded.GetDirectionalInscatteringStartDistance(), 75.0F);
+  EXPECT_FLOAT_EQ(loaded.GetFogEndDistanceMeters(), 800.0F);
+  EXPECT_FLOAT_EQ(loaded.GetFogCutoffDistanceMeters(), 1800.0F);
+  EXPECT_TRUE(loaded.GetFogHoldout());
+  EXPECT_TRUE(loaded.GetFogRenderInMainPass());
+  EXPECT_FALSE(loaded.GetFogVisibleInReflectionCaptures());
+  EXPECT_FALSE(loaded.GetFogVisibleInRealTimeSkyCaptures());
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

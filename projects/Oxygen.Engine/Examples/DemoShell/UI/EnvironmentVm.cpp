@@ -112,8 +112,8 @@ namespace {
       .sky_light_specular = 1.0F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_extinction_sigma_t_per_m = 0.01F,
-      .fog_height_falloff_per_m = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.002F,
+      .fog_height_falloff_per_m = 0.02F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
@@ -159,8 +159,8 @@ namespace {
       .sky_light_specular = 0.7F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_extinction_sigma_t_per_m = 0.01F,
-      .fog_height_falloff_per_m = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.002F,
+      .fog_height_falloff_per_m = 0.02F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
@@ -207,7 +207,7 @@ namespace {
       .fog_enabled = true,
       .fog_model = 0, // Exponential
       .fog_extinction_sigma_t_per_m = 0.02F,
-      .fog_height_falloff_per_m = 0.1F,
+      .fog_height_falloff_per_m = 0.02F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 0.95F,
@@ -253,8 +253,8 @@ namespace {
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_extinction_sigma_t_per_m = 0.01F,
-      .fog_height_falloff_per_m = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.002F,
+      .fog_height_falloff_per_m = 0.02F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
@@ -300,8 +300,8 @@ namespace {
       .sky_light_specular = 0.5F,
       .fog_enabled = false,
       .fog_model = 0,
-      .fog_extinction_sigma_t_per_m = 0.01F,
-      .fog_height_falloff_per_m = 0.2F,
+      .fog_extinction_sigma_t_per_m = 0.002F,
+      .fog_height_falloff_per_m = 0.02F,
       .fog_height_offset_m = 0.0F,
       .fog_start_distance_m = 0.0F,
       .fog_max_opacity = 1.0F,
@@ -1144,6 +1144,11 @@ auto EnvironmentVm::SetFogEnabled(const bool enabled) -> void
 {
   PrepareForManualOverride();
   service_->SetFogEnabled(enabled);
+}
+
+auto EnvironmentVm::GetHeightFogPassRequested() const -> bool
+{
+  return service_->GetHeightFogPassRequested();
 }
 
 auto EnvironmentVm::GetFogModel() const -> int

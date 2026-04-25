@@ -23,14 +23,11 @@
 
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
-#include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewColorHelpers.hlsli"
 #include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
-#include "Vortex/Services/Environment/AtmospherePhase.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
-#include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
 #include "Vortex/Shared/Geometry.hlsli"
@@ -246,49 +243,6 @@ AerialPerspectiveResult ComputeAerialPerspective(
         camera_pos,
         sun_dir,
         view_distance);
-
-    // Apply Fog environment system in addition to atmosphere.
-    // Fog must remain responsive even when LUT haze is active.
-    if (env_data.fog.enabled)
-    {
-        GpuFogParams fog = env_data.fog;
-
-        const float start_d = max(fog.start_distance_m, 0.0);
-        const float d = max(view_distance - start_d, 0.0);
-        if (d > 1e-4)
-        {
-            const float base_sigma_t = max(fog.extinction_sigma_t_per_m, 0.0);
-            const float falloff = max(fog.height_falloff_per_m, 0.0);
-
-            // Oxygen convention is Z-up; fog height parameters are authored in meters.
-            const float mid_height_m = 0.5 * (camera_pos.z + world_pos.z);
-            const float height_rel_m = mid_height_m - fog.height_offset_m;
-
-            // Density decreases with height above the offset.
-            const float height_scale = (falloff > 1e-5) ? exp(-falloff * height_rel_m) : 1.0;
-            const float sigma_t = base_sigma_t * height_scale;
-
-            // Beer-Lambert extinction approximation.
-            const float transmittance = exp(-sigma_t * d);
-            const float min_transmittance = 1.0 - saturate(fog.max_opacity);
-            const float fog_transmittance = max(transmittance, min_transmittance);
-
-            // Composite: multiply transmittance, add fog inscatter.
-            result.transmittance *= fog_transmittance;
-
-            // Directional single scattering from the sun.
-            const float3 view_dir = view_vec / view_distance; // camera -> point
-            const float cos_theta = dot(sun_dir, -view_dir);  // point->camera
-            const float phase = HenyeyGreensteinPhase(cos_theta, fog.anisotropy_g);
-
-            const float sun_irradiance = LuxToIrradiance(GetSunIlluminance());
-            const float3 sun_radiance = GetSunColorRGB() * (sun_irradiance * INV_PI);
-
-            const float scattering_weight = (1.0 - fog_transmittance);
-            result.inscatter += sun_radiance * fog.single_scattering_albedo_rgb
-                * (scattering_weight * phase);
-        }
-    }
 
     return result;
 }

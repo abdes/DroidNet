@@ -159,8 +159,8 @@ auto BuildFogPipelineDesc(const SceneTextures& scene_textures)
   auto root_bindings = BuildVortexRootBindings();
   const auto alpha_blend = graphics::BlendTargetDesc {
     .blend_enable = true,
-    .src_blend = graphics::BlendFactor::kSrcAlpha,
-    .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+    .src_blend = graphics::BlendFactor::kOne,
+    .dest_blend = graphics::BlendFactor::kSrcAlpha,
     .blend_op = graphics::BlendOp::kAdd,
     .src_blend_alpha = graphics::BlendFactor::kOne,
     .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,

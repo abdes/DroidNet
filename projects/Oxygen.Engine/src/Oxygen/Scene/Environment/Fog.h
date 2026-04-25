@@ -459,8 +459,8 @@ private:
   bool enable_height_fog_ = true;
   bool enable_volumetric_fog_ = false;
 
-  float extinction_sigma_t_per_m_ = 0.01F;
-  float height_falloff_per_m_ = 0.2F;
+  float extinction_sigma_t_per_m_ = 0.002F;
+  float height_falloff_per_m_ = 0.02F;
   float height_offset_m_ = 0.0F;
   float start_distance_m_ = 0.0F;
   float second_fog_density_ = 0.0F;
@@ -469,7 +469,7 @@ private:
 
   float max_opacity_ = 1.0F;
   Vec3 single_scattering_albedo_rgb_ { 1.0F, 1.0F, 1.0F };
-  Vec3 fog_inscattering_luminance_ { 1.0F, 1.0F, 1.0F };
+  Vec3 fog_inscattering_luminance_ { 0.0F, 0.0F, 0.0F };
   Vec3 sky_atmosphere_ambient_contribution_color_scale_ {
     1.0F,
     1.0F,
@@ -480,9 +480,9 @@ private:
   Vec3 inscattering_texture_tint_ { 1.0F, 1.0F, 1.0F };
   float fully_directional_inscattering_color_distance_ = 0.0F;
   float non_directional_inscattering_color_distance_ = 0.0F;
-  Vec3 directional_inscattering_luminance_ { 1.0F, 1.0F, 1.0F };
-  float directional_inscattering_exponent_ = 0.0F;
-  float directional_inscattering_start_distance_ = 0.0F;
+  Vec3 directional_inscattering_luminance_ { 0.0F, 0.0F, 0.0F };
+  float directional_inscattering_exponent_ = 4.0F;
+  float directional_inscattering_start_distance_ = 10000.0F;
   float end_distance_m_ = 0.0F;
   float fog_cutoff_distance_m_ = 0.0F;
 

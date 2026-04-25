@@ -1126,13 +1126,19 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
                  return !target.blend_enable;
                });
         }
+        const auto expected_src_blend
+          = pipeline_name == "Vortex.Environment.Fog"
+          ? oxygen::graphics::BlendFactor::kOne
+          : oxygen::graphics::BlendFactor::kSrcAlpha;
+        const auto expected_dest_blend
+          = pipeline_name == "Vortex.Environment.Fog"
+          ? oxygen::graphics::BlendFactor::kSrcAlpha
+          : oxygen::graphics::BlendFactor::kInvSrcAlpha;
         return !blend_state.empty()
-          && std::ranges::all_of(blend_state, [](const auto& target) {
+          && std::ranges::all_of(blend_state, [&](const auto& target) {
                return target.blend_enable
-                 && target.src_blend
-                   == oxygen::graphics::BlendFactor::kSrcAlpha
-                 && target.dest_blend
-                   == oxygen::graphics::BlendFactor::kInvSrcAlpha;
+                 && target.src_blend == expected_src_blend
+                 && target.dest_blend == expected_dest_blend;
              });
       }
     }
