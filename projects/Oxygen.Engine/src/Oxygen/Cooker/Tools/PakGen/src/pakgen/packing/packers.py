@@ -1093,6 +1093,7 @@ def _pack_node_record(
 def _pack_renderable_record(
     renderable: Dict[str, Any],
     geometry_name_to_key: Dict[str, bytes],
+    material_name_to_key: Dict[str, bytes],
     *,
     node_count: int,
 ) -> bytes:
@@ -1115,14 +1116,26 @@ def _pack_renderable_record(
     if geometry_key == b"\x00" * ASSET_KEY_SIZE:
         raise PakError("E_REF", "Renderable missing geometry reference")
 
+    material_key = _asset_key_bytes(
+        renderable.get("material_asset_key", renderable.get("material_key"))
+    )
+    if material_key == b"\x00" * ASSET_KEY_SIZE:
+        material_name = renderable.get(
+            "material",
+            renderable.get("material_override", renderable.get("material_asset")),
+        )
+        if isinstance(material_name, str) and material_name in material_name_to_key:
+            material_key = material_name_to_key[material_name]
+
     visible = renderable.get("visible", 1)
     visible_u32 = 1 if bool(visible) else 0
     out = (
         struct.pack("<I", int(node_index))
         + geometry_key
+        + material_key
         + struct.pack("<I", int(visible_u32))
     )
-    if len(out) != 24:
+    if len(out) != 40:
         raise PakError("E_SIZE", f"RenderableRecord size mismatch: {len(out)}")
     return out
 
@@ -1190,6 +1203,7 @@ def pack_scene_asset_descriptor_and_payload(
     *,
     header_builder,
     geometry_name_to_key: Dict[str, bytes],
+    material_name_to_key: Dict[str, bytes] | None = None,
     script_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
@@ -1243,8 +1257,14 @@ def pack_scene_asset_descriptor_and_payload(
         raise PakError("E_TYPE", "scene.renderables must be a list")
     renderables = [r for r in renderables if isinstance(r, dict)]
     renderables.sort(key=lambda r: int(r.get("node_index", 0) or 0))
+    material_name_to_key = material_name_to_key or {}
     renderable_records = b"".join(
-        _pack_renderable_record(r, geometry_name_to_key, node_count=node_count)
+        _pack_renderable_record(
+            r,
+            geometry_name_to_key,
+            material_name_to_key,
+            node_count=node_count,
+        )
         for r in renderables
     )
 
@@ -1318,7 +1338,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_RENDERABLE,
                 len(renderables),
-                24,
+                40,
                 renderable_records,
             )
         )

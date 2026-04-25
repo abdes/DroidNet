@@ -23,6 +23,25 @@ def _extract_scene_descriptor(data: bytes) -> bytes:
     raise AssertionError("scene descriptor not found")
 
 
+def _extract_scene_component_tables(scene_desc: bytes) -> list[dict[str, int]]:
+    component_dir_offset = struct.unpack_from("<Q", scene_desc, 127)[0]
+    component_count = struct.unpack_from("<I", scene_desc, 135)[0]
+    tables = []
+    for i in range(component_count):
+        off = component_dir_offset + i * 20
+        component_type = struct.unpack_from("<I", scene_desc, off)[0]
+        table_offset, count, entry_size = struct.unpack_from("<QII", scene_desc, off + 4)
+        tables.append(
+            {
+                "component_type": component_type,
+                "table_offset": table_offset,
+                "count": count,
+                "entry_size": entry_size,
+            }
+        )
+    return tables
+
+
 def test_build_pak_with_scene_asset(tmp_path: Path):
     spec = {
         "version": 6,
@@ -73,7 +92,12 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
                     {"name": "Child", "parent": 0},
                 ],
                 "renderables": [
-                    {"node_index": 1, "geometry": "GeoA", "visible": True}
+                    {
+                        "node_index": 1,
+                        "geometry": "GeoA",
+                        "material": "MatA",
+                        "visible": True,
+                    }
                 ],
             },
         ],
@@ -112,6 +136,16 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
 
     scene_desc = _extract_scene_descriptor(data)
     assert scene_desc[65] == 3
+
+    tables = _extract_scene_component_tables(scene_desc)
+    assert len(tables) == 1
+    renderable_table = tables[0]
+    assert renderable_table["count"] == 1
+    assert renderable_table["entry_size"] == 40
+    record_offset = renderable_table["table_offset"]
+    assert scene_desc[record_offset + 20 : record_offset + 36] == bytes.fromhex(
+        "11" * 16
+    )
 
 
 def test_build_pak_with_v3_environment_and_local_fog_scene_asset(tmp_path: Path):

@@ -1004,19 +1004,24 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         return cleaned
 
     geometry_name_to_key: Dict[str, str] = {}
+    material_name_to_key: Dict[str, str] = {}
     for a in spec.get("assets", []) or []:
-        if not isinstance(a, dict) or a.get("type") != "geometry":
+        if not isinstance(a, dict):
             continue
-        gname = a.get("name")
-        if not isinstance(gname, str):
+        asset_type = a.get("type")
+        name = a.get("name")
+        if not isinstance(name, str):
             continue
-        raw_key = a.get("asset_key")
-        key_hex = _clean_key_hex(raw_key)
+        key_hex = _clean_key_hex(a.get("asset_key"))
         if key_hex is None:
             key_hex = "00" * 16
-        geometry_name_to_key[gname] = key_hex
+        if asset_type == "geometry":
+            geometry_name_to_key[name] = key_hex
+        elif asset_type == "material":
+            material_name_to_key[name] = key_hex
 
     known_geometry_keys = set(geometry_name_to_key.values())
+    known_material_keys = set(material_name_to_key.values())
 
     def _validate_light_list(
         lights: Any,
@@ -1174,6 +1179,42 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     "Unknown geometry reference",
                     rpath + ".geometry_asset_key",
                 )
+
+            material_ref_present = any(
+                key in r
+                for key in (
+                    "material_asset_key",
+                    "material_key",
+                    "material",
+                    "material_override",
+                    "material_asset",
+                )
+            )
+            if material_ref_present:
+                material_key = _clean_key_hex(
+                    r.get("material_asset_key", r.get("material_key"))
+                )
+                if material_key is None:
+                    material_name = r.get(
+                        "material",
+                        r.get("material_override", r.get("material_asset")),
+                    )
+                    if isinstance(material_name, str):
+                        material_key = material_name_to_key.get(material_name)
+                if material_key is None:
+                    _err(
+                        errors,
+                        "E_REF",
+                        "Renderable material override must reference material_asset_key (hex) or material (name)",
+                        rpath,
+                    )
+                elif material_key not in known_material_keys:
+                    _err(
+                        errors,
+                        "E_REF",
+                        "Unknown material override reference",
+                        rpath + ".material_asset_key",
+                    )
 
         perspective_cameras = s.get("perspective_cameras", []) or []
         if not isinstance(perspective_cameras, list):

@@ -885,20 +885,23 @@ namespace {
           return std::nullopt;
         }
 
+        auto material_key = data::AssetKey {};
         if (renderable_doc.contains("material_ref")) {
           const auto material_ref
             = renderable_doc.at("material_ref").get<std::string>();
-          if (!ResolveAssetReference(context, material_ref,
-                data::AssetType::kMaterial, false,
-                object_path + ".material_ref")
-                .has_value()) {
+          const auto resolved_material = ResolveAssetReference(context,
+            material_ref, data::AssetType::kMaterial, false,
+            object_path + ".material_ref");
+          if (!resolved_material.has_value()) {
             return std::nullopt;
           }
+          material_key = resolved_material->first;
         }
 
         auto renderable = data::pak::world::RenderableRecord {};
         renderable.node_index = node_index;
         renderable.geometry_key = resolved_geometry->first;
+        renderable.material_key = material_key;
         renderable.visible = renderable_doc.value("visible", true) ? 1U : 0U;
         prepared.build.renderables.push_back(renderable);
         prepared.geometry_keys.push_back(renderable.geometry_key);

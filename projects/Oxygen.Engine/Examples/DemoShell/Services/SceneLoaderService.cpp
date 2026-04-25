@@ -34,8 +34,10 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -2621,8 +2623,29 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
 {
   using data::pak::world::RenderableRecord;
 
+  const auto ApplyMaterialOverride =
+    [](scene::SceneNode::Renderable renderable,
+      std::shared_ptr<const data::GeometryAsset> geometry,
+      std::shared_ptr<const data::MaterialAsset> material) {
+      if (!geometry || !material) {
+        return;
+      }
+      const auto meshes = geometry->Meshes();
+      for (std::size_t lod = 0; lod < meshes.size(); ++lod) {
+        const auto& mesh = meshes[lod];
+        if (!mesh) {
+          continue;
+        }
+        const auto submeshes = mesh->SubMeshes();
+        for (std::size_t submesh = 0; submesh < submeshes.size(); ++submesh) {
+          renderable.SetMaterialOverride(lod, submesh, material);
+        }
+      }
+    };
+
   const auto renderables = asset.GetComponents<RenderableRecord>();
   int valid_renderables = 0;
+  int material_overrides = 0;
   for (const RenderableRecord& r : renderables) {
     if (r.visible == 0) {
       continue;
@@ -2637,7 +2660,19 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
     // avoid redundant async waits.
     auto geo = loader_.GetGeometryAsset(r.geometry_key);
     if (geo) {
-      runtime_nodes_[node_index].GetRenderable().SetGeometry(std::move(geo));
+      auto renderable = runtime_nodes_[node_index].GetRenderable();
+      renderable.SetGeometry(geo);
+      if (r.material_key != data::AssetKey {}) {
+        auto material = loader_.GetMaterialAsset(r.material_key);
+        if (material) {
+          ApplyMaterialOverride(renderable, geo, std::move(material));
+          material_overrides++;
+        } else {
+          LOG_F(WARNING,
+            "SceneLoader: Missing material override dependency for node {}",
+            node_index);
+        }
+      }
       valid_renderables++;
     } else {
       LOG_F(WARNING, "SceneLoader: Missing geometry dependency for node {}",
@@ -2646,8 +2681,10 @@ void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
   }
 
   if (valid_renderables > 0) {
-    LOG_F(INFO, "SceneLoader: Assigned {} geometries from cache.",
-      valid_renderables);
+    LOG_F(INFO,
+      "SceneLoader: Assigned {} geometries from cache and {} material "
+      "overrides.",
+      valid_renderables, material_overrides);
   }
 }
 

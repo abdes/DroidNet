@@ -163,8 +163,20 @@ namespace {
 
     auto layout = LooseCookedLayout {};
     const auto expected_relpath = layout.SceneDescriptorRelPath("DemoScene");
-    EXPECT_TRUE(std::filesystem::exists(
-      cooked_root / std::filesystem::path(expected_relpath)));
+    const auto scene_path = cooked_root / std::filesystem::path(expected_relpath);
+    EXPECT_TRUE(std::filesystem::exists(scene_path));
+
+    const auto scene_bytes = ReadBinaryFile(scene_path);
+    ASSERT_FALSE(scene_bytes.empty());
+
+    const auto scene = oxygen::data::SceneAsset(
+      oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
+    const auto renderables
+      = scene.GetComponents<oxygen::data::pak::world::RenderableRecord>();
+    ASSERT_EQ(renderables.size(), 1U);
+    EXPECT_EQ(renderables[0].material_key,
+      oxygen::data::AssetKey::FromVirtualPath(
+        "/.cooked/Materials/cube.omat"));
 
     service.Stop();
   }

@@ -182,6 +182,8 @@ static_assert(sizeof(NodeRecord) == 68);
   ### Relationships
   - Links to a `NodeRecord` via `node_index`.
   - References a `GeometryAsset` via `geometry_key`.
+  - Optionally references a scene-authored material override via
+    `material_key`.
 
   @note Component tables are typically sorted by `node_index` for efficient
   loading.
@@ -189,10 +191,11 @@ static_assert(sizeof(NodeRecord) == 68);
 struct RenderableRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   AssetKey geometry_key; // Geometry asset to render
+  AssetKey material_key; // Optional material override; nil means no override
   uint32_t visible = 1; // Visibility flag (boolean)
 };
 #pragma pack(pop)
-static_assert(sizeof(RenderableRecord) == 24);
+static_assert(sizeof(RenderableRecord) == 40);
 
 #pragma pack(push, 1)
 
