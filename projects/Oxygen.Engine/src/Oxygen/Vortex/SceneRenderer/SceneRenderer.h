@@ -203,6 +203,7 @@ private:
 
   OXGN_VRTX_API void RefreshSceneTextureBindings();
   OXGN_VRTX_API void ResetExtractArtifacts();
+  OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
   OXGN_VRTX_API auto EnsureArtifactTexture(ExtractArtifact& artifact,
     std::string_view debug_name, const graphics::Texture& source)
     -> graphics::Texture*;
