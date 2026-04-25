@@ -174,10 +174,12 @@ validation.
 Current Vortex status: a first integrated-light-scattering runtime path exists
 for authored/requested volumetric fog. It allocates a 3D product, dispatches a
 Stage-14 compute pass, publishes SRV/static binding validity, and lets the
-Stage-15 fog pass consume the product. This is a partial implementation path,
-not full UE5.7 volumetric-fog parity: depth-aware froxel distribution,
-shadowed/local/sky-light injection, local-fog injection, temporal history, and
-capture/analyzer proof remain required.
+Stage-15 fog pass consume the product. The Stage-14 compute path also has a
+first UE5.7-shaped logarithmic froxel-depth distribution and primary
+directional CSM shadow sampling path. This is a partial implementation path,
+not full UE5.7 volumetric-fog parity: full media/local/sky-light injection,
+local-fog injection, temporal history, volumetric shadow artifact proof, and
+city-scale capture/analyzer proof remain required.
 
 ## 1. Scope and Intent
 
@@ -1305,6 +1307,11 @@ only to prevent duplicate implementation; it is not a completion claim.
       authored/requested volumetric fog allocates a 3D product, runs a Stage-14
       compute pass, publishes SRV/static binding validity, and composes through
       Stage 15 fog.
+- [x] First UE5.7-shaped volumetric froxel-depth and primary directional CSM
+      shadow sampling path exists: Stage-14 volumetric fog computes
+      `CalculateGridZParams`-style logarithmic z slices and samples the
+      validated conventional directional CSM product without surface normal
+      receiver bias.
 
 ### 11.2 Blocking Work Before Fog Parity Can Close
 
@@ -1319,11 +1326,12 @@ only to prevent duplicate implementation; it is not a completion claim.
       atmosphere-aware lighting.
 - [ ] Implement local-fog injection into volumetric fog when volumetric fog is
       enabled.
-- [ ] Complete volumetric fog as a UE5.7-informed froxel system: depth-aware
-      grid distribution, media/light injection, shadow/sky/local-light
-      participation, local-fog injection, temporal history/reprojection, final
-      integration, and capture/analyzer proof. The first Vortex integrated
-      scattering product path does not close this gate.
+- [ ] Complete volumetric fog as a UE5.7-informed froxel system: full
+      media/local/sky-light injection, local-fog injection, temporal
+      history/reprojection, final integration, volumetric shadow artifact proof,
+      and city-scale capture/analyzer proof. The first Vortex integrated
+      scattering product plus directional CSM sampling path does not close this
+      gate.
 - [ ] Publish complete environment frame/view products for height fog, local
       fog, volumetric fog, and sky-light coupling.
 - [ ] Validate the environment path against UE5.7 source/shader contracts and

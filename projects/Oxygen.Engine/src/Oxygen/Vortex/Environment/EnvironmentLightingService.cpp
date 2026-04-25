@@ -677,6 +677,11 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
     = data.volumetric_fog.depth_slice_length_m > 1.0e-6F
     ? 1.0F / data.volumetric_fog.depth_slice_length_m
     : 0.0F;
+  data.volumetric_fog.grid_z_params = {
+    pending_volumetric_fog_state_.grid_z_params[0],
+    pending_volumetric_fog_state_.grid_z_params[1],
+    pending_volumetric_fog_state_.grid_z_params[2],
+  };
 
   const auto& atmo = view_products.atmosphere;
   const auto primary_sun_disk_enabled
@@ -998,6 +1003,13 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     = products.integrated_light_scattering_srv.IsValid(),
     .integrated_light_scattering_unavailable = products.volumetric_fog.enabled
       && !products.integrated_light_scattering_srv.IsValid(),
+    .volumetric_fog_view_constants_bound
+    = pending_volumetric_fog_state_.view_constants_bound,
+    .volumetric_fog_ue_log_depth_distribution
+    = pending_volumetric_fog_state_.ue_log_depth_distribution,
+    .volumetric_fog_directional_shadowed_light_requested
+    = pending_volumetric_fog_state_
+        .directional_shadowed_light_injection_requested,
   };
 
   return slot;
@@ -1050,11 +1062,21 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     = pending_volumetric_fog_state_.dispatch_count_y,
     .volumetric_fog_dispatch_count_z
     = pending_volumetric_fog_state_.dispatch_count_z,
+    .volumetric_fog_view_constants_bound
+    = pending_volumetric_fog_state_.view_constants_bound,
+    .volumetric_fog_ue_log_depth_distribution
+    = pending_volumetric_fog_state_.ue_log_depth_distribution,
+    .volumetric_fog_directional_shadowed_light_requested
+    = pending_volumetric_fog_state_
+        .directional_shadowed_light_injection_requested,
   };
   LOG_F(INFO,
     "volumetric_fog_requested={} volumetric_fog_executed={} "
     "integrated_light_scattering_valid={} volumetric_fog_grid={}x{}x{} "
-    "volumetric_fog_dispatch={}x{}x{}",
+    "volumetric_fog_dispatch={}x{}x{} "
+    "volumetric_fog_view_constants_bound={} "
+    "volumetric_fog_ue_log_depth_distribution={} "
+    "volumetric_fog_directional_shadowed_light_requested={}",
     last_stage14_state_.volumetric_fog_requested,
     last_stage14_state_.volumetric_fog_executed,
     last_stage14_state_.integrated_light_scattering_valid,
@@ -1063,7 +1085,10 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     last_stage14_state_.volumetric_fog_grid_depth,
     last_stage14_state_.volumetric_fog_dispatch_count_x,
     last_stage14_state_.volumetric_fog_dispatch_count_y,
-    last_stage14_state_.volumetric_fog_dispatch_count_z);
+    last_stage14_state_.volumetric_fog_dispatch_count_z,
+    last_stage14_state_.volumetric_fog_view_constants_bound,
+    last_stage14_state_.volumetric_fog_ue_log_depth_distribution,
+    last_stage14_state_.volumetric_fog_directional_shadowed_light_requested);
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = sky_state.requested || atmosphere_state.requested

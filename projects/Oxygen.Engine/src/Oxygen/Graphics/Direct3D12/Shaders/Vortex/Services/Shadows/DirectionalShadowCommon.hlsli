@@ -150,15 +150,21 @@ static inline float ComputeDirectionalCascadeVisibility(
         bindings, cascade_index, shadow_uv, shadow_ndc.z);
 }
 
+static inline bool HasDirectionalConventionalShadowBindings(
+    VortexShadowFrameBindings bindings)
+{
+    return (bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) != 0u
+        && bindings.cascade_count != 0u
+        && bindings.conventional_shadow_surface_handle != K_INVALID_BINDLESS_INDEX;
+}
+
 static inline float ComputeDirectionalShadowVisibility(
     float3 world_position,
     float3 world_normal,
     float3 light_direction_to_source)
 {
     const VortexShadowFrameBindings bindings = LoadVortexShadowFrameBindings();
-    if ((bindings.technique_flags & VORTEX_SHADOW_TECHNIQUE_DIRECTIONAL_CONVENTIONAL) == 0u
-        || bindings.cascade_count == 0u
-        || bindings.conventional_shadow_surface_handle == K_INVALID_BINDLESS_INDEX) {
+    if (!HasDirectionalConventionalShadowBindings(bindings)) {
         return 1.0f;
     }
 
@@ -199,6 +205,58 @@ static inline float ComputeDirectionalShadowVisibility(
     }
 
     return visibility;
+}
+
+static inline float ComputeDirectionalVolumetricShadowVisibility(
+    VortexShadowFrameBindings bindings,
+    float3 world_position,
+    float3 light_direction_to_source)
+{
+    if (!HasDirectionalConventionalShadowBindings(bindings)) {
+        return 1.0f;
+    }
+
+    const float view_depth = max(0.0f, -mul(view_matrix, float4(world_position, 1.0f)).z);
+    const uint cascade_count = min(max(bindings.cascade_count, 1u), 4u);
+    const uint cascade_index = SelectDirectionalShadowCascade(bindings, view_depth);
+    const VortexShadowCascadeBinding cascade = bindings.cascades[cascade_index];
+
+    const float3 safe_light_dir = normalize(
+        dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
+            ? light_direction_to_source
+            : float3(0.0f, -1.0f, 0.0f));
+    float visibility = ComputeDirectionalCascadeVisibility(
+        bindings, cascade_index, world_position, 0.0f.xxx, safe_light_dir, 0.0f);
+
+    const float transition_width = max(cascade.sampling_metadata1.x, 0.0f);
+    if (cascade_index + 1u < cascade_count && transition_width > 0.0f) {
+        const float transition_begin = cascade.split_far - transition_width;
+        const float transition_alpha =
+            saturate((view_depth - transition_begin) / transition_width);
+        if (transition_alpha > 0.0f) {
+            const float next_visibility = ComputeDirectionalCascadeVisibility(
+                bindings, cascade_index + 1u, world_position, 0.0f.xxx,
+                safe_light_dir, 0.0f);
+            visibility = lerp(visibility, next_visibility, transition_alpha);
+        }
+    }
+
+    if (cascade_index + 1u == cascade_count) {
+        const float fade_begin = cascade.sampling_metadata1.y;
+        const float fade_span = max(cascade.split_far - fade_begin, 0.001f);
+        const float fade_alpha = saturate((view_depth - fade_begin) / fade_span);
+        visibility = lerp(visibility, 1.0f, fade_alpha);
+    }
+
+    return visibility;
+}
+
+static inline float ComputeDirectionalVolumetricShadowVisibility(
+    float3 world_position,
+    float3 light_direction_to_source)
+{
+    return ComputeDirectionalVolumetricShadowVisibility(
+        LoadVortexShadowFrameBindings(), world_position, light_direction_to_source);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_SHADOWS_DIRECTIONALSHADOWCOMMON_HLSLI

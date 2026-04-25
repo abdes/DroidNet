@@ -48,6 +48,10 @@ namespace environment {
       std::uint32_t dispatch_count_z { 0U };
       float start_distance_m { 0.0F };
       float end_distance_m { 0.0F };
+      bool view_constants_bound { false };
+      bool ue_log_depth_distribution { false };
+      bool directional_shadowed_light_injection_requested { false };
+      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
     };
 
     OXGN_VRTX_API explicit VolumetricFogPass(Renderer& renderer);
@@ -83,6 +87,11 @@ namespace environment {
       float scattering_distribution { 0.0F };
     };
 
+    struct alignas(16) GridZControl {
+      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
+      float shadowed_directional_light0_enabled { 0.0F };
+    };
+
     struct alignas(16) MediaControl1 {
       float emissive_rgb[3] { 0.0F, 0.0F, 0.0F };
       float static_lighting_scattering_intensity { 1.0F };
@@ -91,6 +100,7 @@ namespace environment {
     struct alignas(16) PassConstants {
       OutputHeader output_header {};
       GridControl grid {};
+      GridZControl grid_z {};
       MediaControl0 media0 {};
       MediaControl1 media1 {};
       float light0_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };

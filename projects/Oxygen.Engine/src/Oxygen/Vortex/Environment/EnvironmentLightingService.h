@@ -145,6 +145,9 @@ public:
     bool volumetric_fog_authored_enabled { false };
     bool integrated_light_scattering_valid { false };
     bool integrated_light_scattering_unavailable { false };
+    bool volumetric_fog_view_constants_bound { false };
+    bool volumetric_fog_ue_log_depth_distribution { false };
+    bool volumetric_fog_directional_shadowed_light_requested { false };
   };
 
   struct Stage15State {
@@ -190,6 +193,9 @@ public:
     std::uint32_t volumetric_fog_dispatch_count_x { 0U };
     std::uint32_t volumetric_fog_dispatch_count_y { 0U };
     std::uint32_t volumetric_fog_dispatch_count_z { 0U };
+    bool volumetric_fog_view_constants_bound { false };
+    bool volumetric_fog_ue_log_depth_distribution { false };
+    bool volumetric_fog_directional_shadowed_light_requested { false };
   };
 
   OXGN_VRTX_API explicit EnvironmentLightingService(Renderer& renderer);

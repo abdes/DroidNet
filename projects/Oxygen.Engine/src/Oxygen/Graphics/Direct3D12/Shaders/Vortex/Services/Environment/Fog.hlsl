@@ -292,14 +292,27 @@ static float4 SampleIntegratedVolumetricFog(
 
     const float depth_span =
         max(volumetric_fog.distance_m - volumetric_fog.start_distance_m, 1.0f);
-    const float depth_fraction =
+    const float linear_depth_fraction =
         saturate((ray_length_m - volumetric_fog.start_distance_m) / depth_span);
+    float depth_fraction = sqrt(linear_depth_fraction);
+    if (abs(volumetric_fog.grid_z_params.x) > 1.0e-8f
+        && abs(volumetric_fog.grid_z_params.z) > 1.0e-4f
+        && volumetric_fog.grid_depth > 0u) {
+        const float z_argument = max(
+            ray_length_m * volumetric_fog.grid_z_params.x
+            + volumetric_fog.grid_z_params.y,
+            1.0e-8f);
+        const float z_slice =
+            log2(z_argument) * volumetric_fog.grid_z_params.z;
+        depth_fraction = saturate(
+            z_slice / max(float(volumetric_fog.grid_depth), 1.0f));
+    }
     Texture3D<float4> integrated_light_scattering =
         ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv];
     SamplerState linear_sampler = SamplerDescriptorHeap[0];
     return integrated_light_scattering.SampleLevel(
         linear_sampler,
-        float3(uv, sqrt(depth_fraction)),
+        float3(uv, depth_fraction),
         0.0f);
 }
 

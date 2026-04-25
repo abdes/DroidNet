@@ -43,6 +43,8 @@ namespace {
   constexpr std::uint32_t kTileSizePixels = 8U;
   constexpr std::uint32_t kDepthResolution = 32U;
   constexpr float kDefaultVolumetricDistanceMeters = 100000.0F;
+  constexpr float kUeVolumetricFogDepthDistributionScale = 32.0F;
+  constexpr float kUeFroxelNearOffsetMeters = 9.5F;
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -191,6 +193,30 @@ namespace {
         / kTileSizePixels);
   }
 
+  auto CalculateUeGridZParams(const float start_distance_m,
+    const float near_plane_m, const float far_plane_m,
+    const std::uint32_t grid_size_z) -> glm::vec3
+  {
+    const auto near_plane = static_cast<double>(
+      std::max(near_plane_m, start_distance_m));
+    const auto slice_count = static_cast<double>(std::max(grid_size_z, 1U));
+    const auto depth_distribution
+      = static_cast<double>(kUeVolumetricFogDepthDistributionScale);
+    const auto near_with_offset
+      = near_plane + static_cast<double>(kUeFroxelNearOffsetMeters);
+    const auto far_plane = static_cast<double>(
+      std::max(far_plane_m, static_cast<float>(near_with_offset + 1.0)));
+    const auto far_minus_near = std::max(far_plane - near_with_offset, 1.0e-6);
+    const auto depth_exp = std::exp2(slice_count / depth_distribution);
+    const auto offset = (far_plane - near_with_offset * depth_exp)
+      / far_minus_near;
+    const auto scale = (1.0 - offset) / near_with_offset;
+
+    return glm::vec3 { static_cast<float>(scale),
+      static_cast<float>(offset),
+      kUeVolumetricFogDepthDistributionScale };
+  }
+
 } // namespace
 
 VolumetricFogPass::VolumetricFogPass(Renderer& renderer)
@@ -250,6 +276,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
 
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
+    return state;
+  }
+  if (ctx.view_constants == nullptr) {
     return state;
   }
 
@@ -334,6 +363,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.grid.near_fade_in_distance_m
     = std::max(volumetric.near_fade_in_distance, 0.0F);
   constants.grid.base_extinction_per_m = base_extinction;
+  const auto grid_z_params = CalculateUeGridZParams(start_distance,
+    resolved_view.NearPlane(), end_distance, depth);
+  constants.grid_z.grid_z_params[0] = grid_z_params.x;
+  constants.grid_z.grid_z_params[1] = grid_z_params.y;
+  constants.grid_z.grid_z_params[2] = grid_z_params.z;
+  constants.grid_z.shadowed_directional_light0_enabled
+    = stable_state.view_products.atmosphere_lights[0].enabled ? 1.0F : 0.0F;
   constants.media0.albedo_rgb[0] = volumetric.albedo.x;
   constants.media0.albedo_rgb[1] = volumetric.albedo.y;
   constants.media0.albedo_rgb[2] = volumetric.albedo.z;
@@ -370,6 +406,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
+  recorder->SetComputeRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants->GetGPUVirtualAddress());
   recorder->SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -403,6 +442,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.dispatch_count_z = dispatch_z;
   state.start_distance_m = start_distance;
   state.end_distance_m = end_distance;
+  state.view_constants_bound = true;
+  state.ue_log_depth_distribution = true;
+  state.directional_shadowed_light_injection_requested
+    = constants.grid_z.shadowed_directional_light0_enabled > 0.0F;
+  state.grid_z_params[0] = grid_z_params.x;
+  state.grid_z_params[1] = grid_z_params.y;
+  state.grid_z_params[2] = grid_z_params.z;
   return state;
 }
 

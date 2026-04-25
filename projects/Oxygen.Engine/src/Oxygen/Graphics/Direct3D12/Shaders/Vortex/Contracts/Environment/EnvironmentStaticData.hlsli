@@ -88,7 +88,7 @@ struct GpuFogParams
     uint model;
 };
 
-// Mirrors oxygen::vortex::GpuVolumetricFogParams (sizeof = 80)
+// Mirrors oxygen::vortex::GpuVolumetricFogParams (sizeof = 96)
 struct GpuVolumetricFogParams
 {
     float3 albedo_rgb;
@@ -111,6 +111,9 @@ struct GpuVolumetricFogParams
     float depth_slice_length_m;
     float inv_depth_slice_length_m;
     uint _pad0;
+
+    float3 grid_z_params;
+    uint _pad1;
 };
 
 // Mirrors oxygen::vortex::GpuSkyAtmosphereParams (sizeof = 208)
@@ -244,7 +247,7 @@ struct GpuPostProcessParams
     uint _pad2;
 };
 
-// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 656)
+// Mirrors oxygen::vortex::EnvironmentStaticData (sizeof = 672)
 struct EnvironmentStaticData
 {
     GpuFogParams fog;
