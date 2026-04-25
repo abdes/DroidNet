@@ -141,8 +141,8 @@ namespace {
       / safe_solid_angle;
   }
 
-  auto ProbeBindingsHaveUsableResources(
-    const EnvironmentProbeBindings& probes) -> bool
+  auto ProbeBindingsHaveUsableResources(const EnvironmentProbeBindings& probes)
+    -> bool
   {
     return probes.environment_map_srv.IsValid()
       && probes.irradiance_map_srv.IsValid()
@@ -458,9 +458,9 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   data.planet_center_ws_pad = glm::vec4(planet_center_ws, 0.0F);
   data.planet_up_ws_camera_altitude_km
     = glm::vec4(planet_up_ws, camera_altitude_km);
-  data.sky_planet_translated_world_center_km_and_view_height_km = glm::vec4(
-    MetersToSkyUnitVec3(planet_center_translated_ws),
-    engine::atmos::MetersToSkyUnit(view_height_m));
+  data.sky_planet_translated_world_center_km_and_view_height_km
+    = glm::vec4(MetersToSkyUnitVec3(planet_center_translated_ws),
+      engine::atmos::MetersToSkyUnit(view_height_m));
   data.sky_camera_translated_world_origin_km_pad
     = glm::vec4(MetersToSkyUnitVec3(sky_camera_translated_world_origin), 0.0F);
   data.sky_view_lut_referential_row0 = referential_rows[0];
@@ -524,10 +524,12 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   auto data = EnvironmentStaticData {};
 
   const auto& height_fog = view_products.height_fog;
-  const auto fog_max_opacity = std::clamp(height_fog.fog_max_opacity, 0.0F, 1.0F);
+  const auto fog_max_opacity
+    = std::clamp(height_fog.fog_max_opacity, 0.0F, 1.0F);
   const auto primary_density = std::max(height_fog.fog_density, 0.0F);
   const auto secondary_density = std::max(height_fog.second_fog_density, 0.0F);
-  const auto any_layer_density = primary_density > 0.0F || secondary_density > 0.0F;
+  const auto any_layer_density
+    = primary_density > 0.0F || secondary_density > 0.0F;
   const auto cubemap_authored
     = height_fog.inscattering_color_cubemap_resource.get() != 0U;
   const auto cubemap_usable = false;
@@ -569,14 +571,16 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   const auto cubemap_fade_range
     = height_fog.fully_directional_inscattering_color_distance
     - height_fog.non_directional_inscattering_color_distance;
-  const auto cubemap_fade_inv_range = 1.0F / std::max(cubemap_fade_range, 0.00001F);
+  const auto cubemap_fade_inv_range
+    = 1.0F / std::max(cubemap_fade_range, 0.00001F);
   data.fog.fog_inscattering_luminance_rgb = {
     height_fog.fog_inscattering_luminance.x,
     height_fog.fog_inscattering_luminance.y,
     height_fog.fog_inscattering_luminance.z,
   };
   data.fog.primary_density = primary_density;
-  data.fog.primary_height_falloff = std::max(height_fog.fog_height_falloff, 0.0F);
+  data.fog.primary_height_falloff
+    = std::max(height_fog.fog_height_falloff, 0.0F);
   data.fog.primary_height_offset_m = height_fog.fog_height_offset;
   data.fog.secondary_density = secondary_density;
   data.fog.secondary_height_falloff
@@ -792,9 +796,11 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   const auto sky_light_authored_enabled = products.sky_light.enabled;
   const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
   if (sky_light_authored_enabled) {
-    products.flags |= environment::kEnvironmentViewProductFlagSkyLightAuthoredEnabled;
+    products.flags
+      |= environment::kEnvironmentViewProductFlagSkyLightAuthoredEnabled;
     if (sky_light_ibl_valid) {
-      products.flags |= environment::kEnvironmentViewProductFlagSkyLightIblValid;
+      products.flags
+        |= environment::kEnvironmentViewProductFlagSkyLightIblValid;
     } else {
       products.flags
         |= environment::kEnvironmentViewProductFlagSkyLightIblUnavailable;
@@ -804,11 +810,11 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     products.flags
       |= environment::kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled;
     if (products.integrated_light_scattering_srv.IsValid()) {
-      products.flags
-        |= environment::kEnvironmentViewProductFlagIntegratedLightScatteringValid;
+      products.flags |= environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringValid;
     } else {
-      products.flags
-        |= environment::kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable;
+      products.flags |= environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable;
     }
   }
 
@@ -914,6 +920,8 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .camera_aerial_width = camera_aerial_state.width,
     .camera_aerial_height = camera_aerial_state.height,
     .camera_aerial_depth = camera_aerial_state.depth,
+    .camera_aerial_sample_count_per_slice
+    = cache_state.internal_parameters.camera_aerial_sample_count_per_slice,
     .camera_aerial_dispatch_count_x = camera_aerial_state.dispatch_count_x,
     .camera_aerial_dispatch_count_y = camera_aerial_state.dispatch_count_y,
     .camera_aerial_dispatch_count_z = camera_aerial_state.dispatch_count_z,
@@ -927,8 +935,7 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .volumetric_fog_authored_enabled = products.volumetric_fog.enabled,
     .integrated_light_scattering_valid
     = products.integrated_light_scattering_srv.IsValid(),
-    .integrated_light_scattering_unavailable
-    = products.volumetric_fog.enabled
+    .integrated_light_scattering_unavailable = products.volumetric_fog.enabled
       && !products.integrated_light_scattering_srv.IsValid(),
   };
 
@@ -956,8 +963,7 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .local_fog_executed = local_fog_culling_state.executed,
     .local_fog_hzb_consumed
     = local_fog_culling_state.consumed_published_screen_hzb,
-    .local_fog_hzb_unavailable
-    = local_fog_culling_state.requested
+    .local_fog_hzb_unavailable = local_fog_culling_state.requested
       && !local_fog_culling_state.consumed_published_screen_hzb,
     .local_fog_buffer_ready
     = local_fog_products.buffer_ready && local_fog_products.tile_data_ready,

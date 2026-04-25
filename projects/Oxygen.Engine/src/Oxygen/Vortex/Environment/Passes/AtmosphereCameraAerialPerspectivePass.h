@@ -111,7 +111,7 @@ namespace environment {
     struct alignas(16) AtmosphereScales0 {
       float atmosphere_height_km { 100.0F };
       float aerial_perspective_distance_scale { 1.0F };
-      float aerial_scattering_strength { 1.0F };
+      float _pad0 { 0.0F };
       float rayleigh_scale_height_km { 8.0F };
     };
 

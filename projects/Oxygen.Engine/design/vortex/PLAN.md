@@ -92,7 +92,8 @@ migration or Phase 5 until the environment/fog parity gates have evidence.
 Contract Truth`. This stabilized what downstream code, diagnostics, tests, and
 runtime proof can observe before deeper fog parity work lands.
 
-**Next work package:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`.
+**Active work packages:** `VTX-M04D.2 — UE5.7 Exponential Height Fog Parity`
+and `VTX-M04D.6 — UE5.7 Aerial Perspective Parity`.
 
 **Detailed plan:** [plan/VTX-M04D.2-exponential-height-fog-parity.md](./plan/VTX-M04D.2-exponential-height-fog-parity.md)
 
@@ -166,7 +167,7 @@ planning handles; do not renumber them when scopes are refined.
 | VTX-M04D.3 | UE5.7 local fog volume parity | `in_progress` | VTX-M04D.1, VTX-M04D.2, Stage 5 HZB | Local fog authored components, tiled culling, HZB use, splat/compose, sky-depth exclusion, tests/proof. |
 | VTX-M04D.4 | UE5.7 volumetric fog parity | `in_progress` | VTX-M04D.1, VTX-M04D.2, VTX-M04D.3 | Froxel grid, media injection, lighting/shadowing, history/reprojection, integrated scattering product. |
 | VTX-M04D.5 | Environment runtime proof and Async preparation | `planned` | VTX-M04D.2, VTX-M04D.3, VTX-M04D.4, VTX-M04D.6 | One runtime proof path exercises atmosphere, aerial perspective, height fog, local fog, volumetric fog, and SkyLight. |
-| VTX-M04D.6 | UE5.7 aerial perspective parity | `planned` | VTX-M04D.1, VTX-M04D.2 | Camera aerial-perspective volume generation/sampling, main-pass application, height-fog coupling, and capture/test proof. |
+| VTX-M04D.6 | UE5.7 aerial perspective parity | `in_progress` | VTX-M04D.1, VTX-M04D.2 | Camera aerial-perspective volume generation/sampling, main-pass application, height-fog coupling, and capture/test proof. |
 | VTX-M04E | Async migration parity gate | `planned` | VTX-M03, VTX-M04D.5 | `Examples/Async` runs through Vortex with no long-lived compatibility clutter and captures proof. |
 | VTX-M04F | Single-view composition and presentation closeout | `planned` | VTX-M04E | Single-view composition, resolve, handoff, post-process, and presentation proof. |
 | VTX-M05A | Diagnostics product service | `planned` | VTX-M04D.1, VTX-M04F | Concrete diagnostics product surface; not confused with proof tooling. |
@@ -305,6 +306,16 @@ Required work:
 - Add focused tests and shader/capture evidence for enabled, disabled,
   authored parameter changes, resource-unavailable states, and main-pass
   application.
+
+Current evidence:
+
+- VTX-M04D.6 has a first implementation pass and focused build/test/shader-bake
+  evidence recorded in `IMPLEMENTATION_STATUS.md`.
+- RenderScene visual validation for the main scene AP path was confirmed on
+  2026-04-25 after DemoShell exposed effective AP controls and the compose pass
+  used the main AP helper/gate.
+- The milestone remains `in_progress` until capture/analyzer proof exists and
+  reflection/360-view AP behavior is proven or explicitly deferred.
 
 Exit gate:
 
@@ -496,7 +507,7 @@ Parallelism rules:
 | LightingService | VTX-M03 | `landed_needs_validation` | Light selection, forward light publication, light grid, Stage 12 service ownership. |
 | ShadowService directional baseline | VTX-M03 | `landed_needs_validation` | Directional conventional shadow data publication. |
 | PostProcessService | VTX-M03 | `landed_needs_validation` | Exposure, bloom, tonemap, Stage 22 service. |
-| Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `in_progress` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; aerial perspective parity remains a dedicated proof gap. |
+| Environment sky/atmosphere | VTX-M04D.1 / VTX-M04D.6 | `in_progress` | Advanced sky/atmosphere and below-horizon behavior is preserved while publication state is truthful; aerial perspective has focused implementation evidence and RenderScene visual confirmation but still needs capture/reflection proof. |
 | SkyLight / IBL | VTX-M04D.1 | `validated` | Real resource publication or explicit invalid state; no revision-only closure. Real capture/filtering remains a later implementation gap. |
 | Exponential height fog | VTX-M04D.2 | `in_progress` | UE5.7-grade authored parameters, algorithms, shaders, and coupling. |
 | Local fog volumes | VTX-M04D.3 | `in_progress` | UE5.7-grade authoring, culling, splat/compose, HZB, sky exclusion, proof. |

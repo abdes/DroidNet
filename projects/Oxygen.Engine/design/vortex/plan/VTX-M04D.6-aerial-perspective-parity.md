@@ -1,6 +1,6 @@
 # VTX-M04D.6 — UE5.7 Aerial Perspective Parity
 
-Status: `planned`
+Status: `in_progress`
 
 This plan covers Vortex aerial perspective only. It is a scope-correction
 milestone created after the VTX-M04D.2 height-fog work removed the old
@@ -63,13 +63,19 @@ height-fog contribution controls, and dummy/invalid resource behavior.
 ## Current Findings
 
 - Vortex has camera aerial-perspective shader sampling and atmosphere LUT
-  infrastructure, but current status evidence only preserves it as existing
-  sky/atmosphere behavior.
-- No focused Vortex milestone currently proves UE5.7 parity for aerial
-  perspective generation, sampling, height-fog coupling, or runtime output.
-- The current aerial-perspective shader still contains stale explanatory text
-  describing approximation behavior after the simplified fog fallback was
-  removed.
+  infrastructure.
+- The first M04D.6 implementation pass removed stale approximation wording,
+  shaped the consumer helper after UE5.7 `GetAerialPerspectiveLuminanceTransmittance`,
+  and fixed the AP-strength contract so camera-volume generation stores raw
+  inscatter/transmittance while the artistic strength control applies only at
+  final sampling.
+- Focused publication tests now cover AP authored controls, camera-volume
+  dimensions/dispatches, resource-slot publication, height-fog contribution,
+  and the main-pass apply-time gate.
+- RenderScene main-scene visual validation was confirmed on 2026-04-25 after
+  DemoShell stopped clamping the UE-style distance-scale control to `16`,
+  exposed effective AP controls/CVar state, and routed fullscreen composition
+  through the main AP helper/gate.
 - VTX-M04D.5 runtime proof must not claim full atmosphere runtime closure until
   this milestone records AP parity evidence.
 
@@ -105,8 +111,8 @@ height-fog contribution controls, and dummy/invalid resource behavior.
 
 ## Proof Gate
 
-VTX-M04D.6 remains `planned` or `in_progress` until implementation and fresh
-evidence exist. Required validation before any validated claim:
+VTX-M04D.6 remains `in_progress` until capture/analyzer evidence exists.
+Required validation before any validated claim:
 
 ```powershell
 cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService Oxygen.Vortex.SceneRendererPublication
@@ -115,16 +121,17 @@ ctest --preset test-debug -R "Oxygen.Vortex.(EnvironmentLightingService|SceneRen
 
 If CPU/HLSL layout, shader behavior, shader requests, or baked shader catalogs
 change, run the project shader bake/catalog validation and record the exact
-command/result. Runtime/capture proof is required before claiming visual AP
-parity. If AP work changes publication truth or height-fog behavior, rerun the
-affected VTX-M04D.1 and VTX-M04D.2 focused validation and update their status
-evidence.
+command/result. RenderScene visual confirmation exists for the main scene path,
+but capture/analyzer proof remains required before a validated AP parity claim.
+If AP work changes publication truth or height-fog behavior, rerun the affected
+VTX-M04D.1 and VTX-M04D.2 focused validation and update their status evidence.
 
 ## Residual Gaps Not Closed By This Plan
 
-- This plan does not validate existing AP behavior. It only records the
-  required remediation scope.
-- Runtime visual verification, capture analysis, and shader bake evidence are
-  missing until the milestone is implemented.
+- Capture/analyzer proof is still missing, so this work is not a validated AP
+  parity claim even though main-scene RenderScene visual validation was
+  confirmed.
+- Reflection/360-view camera aerial perspective is represented in shader helper
+  shape but is not driven by a Vortex runtime resource path or capture proof.
 - Local fog, volumetric fog, SkyLight capture/filtering, and Async proof remain
   separate milestones.

@@ -339,14 +339,14 @@ void EnvironmentDebugPanel::DrawFog()
 
   ImGui::SeparatorText("Inscattering");
   auto fog_inscattering = environment_vm_->GetFogInscatteringLuminance();
-  if (ImGui::DragFloat3("Fog Inscattering Luminance",
-        &fog_inscattering.x, 1.0F, 0.0F, 100000.0F, "%.3f")) {
+  if (ImGui::DragFloat3("Fog Inscattering Luminance", &fog_inscattering.x, 1.0F,
+        0.0F, 100000.0F, "%.3f")) {
     environment_vm_->SetFogInscatteringLuminance(fog_inscattering);
   }
   auto ambient_scale
     = environment_vm_->GetSkyAtmosphereAmbientContributionColorScale();
-  if (ImGui::DragFloat3("Sky Atmosphere Ambient Scale", &ambient_scale.x,
-        0.01F, 0.0F, 16.0F, "%.3f")) {
+  if (ImGui::DragFloat3("Sky Atmosphere Ambient Scale", &ambient_scale.x, 0.01F,
+        0.0F, 16.0F, "%.3f")) {
     environment_vm_->SetSkyAtmosphereAmbientContributionColorScale(
       ambient_scale);
   }
@@ -962,33 +962,35 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   ImGui::SeparatorText("Aerial Perspective");
 
-  bool aerial_perspective_enabled = environment_vm_->GetUseLut();
-  if (ImGui::Checkbox("Enabled (LUT)", &aerial_perspective_enabled)) {
-    environment_vm_->SetUseLut(aerial_perspective_enabled);
+  bool aerial_perspective_enabled
+    = environment_vm_->GetAerialPerspectiveEnabled();
+  if (ImGui::Checkbox(
+        "Enabled##AerialPerspective", &aerial_perspective_enabled)) {
+    environment_vm_->SetAerialPerspectiveEnabled(aerial_perspective_enabled);
   }
-  ImGui::TextDisabled("Affects geometry only, not sky");
+  ImGui::TextDisabled("Strength zero disables AP without disabling sky");
 
   ImGui::BeginDisabled(!aerial_perspective_enabled);
   float aerial_perspective_scale = environment_vm_->GetAerialPerspectiveScale();
-  if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 0.01F, 0.0F,
-        16.0F, "%.2F")) {
+  if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 1.0F, 0.0F,
+        10000.0F, "%.1F")) {
     environment_vm_->SetAerialPerspectiveScale(aerial_perspective_scale);
   }
   float aerial_start_depth
     = environment_vm_->GetAerialPerspectiveStartDepthMeters();
-  if (ImGui::DragFloat("Start Depth (m)", &aerial_start_depth, 1.0F, 1.0F,
+  if (ImGui::DragFloat("Start Depth (m)", &aerial_start_depth, 1.0F, 0.0F,
         1000000.0F, "%.1F")) {
     environment_vm_->SetAerialPerspectiveStartDepthMeters(aerial_start_depth);
   }
   float aerial_scattering_strength
     = environment_vm_->GetAerialScatteringStrength();
   if (ImGui::DragFloat("Haze Strength", &aerial_scattering_strength, 0.01F,
-        0.0F, 16.0F, "%.2F")) {
+        0.0F, 100.0F, "%.2F")) {
     environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
   }
   float height_fog_contribution = environment_vm_->GetHeightFogContribution();
   if (ImGui::SliderFloat("Height Fog Contribution", &height_fog_contribution,
-        0.0F, 16.0F, "%.2F")) {
+        0.0F, 1.0F, "%.2F")) {
     environment_vm_->SetHeightFogContribution(height_fog_contribution);
   }
   float trace_sample_count_scale = environment_vm_->GetTraceSampleCountScale();
@@ -1014,6 +1016,23 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     environment_vm_->SetAtmosphereRenderInMainPass(
       atmosphere_render_in_main_pass);
   }
+  ImGui::EndDisabled();
+
+  ImGui::SeparatorText("Aerial Perspective LUT");
+  ImGui::TextDisabled("Vortex CVars, UE5.7 defaults");
+  ImGui::BeginDisabled(true);
+  int aerial_lut_width = environment_vm_->GetAerialPerspectiveLutWidth();
+  ImGui::DragInt("Width", &aerial_lut_width, 1, 4, 256);
+  int aerial_lut_depth
+    = environment_vm_->GetAerialPerspectiveLutDepthResolution();
+  ImGui::DragInt("Depth Resolution", &aerial_lut_depth, 1, 4, 256);
+  float aerial_lut_depth_km = environment_vm_->GetAerialPerspectiveLutDepthKm();
+  ImGui::DragFloat(
+    "Depth (km)", &aerial_lut_depth_km, 1.0F, 0.1F, 100000.0F, "%.1F");
+  float aerial_lut_sample_max
+    = environment_vm_->GetAerialPerspectiveLutSampleCountMaxPerSlice();
+  ImGui::DragFloat(
+    "Max Samples/Slice", &aerial_lut_sample_max, 0.1F, 1.0F, 64.0F, "%.1F");
   ImGui::EndDisabled();
 
   // Sky-View LUT Slicing

@@ -92,6 +92,8 @@ public:
   auto SetSunDiskEnabled(bool enabled) -> void;
   [[nodiscard]] auto GetAerialPerspectiveScale() const -> float;
   auto SetAerialPerspectiveScale(float value) -> void;
+  [[nodiscard]] auto GetAerialPerspectiveEnabled() const -> bool;
+  auto SetAerialPerspectiveEnabled(bool enabled) -> void;
   [[nodiscard]] auto GetAerialPerspectiveStartDepthMeters() const -> float;
   auto SetAerialPerspectiveStartDepthMeters(float value) -> void;
   [[nodiscard]] auto GetAerialScatteringStrength() const -> float;
@@ -115,6 +117,11 @@ public:
   // Sky-View LUT slicing
   [[nodiscard]] auto GetSkyViewLutSlices() const -> int;
   auto SetSkyViewLutSlices(int value) -> void;
+  [[nodiscard]] auto GetAerialPerspectiveLutWidth() const -> int;
+  [[nodiscard]] auto GetAerialPerspectiveLutDepthResolution() const -> int;
+  [[nodiscard]] auto GetAerialPerspectiveLutDepthKm() const -> float;
+  [[nodiscard]] auto GetAerialPerspectiveLutSampleCountMaxPerSlice() const
+    -> float;
   [[nodiscard]] auto GetSkyViewAltMappingMode() const -> int;
   auto SetSkyViewAltMappingMode(int value) -> void;
   auto RequestRegenerateLut() -> void;
@@ -351,6 +358,7 @@ private:
   vortex::Renderer* last_runtime_config_renderer_ { nullptr };
   bool runtime_config_initialized_ { false };
   bool startup_preset_applied_ { false };
+  bool applying_preset_ { false };
 };
 
 } // namespace oxygen::examples::ui
