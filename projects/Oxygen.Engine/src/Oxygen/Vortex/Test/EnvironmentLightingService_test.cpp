@@ -556,15 +556,82 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     view_data->sky_camera_translated_world_origin_km_pad.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(
     view_data->sky_camera_translated_world_origin_km_pad.z, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_view_lut_referential_row0.x, 1.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row0.x, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row0.y, 1.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.x, 0.0F, 1.0e-3F);
-  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.y, 1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.x, -1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data->sky_view_lut_referential_row1.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row1.z, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row2.x, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row2.y, 0.0F, 1.0e-3F);
   EXPECT_NEAR(view_data->sky_view_lut_referential_row2.z, 1.0F, 1.0e-3F);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  SkyViewReferentialFollowsSunDirectionNotCameraForward)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 4U }, oxygen::frame::Slot { 1U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Sun",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 2U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 1.0F, 1.0F }, 100000.0F));
+  scene->Update();
+
+  const auto camera_position = glm::vec3 { 0.0F, 0.0F, 7000300.0F };
+  const auto view_matrix_x = glm::lookAtRH(camera_position,
+    camera_position + glm::vec3 { 1.0F, 0.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F });
+  const auto view_matrix_up = glm::lookAtRH(camera_position,
+    camera_position + glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 1.0F, 0.0F });
+
+  auto view_x = MakeResolvedView(
+    64.0F, 64.0F, 0.0F, 0.0F, camera_position, view_matrix_x);
+  auto view_up = MakeResolvedView(
+    64.0F, 64.0F, 0.0F, 0.0F, camera_position, view_matrix_up);
+  auto composition_view_x = oxygen::vortex::CompositionView {};
+  composition_view_x.id = ViewId { 201U };
+  composition_view_x.with_atmosphere = true;
+  auto composition_view_up = oxygen::vortex::CompositionView {};
+  composition_view_up.id = ViewId { 202U };
+  composition_view_up.with_atmosphere = true;
+
+  auto ctx_x = MakeRenderContext(ViewId { 201U }, view_x, composition_view_x);
+  ctx_x.scene = oxygen::observer_ptr { scene.get() };
+  auto ctx_up
+    = MakeRenderContext(ViewId { 202U }, view_up, composition_view_up);
+  ctx_up.scene = oxygen::observer_ptr { scene.get() };
+
+  static_cast<void>(service.PublishEnvironmentBindings(ctx_x));
+  static_cast<void>(service.PublishEnvironmentBindings(ctx_up));
+
+  const auto* view_data_x = service.InspectEnvironmentViewData(ViewId { 201U });
+  const auto* view_data_up
+    = service.InspectEnvironmentViewData(ViewId { 202U });
+  ASSERT_NE(view_data_x, nullptr);
+  ASSERT_NE(view_data_up, nullptr);
+
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row0.x, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row0.y, 1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row0.z, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row1.x, -1.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row1.y, 0.0F, 1.0e-3F);
+  EXPECT_NEAR(view_data_x->sky_view_lut_referential_row1.z, 0.0F, 1.0e-3F);
+
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row0.x,
+    view_data_x->sky_view_lut_referential_row0.x, 1.0e-5F);
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row0.y,
+    view_data_x->sky_view_lut_referential_row0.y, 1.0e-5F);
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row0.z,
+    view_data_x->sky_view_lut_referential_row0.z, 1.0e-5F);
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row1.x,
+    view_data_x->sky_view_lut_referential_row1.x, 1.0e-5F);
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row1.y,
+    view_data_x->sky_view_lut_referential_row1.y, 1.0e-5F);
+  EXPECT_NEAR(view_data_up->sky_view_lut_referential_row1.z,
+    view_data_x->sky_view_lut_referential_row1.z, 1.0e-5F);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
