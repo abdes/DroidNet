@@ -298,6 +298,10 @@ Required work:
   reflection-capture or 360-view behavior, and per-view resource validity.
 - Define and implement the height-fog coupling contract used when aerial
   perspective is composed with exponential height fog.
+- Propagate any AP-driven contract, binding, or shader-behavior changes back
+  into VTX-M04D.1 publication truth and VTX-M04D.2 height-fog parity, with
+  updated tests and status evidence. AP fixes must not silently invalidate the
+  validated publication baseline or the height-fog implementation evidence.
 - Add focused tests and shader/capture evidence for enabled, disabled,
   authored parameter changes, resource-unavailable states, and main-pass
   application.
@@ -306,7 +310,8 @@ Exit gate:
 
 - Aerial perspective has a source-to-target mapping to the relevant UE5.7
   files, implementation deltas are resolved or explicitly accepted as Vortex
-  differences, focused tests pass, shader bake/catalog validation runs where
+  differences, any impact on VTX-M04D.1 and VTX-M04D.2 is implemented and
+  revalidated, focused tests pass, shader bake/catalog validation runs where
   shader behavior changes, and runtime/capture proof records that camera
   aerial perspective affects the expected pixels without replacing height fog,
   local fog, volumetric fog, or SkyLight proof.
@@ -464,7 +469,9 @@ Parallelism rules:
   truth is complete, but their final parity claims must account for coupling.
 - VTX-M04D.6 aerial perspective can start after height-fog cleanup because it
   must settle whether AP contains fog contribution or only composes with the
-  separate height-fog pass.
+  separate height-fog pass. Any resulting publication or height-fog contract
+  change must be propagated back to VTX-M04D.1 and VTX-M04D.2 before AP parity
+  can be claimed.
 - VTX-M05A diagnostics can start once the environment and renderer publication
   surfaces it inspects are stable enough; it must not reach into private
   service internals.

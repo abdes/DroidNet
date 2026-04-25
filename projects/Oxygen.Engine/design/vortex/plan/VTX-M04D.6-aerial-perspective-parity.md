@@ -27,6 +27,10 @@ renderer fallback work.
 - Define the explicit height-fog coupling contract for aerial perspective,
   including when fog is already baked into camera aerial perspective and when
   Vortex composes height fog separately.
+- Propagate every AP-driven contract, binding, publication, or shader-behavior
+  change back into VTX-M04D.1 publication truth and VTX-M04D.2 height-fog
+  parity. The implementation must update affected tests and status evidence
+  instead of treating AP as an isolated shader cleanup.
 - Add focused tests and runtime/capture evidence for enabled, disabled,
   authored settings, resource state, and main-pass pixel impact.
 
@@ -87,11 +91,15 @@ height-fog contribution controls, and dummy/invalid resource behavior.
 5. Define height-fog coupling explicitly, including whether Vortex AP contains
    height fog contribution in the sampled volume or composes height fog in the
    separate fog pass.
-6. Add focused tests for enabled/disabled AP, authored setting changes,
+6. Audit all AP changes against VTX-M04D.1 and VTX-M04D.2. If publication
+   truth, invalid-resource behavior, environment bindings, height-fog shader
+   math, or height-fog tests are affected, update those artifacts and record
+   fresh evidence in the status ledger.
+7. Add focused tests for enabled/disabled AP, authored setting changes,
    unavailable resources, invalidation/publication truth, depth mapping, and
    main-pass application. Add shader/capture proof for pixel impact where unit
    tests cannot observe the behavior.
-7. Update `PLAN.md` and `IMPLEMENTATION_STATUS.md` with files changed, UE5.7
+8. Update `PLAN.md` and `IMPLEMENTATION_STATUS.md` with files changed, UE5.7
    references checked, exact validation commands/results, shader bake/catalog
    result when shader behavior changes, and residual gaps.
 
@@ -108,7 +116,9 @@ ctest --preset test-debug -R "Oxygen.Vortex.(EnvironmentLightingService|SceneRen
 If CPU/HLSL layout, shader behavior, shader requests, or baked shader catalogs
 change, run the project shader bake/catalog validation and record the exact
 command/result. Runtime/capture proof is required before claiming visual AP
-parity.
+parity. If AP work changes publication truth or height-fog behavior, rerun the
+affected VTX-M04D.1 and VTX-M04D.2 focused validation and update their status
+evidence.
 
 ## Residual Gaps Not Closed By This Plan
 
