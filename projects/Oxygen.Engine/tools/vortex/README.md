@@ -161,14 +161,17 @@ ambient term while preserving the rest of the validation scene.
 `--volumetric-directional-shadows false` disables only the directional
 shadow-map visibility multiplier inside volumetric fog so paired captures can
 prove the shadow term separately from surface projected shadows. Focused proof
-runs can amplify or isolate the additive terms with
+runs can also use `--volumetric-temporal-reprojection false` to compare the
+UE-shaped temporal jitter/reprojection/history-miss path against centered
+single-sample volumetric fog. Additive terms can be amplified or isolated with
 `--local-fog-volumetric-max-density`, `--local-fog-emissive-scale`, and
 `--volumetric-fog-emissive-scale`; the normal defaults remain unchanged.
 `Compare-VortexBasicVolumetricTermReports.ps1` compares paired reports and
 requires both the runtime term gates and the expected sampled
 integrated-scattering delta: positive enabled-minus-disabled increase for
 additive terms, and positive disabled-minus-enabled decrease for the
-`directional-shadow` term.
+`directional-shadow` term. The `temporal` term uses an absolute sampled-volume
+delta because temporal reprojection is not an additive lighting contribution.
 
 Current limitation: RenderDoc does not expose the bindless Stage-15 pixel
 shader SRV read for `IntegratedLightScattering` through this analyzer, so the

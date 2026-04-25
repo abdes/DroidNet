@@ -109,6 +109,12 @@ namespace {
     = "vtx.local_fog.half_resolution";
   constexpr auto kCVarVortexVolumetricFogDirectionalShadows
     = "vtx.volumetric_fog.directional_shadows";
+  constexpr auto kCVarVortexVolumetricFogTemporalReprojection
+    = "vtx.volumetric_fog.temporal_reprojection";
+  constexpr auto kCVarVortexVolumetricFogJitter
+    = "vtx.volumetric_fog.jitter";
+  constexpr auto kCVarVortexVolumetricFogHistoryMissSupersampleCount
+    = "vtx.volumetric_fog.history_miss_supersample_count";
   constexpr auto kCVarVortexAerialPerspectiveLutWidth
     = "vtx.sky_atmosphere.aerial_perspective_lut.width";
   constexpr auto kCVarVortexAerialPerspectiveLutDepthResolution
@@ -506,6 +512,33 @@ auto Renderer::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogTemporalReprojection),
+    .help = "Enable volumetric fog temporal reprojection",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogJitter),
+    .help = "Enable UE-style volumetric fog Halton jitter when temporal reprojection is enabled",
+    .default_value = true,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogHistoryMissSupersampleCount),
+    .help = "Volumetric fog sample count used when temporal history is missing",
+    .default_value = int64_t { 4 },
+    .flags = console::CVarFlags::kArchive,
+    .min_value = 1,
+    .max_value = 16,
   });
 
   (void)console->RegisterCVar(console::CVarDefinition {
@@ -1537,6 +1570,45 @@ auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> boo
     }
   }
   return true;
+}
+
+auto Renderer::GetVolumetricFogTemporalReprojectionEnabled() const noexcept
+  -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogTemporalReprojection, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetVolumetricFogJitterEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogJitter, value)) {
+      return value;
+    }
+  }
+  return true;
+}
+
+auto Renderer::GetVolumetricFogHistoryMissSupersampleCount() const noexcept
+  -> std::uint32_t
+{
+  if (console_ != nullptr) {
+    auto value = std::int64_t { 4 };
+    if (console_->TryGetCVarValue<int64_t>(
+          kCVarVortexVolumetricFogHistoryMissSupersampleCount, value)) {
+      return static_cast<std::uint32_t>(
+        std::clamp<std::int64_t>(value, 1, 16));
+    }
+  }
+  return 4U;
 }
 
 auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t

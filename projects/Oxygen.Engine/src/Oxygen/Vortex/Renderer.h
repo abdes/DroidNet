@@ -572,6 +572,13 @@ public:
   GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float;
   [[nodiscard]] OXGN_VRTX_API auto
   GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogTemporalReprojectionEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogJitterEnabled() const noexcept -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto
+  GetVolumetricFogHistoryMissSupersampleCount() const noexcept
+    -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogTilePixelSize() const noexcept
     -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto

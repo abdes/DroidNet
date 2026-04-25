@@ -288,6 +288,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .StoreTo(&app.vortex_volumetric_directional_shadows)
         .Build());
     vortex_options->Add(
+      clap::Option::WithKey("volumetric-temporal-reprojection")
+        .About("Enable temporal reprojection in volumetric fog")
+        .Long("volumetric-temporal-reprojection")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_volumetric_temporal_reprojection)
+        .Build());
+    vortex_options->Add(
       clap::Option::WithKey("sky-light-volumetric-scattering")
         .About("SkyLight volumetric scattering intensity")
         .Long("sky-light-volumetric-scattering")
@@ -363,6 +372,8 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       app.vortex_local_fog_into_volumetric);
     LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
       app.vortex_volumetric_directional_shadows);
+    LOG_F(INFO, "Parsed volumetric-temporal-reprojection option = {}",
+      app.vortex_volumetric_temporal_reprojection);
     LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
       app.vortex_sky_light_volumetric_scattering_intensity);
     LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
@@ -445,6 +456,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     startup_cvars.Set("vtx.volumetric_fog.directional_shadows",
       oxygen::console::CVarValue {
         app.vortex_volumetric_directional_shadows });
+    startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection",
+      oxygen::console::CVarValue {
+        app.vortex_volumetric_temporal_reprojection });
     if (app.with_local_fog) {
       startup_cvars.Set(
         "vtx.local_fog.enable", oxygen::console::CVarValue { true });
