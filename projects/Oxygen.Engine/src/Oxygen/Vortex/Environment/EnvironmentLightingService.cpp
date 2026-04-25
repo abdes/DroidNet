@@ -86,7 +86,7 @@ namespace {
   /*!
    Contract:
    - rows are expressed in Oxygen world space
-   - row0 = local +X = forward hint projected onto the tangent plane
+   - row0 = local +X = sun/physics hint projected onto the tangent plane
    - row1 = local +Y = right = cross(up, forward)
    - row2 = local +Z = up
 
@@ -395,13 +395,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto& atmosphere = stable_state.view_products.atmosphere;
 
   auto camera_position = glm::vec3 { 0.0F, 0.0F, 0.0F };
-  auto view_forward_ws = glm::vec3(space::move::Forward);
   if (ctx.current_view.resolved_view != nullptr) {
     camera_position = ctx.current_view.resolved_view->CameraPosition();
-    const auto inverse_view = ctx.current_view.resolved_view->InverseView();
-    view_forward_ws = SafeNormalizeOrFallback(
-      glm::vec3(inverse_view * glm::vec4(space::look::Forward, 0.0F)),
-      glm::vec3(space::move::Forward));
   }
   const auto planet_center_ws = ResolvePlanetCenterWs(atmosphere);
   const auto planet_center_translated_ws = planet_center_ws - camera_position;
@@ -425,9 +420,6 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
   const auto view_height_m = glm::length(sky_camera_planet_vector);
   const auto camera_altitude_km = engine::atmos::MetersToSkyUnit(
     std::max(view_height_m - atmosphere.planet_radius_m, 0.0F));
-  const auto referential_rows
-    = BuildSkyViewReferentialRows(planet_up_ws, view_forward_ws);
-
   auto sun_direction_ws = engine::atmos::kDefaultSunDirection;
   if (stable_state.view_products.atmosphere_lights[0].enabled) {
     const auto& slot0 = stable_state.view_products.atmosphere_lights[0];
@@ -437,6 +429,8 @@ auto EnvironmentLightingService::BuildEnvironmentViewData(
       sun_direction_ws = glm::normalize(slot0.direction_to_light_ws);
     }
   }
+  const auto referential_rows
+    = BuildSkyViewReferentialRows(planet_up_ws, sun_direction_ws);
 
   auto data = EnvironmentViewData {};
   data.flags = 0U;
