@@ -125,6 +125,12 @@ namespace Oxygen::Interop {
     /// <returns>
     /// A new EngineContext if creation succeeded; otherwise, nullptr.
     /// </returns>
+    auto CreateEngine(EditorEngineConfigManaged^ config,
+      System::IntPtr swapChainPanel)
+      -> EngineContext
+      ^
+      ;
+
     auto CreateEngine(EngineConfig^ config, System::IntPtr swapChainPanel)
       -> EngineContext
       ^
@@ -134,6 +140,7 @@ namespace Oxygen::Interop {
     /// Creates and initializes the engine using the supplied configuration
     /// (headless or default window).
     /// </summary>
+    auto CreateEngine(EditorEngineConfigManaged^ config) -> EngineContext^;
     auto CreateEngine(EngineConfig^ config) -> EngineContext^;
 
     auto RunEngine(EngineContext^ ctx) -> void;
