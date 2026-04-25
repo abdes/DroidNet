@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
@@ -56,6 +57,9 @@ namespace environment {
       bool height_fog_media_executed { false };
       bool sky_light_injection_requested { false };
       bool sky_light_injection_executed { false };
+      bool temporal_history_requested { false };
+      bool temporal_history_reprojection_executed { false };
+      bool temporal_history_reset { false };
       bool local_fog_injection_requested { false };
       bool local_fog_injection_executed { false };
       std::uint32_t local_fog_instance_count { 0U };
@@ -157,6 +161,15 @@ namespace environment {
       float intensity_mul { 1.0F };
     };
 
+    struct alignas(16) TemporalHistoryControl0 {
+      std::uint32_t previous_integrated_light_scattering_srv {
+        kInvalidShaderVisibleIndex.get()
+      };
+      std::uint32_t enabled { 0U };
+      float history_weight { 0.9F };
+      float _pad0 { 0.0F };
+    };
+
     struct alignas(16) PassConstants {
       OutputHeader output_header {};
       GridControl grid {};
@@ -167,6 +180,7 @@ namespace environment {
       HeightFogMediaControl1 height_fog1 {};
       SkyLightControl0 sky_light0 {};
       SkyLightControl1 sky_light1 {};
+      TemporalHistoryControl0 temporal_history0 {};
       LocalFogControl0 local_fog0 {};
       LocalFogControl1 local_fog1 {};
       LocalFogControl2 local_fog2 {};
@@ -179,6 +193,19 @@ namespace environment {
     Renderer& renderer_;
     upload::TransientStructuredBuffer pass_constants_buffer_;
     std::vector<std::shared_ptr<graphics::Texture>> live_textures_ {};
+
+    struct HistoryEntry {
+      std::shared_ptr<graphics::Texture> texture {};
+      ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+      std::uint32_t width { 0U };
+      std::uint32_t height { 0U };
+      std::uint32_t depth { 0U };
+      float start_distance_m { 0.0F };
+      float end_distance_m { 0.0F };
+      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
+      bool valid { false };
+    };
+    std::unordered_map<ViewId, HistoryEntry> history_by_view_ {};
   };
 
 } // namespace environment

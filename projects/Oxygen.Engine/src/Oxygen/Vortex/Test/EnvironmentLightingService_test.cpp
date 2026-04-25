@@ -2045,6 +2045,61 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
   EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
   EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_requested);
+  EXPECT_FALSE(
+    generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_reset);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogReusesPerViewTemporalHistoryOnSecondFrame)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  static_cast<void>(AddAtmosphereDirectionalLight(*scene, "Primary",
+    oxygen::scene::AtmosphereLightSlot::kPrimary, true, 4U, true,
+    { 1.0F, 1.0F, 1.0F }, { 1.0F, 0.95F, 0.9F }, 100000.0F));
+  auto fog
+    = scene->GetEnvironment()->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  fog->SetVolumetricFogDistance(96000.0F);
+  fog->SetVolumetricFogStartDistance(50.0F);
+  scene->Update();
+
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 33U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 33U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  ctx.view_constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
+    .usage = oxygen::graphics::BufferUsage::kConstant,
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+    .debug_name
+    = "EnvironmentLightingServiceBehaviorTest.VolumetricHistory.ViewConstants",
+  });
+  ASSERT_NE(ctx.view_constants, nullptr);
+
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 13U }, oxygen::frame::Slot { 2U });
+  ASSERT_NE(service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  auto first_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(first_generation.volumetric_fog_temporal_history_requested);
+  EXPECT_FALSE(
+    first_generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_TRUE(first_generation.volumetric_fog_temporal_history_reset);
+
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 14U }, oxygen::frame::Slot { 0U });
+  ASSERT_NE(service.PublishEnvironmentBindings(ctx), kInvalidShaderVisibleIndex);
+  const auto& second_generation = service.GetLastViewProductGenerationState();
+  EXPECT_TRUE(second_generation.volumetric_fog_temporal_history_requested);
+  EXPECT_TRUE(
+    second_generation.volumetric_fog_temporal_history_reprojection_executed);
+  EXPECT_FALSE(second_generation.volumetric_fog_temporal_history_reset);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2119,6 +2174,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(generation.volumetric_fog_height_fog_media_executed);
   EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_requested);
   EXPECT_TRUE(generation.volumetric_fog_sky_light_injection_executed);
+  EXPECT_TRUE(generation.volumetric_fog_temporal_history_requested);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_requested);
   EXPECT_TRUE(generation.volumetric_fog_local_fog_injection_executed);
   EXPECT_EQ(generation.volumetric_fog_local_fog_instance_count, 1U);
