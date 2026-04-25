@@ -107,6 +107,8 @@ namespace {
   constexpr auto kCVarVortexLocalFogUseHzb = "vtx.local_fog.use_hzb";
   constexpr auto kCVarVortexLocalFogHalfResolution
     = "vtx.local_fog.half_resolution";
+  constexpr auto kCVarVortexVolumetricFogDirectionalShadows
+    = "vtx.volumetric_fog.directional_shadows";
   constexpr auto kCVarVortexAerialPerspectiveLutWidth
     = "vtx.sky_atmosphere.aerial_perspective_lut.width";
   constexpr auto kCVarVortexAerialPerspectiveLutDepthResolution
@@ -492,6 +494,15 @@ auto Renderer::RegisterConsoleBindings(
     .name = std::string(kCVarVortexLocalFogHalfResolution),
     .help = "Render local fog at half resolution when supported",
     .default_value = false,
+    .flags = console::CVarFlags::kArchive,
+    .min_value = std::nullopt,
+    .max_value = std::nullopt,
+  });
+
+  (void)console->RegisterCVar(console::CVarDefinition {
+    .name = std::string(kCVarVortexVolumetricFogDirectionalShadows),
+    .help = "Enable directional shadow-map visibility in volumetric fog",
+    .default_value = true,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
@@ -1514,6 +1525,18 @@ auto Renderer::GetLocalFogMaxDensityIntoVolumetricFog() const noexcept -> float
     }
   }
   return 0.01F;
+}
+
+auto Renderer::GetVolumetricFogDirectionalShadowsEnabled() const noexcept -> bool
+{
+  if (console_ != nullptr) {
+    auto value = true;
+    if (console_->TryGetCVarValue<bool>(
+          kCVarVortexVolumetricFogDirectionalShadows, value)) {
+      return value;
+    }
+  }
+  return true;
 }
 
 auto Renderer::GetLocalFogTilePixelSize() const noexcept -> std::uint32_t

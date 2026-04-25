@@ -44,6 +44,7 @@ public:
   bool with_local_fog { false };
   bool with_volumetric_fog { false };
   bool vortex_local_fog_into_volumetric { true };
+  bool vortex_volumetric_directional_shadows { true };
   float vortex_local_fog_volumetric_max_density { 0.01F };
   float vortex_local_fog_emissive_scale { 1.0F };
   float vortex_volumetric_fog_emissive_scale { 1.0F };
