@@ -139,6 +139,11 @@ public:
     bool stage14_volumetric_fog_height_fog_media_executed { false };
     bool stage14_volumetric_fog_sky_light_injection_requested { false };
     bool stage14_volumetric_fog_sky_light_injection_executed { false };
+    bool stage14_volumetric_fog_temporal_history_requested { false };
+    bool stage14_volumetric_fog_temporal_history_reprojection_executed {
+      false
+    };
+    bool stage14_volumetric_fog_temporal_history_reset { false };
     bool stage14_volumetric_fog_local_fog_injection_requested { false };
     bool stage14_volumetric_fog_local_fog_injection_executed { false };
     std::uint32_t stage14_volumetric_fog_local_fog_instance_count { 0U };

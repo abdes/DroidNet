@@ -45,6 +45,7 @@ namespace {
   constexpr float kDefaultVolumetricDistanceMeters = 100000.0F;
   constexpr float kUeVolumetricFogDepthDistributionScale = 32.0F;
   constexpr float kUeFroxelNearOffsetMeters = 9.5F;
+  constexpr float kUeVolumetricFogHistoryWeight = 0.9F;
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -217,6 +218,11 @@ namespace {
       kUeVolumetricFogDepthDistributionScale };
   }
 
+  auto NearlyEqual(const float left, const float right) -> bool
+  {
+    return std::abs(left - right) <= 1.0e-4F;
+  }
+
 } // namespace
 
 VolumetricFogPass::VolumetricFogPass(Renderer& renderer)
@@ -240,6 +246,11 @@ VolumetricFogPass::~VolumetricFogPass()
   for (const auto& texture : live_textures_) {
     if (texture != nullptr && registry.Contains(*texture)) {
       registry.UnRegisterResource(*texture);
+    }
+  }
+  for (const auto& [_, history] : history_by_view_) {
+    if (history.texture != nullptr && registry.Contains(*history.texture)) {
+      registry.UnRegisterResource(*history.texture);
     }
   }
 }
@@ -274,6 +285,15 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   };
   if (!state.requested
     || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
+    if (ctx.current_view.view_id != kInvalidViewId) {
+      if (auto it = history_by_view_.find(ctx.current_view.view_id);
+        it != history_by_view_.end()) {
+        if (it->second.texture != nullptr) {
+          live_textures_.push_back(it->second.texture);
+        }
+        history_by_view_.erase(it);
+      }
+    }
     return state;
   }
 
@@ -377,6 +397,23 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = std::max(volumetric.extinction_scale, 0.0F);
   const auto grid_z_params = CalculateUeGridZParams(start_distance,
     resolved_view.NearPlane(), end_distance, depth);
+  auto& history_entry = history_by_view_[ctx.current_view.view_id];
+  const auto history_matches = history_entry.valid
+    && history_entry.texture != nullptr && history_entry.srv.IsValid()
+    && history_entry.width == width && history_entry.height == height
+    && history_entry.depth == depth
+    && NearlyEqual(history_entry.start_distance_m, start_distance)
+    && NearlyEqual(history_entry.end_distance_m, end_distance)
+    && NearlyEqual(history_entry.grid_z_params[0], grid_z_params.x)
+    && NearlyEqual(history_entry.grid_z_params[1], grid_z_params.y)
+    && NearlyEqual(history_entry.grid_z_params[2], grid_z_params.z);
+  if (history_matches) {
+    constants.temporal_history0.previous_integrated_light_scattering_srv
+      = history_entry.srv.get();
+    constants.temporal_history0.enabled = 1U;
+    constants.temporal_history0.history_weight
+      = kUeVolumetricFogHistoryWeight;
+  }
   constants.grid_z.grid_z_params[0] = grid_z_params.x;
   constants.grid_z.grid_z_params[1] = grid_z_params.y;
   constants.grid_z.grid_z_params[2] = grid_z_params.z;
@@ -498,7 +535,6 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   recorder->RequireResourceStateFinal(
     *texture, graphics::ResourceStates::kShaderResource);
 
-  live_textures_.push_back(texture);
   state.executed = true;
   state.integrated_light_scattering_srv = integrated_srv;
   state.integrated_light_scattering_uav = integrated_uav;
@@ -518,6 +554,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.height_fog_media_executed = constants.height_fog1.enabled != 0U;
   state.sky_light_injection_requested = sky_light_injection_requested;
   state.sky_light_injection_executed = constants.sky_light0.enabled != 0U;
+  state.temporal_history_requested = true;
+  state.temporal_history_reprojection_executed
+    = constants.temporal_history0.enabled != 0U;
+  state.temporal_history_reset = !state.temporal_history_reprojection_executed;
   state.local_fog_injection_requested = renderer_.GetLocalFogRenderIntoVolumetricFog()
     && local_fog_products != nullptr && local_fog_products->prepared;
   state.local_fog_injection_executed = local_fog_ready;
@@ -526,6 +566,20 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.grid_z_params[0] = grid_z_params.x;
   state.grid_z_params[1] = grid_z_params.y;
   state.grid_z_params[2] = grid_z_params.z;
+  if (history_entry.texture != nullptr) {
+    live_textures_.push_back(history_entry.texture);
+  }
+  history_entry.texture = texture;
+  history_entry.srv = integrated_srv;
+  history_entry.width = width;
+  history_entry.height = height;
+  history_entry.depth = depth;
+  history_entry.start_distance_m = start_distance;
+  history_entry.end_distance_m = end_distance;
+  history_entry.grid_z_params[0] = grid_z_params.x;
+  history_entry.grid_z_params[1] = grid_z_params.y;
+  history_entry.grid_z_params[2] = grid_z_params.z;
+  history_entry.valid = true;
   return state;
 }
 

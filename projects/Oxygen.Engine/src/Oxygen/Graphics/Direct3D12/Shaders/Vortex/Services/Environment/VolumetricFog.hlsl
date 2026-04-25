@@ -7,6 +7,8 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewHistoryFrameBindings.hlsli"
 #include "Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
@@ -105,6 +107,14 @@ struct VolumetricFogSkyLightControl1
     float intensity_mul;
 };
 
+struct VolumetricFogTemporalHistoryControl0
+{
+    uint previous_integrated_light_scattering_srv;
+    uint enabled;
+    float history_weight;
+    float _pad0;
+};
+
 struct VolumetricFogPassConstants
 {
     VolumetricFogOutputHeader output_header;
@@ -116,6 +126,7 @@ struct VolumetricFogPassConstants
     VolumetricFogHeightFogMediaControl1 height_fog1;
     VolumetricFogSkyLightControl0 sky_light0;
     VolumetricFogSkyLightControl1 sky_light1;
+    VolumetricFogTemporalHistoryControl0 temporal_history0;
     VolumetricFogLocalFogControl0 local_fog0;
     VolumetricFogLocalFogControl1 local_fog1;
     VolumetricFogLocalFogControl2 local_fog2;
@@ -175,6 +186,14 @@ static float ComputeDepthFromZSlice(float z_slice, float3 grid_z_params)
     return (exp2(z_slice / distribution) - grid_z_params.y) / scale;
 }
 
+static float ComputeZSliceFromViewDepth(float view_depth, float3 grid_z_params)
+{
+    const float scale = max(abs(grid_z_params.x), 1.0e-8f);
+    const float distribution = max(abs(grid_z_params.z), 1.0e-4f);
+    return log2(max(view_depth * scale + grid_z_params.y, 1.0e-8f))
+        * distribution;
+}
+
 static float ComputeDeviceDepthFromViewDepth(float view_depth)
 {
     const float safe_depth = max(view_depth, 1.0e-4f);
@@ -224,6 +243,69 @@ static float EvaluateHeightFogMediaDensity(
         world_position_z);
     return max(primary_density + secondary_density, 0.0f)
         * pass.height_fog1.match_height_fog_factor;
+}
+
+static bool TrySampleTemporalHistory(
+    VolumetricFogPassConstants pass,
+    float3 world_position,
+    out float4 history_value)
+{
+    history_value = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    if (pass.temporal_history0.enabled == 0u
+        || pass.temporal_history0.previous_integrated_light_scattering_srv
+            == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_GLOBAL_SRV(
+            pass.temporal_history0.previous_integrated_light_scattering_srv))
+    {
+        return false;
+    }
+
+    const ViewFrameBindings view_bindings =
+        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const ViewHistoryFrameBindings view_history =
+        LoadViewHistoryFrameBindings(view_bindings.history_frame_slot);
+    if ((view_history.validity_flags & VIEW_HISTORY_FLAG_PREVIOUS_VIEW_VALID) == 0u)
+    {
+        return false;
+    }
+
+    const float4 previous_view_position =
+        mul(view_history.previous_view_matrix, float4(world_position, 1.0f));
+    const float previous_view_depth = max(-previous_view_position.z, 1.0e-4f);
+    const float previous_z_slice =
+        ComputeZSliceFromViewDepth(previous_view_depth, pass.grid_z.grid_z_params);
+    if (previous_z_slice < 0.0f
+        || previous_z_slice >= float(pass.output_header.output_depth))
+    {
+        return false;
+    }
+
+    const float4 previous_clip_position =
+        mul(view_history.previous_projection_matrix, previous_view_position);
+    if (previous_clip_position.w <= 1.0e-5f)
+    {
+        return false;
+    }
+
+    const float2 previous_ndc =
+        previous_clip_position.xy / previous_clip_position.w;
+    const float2 previous_uv =
+        previous_ndc * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+    if (any(previous_uv < 0.0f.xx) || any(previous_uv > 1.0f.xx))
+    {
+        return false;
+    }
+
+    Texture3D<float4> history_texture =
+        ResourceDescriptorHeap[
+            pass.temporal_history0.previous_integrated_light_scattering_srv];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const float previous_w =
+        (previous_z_slice + 0.5f) / max(float(pass.output_header.output_depth), 1.0f);
+    history_value =
+        history_texture.SampleLevel(
+            linear_sampler, float3(previous_uv, saturate(previous_w)), 0.0f);
+    return true;
 }
 
 static VolumetricLocalFogMedia EvaluateLocalFogVolumeFroxelMedia(
@@ -431,6 +513,17 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     const float3 integrated_luminance =
         (scattering + local_fog_media.emissive) * opacity;
 
-    output_texture[dispatch_id] = float4(max(integrated_luminance, 0.0f.xxx),
+    float4 output_value = float4(max(integrated_luminance, 0.0f.xxx),
         saturate(transmittance));
+    float4 history_value = output_value;
+    if (TrySampleTemporalHistory(pass, world_position, history_value))
+    {
+        output_value = lerp(
+            output_value,
+            max(history_value, 0.0f.xxxx),
+            saturate(pass.temporal_history0.history_weight));
+        output_value.a = saturate(output_value.a);
+    }
+
+    output_texture[dispatch_id] = output_value;
 }

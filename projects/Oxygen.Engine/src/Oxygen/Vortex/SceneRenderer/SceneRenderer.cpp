@@ -1603,6 +1603,16 @@ void SceneRenderer::OnRender(RenderContext& ctx)
       .stage14_volumetric_fog_sky_light_injection_executed
       = stage14_state.volumetric_fog_sky_light_injection_executed;
     environment_lighting_state_
+      .stage14_volumetric_fog_temporal_history_requested
+      = stage14_state.volumetric_fog_temporal_history_requested;
+    environment_lighting_state_
+      .stage14_volumetric_fog_temporal_history_reprojection_executed
+      = stage14_state
+          .volumetric_fog_temporal_history_reprojection_executed;
+    environment_lighting_state_
+      .stage14_volumetric_fog_temporal_history_reset
+      = stage14_state.volumetric_fog_temporal_history_reset;
+    environment_lighting_state_
       .stage14_volumetric_fog_local_fog_injection_requested
       = stage14_state.volumetric_fog_local_fog_injection_requested;
     environment_lighting_state_
