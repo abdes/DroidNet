@@ -216,6 +216,7 @@ def _prepare_scene_script_slots(
     pak_plan: PakPlan,
     header_builder,
     geometry_name_to_key: dict[str, bytes],
+    material_name_to_key: dict[str, bytes],
     script_name_to_key: dict[str, bytes],
 ):
     material_count = len(build.assets.material_assets)
@@ -247,6 +248,7 @@ def _prepare_scene_script_slots(
             scene_spec,
             header_builder=header_builder,
             geometry_name_to_key=geometry_name_to_key,
+            material_name_to_key=material_name_to_key,
             script_name_to_key=script_name_to_key,
             scripting_slot_base_index=global_slot_base,
         )
@@ -394,6 +396,18 @@ def _write_assets_and_directory_from_plan(
                 asset_key, (bytes, bytearray)
             ):
                 geometry_name_to_key[nm] = bytes(asset_key)
+
+    material_name_to_key: dict[str, bytes] = {}
+    for material in materials:
+        if isinstance(material, dict):
+            material_spec = material.get("spec")
+            asset_key = material.get("asset_key")
+        else:
+            material_spec, asset_key, _atype, _align = material
+        if isinstance(material_spec, dict):
+            nm = material_spec.get("name")
+            if isinstance(nm, str) and isinstance(asset_key, (bytes, bytearray)):
+                material_name_to_key[nm] = bytes(asset_key)
 
     input_action_name_to_key: dict[str, bytes] = {}
     for input_action_spec, asset_key, _atype, _align in input_actions:
@@ -781,6 +795,19 @@ def write_pak(
                 if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
                     geometry_name_to_key[name] = bytes(asset_key)
 
+            material_name_to_key: dict[str, bytes] = {}
+            for material in build_plan.assets.material_assets:
+                if isinstance(material, dict):
+                    material_spec = material.get("spec")
+                    asset_key = material.get("asset_key")
+                else:
+                    material_spec, asset_key, _atype, _align = material
+                if not isinstance(material_spec, dict):
+                    continue
+                name = material_spec.get("name")
+                if isinstance(name, str) and isinstance(asset_key, (bytes, bytearray)):
+                    material_name_to_key[name] = bytes(asset_key)
+
             script_name_to_key: dict[str, bytes] = {}
             for script_spec, asset_key, _atype, _align in build_plan.assets.script_assets:
                 if not isinstance(script_spec, dict):
@@ -794,6 +821,7 @@ def write_pak(
                 pak_plan,
                 header_builder=header_builder,
                 geometry_name_to_key=geometry_name_to_key,
+                material_name_to_key=material_name_to_key,
                 script_name_to_key=script_name_to_key,
             )
             table_info["script_slot"] = _write_script_slot_table_from_plan(

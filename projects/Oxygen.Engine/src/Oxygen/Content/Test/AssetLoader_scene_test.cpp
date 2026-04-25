@@ -245,24 +245,26 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
   });
 }
 
-//! Test: AssetLoader loads a scene and registers only renderable geometry deps.
+//! Test: AssetLoader loads a scene and registers renderable asset deps.
 /*!
  Scenario: Build a PAK from a YAML spec containing a scene with one renderable
- that references geometry A, plus an additional geometry B that is not
- referenced.
+ that references geometry A and a scene-authored material override, plus an
+ additional geometry B that is not referenced.
 
  Verify that:
  - `LoadAssetAsync<SceneAsset>` returns a valid scene.
  - The scene exposes expected nodes and renderable component records.
- - Only geometry A becomes a dependent edge of the scene.
+ - Geometry A and the material override become dependent edges of the scene.
+ - The unreferenced geometry does not become a scene dependency.
 */
 NOLINT_TEST_F(AssetLoaderSceneTest,
-  LoadAssetSceneWithRenderableRegistersOnlyRenderableGeometryDependency)
+  LoadAssetSceneWithRenderableRegistersRenderableDependencies)
 {
   // Arrange
   const auto pak_path = GeneratePakFile("scene_with_renderable");
   const auto scene_key = CreateTestAssetKey("test_scene");
   const auto referenced_geometry_key = CreateTestAssetKey("test_geometry");
+  const auto material_key = CreateTestAssetKey("simple_material");
   const auto unused_geometry_key = CreateTestAssetKey("buffered_geometry");
 
   TestEventLoop el;
@@ -315,9 +317,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       }
       EXPECT_EQ(renderables[0].node_index, 1U);
       EXPECT_EQ(renderables[0].geometry_key, referenced_geometry_key);
+      EXPECT_EQ(renderables[0].material_key, material_key);
 
 #if !defined(NDEBUG)
-      // Assert: only referenced geometry becomes a dependent edge.
+      // Assert: referenced renderable assets become dependent edges.
       bool has_scene_as_dependent = false;
       loader.ForEachDependent(
         referenced_geometry_key, [&](const oxygen::data::AssetKey& dependent) {
@@ -326,6 +329,15 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
           }
         });
       EXPECT_TRUE(has_scene_as_dependent);
+
+      bool has_scene_as_material_dependent = false;
+      loader.ForEachDependent(
+        material_key, [&](const oxygen::data::AssetKey& dependent) {
+          if (dependent == scene_key) {
+            has_scene_as_material_dependent = true;
+          }
+        });
+      EXPECT_TRUE(has_scene_as_material_dependent);
 
       size_t unused_dependents = 0;
       loader.ForEachDependent(unused_geometry_key,

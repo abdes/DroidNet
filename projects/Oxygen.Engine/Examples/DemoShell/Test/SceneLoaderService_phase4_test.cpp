@@ -37,6 +37,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
@@ -153,6 +154,117 @@ namespace {
     return bytes;
   }
 
+  auto BuildSceneDescriptorBytesWithRenderableMaterialOverride(
+    const data::AssetKey& geometry_key, const data::AssetKey& material_key)
+    -> std::vector<std::byte>
+  {
+    auto desc = pakw::SceneAssetDesc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+    desc.header.version = pakw::kSceneAssetVersion;
+    desc.nodes.offset = static_cast<data::pak::core::OffsetT>(sizeof(desc));
+    desc.nodes.count = 2U;
+    desc.nodes.entry_size = sizeof(pakw::NodeRecord);
+
+    auto root = pakw::NodeRecord {};
+    root.parent_index = 0U;
+    root.scene_name_offset = 1U;
+
+    auto mesh_node = pakw::NodeRecord {};
+    mesh_node.parent_index = 0U;
+    mesh_node.scene_name_offset = 6U;
+
+    const auto strings = std::string("\0Root\0MeshNode\0", 15);
+    const auto nodes_bytes = sizeof(root) + sizeof(mesh_node);
+    desc.scene_strings.offset = static_cast<data::pak::core::StringTableOffsetT>(
+      desc.nodes.offset + nodes_bytes);
+    desc.scene_strings.size
+      = static_cast<data::pak::core::StringTableSizeT>(strings.size());
+    desc.component_table_directory_offset
+      = desc.scene_strings.offset + desc.scene_strings.size;
+    desc.component_table_count = 1U;
+
+    auto table_desc = pakw::SceneComponentTableDesc {};
+    table_desc.component_type
+      = static_cast<uint32_t>(data::ComponentType::kRenderable);
+    table_desc.table.offset = desc.component_table_directory_offset
+      + static_cast<data::pak::core::OffsetT>(sizeof(table_desc));
+    table_desc.table.count = 1U;
+    table_desc.table.entry_size = sizeof(pakw::RenderableRecord);
+
+    auto renderable = pakw::RenderableRecord {};
+    renderable.node_index = 1U;
+    renderable.geometry_key = geometry_key;
+    renderable.material_key = material_key;
+    renderable.visible = 1U;
+
+    auto bytes = std::vector<std::byte> {};
+    bytes.resize(sizeof(desc) + nodes_bytes + strings.size()
+      + sizeof(table_desc) + sizeof(renderable));
+
+    auto* cursor = bytes.data();
+    std::memcpy(cursor, &desc, sizeof(desc));
+    cursor += sizeof(desc);
+    std::memcpy(cursor, &root, sizeof(root));
+    cursor += sizeof(root);
+    std::memcpy(cursor, &mesh_node, sizeof(mesh_node));
+    cursor += sizeof(mesh_node);
+    std::memcpy(cursor, strings.data(), strings.size());
+    cursor += strings.size();
+    std::memcpy(cursor, &table_desc, sizeof(table_desc));
+    cursor += sizeof(table_desc);
+    std::memcpy(cursor, &renderable, sizeof(renderable));
+    return bytes;
+  }
+
+  auto BuildSingleSubmeshGeometry(std::shared_ptr<const data::MaterialAsset> mat)
+    -> std::shared_ptr<data::GeometryAsset>
+  {
+    using data::GeometryAsset;
+    using data::MeshBuilder;
+    using data::Vertex;
+    using data::pak::geometry::GeometryAssetDesc;
+
+    std::vector<Vertex> vertices {
+      { .position = { -1.0F, -1.0F, 0.0F } },
+      { .position = { 1.0F, -1.0F, 0.0F } },
+      { .position = { 0.0F, 1.0F, 0.0F } },
+    };
+    std::vector<std::uint32_t> indices { 0U, 1U, 2U };
+
+    auto builder = MeshBuilder {};
+    builder.WithVertices(vertices)
+      .WithIndices(indices)
+      .BeginSubMesh("surface", std::move(mat))
+      .WithMeshView({ .first_index = 0U,
+        .index_count = static_cast<uint32_t>(indices.size()),
+        .first_vertex = 0U,
+        .vertex_count = static_cast<uint32_t>(vertices.size()) })
+      .EndSubMesh();
+
+    auto mesh = builder.Build();
+    GeometryAssetDesc desc {};
+    desc.lod_count = 1U;
+    desc.bounding_box_min[0] = -1.0F;
+    desc.bounding_box_min[1] = -1.0F;
+    desc.bounding_box_min[2] = 0.0F;
+    desc.bounding_box_max[0] = 1.0F;
+    desc.bounding_box_max[1] = 1.0F;
+    desc.bounding_box_max[2] = 0.0F;
+
+    std::vector<std::shared_ptr<data::Mesh>> lods;
+    lods.push_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
+    return std::make_shared<GeometryAsset>(
+      data::AssetKey {}, std::move(desc), std::move(lods));
+  }
+
+  auto BuildTestMaterial(const data::AssetKey& key)
+    -> std::shared_ptr<data::MaterialAsset>
+  {
+    auto desc = data::pak::render::MaterialAssetDesc {};
+    desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
+    return std::make_shared<data::MaterialAsset>(key, desc);
+  }
+
   auto FindNodeByName(scene::Scene& scene, std::string_view name)
     -> std::optional<scene::SceneNode>
   {
@@ -224,6 +336,20 @@ namespace {
       sidecars_.insert_or_assign(sidecar_key, std::move(sidecar));
     }
 
+    auto PutGeometry(
+      const data::AssetKey& key, std::shared_ptr<data::GeometryAsset> geometry)
+      -> void
+    {
+      geometries_.insert_or_assign(key, std::move(geometry));
+    }
+
+    auto PutMaterial(
+      const data::AssetKey& key, std::shared_ptr<data::MaterialAsset> material)
+      -> void
+    {
+      materials_.insert_or_assign(key, std::move(material));
+    }
+
     void StartLoadTexture(
       content::ResourceKey /*key*/, TextureCallback on_complete) override
     {
@@ -251,15 +377,17 @@ namespace {
     }
 
     void StartLoadMaterialAsset(
-      const data::AssetKey& /*key*/, MaterialCallback on_complete) override
+      const data::AssetKey& key, MaterialCallback on_complete) override
     {
-      on_complete(nullptr);
+      const auto it = materials_.find(key);
+      on_complete(it == materials_.end() ? nullptr : it->second);
     }
 
     void StartLoadGeometryAsset(
-      const data::AssetKey& /*key*/, GeometryCallback on_complete) override
+      const data::AssetKey& key, GeometryCallback on_complete) override
     {
-      on_complete(nullptr);
+      const auto it = geometries_.find(key);
+      on_complete(it == geometries_.end() ? nullptr : it->second);
     }
 
     void StartLoadScene(
@@ -354,16 +482,18 @@ namespace {
       return nullptr;
     }
     [[nodiscard]] auto GetMaterialAsset(
-      const data::AssetKey& /*key*/) const noexcept
+      const data::AssetKey& key) const noexcept
       -> std::shared_ptr<data::MaterialAsset> override
     {
-      return nullptr;
+      const auto it = materials_.find(key);
+      return it == materials_.end() ? nullptr : it->second;
     }
     [[nodiscard]] auto GetGeometryAsset(
-      const data::AssetKey& /*key*/) const noexcept
+      const data::AssetKey& key) const noexcept
       -> std::shared_ptr<data::GeometryAsset> override
     {
-      return nullptr;
+      const auto it = geometries_.find(key);
+      return it == geometries_.end() ? nullptr : it->second;
     }
     [[nodiscard]] auto GetScriptAsset(
       const data::AssetKey& /*key*/) const noexcept
@@ -490,14 +620,14 @@ namespace {
       return false;
     }
     [[nodiscard]] auto HasMaterialAsset(
-      const data::AssetKey& /*key*/) const noexcept -> bool override
+      const data::AssetKey& key) const noexcept -> bool override
     {
-      return false;
+      return materials_.contains(key);
     }
     [[nodiscard]] auto HasGeometryAsset(
-      const data::AssetKey& /*key*/) const noexcept -> bool override
+      const data::AssetKey& key) const noexcept -> bool override
     {
-      return false;
+      return geometries_.contains(key);
     }
     [[nodiscard]] auto HasScriptAsset(
       const data::AssetKey& /*key*/) const noexcept -> bool override
@@ -584,6 +714,10 @@ namespace {
       sidecar_keys_by_scene_ {};
     std::unordered_map<data::AssetKey, std::shared_ptr<data::PhysicsSceneAsset>>
       sidecars_ {};
+    std::unordered_map<data::AssetKey, std::shared_ptr<data::GeometryAsset>>
+      geometries_ {};
+    std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>
+      materials_ {};
     std::unordered_map<TypeId, std::unordered_map<uint64_t, EvictionHandler>>
       eviction_handlers_ {};
     uint64_t next_subscription_id_ { 1U };
@@ -766,6 +900,48 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_EQ(local_fog.GetFogAlbedo(), glm::vec3(0.7F, 0.8F, 0.9F));
   EXPECT_EQ(local_fog.GetFogEmissive(), glm::vec3(0.1F, 0.2F, 0.3F));
   EXPECT_EQ(local_fog.GetSortPriority(), 2);
+}
+
+NOLINT_TEST(SceneLoaderServicePhase4Test,
+  BuildSceneAsyncAppliesRenderableMaterialOverride)
+{
+  auto loader = SceneLoaderTestAssetLoader {};
+  const auto scene_key = data::AssetKey::FromVirtualPath(
+    "/Game/Tests/Phase4/renderable_override.oscene");
+  const auto geometry_key
+    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/cube.ogeo");
+  const auto material_key
+    = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/override.omat");
+
+  auto base_material = data::MaterialAsset::CreateDefault();
+  auto override_material = BuildTestMaterial(material_key);
+  auto geometry = BuildSingleSubmeshGeometry(base_material);
+
+  auto scene_asset = std::make_shared<data::SceneAsset>(scene_key,
+    BuildSceneDescriptorBytesWithRenderableMaterialOverride(
+      geometry_key, material_key));
+  loader.PutScene(scene_key, scene_asset);
+  loader.PutGeometry(geometry_key, geometry);
+  loader.PutMaterial(material_key, override_material);
+
+  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
+    std::filesystem::current_path());
+  auto service = std::make_shared<SceneLoaderService>(loader,
+    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
+    nullptr, nullptr, std::move(path_finder));
+
+  auto runtime_scene
+    = std::make_shared<scene::Scene>("DemoShell.RenderableOverride", 64U);
+  oxygen::co::testing::TestEventLoop loop;
+  oxygen::co::Run(loop, [&]() -> oxygen::co::Co<> {
+    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
+  });
+
+  auto mesh_node = FindNodeByName(*runtime_scene, "MeshNode");
+  ASSERT_TRUE(mesh_node.has_value());
+  auto renderable = mesh_node->GetRenderable();
+  ASSERT_TRUE(renderable.HasGeometry());
+  EXPECT_EQ(renderable.ResolveSubmeshMaterial(0U, 0U), override_material);
 }
 
 } // namespace oxygen::examples::testing

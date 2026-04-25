@@ -203,6 +203,25 @@ public:
       scene->GetComponents<ScriptingComponentRecord>().size());
     std::cout << "\n";
 
+    const auto DumpRenderables = [&]() -> void {
+      const auto renderables = scene->GetComponents<RenderableRecord>();
+      if (renderables.empty()) {
+        return;
+      }
+
+      std::cout << "    Renderables (" << renderables.size() << "):\n";
+      for (size_t i = 0; i < renderables.size(); ++i) {
+        const auto& rec = renderables[i];
+        std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
+        PrintUtils::Field(
+          "Geometry Key", oxygen::data::to_string(rec.geometry_key), 10);
+        PrintUtils::Field(
+          "Material Key", oxygen::data::to_string(rec.material_key), 10);
+        PrintUtils::Field("Visible", rec.visible != 0U, 10);
+      }
+      std::cout << "\n";
+    };
+
     const auto DumpDirectionalLights = [&]() -> void {
       const auto lights = scene->GetComponents<DirectionalLightRecord>();
       if (lights.empty()) {
@@ -314,6 +333,7 @@ public:
       std::cout << "\n";
     };
 
+    DumpRenderables();
     DumpDirectionalLights();
     DumpPointLights();
     DumpSpotLights();

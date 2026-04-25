@@ -256,6 +256,7 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
 
   CHECK_RESULT(reader.ReadInto(record.node_index));
   CHECK_RESULT(reader.ReadInto(record.geometry_key));
+  CHECK_RESULT(reader.ReadInto(record.material_key));
   CHECK_RESULT(reader.ReadInto(record.visible));
 
   return {};

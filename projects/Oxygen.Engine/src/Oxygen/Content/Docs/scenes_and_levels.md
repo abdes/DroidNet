@@ -148,18 +148,22 @@ Design notes:
 The scene loader must:
 
 1. Decode the scene descriptor into a CPU-side scene description.
-2. Register dependencies for every referenced geometry key:
+2. Register dependencies for every referenced geometry and renderable material
+   override key:
 
    - For each renderable `geometry_key`:
      - call `AddAssetDependency(scene_key, geometry_key)`
+   - For each non-nil renderable `material_key`:
+     - call `AddAssetDependency(scene_key, material_key)`
 
 3. Eager-load geometry assets (Phase 1.5 decision): once dependencies are
-   registered, request/load all referenced geometry assets.
+   registered, request/load all referenced geometry assets and scene-authored
+   material overrides.
 
 Geometry loading is responsible for registering its own downstream dependencies
-(e.g. geometry → materials, materials → textures). The scene should not
-duplicate those edges unless/ until explicit scene-level material overrides are
-introduced.
+(e.g. geometry -> materials, materials -> textures). Scene-authored renderable
+material overrides are direct scene dependencies because they replace the
+geometry material at runtime.
 
 ### Load flow
 
