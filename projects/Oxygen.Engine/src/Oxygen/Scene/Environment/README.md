@@ -66,9 +66,10 @@ light or a selection rule; this component stores authored parameters only.
   - Optional pixel/compute helper for aerial perspective integrated into forward
     shading or a separate composite.
 
-**Coupling:** The renderer may optionally use a directional “sun” light (chosen
-from scene lights) for sky lighting direction. This component does not store a
-sun direction; it stores only authored atmospheric parameters.
+**Coupling:** The renderer may optionally use one primary and one secondary
+atmosphere light resolved from directional-light authoring. This component does
+not store a sun direction; it stores authored atmosphere parameters and
+renderer-facing art-direction controls only.
 
 ### VolumetricClouds
 
@@ -102,6 +103,10 @@ or full volumetric fog.
 - **Volumetric fog** (froxel/grid): evaluate scattering/extinction in a 3D grid
   and integrate along view.
 
+Authoring note: `Fog` now carries both height-fog and volumetric-fog controls
+as coexisting authored state. The legacy `FogModel` remains only as a
+compatibility selector; it is not the full runtime meaning of the component.
+
 - **Pass implications**
   - Analytic: integrated directly into forward shading.
   - Volumetric: one or more compute passes to build a froxel volume, followed by
@@ -132,6 +137,25 @@ prefilter mip chain; use a shared BRDF integration LUT.
 
 - `kCapturedScene`: capture the active sky/background into a cubemap for IBL.
 - `kSpecifiedCubemap`: use the authored cubemap asset.
+
+Extended authoring also covers:
+
+- real-time capture enable
+- lower-hemisphere color
+- volumetric scattering intensity
+- reflection / GI participation flags
+
+### Directional Light Atmosphere Roles
+
+`DirectionalLight` is not an environment system, but it now carries explicit
+atmosphere-light-slot authoring so the environment family can resolve:
+
+- no atmosphere role
+- primary atmosphere light
+- secondary atmosphere light
+
+It also carries per-pixel atmosphere-transmittance authoring and disk-luminance
+scale controls needed by later Vortex environment plans.
 
 ### SkySphere (Background Fallback)
 

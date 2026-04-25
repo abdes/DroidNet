@@ -12,14 +12,18 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
-#include <Oxygen/Renderer/Types/ShaderDebugMode.h>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
 
 #include "DemoShell/Services/DomainService.h"
 
 namespace oxygen::renderer {
 class RenderingPipeline;
 } // namespace oxygen::renderer
+
+namespace oxygen::vortex {
+class Renderer;
+} // namespace oxygen::vortex
 
 namespace oxygen::examples {
 
@@ -49,6 +53,11 @@ public:
 
   //! Associates the service with a rendering pipeline.
   virtual auto Initialize(observer_ptr<renderer::RenderingPipeline> pipeline)
+    -> void;
+
+  //! Binds the service to the Vortex runtime seam when no legacy pipeline is
+  //! present.
+  virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
 
   //! Returns the persisted render mode.
@@ -87,13 +96,21 @@ public:
   //! Persists the directional shadow quality tier for the next renderer init.
   virtual auto SetShadowQualityTier(ShadowQualityTier tier) -> void;
 
+  [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
+  [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
+  [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
+  [[nodiscard]] virtual auto SupportsAtmosphereBlueNoiseControl() const -> bool;
+  [[nodiscard]] virtual auto SupportsDebugMode(
+    engine::ShaderDebugMode mode) const -> bool;
+  [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
+
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
-    const renderer::CompositionView& view) -> void override;
+    const vortex::CompositionView& view) -> void override;
 
 private:
   static constexpr auto kViewModeKey = "rendering.view_mode";
@@ -104,11 +121,13 @@ private:
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
-  static constexpr auto kShadowQualityTierKey
-    = "rendering.shadow_quality_tier";
+  static constexpr auto kShadowQualityTierKey = "rendering.shadow_quality_tier";
 
   observer_ptr<renderer::RenderingPipeline> pipeline_;
+  observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   mutable std::atomic_uint64_t epoch_ { 0 };
+
+  auto ApplyVortexSettings() -> void;
 };
 
 } // namespace oxygen::examples

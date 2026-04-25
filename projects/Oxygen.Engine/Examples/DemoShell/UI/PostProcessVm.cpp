@@ -37,6 +37,8 @@ auto PostProcessVm::Refresh() -> void
   auto_exposure_speed_down_ = service_->GetAutoExposureAdaptationSpeedDown();
   auto_exposure_low_percentile_ = service_->GetAutoExposureLowPercentile();
   auto_exposure_high_percentile_ = service_->GetAutoExposureHighPercentile();
+  auto_exposure_min_ev_ = service_->GetAutoExposureMinEv();
+  auto_exposure_max_ev_ = service_->GetAutoExposureMaxEv();
   auto_exposure_min_log_lum_ = service_->GetAutoExposureMinLogLuminance();
   auto_exposure_log_lum_range_ = service_->GetAutoExposureLogLuminanceRange();
   auto_exposure_target_lum_ = service_->GetAutoExposureTargetLuminance();
@@ -104,7 +106,7 @@ auto PostProcessVm::SetManualExposureEv(float ev) -> void
 {
   std::lock_guard lock(mutex_);
   if (service_) {
-    service_->SetManualExposureEv(std::max(ev, 0.0F));
+    service_->SetManualExposureEv(ev);
     Refresh();
   }
 }
@@ -281,6 +283,42 @@ auto PostProcessVm::SetAutoExposureHighPercentile(float percentile) -> void
   std::lock_guard lock(mutex_);
   if (service_) {
     service_->SetAutoExposureHighPercentile(percentile);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureMinEv() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_min_ev_;
+}
+
+auto PostProcessVm::SetAutoExposureMinEv(float min_ev) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureMinEv(min_ev);
+    Refresh();
+  }
+}
+
+auto PostProcessVm::GetAutoExposureMaxEv() -> float
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return auto_exposure_max_ev_;
+}
+
+auto PostProcessVm::SetAutoExposureMaxEv(float max_ev) -> void
+{
+  std::lock_guard lock(mutex_);
+  if (service_) {
+    service_->SetAutoExposureMaxEv(max_ev);
     Refresh();
   }
 }

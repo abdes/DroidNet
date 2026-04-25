@@ -212,9 +212,10 @@ without requiring per-dependency options.
 .\tools\generate-builds.ps1 -Help
 ```
 
-**CLI tools (oxybuild / oxyrun):**
+**CLI tools (oxybuild / oxyrun / oxytidy):**
 
 - Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
+- Use `tools\cli\oxytidy.ps1` to run scoped parallel `clang-tidy` with the repo's `.clang-tidy`, `.clangd`, and CMake compile database.
 - Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
 - Build-root conventions:
   - Regular builds: `out/build-ninja`

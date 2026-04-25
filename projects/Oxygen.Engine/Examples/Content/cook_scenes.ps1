@@ -57,6 +57,40 @@ if (-not (Test-Path $ScenesDir)) {
     exit 1
 }
 
+function Assert-V3SceneDescriptors {
+    param([string]$ManifestPath)
+
+    $manifestDir = Split-Path -Parent $ManifestPath
+    $manifest = Get-Content -Raw -Path $ManifestPath | ConvertFrom-Json
+    if ($null -eq $manifest.jobs) {
+        return
+    }
+
+    foreach ($job in $manifest.jobs) {
+        if ($job.type -ne "scene-descriptor") {
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($job.source)) {
+            throw "Scene descriptor job in '$ManifestPath' is missing 'source'."
+        }
+
+        $descriptorPath = $job.source
+        if (-not [System.IO.Path]::IsPathRooted($descriptorPath)) {
+            $descriptorPath = [System.IO.Path]::GetFullPath((Join-Path $manifestDir $descriptorPath))
+        }
+
+        if (-not (Test-Path $descriptorPath -PathType Leaf)) {
+            throw "Scene descriptor source not found: $descriptorPath"
+        }
+
+        $descriptor = Get-Content -Raw -Path $descriptorPath | ConvertFrom-Json
+        if ($descriptor.version -ne 3) {
+            throw "scene.descriptor.recook_required: '$descriptorPath' must declare version 3. Update the authored descriptor and re-cook the scene content."
+        }
+    }
+}
+
 function Get-ExpandedCMakePresets {
     param([string]$Path, [System.Collections.Hashtable]$Seen = @{})
 
@@ -213,6 +247,8 @@ $FailedCount = 0
 
 foreach ($SceneDir in $ScenesToCook) {
     $ManifestPath = Join-Path $SceneDir.FullName "import-manifest.json"
+
+    Assert-V3SceneDescriptors -ManifestPath $ManifestPath
 
     Write-Host ""
     Write-Host "=======================================================" -ForegroundColor Cyan

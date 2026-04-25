@@ -9,7 +9,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Renderer/Pipeline/RenderMode.h>
 
 #include "DemoShell/UI/RenderingPanel.h"
 #include "DemoShell/UI/RenderingVm.h"
@@ -29,12 +28,19 @@ auto RenderingPanel::DrawContents() -> void
     DrawShadowSettings();
   }
 
-  if (ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (vm_->SupportsRenderModeControls()
+    && ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawViewModeControls();
-    DrawWireframeColor();
+    if (vm_->SupportsWireframeColorControl()) {
+      DrawWireframeColor();
+    }
   }
 
   if (ImGui::CollapsingHeader("Debug Modes", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (vm_->IsVortexRuntimeBound()) {
+      ImGui::TextDisabled(
+        "Vortex currently exposes only the live debug visualizations.");
+    }
     DrawDebugModes();
   }
 }
@@ -123,7 +129,8 @@ void RenderingPanel::DrawDebugModes()
   using engine::ShaderDebugMode;
   using RenderMode = renderer::RenderMode;
 
-  const bool disable_debug_modes = GetRenderMode() == RenderMode::kWireframe;
+  const bool disable_debug_modes = vm_->SupportsRenderModeControls()
+    && GetRenderMode() == RenderMode::kWireframe;
   if (disable_debug_modes) {
     ImGui::BeginDisabled();
   }
@@ -140,127 +147,52 @@ void RenderingPanel::DrawDebugModes()
     vm_->SetDebugMode(ShaderDebugMode::kDisabled);
   }
 
-  if (ImGui::RadioButton(
-        "Base Color", current_mode == ShaderDebugMode::kBaseColor)) {
-    vm_->SetDebugMode(ShaderDebugMode::kBaseColor);
-  }
+  const auto draw_debug_mode
+    = [&](const char* label, const ShaderDebugMode mode) -> void {
+    if (!vm_->SupportsDebugMode(mode)) {
+      return;
+    }
+    if (ImGui::RadioButton(label, current_mode == mode)) {
+      vm_->SetDebugMode(mode);
+    }
+  };
 
-  if (ImGui::RadioButton("UV0", current_mode == ShaderDebugMode::kUv0)) {
-    vm_->SetDebugMode(ShaderDebugMode::kUv0);
-  }
-
-  if (ImGui::RadioButton(
-        "Opacity", current_mode == ShaderDebugMode::kOpacity)) {
-    vm_->SetDebugMode(ShaderDebugMode::kOpacity);
-  }
-
-  if (ImGui::RadioButton(
-        "World Normals", current_mode == ShaderDebugMode::kWorldNormals)) {
-    vm_->SetDebugMode(ShaderDebugMode::kWorldNormals);
-  }
-
-  if (ImGui::RadioButton(
-        "Roughness", current_mode == ShaderDebugMode::kRoughness)) {
-    vm_->SetDebugMode(ShaderDebugMode::kRoughness);
-  }
-
-  if (ImGui::RadioButton(
-        "Metalness", current_mode == ShaderDebugMode::kMetalness)) {
-    vm_->SetDebugMode(ShaderDebugMode::kMetalness);
-  }
-
-  if (ImGui::RadioButton(
-        "IBL Specular Dir", current_mode == ShaderDebugMode::kIblSpecular)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblSpecular);
-  }
-
-  if (ImGui::RadioButton("IBL Irradiance Dir",
-        current_mode == ShaderDebugMode::kIblIrradiance)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblIrradiance);
-  }
-
-  if (ImGui::RadioButton(
-        "IBL Raw Sky", current_mode == ShaderDebugMode::kIblRawSky)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblRawSky);
-  }
-
-  if (ImGui::RadioButton(
-        "IBL Face Index", current_mode == ShaderDebugMode::kIblFaceIndex)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblFaceIndex);
-  }
-
-  if (ImGui::RadioButton(
-        "IBL No BRDF LUT", current_mode == ShaderDebugMode::kIblNoBrdfLut)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblNoBrdfLut);
-  }
-
-  if (ImGui::RadioButton("Direct Lighting Only",
-        current_mode == ShaderDebugMode::kDirectLightingOnly)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDirectLightingOnly);
-  }
-
-  if (ImGui::RadioButton(
-        "IBL Only", current_mode == ShaderDebugMode::kIblOnly)) {
-    vm_->SetDebugMode(ShaderDebugMode::kIblOnly);
-  }
-
-  if (ImGui::RadioButton(
-        "Direct + IBL", current_mode == ShaderDebugMode::kDirectPlusIbl)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDirectPlusIbl);
-  }
-
-  if (ImGui::RadioButton("Direct Lighting Full",
-        current_mode == ShaderDebugMode::kDirectLightingFull)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDirectLightingFull);
-  }
-
-  if (ImGui::RadioButton("Direct Light Gates",
-        current_mode == ShaderDebugMode::kDirectLightGates)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDirectLightGates);
-  }
-
-  if (ImGui::RadioButton(
-        "Direct BRDF Core", current_mode == ShaderDebugMode::kDirectBrdfCore)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDirectBrdfCore);
-  }
-
-  if (ImGui::RadioButton("Virtual Shadow Mask",
-        current_mode == ShaderDebugMode::kVirtualShadowMask)) {
-    vm_->SetDebugMode(ShaderDebugMode::kVirtualShadowMask);
-  }
-
-  if (ImGui::RadioButton(
-        "Scene Depth Raw", current_mode == ShaderDebugMode::kSceneDepthRaw)) {
-    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthRaw);
-  }
-
-  if (ImGui::RadioButton("Scene Depth Linear",
-        current_mode == ShaderDebugMode::kSceneDepthLinear)) {
-    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthLinear);
-  }
-
-  if (ImGui::RadioButton("Scene Depth Mismatch",
-        current_mode == ShaderDebugMode::kSceneDepthMismatch)) {
-    vm_->SetDebugMode(ShaderDebugMode::kSceneDepthMismatch);
-  }
-
-  if (ImGui::RadioButton("Masked Alpha Coverage",
-        current_mode == ShaderDebugMode::kMaskedAlphaCoverage)) {
-    vm_->SetDebugMode(ShaderDebugMode::kMaskedAlphaCoverage);
-  }
+  draw_debug_mode("Base Color", ShaderDebugMode::kBaseColor);
+  draw_debug_mode("UV0", ShaderDebugMode::kUv0);
+  draw_debug_mode("Opacity", ShaderDebugMode::kOpacity);
+  draw_debug_mode("World Normals", ShaderDebugMode::kWorldNormals);
+  draw_debug_mode("Roughness", ShaderDebugMode::kRoughness);
+  draw_debug_mode("Metalness", ShaderDebugMode::kMetalness);
+  draw_debug_mode("IBL Specular Dir", ShaderDebugMode::kIblSpecular);
+  draw_debug_mode("IBL Irradiance Dir", ShaderDebugMode::kIblIrradiance);
+  draw_debug_mode("IBL Raw Sky", ShaderDebugMode::kIblRawSky);
+  draw_debug_mode("IBL Face Index", ShaderDebugMode::kIblFaceIndex);
+  draw_debug_mode("IBL No BRDF LUT", ShaderDebugMode::kIblNoBrdfLut);
+  draw_debug_mode("Direct Lighting Only", ShaderDebugMode::kDirectLightingOnly);
+  draw_debug_mode("IBL Only", ShaderDebugMode::kIblOnly);
+  draw_debug_mode("Direct + IBL", ShaderDebugMode::kDirectPlusIbl);
+  draw_debug_mode("Direct Lighting Full", ShaderDebugMode::kDirectLightingFull);
+  draw_debug_mode("Direct Light Gates", ShaderDebugMode::kDirectLightGates);
+  draw_debug_mode("Direct BRDF Core", ShaderDebugMode::kDirectBrdfCore);
+  draw_debug_mode("Virtual Shadow Mask", ShaderDebugMode::kVirtualShadowMask);
+  draw_debug_mode("Scene Depth Raw", ShaderDebugMode::kSceneDepthRaw);
+  draw_debug_mode("Scene Depth Linear", ShaderDebugMode::kSceneDepthLinear);
+  draw_debug_mode("Scene Depth Mismatch", ShaderDebugMode::kSceneDepthMismatch);
+  draw_debug_mode(
+    "Masked Alpha Coverage", ShaderDebugMode::kMaskedAlphaCoverage);
 
   if (disable_debug_modes) {
     ImGui::EndDisabled();
   }
 
-  {
+  if (vm_->SupportsGpuDebugPassControl()) {
     auto gpu_debug_enabled = vm_->GetGpuDebugPassEnabled();
     if (ImGui::Checkbox("Show GPU Debug Pass", &gpu_debug_enabled)) {
       vm_->SetGpuDebugPassEnabled(gpu_debug_enabled);
     }
   }
 
-  {
+  if (vm_->SupportsAtmosphereBlueNoiseControl()) {
     auto atmo_blue_noise = vm_->GetAtmosphereBlueNoiseEnabled();
     if (ImGui::Checkbox("Atmosphere Blue Noise", &atmo_blue_noise)) {
       vm_->SetAtmosphereBlueNoiseEnabled(atmo_blue_noise);

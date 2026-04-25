@@ -57,6 +57,7 @@ constexpr auto operator&(const SceneMutationMask lhs,
 
 class SceneQuery;
 class SceneEnvironment;
+class DirectionalLightResolver;
 template <typename SceneT> class SceneTraversal;
 namespace internal {
   class IMutationCollector;
@@ -408,6 +409,10 @@ public:
    * preserving already queued mutations for the next observer sync.
   */
   OXGN_SCN_API auto CollectMutationsEnd() noexcept -> void;
+  OXGN_SCN_API auto GetDirectionalLightResolver() noexcept
+    -> DirectionalLightResolver&;
+  OXGN_SCN_API auto GetDirectionalLightResolver() const noexcept
+    -> const DirectionalLightResolver&;
 
   //=== Node Re-parenting API (Same-Scene Only) ===-------------------------//
 
@@ -759,6 +764,7 @@ private:
   std::unique_ptr<internal::IScriptSlotMutationProcessor>
     script_slot_processor_;
   std::unique_ptr<internal::IMutationDispatcher> mutation_dispatcher_;
+  std::unique_ptr<DirectionalLightResolver> directional_light_resolver_;
 
   friend class SceneNode;
 

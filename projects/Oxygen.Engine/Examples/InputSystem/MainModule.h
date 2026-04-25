@@ -25,9 +25,9 @@
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "InputSystem/InputDebugPanel.h"
 
-namespace oxygen::renderer {
+namespace oxygen::vortex {
 struct CompositionView;
-} // namespace oxygen::renderer
+} // namespace oxygen::vortex
 
 namespace oxygen::examples::ui {
 class CameraRigController;
@@ -93,7 +93,7 @@ protected:
     -> platform::window::Properties override;
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
+    std::vector<vortex::CompositionView>& views) -> void override;
 
   // EngineModule phase handlers
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -109,6 +109,7 @@ protected:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
+  auto StageInitialScene(DemoShell& shell) -> void;
   auto InitInputBindings() noexcept -> bool;
   auto UpdateInputDebugPanelConfig(
     observer_ptr<ui::CameraRigController> camera_rig) -> void;

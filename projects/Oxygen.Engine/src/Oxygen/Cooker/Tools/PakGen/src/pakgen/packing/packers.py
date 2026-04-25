@@ -85,6 +85,7 @@ _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA = 0x4D41434F  # 'OCAM'
 _COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
 _COMPONENT_TYPE_POINT_LIGHT = 0x54494C50  # 'PLIT'
 _COMPONENT_TYPE_SPOT_LIGHT = 0x54494C53  # 'SLIT'
+_COMPONENT_TYPE_LOCAL_FOG_VOLUME = 0x474F464C  # 'LFOG'
 _COMPONENT_TYPE_SCRIPTING = 0x50524353  # 'SCRP'
 
 _ENV_SYSTEM_SKY_ATMOSPHERE = 0
@@ -524,16 +525,41 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
     rayleigh_scale = _f(spec.get("rayleigh_scale_height_m"), 8000.0)
     ms = spec.get("mie_scattering_rgb", [21.0e-6, 21.0e-6, 21.0e-6])
     mie = _vec3(ms, [21.0e-6, 21.0e-6, 21.0e-6])
+    ma = spec.get("mie_absorption_rgb", [0.0, 0.0, 0.0])
+    mie_absorption = _vec3(ma, [0.0, 0.0, 0.0])
     mie_scale = _f(spec.get("mie_scale_height_m"), 1200.0)
-    mie_g = _f(spec.get("mie_g"), 0.8)
-    ab = spec.get("absorption_rgb", [0.0, 0.0, 0.0])
+    mie_g = _f(spec.get("mie_anisotropy"), 0.8)
+    ab = spec.get("ozone_absorption_rgb", [0.0, 0.0, 0.0])
     absorption = _vec3(ab, [0.0, 0.0, 0.0])
-    absorption_scale = _f(spec.get("absorption_scale_height_m"), 25000.0)
+    ozone_density = _vec3(
+        spec.get("ozone_density_profile", [25000.0, 0.0, 0.0]),
+        [25000.0, 0.0, 0.0],
+    )
     multi_scattering = _f(spec.get("multi_scattering_factor"), 1.0)
-    sun_disk_enabled = _u32_bool(spec.get("sun_disk_enabled"), 1)
+    sky_luminance = _vec3(
+        spec.get("sky_luminance_factor_rgb", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
+    sky_aerial_luminance = _vec3(
+        spec.get(
+            "sky_and_aerial_perspective_luminance_factor_rgb",
+            [1.0, 1.0, 1.0],
+        ),
+        [1.0, 1.0, 1.0],
+    )
     aerial_scale = _f(spec.get("aerial_perspective_distance_scale"), 1.0)
+    aerial_strength = _f(spec.get("aerial_scattering_strength"), 1.0)
+    aerial_start_depth = _f(spec.get("aerial_perspective_start_depth_m"), 0.0)
+    height_fog_contribution = _f(spec.get("height_fog_contribution"), 1.0)
+    trace_sample_count_scale = _f(spec.get("trace_sample_count_scale"), 1.0)
+    transmittance_min_light_elevation_deg = _f(
+        spec.get("transmittance_min_light_elevation_deg"), -6.0
+    )
+    sun_disk_enabled = _u32_bool(spec.get("sun_disk_enabled"), 1)
+    holdout = _u32_bool(spec.get("holdout"), 0)
+    render_in_main_pass = _u32_bool(spec.get("render_in_main_pass"), 1)
 
-    record_size = 96
+    record_size = 168
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_ATMOSPHERE, record_size)
         + struct.pack("<I", int(enabled))
@@ -542,13 +568,23 @@ def _pack_sky_atmosphere_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *rayleigh)
         + struct.pack("<f", rayleigh_scale)
         + struct.pack("<3f", *mie)
+        + struct.pack("<3f", *mie_absorption)
         + struct.pack("<f", mie_scale)
         + struct.pack("<f", mie_g)
         + struct.pack("<3f", *absorption)
-        + struct.pack("<f", absorption_scale)
+        + struct.pack("<3f", *ozone_density)
         + struct.pack("<f", multi_scattering)
-        + struct.pack("<I", int(sun_disk_enabled))
+        + struct.pack("<3f", *sky_luminance)
+        + struct.pack("<3f", *sky_aerial_luminance)
         + struct.pack("<f", aerial_scale)
+        + struct.pack("<f", aerial_strength)
+        + struct.pack("<f", aerial_start_depth)
+        + struct.pack("<f", height_fog_contribution)
+        + struct.pack("<f", trace_sample_count_scale)
+        + struct.pack("<f", transmittance_min_light_elevation_deg)
+        + struct.pack("<I", int(sun_disk_enabled))
+        + struct.pack("<I", int(holdout))
+        + struct.pack("<I", int(render_in_main_pass))
     )
     if len(out) != record_size:
         raise PakError(
@@ -601,8 +637,22 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
     diffuse = _f(spec.get("diffuse_intensity"), 1.0)
     specular = _f(spec.get("specular_intensity"), 1.0)
+    real_time_capture_enabled = _u32_bool(
+        spec.get("real_time_capture_enabled"), 0
+    )
+    lower_hemisphere_color = _vec3(
+        spec.get("lower_hemisphere_color", [0.0, 0.0, 0.0]),
+        [0.0, 0.0, 0.0],
+    )
+    volumetric_scattering_intensity = _f(
+        spec.get("volumetric_scattering_intensity"), 1.0
+    )
+    affect_reflections = _u32_bool(spec.get("affect_reflections"), 1)
+    affect_global_illumination = _u32_bool(
+        spec.get("affect_global_illumination"), 1
+    )
 
-    record_size = 56
+    record_size = 84
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
         + struct.pack("<I", int(enabled))
@@ -612,6 +662,11 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *tint)
         + struct.pack("<f", diffuse)
         + struct.pack("<f", specular)
+        + struct.pack("<I", int(real_time_capture_enabled))
+        + struct.pack("<3f", *lower_hemisphere_color)
+        + struct.pack("<f", volumetric_scattering_intensity)
+        + struct.pack("<I", int(affect_reflections))
+        + struct.pack("<I", int(affect_global_illumination))
     )
     if len(out) != record_size:
         raise PakError(
@@ -695,8 +750,83 @@ def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
         [1.0, 1.0, 1.0],
     )
     anisotropy_g = _f(spec.get("anisotropy_g"), 0.0)
+    enable_height_fog = _u32_bool(spec.get("enable_height_fog"), 1)
+    enable_volumetric_fog = _u32_bool(spec.get("enable_volumetric_fog"), 0)
+    second_fog_density = _f(spec.get("second_fog_density"), 0.0)
+    second_fog_height_falloff = _f(spec.get("second_fog_height_falloff"), 0.0)
+    second_fog_height_offset = _f(spec.get("second_fog_height_offset"), 0.0)
+    fog_inscattering = _vec3(
+        spec.get("fog_inscattering_luminance", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
+    ambient_scale = _vec3(
+        spec.get(
+            "sky_atmosphere_ambient_contribution_color_scale",
+            [1.0, 1.0, 1.0],
+        ),
+        [1.0, 1.0, 1.0],
+    )
+    cubemap_asset = _asset_key_bytes(spec.get("inscattering_color_cubemap_asset"))
+    cubemap_angle = _f(spec.get("inscattering_color_cubemap_angle"), 0.0)
+    cubemap_tint = _vec3(
+        spec.get("inscattering_texture_tint", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
+    fully_directional = _f(
+        spec.get("fully_directional_inscattering_color_distance"), 0.0
+    )
+    non_directional = _f(
+        spec.get("non_directional_inscattering_color_distance"), 0.0
+    )
+    directional_luminance = _vec3(
+        spec.get("directional_inscattering_luminance", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
+    directional_exponent = _f(
+        spec.get("directional_inscattering_exponent"), 0.0
+    )
+    directional_start = _f(
+        spec.get("directional_inscattering_start_distance"), 0.0
+    )
+    end_distance_m = _f(spec.get("end_distance_m"), 0.0)
+    fog_cutoff_distance_m = _f(spec.get("fog_cutoff_distance_m"), 0.0)
+    volumetric_distribution = _f(
+        spec.get("volumetric_fog_scattering_distribution"), 0.0
+    )
+    volumetric_albedo = _vec3(
+        spec.get("volumetric_fog_albedo", [1.0, 1.0, 1.0]),
+        [1.0, 1.0, 1.0],
+    )
+    volumetric_emissive = _vec3(
+        spec.get("volumetric_fog_emissive", [0.0, 0.0, 0.0]),
+        [0.0, 0.0, 0.0],
+    )
+    volumetric_extinction_scale = _f(
+        spec.get("volumetric_fog_extinction_scale"), 1.0
+    )
+    volumetric_distance = _f(spec.get("volumetric_fog_distance"), 0.0)
+    volumetric_start_distance = _f(
+        spec.get("volumetric_fog_start_distance"), 0.0
+    )
+    volumetric_near_fade = _f(
+        spec.get("volumetric_fog_near_fade_in_distance"), 0.0
+    )
+    volumetric_static_lighting = _f(
+        spec.get("volumetric_fog_static_lighting_scattering_intensity"), 1.0
+    )
+    override_light_colors = _u32_bool(
+        spec.get("override_light_colors_with_fog_inscattering_colors"), 0
+    )
+    holdout = _u32_bool(spec.get("holdout"), 0)
+    render_in_main_pass = _u32_bool(spec.get("render_in_main_pass"), 1)
+    visible_in_reflection_captures = _u32_bool(
+        spec.get("visible_in_reflection_captures"), 1
+    )
+    visible_in_real_time_sky_captures = _u32_bool(
+        spec.get("visible_in_real_time_sky_captures"), 1
+    )
 
-    record_size = 52
+    record_size = 232
     out = (
         _pack_env_record_header(_ENV_SYSTEM_FOG, record_size)
         + struct.pack("<I", int(enabled))
@@ -708,6 +838,36 @@ def _pack_fog_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<f", max_opacity)
         + struct.pack("<3f", *albedo)
         + struct.pack("<f", anisotropy_g)
+        + struct.pack("<I", int(enable_height_fog))
+        + struct.pack("<I", int(enable_volumetric_fog))
+        + struct.pack("<f", second_fog_density)
+        + struct.pack("<f", second_fog_height_falloff)
+        + struct.pack("<f", second_fog_height_offset)
+        + struct.pack("<3f", *fog_inscattering)
+        + struct.pack("<3f", *ambient_scale)
+        + cubemap_asset
+        + struct.pack("<f", cubemap_angle)
+        + struct.pack("<3f", *cubemap_tint)
+        + struct.pack("<f", fully_directional)
+        + struct.pack("<f", non_directional)
+        + struct.pack("<3f", *directional_luminance)
+        + struct.pack("<f", directional_exponent)
+        + struct.pack("<f", directional_start)
+        + struct.pack("<f", end_distance_m)
+        + struct.pack("<f", fog_cutoff_distance_m)
+        + struct.pack("<f", volumetric_distribution)
+        + struct.pack("<3f", *volumetric_albedo)
+        + struct.pack("<3f", *volumetric_emissive)
+        + struct.pack("<f", volumetric_extinction_scale)
+        + struct.pack("<f", volumetric_distance)
+        + struct.pack("<f", volumetric_start_distance)
+        + struct.pack("<f", volumetric_near_fade)
+        + struct.pack("<f", volumetric_static_lighting)
+        + struct.pack("<I", int(override_light_colors))
+        + struct.pack("<I", int(holdout))
+        + struct.pack("<I", int(render_in_main_pass))
+        + struct.pack("<I", int(visible_in_reflection_captures))
+        + struct.pack("<I", int(visible_in_real_time_sky_captures))
     )
     if len(out) != record_size:
         raise PakError(
@@ -758,6 +918,50 @@ def _pack_scene_environment_block(scene: Dict[str, Any]) -> bytes:
             f"SceneEnvironmentBlockHeader size mismatch: {len(header)}",
         )
     return header + b"".join(records)
+
+
+def _pack_local_fog_volume_record(
+    volume: Dict[str, Any], *, node_count: int
+) -> bytes:
+    node_index = volume.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"LocalFogVolume node_index out of range: {node_index}"
+        )
+
+    enabled = _u32_bool(volume.get("enabled"), 1)
+    radial_fog_extinction = _f(volume.get("radial_fog_extinction"), 1.0)
+    height_fog_extinction = _f(volume.get("height_fog_extinction"), 1.0)
+    height_fog_falloff = _f(volume.get("height_fog_falloff"), 1000.0)
+    height_fog_offset = _f(volume.get("height_fog_offset"), 0.0)
+    fog_phase_g = _f(volume.get("fog_phase_g"), 0.2)
+    fog_albedo = _vec3(volume.get("fog_albedo", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
+    fog_emissive = _vec3(
+        volume.get("fog_emissive", [0.0, 0.0, 0.0]), [0.0, 0.0, 0.0]
+    )
+    sort_priority = int(volume.get("sort_priority", 0) or 0)
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + struct.pack("<I", int(enabled))
+        + struct.pack("<f", radial_fog_extinction)
+        + struct.pack("<f", height_fog_extinction)
+        + struct.pack("<f", height_fog_falloff)
+        + struct.pack("<f", height_fog_offset)
+        + struct.pack("<f", fog_phase_g)
+        + struct.pack("<3f", *fog_albedo)
+        + struct.pack("<3f", *fog_emissive)
+        + struct.pack("<i", sort_priority)
+    )
+    if len(out) != 56:
+        raise PakError(
+            "E_SIZE", f"LocalFogVolumeRecord size mismatch: {len(out)}"
+        )
+    return out
 
 
 def _asset_key_bytes(value: Any) -> bytes:
@@ -889,6 +1093,7 @@ def _pack_node_record(
 def _pack_renderable_record(
     renderable: Dict[str, Any],
     geometry_name_to_key: Dict[str, bytes],
+    material_name_to_key: Dict[str, bytes],
     *,
     node_count: int,
 ) -> bytes:
@@ -911,14 +1116,26 @@ def _pack_renderable_record(
     if geometry_key == b"\x00" * ASSET_KEY_SIZE:
         raise PakError("E_REF", "Renderable missing geometry reference")
 
+    material_key = _asset_key_bytes(
+        renderable.get("material_asset_key", renderable.get("material_key"))
+    )
+    if material_key == b"\x00" * ASSET_KEY_SIZE:
+        material_name = renderable.get(
+            "material",
+            renderable.get("material_override", renderable.get("material_asset")),
+        )
+        if isinstance(material_name, str) and material_name in material_name_to_key:
+            material_key = material_name_to_key[material_name]
+
     visible = renderable.get("visible", 1)
     visible_u32 = 1 if bool(visible) else 0
     out = (
         struct.pack("<I", int(node_index))
         + geometry_key
+        + material_key
         + struct.pack("<I", int(visible_u32))
     )
-    if len(out) != 24:
+    if len(out) != 40:
         raise PakError("E_SIZE", f"RenderableRecord size mismatch: {len(out)}")
     return out
 
@@ -986,6 +1203,7 @@ def pack_scene_asset_descriptor_and_payload(
     *,
     header_builder,
     geometry_name_to_key: Dict[str, bytes],
+    material_name_to_key: Dict[str, bytes] | None = None,
     script_name_to_key: Dict[str, bytes] | None = None,
     scripting_slot_base_index: int = 0,
 ) -> Tuple[bytes, bytes, List[Dict[str, Any]]]:
@@ -999,6 +1217,7 @@ def pack_scene_asset_descriptor_and_payload(
 
     Supported component tables:
     - RenderableRecord table (component_type 'MESH')
+    - LocalFogVolumeRecord table (component_type 'LFOG')
     - PerspectiveCameraRecord table (component_type 'PCAM')
     - OrthographicCameraRecord table (component_type 'OCAM')
     - DirectionalLightRecord table (component_type 'DLIT')
@@ -1013,6 +1232,13 @@ def pack_scene_asset_descriptor_and_payload(
     nodes = [n for n in nodes if isinstance(n, dict)]
     if len(nodes) == 0:
         raise PakError("E_COUNT", "scene must have at least one node")
+
+    scene_version = scene.get("version")
+    if scene_version is not None and int(scene_version) != SCENE_ASSET_VERSION_CURRENT:
+        raise PakError(
+            "E_VERSION",
+            "Scene asset version 3 is required; re-cook authored scene content",
+        )
 
     string_table, name_to_offset = _pack_scene_string_table(nodes)
     node_count = len(nodes)
@@ -1031,9 +1257,25 @@ def pack_scene_asset_descriptor_and_payload(
         raise PakError("E_TYPE", "scene.renderables must be a list")
     renderables = [r for r in renderables if isinstance(r, dict)]
     renderables.sort(key=lambda r: int(r.get("node_index", 0) or 0))
+    material_name_to_key = material_name_to_key or {}
     renderable_records = b"".join(
-        _pack_renderable_record(r, geometry_name_to_key, node_count=node_count)
+        _pack_renderable_record(
+            r,
+            geometry_name_to_key,
+            material_name_to_key,
+            node_count=node_count,
+        )
         for r in renderables
+    )
+
+    local_fog_volumes = scene.get("local_fog_volumes", []) or []
+    if not isinstance(local_fog_volumes, list):
+        raise PakError("E_TYPE", "scene.local_fog_volumes must be a list")
+    local_fog_volumes = [v for v in local_fog_volumes if isinstance(v, dict)]
+    local_fog_volumes.sort(key=lambda v: int(v.get("node_index", 0) or 0))
+    local_fog_volume_records = b"".join(
+        _pack_local_fog_volume_record(v, node_count=node_count)
+        for v in local_fog_volumes
     )
 
     cameras = scene.get("perspective_cameras", []) or []
@@ -1096,8 +1338,17 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_RENDERABLE,
                 len(renderables),
-                24,
+                40,
                 renderable_records,
+            )
+        )
+    if local_fog_volume_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_LOCAL_FOG_VOLUME,
+                len(local_fog_volumes),
+                56,
+                local_fog_volume_records,
             )
         )
     if camera_records:

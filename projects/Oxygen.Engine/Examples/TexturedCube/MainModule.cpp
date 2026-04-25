@@ -19,11 +19,8 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Vortex/CompositionView.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -33,6 +30,10 @@
 #include "TexturedCube/MainModule.h"
 
 namespace oxygen::examples::textured_cube {
+
+namespace {
+  constexpr size_t kDefaultSceneCapacity = 128;
+}
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
@@ -152,12 +153,7 @@ auto MainModule::BuildDefaultWindowProperties() const
   return p;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  if (pipeline_) {
-    pipeline_->ClearBackbufferReferences();
-  }
-}
+auto MainModule::ClearBackbufferReferences() -> void { }
 
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
@@ -165,12 +161,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   if (!engine) {
     return nullptr;
   }
-
-  // Create Pipeline
-  auto fw_pipeline = std::make_unique<renderer::ForwardPipeline>(
-    observer_ptr { app_.engine.get() });
-
-  pipeline_ = std::move(fw_pipeline);
 
   auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
@@ -189,14 +179,64 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
-
-  shell_config.get_active_pipeline = [this]() {
-    return observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
-  };
+  shell_config.enable_renderer_bound_panels = false;
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(ERROR, "TexturedCube: DemoShell initialization failed");
     return nullptr;
+  }
+
+  shell->StageScene(std::make_unique<scene::Scene>(
+    "TexturedCube-Scene", kDefaultSceneCapacity));
+  const auto staged_scene = shell->GetStagedScene();
+  CHECK_NOTNULL_F(staged_scene, "TexturedCube staged scene is null");
+
+  main_camera_ = staged_scene->CreateNode("MainCamera");
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
+  const bool attached = main_camera_.AttachCamera(std::move(camera));
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = main_camera_.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  shell->SetStagedMainCamera(main_camera_);
+
+  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  if (asset_loader) {
+    texture_service_ = std::make_unique<TextureLoadingService>(
+      observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() });
+    skybox_service_ = std::make_unique<SkyboxService>(
+      observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() },
+      staged_scene);
+
+    texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
+      observer_ptr { texture_service_.get() },
+      observer_ptr { &shell->GetFileBrowserService() });
+    texture_vm_->SetCubeRebuildNeeded();
+
+    texture_vm_->SetOnSkyboxSelected([this](oxygen::content::ResourceKey key) {
+      if (skybox_service_) {
+        skybox_service_->SetSkyboxResourceKey(key);
+        SkyboxService::SkyLightParams params;
+        if (const auto settings = SettingsService::ForDemoApp()) {
+          if (const auto intensity
+            = settings->GetFloat("env.sky_sphere.intensity")) {
+            params.sky_sphere_intensity = *intensity;
+          }
+        }
+        params.intensity_mul = 1.0F;
+        params.diffuse_intensity = 1.0F;
+        params.specular_intensity = 1.0F;
+        skybox_service_->ApplyToScene(params);
+      }
+    });
+
+    texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
+    texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
+    shell->RegisterPanel(texture_panel_);
+
+    scene_setup_ = std::make_unique<SceneSetup>(
+      staged_scene, *texture_service_, *skybox_service_, cooked_root_);
+    scene_setup_->Initialize();
   }
 
   // Create Main View ID
@@ -248,6 +288,10 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
+  if (!HasRenderableWindow()) {
+    return;
+  }
+
   if (!app_.headless && app_window_ && app_window_->GetWindow()) {
     last_viewport_ = app_window_->GetWindow()->Size();
   }
@@ -258,8 +302,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  constexpr size_t kDefaultSceneCapacity = 128;
-
   DCHECK_NOTNULL_F(app_window_);
   auto& shell = GetShell();
   if (!app_window_->GetWindow()) {
@@ -388,23 +430,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       scene_setup_->UpdateCube(
         cube_state, surface_params, forced_error_key_, custom_material);
 
-      // Apply overrides immediately
-      if (app_.engine) {
-        if (auto r = app_.engine->GetModule<engine::Renderer>()) {
-          scene_setup_->UpdateUvTransform(
-            r->get(), uv_transform.first, uv_transform.second);
-        }
-      }
+      // Vortex currently uses the rebuilt material snapshot directly; the
+      // legacy live UV override path is intentionally removed.
     } else {
-      // Sticky Overrides even if not rebuilt (e.g. UV changed)
-      if (app_.engine) {
-        if (auto r = app_.engine->GetModule<engine::Renderer>()) {
-          const std::pair<glm::vec2, glm::vec2> uv_transform
-            = texture_vm_->GetEffectiveUvTransform();
-          scene_setup_->UpdateUvTransform(
-            r->get(), uv_transform.first, uv_transform.second);
-        }
-      }
+      // Vortex currently uses the rebuilt material snapshot directly; the
+      // legacy live UV override path is intentionally removed.
     }
   }
 
@@ -436,7 +466,7 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
 }
 
 auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<renderer::CompositionView>& views) -> void
+  std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
@@ -458,14 +488,14 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   // Create the main scene view intent
   auto main_comp
-    = renderer::CompositionView::ForScene(main_view_id_, view, main_camera_);
+    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
 
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(renderer::CompositionView::ForImGui(
+  views.push_back(vortex::CompositionView::ForImGui(
     imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 

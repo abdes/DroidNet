@@ -1,0 +1,41 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <memory>
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Vortex/Types/CompositingTask.h>
+#include <Oxygen/Vortex/api_export.h>
+
+namespace oxygen::vortex::internal {
+
+class FramePlanBuilder;
+
+class CompositionPlanner {
+public:
+  explicit CompositionPlanner(observer_ptr<FramePlanBuilder> frame_plan_builder)
+    : frame_plan_builder_(frame_plan_builder)
+  {
+  }
+  OXGN_VRTX_API ~CompositionPlanner();
+  OXYGEN_MAKE_NON_COPYABLE(CompositionPlanner)
+  OXYGEN_MAKE_NON_MOVABLE(CompositionPlanner)
+
+  OXGN_VRTX_API void PlanCompositingTasks();
+  OXGN_VRTX_API auto BuildCompositionSubmission(
+    std::shared_ptr<graphics::Framebuffer> final_output)
+    -> oxygen::vortex::CompositionSubmission;
+
+private:
+  observer_ptr<FramePlanBuilder> frame_plan_builder_;
+  CompositingTaskList planned_composition_tasks;
+};
+
+} // namespace oxygen::vortex::internal

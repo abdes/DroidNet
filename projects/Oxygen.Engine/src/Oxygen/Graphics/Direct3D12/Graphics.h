@@ -114,6 +114,9 @@ public:
   [[nodiscard]] OXGN_D3D12_NDAPI auto GetFrameCaptureController() const
     -> observer_ptr<graphics::FrameCaptureController> override;
 
+  [[nodiscard]] OXGN_D3D12_NDAPI auto CreateImGuiGraphicsBackend() const
+    -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> override;
+
   //! Get the V-Sync setting.
   [[nodiscard]] auto IsVSyncEnabled() const noexcept -> bool override
   {

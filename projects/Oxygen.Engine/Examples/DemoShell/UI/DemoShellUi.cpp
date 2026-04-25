@@ -19,9 +19,7 @@
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
-#include <Oxygen/Renderer/ImGui/ImGuiModule.h>
-#include <Oxygen/Renderer/Pipeline/PipelineFeature.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
@@ -58,6 +56,18 @@
 #include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
+
+auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
+  const bool enable_renderer_bound_panels) -> DemoShellPanelConfig
+{
+  if (enable_renderer_bound_panels) {
+    return panel_config;
+  }
+
+  panel_config.lighting = false;
+  panel_config.ground_grid = false;
+  return panel_config;
+}
 
 namespace {
 
@@ -450,18 +460,43 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
     return;
   }
 
-  auto imgui_module_ref
-    = impl_->engine->GetModule<engine::imgui::ImGuiModule>();
-  if (!imgui_module_ref) {
+  auto renderer_ref = impl_->engine->GetModule<vortex::Renderer>();
+  if (!renderer_ref) {
     return;
   }
 
-  auto& imgui_module = imgui_module_ref->get();
-  if (!imgui_module.IsWitinFrameScope()) {
+  auto& renderer = renderer_ref->get();
+  if (impl_->panel_config.rendering && !impl_->rendering_panel
+    && impl_->rendering_settings_service) {
+    impl_->rendering_settings_service->BindVortexRenderer(
+      observer_ptr { &renderer });
+    if (impl_->light_culling_settings_service) {
+      impl_->light_culling_settings_service->BindVortexRenderer(
+        observer_ptr { &renderer });
+    }
+    impl_->rendering_vm
+      = std::make_unique<RenderingVm>(impl_->rendering_settings_service);
+    impl_->rendering_panel = std::make_shared<RenderingPanel>(
+      observer_ptr { impl_->rendering_vm.get() });
+    if (impl_->panel_registry->RegisterPanel(impl_->rendering_panel)) {
+      LOG_F(INFO, "Registered Rendering panel for the Vortex runtime seam");
+    } else {
+      LOG_F(WARNING,
+        "Failed to register Rendering panel for the Vortex runtime seam");
+      impl_->rendering_panel.reset();
+      impl_->rendering_vm.reset();
+    }
+  }
+  if (impl_->panel_config.ground_grid && impl_->grid_settings_service) {
+    impl_->grid_settings_service->BindVortexRenderer(
+      observer_ptr { &renderer });
+  }
+
+  if (!renderer.IsImGuiFrameActive()) {
     return;
   }
 
-  auto* imgui_context = imgui_module.GetImGuiContext();
+  auto* imgui_context = renderer.GetImGuiContext();
   if (imgui_context == nullptr) {
     return;
   }
@@ -492,82 +527,6 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
 
   if (impl_->file_browser_service) {
     impl_->file_browser_service->UpdateAndDraw();
-  }
-}
-
-auto DemoShellUi::EnsureRenderingPanelReady(
-  renderer::RenderingPipeline& pipeline) -> void
-{
-  if (!impl_->panel_config.rendering) {
-    return;
-  }
-  if (impl_->rendering_panel) {
-    return;
-  }
-
-  const auto features = pipeline.GetSupportedFeatures();
-  if ((features & renderer::PipelineFeature::kOpaqueShading)
-    == renderer::PipelineFeature::kNone) {
-    return;
-  }
-
-  if (!impl_->rendering_settings_service) {
-    LOG_F(
-      WARNING, "Cannot create RenderingPanel without RenderingSettingsService");
-    return;
-  }
-
-  // Create the ViewModel
-  impl_->rendering_vm
-    = std::make_unique<RenderingVm>(impl_->rendering_settings_service);
-
-  // Create the Panel with the ViewModel
-  impl_->rendering_panel = std::make_shared<RenderingPanel>(
-    observer_ptr { impl_->rendering_vm.get() });
-
-  // Register with panel registry
-  if (impl_->panel_registry->RegisterPanel(impl_->rendering_panel)) {
-    LOG_F(INFO, "Registered Rendering panel");
-  } else {
-    LOG_F(WARNING, "Failed to register Rendering panel");
-  }
-}
-
-auto DemoShellUi::EnsureLightingPanelReady(
-  renderer::RenderingPipeline& pipeline) -> void
-{
-  if (!impl_->panel_config.lighting) {
-    return;
-  }
-  if (impl_->lighting_panel) {
-    return;
-  }
-
-  const auto features = pipeline.GetSupportedFeatures();
-  if ((features & renderer::PipelineFeature::kLightCulling)
-    == renderer::PipelineFeature::kNone) {
-    return;
-  }
-
-  if (!impl_->light_culling_settings_service) {
-    LOG_F(WARNING,
-      "Cannot create LightingPanel without LightCullingSettingsService");
-    return;
-  }
-
-  // Create the ViewModel
-  impl_->light_culling_vm
-    = std::make_unique<LightCullingVm>(impl_->light_culling_settings_service);
-
-  // Create the Panel with the ViewModel
-  impl_->lighting_panel = std::make_shared<LightingPanel>(
-    observer_ptr { impl_->light_culling_vm.get() });
-
-  // Register with panel registry
-  if (impl_->panel_registry->RegisterPanel(impl_->lighting_panel)) {
-    LOG_F(INFO, "Registered Lighting panel");
-  } else {
-    LOG_F(WARNING, "Failed to register Lighting panel");
   }
 }
 

@@ -605,7 +605,7 @@ public:
 
   //! Orients the node to look at a target position.
   OXGN_SCN_API auto LookAt(const Vec3& target_position,
-    const Vec3& up_direction = ::oxygen::space::look::Up) noexcept -> bool;
+    const Vec3& up_direction = ::oxygen::space::move::Up) noexcept -> bool;
 
 private:
   //=== Validation Helpers ===------------------------------------------------//

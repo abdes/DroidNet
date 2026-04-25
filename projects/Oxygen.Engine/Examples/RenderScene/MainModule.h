@@ -35,7 +35,7 @@ namespace data {
   class SceneAsset;
   class PhysicsSceneAsset;
 }
-namespace renderer {
+namespace vortex {
   struct CompositionView;
 }
 } // namespace oxygen
@@ -84,7 +84,7 @@ public:
 
   auto ClearBackbufferReferences() -> void override;
   auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
+    std::vector<vortex::CompositionView>& views) -> void override;
 
   auto OnAttachedImpl(
     oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept

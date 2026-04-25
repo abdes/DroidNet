@@ -73,7 +73,7 @@ target_link_libraries(
     oxygen::physics
     oxygen::physicsmodule
     oxygen::platform
-    oxygen::renderer
+    oxygen::vortex
     oxygen::scene
 )
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/CommandContext.h>
 #include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
@@ -25,6 +26,7 @@ namespace oxygen::graphics::headless::internal {
 
 struct SubmissionChunk {
   std::vector<graphics::CommandList::SubmitQueueAction> submit_actions;
+  std::vector<graphics::CommandQueue::KnownResourceState> known_states;
   std::deque<std::shared_ptr<Command>> commands;
 };
 

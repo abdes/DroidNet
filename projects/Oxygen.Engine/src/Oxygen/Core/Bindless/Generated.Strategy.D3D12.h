@@ -10,7 +10,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-02 17:13:35
+// Generated: 2026-04-21 10:29:41
 
 #pragma once
 
@@ -22,7 +22,7 @@ static constexpr const char kStrategyJson[] = R"OXJ(
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
     "source_version": "2.0.0",
     "tool_version": "1.2.2",
-    "generated": "2026-04-02 17:13:35",
+    "generated": "2026-04-21 10:29:41",
     "format": "BindlessStrategy.D3D12/1",
     "schema_version": "2.0.0"
   },

@@ -26,6 +26,12 @@ m_gtest_program(
     "RenderingSettingsService_test.cpp"
 )
 
+m_gtest_program(
+  AsyncVortexMigrationSurface
+  SOURCES
+    "AsyncVortexMigrationSurface_test.cpp"
+)
+
 m_gtest_program(FrameCaptureCli SOURCES "FrameCaptureCli_test.cpp")
 
 m_gtest_program(GraphicsToolingCli SOURCES "GraphicsToolingCli_test.cpp")

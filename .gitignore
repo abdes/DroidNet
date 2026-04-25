@@ -424,4 +424,35 @@ FodyWeavers.xsd
 
 Trash/
 /Testing
-.omx/state/current-task-baseline.json
+.omx/
+.codex/
+**/.gsd
+**/.gsd-id
+**/.bg-shell/
+
+# ── GSD baseline (auto-generated) ──
+.gsd
+.gsd-id
+.bg-shell/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.env
+.env.*
+!.env.example
+.next/
+dist/
+build/
+.venv/
+venv/
+target/
+vendor/
+coverage/
+.cache/
+tmp/
+
+# ── GSD baseline (auto-generated) ──
+.mcp.json
+Python/

@@ -67,6 +67,13 @@ struct RendererConfig {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
 
+  //! Enable renderer-owned ImGui plumbing when supported by the active
+  //! graphics backend.
+  //!
+  //! The application still owns the actual UI draw code, but the renderer owns
+  //! the backend setup, frame lifecycle, and final composition plumbing.
+  bool enable_imgui { false };
+
 private:
   static constexpr std::size_t kDefaultMaxActiveViews = 8;
 };

@@ -78,6 +78,10 @@ auto CommandExecutor::ExecuteAsync(CommandQueue* queue,
               }
             }
 
+            if (queue != nullptr && !chunk.known_states.empty()) {
+              queue->AdoptKnownResourceStates(chunk.known_states);
+            }
+
             for (const auto& action : chunk.submit_actions) {
               if (action.kind
                 == graphics::CommandList::SubmitQueueActionKind::kSignal) {

@@ -222,7 +222,7 @@ Must-have fields/behavior:
 
 Suggested fields (names not final; semantics are):
 
-- `float angular_size_radians`
+- `float angular_size_radians` (full source angle / angular diameter)
 - `bool environment_contribution`
 - `CascadedShadowSettings csm` with:
   - `uint32_t cascade_count`
@@ -256,9 +256,13 @@ as the scene’s sun.
 
 **Direction semantics (important for shading)**:
 
-- Scene extraction publishes `sun_dir_ws` as the direction of incoming rays
-  (from light to scene). Many BRDF implementations use a vector from surface to
-  light, commonly named `L`; in that case `L = -sun_dir_ws`.
+- The node’s world-space `oxygen::space::move::Forward` axis is the
+  **emitted-ray direction** (from the light toward the scene).
+- Renderer/light-environment publication must expose the opposite convention:
+  a normalized vector **from the shaded point toward the light source**.
+- This "toward the light" vector is the Oxygen runtime convention for
+  directional-light data consumed by both scene lighting and atmosphere/sky
+  rendering. Shader stages that need the incoming-ray direction must negate it.
 
 **Visibility and contribution gates**:
 
@@ -268,19 +272,30 @@ as the scene’s sun.
 
 **Environment / sky coupling**:
 
-- `DirectionalLight.environment_contribution` controls whether this light is
-  considered the primary sun direction for:
-  - sky/atmosphere rendering (if/when present),
-  - ambient/IBL injection (if/when present).
+- `DirectionalLight.environment_contribution` marks a directional light as
+  eligible for environment/sky consumption.
+- A scene may have at most **two** such lights.
+- `DirectionalLight.is_sun_light == true` additionally marks the unique
+  authored **primary** sun candidate and requires
+  `environment_contribution == true`.
+- The scene-owned `DirectionalLightResolver` is the single authority that:
+  - validates these contracts,
+  - resolves the primary sun,
+  - resolves the optional secondary sun/moon,
+  - exposes the full directional-light set for scene lighting.
 
 **Multi-sun policy**:
 
 - The engine may support multiple directional lights for artistic reasons.
-  However, for environment/sky systems there should be at most **one**
-  directional light with `environment_contribution == true`.
-- If multiple environment-contributing directional lights are present, the
-  renderer should deterministically pick one (recommended: highest effective
-  intensity after `exposure_compensation_ev`), and log a warning in debug builds.
+- Scene lighting may consume any number of directional lights.
+- Environment/sky may consume at most two directional lights:
+  - slot 0 = resolved primary sun
+  - slot 1 = resolved secondary sun / moon
+- Contract violations:
+  - more than two `environment_contribution == true` lights: invalid
+  - more than one `is_sun_light == true && environment_contribution == true`
+    light: invalid
+  - `is_sun_light == true && environment_contribution == false`: invalid
 
 **Shadow cascades**:
 

@@ -266,4 +266,39 @@ auto SettingsService::SetBool(std::string_view key, bool value) -> void
   dirty_ = true;
 }
 
+auto SettingsService::Remove(std::string_view key) -> bool
+{
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+
+  const auto tokens = SplitKey(key);
+  if (tokens.empty()) {
+    return false;
+  }
+
+  nlohmann::json* current = &storage_->data;
+  for (std::size_t i = 0; i + 1 < tokens.size(); ++i) {
+    if (!current->is_object()) {
+      return false;
+    }
+    const auto it = current->find(tokens[i]);
+    if (it == current->end()) {
+      return false;
+    }
+    current = &(*it);
+  }
+
+  if (!current->is_object()) {
+    return false;
+  }
+
+  const auto erased = current->erase(tokens.back());
+  if (erased == 0) {
+    return false;
+  }
+
+  dirty_ = true;
+  return true;
+}
+
 } // namespace oxygen::examples

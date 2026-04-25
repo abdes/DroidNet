@@ -15,6 +15,12 @@
 
 namespace oxygen::scene {
 
+enum class AtmosphereLightSlot : std::uint8_t {
+  kNone,
+  kPrimary,
+  kSecondary,
+};
+
 //! Directional light component for scene nodes.
 /*!
  Represents a light at infinity (e.g. sun/moon). The light direction is derived
@@ -50,13 +56,17 @@ public:
     return common_;
   }
 
-  //! Sets the light's angular size in radians.
+  //! Sets the light source angle in radians.
+  //!
+  //! Semantics match UE's directional-light Source Angle: this is the full
+  //! angular diameter, not the half-apex angle used internally by the
+  //! atmosphere sun-disk shader math.
   auto SetAngularSizeRadians(const float angular_size_radians) noexcept -> void
   {
     angular_size_radians_ = angular_size_radians;
   }
 
-  //! Gets the light's angular size in radians.
+  //! Gets the light source angle in radians.
   OXGN_SCN_NDAPI auto GetAngularSizeRadians() const noexcept -> float
   {
     return angular_size_radians_;
@@ -87,21 +97,55 @@ public:
     return environment_contribution_;
   }
 
-  //! Designates this light as the sun for atmospheric systems.
+  //! Designates this light as the authored primary sun candidate.
   /*!
-   When true, this directional light's direction is used by atmospheric systems
-   (fog inscattering, sky atmosphere, etc.). Only the first enabled
-   DirectionalLight with is_sun_light=true is used.
+   Contract:
+   - `is_sun_light == true` requires `environment_contribution == true`
+   - at most one directional light in a scene may satisfy both
+   - the scene-owned DirectionalLightResolver validates and enforces this
+     contract before renderer/runtime consumers resolve primary/secondary suns
   */
   auto SetIsSunLight(const bool is_sun) noexcept -> void
   {
     is_sun_light_ = is_sun;
   }
 
-  //! Returns true if this light is designated as the sun for atmosphere.
+  //! Returns true if this light is designated as the authored primary sun
+  //! candidate.
   [[nodiscard]] auto IsSunLight() const noexcept -> bool
   {
     return is_sun_light_;
+  }
+
+  auto SetAtmosphereLightSlot(const AtmosphereLightSlot slot) noexcept -> void
+  {
+    atmosphere_light_slot_ = slot;
+  }
+  [[nodiscard]] auto GetAtmosphereLightSlot() const noexcept
+    -> AtmosphereLightSlot
+  {
+    return atmosphere_light_slot_;
+  }
+
+  auto SetUsePerPixelAtmosphereTransmittance(const bool enabled) noexcept
+    -> void
+  {
+    use_per_pixel_atmosphere_transmittance_ = enabled;
+  }
+  [[nodiscard]] auto GetUsePerPixelAtmosphereTransmittance() const noexcept
+    -> bool
+  {
+    return use_per_pixel_atmosphere_transmittance_;
+  }
+
+  auto SetAtmosphereDiskLuminanceScale(const Vec4& rgba) noexcept -> void
+  {
+    atmosphere_disk_luminance_scale_ = rgba;
+  }
+  [[nodiscard]] auto GetAtmosphereDiskLuminanceScale() const noexcept
+    -> const Vec4&
+  {
+    return atmosphere_disk_luminance_scale_;
   }
 
   //! Gets the cascaded shadow settings.
@@ -125,8 +169,8 @@ protected:
 private:
   CommonLightProperties common_ {};
 
-  //! Angular radius of the light source in radians.
-  //! Scale: 0 to pi/2 (radians).
+  //! Full source angle / angular diameter of the light source in radians.
+  //! Scale: 0 to pi (radians).
   //! Variation: Small changes (e.g. 0.01) affect shadow softness and specular
   //! highlights.
   float angular_size_radians_ = 0.0F;
@@ -139,6 +183,9 @@ private:
 
   bool environment_contribution_ = false;
   bool is_sun_light_ = false;
+  AtmosphereLightSlot atmosphere_light_slot_ = AtmosphereLightSlot::kNone;
+  bool use_per_pixel_atmosphere_transmittance_ = false;
+  Vec4 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F, 1.0F };
   CascadedShadowSettings csm_ {};
   detail::TransformComponent* transform_ { nullptr };
 };

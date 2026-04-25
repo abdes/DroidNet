@@ -23,10 +23,6 @@
 #include "DemoShell/Services/SkyboxService.h"
 #include "TexturedCube/TextureLoadingService.h"
 
-namespace oxygen::engine {
-class Renderer;
-}
-
 namespace oxygen::examples::textured_cube {
 
 //! Texture index mode for the sample materials.
@@ -86,10 +82,6 @@ public:
     const SurfaceParams& surface, content::ResourceKey forced_error_key,
     std::shared_ptr<const data::MaterialAsset> custom_material = nullptr)
     -> void;
-
-  //! Apply UV transform overrides to the current sample materials.
-  auto UpdateUvTransform(engine::Renderer& renderer, const glm::vec2& scale,
-    const glm::vec2& offset) -> void;
 
 private:
   // Light node is an implementation detail; configuration lives in .cpp

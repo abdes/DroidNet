@@ -1,0 +1,16 @@
+{
+  "name": "MatCityAsphalt",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [
+      0.045,
+      0.048,
+      0.052,
+      1.0
+    ],
+    "metalness": 0.0,
+    "roughness": 0.92,
+    "ambient_occlusion": 1.0
+  }
+}

@@ -16,8 +16,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/RenderingPipeline.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
@@ -219,8 +217,8 @@ auto CameraSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 }
 
 auto CameraSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& view) -> void
+  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
+  -> void
 {
   if (!view.camera.has_value()) {
     DCHECK_F(false, "Main view must provide a camera");
@@ -238,13 +236,18 @@ auto CameraSettingsService::OnMainViewReady(
     return;
   }
 
+  OnRuntimeMainViewReady(camera, view.view.viewport);
+}
+
+auto CameraSettingsService::OnRuntimeMainViewReady(
+  scene::SceneNode camera, const ViewPort& viewport) -> void
+{
   const bool camera_changed = !active_camera_.IsAlive()
     || active_camera_.GetHandle() != camera.GetHandle();
   if (camera_changed) {
     SetActiveCamera(camera);
   }
 
-  const auto& viewport = view.view.viewport;
   if (viewport.width > 0.0F && viewport.height > 0.0F) {
     const float aspect
       = viewport.height > 0.0F ? (viewport.width / viewport.height) : 1.0F;

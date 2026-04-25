@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-02 21:10:18
+// Generated: 2026-04-21 10:29:41
 
 #ifndef OXYGEN_BINDLESS_ABI_HLSL
 #define OXYGEN_BINDLESS_ABI_HLSL

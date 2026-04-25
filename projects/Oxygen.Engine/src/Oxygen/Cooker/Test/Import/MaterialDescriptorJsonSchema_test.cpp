@@ -145,12 +145,12 @@ NOLINT_TEST(MaterialDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
     "shaders": [
       {
         "stage": "vertex",
-        "source_path": "Forward/ForwardMesh_VS.hlsl",
+        "source_path": "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",
         "entry_point": "MainVS"
       },
       {
         "stage": "pixel",
-        "source_path": "Forward/ForwardMesh_PS.hlsl",
+        "source_path": "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
         "entry_point": "MainPS",
         "defines": "USE_FOG=1"
       }

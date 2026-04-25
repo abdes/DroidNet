@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
@@ -32,6 +33,14 @@
 
 namespace oxygen::examples::ui {
 class CameraRigController;
+}
+
+namespace oxygen::graphics {
+class Framebuffer;
+}
+
+namespace oxygen::vortex {
+class Renderer;
 }
 
 namespace oxygen::examples::async {
@@ -113,13 +122,13 @@ public:
 protected:
   //! Clear backbuffer references (required by DemoModuleBase).
   auto ClearBackbufferReferences() -> void override;
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<renderer::CompositionView>& views) -> void override;
 
   //! Execute phase-specific work.
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  auto OnPublishViews(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
@@ -138,6 +147,14 @@ private:
   //! Scene and rendering functions.
   auto EnsureExampleScene() -> void;
   auto EnsureMainCamera(int width, int height) -> void;
+  auto ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>;
+  auto ReleasePublishedRuntimeView(
+    observer_ptr<engine::FrameContext> context = nullptr) -> void;
+  [[nodiscard]] auto BuildResolvedView(uint32_t width, uint32_t height)
+    -> std::optional<ResolvedView>;
+  [[nodiscard]] auto ResolveViewExtent() const noexcept -> glm::uvec2;
+  auto EnsureSceneFramebuffer(uint32_t width, uint32_t height) -> void;
+  auto ClearSceneFramebuffer() -> void;
   // delta_time used to be absolute time; module now expects a per-frame
   // delta (seconds) for update integration. Use double precision here to
   // preserve granularity at high FPS.
@@ -210,6 +227,9 @@ private:
   std::shared_ptr<AsyncDemoPanel> async_panel_;
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };
+  std::shared_ptr<graphics::Framebuffer> scene_fb_;
+  uint32_t scene_fb_width_ { 0 };
+  uint32_t scene_fb_height_ { 0 };
   observer_ptr<ui::CameraRigController> last_camera_rig_;
   bool drone_configured_ { false };
 };

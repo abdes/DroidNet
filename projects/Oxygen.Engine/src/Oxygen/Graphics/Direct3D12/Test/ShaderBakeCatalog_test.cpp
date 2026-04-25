@@ -6,6 +6,7 @@
 
 #include <array>
 #include <initializer_list>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -106,4 +107,25 @@ NOLINT_TEST(ShaderBakeCatalogTest, EngineCatalogHasUniqueCanonicalRequests)
   const auto expanded = ExpandShaderCatalog(kEngineShaders);
 
   EXPECT_EQ(expanded.size(), kEngineShaders.size());
+}
+
+NOLINT_TEST(ShaderBakeCatalogTest,
+  EngineCatalogUsesVortexEnvironmentShadersAndNoLegacyAtmosphereCatalogEntries)
+{
+  const auto has_path = [](std::string_view path) {
+    return std::ranges::any_of(kEngineShaders, [path](const ShaderEntry& entry) {
+      return entry.path == path;
+    });
+  };
+
+  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereTransmittanceLut.hlsl"));
+  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl"));
+  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereMultiScatteringLut.hlsl"));
+  EXPECT_TRUE(has_path("Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl"));
+
+  EXPECT_FALSE(has_path("Atmosphere/TransmittanceLut_CS.hlsl"));
+  EXPECT_FALSE(has_path("Atmosphere/SkyViewLut_CS.hlsl"));
+  EXPECT_FALSE(has_path("Atmosphere/MultiScatLut_CS.hlsl"));
+  EXPECT_FALSE(has_path("Atmosphere/SkyIrradianceLut_CS.hlsl"));
+  EXPECT_FALSE(has_path("Atmosphere/CameraVolumeLut_CS.hlsl"));
 }

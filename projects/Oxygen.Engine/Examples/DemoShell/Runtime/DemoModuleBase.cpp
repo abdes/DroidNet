@@ -4,25 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
-#include <mutex>
+#include <ranges>
 #include <string_view>
+#include <utility>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Console/Command.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Pipeline/ForwardPipeline.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/Types/CompositingTask.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
@@ -30,85 +33,78 @@
 namespace oxygen::examples {
 
 namespace {
-  constexpr std::string_view kCommandDumpLightCullingTelemetry
-    = "rndr.light_culling.dump_telemetry";
 
-  struct LightCullingConsoleCommandState {
-    observer_ptr<renderer::RenderingPipeline> pipeline { nullptr };
-  };
-
-  [[nodiscard]] auto GetLightCullingConsoleCommandState()
-    -> const std::shared_ptr<LightCullingConsoleCommandState>&
+  auto ClampViewportDimension(const float value) -> std::uint32_t
   {
-    static const auto state
-      = std::make_shared<LightCullingConsoleCommandState>();
-    return state;
+    return std::max(1U, static_cast<std::uint32_t>(value));
   }
 
-  auto RegisterLightCullingConsoleCommand(IAsyncEngine& engine) -> void
+  auto ResolveViewport(const vortex::CompositionView& view_intent,
+    const observer_ptr<AppWindow> app_window) -> ViewPort
   {
-    static std::once_flag once;
-    std::call_once(once, [&engine] {
-      std::weak_ptr<LightCullingConsoleCommandState> weak_state {
-        GetLightCullingConsoleCommandState(),
+    if (view_intent.view.viewport.IsValid()) {
+      return view_intent.view.viewport;
+    }
+
+    if (app_window != nullptr && app_window->GetWindow()) {
+      const auto extent = app_window->GetWindow()->Size();
+      return ViewPort {
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = static_cast<float>(extent.width),
+        .height = static_cast<float>(extent.height),
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
       };
-      (void)engine.GetConsole().RegisterCommand(console::CommandDefinition {
-        .name = std::string(kCommandDumpLightCullingTelemetry),
-        .help
-        = "Dump LightCullingPass telemetry from the active ForwardPipeline",
-        .flags = console::CommandFlags::kDevOnly,
-        .handler
-        = [weak_state](const std::vector<std::string>& args,
-            const console::CommandContext&) -> console::ExecutionResult {
-          if (!args.empty()) {
-            return console::ExecutionResult {
-              .status = console::ExecutionStatus::kInvalidArguments,
-              .exit_code = 2,
-              .output = {},
-              .error = "usage: rndr.light_culling.dump_telemetry",
-            };
-          }
+    }
 
-          const auto state = weak_state.lock();
-          if (!state || state->pipeline == nullptr) {
-            return console::ExecutionResult {
-              .status = console::ExecutionStatus::kError,
-              .exit_code = 1,
-              .output = {},
-              .error = "no active rendering pipeline is bound",
-            };
-          }
-
-          if (state->pipeline->GetTypeId()
-            != renderer::ForwardPipeline::ClassTypeId()) {
-            return console::ExecutionResult {
-              .status = console::ExecutionStatus::kError,
-              .exit_code = 1,
-              .output = {},
-              .error
-              = "active pipeline does not expose LightCullingPass telemetry",
-            };
-          }
-          const auto& forward_pipeline
-            = static_cast<const renderer::ForwardPipeline&>(*state->pipeline);
-
-          return console::ExecutionResult {
-            .status = console::ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = forward_pipeline.DumpLightCullingTelemetry(),
-            .error = {},
-          };
-        },
-      });
-    });
+    return ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
+      .width = 1.0F,
+      .height = 1.0F,
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    };
   }
 
-  auto GetRendererFromEngine(AsyncEngine* engine) -> engine::Renderer*
+  auto NormalizeVortexCompositionView(const vortex::CompositionView& source,
+    const observer_ptr<AppWindow> app_window) -> vortex::CompositionView
   {
-    DCHECK_NOTNULL_F(engine);
-    auto renderer_opt = engine->GetModule<engine::Renderer>();
-    return renderer_opt ? &renderer_opt->get() : nullptr;
+    const auto viewport = ResolveViewport(source, app_window);
+
+    auto target = source;
+    target.view.viewport = viewport;
+    if (source.camera.has_value() && viewport.IsValid()) {
+      target.view.viewport.top_left_x = 0.0F;
+      target.view.viewport.top_left_y = 0.0F;
+      if (target.view.scissor.right > target.view.scissor.left
+        && target.view.scissor.bottom > target.view.scissor.top) {
+        const auto offset_x = static_cast<int32_t>(viewport.top_left_x);
+        const auto offset_y = static_cast<int32_t>(viewport.top_left_y);
+        target.view.scissor.left
+          = std::max(0, target.view.scissor.left - offset_x);
+        target.view.scissor.top
+          = std::max(0, target.view.scissor.top - offset_y);
+        target.view.scissor.right = std::max(
+          target.view.scissor.left, target.view.scissor.right - offset_x);
+        target.view.scissor.bottom = std::max(
+          target.view.scissor.top, target.view.scissor.bottom - offset_y);
+      }
+    }
+    target.with_height_fog = source.camera.has_value() && source.with_height_fog;
+    target.with_local_fog = source.camera.has_value() && source.with_local_fog;
+    target.shading_mode = source.camera.has_value()
+      ? std::optional<vortex::ShadingMode> { vortex::ShadingMode::kDeferred }
+      : std::nullopt;
+    return target;
   }
+
+  auto IsSceneView(const vortex::CompositionView& view_intent) -> bool
+  {
+    return view_intent.camera.has_value() && view_intent.id != kInvalidViewId;
+  }
+
 } // namespace
 
 DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
@@ -124,9 +120,7 @@ DemoModuleBase::DemoModuleBase(const DemoAppContext& app) noexcept
 DemoModuleBase::~DemoModuleBase()
 {
   ClearViewIds();
-  GetLightCullingConsoleCommandState()->pipeline = nullptr;
-  renderer_subscription_.Cancel();
-  pipeline_.reset();
+  ClearSceneFramebuffers();
 }
 
 auto DemoModuleBase::BuildDefaultWindowProperties() const
@@ -135,8 +129,9 @@ auto DemoModuleBase::BuildDefaultWindowProperties() const
   platform::window::Properties p("Oxygen Example");
   p.extent = { .width = 1280U, .height = 720U };
   p.flags = { .hidden = false, .resizable = true };
-  if (app_.fullscreen)
+  if (app_.fullscreen) {
     p.flags.full_screen = true;
+  }
   return p;
 }
 
@@ -162,33 +157,21 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     return false;
   }
 
-  if (pipeline_) {
-    renderer_subscription_ = engine->SubscribeModuleAttached(
-      [this](const engine::ModuleEvent& event) {
-        if (event.type_id != engine::Renderer::ClassTypeId()) {
-          return;
-        }
-        auto* renderer = static_cast<engine::Renderer*>(event.module.get());
-        DCHECK_NOTNULL_F(renderer);
-        BindPipelineToRenderer(*renderer);
-      },
-      true);
-  }
-
-  RegisterLightCullingConsoleCommand(*engine);
-  GetLightCullingConsoleCommandState()->pipeline
-    = observer_ptr<renderer::RenderingPipeline> { pipeline_.get() };
   return true;
 }
 
 auto DemoModuleBase::OnShutdown() noexcept -> void
 {
+  if (auto renderer = ResolveVortexRenderer(); renderer != nullptr) {
+    for (const auto& [_, view_id] : view_registry_) {
+      renderer->RemovePublishedRuntimeView(view_id);
+    }
+  }
+
+  ClearSceneFramebuffers();
   shell_.reset();
-  GetLightCullingConsoleCommandState()->pipeline = nullptr;
-  renderer_subscription_.Cancel();
-  pipeline_bound_ = false;
-  pipeline_.reset();
   view_registry_.clear();
+  active_views_.clear();
 }
 
 auto DemoModuleBase::GetShell() -> DemoShell&
@@ -197,13 +180,25 @@ auto DemoModuleBase::GetShell() -> DemoShell&
   return *shell_;
 }
 
-auto DemoModuleBase::BindPipelineToRenderer(engine::Renderer& renderer) -> void
+auto DemoModuleBase::ResolveVortexRenderer() const noexcept
+  -> observer_ptr<vortex::Renderer>
 {
-  if (pipeline_ == nullptr || pipeline_bound_) {
-    return;
+  if (app_.engine == nullptr) {
+    return nullptr;
   }
-  pipeline_->BindToRenderer(renderer);
-  pipeline_bound_ = true;
+  if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
+    return observer_ptr { &renderer->get() };
+  }
+  return nullptr;
+}
+
+auto DemoModuleBase::HasRenderableWindow() const noexcept -> bool
+{
+  if (app_.headless) {
+    return true;
+  }
+  return app_window_ != nullptr && app_window_->GetWindow() != nullptr
+    && !app_window_->IsShuttingDown();
 }
 
 auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -212,11 +207,6 @@ auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
   DCHECK_NOTNULL_F(context);
   try {
     OnFrameStartCommon(*context);
-    if (pipeline_ && pipeline_bound_) {
-      if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
-        pipeline_->OnFrameStart(context, *renderer);
-      }
-    }
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "Report OnFrameStart error: {}", ex.what());
   }
@@ -225,12 +215,6 @@ auto DemoModuleBase::OnFrameStart(observer_ptr<engine::FrameContext> context)
 auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  if (!pipeline_) {
-    co_return;
-  }
-
-  // Gather composition intent during SceneMutation so any camera/view-node
-  // edits happen before TransformPropagation.
   active_views_.clear();
   if (!app_.headless && app_window_ && !app_window_->GetWindow()) {
     LOG_F(INFO, "Skipping UpdateComposition: app window is no longer valid");
@@ -240,73 +224,231 @@ auto DemoModuleBase::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
+auto DemoModuleBase::ReleaseInactiveRuntimeViews(
+  const observer_ptr<engine::FrameContext> context,
+  const std::vector<ViewId>& retained_intent_ids) -> void
+{
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer) {
+    return;
+  }
+
+  for (const auto& [_, view_id] : view_registry_) {
+    const bool should_retain = std::ranges::find(retained_intent_ids, view_id)
+      != retained_intent_ids.end();
+    if (should_retain) {
+      continue;
+    }
+
+    if (context != nullptr) {
+      renderer->RemovePublishedRuntimeView(*context, view_id);
+    } else {
+      renderer->RemovePublishedRuntimeView(view_id);
+    }
+    scene_targets_.erase(view_id);
+  }
+}
+
+auto DemoModuleBase::EnsureSceneFramebuffer(
+  const ViewId view_id, const uint32_t width, const uint32_t height)
+  -> RuntimeSceneTarget*
+{
+  if (auto it = scene_targets_.find(view_id); it != scene_targets_.end()
+    && it->second.scene_framebuffer && it->second.composite_framebuffer
+    && it->second.width == width
+    && it->second.height == height) {
+    return &it->second;
+  }
+
+  auto gfx = app_.gfx_weak.lock();
+  if (!gfx) {
+    return {};
+  }
+
+  graphics::TextureDesc color_desc {};
+  color_desc.width = width;
+  color_desc.height = height;
+  color_desc.format = Format::kRGBA16Float;
+  color_desc.texture_type = TextureType::kTexture2D;
+  color_desc.is_render_target = true;
+  color_desc.is_shader_resource = true;
+  color_desc.initial_state = graphics::ResourceStates::kCommon;
+  color_desc.use_clear_value = true;
+  color_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  color_desc.debug_name
+    = fmt::format("DemoRuntime.SceneColor.{}", view_id.get());
+
+  auto color_texture = gfx->CreateTexture(color_desc);
+  CHECK_F(static_cast<bool>(color_texture),
+    "Failed to create Vortex runtime scene texture for view {}", view_id.get());
+
+  auto framebuffer_desc = graphics::FramebufferDesc {};
+  framebuffer_desc.AddColorAttachment({ .texture = std::move(color_texture) });
+  auto framebuffer = gfx->CreateFramebuffer(framebuffer_desc);
+  CHECK_F(static_cast<bool>(framebuffer),
+    "Failed to create Vortex runtime framebuffer for view {}", view_id.get());
+
+  graphics::TextureDesc composite_desc {};
+  composite_desc.width = width;
+  composite_desc.height = height;
+  composite_desc.format = Format::kRGBA8UNorm;
+  composite_desc.texture_type = TextureType::kTexture2D;
+  composite_desc.is_render_target = true;
+  composite_desc.is_shader_resource = true;
+  composite_desc.initial_state = graphics::ResourceStates::kCommon;
+  composite_desc.use_clear_value = true;
+  composite_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+  composite_desc.debug_name
+    = fmt::format("DemoRuntime.CompositeColor.{}", view_id.get());
+
+  auto composite_texture = gfx->CreateTexture(composite_desc);
+  CHECK_F(static_cast<bool>(composite_texture),
+    "Failed to create Vortex runtime composite texture for view {}", view_id.get());
+
+  auto composite_desc_fb = graphics::FramebufferDesc {};
+  composite_desc_fb.AddColorAttachment({ .texture = std::move(composite_texture) });
+  auto composite_framebuffer = gfx->CreateFramebuffer(composite_desc_fb);
+  CHECK_F(static_cast<bool>(composite_framebuffer),
+    "Failed to create Vortex runtime composite framebuffer for view {}", view_id.get());
+
+  scene_targets_[view_id] = RuntimeSceneTarget {
+    .scene_framebuffer = framebuffer,
+    .composite_framebuffer = composite_framebuffer,
+    .width = width,
+    .height = height,
+  };
+  return &scene_targets_.at(view_id);
+}
+
+auto DemoModuleBase::ClearSceneFramebuffers() -> void
+{
+  scene_targets_.clear();
+}
+
 auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  if (!pipeline_ || !pipeline_bound_) {
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer) {
     co_return;
   }
-  auto* renderer = GetRendererFromEngine(app_.engine.get());
-  if (renderer == nullptr) {
-    co_return;
-  }
-  auto scene = context->GetScene();
-  if (!scene) {
-    co_return;
-  }
-  graphics::Framebuffer* target_fb = nullptr;
-  if (app_window_) {
-    if (auto fb_weak = app_window_->GetCurrentFrameBuffer();
-      !fb_weak.expired()) {
-      target_fb = fb_weak.lock().get();
-    }
-  }
-  co_await pipeline_->OnPublishViews(
-    context, *renderer, *scene, active_views_, target_fb);
-}
 
-auto DemoModuleBase::OnPreRender(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  if (pipeline_ && pipeline_bound_) {
-    if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
-      co_await pipeline_->OnPreRender(context, *renderer, active_views_);
+  if (!app_.headless && app_window_
+    && (!app_window_->GetWindow() || app_window_->IsShuttingDown())) {
+    ReleaseInactiveRuntimeViews(context, {});
+    co_return;
+  }
+
+  if (!context->GetScene()) {
+    ReleaseInactiveRuntimeViews(context, {});
+    co_return;
+  }
+
+  std::vector<ViewId> retained_scene_view_ids {};
+  retained_scene_view_ids.reserve(active_views_.size());
+
+  const vortex::CompositionView* primary_scene_view = nullptr;
+  for (const auto& view_intent : active_views_) {
+    if (!IsSceneView(view_intent)) {
+      continue;
+    }
+
+    retained_scene_view_ids.push_back(view_intent.id);
+    if (primary_scene_view == nullptr
+      || view_intent.z_order.get() < primary_scene_view->z_order.get()) {
+      primary_scene_view = &view_intent;
     }
   }
+
+  ReleaseInactiveRuntimeViews(context, retained_scene_view_ids);
+
+  for (const auto& view_intent : active_views_) {
+    if (!IsSceneView(view_intent)) {
+      continue;
+    }
+
+    auto vortex_view = NormalizeVortexCompositionView(view_intent, app_window_);
+    const auto width = ClampViewportDimension(vortex_view.view.viewport.width);
+    const auto height
+      = ClampViewportDimension(vortex_view.view.viewport.height);
+    auto* target = EnsureSceneFramebuffer(view_intent.id, width, height);
+    if (target == nullptr || !target->scene_framebuffer
+      || !target->composite_framebuffer) {
+      LOG_F(WARNING,
+        "Skipping Vortex runtime publication for view {} due to missing "
+        "framebuffer",
+        view_intent.id.get());
+      continue;
+    }
+
+    renderer->PublishRuntimeCompositionView(*context,
+      vortex::Renderer::RuntimeViewPublishInput {
+        .composition_view = std::move(vortex_view),
+        .render_target = observer_ptr { target->scene_framebuffer.get() },
+        .composite_source = observer_ptr { target->composite_framebuffer.get() },
+      });
+
+    if (primary_scene_view == &view_intent) {
+      GetShell().OnRuntimeMainViewReady(view_intent.id,
+        view_intent.camera.value(), ResolveViewport(view_intent, app_window_));
+    }
+  }
+
   co_return;
 }
 
-auto DemoModuleBase::OnCompositing(observer_ptr<engine::FrameContext> context)
+auto DemoModuleBase::OnPreRender(observer_ptr<engine::FrameContext> /*context*/)
   -> co::Co<>
+{
+  co_return;
+}
+
+auto DemoModuleBase::OnCompositing(
+  observer_ptr<engine::FrameContext> /*context*/) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
 
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "Skip compositing: no valid window");
+  if (app_.headless || !app_window_->GetWindow()
+    || app_window_->IsShuttingDown()) {
     co_return;
   }
 
-  if (pipeline_ && pipeline_bound_) {
-    if (auto* renderer = GetRendererFromEngine(app_.engine.get())) {
-      // Get the current framebuffer from our window for final composite
-      std::shared_ptr<graphics::Framebuffer> target_fb;
-      if (app_window_) {
-        target_fb = app_window_->GetCurrentFrameBuffer().lock();
-      }
-      if (!target_fb) {
-        LOG_F(WARNING, "Skip compositing: no valid framebuffer target");
-        co_return;
-      }
-      auto submission = co_await pipeline_->OnCompositing(context, target_fb);
-      if (!submission.tasks.empty() && submission.composite_target) {
-        std::shared_ptr<graphics::Surface> surface;
-        if (app_window_) {
-          surface = app_window_->GetSurface().lock();
-        }
-        renderer->RegisterComposition(std::move(submission), surface);
-      }
-    }
+  auto renderer = ResolveVortexRenderer();
+  if (!renderer) {
+    co_return;
   }
+
+  auto target_fb = app_window_->GetCurrentFrameBuffer().lock();
+  if (!target_fb) {
+    LOG_F(WARNING, "Skip compositing: no valid framebuffer target");
+    co_return;
+  }
+
+  auto surface = app_window_->GetSurface().lock();
+  if (!surface) {
+    LOG_F(WARNING, "Skip compositing: no valid target surface");
+    co_return;
+  }
+
+  vortex::Renderer::RuntimeCompositionInput input {};
+  input.composite_target = std::move(target_fb);
+  input.target_surface = std::move(surface);
+  input.layers.reserve(active_views_.size());
+
+  for (const auto& view_intent : active_views_) {
+    if (!IsSceneView(view_intent)) {
+      continue;
+    }
+
+    const auto viewport = ResolveViewport(view_intent, app_window_);
+    input.layers.push_back(vortex::Renderer::RuntimeCompositionLayer {
+      .intent_view_id = view_intent.id,
+      .viewport = viewport,
+      .opacity = view_intent.opacity,
+    });
+  }
+
+  renderer->RegisterRuntimeComposition(input);
   co_return;
 }
 
@@ -317,9 +459,6 @@ auto DemoModuleBase::GetOrCreateViewId(std::string_view name) -> ViewId
     return it->second;
   }
 
-  // Generate a stable ID for this view name. We use a simple monotonic
-  // counter starting from a high base to avoid collision with engine-internal
-  // views if they exist.
   static std::atomic<uint64_t> s_next_view_id { 1000 };
   const ViewId new_id { s_next_view_id++ };
   view_registry_[name_str] = new_id;
@@ -350,6 +489,7 @@ auto DemoModuleBase::OnFrameStartCommon(engine::FrameContext& context) -> void
   if (app_window_->ShouldResize()) {
     ClearBackbufferReferences();
     app_window_->ApplyPendingResize();
+    ClearSceneFramebuffers();
   }
 
   auto surfaces = context.GetSurfaces();

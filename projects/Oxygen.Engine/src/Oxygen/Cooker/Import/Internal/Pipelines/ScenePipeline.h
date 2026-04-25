@@ -48,6 +48,7 @@ struct SceneBuild final {
   std::vector<std::byte> strings;
 
   std::vector<data::pak::world::RenderableRecord> renderables;
+  std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
   std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
   std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
   std::vector<data::pak::world::DirectionalLightRecord> directional_lights;

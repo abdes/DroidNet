@@ -19,20 +19,20 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Renderer/Internal/SkyAtmosphereLutManager.h>
-#include <Oxygen/Renderer/Pipeline/CompositionView.h>
-#include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
-#include <Oxygen/Scene/Environment/Sun.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
@@ -42,31 +42,10 @@ namespace oxygen::examples {
 
 namespace {
 
-  enum class SceneSunCandidateSource : std::uint8_t {
-    kTagged,
-    kNamedSunNode,
-    kFirstDirectional,
-  };
-
-  struct SceneSunCandidate {
-    scene::SceneNode node {};
-    SceneSunCandidateSource source { SceneSunCandidateSource::kTagged };
-  };
-
-  struct SunSceneScanResult {
-    std::optional<scene::SceneNode> unique_sun {};
-    std::optional<scene::SceneNode> named_sun_directional {};
-    std::optional<scene::SceneNode> first_directional {};
-    std::size_t sun_count { 0 };
-    std::size_t directional_count { 0 };
-    bool has_non_camera_content { false };
-  };
-
   constexpr float kDegToRad = std::numbers::pi_v<float> / 180.0F;
   constexpr float kRadToDeg = 180.0F / std::numbers::pi_v<float>;
-  constexpr float kMetersToKm = 0.001F;
-  constexpr float kKmToMeters = 1000.0F;
-  constexpr std::string_view kPreferredSceneSunNodeName = "SUN";
+  constexpr float kMetersToKm = engine::atmos::kMToSkyUnit;
+  constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
 
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
@@ -170,9 +149,48 @@ namespace {
     return record.has_value() && record->enabled != 0U;
   }
 
+  auto CollectLocalFogVolumeNodes(scene::Scene& scene)
+    -> std::vector<scene::SceneNode>
+  {
+    auto result = std::vector<scene::SceneNode> {};
+    auto roots = scene.GetRootNodes();
+    auto stack = std::vector<scene::SceneNode> {};
+    stack.reserve(roots.size());
+    for (auto& root : roots) {
+      stack.push_back(root);
+    }
+
+    while (!stack.empty()) {
+      auto node = stack.back();
+      stack.pop_back();
+      if (!node.IsAlive()) {
+        continue;
+      }
+
+      if (const auto impl_opt = node.GetImpl(); impl_opt.has_value()
+        && impl_opt->get().HasComponent<scene::environment::LocalFogVolume>()) {
+        result.push_back(node);
+      }
+
+      auto child = node.GetFirstChild();
+      while (child.has_value()) {
+        stack.push_back(*child);
+        child = child->GetNextSibling();
+      }
+    }
+
+    std::ranges::sort(
+      result, [](const scene::SceneNode& lhs, const scene::SceneNode& rhs) {
+        return lhs.GetName() < rhs.GetName();
+      });
+    return result;
+  }
+
   auto HydrateSkyAtmosphere(scene::environment::SkyAtmosphere& target,
     const data::pak::world::SkyAtmosphereEnvironmentRecord& source) -> void
   {
+    target.SetTransformMode(scene::environment::SkyAtmosphereTransformMode::
+        kPlanetTopAtAbsoluteWorldOrigin);
     target.SetPlanetRadiusMeters(source.planet_radius_m);
     target.SetAtmosphereHeightMeters(source.atmosphere_height_m);
     target.SetGroundAlbedoRgb(Vec3 { source.ground_albedo_rgb[0],
@@ -191,12 +209,29 @@ namespace {
     // The physical lighting spec uses a fixed two-layer linear ozone profile,
     // so we ignore this field and apply the default Earth-like profile.
     target.SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
-    // New parameters not yet in PakFormat, use defaults or derived values if
-    // needed. For now, we leave them as component defaults.
     target.SetMultiScatteringFactor(source.multi_scattering_factor);
+    target.SetSkyLuminanceFactorRgb({
+      source.sky_luminance_factor_rgb[0],
+      source.sky_luminance_factor_rgb[1],
+      source.sky_luminance_factor_rgb[2],
+    });
+    target.SetSkyAndAerialPerspectiveLuminanceFactorRgb({
+      source.sky_and_aerial_perspective_luminance_factor_rgb[0],
+      source.sky_and_aerial_perspective_luminance_factor_rgb[1],
+      source.sky_and_aerial_perspective_luminance_factor_rgb[2],
+    });
     target.SetSunDiskEnabled(source.sun_disk_enabled != 0U);
     target.SetAerialPerspectiveDistanceScale(
       source.aerial_perspective_distance_scale);
+    target.SetAerialPerspectiveStartDepthMeters(
+      source.aerial_perspective_start_depth_m);
+    target.SetAerialScatteringStrength(source.aerial_scattering_strength);
+    target.SetHeightFogContribution(source.height_fog_contribution);
+    target.SetTraceSampleCountScale(source.trace_sample_count_scale);
+    target.SetTransmittanceMinLightElevationDeg(
+      source.transmittance_min_light_elevation_deg);
+    target.SetHoldout(source.holdout != 0U);
+    target.SetRenderInMainPass(source.render_in_main_pass != 0U);
   }
 
   auto HydrateSkySphere(scene::environment::SkySphere& target,
@@ -227,16 +262,81 @@ namespace {
     const data::pak::world::FogEnvironmentRecord& source) -> void
   {
     target.SetModel(static_cast<scene::environment::FogModel>(source.model));
+    target.SetEnableHeightFog(source.enable_height_fog != 0U);
+    target.SetEnableVolumetricFog(source.enable_volumetric_fog != 0U);
     target.SetExtinctionSigmaTPerMeter(source.extinction_sigma_t_per_m);
     target.SetHeightFalloffPerMeter(source.height_falloff_per_m);
     target.SetHeightOffsetMeters(source.height_offset_m);
     target.SetStartDistanceMeters(source.start_distance_m);
+    target.SetSecondFogDensity(source.second_fog_density);
+    target.SetSecondFogHeightFalloff(source.second_fog_height_falloff);
+    target.SetSecondFogHeightOffset(source.second_fog_height_offset);
     target.SetMaxOpacity(source.max_opacity);
     target.SetSingleScatteringAlbedoRgb(
       Vec3 { source.single_scattering_albedo_rgb[0],
         source.single_scattering_albedo_rgb[1],
         source.single_scattering_albedo_rgb[2] });
     target.SetAnisotropy(source.anisotropy_g);
+    target.SetFogInscatteringLuminance({
+      source.fog_inscattering_luminance[0],
+      source.fog_inscattering_luminance[1],
+      source.fog_inscattering_luminance[2],
+    });
+    target.SetSkyAtmosphereAmbientContributionColorScale({
+      source.sky_atmosphere_ambient_contribution_color_scale[0],
+      source.sky_atmosphere_ambient_contribution_color_scale[1],
+      source.sky_atmosphere_ambient_contribution_color_scale[2],
+    });
+    target.SetInscatteringColorCubemapAngle(
+      source.inscattering_color_cubemap_angle);
+    target.SetInscatteringTextureTint({
+      source.inscattering_texture_tint[0],
+      source.inscattering_texture_tint[1],
+      source.inscattering_texture_tint[2],
+    });
+    target.SetFullyDirectionalInscatteringColorDistance(
+      source.fully_directional_inscattering_color_distance);
+    target.SetNonDirectionalInscatteringColorDistance(
+      source.non_directional_inscattering_color_distance);
+    target.SetDirectionalInscatteringLuminance({
+      source.directional_inscattering_luminance[0],
+      source.directional_inscattering_luminance[1],
+      source.directional_inscattering_luminance[2],
+    });
+    target.SetDirectionalInscatteringExponent(
+      source.directional_inscattering_exponent);
+    target.SetDirectionalInscatteringStartDistance(
+      source.directional_inscattering_start_distance);
+    target.SetEndDistanceMeters(source.end_distance_m);
+    target.SetFogCutoffDistanceMeters(source.fog_cutoff_distance_m);
+    target.SetVolumetricFogScatteringDistribution(
+      source.volumetric_fog_scattering_distribution);
+    target.SetVolumetricFogAlbedo({
+      source.volumetric_fog_albedo[0],
+      source.volumetric_fog_albedo[1],
+      source.volumetric_fog_albedo[2],
+    });
+    target.SetVolumetricFogEmissive({
+      source.volumetric_fog_emissive[0],
+      source.volumetric_fog_emissive[1],
+      source.volumetric_fog_emissive[2],
+    });
+    target.SetVolumetricFogExtinctionScale(
+      source.volumetric_fog_extinction_scale);
+    target.SetVolumetricFogDistance(source.volumetric_fog_distance);
+    target.SetVolumetricFogStartDistance(source.volumetric_fog_start_distance);
+    target.SetVolumetricFogNearFadeInDistance(
+      source.volumetric_fog_near_fade_in_distance);
+    target.SetVolumetricFogStaticLightingScatteringIntensity(
+      source.volumetric_fog_static_lighting_scattering_intensity);
+    target.SetOverrideLightColorsWithFogInscatteringColors(
+      source.override_light_colors_with_fog_inscattering_colors != 0U);
+    target.SetHoldout(source.holdout != 0U);
+    target.SetRenderInMainPass(source.render_in_main_pass != 0U);
+    target.SetVisibleInReflectionCaptures(
+      source.visible_in_reflection_captures != 0U);
+    target.SetVisibleInRealTimeSkyCaptures(
+      source.visible_in_real_time_sky_captures != 0U);
   }
 
   auto HydrateSkyLight(scene::environment::SkyLight& target,
@@ -256,6 +356,16 @@ namespace {
       Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
     target.SetDiffuseIntensity(source.diffuse_intensity);
     target.SetSpecularIntensity(source.specular_intensity);
+    target.SetRealTimeCaptureEnabled(source.real_time_capture_enabled != 0U);
+    target.SetLowerHemisphereColor({
+      source.lower_hemisphere_color[0],
+      source.lower_hemisphere_color[1],
+      source.lower_hemisphere_color[2],
+    });
+    target.SetVolumetricScatteringIntensity(
+      source.volumetric_scattering_intensity);
+    target.SetAffectReflections(source.affect_reflections != 0U);
+    target.SetAffectGlobalIllumination(source.affect_global_illumination != 0U);
   }
 
   auto HydrateVolumetricClouds(scene::environment::VolumetricClouds& target,
@@ -294,6 +404,8 @@ namespace {
   }
 
   constexpr std::string_view kSkyAtmoEnabledKey = "env.atmo.enabled";
+  constexpr std::string_view kSkyAtmoTransformModeKey
+    = "env.atmo.transform_mode";
   constexpr std::string_view kPlanetRadiusKey = "env.atmo.planet_radius_km";
   constexpr std::string_view kAtmosphereHeightKey
     = "env.atmo.atmosphere_height_km";
@@ -306,11 +418,26 @@ namespace {
   constexpr std::string_view kMieAbsorptionScaleKey
     = "env.atmo.mie_absorption_scale";
   constexpr std::string_view kMultiScatteringKey = "env.atmo.multi_scattering";
+  constexpr std::string_view kSkyLuminanceFactorKey
+    = "env.atmo.sky_luminance_factor";
+  constexpr std::string_view kSkyAndAerialLuminanceFactorKey
+    = "env.atmo.sky_and_aerial_luminance_factor";
   constexpr std::string_view kSunDiskEnabledKey = "env.atmo.sun_disk_enabled";
   constexpr std::string_view kAerialPerspectiveScaleKey
     = "env.atmo.aerial_perspective_scale";
+  constexpr std::string_view kAerialPerspectiveStartDepthKey
+    = "env.atmo.aerial_perspective_start_depth_m";
   constexpr std::string_view kAerialScatteringStrengthKey
     = "env.atmo.aerial_scattering_strength";
+  constexpr std::string_view kHeightFogContributionKey
+    = "env.atmo.height_fog_contribution";
+  constexpr std::string_view kTraceSampleCountScaleKey
+    = "env.atmo.trace_sample_count_scale";
+  constexpr std::string_view kTransmittanceMinLightElevationKey
+    = "env.atmo.transmittance_min_light_elevation_deg";
+  constexpr std::string_view kAtmosphereHoldoutKey = "env.atmo.holdout";
+  constexpr std::string_view kAtmosphereRenderInMainPassKey
+    = "env.atmo.render_in_main_pass";
   constexpr std::string_view kOzoneRgbKey = "env.atmo.ozone_rgb";
 
   constexpr std::string_view kOzoneProfileLayer0WidthMKey
@@ -349,6 +476,16 @@ namespace {
     = "env.sky_light.intensity_mul";
   constexpr std::string_view kSkyLightDiffuseKey = "env.sky_light.diffuse";
   constexpr std::string_view kSkyLightSpecularKey = "env.sky_light.specular";
+  constexpr std::string_view kSkyLightRealTimeCaptureKey
+    = "env.sky_light.real_time_capture_enabled";
+  constexpr std::string_view kSkyLightLowerHemisphereColorKey
+    = "env.sky_light.lower_hemisphere_color";
+  constexpr std::string_view kSkyLightVolumetricScatteringIntensityKey
+    = "env.sky_light.volumetric_scattering_intensity";
+  constexpr std::string_view kSkyLightAffectReflectionsKey
+    = "env.sky_light.affect_reflections";
+  constexpr std::string_view kSkyLightAffectGlobalIlluminationKey
+    = "env.sky_light.affect_global_illumination";
 
   constexpr std::string_view kFogEnabledKey = "env.fog.enabled";
   constexpr std::string_view kFogModelKey = "env.fog.model";
@@ -358,21 +495,78 @@ namespace {
     = "env.fog.height_falloff_per_m";
   constexpr std::string_view kFogHeightOffsetKey = "env.fog.height_offset_m";
   constexpr std::string_view kFogStartDistanceKey = "env.fog.start_distance_m";
+  constexpr std::string_view kSecondFogDensityKey = "env.fog.second_density";
+  constexpr std::string_view kSecondFogHeightFalloffKey
+    = "env.fog.second_height_falloff";
+  constexpr std::string_view kSecondFogHeightOffsetKey
+    = "env.fog.second_height_offset";
   constexpr std::string_view kFogMaxOpacityKey = "env.fog.max_opacity";
   constexpr std::string_view kFogSingleScatteringAlbedoKey
     = "env.fog.single_scattering_albedo_rgb";
+  constexpr std::string_view kFogInscatteringLuminanceKey
+    = "env.fog.inscattering_luminance";
+  constexpr std::string_view kFogSkyAtmosphereAmbientContributionKey
+    = "env.fog.sky_atmo_ambient_contribution";
+  constexpr std::string_view kFogInscatteringColorCubemapAngleKey
+    = "env.fog.inscattering_cubemap_angle";
+  constexpr std::string_view kFogInscatteringTextureTintKey
+    = "env.fog.inscattering_texture_tint";
+  constexpr std::string_view kFogFullyDirectionalColorDistanceKey
+    = "env.fog.fully_directional_color_distance";
+  constexpr std::string_view kFogNonDirectionalColorDistanceKey
+    = "env.fog.non_directional_color_distance";
+  constexpr std::string_view kFogDirectionalInscatteringLuminanceKey
+    = "env.fog.directional_inscattering_luminance";
+  constexpr std::string_view kFogDirectionalInscatteringExponentKey
+    = "env.fog.directional_inscattering_exponent";
+  constexpr std::string_view kFogDirectionalInscatteringStartDistanceKey
+    = "env.fog.directional_inscattering_start_distance";
+  constexpr std::string_view kFogEndDistanceKey = "env.fog.end_distance_m";
+  constexpr std::string_view kFogCutoffDistanceKey
+    = "env.fog.cutoff_distance_m";
+  constexpr std::string_view kVolumetricFogScatteringDistributionKey
+    = "env.fog.volumetric.scattering_distribution";
+  constexpr std::string_view kVolumetricFogAlbedoKey
+    = "env.fog.volumetric.albedo";
+  constexpr std::string_view kVolumetricFogEmissiveKey
+    = "env.fog.volumetric.emissive";
+  constexpr std::string_view kVolumetricFogExtinctionScaleKey
+    = "env.fog.volumetric.extinction_scale";
+  constexpr std::string_view kVolumetricFogDistanceKey
+    = "env.fog.volumetric.distance_m";
+  constexpr std::string_view kVolumetricFogStartDistanceKey
+    = "env.fog.volumetric.start_distance_m";
+  constexpr std::string_view kVolumetricFogNearFadeInDistanceKey
+    = "env.fog.volumetric.near_fade_in_distance_m";
+  constexpr std::string_view kVolumetricFogStaticLightingScatteringKey
+    = "env.fog.volumetric.static_lighting_scattering_intensity";
+  constexpr std::string_view kVolumetricFogOverrideLightColorsKey
+    = "env.fog.volumetric.override_light_colors";
+  constexpr std::string_view kFogHoldoutKey = "env.fog.holdout";
+  constexpr std::string_view kFogRenderInMainPassKey
+    = "env.fog.render_in_main_pass";
+  constexpr std::string_view kFogVisibleInReflectionCapturesKey
+    = "env.fog.visible_in_reflection_captures";
+  constexpr std::string_view kFogVisibleInRealTimeSkyCapturesKey
+    = "env.fog.visible_in_real_time_sky_captures";
   constexpr std::string_view kEnvironmentPresetKey = "environment_preset_index";
 
   // Light Culling Key
   constexpr std::string_view kSunEnabledKey = "env.sun.enabled";
-  constexpr std::string_view kSunSourceKey = "env.sun.source";
+  constexpr std::string_view kLegacySunSourceKey = "env.sun.source";
   constexpr std::string_view kSunAzimuthKey = "env.sun.azimuth_deg";
   constexpr std::string_view kSunElevationKey = "env.sun.elevation_deg";
   constexpr std::string_view kSunColorKey = "env.sun.color";
   constexpr std::string_view kSunIlluminanceKey = "env.sun.illuminance_lx";
   constexpr std::string_view kSunUseTemperatureKey = "env.sun.use_temperature";
   constexpr std::string_view kSunTemperatureKey = "env.sun.temperature_kelvin";
-  constexpr std::string_view kSunDiskRadiusKey = "env.sun.disk_radius_deg";
+  constexpr std::string_view kSunSourceAngleKey = "env.sun.source_angle_deg";
+  constexpr std::string_view kSunAtmosphereLightSlotKey
+    = "env.sun.atmosphere_light_slot";
+  constexpr std::string_view kSunPerPixelAtmosphereTransmittanceKey
+    = "env.sun.per_pixel_atmosphere_transmittance";
+  constexpr std::string_view kSunAtmosphereDiskLuminanceScaleKey
+    = "env.sun.atmosphere_disk_luminance_scale";
   constexpr std::string_view kSunShadowBiasKey = "env.sun.shadow.bias";
   constexpr std::string_view kSunShadowNormalBiasKey
     = "env.sun.shadow.normal_bias";
@@ -410,12 +604,11 @@ namespace {
     = "env.settings.schema_version";
   constexpr std::string_view kEnvironmentCustomStatePresentKey
     = "env.settings.custom_state_present";
-  constexpr float kCurrentSettingsSchemaVersion = 2.0F;
+  constexpr float kCurrentSettingsSchemaVersion = 5.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
-  // Demo policy: UI environment settings are authoritative and always
-  // override scene environment data.
-  constexpr bool kForceEnvironmentOverride = true;
+  constexpr std::uint32_t kFogDirtyMask = (1u << 2u) | (1u << 3u);
+  constexpr std::uint32_t kSunDirtyMask = (1u << 8u) | (1u << 1u);
 
   auto ClampVec3(const glm::vec3& value, float min_value, float max_value)
     -> glm::vec3
@@ -461,108 +654,6 @@ namespace {
     }
 
     return true;
-  }
-
-  [[nodiscard]] auto SceneSunCandidateSourceLabel(
-    const SceneSunCandidateSource source) -> std::string_view
-  {
-    switch (source) {
-    case SceneSunCandidateSource::kTagged:
-      return "sun-tagged";
-    case SceneSunCandidateSource::kNamedSunNode:
-      return "node named SUN";
-    case SceneSunCandidateSource::kFirstDirectional:
-      return "first directional";
-    default:
-      return "scene directional";
-    }
-  }
-
-  [[nodiscard]] auto ResolveSceneSunCandidate(const SunSceneScanResult& scan)
-    -> std::optional<SceneSunCandidate>
-  {
-    if (scan.unique_sun.has_value()) {
-      return SceneSunCandidate {
-        .node = *scan.unique_sun,
-        .source = SceneSunCandidateSource::kTagged,
-      };
-    }
-    if (scan.named_sun_directional.has_value()) {
-      return SceneSunCandidate {
-        .node = *scan.named_sun_directional,
-        .source = SceneSunCandidateSource::kNamedSunNode,
-      };
-    }
-    if (scan.first_directional.has_value()) {
-      return SceneSunCandidate {
-        .node = *scan.first_directional,
-        .source = SceneSunCandidateSource::kFirstDirectional,
-      };
-    }
-
-    return std::nullopt;
-  }
-
-  auto ScanSceneSunState(scene::Scene& scene,
-    scene::SceneNode excluded_directional = {}) -> SunSceneScanResult
-  {
-    SunSceneScanResult result {};
-
-    auto roots = scene.GetRootNodes();
-    std::vector<scene::SceneNode> stack {};
-    stack.reserve(roots.size());
-    for (auto& root : roots) {
-      stack.push_back(root);
-    }
-
-    while (!stack.empty()) {
-      auto node = stack.back();
-      stack.pop_back();
-      if (!node.IsAlive()) {
-        continue;
-      }
-      if (excluded_directional.IsAlive()
-        && node.GetHandle() == excluded_directional.GetHandle()) {
-        continue;
-      }
-
-      const bool has_camera = node.HasCamera();
-      const bool has_light = node.HasLight();
-      const bool has_geometry = node.GetRenderable().HasGeometry();
-      const bool has_scripting = node.HasScripting();
-      if (has_light || has_geometry || has_scripting || !has_camera) {
-        result.has_non_camera_content = true;
-      }
-
-      if (auto light = node.GetLightAs<scene::DirectionalLight>()) {
-        ++result.directional_count;
-        if (!result.first_directional.has_value()) {
-          result.first_directional = node;
-        }
-        if (!result.named_sun_directional.has_value()
-          && node.GetName() == kPreferredSceneSunNodeName) {
-          result.named_sun_directional = node;
-        }
-        if (light->get().IsSunLight()) {
-          ++result.sun_count;
-          if (result.sun_count == 1U) {
-            result.unique_sun = node;
-          }
-        }
-      }
-
-      auto child_opt = node.GetFirstChild();
-      while (child_opt.has_value()) {
-        stack.push_back(*child_opt);
-        child_opt = child_opt->GetNextSibling();
-      }
-    }
-
-    if (result.sun_count != 1U) {
-      result.unique_sun.reset();
-    }
-
-    return result;
   }
 
 } // namespace
@@ -667,13 +758,12 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       return;
     }
 
-    if (kForceEnvironmentOverride) {
+    if (config_.force_environment_override) {
       pending_changes_ = true;
       dirty_domains_ = ToMask(DirtyDomain::kAll);
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
       needs_sync_ = false;
       skybox_dirty_ = true;
-      sun_present_ = true;
       return;
     }
 
@@ -682,7 +772,6 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
       dirty_domains_ = ToMask(DirtyDomain::kNone);
       batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
       needs_sync_ = true;
-      apply_saved_sun_on_next_sync_ = true;
       SyncFromSceneIfNeeded();
     } else if (preset_index_ == kPresetCustom) {
       // Custom mode applies persisted settings when available; otherwise it
@@ -696,7 +785,6 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
         pending_changes_ = false;
         dirty_domains_ = ToMask(DirtyDomain::kNone);
         needs_sync_ = true;
-        apply_saved_sun_on_next_sync_ = true;
         SyncFromSceneIfNeeded();
       }
     } else {
@@ -734,11 +822,8 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   config_.skybox_service = nullptr;
   main_view_id_.reset();
   needs_sync_ = true;
-  apply_saved_sun_on_next_sync_ = true;
   sun_light_available_ = false;
   sun_light_node_ = {};
-  synthetic_sun_light_node_ = {};
-  synthetic_sun_light_created_ = false;
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -747,10 +832,16 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
 }
 
 auto EnvironmentSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/,
-  const renderer::CompositionView& view) -> void
+  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
+  -> void
 {
-  main_view_id_ = view.id;
+  OnRuntimeMainViewReady(view.id);
+}
+
+auto EnvironmentSettingsService::OnRuntimeMainViewReady(const ViewId view_id)
+  -> void
+{
+  main_view_id_ = view_id;
 }
 
 auto EnvironmentSettingsService::HasScene() const noexcept -> bool
@@ -795,7 +886,7 @@ auto EnvironmentSettingsService::SetPresetIndex(int index) -> void
 
 auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
 {
-  if (kForceEnvironmentOverride) {
+  if (config_.force_environment_override) {
     pending_changes_ = true;
     dirty_domains_ = ToMask(DirtyDomain::kAll);
     batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
@@ -808,13 +899,19 @@ auto EnvironmentSettingsService::ActivateUseSceneMode() -> void
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
   needs_sync_ = true;
-  apply_saved_sun_on_next_sync_ = true;
   SyncFromSceneIfNeeded();
+}
+
+auto EnvironmentSettingsService::ActivateCustomMode() -> void
+{
+  preset_index_ = kPresetCustom;
+  settings_persist_dirty_ = true;
+  needs_sync_ = false;
 }
 
 auto EnvironmentSettingsService::SyncFromSceneIfNeeded() -> void
 {
-  if (kForceEnvironmentOverride) {
+  if (config_.force_environment_override) {
     needs_sync_ = false;
     return;
   }
@@ -852,11 +949,10 @@ auto EnvironmentSettingsService::GetAtmosphereLutStatus() const
   bool luts_dirty = true;
 
   if (config_.renderer && main_view_id_.has_value()) {
-    if (auto lut_mgr
-      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
-      luts_valid = lut_mgr->HasBeenGenerated();
-      luts_dirty = lut_mgr->IsDirty();
-    }
+    const auto state = config_.renderer->GetLastEnvironmentLightingState();
+    luts_valid = state.published_bindings && state.sky_executed
+      && state.atmosphere_executed;
+    luts_dirty = !luts_valid;
   }
 
   return { luts_valid, luts_dirty };
@@ -874,7 +970,22 @@ auto EnvironmentSettingsService::SetSkyAtmosphereEnabled(bool enabled) -> void
   }
   sky_atmo_enabled_ = enabled;
   NormalizeSkySystems();
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetSkyAtmosphereTransformMode() const -> int
+{
+  return sky_atmo_transform_mode_;
+}
+
+auto EnvironmentSettingsService::SetSkyAtmosphereTransformMode(int value)
+  -> void
+{
+  if (sky_atmo_transform_mode_ == value) {
+    return;
+  }
+  sky_atmo_transform_mode_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetPlanetRadiusKm() const -> float
@@ -888,7 +999,7 @@ auto EnvironmentSettingsService::SetPlanetRadiusKm(float value) -> void
     return;
   }
   planet_radius_km_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetAtmosphereHeightKm() const -> float
@@ -902,7 +1013,7 @@ auto EnvironmentSettingsService::SetAtmosphereHeightKm(float value) -> void
     return;
   }
   atmosphere_height_km_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetGroundAlbedo() const -> glm::vec3
@@ -916,7 +1027,7 @@ auto EnvironmentSettingsService::SetGroundAlbedo(const glm::vec3& value) -> void
     return;
   }
   ground_albedo_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetRayleighScaleHeightKm() const -> float
@@ -930,7 +1041,7 @@ auto EnvironmentSettingsService::SetRayleighScaleHeightKm(float value) -> void
     return;
   }
   rayleigh_scale_height_km_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetMieScaleHeightKm() const -> float
@@ -944,7 +1055,7 @@ auto EnvironmentSettingsService::SetMieScaleHeightKm(float value) -> void
     return;
   }
   mie_scale_height_km_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetMieAnisotropy() const -> float
@@ -958,7 +1069,7 @@ auto EnvironmentSettingsService::SetMieAnisotropy(float value) -> void
     return;
   }
   mie_anisotropy_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetMieAbsorptionScale() const -> float
@@ -973,7 +1084,7 @@ auto EnvironmentSettingsService::SetMieAbsorptionScale(float value) -> void
     return;
   }
   mie_absorption_scale_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetMultiScattering() const -> float
@@ -987,7 +1098,38 @@ auto EnvironmentSettingsService::SetMultiScattering(float value) -> void
     return;
   }
   multi_scattering_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetSkyLuminanceFactor() const -> glm::vec3
+{
+  return sky_luminance_factor_;
+}
+
+auto EnvironmentSettingsService::SetSkyLuminanceFactor(const glm::vec3& value)
+  -> void
+{
+  if (sky_luminance_factor_ == value) {
+    return;
+  }
+  sky_luminance_factor_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetSkyAndAerialPerspectiveLuminanceFactor()
+  const -> glm::vec3
+{
+  return sky_and_aerial_perspective_luminance_factor_;
+}
+
+auto EnvironmentSettingsService::SetSkyAndAerialPerspectiveLuminanceFactor(
+  const glm::vec3& value) -> void
+{
+  if (sky_and_aerial_perspective_luminance_factor_ == value) {
+    return;
+  }
+  sky_and_aerial_perspective_luminance_factor_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetOzoneRgb() const -> glm::vec3
@@ -1001,7 +1143,7 @@ auto EnvironmentSettingsService::SetOzoneRgb(const glm::vec3& value) -> void
     return;
   }
   ozone_rgb_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetOzoneDensityProfile() const
@@ -1014,7 +1156,7 @@ auto EnvironmentSettingsService::SetOzoneDensityProfile(
   const engine::atmos::DensityProfile& profile) -> void
 {
   ozone_profile_ = profile;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetSunDiskEnabled() const -> bool
@@ -1028,7 +1170,7 @@ auto EnvironmentSettingsService::SetSunDiskEnabled(const bool enabled) -> void
     return;
   }
   sun_disk_enabled_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetAerialPerspectiveScale() const -> float
@@ -1043,7 +1185,39 @@ auto EnvironmentSettingsService::SetAerialPerspectiveScale(const float value)
     return;
   }
   aerial_perspective_scale_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveEnabled() const -> bool
+{
+  return aerial_scattering_strength_ > 0.0F;
+}
+
+auto EnvironmentSettingsService::SetAerialPerspectiveEnabled(const bool enabled)
+  -> void
+{
+  const bool current = GetAerialPerspectiveEnabled();
+  if (current == enabled) {
+    return;
+  }
+  aerial_scattering_strength_ = enabled ? 1.0F : 0.0F;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveStartDepthMeters() const
+  -> float
+{
+  return aerial_perspective_start_depth_m_;
+}
+
+auto EnvironmentSettingsService::SetAerialPerspectiveStartDepthMeters(
+  const float value) -> void
+{
+  if (aerial_perspective_start_depth_m_ == value) {
+    return;
+  }
+  aerial_perspective_start_depth_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetAerialScatteringStrength() const -> float
@@ -1058,7 +1232,83 @@ auto EnvironmentSettingsService::SetAerialScatteringStrength(const float value)
     return;
   }
   aerial_scattering_strength_ = value;
-  MarkDirty(ToMask(DirtyDomain::kAtmosphere));
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetHeightFogContribution() const -> float
+{
+  return height_fog_contribution_;
+}
+
+auto EnvironmentSettingsService::SetHeightFogContribution(const float value)
+  -> void
+{
+  if (height_fog_contribution_ == value) {
+    return;
+  }
+  height_fog_contribution_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetTraceSampleCountScale() const -> float
+{
+  return trace_sample_count_scale_;
+}
+
+auto EnvironmentSettingsService::SetTraceSampleCountScale(const float value)
+  -> void
+{
+  if (trace_sample_count_scale_ == value) {
+    return;
+  }
+  trace_sample_count_scale_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetTransmittanceMinLightElevationDeg() const
+  -> float
+{
+  return transmittance_min_light_elevation_deg_;
+}
+
+auto EnvironmentSettingsService::SetTransmittanceMinLightElevationDeg(
+  const float value) -> void
+{
+  if (transmittance_min_light_elevation_deg_ == value) {
+    return;
+  }
+  transmittance_min_light_elevation_deg_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetAtmosphereHoldout() const -> bool
+{
+  return atmosphere_holdout_;
+}
+
+auto EnvironmentSettingsService::SetAtmosphereHoldout(const bool enabled)
+  -> void
+{
+  if (atmosphere_holdout_ == enabled) {
+    return;
+  }
+  atmosphere_holdout_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
+}
+
+auto EnvironmentSettingsService::GetAtmosphereRenderInMainPass() const -> bool
+{
+  return atmosphere_render_in_main_pass_;
+}
+
+auto EnvironmentSettingsService::SetAtmosphereRenderInMainPass(
+  const bool enabled) -> void
+{
+  if (atmosphere_render_in_main_pass_ == enabled) {
+    return;
+  }
+  atmosphere_render_in_main_pass_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereModel));
 }
 
 auto EnvironmentSettingsService::GetSkyViewLutSlices() const -> int
@@ -1076,6 +1326,41 @@ auto EnvironmentSettingsService::SetSkyViewLutSlices(int value) -> void
     "SkyView LUT slices are renderer-owned; ignoring UI write {} "
     "(current={})",
     value, sky_view_lut_slices_);
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutWidth() const -> int
+{
+  if (config_.renderer != nullptr) {
+    return static_cast<int>(config_.renderer->GetAerialPerspectiveLutWidth());
+  }
+  return 32;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthResolution() const
+  -> int
+{
+  if (config_.renderer != nullptr) {
+    return static_cast<int>(
+      config_.renderer->GetAerialPerspectiveLutDepthResolution());
+  }
+  return 16;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutDepthKm() const -> float
+{
+  if (config_.renderer != nullptr) {
+    return config_.renderer->GetAerialPerspectiveLutDepthKm();
+  }
+  return 96.0F;
+}
+
+auto EnvironmentSettingsService::GetAerialPerspectiveLutSampleCountMaxPerSlice()
+  const -> float
+{
+  if (config_.renderer != nullptr) {
+    return config_.renderer->GetAerialPerspectiveLutSampleCountMaxPerSlice();
+  }
+  return 2.0F;
 }
 
 auto EnvironmentSettingsService::GetSkyViewAltMappingMode() const -> int
@@ -1430,9 +1715,99 @@ auto EnvironmentSettingsService::SetSkyLightSpecular(float value) -> void
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
+auto EnvironmentSettingsService::GetSkyLightRealTimeCaptureEnabled() const
+  -> bool
+{
+  return sky_light_real_time_capture_enabled_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightRealTimeCaptureEnabled(
+  const bool enabled) -> void
+{
+  if (sky_light_real_time_capture_enabled_ == enabled) {
+    return;
+  }
+  sky_light_real_time_capture_enabled_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightLowerHemisphereColor() const
+  -> glm::vec3
+{
+  return sky_light_lower_hemisphere_color_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightLowerHemisphereColor(
+  const glm::vec3& value) -> void
+{
+  if (sky_light_lower_hemisphere_color_ == value) {
+    return;
+  }
+  sky_light_lower_hemisphere_color_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightVolumetricScatteringIntensity()
+  const -> float
+{
+  return sky_light_volumetric_scattering_intensity_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightVolumetricScatteringIntensity(
+  const float value) -> void
+{
+  if (sky_light_volumetric_scattering_intensity_ == value) {
+    return;
+  }
+  sky_light_volumetric_scattering_intensity_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightAffectReflections() const -> bool
+{
+  return sky_light_affect_reflections_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightAffectReflections(
+  const bool enabled) -> void
+{
+  if (sky_light_affect_reflections_ == enabled) {
+    return;
+  }
+  sky_light_affect_reflections_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightAffectGlobalIllumination() const
+  -> bool
+{
+  return sky_light_affect_global_illumination_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightAffectGlobalIllumination(
+  const bool enabled) -> void
+{
+  if (sky_light_affect_global_illumination_ == enabled) {
+    return;
+  }
+  sky_light_affect_global_illumination_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
 auto EnvironmentSettingsService::GetFogEnabled() const -> bool
 {
   return fog_enabled_;
+}
+
+auto EnvironmentSettingsService::GetHeightFogPassRequested() const -> bool
+{
+  return fog_enabled_ && fog_render_in_main_pass_;
+}
+
+auto EnvironmentSettingsService::GetLocalFogPassRequested() const -> bool
+{
+  return std::ranges::any_of(local_fog_volumes_,
+    [](const LocalFogVolumeUiState& entry) { return entry.enabled; });
 }
 
 auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
@@ -1441,7 +1816,7 @@ auto EnvironmentSettingsService::SetFogEnabled(const bool enabled) -> void
     return;
   }
   fog_enabled_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogModel() const -> int
@@ -1455,7 +1830,7 @@ auto EnvironmentSettingsService::SetFogModel(const int model) -> void
     return;
   }
   fog_model_ = model;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogExtinctionSigmaTPerMeter() const -> float
@@ -1470,7 +1845,7 @@ auto EnvironmentSettingsService::SetFogExtinctionSigmaTPerMeter(
     return;
   }
   fog_extinction_sigma_t_per_m_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogHeightFalloffPerMeter() const -> float
@@ -1485,7 +1860,7 @@ auto EnvironmentSettingsService::SetFogHeightFalloffPerMeter(const float value)
     return;
   }
   fog_height_falloff_per_m_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogHeightOffsetMeters() const -> float
@@ -1500,7 +1875,7 @@ auto EnvironmentSettingsService::SetFogHeightOffsetMeters(const float value)
     return;
   }
   fog_height_offset_m_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogStartDistanceMeters() const -> float
@@ -1515,7 +1890,51 @@ auto EnvironmentSettingsService::SetFogStartDistanceMeters(const float value)
     return;
   }
   fog_start_distance_m_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetSecondFogDensity() const -> float
+{
+  return second_fog_density_;
+}
+
+auto EnvironmentSettingsService::SetSecondFogDensity(const float value) -> void
+{
+  if (second_fog_density_ == value) {
+    return;
+  }
+  second_fog_density_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetSecondFogHeightFalloff() const -> float
+{
+  return second_fog_height_falloff_;
+}
+
+auto EnvironmentSettingsService::SetSecondFogHeightFalloff(const float value)
+  -> void
+{
+  if (second_fog_height_falloff_ == value) {
+    return;
+  }
+  second_fog_height_falloff_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetSecondFogHeightOffset() const -> float
+{
+  return second_fog_height_offset_;
+}
+
+auto EnvironmentSettingsService::SetSecondFogHeightOffset(const float value)
+  -> void
+{
+  if (second_fog_height_offset_ == value) {
+    return;
+  }
+  second_fog_height_offset_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
 }
 
 auto EnvironmentSettingsService::GetFogMaxOpacity() const -> float
@@ -1529,7 +1948,7 @@ auto EnvironmentSettingsService::SetFogMaxOpacity(const float value) -> void
     return;
   }
   fog_max_opacity_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetFogSingleScatteringAlbedoRgb() const
@@ -1545,12 +1964,631 @@ auto EnvironmentSettingsService::SetFogSingleScatteringAlbedoRgb(
     return;
   }
   fog_single_scattering_albedo_rgb_ = value;
-  MarkDirty(ToMask(DirtyDomain::kFog));
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetFogInscatteringLuminance() const
+  -> glm::vec3
+{
+  return fog_inscattering_luminance_;
+}
+
+auto EnvironmentSettingsService::SetFogInscatteringLuminance(
+  const glm::vec3& value) -> void
+{
+  if (fog_inscattering_luminance_ == value) {
+    return;
+  }
+  fog_inscattering_luminance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetSkyAtmosphereAmbientContributionColorScale()
+  const -> glm::vec3
+{
+  return sky_atmosphere_ambient_contribution_color_scale_;
+}
+
+auto EnvironmentSettingsService::SetSkyAtmosphereAmbientContributionColorScale(
+  const glm::vec3& value) -> void
+{
+  if (sky_atmosphere_ambient_contribution_color_scale_ == value) {
+    return;
+  }
+  sky_atmosphere_ambient_contribution_color_scale_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetInscatteringColorCubemapAngle() const
+  -> float
+{
+  return inscattering_color_cubemap_angle_;
+}
+
+auto EnvironmentSettingsService::SetInscatteringColorCubemapAngle(
+  const float value) -> void
+{
+  if (inscattering_color_cubemap_angle_ == value) {
+    return;
+  }
+  inscattering_color_cubemap_angle_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetInscatteringTextureTint() const -> glm::vec3
+{
+  return inscattering_texture_tint_;
+}
+
+auto EnvironmentSettingsService::SetInscatteringTextureTint(
+  const glm::vec3& value) -> void
+{
+  if (inscattering_texture_tint_ == value) {
+    return;
+  }
+  inscattering_texture_tint_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetFullyDirectionalInscatteringColorDistance()
+  const -> float
+{
+  return fully_directional_inscattering_color_distance_;
+}
+
+auto EnvironmentSettingsService::SetFullyDirectionalInscatteringColorDistance(
+  const float value) -> void
+{
+  if (fully_directional_inscattering_color_distance_ == value) {
+    return;
+  }
+  fully_directional_inscattering_color_distance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetNonDirectionalInscatteringColorDistance()
+  const -> float
+{
+  return non_directional_inscattering_color_distance_;
+}
+
+auto EnvironmentSettingsService::SetNonDirectionalInscatteringColorDistance(
+  const float value) -> void
+{
+  if (non_directional_inscattering_color_distance_ == value) {
+    return;
+  }
+  non_directional_inscattering_color_distance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetDirectionalInscatteringLuminance() const
+  -> glm::vec3
+{
+  return directional_inscattering_luminance_;
+}
+
+auto EnvironmentSettingsService::SetDirectionalInscatteringLuminance(
+  const glm::vec3& value) -> void
+{
+  if (directional_inscattering_luminance_ == value) {
+    return;
+  }
+  directional_inscattering_luminance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetDirectionalInscatteringExponent() const
+  -> float
+{
+  return directional_inscattering_exponent_;
+}
+
+auto EnvironmentSettingsService::SetDirectionalInscatteringExponent(
+  const float value) -> void
+{
+  if (directional_inscattering_exponent_ == value) {
+    return;
+  }
+  directional_inscattering_exponent_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetDirectionalInscatteringStartDistance() const
+  -> float
+{
+  return directional_inscattering_start_distance_;
+}
+
+auto EnvironmentSettingsService::SetDirectionalInscatteringStartDistance(
+  const float value) -> void
+{
+  if (directional_inscattering_start_distance_ == value) {
+    return;
+  }
+  directional_inscattering_start_distance_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetFogEndDistanceMeters() const -> float
+{
+  return fog_end_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetFogEndDistanceMeters(const float value)
+  -> void
+{
+  if (fog_end_distance_m_ == value) {
+    return;
+  }
+  fog_end_distance_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetFogCutoffDistanceMeters() const -> float
+{
+  return fog_cutoff_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetFogCutoffDistanceMeters(const float value)
+  -> void
+{
+  if (fog_cutoff_distance_m_ == value) {
+    return;
+  }
+  fog_cutoff_distance_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kHeightFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogScatteringDistribution() const
+  -> float
+{
+  return volumetric_fog_scattering_distribution_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogScatteringDistribution(
+  const float value) -> void
+{
+  if (volumetric_fog_scattering_distribution_ == value) {
+    return;
+  }
+  volumetric_fog_scattering_distribution_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogAlbedo() const -> glm::vec3
+{
+  return volumetric_fog_albedo_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogAlbedo(const glm::vec3& value)
+  -> void
+{
+  if (volumetric_fog_albedo_ == value) {
+    return;
+  }
+  volumetric_fog_albedo_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogEmissive() const -> glm::vec3
+{
+  return volumetric_fog_emissive_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogEmissive(
+  const glm::vec3& value) -> void
+{
+  if (volumetric_fog_emissive_ == value) {
+    return;
+  }
+  volumetric_fog_emissive_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogExtinctionScale() const
+  -> float
+{
+  return volumetric_fog_extinction_scale_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogExtinctionScale(
+  const float value) -> void
+{
+  if (volumetric_fog_extinction_scale_ == value) {
+    return;
+  }
+  volumetric_fog_extinction_scale_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogDistanceMeters() const -> float
+{
+  return volumetric_fog_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogDistanceMeters(
+  const float value) -> void
+{
+  if (volumetric_fog_distance_m_ == value) {
+    return;
+  }
+  volumetric_fog_distance_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogStartDistanceMeters() const
+  -> float
+{
+  return volumetric_fog_start_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogStartDistanceMeters(
+  const float value) -> void
+{
+  if (volumetric_fog_start_distance_m_ == value) {
+    return;
+  }
+  volumetric_fog_start_distance_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetVolumetricFogNearFadeInDistanceMeters()
+  const -> float
+{
+  return volumetric_fog_near_fade_in_distance_m_;
+}
+
+auto EnvironmentSettingsService::SetVolumetricFogNearFadeInDistanceMeters(
+  const float value) -> void
+{
+  if (volumetric_fog_near_fade_in_distance_m_ == value) {
+    return;
+  }
+  volumetric_fog_near_fade_in_distance_m_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::
+  GetVolumetricFogStaticLightingScatteringIntensity() const -> float
+{
+  return volumetric_fog_static_lighting_scattering_intensity_;
+}
+
+auto EnvironmentSettingsService::
+  SetVolumetricFogStaticLightingScatteringIntensity(const float value) -> void
+{
+  if (volumetric_fog_static_lighting_scattering_intensity_ == value) {
+    return;
+  }
+  volumetric_fog_static_lighting_scattering_intensity_ = value;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::
+  GetOverrideLightColorsWithFogInscatteringColors() const -> bool
+{
+  return override_light_colors_with_fog_inscattering_colors_;
+}
+
+auto EnvironmentSettingsService::
+  SetOverrideLightColorsWithFogInscatteringColors(const bool enabled) -> void
+{
+  if (override_light_colors_with_fog_inscattering_colors_ == enabled) {
+    return;
+  }
+  override_light_colors_with_fog_inscattering_colors_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kVolumetricFog));
+}
+
+auto EnvironmentSettingsService::GetFogHoldout() const -> bool
+{
+  return fog_holdout_;
+}
+
+auto EnvironmentSettingsService::SetFogHoldout(const bool enabled) -> void
+{
+  if (fog_holdout_ == enabled) {
+    return;
+  }
+  fog_holdout_ = enabled;
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetFogRenderInMainPass() const -> bool
+{
+  return fog_render_in_main_pass_;
+}
+
+auto EnvironmentSettingsService::SetFogRenderInMainPass(const bool enabled)
+  -> void
+{
+  if (fog_render_in_main_pass_ == enabled) {
+    return;
+  }
+  fog_render_in_main_pass_ = enabled;
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetFogVisibleInReflectionCaptures() const
+  -> bool
+{
+  return fog_visible_in_reflection_captures_;
+}
+
+auto EnvironmentSettingsService::SetFogVisibleInReflectionCaptures(
+  const bool enabled) -> void
+{
+  if (fog_visible_in_reflection_captures_ == enabled) {
+    return;
+  }
+  fog_visible_in_reflection_captures_ = enabled;
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetFogVisibleInRealTimeSkyCaptures() const
+  -> bool
+{
+  return fog_visible_in_real_time_sky_captures_;
+}
+
+auto EnvironmentSettingsService::SetFogVisibleInRealTimeSkyCaptures(
+  const bool enabled) -> void
+{
+  if (fog_visible_in_real_time_sky_captures_ == enabled) {
+    return;
+  }
+  fog_visible_in_real_time_sky_captures_ = enabled;
+  MarkDirty(kFogDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetLocalFogVolumeCount() const -> int
+{
+  return static_cast<int>(local_fog_volumes_.size());
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeIndex() const -> int
+{
+  return selected_local_fog_volume_index_;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeIndex(const int index)
+  -> void
+{
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+    return;
+  }
+  selected_local_fog_volume_index_
+    = std::clamp(index, 0, static_cast<int>(local_fog_volumes_.size()) - 1);
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeMutable()
+  -> LocalFogVolumeUiState*
+{
+  if (selected_local_fog_volume_index_ < 0
+    || selected_local_fog_volume_index_
+      >= static_cast<int>(local_fog_volumes_.size())) {
+    return nullptr;
+  }
+  return &local_fog_volumes_[static_cast<size_t>(
+    selected_local_fog_volume_index_)];
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolume() const
+  -> const LocalFogVolumeUiState*
+{
+  if (selected_local_fog_volume_index_ < 0
+    || selected_local_fog_volume_index_
+      >= static_cast<int>(local_fog_volumes_.size())) {
+    return nullptr;
+  }
+  return &local_fog_volumes_[static_cast<size_t>(
+    selected_local_fog_volume_index_)];
+}
+
+auto EnvironmentSettingsService::AddLocalFogVolume() -> void
+{
+  if (!config_.scene) {
+    return;
+  }
+
+  auto node = config_.scene->CreateNode(
+    "Local Fog Volume " + std::to_string(local_fog_volumes_.size() + 1));
+  const auto impl_opt = node.GetImpl();
+  if (!impl_opt.has_value()) {
+    return;
+  }
+
+  impl_opt->get().AddComponent<scene::environment::LocalFogVolume>();
+  const auto& local_fog
+    = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+  local_fog_volumes_.push_back(LocalFogVolumeUiState {
+    .node = node,
+    .enabled = local_fog.IsEnabled(),
+    .radial_fog_extinction = local_fog.GetRadialFogExtinction(),
+    .height_fog_extinction = local_fog.GetHeightFogExtinction(),
+    .height_fog_falloff = local_fog.GetHeightFogFalloff(),
+    .height_fog_offset = local_fog.GetHeightFogOffset(),
+    .fog_phase_g = local_fog.GetFogPhaseG(),
+    .fog_albedo = local_fog.GetFogAlbedo(),
+    .fog_emissive = local_fog.GetFogEmissive(),
+    .sort_priority = local_fog.GetSortPriority(),
+  });
+  selected_local_fog_volume_index_
+    = static_cast<int>(local_fog_volumes_.size()) - 1;
+  MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+}
+
+auto EnvironmentSettingsService::RemoveSelectedLocalFogVolume() -> void
+{
+  auto* selected = GetSelectedLocalFogVolumeMutable();
+  if (selected == nullptr) {
+    return;
+  }
+  if (selected->node.IsAlive()) {
+    removed_local_fog_nodes_.push_back(selected->node.GetHandle());
+  }
+
+  local_fog_volumes_.erase(local_fog_volumes_.begin()
+    + static_cast<std::ptrdiff_t>(selected_local_fog_volume_index_));
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+  } else {
+    selected_local_fog_volume_index_
+      = std::clamp(selected_local_fog_volume_index_, 0,
+        static_cast<int>(local_fog_volumes_.size()) - 1);
+  }
+  MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeEnabled() const
+  -> bool
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->enabled : false;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeEnabled(
+  const bool enabled) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->enabled = enabled;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeRadialFogExtinction()
+  const -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->radial_fog_extinction : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeRadialFogExtinction(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->radial_fog_extinction = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogExtinction()
+  const -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_extinction : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogExtinction(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_extinction = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogFalloff()
+  const -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_falloff : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogFalloff(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_falloff = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeHeightFogOffset()
+  const -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->height_fog_offset : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeHeightFogOffset(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->height_fog_offset = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogPhaseG() const
+  -> float
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_phase_g : 0.0F;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogPhaseG(
+  const float value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_phase_g = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogAlbedo() const
+  -> glm::vec3
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_albedo : glm::vec3 { 1.0F };
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogAlbedo(
+  const glm::vec3& value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_albedo = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeFogEmissive() const
+  -> glm::vec3
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->fog_emissive : glm::vec3 { 0.0F };
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeFogEmissive(
+  const glm::vec3& value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->fog_emissive = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
+}
+
+auto EnvironmentSettingsService::GetSelectedLocalFogVolumeSortPriority() const
+  -> int
+{
+  const auto* selected = GetSelectedLocalFogVolume();
+  return selected != nullptr ? selected->sort_priority : 0;
+}
+
+auto EnvironmentSettingsService::SetSelectedLocalFogVolumeSortPriority(
+  const int value) -> void
+{
+  if (auto* selected = GetSelectedLocalFogVolumeMutable()) {
+    selected->sort_priority = value;
+    MarkDirty(ToMask(DirtyDomain::kLocalFogVolumes));
+  }
 }
 
 auto EnvironmentSettingsService::GetSunPresent() const -> bool
 {
-  return sun_present_;
+  return config_.scene != nullptr;
 }
 
 auto EnvironmentSettingsService::GetSunEnabled() const -> bool
@@ -1564,24 +2602,7 @@ auto EnvironmentSettingsService::SetSunEnabled(bool enabled) -> void
     return;
   }
   sun_enabled_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kSun));
-}
-
-auto EnvironmentSettingsService::GetSunSource() const -> int
-{
-  return sun_source_;
-}
-
-auto EnvironmentSettingsService::SetSunSource(int source) -> void
-{
-  if (sun_source_ == source) {
-    return;
-  }
-
-  SaveSunSettingsToProfile(sun_source_);
-  sun_source_ = source;
-  LoadSunSettingsFromProfile(sun_source_);
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunAzimuthDeg() const -> float
@@ -1595,7 +2616,7 @@ auto EnvironmentSettingsService::SetSunAzimuthDeg(float value) -> void
     return;
   }
   sun_azimuth_deg_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunElevationDeg() const -> float
@@ -1609,7 +2630,7 @@ auto EnvironmentSettingsService::SetSunElevationDeg(float value) -> void
     return;
   }
   sun_elevation_deg_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunColorRgb() const -> glm::vec3
@@ -1623,7 +2644,7 @@ auto EnvironmentSettingsService::SetSunColorRgb(const glm::vec3& value) -> void
     return;
   }
   sun_color_rgb_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunIlluminanceLx() const -> float
@@ -1637,7 +2658,7 @@ auto EnvironmentSettingsService::SetSunIlluminanceLx(float value) -> void
     return;
   }
   sun_illuminance_lx_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunUseTemperature() const -> bool
@@ -1651,7 +2672,7 @@ auto EnvironmentSettingsService::SetSunUseTemperature(bool enabled) -> void
     return;
   }
   sun_use_temperature_ = enabled;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunTemperatureKelvin() const -> float
@@ -1665,21 +2686,67 @@ auto EnvironmentSettingsService::SetSunTemperatureKelvin(float value) -> void
     return;
   }
   sun_temperature_kelvin_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
-auto EnvironmentSettingsService::GetSunDiskRadiusDeg() const -> float
+auto EnvironmentSettingsService::GetSunSourceAngleDeg() const -> float
 {
-  return sun_component_disk_radius_deg_;
+  return sun_source_angle_deg_;
 }
 
-auto EnvironmentSettingsService::SetSunDiskRadiusDeg(float value) -> void
+auto EnvironmentSettingsService::SetSunSourceAngleDeg(float value) -> void
 {
-  if (sun_component_disk_radius_deg_ == value) {
+  if (sun_source_angle_deg_ == value) {
     return;
   }
-  sun_component_disk_radius_deg_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  sun_source_angle_deg_ = value;
+  MarkDirty(kSunDirtyMask);
+}
+
+auto EnvironmentSettingsService::GetSunAtmosphereLightSlot() const -> int
+{
+  return sun_atmosphere_light_slot_;
+}
+
+auto EnvironmentSettingsService::SetSunAtmosphereLightSlot(int value) -> void
+{
+  if (sun_atmosphere_light_slot_ == value) {
+    return;
+  }
+  sun_atmosphere_light_slot_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereLights));
+}
+
+auto EnvironmentSettingsService::GetSunUsePerPixelAtmosphereTransmittance()
+  const -> bool
+{
+  return sun_use_per_pixel_atmosphere_transmittance_;
+}
+
+auto EnvironmentSettingsService::SetSunUsePerPixelAtmosphereTransmittance(
+  bool enabled) -> void
+{
+  if (sun_use_per_pixel_atmosphere_transmittance_ == enabled) {
+    return;
+  }
+  sun_use_per_pixel_atmosphere_transmittance_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereLights));
+}
+
+auto EnvironmentSettingsService::GetSunAtmosphereDiskLuminanceScale() const
+  -> glm::vec4
+{
+  return sun_atmosphere_disk_luminance_scale_;
+}
+
+auto EnvironmentSettingsService::SetSunAtmosphereDiskLuminanceScale(
+  const glm::vec4& value) -> void
+{
+  if (sun_atmosphere_disk_luminance_scale_ == value) {
+    return;
+  }
+  sun_atmosphere_disk_luminance_scale_ = value;
+  MarkDirty(ToMask(DirtyDomain::kAtmosphereLights));
 }
 
 auto EnvironmentSettingsService::GetSunShadowBias() const -> float
@@ -1693,7 +2760,7 @@ auto EnvironmentSettingsService::SetSunShadowBias(float value) -> void
     return;
   }
   sun_shadow_bias_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowNormalBias() const -> float
@@ -1707,7 +2774,7 @@ auto EnvironmentSettingsService::SetSunShadowNormalBias(float value) -> void
     return;
   }
   sun_shadow_normal_bias_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowResolutionHint() const -> int
@@ -1721,7 +2788,7 @@ auto EnvironmentSettingsService::SetSunShadowResolutionHint(int value) -> void
     return;
   }
   sun_shadow_resolution_hint_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowCascadeCount() const -> int
@@ -1735,7 +2802,7 @@ auto EnvironmentSettingsService::SetSunShadowCascadeCount(int value) -> void
     return;
   }
   sun_shadow_cascade_count_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowSplitMode() const -> int
@@ -1749,7 +2816,7 @@ auto EnvironmentSettingsService::SetSunShadowSplitMode(int value) -> void
     return;
   }
   sun_shadow_split_mode_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowMaxDistance() const -> float
@@ -1763,7 +2830,7 @@ auto EnvironmentSettingsService::SetSunShadowMaxDistance(float value) -> void
     return;
   }
   sun_shadow_max_distance_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowDistributionExponent() const
@@ -1779,7 +2846,7 @@ auto EnvironmentSettingsService::SetSunShadowDistributionExponent(float value)
     return;
   }
   sun_shadow_distribution_exponent_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowTransitionFraction() const -> float
@@ -1794,7 +2861,7 @@ auto EnvironmentSettingsService::SetSunShadowTransitionFraction(float value)
     return;
   }
   sun_shadow_transition_fraction_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowDistanceFadeoutFraction() const
@@ -1810,7 +2877,7 @@ auto EnvironmentSettingsService::SetSunShadowDistanceFadeoutFraction(
     return;
   }
   sun_shadow_distance_fadeout_fraction_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunShadowCascadeDistance(
@@ -1835,7 +2902,7 @@ auto EnvironmentSettingsService::SetSunShadowCascadeDistance(
     return;
   }
   sun_shadow_cascade_distances_[idx] = value;
-  MarkDirty(ToMask(DirtyDomain::kSun));
+  MarkDirty(kSunDirtyMask);
 }
 
 auto EnvironmentSettingsService::GetSunLightAvailable() const -> bool
@@ -1863,6 +2930,12 @@ auto EnvironmentSettingsService::UpdateSunLightCandidate() -> void
 auto EnvironmentSettingsService::CaptureSunShadowSettingsFromLight(
   const scene::DirectionalLight& light) -> void
 {
+  sun_atmosphere_light_slot_ = static_cast<int>(light.GetAtmosphereLightSlot());
+  sun_use_per_pixel_atmosphere_transmittance_
+    = light.GetUsePerPixelAtmosphereTransmittance();
+  sun_atmosphere_disk_luminance_scale_
+    = light.GetAtmosphereDiskLuminanceScale();
+
   const auto& shadow = light.Common().shadow;
   sun_shadow_bias_ = shadow.bias;
   sun_shadow_normal_bias_ = shadow.normal_bias;
@@ -1882,6 +2955,16 @@ auto EnvironmentSettingsService::CaptureSunShadowSettingsFromLight(
 auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   scene::DirectionalLight& light) const -> void
 {
+  light.SetAngularSizeRadians(
+    std::max(sun_source_angle_deg_ * kDegToRad, 0.0F));
+  light.SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(
+    std::clamp(sun_atmosphere_light_slot_,
+      static_cast<int>(scene::AtmosphereLightSlot::kNone),
+      static_cast<int>(scene::AtmosphereLightSlot::kSecondary))));
+  light.SetUsePerPixelAtmosphereTransmittance(
+    sun_use_per_pixel_atmosphere_transmittance_);
+  light.SetAtmosphereDiskLuminanceScale(sun_atmosphere_disk_luminance_scale_);
+
   auto& shadow = light.Common().shadow;
   shadow.bias = sun_shadow_bias_;
   shadow.normal_bias = sun_shadow_normal_bias_;
@@ -1901,15 +2984,6 @@ auto EnvironmentSettingsService::ApplySunShadowSettingsToLight(
   csm.transition_fraction = sun_shadow_transition_fraction_;
   csm.distance_fadeout_fraction = sun_shadow_distance_fadeout_fraction_;
   light.CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
-}
-
-auto EnvironmentSettingsService::EnableSyntheticSun() -> void
-{
-  if (sun_present_ && sun_source_ == 1) {
-    return;
-  }
-  sun_present_ = true;
-  SetSunSource(1);
 }
 
 auto EnvironmentSettingsService::GetUseLut() const -> bool { return use_lut_; }
@@ -1938,9 +3012,13 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   ValidateAndClampState();
   NormalizeSkySystems();
   const bool apply_atmosphere
-    = HasDirty(dirty_domains_, DirtyDomain::kAtmosphere);
-  const bool apply_sun = HasDirty(dirty_domains_, DirtyDomain::kSun);
-  const bool apply_fog = HasDirty(dirty_domains_, DirtyDomain::kFog);
+    = HasDirty(dirty_domains_, DirtyDomain::kAtmosphereModel);
+  const bool apply_sun = HasDirty(dirty_domains_, DirtyDomain::kSun)
+    || HasDirty(dirty_domains_, DirtyDomain::kAtmosphereLights);
+  const bool apply_fog = HasDirty(dirty_domains_, DirtyDomain::kHeightFog)
+    || HasDirty(dirty_domains_, DirtyDomain::kVolumetricFog);
+  const bool apply_local_fog
+    = HasDirty(dirty_domains_, DirtyDomain::kLocalFogVolumes);
   const bool apply_sky_sphere
     = HasDirty(dirty_domains_, DirtyDomain::kSkySphere);
   const bool apply_sky_light = HasDirty(dirty_domains_, DirtyDomain::kSkyLight);
@@ -1961,161 +3039,53 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     env = config_.scene->GetEnvironment();
   }
 
-  auto sun = env->TryGetSystem<scene::environment::Sun>();
-  if (apply_sun && sun_enabled_ && (sun == nullptr)) {
-    sun = observer_ptr { &env->AddSystem<scene::environment::Sun>() };
-  }
-  if (apply_sun && sun) {
-    sun->SetEnabled(sun_enabled_);
-  }
   if (apply_sun && !sun_enabled_) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
+      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+        ApplySunShadowSettingsToLight(light->get());
+      }
       if (ApplyDirectionalSunRole(sun_light_node_, false, false, true, true)) {
         LOG_F(INFO,
-          "EnvironmentSettingsService: disabled scene sun candidate '{}' "
-          "while sun system is disabled",
+          "disabled scene sun candidate '{}' while sun system is disabled",
           sun_light_node_.GetName());
       }
-    }
-
-    if (synthetic_sun_light_node_.IsAlive()) {
-      if (ApplyDirectionalSunRole(
-            synthetic_sun_light_node_, false, false, false, false)) {
-        LOG_F(INFO,
-          "EnvironmentSettingsService: disabled synthetic sun node '{}' "
-          "while sun system is disabled",
-          synthetic_sun_light_node_.GetName());
-      }
-    }
-
-    if (sun) {
-      sun->ClearLightReference();
     }
   }
 
   if (apply_sun && sun_enabled_) {
-    const auto sun_source = (sun_source_ == 0)
-      ? scene::environment::SunSource::kFromScene
-      : scene::environment::SunSource::kSynthetic;
-    if (sun) {
-      sun->SetSunSource(sun_source);
-      sun->SetAzimuthElevationDegrees(sun_azimuth_deg_, sun_elevation_deg_);
-      sun->SetIlluminanceLx(sun_illuminance_lx_);
-      sun->SetDiskAngularRadiusRadians(
-        sun_component_disk_radius_deg_ * kDegToRad);
-      if (sun_use_temperature_) {
-        sun->SetLightTemperatureKelvin(sun_temperature_kelvin_);
-      } else {
-        sun->SetColorRgb(sun_color_rgb_);
-      }
-    }
-
-    if (sun_source == scene::environment::SunSource::kFromScene) {
-      const auto scene_name
-        = config_.scene ? config_.scene->GetName() : std::string_view {};
-      DestroySyntheticSunLight();
-      UpdateSunLightCandidate();
-      if (sun_light_available_) {
-        if (auto light
-          = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-          CHECK_F(ApplyDirectionalSunRole(
-                    sun_light_node_, sun_enabled_, true, true, true),
-            "EnvironmentSettingsService: failed to apply scene sun role to "
-            "directional node '{}'",
-            sun_light_node_.GetName());
-
-          ApplySunShadowSettingsToLight(light->get());
-          light->get().SetIntensityLux(sun_illuminance_lx_);
-          auto& common = light->get().Common();
-          common.color_rgb = sun_use_temperature_
-            ? KelvinToLinearRgb(sun_temperature_kelvin_)
-            : sun_color_rgb_;
-
-          const auto sun_dir = DirectionFromAzimuthElevation(
-            sun_azimuth_deg_, sun_elevation_deg_);
-          const glm::vec3 light_dir = -sun_dir;
-          ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
-        }
-
-        if (sun) {
-          sun->SetLightReference(sun_light_node_);
-        }
-        LOG_F(INFO,
-          "EnvironmentSettingsService: using scene directional '{}' as sun "
-          "(source=scene, casts_shadows=true, environment_contribution=true)",
+    const auto scene_name
+      = config_.scene ? config_.scene->GetName() : std::string_view {};
+    UpdateSunLightCandidate();
+    if (sun_light_available_) {
+      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+        CHECK_F(ApplyDirectionalSunRole(
+                  sun_light_node_, sun_enabled_, true, true, true),
+          "failed to apply scene sun role to directional node '{}'",
           sun_light_node_.GetName());
-      } else {
-        LOG_F(WARNING,
-          "EnvironmentSettingsService: sun source is 'from scene' but no "
-          "scene directional light candidate is currently available in scene "
-          "'{}'",
-          scene_name);
-        if (sun) {
-          sun->ClearLightReference();
-        }
+
+        ApplySunShadowSettingsToLight(light->get());
+        light->get().SetIntensityLux(sun_illuminance_lx_);
+        auto& common = light->get().Common();
+        common.color_rgb = sun_use_temperature_
+          ? KelvinToLinearRgb(sun_temperature_kelvin_)
+          : sun_color_rgb_;
+
+        const auto sun_dir
+          = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
+        const glm::vec3 light_dir = -sun_dir;
+        ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
       }
+
+      LOG_F(INFO,
+        "using scene directional '{}' as sun "
+        "(source=scene, casts_shadows=true, environment_contribution=true)",
+        sun_light_node_.GetName());
     } else {
-      UpdateSunLightCandidate();
-      if (sun_light_available_) {
-        if (ApplyDirectionalSunRole(
-              sun_light_node_, false, false, false, false)) {
-          LOG_F(INFO,
-            "EnvironmentSettingsService: disabled scene directional '{}' "
-            "because synthetic sun override is active",
-            sun_light_node_.GetName());
-        }
-      } else {
-        LOG_F(INFO,
-          "EnvironmentSettingsService: synthetic sun override found no "
-          "scene directional candidate to disable in scene '{}'",
-          config_.scene->GetName());
-      }
-
-      EnsureSyntheticSunLight();
-      if (synthetic_sun_light_node_.IsAlive()) {
-        if (auto light
-          = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-          const bool casts_shadows = sun ? sun->CastsShadows() : true;
-          CHECK_F(ApplyDirectionalSunRole(synthetic_sun_light_node_,
-                    sun_enabled_, casts_shadows, true, sun_enabled_),
-            "EnvironmentSettingsService: failed to apply synthetic sun role "
-            "to node '{}'",
-            synthetic_sun_light_node_.GetName());
-
-          ApplySunShadowSettingsToLight(light->get());
-          auto& common = light->get().Common();
-          light->get().SetIntensityLux(sun_illuminance_lx_);
-          common.color_rgb = sun_use_temperature_
-            ? KelvinToLinearRgb(sun_temperature_kelvin_)
-            : sun_color_rgb_;
-
-          const auto sun_dir = DirectionFromAzimuthElevation(
-            sun_azimuth_deg_, sun_elevation_deg_);
-          const glm::vec3 light_dir = -sun_dir;
-          ApplyLightDirectionWorldSpace(synthetic_sun_light_node_, light_dir);
-        }
-
-        if (sun) {
-          sun->SetLightReference(synthetic_sun_light_node_);
-        }
-        LOG_F(INFO,
-          "EnvironmentSettingsService: using synthetic sun node '{}' "
-          "(source=synthetic, casts_shadows={}, environment_contribution=true)",
-          synthetic_sun_light_node_.GetName(),
-          sun ? sun->CastsShadows() : true);
-      } else {
-        if (sun) {
-          sun->ClearLightReference();
-        }
-        LOG_F(ERROR,
-          "EnvironmentSettingsService: synthetic sun override failed to "
-          "create or recover a synthetic directional light for scene '{}'",
-          config_.scene->GetName());
-      }
+      LOG_F(WARNING,
+        "no resolved scene sun is currently available in scene '{}'",
+        scene_name);
     }
-  } else if (apply_sun && sun) {
-    sun->ClearLightReference();
   }
 
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
@@ -2128,6 +3098,9 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
   if (apply_atmosphere && sky_atmo_enabled_ && atmo) {
     const auto atmosphere_state = CaptureAtmosphereCanonicalState();
+    atmo->SetTransformMode(
+      static_cast<scene::environment::SkyAtmosphereTransformMode>(
+        atmosphere_state.transform_mode));
     atmo->SetPlanetRadiusMeters(
       atmosphere_state.planet_radius_km * kKmToMeters);
     atmo->SetAtmosphereHeightMeters(
@@ -2147,11 +3120,22 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     atmo->SetOzoneDensityProfile(atmosphere_state.ozone_profile);
 
     atmo->SetMultiScatteringFactor(atmosphere_state.multi_scattering);
+    atmo->SetSkyLuminanceFactorRgb(atmosphere_state.sky_luminance_factor);
+    atmo->SetSkyAndAerialPerspectiveLuminanceFactorRgb(
+      atmosphere_state.sky_and_aerial_luminance_factor);
     atmo->SetSunDiskEnabled(atmosphere_state.sun_disk_enabled);
     atmo->SetAerialPerspectiveDistanceScale(
       atmosphere_state.aerial_perspective_scale);
+    atmo->SetAerialPerspectiveStartDepthMeters(
+      atmosphere_state.aerial_perspective_start_depth_m);
     atmo->SetAerialScatteringStrength(
       atmosphere_state.aerial_scattering_strength);
+    atmo->SetHeightFogContribution(atmosphere_state.height_fog_contribution);
+    atmo->SetTraceSampleCountScale(atmosphere_state.trace_sample_count_scale);
+    atmo->SetTransmittanceMinLightElevationDeg(
+      atmosphere_state.transmittance_min_light_elevation_deg);
+    atmo->SetHoldout(atmosphere_state.holdout);
+    atmo->SetRenderInMainPass(atmosphere_state.render_in_main_pass);
 
     if (config_.on_atmosphere_params_changed) {
       config_.on_atmosphere_params_changed();
@@ -2161,20 +3145,99 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   }
 
   auto fog = env->TryGetSystem<scene::environment::Fog>();
-  if (apply_fog && fog_enabled_ && !fog) {
+  const bool volumetric_enabled
+    = fog_model_ == static_cast<int>(scene::environment::FogModel::kVolumetric);
+  const bool any_fog_enabled = fog_enabled_ || volumetric_enabled;
+  if (apply_fog && any_fog_enabled && !fog) {
     fog = observer_ptr { &env->AddSystem<scene::environment::Fog>() };
   }
   if (apply_fog && fog) {
-    fog->SetEnabled(fog_enabled_);
+    fog->SetEnabled(any_fog_enabled);
   }
-  if (apply_fog && fog_enabled_ && fog) {
+  if (apply_fog && any_fog_enabled && fog) {
     fog->SetModel(static_cast<scene::environment::FogModel>(fog_model_));
+    fog->SetEnableHeightFog(fog_enabled_);
     fog->SetExtinctionSigmaTPerMeter(fog_extinction_sigma_t_per_m_);
     fog->SetHeightFalloffPerMeter(fog_height_falloff_per_m_);
     fog->SetHeightOffsetMeters(fog_height_offset_m_);
     fog->SetStartDistanceMeters(fog_start_distance_m_);
+    fog->SetSecondFogDensity(second_fog_density_);
+    fog->SetSecondFogHeightFalloff(second_fog_height_falloff_);
+    fog->SetSecondFogHeightOffset(second_fog_height_offset_);
     fog->SetMaxOpacity(fog_max_opacity_);
     fog->SetSingleScatteringAlbedoRgb(fog_single_scattering_albedo_rgb_);
+    fog->SetFogInscatteringLuminance(fog_inscattering_luminance_);
+    fog->SetSkyAtmosphereAmbientContributionColorScale(
+      sky_atmosphere_ambient_contribution_color_scale_);
+    fog->SetInscatteringColorCubemapAngle(inscattering_color_cubemap_angle_);
+    fog->SetInscatteringTextureTint(inscattering_texture_tint_);
+    fog->SetFullyDirectionalInscatteringColorDistance(
+      fully_directional_inscattering_color_distance_);
+    fog->SetNonDirectionalInscatteringColorDistance(
+      non_directional_inscattering_color_distance_);
+    fog->SetDirectionalInscatteringLuminance(
+      directional_inscattering_luminance_);
+    fog->SetDirectionalInscatteringExponent(directional_inscattering_exponent_);
+    fog->SetDirectionalInscatteringStartDistance(
+      directional_inscattering_start_distance_);
+    fog->SetEndDistanceMeters(fog_end_distance_m_);
+    fog->SetFogCutoffDistanceMeters(fog_cutoff_distance_m_);
+    fog->SetVolumetricFogScatteringDistribution(
+      volumetric_fog_scattering_distribution_);
+    fog->SetVolumetricFogAlbedo(volumetric_fog_albedo_);
+    fog->SetVolumetricFogEmissive(volumetric_fog_emissive_);
+    fog->SetVolumetricFogExtinctionScale(volumetric_fog_extinction_scale_);
+    fog->SetVolumetricFogDistance(volumetric_fog_distance_m_);
+    fog->SetVolumetricFogStartDistance(volumetric_fog_start_distance_m_);
+    fog->SetVolumetricFogNearFadeInDistance(
+      volumetric_fog_near_fade_in_distance_m_);
+    fog->SetVolumetricFogStaticLightingScatteringIntensity(
+      volumetric_fog_static_lighting_scattering_intensity_);
+    fog->SetOverrideLightColorsWithFogInscatteringColors(
+      override_light_colors_with_fog_inscattering_colors_);
+    fog->SetHoldout(fog_holdout_);
+    fog->SetRenderInMainPass(fog_render_in_main_pass_);
+    fog->SetVisibleInReflectionCaptures(fog_visible_in_reflection_captures_);
+    fog->SetVisibleInRealTimeSkyCaptures(
+      fog_visible_in_real_time_sky_captures_);
+  }
+
+  if (apply_local_fog && config_.scene) {
+    for (const auto& removed_handle : removed_local_fog_nodes_) {
+      if (auto* node_impl = config_.scene->TryGetNodeImpl(removed_handle)) {
+        if (node_impl->HasComponent<scene::environment::LocalFogVolume>()) {
+          node_impl->RemoveComponent<scene::environment::LocalFogVolume>();
+        }
+      }
+    }
+    removed_local_fog_nodes_.clear();
+
+    for (auto& entry : local_fog_volumes_) {
+      if (!entry.node.IsAlive()) {
+        continue;
+      }
+      const auto impl_opt = entry.node.GetImpl();
+      if (!impl_opt.has_value()) {
+        continue;
+      }
+
+      auto& node_impl = impl_opt->get();
+      if (!node_impl.HasComponent<scene::environment::LocalFogVolume>()) {
+        node_impl.AddComponent<scene::environment::LocalFogVolume>();
+      }
+
+      auto& local_fog
+        = node_impl.GetComponent<scene::environment::LocalFogVolume>();
+      local_fog.SetEnabled(entry.enabled);
+      local_fog.SetRadialFogExtinction(entry.radial_fog_extinction);
+      local_fog.SetHeightFogExtinction(entry.height_fog_extinction);
+      local_fog.SetHeightFogFalloff(entry.height_fog_falloff);
+      local_fog.SetHeightFogOffset(entry.height_fog_offset);
+      local_fog.SetFogPhaseG(entry.fog_phase_g);
+      local_fog.SetFogAlbedo(entry.fog_albedo);
+      local_fog.SetFogEmissive(entry.fog_emissive);
+      local_fog.SetSortPriority(entry.sort_priority);
+    }
   }
 
   auto sky = env->TryGetSystem<scene::environment::SkySphere>();
@@ -2206,17 +3269,25 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetIntensityMul(sky_light_intensity_mul_);
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
+    light->SetRealTimeCaptureEnabled(sky_light_real_time_capture_enabled_);
+    light->SetLowerHemisphereColor(sky_light_lower_hemisphere_color_);
+    light->SetVolumetricScatteringIntensity(
+      sky_light_volumetric_scattering_intensity_);
+    light->SetAffectReflections(sky_light_affect_reflections_);
+    light->SetAffectGlobalIllumination(sky_light_affect_global_illumination_);
   }
 
   if (apply_skybox || apply_sky_sphere) {
     MaybeAutoLoadSkybox();
   }
 
+  config_.scene->Update(false);
+
   settings_persist_dirty_ = true;
   applied_changes_this_frame_ = true;
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
-  saved_sun_source_ = sun_source_;
+  epoch_++;
 }
 
 auto EnvironmentSettingsService::SyncFromScene() -> void
@@ -2228,10 +3299,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
 
   auto env = config_.scene->GetEnvironment();
   if (!env) {
-    if (apply_saved_sun_on_next_sync_) {
-      ApplySavedSunSourcePreference();
-      apply_saved_sun_on_next_sync_ = false;
-    }
     pending_changes_ = false;
     dirty_domains_ = ToMask(DirtyDomain::kNone);
     return;
@@ -2241,6 +3308,7 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     atmosphere_from_scene.has_value()) {
     const auto& atmo_state = *atmosphere_from_scene;
     sky_atmo_enabled_ = atmo_state.enabled;
+    sky_atmo_transform_mode_ = atmo_state.transform_mode;
     planet_radius_km_ = atmo_state.planet_radius_km;
     atmosphere_height_km_ = atmo_state.atmosphere_height_km;
     ground_albedo_ = atmo_state.ground_albedo;
@@ -2250,9 +3318,20 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     mie_absorption_scale_
       = std::clamp(atmo_state.mie_absorption_scale, 0.0F, 5.0F);
     multi_scattering_ = atmo_state.multi_scattering;
+    sky_luminance_factor_ = atmo_state.sky_luminance_factor;
+    sky_and_aerial_perspective_luminance_factor_
+      = atmo_state.sky_and_aerial_luminance_factor;
     sun_disk_enabled_ = atmo_state.sun_disk_enabled;
     aerial_perspective_scale_ = atmo_state.aerial_perspective_scale;
+    aerial_perspective_start_depth_m_
+      = atmo_state.aerial_perspective_start_depth_m;
     aerial_scattering_strength_ = atmo_state.aerial_scattering_strength;
+    height_fog_contribution_ = atmo_state.height_fog_contribution;
+    trace_sample_count_scale_ = atmo_state.trace_sample_count_scale;
+    transmittance_min_light_elevation_deg_
+      = atmo_state.transmittance_min_light_elevation_deg;
+    atmosphere_holdout_ = atmo_state.holdout;
+    atmosphere_render_in_main_pass_ = atmo_state.render_in_main_pass;
     ozone_rgb_ = atmo_state.ozone_rgb;
     ozone_profile_ = atmo_state.ozone_profile;
   } else {
@@ -2260,27 +3339,61 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   }
 
   if (auto fog = env->TryGetSystem<scene::environment::Fog>()) {
-    fog_enabled_ = fog->IsEnabled();
+    fog_enabled_ = fog->GetEnableHeightFog();
     fog_model_ = static_cast<int>(fog->GetModel());
     fog_extinction_sigma_t_per_m_ = fog->GetExtinctionSigmaTPerMeter();
     fog_height_falloff_per_m_ = fog->GetHeightFalloffPerMeter();
     fog_height_offset_m_ = fog->GetHeightOffsetMeters();
     fog_start_distance_m_ = fog->GetStartDistanceMeters();
+    second_fog_density_ = fog->GetSecondFogDensity();
+    second_fog_height_falloff_ = fog->GetSecondFogHeightFalloff();
+    second_fog_height_offset_ = fog->GetSecondFogHeightOffset();
     fog_max_opacity_ = fog->GetMaxOpacity();
     fog_single_scattering_albedo_rgb_ = fog->GetSingleScatteringAlbedoRgb();
+    fog_inscattering_luminance_ = fog->GetFogInscatteringLuminance();
+    sky_atmosphere_ambient_contribution_color_scale_
+      = fog->GetSkyAtmosphereAmbientContributionColorScale();
+    inscattering_color_cubemap_angle_ = fog->GetInscatteringColorCubemapAngle();
+    inscattering_texture_tint_ = fog->GetInscatteringTextureTint();
+    fully_directional_inscattering_color_distance_
+      = fog->GetFullyDirectionalInscatteringColorDistance();
+    non_directional_inscattering_color_distance_
+      = fog->GetNonDirectionalInscatteringColorDistance();
+    directional_inscattering_luminance_
+      = fog->GetDirectionalInscatteringLuminance();
+    directional_inscattering_exponent_
+      = fog->GetDirectionalInscatteringExponent();
+    directional_inscattering_start_distance_
+      = fog->GetDirectionalInscatteringStartDistance();
+    fog_end_distance_m_ = fog->GetEndDistanceMeters();
+    fog_cutoff_distance_m_ = fog->GetFogCutoffDistanceMeters();
+    volumetric_fog_scattering_distribution_
+      = fog->GetVolumetricFogScatteringDistribution();
+    volumetric_fog_albedo_ = fog->GetVolumetricFogAlbedo();
+    volumetric_fog_emissive_ = fog->GetVolumetricFogEmissive();
+    volumetric_fog_extinction_scale_ = fog->GetVolumetricFogExtinctionScale();
+    volumetric_fog_distance_m_ = fog->GetVolumetricFogDistance();
+    volumetric_fog_start_distance_m_ = fog->GetVolumetricFogStartDistance();
+    volumetric_fog_near_fade_in_distance_m_
+      = fog->GetVolumetricFogNearFadeInDistance();
+    volumetric_fog_static_lighting_scattering_intensity_
+      = fog->GetVolumetricFogStaticLightingScatteringIntensity();
+    override_light_colors_with_fog_inscattering_colors_
+      = fog->GetOverrideLightColorsWithFogInscatteringColors();
+    fog_holdout_ = fog->GetHoldout();
+    fog_render_in_main_pass_ = fog->GetRenderInMainPass();
+    fog_visible_in_reflection_captures_ = fog->GetVisibleInReflectionCaptures();
+    fog_visible_in_real_time_sky_captures_
+      = fog->GetVisibleInRealTimeSkyCaptures();
   } else {
     fog_enabled_ = false;
   }
 
-  // Sync LUT slice configuration from the renderer's LUT manager.
-  if (config_.renderer && main_view_id_.has_value()) {
-    if (auto lut_mgr
-      = config_.renderer->GetSkyAtmosphereLutManagerForView(*main_view_id_)) {
-      sky_view_lut_slices_ = static_cast<int>(lut_mgr->GetSkyViewLutSlices());
-      sky_view_alt_mapping_mode_
-        = static_cast<int>(lut_mgr->GetAltMappingMode());
-    }
-  }
+  SyncLocalFogVolumesFromScene();
+
+  // DemoShell currently owns the user-facing slice/mapping controls; keep the
+  // persisted values as the source of truth until the Vortex runtime surfaces
+  // per-view LUT parameter introspection directly.
 
   if (auto sky = env->TryGetSystem<scene::environment::SkySphere>()) {
     sky_sphere_enabled_ = sky->IsEnabled();
@@ -2299,56 +3412,43 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
+    sky_light_real_time_capture_enabled_ = light->GetRealTimeCaptureEnabled();
+    sky_light_lower_hemisphere_color_ = light->GetLowerHemisphereColor();
+    sky_light_volumetric_scattering_intensity_
+      = light->GetVolumetricScatteringIntensity();
+    sky_light_affect_reflections_ = light->GetAffectReflections();
+    sky_light_affect_global_illumination_
+      = light->GetAffectGlobalIllumination();
   } else {
     sky_light_enabled_ = false;
   }
 
-  if (auto sun = env->TryGetSystem<scene::environment::Sun>()) {
-    sun_present_ = true;
-    sun_enabled_ = sun->IsEnabled();
-    const bool from_scene
-      = (sun->GetSunSource() == scene::environment::SunSource::kFromScene);
-    sun_source_ = from_scene ? 0 : 1;
-    sun_azimuth_deg_ = sun->GetAzimuthDegrees();
-    sun_elevation_deg_ = sun->GetElevationDegrees();
-    sun_color_rgb_ = sun->GetColorRgb();
-    sun_illuminance_lx_ = sun->GetIlluminanceLx();
-    sun_use_temperature_ = sun->HasLightTemperature();
-    if (sun_use_temperature_) {
-      sun_temperature_kelvin_ = sun->GetLightTemperatureKelvin();
-    }
-    sun_component_disk_radius_deg_
-      = sun->GetDiskAngularRadiusRadians() * kRadToDeg;
-
-    if (from_scene) {
-      UpdateSunLightCandidate();
-      if (sun_light_available_) {
-        if (auto light
-          = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-          sun_enabled_ = light->get().Common().affects_world;
-          CaptureSunShadowSettingsFromLight(light->get());
+  UpdateSunLightCandidate();
+  if (sun_light_available_) {
+    if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
+      sun_enabled_ = light->get().Common().affects_world;
+      sun_color_rgb_ = light->get().Common().color_rgb;
+      sun_illuminance_lx_ = light->get().GetIntensityLux();
+      sun_source_angle_deg_ = light->get().GetAngularSizeRadians() * kRadToDeg;
+      sun_use_temperature_ = false;
+      const auto& resolver = config_.scene->GetDirectionalLightResolver();
+      if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()
+        && primary->NodeHandle() == sun_light_node_.GetHandle()) {
+        const auto direction_to_light_ws = primary->DirectionToLightWs();
+        sun_azimuth_deg_
+          = std::atan2(direction_to_light_ws.y, direction_to_light_ws.x)
+          * kRadToDeg;
+        if (sun_azimuth_deg_ < 0.0F) {
+          sun_azimuth_deg_ += 360.0F;
         }
+        sun_elevation_deg_
+          = std::asin(std::clamp(direction_to_light_ws.z, -1.0F, 1.0F))
+          * kRadToDeg;
       }
-    } else if (synthetic_sun_light_node_.IsAlive()) {
-      if (auto light
-        = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        CaptureSunShadowSettingsFromLight(light->get());
-      }
+      CaptureSunShadowSettingsFromLight(light->get());
     }
-
-    SaveSunSettingsToProfile(sun_source_);
   } else {
-    sun_present_ = false;
     sun_light_available_ = false;
-  }
-
-  if (apply_saved_sun_on_next_sync_) {
-    if (!(sun_light_available_ && sun_source_ == 0)) {
-      ApplySavedSunSourcePreference();
-    } else {
-      saved_sun_source_ = 0;
-    }
-    apply_saved_sun_on_next_sync_ = false;
   }
 
   ValidateAndClampState();
@@ -2356,6 +3456,45 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   pending_changes_ = false;
   dirty_domains_ = ToMask(DirtyDomain::kNone);
   epoch_++;
+}
+
+auto EnvironmentSettingsService::SyncLocalFogVolumesFromScene() -> void
+{
+  local_fog_volumes_.clear();
+  removed_local_fog_nodes_.clear();
+  if (!config_.scene) {
+    selected_local_fog_volume_index_ = -1;
+    return;
+  }
+
+  for (auto& node : CollectLocalFogVolumeNodes(*config_.scene)) {
+    const auto impl_opt = node.GetImpl();
+    if (!impl_opt.has_value()) {
+      continue;
+    }
+    const auto& local_fog
+      = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
+    local_fog_volumes_.push_back(LocalFogVolumeUiState {
+      .node = node,
+      .enabled = local_fog.IsEnabled(),
+      .radial_fog_extinction = local_fog.GetRadialFogExtinction(),
+      .height_fog_extinction = local_fog.GetHeightFogExtinction(),
+      .height_fog_falloff = local_fog.GetHeightFogFalloff(),
+      .height_fog_offset = local_fog.GetHeightFogOffset(),
+      .fog_phase_g = local_fog.GetFogPhaseG(),
+      .fog_albedo = local_fog.GetFogAlbedo(),
+      .fog_emissive = local_fog.GetFogEmissive(),
+      .sort_priority = local_fog.GetSortPriority(),
+    });
+  }
+
+  if (local_fog_volumes_.empty()) {
+    selected_local_fog_volume_index_ = -1;
+  } else {
+    selected_local_fog_volume_index_
+      = std::clamp(selected_local_fog_volume_index_, 0,
+        static_cast<int>(local_fog_volumes_.size()) - 1);
+  }
 }
 
 auto EnvironmentSettingsService::NormalizeSkySystems() -> void
@@ -2400,6 +3539,7 @@ auto EnvironmentSettingsService::CaptureAtmosphereCanonicalState() const
 {
   AtmosphereCanonicalState state {};
   state.enabled = sky_atmo_enabled_;
+  state.transform_mode = sky_atmo_transform_mode_;
   state.planet_radius_km = planet_radius_km_;
   state.atmosphere_height_km = atmosphere_height_km_;
   state.ground_albedo = ground_albedo_;
@@ -2408,11 +3548,21 @@ auto EnvironmentSettingsService::CaptureAtmosphereCanonicalState() const
   state.mie_anisotropy = mie_anisotropy_;
   state.mie_absorption_scale = mie_absorption_scale_;
   state.multi_scattering = multi_scattering_;
+  state.sky_luminance_factor = sky_luminance_factor_;
+  state.sky_and_aerial_luminance_factor
+    = sky_and_aerial_perspective_luminance_factor_;
   state.ozone_rgb = ozone_rgb_;
   state.ozone_profile = ozone_profile_;
   state.sun_disk_enabled = sun_disk_enabled_;
   state.aerial_perspective_scale = aerial_perspective_scale_;
+  state.aerial_perspective_start_depth_m = aerial_perspective_start_depth_m_;
   state.aerial_scattering_strength = aerial_scattering_strength_;
+  state.height_fog_contribution = height_fog_contribution_;
+  state.trace_sample_count_scale = trace_sample_count_scale_;
+  state.transmittance_min_light_elevation_deg
+    = transmittance_min_light_elevation_deg_;
+  state.holdout = atmosphere_holdout_;
+  state.render_in_main_pass = atmosphere_render_in_main_pass_;
   return state;
 }
 
@@ -2433,6 +3583,7 @@ auto EnvironmentSettingsService::CaptureSceneAtmosphereCanonicalState() const
 
   AtmosphereCanonicalState state {};
   state.enabled = atmo->IsEnabled();
+  state.transform_mode = static_cast<int>(atmo->GetTransformMode());
   state.planet_radius_km = atmo->GetPlanetRadiusMeters() * kMetersToKm;
   state.atmosphere_height_km = atmo->GetAtmosphereHeightMeters() * kMetersToKm;
   state.ground_albedo = atmo->GetGroundAlbedoRgb();
@@ -2448,11 +3599,22 @@ auto EnvironmentSettingsService::CaptureSceneAtmosphereCanonicalState() const
     ? (absorption.x + absorption.y + absorption.z) / (3.0F * base_avg)
     : 0.0F;
   state.multi_scattering = atmo->GetMultiScatteringFactor();
+  state.sky_luminance_factor = atmo->GetSkyLuminanceFactorRgb();
+  state.sky_and_aerial_luminance_factor
+    = atmo->GetSkyAndAerialPerspectiveLuminanceFactorRgb();
   state.ozone_rgb = atmo->GetAbsorptionRgb();
   state.ozone_profile = atmo->GetOzoneDensityProfile();
   state.sun_disk_enabled = atmo->GetSunDiskEnabled();
   state.aerial_perspective_scale = atmo->GetAerialPerspectiveDistanceScale();
+  state.aerial_perspective_start_depth_m
+    = atmo->GetAerialPerspectiveStartDepthMeters();
   state.aerial_scattering_strength = atmo->GetAerialScatteringStrength();
+  state.height_fog_contribution = atmo->GetHeightFogContribution();
+  state.trace_sample_count_scale = atmo->GetTraceSampleCountScale();
+  state.transmittance_min_light_elevation_deg
+    = atmo->GetTransmittanceMinLightElevationDeg();
+  state.holdout = atmo->GetHoldout();
+  state.render_in_main_pass = atmo->GetRenderInMainPass();
   return state;
 }
 
@@ -2471,6 +3633,15 @@ auto EnvironmentSettingsService::HashAtmosphereState(
   seed = HashCombineU64(seed, FloatBits(state.mie_anisotropy));
   seed = HashCombineU64(seed, FloatBits(state.mie_absorption_scale));
   seed = HashCombineU64(seed, FloatBits(state.multi_scattering));
+  seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.x));
+  seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.y));
+  seed = HashCombineU64(seed, FloatBits(state.sky_luminance_factor.z));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.x));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.y));
+  seed
+    = HashCombineU64(seed, FloatBits(state.sky_and_aerial_luminance_factor.z));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.x));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.y));
   seed = HashCombineU64(seed, FloatBits(state.ozone_rgb.z));
@@ -2491,7 +3662,16 @@ auto EnvironmentSettingsService::HashAtmosphereState(
   seed
     = HashCombineU64(seed, static_cast<std::uint64_t>(state.sun_disk_enabled));
   seed = HashCombineU64(seed, FloatBits(state.aerial_perspective_scale));
+  seed
+    = HashCombineU64(seed, FloatBits(state.aerial_perspective_start_depth_m));
   seed = HashCombineU64(seed, FloatBits(state.aerial_scattering_strength));
+  seed = HashCombineU64(seed, FloatBits(state.height_fog_contribution));
+  seed = HashCombineU64(seed, FloatBits(state.trace_sample_count_scale));
+  seed = HashCombineU64(
+    seed, FloatBits(state.transmittance_min_light_elevation_deg));
+  seed = HashCombineU64(seed, static_cast<std::uint64_t>(state.holdout));
+  seed = HashCombineU64(
+    seed, static_cast<std::uint64_t>(state.render_in_main_pass));
   return seed;
 }
 
@@ -2500,6 +3680,8 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   auto clamp_float = [](float& value, float min_v, float max_v) {
     value = std::clamp(value, min_v, max_v);
   };
+  auto clamp_float_min
+    = [](float& value, float min_v) { value = std::max(value, min_v); };
   auto clamp_int = [](int& value, int min_v, int max_v) {
     value = std::clamp(value, min_v, max_v);
   };
@@ -2510,28 +3692,37 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
     value = glm::max(value, glm::vec3(min_v));
   };
 
-  clamp_float(planet_radius_km_, 1.0F, 100000.0F);
-  clamp_float(atmosphere_height_km_, 0.1F, 1000.0F);
+  clamp_float(planet_radius_km_, 10.0F, 100000.0F);
+  clamp_float(atmosphere_height_km_, 1.0F, 1000.0F);
+  clamp_int(sky_atmo_transform_mode_, 0, 2);
   clamp_vec3(ground_albedo_, 0.0F, 1.0F);
-  clamp_float(rayleigh_scale_height_km_, 0.01F, 100.0F);
-  clamp_float(mie_scale_height_km_, 0.01F, 50.0F);
+  clamp_float(rayleigh_scale_height_km_, 0.1F, 50.0F);
+  clamp_float(mie_scale_height_km_, 0.05F, 20.0F);
   clamp_float(mie_anisotropy_, 0.0F, 0.999F);
   clamp_float(mie_absorption_scale_, 0.0F, 5.0F);
   clamp_float(multi_scattering_, 0.0F, 5.0F);
+  clamp_vec3_min(sky_luminance_factor_, 0.0F);
+  clamp_vec3_min(sky_and_aerial_perspective_luminance_factor_, 0.0F);
   clamp_vec3_min(ozone_rgb_, 0.0F);
-  clamp_float(aerial_perspective_scale_, 0.0F, 16.0F);
-  clamp_float(aerial_scattering_strength_, 0.0F, 16.0F);
+  clamp_float_min(aerial_perspective_scale_, 0.0F);
+  clamp_float(aerial_perspective_start_depth_m_, 0.0F, 1000000.0F);
+  clamp_float_min(aerial_scattering_strength_, 0.0F);
+  clamp_float(height_fog_contribution_, 0.0F, 1.0F);
+  clamp_float_min(trace_sample_count_scale_, 0.25F);
+  clamp_float(transmittance_min_light_elevation_deg_, -90.0F, 90.0F);
 
-  clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 200000.0F);
-  clamp_float(ozone_profile_.layers[0].linear_term, -1.0F, 1.0F);
-  clamp_float(ozone_profile_.layers[0].constant_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[0].width_m, 0.0F, 120000.0F);
+  clamp_float(ozone_profile_.layers[0].linear_term, -1.0F / kKmToMeters,
+    1.0F / kKmToMeters);
+  clamp_float(ozone_profile_.layers[0].constant_term, -8.0F, 8.0F);
   ozone_profile_.layers[0].exp_term = 0.0F;
   ozone_profile_.layers[1].width_m = 0.0F;
   ozone_profile_.layers[1].exp_term = 0.0F;
-  clamp_float(ozone_profile_.layers[1].linear_term, -1.0F, 1.0F);
+  clamp_float(ozone_profile_.layers[1].linear_term, -1.0F / kKmToMeters,
+    1.0F / kKmToMeters);
   // For the canonical two-layer ozone profile, this term is commonly > 1
   // (Earth defaults to ~2.6667), so [-1, 1] causes false clamping.
-  clamp_float(ozone_profile_.layers[1].constant_term, -1.0F, 8.0F);
+  clamp_float(ozone_profile_.layers[1].constant_term, -8.0F, 8.0F);
 
   clamp_int(sky_view_lut_slices_, 1, 128);
   clamp_int(sky_view_alt_mapping_mode_, 0, 1);
@@ -2551,22 +3742,53 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(sky_light_intensity_mul_, 0.0F, 100.0F);
   clamp_float(sky_light_diffuse_, 0.0F, 100.0F);
   clamp_float(sky_light_specular_, 0.0F, 100.0F);
+  clamp_vec3_min(sky_light_lower_hemisphere_color_, 0.0F);
+  clamp_float(sky_light_volumetric_scattering_intensity_, 0.0F, 100.0F);
 
   clamp_int(fog_model_, 0, 1);
   clamp_float(fog_extinction_sigma_t_per_m_, 0.0F, 10.0F);
   clamp_float(fog_height_falloff_per_m_, 0.0F, 10.0F);
   clamp_float(fog_height_offset_m_, -100000.0F, 100000.0F);
   clamp_float(fog_start_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(second_fog_density_, 0.0F, 10.0F);
+  clamp_float(second_fog_height_falloff_, 0.0F, 10.0F);
+  clamp_float(second_fog_height_offset_, -100000.0F, 100000.0F);
   clamp_float(fog_max_opacity_, 0.0F, 1.0F);
   clamp_vec3(fog_single_scattering_albedo_rgb_, 0.0F, 1.0F);
+  clamp_vec3_min(fog_inscattering_luminance_, 0.0F);
+  clamp_vec3_min(sky_atmosphere_ambient_contribution_color_scale_, 0.0F);
+  clamp_float(inscattering_color_cubemap_angle_, -3600.0F, 3600.0F);
+  clamp_vec3_min(inscattering_texture_tint_, 0.0F);
+  clamp_float(fully_directional_inscattering_color_distance_, 0.0F, 1000000.0F);
+  clamp_float(non_directional_inscattering_color_distance_, 0.0F, 1000000.0F);
+  clamp_vec3_min(directional_inscattering_luminance_, 0.0F);
+  clamp_float(directional_inscattering_exponent_, 0.0F, 128.0F);
+  clamp_float(directional_inscattering_start_distance_, 0.0F, 1000000.0F);
+  clamp_float(fog_end_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(fog_cutoff_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(volumetric_fog_scattering_distribution_, -0.9F, 0.9F);
+  clamp_vec3(volumetric_fog_albedo_, 0.0F, 1.0F);
+  clamp_vec3_min(volumetric_fog_emissive_, 0.0F);
+  clamp_float(volumetric_fog_extinction_scale_, 0.0F, 100.0F);
+  clamp_float(volumetric_fog_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(volumetric_fog_start_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(volumetric_fog_near_fade_in_distance_m_, 0.0F, 1000000.0F);
+  clamp_float(
+    volumetric_fog_static_lighting_scattering_intensity_, 0.0F, 100.0F);
 
-  clamp_int(sun_source_, 0, 1);
   clamp_float(sun_azimuth_deg_, -720.0F, 720.0F);
   clamp_float(sun_elevation_deg_, -90.0F, 90.0F);
   clamp_vec3_min(sun_color_rgb_, 0.0F);
   clamp_float(sun_illuminance_lx_, 0.0F, 250000.0F);
   clamp_float(sun_temperature_kelvin_, 1000.0F, 40000.0F);
-  clamp_float(sun_component_disk_radius_deg_, 0.01F, 2.0F);
+  clamp_float(sun_source_angle_deg_, 0.01F, 5.0F);
+  clamp_int(sun_atmosphere_light_slot_,
+    static_cast<int>(scene::AtmosphereLightSlot::kNone),
+    static_cast<int>(scene::AtmosphereLightSlot::kSecondary));
+  clamp_float(sun_atmosphere_disk_luminance_scale_.x, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.y, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.z, 0.0F, 1.0e9F);
+  clamp_float(sun_atmosphere_disk_luminance_scale_.w, 0.0F, 1.0e9F);
   clamp_float(sun_shadow_bias_, 0.0F, 10.0F);
   clamp_float(sun_shadow_normal_bias_, 0.0F, 10.0F);
   clamp_int(sun_shadow_resolution_hint_,
@@ -2644,6 +3866,22 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     loaded |= load_float(key, out.z);
     return loaded;
   };
+  auto load_vec4 = [&](std::string_view prefix, glm::vec4& out) -> bool {
+    bool loaded = false;
+    std::string key(prefix);
+    key += ".x";
+    loaded |= load_float(key, out.x);
+    key.resize(prefix.size());
+    key += ".y";
+    loaded |= load_float(key, out.y);
+    key.resize(prefix.size());
+    key += ".z";
+    loaded |= load_float(key, out.z);
+    key.resize(prefix.size());
+    key += ".w";
+    loaded |= load_float(key, out.w);
+    return loaded;
+  };
   auto load_int = [&](std::string_view key, int& out) -> bool {
     float value = 0.0F;
     if (load_float(key, value)) {
@@ -2679,9 +3917,9 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   }
 
   bool skybox_settings_loaded = false;
-  bool sun_source_loaded = false;
   if (load_custom_state) {
     any_loaded |= load_bool(kSkyAtmoEnabledKey, sky_atmo_enabled_);
+    any_loaded |= load_int(kSkyAtmoTransformModeKey, sky_atmo_transform_mode_);
     any_loaded |= load_float(kPlanetRadiusKey, planet_radius_km_);
     any_loaded |= load_float(kAtmosphereHeightKey, atmosphere_height_km_);
     any_loaded |= load_vec3(kGroundAlbedoKey, ground_albedo_);
@@ -2692,11 +3930,25 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_float(kMieAbsorptionScaleKey, mie_absorption_scale_);
     mie_absorption_scale_ = std::clamp(mie_absorption_scale_, 0.0F, 5.0F);
     any_loaded |= load_float(kMultiScatteringKey, multi_scattering_);
+    any_loaded |= load_vec3(kSkyLuminanceFactorKey, sky_luminance_factor_);
+    any_loaded |= load_vec3(kSkyAndAerialLuminanceFactorKey,
+      sky_and_aerial_perspective_luminance_factor_);
     any_loaded |= load_bool(kSunDiskEnabledKey, sun_disk_enabled_);
     any_loaded
       |= load_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
+    any_loaded |= load_float(
+      kAerialPerspectiveStartDepthKey, aerial_perspective_start_depth_m_);
     any_loaded
       |= load_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+    any_loaded
+      |= load_float(kHeightFogContributionKey, height_fog_contribution_);
+    any_loaded
+      |= load_float(kTraceSampleCountScaleKey, trace_sample_count_scale_);
+    any_loaded |= load_float(kTransmittanceMinLightElevationKey,
+      transmittance_min_light_elevation_deg_);
+    any_loaded |= load_bool(kAtmosphereHoldoutKey, atmosphere_holdout_);
+    any_loaded |= load_bool(
+      kAtmosphereRenderInMainPassKey, atmosphere_render_in_main_pass_);
     any_loaded |= load_vec3(kOzoneRgbKey, ozone_rgb_);
 
     engine::atmos::DensityProfile loaded_profile = ozone_profile_;
@@ -2753,6 +4005,16 @@ auto EnvironmentSettingsService::LoadSettings() -> void
       |= load_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
     any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
     any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
+    any_loaded |= load_bool(
+      kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
+    any_loaded |= load_vec3(
+      kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
+    any_loaded |= load_float(kSkyLightVolumetricScatteringIntensityKey,
+      sky_light_volumetric_scattering_intensity_);
+    any_loaded |= load_bool(
+      kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
+    any_loaded |= load_bool(kSkyLightAffectGlobalIlluminationKey,
+      sky_light_affect_global_illumination_);
 
     any_loaded |= load_bool(kFogEnabledKey, fog_enabled_);
     any_loaded |= load_int(kFogModelKey, fog_model_);
@@ -2761,20 +4023,55 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     any_loaded |= load_float(kFogHeightFalloffKey, fog_height_falloff_per_m_);
     any_loaded |= load_float(kFogHeightOffsetKey, fog_height_offset_m_);
     any_loaded |= load_float(kFogStartDistanceKey, fog_start_distance_m_);
+    any_loaded |= load_float(kSecondFogDensityKey, second_fog_density_);
+    any_loaded
+      |= load_float(kSecondFogHeightFalloffKey, second_fog_height_falloff_);
+    any_loaded
+      |= load_float(kSecondFogHeightOffsetKey, second_fog_height_offset_);
     any_loaded |= load_float(kFogMaxOpacityKey, fog_max_opacity_);
     any_loaded |= load_vec3(
       kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
+    any_loaded
+      |= load_vec3(kFogInscatteringLuminanceKey, fog_inscattering_luminance_);
+    any_loaded |= load_vec3(kFogSkyAtmosphereAmbientContributionKey,
+      sky_atmosphere_ambient_contribution_color_scale_);
+    any_loaded |= load_float(
+      kFogInscatteringColorCubemapAngleKey, inscattering_color_cubemap_angle_);
+    any_loaded
+      |= load_vec3(kFogInscatteringTextureTintKey, inscattering_texture_tint_);
+    any_loaded |= load_float(kFogFullyDirectionalColorDistanceKey,
+      fully_directional_inscattering_color_distance_);
+    any_loaded |= load_float(kFogNonDirectionalColorDistanceKey,
+      non_directional_inscattering_color_distance_);
+    any_loaded |= load_vec3(kFogDirectionalInscatteringLuminanceKey,
+      directional_inscattering_luminance_);
+    any_loaded |= load_float(kFogDirectionalInscatteringExponentKey,
+      directional_inscattering_exponent_);
+    any_loaded |= load_float(kFogDirectionalInscatteringStartDistanceKey,
+      directional_inscattering_start_distance_);
+    any_loaded |= load_float(kFogEndDistanceKey, fog_end_distance_m_);
+    any_loaded |= load_float(kFogCutoffDistanceKey, fog_cutoff_distance_m_);
+    any_loaded |= load_bool(kFogHoldoutKey, fog_holdout_);
+    any_loaded |= load_bool(kFogRenderInMainPassKey, fog_render_in_main_pass_);
+    any_loaded |= load_bool(
+      kFogVisibleInReflectionCapturesKey, fog_visible_in_reflection_captures_);
+    any_loaded |= load_bool(kFogVisibleInRealTimeSkyCapturesKey,
+      fog_visible_in_real_time_sky_captures_);
 
     any_loaded |= load_bool(kSunEnabledKey, sun_enabled_);
-    sun_source_loaded = load_int(kSunSourceKey, sun_source_);
-    any_loaded |= sun_source_loaded;
     any_loaded |= load_float(kSunAzimuthKey, sun_azimuth_deg_);
     any_loaded |= load_float(kSunElevationKey, sun_elevation_deg_);
     any_loaded |= load_vec3(kSunColorKey, sun_color_rgb_);
     any_loaded |= load_float(kSunIlluminanceKey, sun_illuminance_lx_);
     any_loaded |= load_bool(kSunUseTemperatureKey, sun_use_temperature_);
     any_loaded |= load_float(kSunTemperatureKey, sun_temperature_kelvin_);
-    any_loaded |= load_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+    any_loaded |= load_float(kSunSourceAngleKey, sun_source_angle_deg_);
+    any_loaded
+      |= load_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
+    any_loaded |= load_bool(kSunPerPixelAtmosphereTransmittanceKey,
+      sun_use_per_pixel_atmosphere_transmittance_);
+    any_loaded |= load_vec4(kSunAtmosphereDiskLuminanceScaleKey,
+      sun_atmosphere_disk_luminance_scale_);
     any_loaded |= load_float(kSunShadowBiasKey, sun_shadow_bias_);
     any_loaded |= load_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
     any_loaded
@@ -2805,13 +4102,8 @@ auto EnvironmentSettingsService::LoadSettings() -> void
     }
   }
 
-  if (sun_source_loaded) {
-    saved_sun_source_ = sun_source_;
-    apply_saved_sun_on_next_sync_ = true;
-    SaveSunSettingsToProfile(sun_source_);
-    if (sun_source_ == 1) {
-      sun_present_ = true;
-    }
+  if (settings->Remove(kLegacySunSourceKey)) {
+    settings_persist_dirty_ = true;
   }
 
   if (load_custom_state && loaded_schema_version < 2.0F) {
@@ -2825,13 +4117,10 @@ auto EnvironmentSettingsService::LoadSettings() -> void
   }
 
   ValidateAndClampState();
-  if (kForceEnvironmentOverride) {
-    sun_present_ = true;
-  }
   settings_loaded_ = true;
   has_persisted_settings_ = custom_state_loaded;
   if (any_loaded) {
-    if (kForceEnvironmentOverride) {
+    if (config_.force_environment_override) {
       needs_sync_ = false;
       pending_changes_ = true;
       dirty_domains_ = ToMask(DirtyDomain::kAll);
@@ -2887,6 +4176,20 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     key += ".z";
     save_float(key, value.z);
   };
+  auto save_vec4 = [&](std::string_view prefix, const glm::vec4& value) {
+    std::string key(prefix);
+    key += ".x";
+    save_float(key, value.x);
+    key.resize(prefix.size());
+    key += ".y";
+    save_float(key, value.y);
+    key.resize(prefix.size());
+    key += ".z";
+    save_float(key, value.z);
+    key.resize(prefix.size());
+    key += ".w";
+    save_float(key, value.w);
+  };
   auto save_int = [&](std::string_view key, int value) {
     save_float(key, static_cast<float>(value));
   };
@@ -2895,12 +4198,14 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     kEnvironmentSettingsSchemaVersionKey, kCurrentSettingsSchemaVersion);
   save_bool(kEnvironmentCustomStatePresentKey, preset_index_ == kPresetCustom);
   save_int(kEnvironmentPresetKey, preset_index_);
+  (void)settings->Remove(kLegacySunSourceKey);
 
   if (preset_index_ != kPresetCustom) {
     return;
   }
 
   save_bool(kSkyAtmoEnabledKey, sky_atmo_enabled_);
+  save_int(kSkyAtmoTransformModeKey, sky_atmo_transform_mode_);
   save_float(kPlanetRadiusKey, planet_radius_km_);
   save_float(kAtmosphereHeightKey, atmosphere_height_km_);
   save_vec3(kGroundAlbedoKey, ground_albedo_);
@@ -2909,9 +4214,20 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kMieAnisotropyKey, mie_anisotropy_);
   save_float(kMieAbsorptionScaleKey, mie_absorption_scale_);
   save_float(kMultiScatteringKey, multi_scattering_);
+  save_vec3(kSkyLuminanceFactorKey, sky_luminance_factor_);
+  save_vec3(kSkyAndAerialLuminanceFactorKey,
+    sky_and_aerial_perspective_luminance_factor_);
   save_bool(kSunDiskEnabledKey, sun_disk_enabled_);
   save_float(kAerialPerspectiveScaleKey, aerial_perspective_scale_);
+  save_float(
+    kAerialPerspectiveStartDepthKey, aerial_perspective_start_depth_m_);
   save_float(kAerialScatteringStrengthKey, aerial_scattering_strength_);
+  save_float(kHeightFogContributionKey, height_fog_contribution_);
+  save_float(kTraceSampleCountScaleKey, trace_sample_count_scale_);
+  save_float(
+    kTransmittanceMinLightElevationKey, transmittance_min_light_elevation_deg_);
+  save_bool(kAtmosphereHoldoutKey, atmosphere_holdout_);
+  save_bool(kAtmosphereRenderInMainPassKey, atmosphere_render_in_main_pass_);
 
   save_vec3(kOzoneRgbKey, ozone_rgb_);
 
@@ -2947,6 +4263,14 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
+  save_bool(kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
+  save_vec3(
+    kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
+  save_float(kSkyLightVolumetricScatteringIntensityKey,
+    sky_light_volumetric_scattering_intensity_);
+  save_bool(kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);
+  save_bool(kSkyLightAffectGlobalIlluminationKey,
+    sky_light_affect_global_illumination_);
 
   save_bool(kFogEnabledKey, fog_enabled_);
   save_int(kFogModelKey, fog_model_);
@@ -2954,18 +4278,49 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kFogHeightFalloffKey, fog_height_falloff_per_m_);
   save_float(kFogHeightOffsetKey, fog_height_offset_m_);
   save_float(kFogStartDistanceKey, fog_start_distance_m_);
+  save_float(kSecondFogDensityKey, second_fog_density_);
+  save_float(kSecondFogHeightFalloffKey, second_fog_height_falloff_);
+  save_float(kSecondFogHeightOffsetKey, second_fog_height_offset_);
   save_float(kFogMaxOpacityKey, fog_max_opacity_);
   save_vec3(kFogSingleScatteringAlbedoKey, fog_single_scattering_albedo_rgb_);
+  save_vec3(kFogInscatteringLuminanceKey, fog_inscattering_luminance_);
+  save_vec3(kFogSkyAtmosphereAmbientContributionKey,
+    sky_atmosphere_ambient_contribution_color_scale_);
+  save_float(
+    kFogInscatteringColorCubemapAngleKey, inscattering_color_cubemap_angle_);
+  save_vec3(kFogInscatteringTextureTintKey, inscattering_texture_tint_);
+  save_float(kFogFullyDirectionalColorDistanceKey,
+    fully_directional_inscattering_color_distance_);
+  save_float(kFogNonDirectionalColorDistanceKey,
+    non_directional_inscattering_color_distance_);
+  save_vec3(kFogDirectionalInscatteringLuminanceKey,
+    directional_inscattering_luminance_);
+  save_float(
+    kFogDirectionalInscatteringExponentKey, directional_inscattering_exponent_);
+  save_float(kFogDirectionalInscatteringStartDistanceKey,
+    directional_inscattering_start_distance_);
+  save_float(kFogEndDistanceKey, fog_end_distance_m_);
+  save_float(kFogCutoffDistanceKey, fog_cutoff_distance_m_);
+  save_bool(kFogHoldoutKey, fog_holdout_);
+  save_bool(kFogRenderInMainPassKey, fog_render_in_main_pass_);
+  save_bool(
+    kFogVisibleInReflectionCapturesKey, fog_visible_in_reflection_captures_);
+  save_bool(kFogVisibleInRealTimeSkyCapturesKey,
+    fog_visible_in_real_time_sky_captures_);
 
   save_bool(kSunEnabledKey, sun_enabled_);
-  save_int(kSunSourceKey, sun_source_);
   save_float(kSunAzimuthKey, sun_azimuth_deg_);
   save_float(kSunElevationKey, sun_elevation_deg_);
   save_vec3(kSunColorKey, sun_color_rgb_);
   save_float(kSunIlluminanceKey, sun_illuminance_lx_);
   save_bool(kSunUseTemperatureKey, sun_use_temperature_);
   save_float(kSunTemperatureKey, sun_temperature_kelvin_);
-  save_float(kSunDiskRadiusKey, sun_component_disk_radius_deg_);
+  save_float(kSunSourceAngleKey, sun_source_angle_deg_);
+  save_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
+  save_bool(kSunPerPixelAtmosphereTransmittanceKey,
+    sun_use_per_pixel_atmosphere_transmittance_);
+  save_vec4(
+    kSunAtmosphereDiskLuminanceScaleKey, sun_atmosphere_disk_luminance_scale_);
   save_float(kSunShadowBiasKey, sun_shadow_bias_);
   save_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
   save_int(kSunShadowResolutionHintKey, sun_shadow_resolution_hint_);
@@ -2990,10 +4345,7 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
   ValidateAndClampState();
   uint32_t effective_domains = dirty_domains;
   if ((dirty_domains & ToMask(DirtyDomain::kSun)) != 0U && sky_atmo_enabled_) {
-    // Sky-atmosphere LUT generation depends on sun state (not just atmosphere
-    // material params), so sun edits must also drive atmosphere
-    // apply/invalidate.
-    effective_domains |= ToMask(DirtyDomain::kAtmosphere);
+    effective_domains |= ToMask(DirtyDomain::kAtmosphereLights);
   }
   if (update_depth_ > 0) {
     batched_dirty_domains_ |= effective_domains;
@@ -3016,48 +4368,18 @@ auto EnvironmentSettingsService::MarkDirty(uint32_t dirty_domains) -> void
   }
 }
 
-auto EnvironmentSettingsService::ApplySavedSunSourcePreference() -> void
-{
-  if (!saved_sun_source_) {
-    return;
-  }
-
-  const int desired_source = *saved_sun_source_;
-  if (desired_source == 1) {
-    sun_source_ = 1;
-    sun_present_ = true;
-    LoadSunSettingsFromProfile(sun_source_);
-    MarkDirty(ToMask(DirtyDomain::kSun));
-    return;
-  }
-
-  if (sun_source_ != desired_source) {
-    sun_source_ = desired_source;
-    LoadSunSettingsFromProfile(sun_source_);
-    MarkDirty(ToMask(DirtyDomain::kSun));
-  }
-}
-
 auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
 {
-  const scene::environment::Sun defaults;
   const scene::CascadedShadowSettings default_csm;
 
-  sun_present_ = true;
-  sun_enabled_ = defaults.IsEnabled();
-  sun_source_
-    = (defaults.GetSunSource() == scene::environment::SunSource::kFromScene)
-    ? 0
-    : 1;
-  sun_azimuth_deg_ = defaults.GetAzimuthDegrees();
-  sun_elevation_deg_ = defaults.GetElevationDegrees();
-  sun_color_rgb_ = defaults.GetColorRgb();
-  sun_illuminance_lx_ = defaults.GetIlluminanceLx();
-  sun_use_temperature_ = defaults.HasLightTemperature();
-  sun_temperature_kelvin_
-    = sun_use_temperature_ ? defaults.GetLightTemperatureKelvin() : 6500.0F;
-  sun_component_disk_radius_deg_
-    = defaults.GetDiskAngularRadiusRadians() * kRadToDeg;
+  sun_enabled_ = true;
+  sun_azimuth_deg_ = kDefaultSunAzimuthDeg;
+  sun_elevation_deg_ = kDefaultSunElevationDeg;
+  sun_color_rgb_ = { 1.0F, 1.0F, 1.0F };
+  sun_illuminance_lx_ = kDefaultSunIlluminanceLx;
+  sun_use_temperature_ = false;
+  sun_temperature_kelvin_ = 6500.0F;
+  sun_source_angle_deg_ = kDefaultSunSourceAngleDeg;
   sun_shadow_bias_ = scene::kDefaultShadowBias;
   sun_shadow_normal_bias_ = scene::kDefaultShadowNormalBias;
   sun_shadow_resolution_hint_
@@ -3069,9 +4391,6 @@ auto EnvironmentSettingsService::ResetSunUiToDefaults() -> void
   sun_shadow_distribution_exponent_ = default_csm.distribution_exponent;
   sun_shadow_transition_fraction_ = default_csm.transition_fraction;
   sun_shadow_distance_fadeout_fraction_ = default_csm.distance_fadeout_fraction;
-
-  SaveSunSettingsToProfile(0);
-  SaveSunSettingsToProfile(1);
 }
 
 auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
@@ -3080,108 +4399,34 @@ auto EnvironmentSettingsService::EnsureSceneHasSunAtActivation() -> void
     return;
   }
 
-  const auto scan
-    = ScanSceneSunState(*config_.scene, synthetic_sun_light_node_);
-  if (scan.sun_count > 1U) {
-    LOG_F(ERROR,
-      "EnvironmentSettingsService: invalid scene lighting configuration in "
-      "scene '{}': {} directional lights are tagged as sun; synthetic sun "
-      "injection suppressed",
-      config_.scene->GetName(), scan.sun_count);
-    sun_light_available_ = false;
-    sun_light_node_ = {};
-    return;
-  }
-
-  if (const auto candidate = ResolveSceneSunCandidate(scan);
-    candidate.has_value()) {
-    sun_light_node_ = candidate->node;
+  const auto& resolver = config_.scene->GetDirectionalLightResolver();
+  resolver.Validate();
+  if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()) {
+    auto node = config_.scene->GetNode(primary->NodeHandle());
+    CHECK_F(
+      node.has_value(), "failed to resolve scene node for primary sun handle");
+    sun_light_node_ = *node;
     sun_light_available_ = sun_light_node_.IsAlive();
     CHECK_F(ApplyDirectionalSunRole(sun_light_node_, true, true, true, true),
-      "EnvironmentSettingsService: failed to promote scene directional '{}' "
-      "to active sun during activation",
+      "failed to promote scene directional '{}' to active sun during "
+      "activation",
       sun_light_node_.GetName());
-    sun_present_ = true;
     sun_enabled_ = true;
-    sun_source_ = 0;
-    saved_sun_source_ = 0;
     if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
       CaptureSunShadowSettingsFromLight(light->get());
-      SaveSunSettingsToProfile(0);
     }
     LOG_F(INFO,
-      "EnvironmentSettingsService: activated scene '{}' selected scene "
-      "directional '{}' as sun via {} selection (directional_count={})",
-      config_.scene->GetName(), sun_light_node_.GetName(),
-      SceneSunCandidateSourceLabel(candidate->source), scan.directional_count);
-    LOG_F(INFO,
-      "EnvironmentSettingsService: activation rejected synthetic sun for "
-      "scene '{}' because scene directional '{}' is authoritative",
+      "activated scene '{}' selected scene directional '{}' as resolved "
+      "primary sun",
       config_.scene->GetName(), sun_light_node_.GetName());
     return;
   }
 
   sun_light_available_ = false;
   sun_light_node_ = {};
-
-  LoadSunSettingsFromProfile(1);
-  EnsureSyntheticSunLight();
-  CHECK_F(synthetic_sun_light_node_.IsAlive(),
-    "EnvironmentSettingsService: failed to create synthetic sun light during "
-    "scene activation");
-
-  auto light = synthetic_sun_light_node_.GetLightAs<scene::DirectionalLight>();
-  CHECK_F(light.has_value(),
-    "EnvironmentSettingsService: synthetic sun node was created without a "
-    "DirectionalLight component");
-
-  light->get().SetIsSunLight(true);
-  light->get().SetEnvironmentContribution(true);
-
-  auto& common = light->get().Common();
-  common.affects_world = true;
-  common.casts_shadows = true;
-  ApplySunShadowSettingsToLight(light->get());
-  light->get().SetIntensityLux(sun_illuminance_lx_);
-  common.color_rgb = sun_use_temperature_
-    ? KelvinToLinearRgb(sun_temperature_kelvin_)
-    : sun_color_rgb_;
-
-  if (auto flags = synthetic_sun_light_node_.GetFlags()) {
-    flags->get().SetFlag(scene::SceneNodeFlags::kCastsShadows,
-      scene::SceneFlag {}.SetEffectiveValueBit(true));
-  }
-
-  const auto sun_dir
-    = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
-  ApplyLightDirectionWorldSpace(synthetic_sun_light_node_, -sun_dir);
-
-  sun_light_node_ = synthetic_sun_light_node_;
-  sun_light_available_ = true;
-  sun_present_ = true;
-  sun_enabled_ = true;
-  sun_source_ = 1;
-  saved_sun_source_ = 1;
-  SaveSunSettingsToProfile(1);
-
-  LOG_F(INFO,
-    "EnvironmentSettingsService: activated scene '{}' selected synthetic sun "
-    "fallback '{}' because no scene directional candidate was available "
-    "(directional_count={})",
-    config_.scene->GetName(), synthetic_sun_light_node_.GetName(),
-    scan.directional_count);
-
-  if (scan.has_non_camera_content) {
-    LOG_F(WARNING,
-      "EnvironmentSettingsService: activated non-empty scene '{}' had no "
-      "usable scene directional light; injected synthetic sun node '{}'",
-      config_.scene->GetName(), synthetic_sun_light_node_.GetName());
-  } else {
-    LOG_F(INFO,
-      "EnvironmentSettingsService: activated camera-only scene '{}' without "
-      "directional lights; synthetic sun fallback was expected",
-      config_.scene->GetName());
-  }
+  sun_enabled_ = false;
+  LOG_F(WARNING, "scene '{}' has no resolved sun directional light",
+    config_.scene->GetName());
 }
 
 auto EnvironmentSettingsService::FindSunLightCandidate() const
@@ -3191,130 +4436,17 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
     return std::nullopt;
   }
 
-  const auto scan
-    = ScanSceneSunState(*config_.scene, synthetic_sun_light_node_);
-  if (scan.sun_count > 1U) {
-    LOG_F(ERROR,
-      "EnvironmentSettingsService: invalid scene lighting configuration in "
-      "scene '{}': {} directional lights are tagged as sun",
-      config_.scene->GetName(), scan.sun_count);
-    return std::nullopt;
+  const auto& resolver = config_.scene->GetDirectionalLightResolver();
+  resolver.Validate();
+  if (const auto primary = resolver.ResolvePrimarySun(); primary.has_value()) {
+    DLOG_F(1, "resolved scene sun candidate '{}' in scene '{}'",
+      primary->Node().GetName(), config_.scene->GetName());
+    return config_.scene->GetNode(primary->NodeHandle());
   }
 
-  if (const auto candidate = ResolveSceneSunCandidate(scan);
-    candidate.has_value()) {
-    DLOG_F(1,
-      "EnvironmentSettingsService: resolved scene sun candidate '{}' via {} "
-      "selection in scene '{}'",
-      candidate->node.GetName(),
-      SceneSunCandidateSourceLabel(candidate->source),
-      config_.scene->GetName());
-    return candidate->node;
-  }
-
-  DLOG_F(1,
-    "EnvironmentSettingsService: resolved no scene sun candidate in scene "
-    "'{}' (directional_count={})",
-    config_.scene->GetName(), scan.directional_count);
+  DLOG_F(1, "resolved no scene sun candidate in scene '{}'",
+    config_.scene->GetName());
   return std::nullopt;
-}
-
-auto EnvironmentSettingsService::EnsureSyntheticSunLight() -> void
-{
-  if (!config_.scene) {
-    return;
-  }
-  if (synthetic_sun_light_created_ && synthetic_sun_light_node_.IsAlive()) {
-    LOG_F(INFO,
-      "EnvironmentSettingsService: reusing synthetic sun node '{}' for "
-      "scene '{}'",
-      synthetic_sun_light_node_.GetName(), config_.scene->GetName());
-    return;
-  }
-
-  auto node = config_.scene->CreateNode("Synthetic Sun");
-  if (!node.IsAlive()) {
-    return;
-  }
-  if (!node.HasLight()) {
-    auto light = std::make_unique<scene::DirectionalLight>();
-    (void)node.AttachLight(std::move(light));
-  }
-  synthetic_sun_light_node_ = node;
-  synthetic_sun_light_created_ = true;
-  LOG_F(INFO,
-    "EnvironmentSettingsService: created synthetic sun node '{}' for "
-    "scene '{}'",
-    synthetic_sun_light_node_.GetName(), config_.scene->GetName());
-}
-
-auto EnvironmentSettingsService::DestroySyntheticSunLight() -> void
-{
-  if (!synthetic_sun_light_created_) {
-    return;
-  }
-
-  if (synthetic_sun_light_node_.IsAlive()) {
-    (void)config_.scene->DestroyNode(synthetic_sun_light_node_);
-  }
-  synthetic_sun_light_node_ = {};
-  synthetic_sun_light_created_ = false;
-}
-
-auto EnvironmentSettingsService::GetSunSettingsForSource(const int source)
-  -> SunUiSettings&
-{
-  return (source == 0) ? sun_scene_settings_ : sun_synthetic_settings_;
-}
-
-auto EnvironmentSettingsService::LoadSunSettingsFromProfile(const int source)
-  -> void
-{
-  const auto& settings = GetSunSettingsForSource(source);
-  sun_enabled_ = settings.enabled;
-  sun_azimuth_deg_ = settings.azimuth_deg;
-  sun_elevation_deg_ = settings.elevation_deg;
-  sun_color_rgb_ = settings.color_rgb;
-  sun_illuminance_lx_ = settings.illuminance_lx;
-  sun_use_temperature_ = settings.use_temperature;
-  sun_temperature_kelvin_ = settings.temperature_kelvin;
-  sun_component_disk_radius_deg_ = settings.disk_radius_deg;
-  sun_shadow_bias_ = settings.shadow_bias;
-  sun_shadow_normal_bias_ = settings.shadow_normal_bias;
-  sun_shadow_resolution_hint_ = settings.shadow_resolution_hint;
-  sun_shadow_cascade_count_ = settings.shadow_cascade_count;
-  sun_shadow_split_mode_ = settings.shadow_split_mode;
-  sun_shadow_max_distance_ = settings.shadow_max_distance;
-  sun_shadow_cascade_distances_ = settings.shadow_cascade_distances;
-  sun_shadow_distribution_exponent_ = settings.shadow_distribution_exponent;
-  sun_shadow_transition_fraction_ = settings.shadow_transition_fraction;
-  sun_shadow_distance_fadeout_fraction_
-    = settings.shadow_distance_fadeout_fraction;
-}
-
-auto EnvironmentSettingsService::SaveSunSettingsToProfile(const int source)
-  -> void
-{
-  auto& settings = GetSunSettingsForSource(source);
-  settings.enabled = sun_enabled_;
-  settings.azimuth_deg = sun_azimuth_deg_;
-  settings.elevation_deg = sun_elevation_deg_;
-  settings.color_rgb = sun_color_rgb_;
-  settings.illuminance_lx = sun_illuminance_lx_;
-  settings.use_temperature = sun_use_temperature_;
-  settings.temperature_kelvin = sun_temperature_kelvin_;
-  settings.disk_radius_deg = sun_component_disk_radius_deg_;
-  settings.shadow_bias = sun_shadow_bias_;
-  settings.shadow_normal_bias = sun_shadow_normal_bias_;
-  settings.shadow_resolution_hint = sun_shadow_resolution_hint_;
-  settings.shadow_cascade_count = sun_shadow_cascade_count_;
-  settings.shadow_split_mode = sun_shadow_split_mode_;
-  settings.shadow_max_distance = sun_shadow_max_distance_;
-  settings.shadow_cascade_distances = sun_shadow_cascade_distances_;
-  settings.shadow_distribution_exponent = sun_shadow_distribution_exponent_;
-  settings.shadow_transition_fraction = sun_shadow_transition_fraction_;
-  settings.shadow_distance_fadeout_fraction
-    = sun_shadow_distance_fadeout_fraction_;
 }
 
 } // namespace oxygen::examples

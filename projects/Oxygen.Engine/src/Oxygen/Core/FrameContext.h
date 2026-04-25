@@ -194,6 +194,8 @@ struct ViewMetadata {
   std::string purpose; // e.g. "primary", "shadow", "reflection"
   bool is_scene_view { false };
   bool with_atmosphere { false };
+  bool with_height_fog { false };
+  bool with_local_fog { false };
   ViewId exposure_view_id { kInvalidViewId };
 };
 

@@ -28,6 +28,7 @@ from ..packing.constants import (
     VALID_MESH_TYPES,
     YAML_SCHEMA_VERSION_CURRENT,
     YAML_SCHEMA_VERSION_MIN,
+    SCENE_ASSET_VERSION_CURRENT,
 )
 
 
@@ -1003,19 +1004,24 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         return cleaned
 
     geometry_name_to_key: Dict[str, str] = {}
+    material_name_to_key: Dict[str, str] = {}
     for a in spec.get("assets", []) or []:
-        if not isinstance(a, dict) or a.get("type") != "geometry":
+        if not isinstance(a, dict):
             continue
-        gname = a.get("name")
-        if not isinstance(gname, str):
+        asset_type = a.get("type")
+        name = a.get("name")
+        if not isinstance(name, str):
             continue
-        raw_key = a.get("asset_key")
-        key_hex = _clean_key_hex(raw_key)
+        key_hex = _clean_key_hex(a.get("asset_key"))
         if key_hex is None:
             key_hex = "00" * 16
-        geometry_name_to_key[gname] = key_hex
+        if asset_type == "geometry":
+            geometry_name_to_key[name] = key_hex
+        elif asset_type == "material":
+            material_name_to_key[name] = key_hex
 
     known_geometry_keys = set(geometry_name_to_key.values())
+    known_material_keys = set(material_name_to_key.values())
 
     def _validate_light_list(
         lights: Any,
@@ -1086,6 +1092,14 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
     ):
         if not isinstance(s, dict):
             continue
+        scene_version = s.get("version", SCENE_ASSET_VERSION_CURRENT)
+        if not isinstance(scene_version, int) or scene_version != SCENE_ASSET_VERSION_CURRENT:
+            _err(
+                errors,
+                "E_VERSION",
+                "Scene asset version 3 is required; re-cook authored scene content",
+                f"scenes[{si}].version",
+            )
         nodes = s.get("nodes", []) or []
         if not isinstance(nodes, list):
             continue
@@ -1166,6 +1180,42 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                     rpath + ".geometry_asset_key",
                 )
 
+            material_ref_present = any(
+                key in r
+                for key in (
+                    "material_asset_key",
+                    "material_key",
+                    "material",
+                    "material_override",
+                    "material_asset",
+                )
+            )
+            if material_ref_present:
+                material_key = _clean_key_hex(
+                    r.get("material_asset_key", r.get("material_key"))
+                )
+                if material_key is None:
+                    material_name = r.get(
+                        "material",
+                        r.get("material_override", r.get("material_asset")),
+                    )
+                    if isinstance(material_name, str):
+                        material_key = material_name_to_key.get(material_name)
+                if material_key is None:
+                    _err(
+                        errors,
+                        "E_REF",
+                        "Renderable material override must reference material_asset_key (hex) or material (name)",
+                        rpath,
+                    )
+                elif material_key not in known_material_keys:
+                    _err(
+                        errors,
+                        "E_REF",
+                        "Unknown material override reference",
+                        rpath + ".material_asset_key",
+                    )
+
         perspective_cameras = s.get("perspective_cameras", []) or []
         if not isinstance(perspective_cameras, list):
             continue
@@ -1235,6 +1285,65 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
             si,
             node_count,
         )
+
+        environment = s.get("environment")
+        if environment is not None and not isinstance(environment, dict):
+            _err(
+                errors,
+                "E_TYPE",
+                "environment must be an object",
+                f"scenes[{si}].environment",
+            )
+
+        local_fog_volumes = s.get("local_fog_volumes", []) or []
+        if not isinstance(local_fog_volumes, list):
+            _err(
+                errors,
+                "E_TYPE",
+                "local_fog_volumes must be a list",
+                f"scenes[{si}].local_fog_volumes",
+            )
+        else:
+            for lfi, volume in enumerate(local_fog_volumes):
+                lf_path = f"scenes[{si}].local_fog_volumes[{lfi}]"
+                if not isinstance(volume, dict):
+                    _err(errors, "E_TYPE", "Local fog volume must be object", lf_path)
+                    continue
+                for key in (
+                    "node_index",
+                    "enabled",
+                    "radial_fog_extinction",
+                    "height_fog_extinction",
+                    "height_fog_falloff",
+                    "height_fog_offset",
+                    "fog_phase_g",
+                    "fog_albedo",
+                    "fog_emissive",
+                    "sort_priority",
+                ):
+                    if key not in volume:
+                        _err(
+                            errors,
+                            "E_REQUIRED",
+                            f"Missing local fog field '{key}'",
+                            lf_path,
+                        )
+                node_index = volume.get("node_index")
+                if isinstance(node_index, int):
+                    if node_index < 0 or node_index >= node_count:
+                        _err(
+                            errors,
+                            "E_RANGE",
+                            "node_index out of range",
+                            f"{lf_path}.node_index",
+                        )
+                else:
+                    _err(
+                        errors,
+                        "E_TYPE",
+                        "node_index must be an integer",
+                        f"{lf_path}.node_index",
+                    )
     return errors
 
 

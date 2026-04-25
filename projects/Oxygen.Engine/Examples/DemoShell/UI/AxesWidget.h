@@ -15,7 +15,7 @@ namespace oxygen::examples::ui {
 
 class UiSettingsVm;
 
-//! Draws a 3D axes indicator showing camera orientation
+//! Draws a 3D axes indicator showing the current camera view orientation.
 /*!
  Renders a small widget in the corner of the screen displaying the X, Y, Z
  axes as they appear from the current camera view. The widget updates in
@@ -24,7 +24,7 @@ class UiSettingsVm;
 
  ### Features
 
- - Color-coded axes: X (Red), Y (Green), Z (Blue)
+ - Color-coded positive axes: +X (Red), +Y (Green), +Z (Blue)
  - Positioned at bottom-left corner of the screen
  - Depth-sorted so nearer axes draw on top
  - Optional axis labels
@@ -35,8 +35,7 @@ class UiSettingsVm;
  AxesWidget axes_widget(settings_vm);
 
  // In ImGui update loop
- glm::mat4 view_matrix = camera.GetViewMatrix();
- axes_widget.Draw(view_matrix);
+ axes_widget.Draw(observer_ptr { &camera_node });
  ```
  */
 class AxesWidget {
@@ -48,7 +47,7 @@ public:
   void Draw(observer_ptr<scene::SceneNode> camera);
 
 private:
-  void Draw(const glm::mat4& view_matrix);
+  void Draw(const glm::mat3& world_to_view_rotation);
 
   observer_ptr<UiSettingsVm> settings_vm_ { nullptr };
 };

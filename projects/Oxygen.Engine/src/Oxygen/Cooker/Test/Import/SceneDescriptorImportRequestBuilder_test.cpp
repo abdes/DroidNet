@@ -63,6 +63,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
+      "version": 3,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
       "name": "DemoScene",
       "content_hashing": false,
@@ -102,6 +103,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "bad.scene.json";
   WriteTextFile(descriptor_path,
     R"({
+      "version": 3,
       "name": "BadScene",
       "nodes": [
         { "name": "Root", "unexpected": true }
@@ -138,6 +140,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   const auto descriptor_path = dir / "Scenes" / "ok.scene.json";
   WriteTextFile(descriptor_path,
     R"({
+      "version": 3,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");
@@ -151,6 +154,29 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   EXPECT_FALSE(request.has_value());
   EXPECT_TRUE(errors.str().find("cooked root must be an absolute path")
     != std::string::npos);
+}
+
+NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
+  RejectsLegacyDescriptorVersionWithRecookMessage)
+{
+  const auto dir = MakeTempDir("legacy_version");
+  const auto descriptor_path = dir / "Scenes" / "legacy.scene.json";
+  WriteTextFile(descriptor_path,
+    R"({
+      "version": 2,
+      "name": "LegacyScene",
+      "nodes": [ { "name": "Root" } ]
+    })");
+
+  const auto settings = MakeBaseSettings(descriptor_path);
+  auto errors = std::ostringstream {};
+
+  const auto request = BuildSceneDescriptorRequest(settings, errors);
+
+  EXPECT_FALSE(request.has_value());
+  EXPECT_TRUE(errors.str().find("scene.descriptor.recook_required")
+      != std::string::npos)
+    << errors.str();
 }
 
 } // namespace

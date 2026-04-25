@@ -15,6 +15,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::internal {
 
@@ -72,6 +73,19 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
   const auto descriptor_doc
     = LoadDescriptorJsonObject(descriptor_path, "scene", error_stream);
   if (!descriptor_doc.has_value()) {
+    return std::nullopt;
+  }
+
+  const auto version_it = descriptor_doc->find("version");
+  const auto invalid_version = version_it == descriptor_doc->end()
+    || !version_it->is_number_unsigned()
+    || version_it->get<uint32_t>() != data::pak::world::kSceneAssetVersion;
+  if (invalid_version) {
+    error_stream << "ERROR [scene.descriptor.recook_required]: "
+                 << "Scene descriptor version "
+                 << static_cast<uint32_t>(data::pak::world::kSceneAssetVersion)
+                 << " is required; update the authored descriptor and re-cook "
+                    "the scene content.\n";
     return std::nullopt;
   }
 

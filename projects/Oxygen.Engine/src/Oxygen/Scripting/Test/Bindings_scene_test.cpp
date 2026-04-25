@@ -134,12 +134,6 @@ function on_scene_mutation()
   local c = clouds:get()
   if math.abs(c.coverage - 0.42) > 0.0001 then error("cloud coverage") end
 
-  local sun = env:ensure_sun()
-  sun:set({ source = "synthetic", casts_shadows = false, illuminance_lx = 1000.0 })
-  local s = sun:get()
-  if s.source ~= "synthetic" then error("sun source") end
-  if s.casts_shadows ~= false then error("sun shadows") end
-
   local pp = env:ensure_post_process()
   pp:set({ tone_mapper = "reinhard", exposure_mode = "manual", manual_exposure_ev = 8.0 })
   local p = pp:get()

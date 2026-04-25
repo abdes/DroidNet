@@ -1,0 +1,61 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <memory>
+
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/api_export.h>
+
+namespace oxygen::graphics {
+class Framebuffer;
+}
+
+namespace oxygen::vortex {
+
+struct RenderContext;
+struct SceneTexturesConfig;
+class Renderer;
+class SceneTextures;
+class DepthPrepassMeshProcessor;
+
+struct DepthPrepassConfig {
+  DepthPrePassMode mode { DepthPrePassMode::kOpaqueAndMasked };
+  bool write_velocity { true };
+};
+
+class DepthPrepassModule {
+public:
+  OXGN_VRTX_API explicit DepthPrepassModule(
+    Renderer& renderer, const SceneTexturesConfig& scene_textures_config);
+  OXGN_VRTX_API ~DepthPrepassModule();
+
+  DepthPrepassModule(const DepthPrepassModule&) = delete;
+  auto operator=(const DepthPrepassModule&) -> DepthPrepassModule& = delete;
+  DepthPrepassModule(DepthPrepassModule&&) = delete;
+  auto operator=(DepthPrepassModule&&) -> DepthPrepassModule& = delete;
+
+  OXGN_VRTX_API void Execute(RenderContext& ctx, SceneTextures& scene_textures);
+  OXGN_VRTX_API void SetConfig(const DepthPrepassConfig& config);
+
+  [[nodiscard]] OXGN_VRTX_API auto GetCompleteness() const
+    -> DepthPrePassCompleteness;
+  [[nodiscard]] OXGN_VRTX_API auto HasValidDepthProduct() const -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto HasPublishedDepthProducts() const -> bool;
+
+private:
+  Renderer& renderer_;
+  DepthPrepassConfig config_ {};
+  DepthPrePassCompleteness completeness_ { DepthPrePassCompleteness::kDisabled };
+  bool has_valid_depth_product_ { false };
+  bool has_published_depth_products_ { false };
+  std::unique_ptr<DepthPrepassMeshProcessor> mesh_processor_;
+  std::shared_ptr<graphics::Framebuffer> depth_framebuffer_ {};
+  std::shared_ptr<graphics::Framebuffer> depth_velocity_framebuffer_ {};
+};
+
+} // namespace oxygen::vortex

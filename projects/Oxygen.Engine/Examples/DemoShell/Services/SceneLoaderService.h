@@ -217,6 +217,8 @@ private:
   void AttachRenderables(const data::SceneAsset& asset);
   //! Attach light components to nodes.
   void AttachLights(const data::SceneAsset& asset);
+  //! Attach local fog volume components to nodes.
+  void AttachLocalFogVolumes(const data::SceneAsset& asset);
   //! Attach scripting components to nodes.
   void AttachScripting(const data::SceneAsset& asset);
   //! Apply script parameter overrides for one slot.

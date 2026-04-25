@@ -1,0 +1,324 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#ifndef OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI
+#define OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI
+
+#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
+#include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
+#include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
+#include "Vortex/Shared/PristineGrid.hlsli"
+#include "Vortex/Contracts/Draw/ProceduralGridMaterialConstants.hlsli"
+#include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
+#include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
+
+struct MaterialSurface
+{
+    float3 base_rgb;
+    float  base_a;
+    float  metalness;
+    float  roughness;
+    float  ao;
+    float3 emissive;
+
+    float3 N;
+    float3 V;
+};
+
+static inline float2 MakeStableGridPlane(float2 world_plane, float2 camera_plane, float2 period)
+{
+    const float2 safe_period = max(period, float2(1e-4, 1e-4));
+    const float2 snapped_origin = floor(camera_plane / safe_period) * safe_period;
+    return world_plane - snapped_origin;
+}
+
+static inline float4 EvaluateProceduralGrid(
+    ProceduralGridMaterialConstants mat,
+    float3 world_pos,
+    float3 world_normal)
+{
+    const float2 spacing = max(mat.grid_spacing, float2(1e-4, 1e-4));
+    const float major_every = max(1.0, (float)mat.grid_major_every);
+    const float2 period = spacing * major_every;
+
+    const float3 n = abs(SafeNormalize(world_normal));
+    const float weight_sum = n.x + n.y + n.z + 1e-5;
+    const float3 w = n / weight_sum;
+
+    const float2 grid_xy = MakeStableGridPlane(world_pos.xy, camera_position.xy, period);
+    const float2 grid_xz = MakeStableGridPlane(float2(world_pos.x, world_pos.z), float2(camera_position.x, camera_position.z), period);
+    const float2 grid_yz = MakeStableGridPlane(float2(world_pos.y, world_pos.z), float2(camera_position.y, camera_position.z), period);
+
+    const float minor_width_x = mat.grid_line_thickness / spacing.x;
+    const float minor_width_y = mat.grid_line_thickness / spacing.y;
+    const float major_width_x = mat.grid_major_thickness / period.x;
+    const float major_width_y = mat.grid_major_thickness / period.y;
+
+    const float minor_xy = PristineGrid(grid_xy / spacing, float2(minor_width_x, minor_width_y));
+    const float major_xy = PristineGrid(grid_xy / period, float2(major_width_x, major_width_y));
+    const float axis_x_xy = PristineLine(grid_xy.x, mat.grid_axis_thickness);
+    const float axis_y_xy = PristineLine(grid_xy.y, mat.grid_axis_thickness);
+    const float origin_xy = axis_x_xy * axis_y_xy;
+    float4 color_xy = mat.grid_minor_color * minor_xy;
+    color_xy = lerp(color_xy, mat.grid_major_color, major_xy);
+    color_xy = lerp(color_xy, mat.grid_axis_color_x, axis_x_xy);
+    color_xy = lerp(color_xy, mat.grid_axis_color_y, axis_y_xy);
+    color_xy = lerp(color_xy, mat.grid_origin_color, origin_xy);
+
+    const float minor_xz = PristineGrid(grid_xz / spacing, float2(minor_width_x, minor_width_y));
+    const float major_xz = PristineGrid(grid_xz / period, float2(major_width_x, major_width_y));
+    const float axis_x_xz = PristineLine(grid_xz.x, mat.grid_axis_thickness);
+    const float axis_z_xz = PristineLine(grid_xz.y, mat.grid_axis_thickness);
+    const float origin_xz = axis_x_xz * axis_z_xz;
+    float4 color_xz = mat.grid_minor_color * minor_xz;
+    color_xz = lerp(color_xz, mat.grid_major_color, major_xz);
+    color_xz = lerp(color_xz, mat.grid_axis_color_x, axis_x_xz);
+    color_xz = lerp(color_xz, mat.grid_axis_color_y, axis_z_xz);
+    color_xz = lerp(color_xz, mat.grid_origin_color, origin_xz);
+
+    const float minor_yz = PristineGrid(grid_yz / spacing, float2(minor_width_x, minor_width_y));
+    const float major_yz = PristineGrid(grid_yz / period, float2(major_width_x, major_width_y));
+    const float axis_y_yz = PristineLine(grid_yz.x, mat.grid_axis_thickness);
+    const float axis_z_yz = PristineLine(grid_yz.y, mat.grid_axis_thickness);
+    const float origin_yz = axis_y_yz * axis_z_yz;
+    float4 color_yz = mat.grid_minor_color * minor_yz;
+    color_yz = lerp(color_yz, mat.grid_major_color, major_yz);
+    color_yz = lerp(color_yz, mat.grid_axis_color_x, axis_y_yz);
+    color_yz = lerp(color_yz, mat.grid_axis_color_y, axis_z_yz);
+    color_yz = lerp(color_yz, mat.grid_origin_color, origin_yz);
+
+    // Z-up: XY plane dominates when normal points +/-Z.
+    // Blend planes by normal magnitude (no camera dependency).
+    return color_xy * w.z + color_xz * w.y + color_yz * w.x;
+}
+
+MaterialSurface EvaluateMaterialSurface(
+    float3 world_pos,
+    float3 world_normal,
+    float3 world_tangent,
+    float3 world_bitangent,
+    float2 uv0,
+    uint   draw_index,
+    bool   is_front_face)
+{
+    MaterialSurface s = (MaterialSurface)0;
+
+    // Defaults
+    s.base_rgb  = float3(1.0, 1.0, 1.0);
+    s.base_a    = 1.0;
+    s.metalness = 0.0;
+    s.roughness = 1.0;
+    s.ao        = 1.0;
+    s.emissive  = float3(0.0, 0.0, 0.0);
+
+    s.N = SafeNormalize(world_normal);
+    // Fallback for degenerate normals from vertex data
+    if (dot(s.N, s.N) < 0.5) {
+        s.N = float3(0.0, 0.0, 1.0);
+    }
+    s.V = SafeNormalize(camera_position - world_pos);
+
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
+        draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
+        uint draw_count = 0u;
+        uint draw_stride = 0u;
+        draw_meta_buffer.GetDimensions(draw_count, draw_stride);
+        if (draw_index >= draw_count) {
+            return s;
+        }
+        DrawMetadata meta = draw_meta_buffer[draw_index];
+
+        StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+        uint material_count = 0u;
+        uint material_stride = 0u;
+        materials.GetDimensions(material_count, material_stride);
+        if (meta.material_handle >= material_count) {
+            return s;
+        }
+        MaterialShadingConstants mat = materials[meta.material_handle];
+
+        s.base_rgb  = mat.base_color.rgb;
+        s.base_a    = mat.base_color.a;
+        s.metalness = saturate(mat.metalness);
+        s.roughness = saturate(mat.roughness);
+        s.ao        = saturate(mat.ambient_occlusion);
+
+        // UV convention (see ApplyMaterialUv in Vortex/Contracts/Draw/MaterialShadingConstants.hlsli):
+        // scale -> rotation (radians, CCW around origin) -> offset.
+        const float2 uv = ApplyMaterialUv(uv0, mat);
+
+        const bool no_texture_sampling =
+            (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
+
+        if (!no_texture_sampling
+            && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
+            Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            float4 texel = base_tex.Sample(samp, uv);
+            // Base-color textures are authored in sRGB. Since the engine binds
+            // RGBA8 as UNORM (non-sRGB) and renders to a non-sRGB backbuffer,
+            // we must manually convert.
+            s.base_rgb *= SrgbToLinear(texel.rgb);
+            s.base_a   *= texel.a;
+        }
+
+        // Normal map (tangent-space)
+        if (!no_texture_sampling
+            && mat.normal_texture_index != K_INVALID_BINDLESS_INDEX) {
+            Texture2D<float4> nrm_tex = ResourceDescriptorHeap[mat.normal_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            float3 n_ts = DecodeNormalTS(nrm_tex.Sample(samp, uv).xyz);
+            n_ts.xy *= mat.normal_scale;
+            n_ts = SafeNormalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
+
+            float3 NN = SafeNormalize(world_normal);
+            // Fallback if geometric normal is degenerate
+            if (dot(NN, NN) < 0.5) {
+                NN = float3(0.0, 0.0, 1.0);
+            }
+
+            // The VS provides an orthonormal TBN basis. In the PS we only do a
+            // minimal, correctness-preserving renormalization and handedness
+            // check to account for interpolation.
+            float3 T = SafeNormalize(world_tangent);
+            float3 B_in = SafeNormalize(world_bitangent);
+
+            // Re-orthogonalize T against N (cheap) to avoid accumulating error
+            // across interpolation.
+            T = T - NN * dot(NN, T);
+            if (dot(T, T) <= 1e-6) {
+                const float3 axis = (abs(NN.z) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                                      : float3(0.0, 0.0, 1.0);
+                T = cross(NN, axis);
+            }
+            T = SafeNormalize(T);
+
+            float3 B = cross(NN, T);
+            if (dot(B, B) <= 1e-6) {
+                B = B_in;
+            }
+            const float handedness = (dot(B, B_in) < 0.0) ? -1.0 : 1.0;
+            B = SafeNormalize(B * handedness);
+
+            // Transform tangent-space normal to world space.
+            // TBN basis vectors (T, B, NN) are columns of the transform matrix.
+            // n_ws = T * n_ts.x + B * n_ts.y + NN * n_ts.z
+            float3 perturbed_N = T * n_ts.x + B * n_ts.y + NN * n_ts.z;
+            perturbed_N = SafeNormalize(perturbed_N);
+
+            // Validate the perturbed normal - if it's zero or points sharply away
+            // from the geometric normal (> 90 degrees), fall back to geometric normal
+            if (dot(perturbed_N, perturbed_N) < 0.5 || dot(perturbed_N, NN) < 0.0) {
+                perturbed_N = NN;
+            }
+            s.N = perturbed_N;
+        }
+
+        // Scalar maps
+        const bool is_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
+        bool use_orm_packed = is_orm_packed;
+
+        // If the packed flag isn't set, still support the common case where
+        // ORM is authored as a single texture wired into all three slots.
+        uint orm_tex_index = K_INVALID_BINDLESS_INDEX;
+        if (!use_orm_packed) {
+            const uint idx = mat.metallic_texture_index;
+            if (idx != K_INVALID_BINDLESS_INDEX && idx == mat.roughness_texture_index
+                && idx == mat.ambient_occlusion_texture_index) {
+                use_orm_packed = true;
+                orm_tex_index = idx;
+            }
+        } else {
+            orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
+                ? mat.roughness_texture_index
+                : ((mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX)
+                    ? mat.metallic_texture_index
+                    : mat.ambient_occlusion_texture_index);
+        }
+
+        if (!no_texture_sampling && use_orm_packed
+            && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
+            Texture2D<float4> orm_tex = ResourceDescriptorHeap[orm_tex_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            const float3 orm = saturate(orm_tex.Sample(samp, uv).rgb);
+
+            // glTF ORM packing:
+            // - AO:       R
+            // - Roughness:G
+            // - Metalness:B
+            s.roughness *= orm.g;
+            s.metalness *= orm.b;
+
+            // Prefer dedicated AO map if provided separately.
+            if (mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX
+                && mat.ambient_occlusion_texture_index != orm_tex_index) {
+                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+            } else {
+                s.ao *= orm.r;
+            }
+        } else {
+            if (!no_texture_sampling
+                && mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX) {
+                Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.metalness *= saturate(m_tex.Sample(samp, uv).r);
+            }
+            if (!no_texture_sampling
+                && mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
+                Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.roughness *= saturate(r_tex.Sample(samp, uv).r);
+            }
+            if (!no_texture_sampling
+                && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
+                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+                SamplerState samp = SamplerDescriptorHeap[0];
+                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+            }
+        }
+
+        // Emissive: self-illumination that bypasses BRDF.
+        // Start with the constant factor, then modulate by texture if present.
+        s.emissive = mat.emissive_factor;
+        if (!no_texture_sampling
+            && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
+            Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            // Emissive textures are typically sRGB-encoded.
+            float3 emissive_sample = SrgbToLinear(emissive_tex.Sample(samp, uv).rgb);
+            s.emissive *= emissive_sample;
+        }
+
+        if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u
+            && draw_bindings.procedural_grid_material_constants_slot
+                != K_INVALID_BINDLESS_INDEX) {
+            StructuredBuffer<ProceduralGridMaterialConstants> procedural_grid_materials =
+                ResourceDescriptorHeap[draw_bindings.procedural_grid_material_constants_slot];
+            const ProceduralGridMaterialConstants grid_mat =
+                procedural_grid_materials[meta.material_handle];
+            const float4 grid_color = EvaluateProceduralGrid(
+                grid_mat, world_pos, world_normal);
+            s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
+            s.base_a = max(s.base_a, grid_color.a);
+            // Keep grid visible regardless of lighting/shadowing.
+            s.emissive += grid_color.rgb * grid_color.a;
+        }
+
+        // Double-sided lighting: keep the surface visible (cull mode) and
+        // flip the shading normal for backfaces so lights contribute on both
+        // sides. This does not change geometry winding; it only affects BRDF.
+        if ((mat.flags & MATERIAL_FLAG_DOUBLE_SIDED) != 0u && !is_front_face) {
+            s.N = -s.N;
+        }
+    }
+
+    return s;
+}
+
+#endif // OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI

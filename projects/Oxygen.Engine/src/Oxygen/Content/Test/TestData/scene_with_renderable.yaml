@@ -109,3 +109,4 @@ assets:
     renderables:
       - node_index: 1
         geometry: "test_geometry"
+        material_asset_key: "11111111-2222-3333-4444-555555555555"

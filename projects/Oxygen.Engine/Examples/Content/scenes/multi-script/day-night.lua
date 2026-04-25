@@ -47,7 +47,7 @@ local function apply_sun_node_settings(sun_node, azimuth_deg, elevation_deg, col
       is_sun_light = true,
       intensity_lux = lux,
       color_rgb = color_rgb,
-      angular_size_radians = 0.004675,
+      angular_size_radians = 0.00935,
     })
   end
 
@@ -56,7 +56,7 @@ local function apply_sun_node_settings(sun_node, azimuth_deg, elevation_deg, col
   sun_node:light_set_casts_shadows(true)
   sun_node:light_set_intensity_lux(lux)
   sun_node:light_set_color_rgb(color_rgb)
-  sun_node:light_set_angular_size_radians(0.004675)
+  sun_node:light_set_angular_size_radians(0.00935)
 
   local pitch = math.rad(-elevation_deg)
   local yaw = math.rad(azimuth_deg)
@@ -67,20 +67,6 @@ local function apply_environment_settings(azimuth_deg, elevation_deg, color_rgb,
   local env = scene.ensure_environment()
   if env == nil then
     return
-  end
-
-  local sun = env:ensure_sun()
-  if sun ~= nil then
-    sun:set({
-      source = "synthetic",
-      azimuth_degrees = azimuth_deg,
-      elevation_degrees = elevation_deg,
-      color_rgb = color_rgb,
-      illuminance_lx = lux,
-      disk_angular_radius_radians = 0.004675,
-      casts_shadows = true,
-      light_temperature_kelvin = lerp(2300.0, 6500.0, day01),
-    })
   end
 
   local sky_atmo = env:ensure_sky_atmosphere()

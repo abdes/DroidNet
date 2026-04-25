@@ -158,6 +158,30 @@ auto ConvertCompareOp(const CompareOp value) -> D3D12_COMPARISON_FUNC
   throw std::runtime_error("Invalid comparison op");
 }
 
+auto ConvertStencilOp(const StencilOp value) -> D3D12_STENCIL_OP
+{
+  switch (value) { // NOLINT(clang-diagnostic-switch)
+  case StencilOp::kKeep:
+    return D3D12_STENCIL_OP_KEEP;
+  case StencilOp::kZero:
+    return D3D12_STENCIL_OP_ZERO;
+  case StencilOp::kReplace:
+    return D3D12_STENCIL_OP_REPLACE;
+  case StencilOp::kIncrSat:
+    return D3D12_STENCIL_OP_INCR_SAT;
+  case StencilOp::kDecrSat:
+    return D3D12_STENCIL_OP_DECR_SAT;
+  case StencilOp::kInvert:
+    return D3D12_STENCIL_OP_INVERT;
+  case StencilOp::kIncr:
+    return D3D12_STENCIL_OP_INCR;
+  case StencilOp::kDecr:
+    return D3D12_STENCIL_OP_DECR;
+  }
+
+  throw std::runtime_error("Invalid stencil op");
+}
+
 auto ConvertBlendFactor(const BlendFactor value) -> D3D12_BLEND
 {
   // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
@@ -309,18 +333,23 @@ void TranslateDepthStencilState(
   d3d_desc.StencilReadMask = desc.stencil_read_mask;
   d3d_desc.StencilWriteMask = desc.stencil_write_mask;
 
-  // The translation sets the default stencil operations for FrontFace and
-  // BackFace to the typical D3D12 defaults most commonly used in 3D game
-  // engines.
-  d3d_desc.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+  d3d_desc.FrontFace.StencilFailOp
+    = ConvertStencilOp(desc.front_face.stencil_fail_op);
+  d3d_desc.FrontFace.StencilDepthFailOp
+    = ConvertStencilOp(desc.front_face.stencil_depth_fail_op);
+  d3d_desc.FrontFace.StencilPassOp
+    = ConvertStencilOp(desc.front_face.stencil_pass_op);
+  d3d_desc.FrontFace.StencilFunc
+    = ConvertCompareOp(desc.front_face.stencil_func);
 
-  d3d_desc.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-  d3d_desc.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+  d3d_desc.BackFace.StencilFailOp
+    = ConvertStencilOp(desc.back_face.stencil_fail_op);
+  d3d_desc.BackFace.StencilDepthFailOp
+    = ConvertStencilOp(desc.back_face.stencil_depth_fail_op);
+  d3d_desc.BackFace.StencilPassOp
+    = ConvertStencilOp(desc.back_face.stencil_pass_op);
+  d3d_desc.BackFace.StencilFunc
+    = ConvertCompareOp(desc.back_face.stencil_func);
 }
 
 void TranslateBlendState(

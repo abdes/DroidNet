@@ -252,11 +252,13 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     data::pak::world::RenderableRecord {
       .node_index = 1,
       .geometry_key = MakeAssetKey(42U),
+      .material_key = MakeAssetKey(52U),
       .visible = 1,
     },
     data::pak::world::RenderableRecord {
       .node_index = 0,
       .geometry_key = MakeAssetKey(43U),
+      .material_key = MakeAssetKey(53U),
       .visible = 1,
     },
   };
@@ -314,6 +316,8 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   const auto renderable0 = ReadRenderableRecord(bytes, entries[0], 0);
   const auto renderable1 = ReadRenderableRecord(bytes, entries[0], 1);
   EXPECT_LT(renderable0.node_index, renderable1.node_index);
+  EXPECT_EQ(renderable0.material_key, MakeAssetKey(53U));
+  EXPECT_EQ(renderable1.material_key, MakeAssetKey(52U));
 }
 
 //! Verify environment block records are appended to the descriptor.

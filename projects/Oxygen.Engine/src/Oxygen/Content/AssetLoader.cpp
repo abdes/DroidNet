@@ -2851,7 +2851,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
           data::AssetType::kScene, LoadTelemetryEvent::kTasksSpawned);
       },
   };
-  const auto publish_scene_geometry_dependencies
+  const auto publish_scene_renderable_dependencies
     = [this, key, source_id, request](
         const std::shared_ptr<data::SceneAsset>& scene_asset) -> co::Co<> {
     if (!scene_asset) {
@@ -2859,20 +2859,34 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     }
 
     std::unordered_set<data::AssetKey> seen_geometry_keys;
+    std::unordered_set<data::AssetKey> seen_material_keys;
     for (const auto& renderable :
       scene_asset->GetComponents<pak::world::RenderableRecord>()) {
-      if (!seen_geometry_keys.insert(renderable.geometry_key).second) {
+      if (seen_geometry_keys.insert(renderable.geometry_key).second) {
+        auto geom = co_await LoadGeometryAssetAsyncImpl(
+          renderable.geometry_key, source_id, request);
+        if (geom) {
+          AddAssetDependency(key, renderable.geometry_key);
+          content_cache_.CheckIn(
+            HashAssetKey(renderable.geometry_key, source_id));
+        }
+      }
+
+      if (renderable.material_key == data::AssetKey {}) {
+        continue;
+      }
+      if (!seen_material_keys.insert(renderable.material_key).second) {
         continue;
       }
 
-      auto geom = co_await LoadGeometryAssetAsyncImpl(
-        renderable.geometry_key, source_id, request);
-      if (!geom) {
+      auto material = co_await LoadMaterialAssetAsyncImpl(
+        renderable.material_key, source_id, request);
+      if (!material) {
         continue;
       }
 
-      AddAssetDependency(key, renderable.geometry_key);
-      content_cache_.CheckIn(HashAssetKey(renderable.geometry_key, source_id));
+      AddAssetDependency(key, renderable.material_key);
+      content_cache_.CheckIn(HashAssetKey(renderable.material_key, source_id));
     }
   };
 
@@ -2908,15 +2922,16 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  const auto cache_hit = [this, hash_key, publish_scene_geometry_dependencies,
+  const auto cache_hit = [this, hash_key, publish_scene_renderable_dependencies,
                            publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     if (auto cached = content_cache_.CheckOut<data::SceneAsset>(
           hash_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit scene loads must republish scene->geometry edges so live
       // scene content is protected from trim and can be rebuilt
-      // deterministically.
-      co_await publish_scene_geometry_dependencies(cached);
+      // deterministically. Scene-authored renderable material overrides are
+      // direct scene dependencies for the same reason.
+      co_await publish_scene_renderable_dependencies(cached);
       co_await publish_scene_script_dependencies(cached);
       co_return cached;
     }
@@ -2924,7 +2939,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish = [this, key, source_id, hash_key, request,
-                                    publish_scene_geometry_dependencies,
+    publish_scene_renderable_dependencies,
                                     publish_scene_script_dependencies]()
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     try {
@@ -2970,7 +2985,8 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       }
 
       // Publish only what needs async residency management:
-      // geometry assets referenced by renderable components.
+      // geometry assets and material overrides referenced by renderable
+      // components.
       // Other scene node components (camera/light/etc.) are embedded records
       // and are not assets/resources.
       //
@@ -2983,7 +2999,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       co_await PublishResourceDependenciesAsync<data::BufferResource>(
         key, *decoded_result.dependency_collector, request);
 
-      co_await publish_scene_geometry_dependencies(decoded);
+      co_await publish_scene_renderable_dependencies(decoded);
       co_await publish_scene_script_dependencies(decoded);
 
       co_return decoded;
