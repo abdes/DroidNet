@@ -77,6 +77,8 @@ public class RouteActivatorTests
         _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
         _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(rootNode, this.contextMock.Object)).Returns(Task.CompletedTask);
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(childRoute, this.contextMock.Object)).Returns(Task.CompletedTask);
 
         // Act
         var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
@@ -98,6 +100,7 @@ public class RouteActivatorTests
         _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
         _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: false);
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(rootNode, this.contextMock.Object)).Returns(Task.CompletedTask);
 
         // Act
         var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
@@ -119,16 +122,44 @@ public class RouteActivatorTests
         _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
         _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
         _ = observerMock.Setup(o => o.OnActivating(childRoute, this.contextMock.Object)).Returns(value: true);
-        _ = observerMock.Setup(o => o.OnActivatedAsync(rootNode, this.contextMock.Object));
-        _ = observerMock.Setup(o => o.OnActivatedAsync(childRoute, this.contextMock.Object));
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(rootNode, this.contextMock.Object)).Returns(Task.CompletedTask);
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(childRoute, this.contextMock.Object)).Returns(Task.CompletedTask);
+        _ = observerMock.Setup(o => o.OnActivated(rootNode, this.contextMock.Object));
+        _ = observerMock.Setup(o => o.OnActivated(childRoute, this.contextMock.Object));
 
         // Act
         var result = await this.activator.ActivateRoutesRecursiveAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeTrue();
-        observerMock.Verify(o => o.OnActivatedAsync(rootNode, this.contextMock.Object), Times.Once());
-        observerMock.Verify(o => o.OnActivatedAsync(childRoute, this.contextMock.Object), Times.Once());
+        observerMock.Verify(o => o.OnActivated(rootNode, this.contextMock.Object), Times.Once());
+        observerMock.Verify(o => o.OnActivated(childRoute, this.contextMock.Object), Times.Once());
+    }
+
+    [TestMethod]
+    public async Task ActivateRoute_WithObserverAcceptsActivation_ShouldNotifyRouteAwareBeforeLoadingContent()
+    {
+        // Arrange
+        var (rootNode, _) = MakeRootNodeWithChild();
+        List<string> calls = [];
+
+        var observerMock = new Mock<IRouteActivationObserver>();
+        _ = this.contextMock.SetupGet(c => c.RouteActivationObserver).Returns(observerMock.Object);
+        _ = observerMock.Setup(o => o.OnActivating(rootNode, this.contextMock.Object)).Returns(value: true);
+        _ = observerMock.Setup(o => o.OnNavigatedToAsync(rootNode, this.contextMock.Object))
+            .Callback(() => calls.Add("route-aware"))
+            .Returns(Task.CompletedTask);
+
+        this.activatorMock.Protected()
+            .Setup("DoActivateRoute", rootNode, this.contextMock.Object)
+            .Callback(() => calls.Add("load-content"));
+
+        // Act
+        var result = await this.activator.ActivateRouteAsync(rootNode, this.contextMock.Object).ConfigureAwait(false);
+
+        // Assert
+        _ = result.Should().BeTrue();
+        _ = calls.Should().Equal("route-aware", "load-content");
     }
 
     private static (IActiveRoute rootNode, IActiveRoute childRoute) MakeRootNodeWithChild()

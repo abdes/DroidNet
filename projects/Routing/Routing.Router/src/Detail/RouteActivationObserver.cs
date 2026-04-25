@@ -77,28 +77,9 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
         return true;
     }
 
-    /// <summary>
-    /// Called after a route has been successfully activated to perform any necessary post-activation logic.
-    /// </summary>
-    /// <param name="route">The route that has been activated.</param>
-    /// <param name="context">The navigation context in which the route was activated.</param>
-    /// <remarks>
-    /// This method is called after a route has been successfully activated. It sets the
-    /// <see cref="ActiveRoute.IsActivated"/> property to <see langword="true"/>, indicating that the
-    /// route is now active. This method ensures that any additional logic that needs to be executed
-    /// after activation is performed, such as updating the state of the route or notifying other
-    /// components of the activation.
-    /// <para>
-    /// If the view model implements <see cref="IRoutingAware"/>, its <see cref="IRoutingAware.OnNavigatedToAsync(IActiveRoute, INavigationContext)"/>
-    /// method is invoked, providing the view model with the data inside the active route, including
-    /// the route's parameters, and the navigation context.
-    /// </para>
-    /// </remarks>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task OnActivatedAsync(IActiveRoute route, INavigationContext context)
+    /// <inheritdoc/>
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext context)
     {
-        _ = context; // Unused
-
         if (route.ViewModel is IRoutingAware routingAware)
         {
             // Provide the activated route as well as the context to the view model, so that the
@@ -106,6 +87,12 @@ internal sealed class RouteActivationObserver(IContainer container) : IRouteActi
             // if it does not need to.
             await routingAware.OnNavigatedToAsync(route, context).ConfigureAwait(true);
         }
+    }
+
+    /// <inheritdoc/>
+    public void OnActivated(IActiveRoute route, INavigationContext context)
+    {
+        _ = context; // Unused
 
         if (route is ActiveRoute routeImpl)
         {

@@ -83,13 +83,14 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
             {
                 LogRouteActivating(this.Logger, route);
 
-                this.DoActivateRoute(route, context);
-
-                // Notify observer post-activation if it exists.
                 if (activationObserver is not null)
                 {
-                    await activationObserver.OnActivatedAsync(route, context).ConfigureAwait(true);
+                    await activationObserver.OnNavigatedToAsync(route, context).ConfigureAwait(true);
                 }
+
+                this.DoActivateRoute(route, context);
+
+                activationObserver?.OnActivated(route, context);
 
                 LogRouteActivated(this.Logger, route);
                 return true;
