@@ -24,6 +24,7 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
@@ -217,6 +218,34 @@ protected:
       .debug_name = "SceneRendererPublicationTest.ViewConstants",
     });
     return render_context;
+  }
+
+  static auto AddEnvironmentWithLocalFog(Scene& scene) -> void
+  {
+    scene.SetEnvironment(
+      std::make_unique<oxygen::scene::SceneEnvironment>());
+    auto* environment = scene.GetEnvironment().get();
+    ASSERT_NE(environment, nullptr);
+    auto& atmosphere
+      = environment->AddSystem<oxygen::scene::environment::SkyAtmosphere>();
+    atmosphere.SetEnabled(true);
+    auto& fog = environment->AddSystem<oxygen::scene::environment::Fog>();
+    fog.SetEnabled(true);
+    fog.SetEnableHeightFog(true);
+
+    auto node = scene.CreateNode("SceneRendererPublicationTest.LocalFog");
+    ASSERT_TRUE(node.IsAlive());
+    const auto impl = node.GetImpl();
+    ASSERT_TRUE(impl.has_value());
+    impl->get().AddComponent<oxygen::scene::environment::LocalFogVolume>();
+    auto& local_fog
+      = impl->get().GetComponent<oxygen::scene::environment::LocalFogVolume>();
+    local_fog.SetEnabled(true);
+    local_fog.SetRadialFogExtinction(0.45F);
+    local_fog.SetHeightFogExtinction(0.25F);
+    local_fog.SetFogAlbedo({ 0.7F, 0.8F, 0.9F });
+    node.GetTransform().SetLocalScale({ 2.0F, 2.0F, 2.0F });
+    scene.Update();
   }
 
   auto RunRendererFrame(FrameContext& frame_context) const -> void
@@ -1117,6 +1146,75 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     "VortexAtmosphereComposePS", true));
   EXPECT_TRUE(has_pipeline("Vortex.Environment.Fog",
     "Vortex/Services/Environment/Fog.hlsl", "VortexFogPassPS", true));
+}
+
+NOLINT_TEST_F(SceneRendererPublicationTest,
+  Stage14EnvironmentStateIsVisibleThroughSceneRendererBoundary)
+{
+  auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
+    SceneTexturesConfig {
+      .extent = { 96U, 54U },
+      .enable_velocity = true,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    },
+    ShadingMode::kDeferred);
+
+  auto frame_context = FrameContext {};
+  PrepareFrameContext(
+    frame_context, oxygen::frame::SequenceNumber { 2U },
+    oxygen::frame::Slot { 0U });
+  auto scene = std::make_shared<Scene>(
+    "SceneRendererPublicationTest.Stage14Environment", 16U);
+  AddEnvironmentWithLocalFog(*scene);
+  frame_context.SetScene(oxygen::observer_ptr<Scene> { scene.get() });
+
+  auto framebuffer
+    = MakeFramebuffer("SceneRendererPublicationTest.Stage14Environment", 96U,
+      54U);
+  const auto view_id = frame_context.RegisterView(
+    MakeView(oxygen::observer_ptr { framebuffer.get() }, 96.0F, 54.0F, true));
+  auto resolved_view = MakeResolvedView(96.0F, 54.0F);
+  auto render_context = MakeSceneRenderContext(
+    scene, view_id, resolved_view, oxygen::observer_ptr { framebuffer.get() });
+  auto composition_view = CompositionView {};
+  composition_view.id = view_id;
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  composition_view.with_local_fog = true;
+  render_context.frame_views.front().composition_view
+    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+  render_context.current_view.composition_view
+    = oxygen::observer_ptr<const CompositionView> { &composition_view };
+  render_context.current_view.with_atmosphere = true;
+  render_context.current_view.with_height_fog = true;
+  render_context.current_view.with_local_fog = true;
+
+  scene_renderer.OnFrameStart(frame_context);
+  graphics_->dispatch_log_.dispatches.clear();
+  scene_renderer.OnRender(render_context);
+
+  const auto& environment_state
+    = scene_renderer.GetLastEnvironmentLightingState();
+  EXPECT_TRUE(environment_state.owned_by_environment_service);
+  EXPECT_TRUE(environment_state.published_bindings);
+  EXPECT_TRUE(environment_state.stage14_requested);
+  EXPECT_TRUE(environment_state.stage14_local_fog_requested);
+  EXPECT_TRUE(environment_state.stage14_local_fog_executed);
+  EXPECT_TRUE(environment_state.stage14_local_fog_hzb_consumed);
+  EXPECT_FALSE(environment_state.stage14_local_fog_hzb_unavailable);
+  EXPECT_TRUE(environment_state.stage14_local_fog_buffer_ready);
+  EXPECT_FALSE(environment_state.stage14_local_fog_skipped);
+  EXPECT_EQ(environment_state.stage14_local_fog_instance_count, 1U);
+  EXPECT_GE(environment_state.stage14_local_fog_dispatch_count_x, 1U);
+  EXPECT_GE(environment_state.stage14_local_fog_dispatch_count_y, 1U);
+  EXPECT_EQ(environment_state.stage14_local_fog_dispatch_count_z, 1U);
+  EXPECT_TRUE(render_context.current_view.screen_hzb_available);
+  EXPECT_NE(
+    scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_GE(graphics_->dispatch_log_.dispatches.size(), 1U);
 }
 
 } // namespace

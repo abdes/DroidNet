@@ -24,6 +24,18 @@ inline constexpr std::uint32_t kEnvironmentContractFlagAtmosphereLight1Enabled
   = 1U << 1U;
 inline constexpr std::uint32_t kEnvironmentContractFlagShadowAuthoritySlot0Only
   = 1U << 2U;
+inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightAuthoredEnabled
+  = 1U << 3U;
+inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblValid
+  = 1U << 4U;
+inline constexpr std::uint32_t kEnvironmentContractFlagSkyLightIblUnavailable
+  = 1U << 5U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagVolumetricFogAuthoredEnabled
+  = 1U << 6U;
+inline constexpr std::uint32_t
+  kEnvironmentContractFlagIntegratedLightScatteringUnavailable
+  = 1U << 7U;
 
 //! Bindless environment-system routing payload for a single view.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {

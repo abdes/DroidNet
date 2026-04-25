@@ -40,17 +40,21 @@ systems have real code but still need fresh validation and UE5.7 parity proof.
 and must not be considered complete. This parent milestone owns the full
 environment/fog closure required before Async migration and Phase 5 work.
 
-**First implementation work package:** `VTX-M04D.1 — Environment Publication
-And Sky/Fog Contract Truth`
+**Validated implementation work package:** `VTX-M04D.1 — Environment
+Publication And Sky/Fog Contract Truth`
 
-**Detailed workstream plan:**
+**Next implementation work package:** `VTX-M04D.2 — UE5.7 Exponential Height
+Fog Parity`
+
+**Validated VTX-M04D.1 workstream plan:**
 [plan/VTX-M04D.1-environment-publication-truth.md](./plan/VTX-M04D.1-environment-publication-truth.md)
 
-- preserve stable sky/atmosphere and below-horizon behavior
-- make SkyLight/IBL publications truthful
-- expose Stage 14 environment execution state at the SceneRenderer boundary
-- tighten environment binding/static/view/product publication tests
-- record validation evidence before any closure claim
+- stable sky/atmosphere and below-horizon behavior was preserved
+- SkyLight/IBL publications now distinguish authored, valid, unavailable, and
+  stale states
+- Stage 14 environment execution state is visible at the SceneRenderer boundary
+- environment binding/static/view/product publication tests were extended
+- validation evidence is recorded below before the validated status claim
 
 ## 4. Milestone Ledger
 
@@ -61,7 +65,7 @@ And Sky/Fog Contract Truth`
 | VTX-M02 | Deferred core visual path | `landed_needs_validation` | InitViews, depth prepass, generic Screen HZB, base pass/GBuffer/velocity, Stage 10 publication, deferred lighting, shader families, debug views, and focused tests/tools are present. | Fresh build, ShaderBake/catalog validation, tests, and capture/analyzer proof are not recorded here. |
 | VTX-M03 | Migration-critical non-environment services | `landed_needs_validation` | LightingService, ShadowService directional baseline, PostProcessService, Stage 8/12/22 routing, and focused tests are present. | Service-specific fresh validation, RenderDoc proof, and residual parity review are not recorded here. |
 | VTX-M04D | Environment / fog parity closure | `in_progress` | Environment service and many atmosphere/sky/fog surfaces exist. | Parent milestone closes publication truth, height fog, local fog, volumetric fog, and runtime proof. |
-| VTX-M04D.1 | Environment publication and sky/fog contract truth | `in_progress` | EnvironmentLightingService and many atmosphere/sky/fog/local-fog passes exist; below-horizon sky invariants are captured in the LLD. | Truthful SkyLight/IBL publication, model-slot truth, Stage 14 renderer-boundary observability, and focused tests. |
+| VTX-M04D.1 | Environment publication and sky/fog contract truth | `validated` | EnvironmentLightingService now sanitizes IBL probe bindings, distinguishes authored SkyLight from usable IBL resources, keeps invalid SkyLight/volumetric products explicit, exposes Stage 14 local-fog state through SceneRenderer, and focused tests passed on 2026-04-25. | Real SkyLight capture/filtering, height-fog parity, local-fog parity, and volumetric-fog runtime output remain deferred to VTX-M04D.2 through VTX-M04D.4; VTX-M04D.1 does not claim those parity gates. |
 | VTX-M04D.2 | UE5.7 exponential height fog parity | `in_progress` | Height fog model/pass code exists. | UE5.7-grade authored parameters, `FogRendering` / `HeightFogCommon` algorithm parity, shader proof, coupling proof. |
 | VTX-M04D.3 | UE5.7 local fog volume parity | `in_progress` | Local fog state, Stage 14 tiled culling, Stage 15 compose, shaders, and tests exist. | Full UE5.7 parity for authoring, packing/sorting/capping, HZB use, analytic integral, splat/compose, sky-depth exclusion. |
 | VTX-M04D.4 | UE5.7 volumetric fog parity | `in_progress` | Volumetric fog model and publication seams exist. | Runtime froxel/grid passes, media/light injection, history/reprojection, integrated-light-scattering output, tests/capture proof. |
@@ -104,9 +108,8 @@ fresh closure claims unless the status is `validated`.
 | Gap | Blocks | Required Resolution |
 | --- | --- | --- |
 | No fresh validation recorded in this new status ledger for existing landed systems. | Any `validated` status for VTX-M01 through VTX-M03. | Run focused builds/tests and record exact command output/results. |
-| SkyLight/IBL publication can appear revisioned without real resource publication. | Environment publication truth and downstream shading/proof. | Implement or explicitly invalidate resource slots; test enabled/unavailable/disabled states. |
-| Environment model/product slots can remain invalid while authored state exists. | Downstream diagnostics, translucency, runtime proof. | Make each slot truthful and documented. |
-| Stage 14 local-fog state is service-local. | Diagnostics and renderer-level validation. | Publish/reflect Stage 14 state through SceneRenderer. |
+| Real SkyLight capture/filtering is not implemented. | Future SkyLight lighting parity and downstream image-based lighting quality. | VTX-M04D.1 now publishes enabled SkyLight as unavailable until usable IBL resources exist; implement real capture/filtering in a later environment/indirect-lighting work package before claiming usable IBL output. |
+| Height/local/volumetric fog runtime parity remains incomplete. | Environment parity and Async migration proof. | Continue through VTX-M04D.2 through VTX-M04D.4; VTX-M04D.1 only makes missing products explicit. |
 | Height fog is not UE5.7 parity-closed. | Environment parity and Async migration proof. | Implement parity-grade authored parameters, algorithms, shaders, tests, and capture proof. |
 | Local fog is not UE5.7 parity-closed. | Environment parity and no-volumetrics variants. | Complete authoring/runtime/culling/splat/sky-exclusion contract. |
 | Volumetric fog has authored/model seams but no accepted runtime parity. | Environment parity and no-volumetrics variants. | Implement froxel/injection/history/integrated-scattering pipeline. |
@@ -120,7 +123,7 @@ fresh closure claims unless the status is `validated`.
 | --- | --- | --- | --- |
 | Below-horizon sky behavior | Stable design invariants captured in `environment-service.md`; separate remediation doc removed. | VTX-M04D.1 preserve | Regression tests/capture proof that raw light directions, LUT domains, horizon seam behavior, and sky-depth rules remain stable. |
 | Atmosphere LUT family | Implementation exists for transmittance, multi-scattering, distant sky light, sky view, and camera aerial perspective. | VTX-M04D.1 preserve | Focused environment tests plus capture/resource proof where applicable. |
-| SkyLight / IBL | Implementation surface exists; publication truth remains open. | VTX-M04D.1 | Real resource publication or explicit invalid state, tests for all states. |
+| SkyLight / IBL | Publication truth is validated: authored SkyLight no longer enables shader-visible IBL without usable resources, probe revisions do not imply valid resource slots, and stale source changes invalidate prior probe bindings. | VTX-M04D.1 validated | Real capture/filtering resource generation remains a later implementation gap; current contract publishes explicit unavailable state. |
 | Height fog | Implementation surface exists; parity rejected as incomplete. | VTX-M04D.2 | UE5.7 source/shader mapping, authored-parameter tests, shader/capture proof. |
 | Local fog volumes | Stage 14 and Stage 15 code exists; parity rejected as incomplete. | VTX-M04D.3 | UE5.7 local fog mapping, HZB culling proof, splat/compose proof, sky-depth exclusion proof. |
 | Volumetric fog | Model/publication seams exist; runtime parity missing. | VTX-M04D.4 | Froxel/injection/history/integrated-scattering implementation and proof. |
@@ -132,5 +135,6 @@ Append new entries at the top.
 
 | Date | Scope | Commands / Evidence | Result | Residual Gap |
 | --- | --- | --- | --- | --- |
-| 2026-04-25 | VTX-M04D.1 detailed planning | Added the detailed environment publication truth plan at [plan/VTX-M04D.1-environment-publication-truth.md](./plan/VTX-M04D.1-environment-publication-truth.md), the planning package index at [plan/README.md](./plan/README.md), and the reusable workflow at [plan/milestone-planning-workflow.md](./plan/milestone-planning-workflow.md). | `in_progress` planning handoff for VTX-M04D.1. | No implementation or runtime validation was run; VTX-M04D.1 remains open until code and proof land. |
+| 2026-04-25 | VTX-M04D.1 environment publication truth implementation | Changed code: `src/Oxygen/Vortex/Environment/EnvironmentLightingService.{h,cpp}`, `src/Oxygen/Vortex/Environment/Passes/IblProbePass.cpp`, `src/Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h`, `src/Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h`, `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.{h,cpp}`, `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h`. Changed tests: `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`, `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`. Build: `cmake --build --preset windows-debug --target Oxygen.Vortex.EnvironmentLightingService Oxygen.Vortex.SceneRendererPublication` passed. Tests: `ctest --preset test-debug -R "Oxygen.Vortex.(EnvironmentLightingService\|SceneRendererPublication)" --output-on-failure` passed with `Oxygen.Vortex.EnvironmentLightingService.Tests` 28/28 and `Oxygen.Vortex.SceneRendererPublication.Tests` 16/16. CPU/HLSL ABI: no shader files or struct sizes changed; no shader bake/catalog validation required. UE5.7 grounding: retained the `environment-service.md` reference families for SkyAtmosphere, FogRendering, LocalFogVolumeRendering, VolumetricFog, and SkyLight capture/filtering contracts; no full fog parity review was performed because VTX-M04D.2 through VTX-M04D.4 remain out of scope. | `validated` for VTX-M04D.1 publication truth only. | Real SkyLight capture/filtering resources are still not generated and are explicitly published unavailable; height fog, local fog, and volumetric fog parity/runtime output remain open in VTX-M04D.2 through VTX-M04D.4. |
+| 2026-04-25 | VTX-M04D.1 detailed planning | Added the detailed environment publication truth plan at [plan/VTX-M04D.1-environment-publication-truth.md](./plan/VTX-M04D.1-environment-publication-truth.md), the planning package index at [plan/README.md](./plan/README.md), and the reusable workflow at [plan/milestone-planning-workflow.md](./plan/milestone-planning-workflow.md). | Historical planning handoff, superseded by the validated implementation evidence row above. | No remaining VTX-M04D.1 planning-only gap; runtime fog parity remains tracked by later VTX-M04D work packages. |
 | 2026-04-25 | Planning/status rewrite | Source/doc inspection; three read-only subagent reviews; restricted markdown scans for stale status links, next milestone visibility, environment/fog false-completion language, and milestone status consistency; `git diff --check` on edited docs. | `validated` for VTX-M00 docs-only planning/status work. | Existing implementation remains `landed_needs_validation` or `in_progress` until fresh build/test/runtime proof is recorded. |

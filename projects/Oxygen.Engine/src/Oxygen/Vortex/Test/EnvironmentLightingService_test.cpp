@@ -35,6 +35,7 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
@@ -50,6 +51,7 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 
 #include "Fakes/Graphics.h"
 
@@ -67,6 +69,7 @@ using oxygen::vortex::EnvironmentFrameBindings;
 using oxygen::vortex::EnvironmentLightingService;
 using oxygen::vortex::EnvironmentProbeBindings;
 using oxygen::vortex::EnvironmentProbeState;
+using oxygen::vortex::EnvironmentStaticData;
 using oxygen::vortex::RenderContext;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
@@ -75,6 +78,7 @@ using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::environment::AtmosphereLightModel;
 using oxygen::vortex::environment::AtmosphereModel;
 using oxygen::vortex::environment::EnvironmentViewProducts;
+using oxygen::vortex::environment::IblProbePass;
 using oxygen::vortex::environment::HeightFogModel;
 using oxygen::vortex::environment::kAtmosphereLightSlotCount;
 using oxygen::vortex::environment::kInvalidAtmosphereLightSlot;
@@ -266,6 +270,36 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     view_products.distant_sky_light_lut_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(
     view_products.integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    view_products.flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagSkyLightAuthoredEnabled,
+    0U);
+  EXPECT_EQ(
+    view_products.flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagSkyLightIblValid,
+    0U);
+  EXPECT_EQ(
+    view_products.flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringValid,
+    0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  EnvironmentStaticSkyLightDefaultsExposeNoUsableIblSlots)
+{
+  const auto static_data = EnvironmentStaticData {};
+
+  EXPECT_EQ(static_data.sky_light.enabled, 0U);
+  EXPECT_EQ(static_data.sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data.sky_light.brdf_lut_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data.sky_light.irradiance_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data.sky_light.prefilter_map_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data.sky_light.ibl_generation, 0U);
 }
 
 class EnvironmentLightingServiceBehaviorTest : public ::testing::Test {
@@ -411,6 +445,49 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(probe_state.probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
+    0U);
+  EXPECT_NE(probe_state.flags & oxygen::vortex::kEnvironmentProbeStateFlagStale,
+    0U);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  IblProbeRefreshInvalidatesPreviouslyUsableResourcesWhenSourceChanges)
+{
+  const auto pass = IblProbePass {};
+  auto current = EnvironmentProbeState {};
+  current.valid = true;
+  current.flags = oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid;
+  current.probes.environment_map_srv = oxygen::ShaderVisibleIndex { 11U };
+  current.probes.irradiance_map_srv = oxygen::ShaderVisibleIndex { 12U };
+  current.probes.prefiltered_map_srv = oxygen::ShaderVisibleIndex { 13U };
+  current.probes.brdf_lut_srv = oxygen::ShaderVisibleIndex { 14U };
+  current.probes.probe_revision = 7U;
+
+  const auto refreshed = pass.Refresh(current, true);
+
+  EXPECT_TRUE(refreshed.requested);
+  EXPECT_TRUE(refreshed.refreshed);
+  EXPECT_FALSE(refreshed.probe_state.valid);
+  EXPECT_EQ(refreshed.probe_state.probes.probe_revision, 8U);
+  EXPECT_EQ(refreshed.probe_state.probes.environment_map_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(refreshed.probe_state.probes.irradiance_map_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(refreshed.probe_state.probes.prefiltered_map_srv,
+    kInvalidShaderVisibleIndex);
+  EXPECT_EQ(
+    refreshed.probe_state.probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(refreshed.probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagUnavailable,
+    0U);
+  EXPECT_NE(refreshed.probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagStale,
+    0U);
+  EXPECT_EQ(refreshed.probe_state.flags
+      & oxygen::vortex::kEnvironmentProbeStateFlagResourcesValid,
+    0U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -1208,6 +1285,175 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  EnabledSkyLightPublishesUnavailableIblInsteadOfRevisionOnlyResources)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 8U }, oxygen::frame::Slot { 2U });
+  service.RefreshPersistentProbeState(true);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 25U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 25U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 25U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* static_data = service.InspectEnvironmentStaticData(ViewId { 25U });
+  ASSERT_NE(static_data, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 25U });
+  ASSERT_NE(products, nullptr);
+
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightAuthoredEnabled,
+    0U);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightIblUnavailable,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightIblValid,
+    0U);
+  EXPECT_EQ(bindings->probes.probe_revision, 1U);
+  EXPECT_EQ(bindings->probes.environment_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->probes.irradiance_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->probes.prefiltered_map_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings->probes.brdf_lut_srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(static_data->sky_light.enabled, 0U);
+  EXPECT_EQ(
+    static_data->sky_light.cubemap_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(
+    static_data->sky_light.brdf_lut_slot, oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data->sky_light.irradiance_map_slot,
+    oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data->sky_light.prefilter_map_slot,
+    oxygen::kInvalidBindlessIndex);
+  EXPECT_EQ(static_data->sky_light.ibl_generation, 0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagSkyLightAuthoredEnabled,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagSkyLightIblUnavailable,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::kEnvironmentViewProductFlagSkyLightIblValid,
+    0U);
+  EXPECT_TRUE(service.GetLastPublicationState().sky_light_authored_enabled);
+  EXPECT_FALSE(service.GetLastPublicationState().sky_light_ibl_valid);
+  EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_unavailable);
+  EXPECT_TRUE(service.GetLastPublicationState().sky_light_ibl_stale);
+  EXPECT_TRUE(service.GetLastViewProductGenerationState()
+      .sky_light_authored_enabled);
+  EXPECT_FALSE(
+    service.GetLastViewProductGenerationState().sky_light_ibl_valid);
+  EXPECT_TRUE(
+    service.GetLastViewProductGenerationState().sky_light_ibl_unavailable);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  DisabledSkyLightDoesNotPublishUnavailableOrUsableIblState)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 9U }, oxygen::frame::Slot { 2U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto sky_light
+    = scene->GetEnvironment()
+        ->TryGetSystem<oxygen::scene::environment::SkyLight>();
+  ASSERT_NE(sky_light.get(), nullptr);
+  sky_light->SetEnabled(false);
+  scene->Update();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 26U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 26U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 26U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 26U });
+  ASSERT_NE(products, nullptr);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightAuthoredEnabled,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightIblUnavailable,
+    0U);
+  EXPECT_EQ(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagSkyLightIblValid,
+    0U);
+  EXPECT_EQ(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagSkyLightAuthoredEnabled,
+    0U);
+  EXPECT_FALSE(service.GetLastPublicationState().sky_light_authored_enabled);
+  EXPECT_FALSE(service.GetLastPublicationState().sky_light_ibl_valid);
+  EXPECT_FALSE(service.GetLastPublicationState().sky_light_ibl_unavailable);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  AuthoredVolumetricFogDoesNotPublishIntegratedScatteringBeforeRuntimePathExists)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 10U }, oxygen::frame::Slot { 2U });
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  auto fog = scene->GetEnvironment()
+               ->TryGetSystem<oxygen::scene::environment::Fog>();
+  ASSERT_NE(fog.get(), nullptr);
+  fog->SetEnableVolumetricFog(true);
+  scene->Update();
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 27U };
+  composition_view.with_atmosphere = true;
+  auto ctx = MakeRenderContext(ViewId { 27U }, resolved_view, composition_view);
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  const auto slot = service.PublishEnvironmentBindings(ctx);
+
+  ASSERT_NE(slot, kInvalidShaderVisibleIndex);
+  const auto* bindings = service.InspectBindings(ViewId { 27U });
+  ASSERT_NE(bindings, nullptr);
+  const auto* products = service.InspectEnvironmentViewProducts(ViewId { 27U });
+  ASSERT_NE(products, nullptr);
+  EXPECT_TRUE(products->volumetric_fog.enabled);
+  EXPECT_EQ(
+    products->integrated_light_scattering_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::kEnvironmentContractFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(bindings->contract_flags
+      & oxygen::vortex::
+        kEnvironmentContractFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled,
+    0U);
+  EXPECT_NE(products->flags
+      & oxygen::vortex::environment::
+        kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable,
+    0U);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().volumetric_fog_authored_enabled);
+  EXPECT_FALSE(
+    service.GetLastPublicationState().integrated_light_scattering_valid);
+  EXPECT_TRUE(
+    service.GetLastPublicationState().integrated_light_scattering_unavailable);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   LocalFogStage14AndStage15RunWhenSceneContainsLocalFogVolumes)
 {
   auto service = EnvironmentLightingService(*renderer_);
@@ -1307,6 +1553,43 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(stage14.local_fog_dispatch_count_x, 1U);
   EXPECT_EQ(stage14.local_fog_dispatch_count_y, 1U);
   EXPECT_EQ(stage14.local_fog_dispatch_count_z, 1U);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  LocalFogStage14ReportsHzbUnavailableWhenCullingRunsWithoutPublishedHzb)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 11U }, oxygen::frame::Slot { 2U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 28U };
+  composition_view.with_local_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 28U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithLocalFog();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+
+  graphics_->dispatch_log_.dispatches.clear();
+
+  service.RenderSkyAndFog(ctx, scene_textures);
+
+  const auto& stage14 = service.GetLastStage14State();
+  EXPECT_TRUE(stage14.requested);
+  EXPECT_TRUE(stage14.local_fog_requested);
+  EXPECT_TRUE(stage14.local_fog_executed);
+  EXPECT_FALSE(stage14.local_fog_hzb_consumed);
+  EXPECT_TRUE(stage14.local_fog_hzb_unavailable);
+  EXPECT_FALSE(stage14.local_fog_skipped);
+  EXPECT_EQ(stage14.local_fog_instance_count, 1U);
+  EXPECT_EQ(graphics_->dispatch_log_.dispatches.size(), 1U);
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,

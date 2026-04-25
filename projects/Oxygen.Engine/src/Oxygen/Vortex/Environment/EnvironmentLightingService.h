@@ -74,6 +74,13 @@ public:
     std::uint32_t published_environment_view_products_count { 0U };
     std::uint32_t ambient_bridge_view_count { 0U };
     std::uint32_t probe_revision { 0U };
+    bool sky_light_authored_enabled { false };
+    bool sky_light_ibl_valid { false };
+    bool sky_light_ibl_unavailable { false };
+    bool sky_light_ibl_stale { false };
+    bool volumetric_fog_authored_enabled { false };
+    bool integrated_light_scattering_valid { false };
+    bool integrated_light_scattering_unavailable { false };
   };
 
   struct ViewProductGenerationState {
@@ -129,6 +136,12 @@ public:
     ShaderVisibleIndex environment_view_products_slot {
       kInvalidShaderVisibleIndex
     };
+    bool sky_light_authored_enabled { false };
+    bool sky_light_ibl_valid { false };
+    bool sky_light_ibl_unavailable { false };
+    bool volumetric_fog_authored_enabled { false };
+    bool integrated_light_scattering_valid { false };
+    bool integrated_light_scattering_unavailable { false };
   };
 
   struct Stage15State {
@@ -155,7 +168,9 @@ public:
     bool local_fog_requested { false };
     bool local_fog_executed { false };
     bool local_fog_hzb_consumed { false };
+    bool local_fog_hzb_unavailable { false };
     bool local_fog_buffer_ready { false };
+    bool local_fog_skipped { false };
     std::uint32_t local_fog_instance_count { 0U };
     std::uint32_t local_fog_dispatch_count_x { 0U };
     std::uint32_t local_fog_dispatch_count_y { 0U };
@@ -193,6 +208,10 @@ public:
     -> const EnvironmentFrameBindings*;
   [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewData(ViewId view_id) const
     -> const EnvironmentViewData*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentStaticData(
+    ViewId view_id) const -> const EnvironmentStaticData*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewProducts(
+    ViewId view_id) const -> const environment::EnvironmentViewProducts*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveEnvironmentFrameSlot(
     ViewId view_id) const -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto InspectProbeState() const noexcept
@@ -235,7 +254,9 @@ private:
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     EnvironmentFrameBindings bindings {};
+    EnvironmentStaticData static_data {};
     EnvironmentViewData view_data {};
+    environment::EnvironmentViewProducts view_products {};
   };
 
   auto EnsurePublishResources() -> bool;

@@ -96,10 +96,10 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t source { 0U };
   std::uint32_t enabled { 0U };
 
-  std::uint32_t cubemap_slot { 0U };
-  std::uint32_t brdf_lut_slot { 0U };
-  std::uint32_t irradiance_map_slot { 0U };
-  std::uint32_t prefilter_map_slot { 0U };
+  std::uint32_t cubemap_slot { kInvalidBindlessIndex };
+  std::uint32_t brdf_lut_slot { kInvalidBindlessIndex };
+  std::uint32_t irradiance_map_slot { kInvalidBindlessIndex };
+  std::uint32_t prefilter_map_slot { kInvalidBindlessIndex };
 
   std::uint32_t cubemap_max_mip { 0U };
   std::uint32_t prefilter_max_mip { 0U };

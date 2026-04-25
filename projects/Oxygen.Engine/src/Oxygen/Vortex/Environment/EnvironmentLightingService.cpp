@@ -141,6 +141,30 @@ namespace {
       / safe_solid_angle;
   }
 
+  auto ProbeBindingsHaveUsableResources(
+    const EnvironmentProbeBindings& probes) -> bool
+  {
+    return probes.environment_map_srv.IsValid()
+      && probes.irradiance_map_srv.IsValid()
+      && probes.prefiltered_map_srv.IsValid() && probes.brdf_lut_srv.IsValid();
+  }
+
+  auto ProbeStateHasUsableResources(const EnvironmentProbeState& state) -> bool
+  {
+    return state.valid && ProbeBindingsHaveUsableResources(state.probes);
+  }
+
+  auto SanitizedProbeBindings(const EnvironmentProbeState& state)
+    -> EnvironmentProbeBindings
+  {
+    auto bindings = EnvironmentProbeBindings {};
+    bindings.probe_revision = state.probes.probe_revision;
+    if (ProbeStateHasUsableResources(state)) {
+      bindings = state.probes;
+    }
+    return bindings;
+  }
+
 } // namespace
 
 EnvironmentLightingService::EnvironmentLightingService(Renderer& renderer)
@@ -238,6 +262,9 @@ auto EnvironmentLightingService::OnFrameStart(
     .frame_sequence = sequence,
     .frame_slot = slot,
     .probe_revision = probe_state_.probes.probe_revision,
+    .sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_),
+    .sky_light_ibl_stale
+    = (probe_state_.flags & kEnvironmentProbeStateFlagStale) != 0U,
   };
   last_view_product_generation_state_ = {};
   last_stage14_state_ = {};
@@ -310,7 +337,7 @@ auto EnvironmentLightingService::BuildBindings(
     .sky_view_lut_srv = view_products.sky_view_lut_srv,
     .camera_aerial_perspective_srv
     = view_products.camera_aerial_perspective_srv,
-    .probes = probe_state_.probes,
+    .probes = SanitizedProbeBindings(probe_state_),
     .evaluation = EnvironmentEvaluationParameters {},
     .ambient_bridge = EnvironmentAmbientBridgeBindings {},
   };
@@ -324,12 +351,30 @@ auto EnvironmentLightingService::BuildBindings(
   if (stable_state.conventional_shadow_authority_slot0_only) {
     bindings.contract_flags |= kEnvironmentContractFlagShadowAuthoritySlot0Only;
   }
+  const auto sky_light_authored_enabled = view_products.sky_light.enabled;
+  const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
+  if (sky_light_authored_enabled) {
+    bindings.contract_flags |= kEnvironmentContractFlagSkyLightAuthoredEnabled;
+    if (sky_light_ibl_valid) {
+      bindings.contract_flags |= kEnvironmentContractFlagSkyLightIblValid;
+    } else {
+      bindings.contract_flags |= kEnvironmentContractFlagSkyLightIblUnavailable;
+    }
+  }
+  if (view_products.volumetric_fog.enabled) {
+    bindings.contract_flags
+      |= kEnvironmentContractFlagVolumetricFogAuthoredEnabled;
+    if (!view_products.integrated_light_scattering_srv.IsValid()) {
+      bindings.contract_flags
+        |= kEnvironmentContractFlagIntegratedLightScatteringUnavailable;
+    }
+  }
 
   if (enable_ambient_bridge) {
     bindings.evaluation.flags
       |= kEnvironmentEvaluationFlagAmbientBridgeEligible;
   }
-  if (enable_ambient_bridge && probe_state_.valid) {
+  if (enable_ambient_bridge && sky_light_ibl_valid) {
     bindings.ambient_bridge.irradiance_map_srv
       = probe_state_.probes.irradiance_map_srv;
     bindings.ambient_bridge.ambient_intensity
@@ -604,7 +649,18 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
   data.sky_light.specular_intensity
     = view_products.sky_light.specular_intensity;
   data.sky_light.source = view_products.sky_light.source;
-  data.sky_light.enabled = view_products.sky_light.enabled ? 1U : 0U;
+  const auto usable_probe_bindings = SanitizedProbeBindings(probe_state_);
+  const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
+  data.sky_light.enabled
+    = view_products.sky_light.enabled && sky_light_ibl_valid ? 1U : 0U;
+  data.sky_light.cubemap_slot = usable_probe_bindings.environment_map_srv.get();
+  data.sky_light.brdf_lut_slot = usable_probe_bindings.brdf_lut_srv.get();
+  data.sky_light.irradiance_map_slot
+    = usable_probe_bindings.irradiance_map_srv.get();
+  data.sky_light.prefilter_map_slot
+    = usable_probe_bindings.prefiltered_map_srv.get();
+  data.sky_light.ibl_generation
+    = sky_light_ibl_valid ? usable_probe_bindings.probe_revision : 0U;
 
   data.sky_sphere.enabled = 0U;
   data.clouds.enabled = 0U;
@@ -659,12 +715,34 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     ctx, view_data, stable_state, *atmosphere_lut_cache_);
   products.camera_aerial_perspective_srv
     = camera_aerial_state.camera_aerial_perspective_srv;
+  const auto sky_light_authored_enabled = products.sky_light.enabled;
+  const auto sky_light_ibl_valid = ProbeStateHasUsableResources(probe_state_);
+  if (sky_light_authored_enabled) {
+    products.flags |= environment::kEnvironmentViewProductFlagSkyLightAuthoredEnabled;
+    if (sky_light_ibl_valid) {
+      products.flags |= environment::kEnvironmentViewProductFlagSkyLightIblValid;
+    } else {
+      products.flags
+        |= environment::kEnvironmentViewProductFlagSkyLightIblUnavailable;
+    }
+  }
+  if (products.volumetric_fog.enabled) {
+    products.flags
+      |= environment::kEnvironmentViewProductFlagVolumetricFogAuthoredEnabled;
+    if (products.integrated_light_scattering_srv.IsValid()) {
+      products.flags
+        |= environment::kEnvironmentViewProductFlagIntegratedLightScatteringValid;
+    } else {
+      products.flags
+        |= environment::kEnvironmentViewProductFlagIntegratedLightScatteringUnavailable;
+    }
+  }
 
+  const auto static_data = BuildEnvironmentStaticData(products);
   const auto resolved_environment_static_slot
     = environment_static_slot.IsValid()
     ? environment_static_slot
-    : static_data_publisher_->Publish(
-        ctx.current_view.view_id, BuildEnvironmentStaticData(products));
+    : static_data_publisher_->Publish(ctx.current_view.view_id, static_data);
 
   const auto environment_view_products_slot
     = view_products_publisher_->Publish(ctx.current_view.view_id, products);
@@ -675,7 +753,12 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     = bindings_publisher_->Publish(ctx.current_view.view_id, bindings);
   published_views_.insert_or_assign(ctx.current_view.view_id,
     PublishedView {
-      .slot = slot, .bindings = bindings, .view_data = view_data });
+      .slot = slot,
+      .bindings = bindings,
+      .static_data = static_data,
+      .view_data = view_data,
+      .view_products = products,
+    });
 
   last_publication_state_.frame_sequence = current_sequence_;
   last_publication_state_.frame_slot = current_slot_;
@@ -686,6 +769,20 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   if (bindings.ambient_bridge.flags != 0U) {
     last_publication_state_.ambient_bridge_view_count += 1U;
   }
+  last_publication_state_.sky_light_authored_enabled
+    = sky_light_authored_enabled;
+  last_publication_state_.sky_light_ibl_valid = sky_light_ibl_valid;
+  last_publication_state_.sky_light_ibl_unavailable
+    = sky_light_authored_enabled && !sky_light_ibl_valid;
+  last_publication_state_.sky_light_ibl_stale
+    = (probe_state_.flags & kEnvironmentProbeStateFlagStale) != 0U;
+  last_publication_state_.volumetric_fog_authored_enabled
+    = products.volumetric_fog.enabled;
+  last_publication_state_.integrated_light_scattering_valid
+    = products.integrated_light_scattering_srv.IsValid();
+  last_publication_state_.integrated_light_scattering_unavailable
+    = products.volumetric_fog.enabled
+    && !products.integrated_light_scattering_srv.IsValid();
 
   const auto& cache_state = atmosphere_lut_cache_->GetState();
   const auto atmosphere_lut_cache_valid = atmosphere_lut_cache_->IsFullyValid();
@@ -749,6 +846,16 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .environment_view_products_published
     = environment_view_products_slot.IsValid(),
     .environment_view_products_slot = environment_view_products_slot,
+    .sky_light_authored_enabled = sky_light_authored_enabled,
+    .sky_light_ibl_valid = sky_light_ibl_valid,
+    .sky_light_ibl_unavailable
+    = sky_light_authored_enabled && !sky_light_ibl_valid,
+    .volumetric_fog_authored_enabled = products.volumetric_fog.enabled,
+    .integrated_light_scattering_valid
+    = products.integrated_light_scattering_srv.IsValid(),
+    .integrated_light_scattering_unavailable
+    = products.volumetric_fog.enabled
+      && !products.integrated_light_scattering_srv.IsValid(),
   };
 
   return slot;
@@ -775,8 +882,13 @@ auto EnvironmentLightingService::RenderSkyAndFog(
     .local_fog_executed = local_fog_culling_state.executed,
     .local_fog_hzb_consumed
     = local_fog_culling_state.consumed_published_screen_hzb,
+    .local_fog_hzb_unavailable
+    = local_fog_culling_state.requested
+      && !local_fog_culling_state.consumed_published_screen_hzb,
     .local_fog_buffer_ready
     = local_fog_products.buffer_ready && local_fog_products.tile_data_ready,
+    .local_fog_skipped
+    = local_fog_products.prepared && !local_fog_culling_state.executed,
     .local_fog_instance_count = local_fog_products.instance_count,
     .local_fog_dispatch_count_x = local_fog_culling_state.dispatch_count_x,
     .local_fog_dispatch_count_y = local_fog_culling_state.dispatch_count_y,
@@ -815,6 +927,20 @@ auto EnvironmentLightingService::InspectEnvironmentViewData(
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? &it->second.view_data : nullptr;
+}
+
+auto EnvironmentLightingService::InspectEnvironmentStaticData(
+  const ViewId view_id) const -> const EnvironmentStaticData*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? &it->second.static_data : nullptr;
+}
+
+auto EnvironmentLightingService::InspectEnvironmentViewProducts(
+  const ViewId view_id) const -> const environment::EnvironmentViewProducts*
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? &it->second.view_products : nullptr;
 }
 
 auto EnvironmentLightingService::ResolveEnvironmentFrameSlot(
