@@ -23,6 +23,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />

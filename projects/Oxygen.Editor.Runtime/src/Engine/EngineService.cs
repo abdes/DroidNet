@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,9 +23,14 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 /// <param name="hostingContext">Provides access to the UI dispatcher context.</param>
 /// <param name="loggerFactory">Optional factory used to bridge native engine logging.</param>
-public sealed partial class EngineService(HostingContext hostingContext, ILoggerFactory? loggerFactory = null) : IEngineService
+/// <param name="engineSettings">Editor native engine startup settings.</param>
+public sealed partial class EngineService(
+    HostingContext hostingContext,
+    ILoggerFactory? loggerFactory = null,
+    ISettingsService<IEngineSettings>? engineSettings = null) : IEngineService
 {
     private readonly HostingContext hostingContext = hostingContext;
+    private readonly IEngineSettings engineSettings = engineSettings?.Settings ?? new EngineSettings();
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private readonly SemaphoreSlim leaseGate = new(1, 1);
@@ -206,11 +212,15 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             this.LogRunnerInitialized();
 
             // Configure the engine for headless operation
-            var config = ConfigFactory.CreateDefaultEngineConfig();
-            config.TargetFps = 1; // TODO: remove after editor is stable
-            config.Graphics ??= new GraphicsConfigManaged();
-            config.Graphics.Headless = true;
-            config.EnableAssetLoader = true;
+            var config = ConfigFactory.CreateDefaultEditorEngineConfig();
+            config.Engine.TargetFps = 1; // TODO: remove after editor is stable
+            config.Platform ??= new PlatformConfigManaged();
+            config.Engine ??= new EngineConfig();
+            config.Engine.Graphics ??= new GraphicsConfigManaged();
+            this.engineSettings.ApplyTo(config);
+            config.Platform.Headless = true;
+            config.Engine.Graphics.Headless = true;
+            config.Engine.EnableAssetLoader = true;
 
             this.engineContext = this.engineRunner.CreateEngine(config);
             if (this.engineContext?.IsValid != true)
