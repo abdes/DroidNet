@@ -11,6 +11,9 @@ This directory contains Vortex-specific capture analysis and probe scripts.
   - runs a debugger-backed no-capture audit under `cdb.exe` with the D3D12
     debug layer enabled before any RenderDoc capture is attempted
   - launches VortexBasic once with RenderDoc capture enabled
+  - runs the environment proof with `--aerial-start-depth 0` and
+    `--aerial-scattering-strength 1` so main-view AP changes Stage-15
+    atmosphere output in the captured frame
   - discovers the newly produced capture and feeds it into the existing proof
     wrapper
 
@@ -31,7 +34,13 @@ This directory contains Vortex-specific capture analysis and probe scripts.
     - `AnalyzeRenderDocVortexBasicCapture.py` for structural/action-count checks
     - `AnalyzeRenderDocVortexBasicProducts.py` for product-correctness checks
   - then gates the combined result in `Assert-VortexBasicRuntimeProof.ps1`
-  - the blocker-closing `04-08` proof also requires:
+  - the VTX-M04D.5 proof requires:
+    - runtime CLI proof for atmosphere, height fog, local fog, volumetric fog,
+      and AP controls
+    - environment product publication truth for transmittance,
+      multi-scattering, distant SkyLight, sky-view, camera AP, and integrated
+      scattering
+    - authored SkyLight unavailable state plus volumetric SkyLight injection
     - `stage15_sky_scene_color_changed=true`
     - `stage15_atmosphere_scene_color_changed=true`
     - `stage15_fog_scene_color_changed=true`
