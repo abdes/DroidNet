@@ -14,6 +14,43 @@
 
 namespace oxygen::interop::module {
 
+  namespace {
+
+    [[nodiscard]] auto ResolveDeclaredInitialState(
+      const graphics::Texture& texture,
+      const graphics::ResourceStates fallback) noexcept
+      -> graphics::ResourceStates {
+      auto state = texture.GetDescriptor().initial_state;
+      if (state == graphics::ResourceStates::kUnknown ||
+        state == graphics::ResourceStates::kUndefined) {
+        state = fallback;
+      }
+      return state;
+    }
+
+    auto TrackTextureFromKnownOrInitial(
+      graphics::CommandRecorder& recorder,
+      const graphics::Texture& texture,
+      const graphics::ResourceStates fallback,
+      const char* usage) -> graphics::ResourceStates {
+      const auto declared_state = ResolveDeclaredInitialState(texture, fallback);
+
+      if (recorder.IsResourceTracked(texture) ||
+        recorder.AdoptKnownResourceState(texture)) {
+        return declared_state;
+      }
+
+      CHECK_F(declared_state != graphics::ResourceStates::kUnknown
+          && declared_state != graphics::ResourceStates::kUndefined,
+        "EditorCompositor: cannot track {} texture '{}' without a known or "
+        "declared initial state",
+        usage, texture.GetName());
+      recorder.BeginTrackingResourceState(texture, declared_state);
+      return declared_state;
+    }
+
+  } // namespace
+
   EditorCompositor::EditorCompositor(std::shared_ptr<oxygen::Graphics> graphics,
     ViewManager& view_manager,
     SurfaceRegistry& registry)
@@ -216,40 +253,26 @@ namespace oxygen::interop::module {
       return;
     }
 
-    // Track source texture state using the texture's descriptor initial state
-    // (falls back to Common if unspecified). This keeps the command-recording
-    // resource tracker consistent with how the texture was created.
+    // The viewport color texture was just produced by Vortex, so the graphics
+    // queue's known state is authoritative. The descriptor initial state is
+    // only a fallback for resources not seen by this queue yet.
     const auto& src_desc = source_texture.GetDescriptor();
-    auto src_initial = src_desc.initial_state;
-    if (src_initial == graphics::ResourceStates::kUnknown ||
-      src_initial == graphics::ResourceStates::kUndefined) {
-      src_initial = graphics::ResourceStates::kCommon;
-    }
-    recorder.BeginTrackingResourceState(source_texture, src_initial);
+    const auto src_final = TrackTextureFromKnownOrInitial(recorder,
+      source_texture, graphics::ResourceStates::kCommon, "source");
     DLOG_F(3,
-      "begin tracking source: initial={} (shader_resource={}, "
+      "begin tracking source: final={} (shader_resource={}, "
       "render_target={})",
-      src_initial, src_desc.is_shader_resource, src_desc.is_render_target);
+      src_final, src_desc.is_shader_resource, src_desc.is_render_target);
 
     // Transition source to CopySource
     DLOG_F(3, "transition source: -> {}", graphics::ResourceStates::kCopySource);
     recorder.RequireResourceState(source_texture,
       graphics::ResourceStates::kCopySource);
 
-    // Ensure the recorder is tracking the backbuffer's current state first.
-    // Some backbuffers may have been used earlier in this command list (e.g.
-    // as shader resources) and the state tracker needs to know the actual
-    // starting state. Use the backbuffer descriptor's initial_state when
-    // available, otherwise assume Present as a safe default for swapchain
-    // images.
     auto dst_desc = backbuffer->GetDescriptor();
-    auto dst_initial = dst_desc.initial_state;
-    if (dst_initial == graphics::ResourceStates::kUnknown ||
-      dst_initial == graphics::ResourceStates::kUndefined) {
-      dst_initial = graphics::ResourceStates::kPresent;
-    }
-    recorder.BeginTrackingResourceState(*backbuffer, dst_initial);
-    DLOG_F(3, "begin tracking target: initial={} (size={}x{})", dst_initial,
+    TrackTextureFromKnownOrInitial(recorder, *backbuffer,
+      graphics::ResourceStates::kPresent, "target");
+    DLOG_F(3, "begin tracking target (size={}x{})",
       dst_desc.width, dst_desc.height);
 
     // Transition backbuffer to CopyDest
@@ -313,13 +336,15 @@ namespace oxygen::interop::module {
     recorder.CopyTexture(source_texture, src_slice, src_sub, *backbuffer,
       dst_slice, dst_sub);
 
-    // Transition the source texture back to its original state.
-    DLOG_F(3, "transition source: -> {}", src_initial);
-    recorder.RequireResourceState(source_texture, src_initial);
+    // Return the source to its declared steady state for consumers after the
+    // editor blit. If Vortex renders it again next frame, that pass will adopt
+    // this known state and transition from here.
+    DLOG_F(3, "transition source: -> {}", src_final);
+    recorder.RequireResourceStateFinal(source_texture, src_final);
 
     // Transition backbuffer to Present
     DLOG_F(3, "transition target: -> {}", graphics::ResourceStates::kPresent);
-    recorder.RequireResourceState(*backbuffer,
+    recorder.RequireResourceStateFinal(*backbuffer,
       graphics::ResourceStates::kPresent);
 
     // Flush barriers after transitions
