@@ -183,6 +183,29 @@ treating it as a closure gate. The accepted focused proof for Stage-15 wiring
 is the captured static payload plus the fog shader contract that samples
 `ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv]`.
 
+## Focused Height Fog Proof
+
+- `Verify-VortexHeightFogProof.ps1`
+  - focused VTX-M04D.2 wrapper for an existing VortexBasic or RenderScene
+    capture
+  - runs `AnalyzeRenderDocVortexHeightFog.py`
+  - asserts one `Vortex.Stage15.Fog` draw for enabled height fog, captured
+    672-byte `EnvironmentStaticData`, enabled/render-in-main-pass flags,
+    positive density, valid max-opacity/min-transmittance, explicit cubemap
+    unavailable state, and a nonzero Stage-15 `SceneColor` delta
+  - supports `-ExpectDisabled` to assert the disabled fast path removes the
+    Stage-15 fog scope/draw
+  - supports `-SkipRuntimeCliCheck` for RenderScene captures that do not use
+    the VortexBasic `Parsed with-height-fog option = ...` log line
+
+The VTX-M04D.2 closure path uses paired VortexBasic enabled/disabled captures
+to prove isolated height-fog pass behavior and the city-scale RenderScene
+capture to prove `CityEnvironmentValidation` carries an enabled height-fog
+payload with measurable Stage-15 fog contribution. Height-fog cubemap
+inscattering remains explicitly deferred: the analyzer requires
+`CubemapUsable=false` for the current validated path rather than treating a
+missing cubemap resource path as bound.
+
 ## Historical Frame-10 Closeout Pack
 
 These scripts are preserved only for historical comparison with the older
