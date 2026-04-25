@@ -15,7 +15,7 @@
       "flags": {
         "visible": true,
         "static": true,
-        "casts_shadows": false,
+        "casts_shadows": true,
         "receives_shadows": true
       },
       "transform": {
