@@ -640,7 +640,8 @@ auto MainModule::EnsureScene() -> void
     sky_light->SetSpecularIntensity(1.0F);
     sky_light->SetRealTimeCaptureEnabled(true);
     sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
-    sky_light->SetVolumetricScatteringIntensity(1.0F);
+    sky_light->SetVolumetricScatteringIntensity(
+      app_.vortex_sky_light_volumetric_scattering_intensity);
     sky_light->SetAffectReflections(true);
     sky_light->SetAffectGlobalIllumination(true);
 

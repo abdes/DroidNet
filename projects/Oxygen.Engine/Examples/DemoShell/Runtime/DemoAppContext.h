@@ -43,6 +43,8 @@ public:
   bool with_height_fog { false };
   bool with_local_fog { false };
   bool with_volumetric_fog { false };
+  bool vortex_local_fog_into_volumetric { true };
+  float vortex_sky_light_volumetric_scattering_intensity { 1.0F };
   DirectionalShadowImplementationPolicy directional_shadow_policy {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };

@@ -270,6 +270,23 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&app.with_volumetric_fog)
         .Build());
+    vortex_options->Add(clap::Option::WithKey("volumetric-local-fog")
+        .About("Inject local fog into volumetric fog when both are enabled")
+        .Long("volumetric-local-fog")
+        .WithValue<bool>()
+        .DefaultValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&app.vortex_local_fog_into_volumetric)
+        .Build());
+    vortex_options->Add(
+      clap::Option::WithKey("sky-light-volumetric-scattering")
+        .About("SkyLight volumetric scattering intensity")
+        .Long("sky-light-volumetric-scattering")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("intensity")
+        .StoreTo(&app.vortex_sky_light_volumetric_scattering_intensity)
+        .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
@@ -308,6 +325,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed with-local-fog option = {}", app.with_local_fog);
     LOG_F(
       INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
+    LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
+      app.vortex_local_fog_into_volumetric);
+    LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
+      app.vortex_sky_light_volumetric_scattering_intensity);
     const auto shader_debug_mode
       = ParseVortexShaderDebugMode(shader_debug_mode_name);
     LOG_F(INFO, "Parsed Vortex shader debug mode = {}",
@@ -382,6 +403,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
       startup_cvars.Set(
         "vtx.local_fog.enable", oxygen::console::CVarValue { true });
+      startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
+        oxygen::console::CVarValue {
+          app.vortex_local_fog_into_volumetric });
       app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
     }
 
