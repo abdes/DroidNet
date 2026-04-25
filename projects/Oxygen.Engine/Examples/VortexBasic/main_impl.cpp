@@ -305,6 +305,22 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("intensity")
         .StoreTo(&app.vortex_sky_light_volumetric_scattering_intensity)
         .Build());
+    vortex_options->Add(clap::Option::WithKey("aerial-scattering-strength")
+        .About("Aerial perspective apply-time scattering strength")
+        .Long("aerial-scattering-strength")
+        .WithValue<float>()
+        .DefaultValue(1.0F)
+        .UserFriendlyName("strength")
+        .StoreTo(&app.vortex_aerial_scattering_strength)
+        .Build());
+    vortex_options->Add(clap::Option::WithKey("aerial-start-depth")
+        .About("Aerial perspective start depth in meters")
+        .Long("aerial-start-depth")
+        .WithValue<float>()
+        .DefaultValue(100.0F)
+        .UserFriendlyName("meters")
+        .StoreTo(&app.vortex_aerial_start_depth_m)
+        .Build());
     vortex_options->Add(
       clap::Option::WithKey("local-fog-volumetric-max-density")
         .About("Clamp used when injecting local fog into volumetric fog")
@@ -376,6 +392,10 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       app.vortex_volumetric_temporal_reprojection);
     LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
       app.vortex_sky_light_volumetric_scattering_intensity);
+    LOG_F(INFO, "Parsed aerial-scattering-strength option = {}",
+      app.vortex_aerial_scattering_strength);
+    LOG_F(INFO, "Parsed aerial-start-depth option = {}",
+      app.vortex_aerial_start_depth_m);
     LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
       app.vortex_local_fog_volumetric_max_density);
     LOG_F(INFO, "Parsed local-fog-emissive-scale option = {}",
