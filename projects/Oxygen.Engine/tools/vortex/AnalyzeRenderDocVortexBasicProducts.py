@@ -1,6 +1,7 @@
 """RenderDoc UI analyzer for VortexBasic stage products."""
 
 import builtins
+import struct
 import sys
 from pathlib import Path
 
@@ -264,6 +265,15 @@ def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
         if resource_used_in_events(controller, resource_id, event_ids):
             matches.append({"resource_id": resource_id, "name": name})
     return matches
+
+
+def read_u32_buffer(controller, resource_id, max_words):
+    raw = controller.GetBufferData(resource_id, 0, max_words * 4)
+    blob = bytes(raw)
+    if not blob:
+        return []
+    word_count = len(blob) // 4
+    return list(struct.unpack("<{}I".format(word_count), blob[: word_count * 4]))
 
 
 def find_screen_hzb_resource(
@@ -754,14 +764,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_local_fog_event_ids,
         "vortex.environment.localfogtiledrawargs",
     )
-    indirect_count_usage = find_named_resource_usage(
-        controller,
-        resource_records,
-        stage15_local_fog_event_ids,
-        "vortex.environment.localfogtiledrawcount",
+    local_fog_indirect_draw_args_values = []
+    if indirect_args_usage:
+        local_fog_indirect_draw_args_values = read_u32_buffer(
+            controller, indirect_args_usage[0]["resource_id"], 4
+        )
+    local_fog_indirect_draw_instance_count = (
+        local_fog_indirect_draw_args_values[1]
+        if len(local_fog_indirect_draw_args_values) > 1
+        else 0
     )
     local_fog_indirect_draw_valid = (
-        len(indirect_args_usage) > 0 and len(indirect_count_usage) > 0
+        len(indirect_args_usage) > 0
+        and len(local_fog_indirect_draw_args_values) >= 4
+        and local_fog_indirect_draw_args_values[0] == 6
+        and local_fog_indirect_draw_instance_count > 0
     )
 
     atmosphere_transmittance_lut_scope_count_match = len(atmosphere_transmittance_lut_scope) == 1
@@ -1008,6 +1025,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(
         "local_fog_indirect_draw_valid={}".format(
             str(local_fog_indirect_draw_valid).lower()
+        )
+    )
+    report.append(
+        "local_fog_indirect_draw_args={}".format(
+            ",".join(str(value) for value in local_fog_indirect_draw_args_values)
+        )
+    )
+    report.append(
+        "local_fog_indirect_draw_instance_count={}".format(
+            local_fog_indirect_draw_instance_count
         )
     )
     report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))

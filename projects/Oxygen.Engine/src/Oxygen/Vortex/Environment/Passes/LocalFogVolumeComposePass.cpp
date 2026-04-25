@@ -274,8 +274,7 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
       && products.tile_data_ready
       && products.occupied_tile_buffer_slot.IsValid()
       && products.instance_count > 0U
-      && products.occupied_tile_draw_args_buffer != nullptr
-      && products.occupied_tile_draw_count_buffer != nullptr,
+      && products.occupied_tile_draw_args_buffer != nullptr,
     .executed = false,
   };
   if (!state.requested
@@ -341,7 +340,6 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneColor());
   TrackTextureFromKnownOrInitial(*recorder, scene_textures.GetSceneDepth());
   TrackBufferFromKnownOrInitial(*recorder, *products.occupied_tile_draw_args_buffer);
-  TrackBufferFromKnownOrInitial(*recorder, *products.occupied_tile_draw_count_buffer);
 
   graphics::GpuEventScope pass_scope(*recorder, "Vortex.Stage15.LocalFog",
     profiling::ProfileGranularity::kDiagnostic,
@@ -352,9 +350,6 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   recorder->RequireResourceState(
     *products.occupied_tile_draw_args_buffer,
-    graphics::ResourceStates::kIndirectArgument);
-  recorder->RequireResourceState(
-    *products.occupied_tile_draw_count_buffer,
     graphics::ResourceStates::kIndirectArgument);
   recorder->FlushBarriers();
 
@@ -379,13 +374,8 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     graphics::CommandRecorder::IndirectExecutionDesc {
       .argument_buffer_range = { 0U, 0U },
       .command_count = graphics::CommandRecorder::IndirectCommandCount {
-        products.tile_capacity
+        1U
       },
-      .count_buffer
-      = observer_ptr<const graphics::Buffer> {
-        products.occupied_tile_draw_count_buffer.get()
-      },
-      .count_buffer_range = { 0U, sizeof(std::uint32_t) },
     });
 
   LOG_F(INFO, "local_fog_indirect_draw_valid=true tile_capacity={} instances={}",
@@ -396,8 +386,6 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   recorder->RequireResourceStateFinal(
     scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
   recorder->RequireResourceStateFinal(*products.occupied_tile_draw_args_buffer,
-    graphics::ResourceStates::kIndirectArgument);
-  recorder->RequireResourceStateFinal(*products.occupied_tile_draw_count_buffer,
     graphics::ResourceStates::kIndirectArgument);
   gfx->RegisterDeferredRelease(std::move(framebuffer));
 

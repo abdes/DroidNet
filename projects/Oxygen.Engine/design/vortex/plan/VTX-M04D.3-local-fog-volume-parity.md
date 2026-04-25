@@ -60,7 +60,7 @@ Implementation and review must check these UE5.7 source families:
    culling states, sub-viewport tile resolution, sky-depth exclusion, and
    RenderDoc/runtime proof.
 
-## Current Slice
+## Current Slices
 
 The first implementation slice corrects the local-fog authoring/cap contract
 before volumetric integration:
@@ -71,6 +71,20 @@ before volumetric integration:
   cannot receive negative density, invalid phase/albedo, or out-of-range sort
   priority values.
 - Add focused tests for authoring clamps and per-view cap behavior.
+
+The second implementation slice corrects the Stage 14/15 indirect draw contract
+against UE5.7:
+
+- UE `LocalFogVolumeTiledCulling.usf` writes a single draw-indirect argument
+  packet and increments the packet's instance count for each occupied tile.
+  UE `LocalFogVolumeSplat.usf` then uses `SV_InstanceID` to index the occupied
+  tile buffer in one tiled draw.
+- Oxygen now follows that shape: Stage 14 initializes
+  `LocalFogTileDrawArgs = {6, 0, 0, 0}`, increments `args[1]` for occupied
+  tiles, and Stage 15 executes one indirect draw command without a separate
+  count buffer.
+- RenderDoc proof tooling now validates the UE-shaped draw-args packet and
+  records the captured occupied-tile instance count.
 
 ## Exit Gate
 
