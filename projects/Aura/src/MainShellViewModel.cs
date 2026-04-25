@@ -4,7 +4,6 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Drag;
@@ -16,7 +15,6 @@ using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Resources;
 using DroidNet.Routing;
-using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,7 +35,7 @@ namespace DroidNet.Aura;
 ///     title bar, an application icon, and provides a collapsible main menu and a flyout menu for
 ///     settings and theme selection.
 /// </remarks>
-public partial class MainShellViewModel : AbstractOutletContainer
+public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
 {
     private static readonly Dictionary<string, ElementTheme> ThemeMap = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -62,7 +60,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShellViewModel"/> class.
     /// </summary>
-    /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher and application information.</param>
     /// <param name="assets">The asset resolver service used to resolve asset URIs for icons and images.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
@@ -74,7 +71,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
     public MainShellViewModel(
-        IRouter router,
         HostingContext hostingContext,
         AssetResolverService assets,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
@@ -103,23 +99,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.SynchronizeThemeSelection();
 
         this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
-
-        _ = router.Events.OfType<ActivationComplete>()
-            .Take(1) // Do this only on the first activation and then unsubscribe
-            .Subscribe(
-                @event =>
-                {
-                    this.Window = (Window)@event.Context.NavigationTarget;
-
-                    // Look up the ManagedWindow for this window
-                    if (this.windowManagerService is not null)
-                    {
-                        this.Context = this.windowManagerService.OpenWindows
-                            .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
-                    }
-
-                    this.UpdateMenuFromManagedWindow();
-                });
     }
 
     /// <summary>
@@ -174,8 +153,8 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// </summary>
     /// <remarks>
     /// This property provides access to the ManagedWindow which contains the window's
-    /// decoration options, menu source, and other metadata. It is populated during
-    /// the first ActivationComplete event.
+    /// decoration options, menu source, and other metadata. It is populated during route
+    /// activation before the shell view is loaded.
     /// </remarks>
     [ObservableProperty]
     public partial IManagedWindow? Context { get; set; }
@@ -213,6 +192,23 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the appearance settings (the service implements IAppearanceSettings).
     /// </summary>
     private IAppearanceSettings AppearanceSettings => this.appearanceSettingsService.Settings;
+
+    /// <inheritdoc/>
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+    {
+        _ = route;
+
+        if (navigationContext.NavigationTarget is Window window)
+        {
+            this.AttachWindow(window);
+        }
+        else
+        {
+            Debug.Fail("Main shell route should be activated inside a WinUI window navigation context.");
+        }
+
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
@@ -272,6 +268,19 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
     private Uri? GetAssetUri(string relativePath)
         => this.assets.FromRelativePath(relativePath, typeof(MainShellViewModel).Assembly);
+
+    private void AttachWindow(Window window)
+    {
+        this.Window = window;
+
+        if (this.windowManagerService is not null)
+        {
+            this.Context = this.windowManagerService.OpenWindows
+                .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
+        }
+
+        this.UpdateMenuFromManagedWindow();
+    }
 
     /// <summary>
     /// Updates the MainMenu property from the ManagedWindow's MenuSource.
