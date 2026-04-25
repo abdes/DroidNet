@@ -224,6 +224,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool verify_hashes = false;
   bool hot_reload = true;
   std::string directional_shadows = "conventional";
+  std::string startup_scene_name;
   std::string cvars_archive_path;
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
@@ -264,6 +265,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("policy")
         .StoreTo(&directional_shadows)
         .Build());
+    developer_options->Add(Option::WithKey("scene")
+        .About("Load a cooked scene by name, virtual path, stem, or key at startup")
+        .Long("scene")
+        .WithValue<std::string>()
+        .UserFriendlyName("scene")
+        .StoreTo(&startup_scene_name)
+        .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
@@ -300,6 +308,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
     oxygen::examples::cli::LogCaptureOptions(capture_cli);
     LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
+    if (!startup_scene_name.empty()) {
+      LOG_F(INFO, "Parsed scene option = {}", startup_scene_name);
+    }
     if (!cvars_archive_path.empty()) {
       LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
     }
@@ -307,6 +318,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       frames, target_fps);
     app.directional_shadow_policy
       = ParseDirectionalShadowPolicy(directional_shadows);
+    app.startup_scene_name = startup_scene_name;
     LOG_F(INFO, "Resolved directional shadow policy = {}",
       app.directional_shadow_policy);
 
@@ -365,6 +377,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
     if (context.ovm.HasOption("verify-hashes")) {
       startup_cvars.Set("cntt.verify_content_hashes", verify_hashes);
+    }
+    if (!startup_scene_name.empty()) {
+      startup_cvars.Set("vtx.local_fog.enable", true);
+      startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog", true);
+      startup_cvars.Set("vtx.volumetric_fog.directional_shadows", true);
+      startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection", true);
     }
 
     app.engine = std::make_shared<AsyncEngine>(
