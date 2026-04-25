@@ -270,16 +270,16 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\include;$(ProjectsRoot)\Oxygen.Engine\src</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Content-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -288,15 +288,15 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\include;$(ProjectsRoot)\Oxygen.Engine\src</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Content.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
-      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
