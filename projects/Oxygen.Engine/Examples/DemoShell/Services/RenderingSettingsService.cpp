@@ -90,7 +90,7 @@ namespace {
     case ShaderDebugMode::kDirectLightingFull:
     case ShaderDebugMode::kDirectLightGates:
     case ShaderDebugMode::kDirectBrdfCore:
-    case ShaderDebugMode::kVirtualShadowMask:
+    case ShaderDebugMode::kDirectionalShadowMask:
     case ShaderDebugMode::kSceneDepthRaw:
     case ShaderDebugMode::kSceneDepthLinear:
     case ShaderDebugMode::kSceneDepthMismatch:

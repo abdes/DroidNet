@@ -33,7 +33,7 @@ enum class ShaderDebugMode : std::uint8_t {
   kDirectLightingFull = 18,
   kDirectLightGates = 19,
   kDirectBrdfCore = 20,
-  kVirtualShadowMask = 21,
+  kDirectionalShadowMask = 21,
   kSceneDepthRaw = 22,
   kSceneDepthLinear = 23,
   kSceneDepthMismatch = 24,
@@ -66,7 +66,7 @@ constexpr auto to_string(const ShaderDebugMode mode) noexcept
       case ShaderDebugMode::kDirectLightingFull: return "DirectLightingFull";
       case ShaderDebugMode::kDirectLightGates: return "DirectLightGates";
       case ShaderDebugMode::kDirectBrdfCore: return "DirectBrdfCore";
-      case ShaderDebugMode::kVirtualShadowMask: return "VirtualShadowMask";
+      case ShaderDebugMode::kDirectionalShadowMask: return "DirectionalShadowMask";
       case ShaderDebugMode::kSceneDepthRaw: return "SceneDepthRaw";
       case ShaderDebugMode::kSceneDepthLinear: return "SceneDepthLinear";
       case ShaderDebugMode::kSceneDepthMismatch: return "SceneDepthMismatch";
@@ -120,7 +120,7 @@ constexpr auto IsNonIblDebugMode(const ShaderDebugMode mode) noexcept -> bool
   case ShaderDebugMode::kDirectLightingFull:
   case ShaderDebugMode::kDirectLightGates:
   case ShaderDebugMode::kDirectBrdfCore:
-  case ShaderDebugMode::kVirtualShadowMask:
+  case ShaderDebugMode::kDirectionalShadowMask:
   case ShaderDebugMode::kSceneDepthRaw:
   case ShaderDebugMode::kSceneDepthLinear:
   case ShaderDebugMode::kSceneDepthMismatch:
@@ -189,8 +189,8 @@ constexpr auto GetShaderDebugDefineName(const ShaderDebugMode mode) noexcept
     return "DEBUG_DIRECT_LIGHT_GATES";
   case ShaderDebugMode::kDirectBrdfCore:
     return "DEBUG_DIRECT_BRDF_CORE";
-  case ShaderDebugMode::kVirtualShadowMask:
-    return "DEBUG_VIRTUAL_SHADOW_MASK";
+  case ShaderDebugMode::kDirectionalShadowMask:
+    return "DEBUG_DIRECTIONAL_SHADOW_MASK";
   case ShaderDebugMode::kSceneDepthRaw:
     return "DEBUG_SCENE_DEPTH_RAW";
   case ShaderDebugMode::kSceneDepthLinear:

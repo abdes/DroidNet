@@ -65,12 +65,12 @@ namespace {
 constexpr uint32_t kDefaultOffscreenWidth = 1920U;
 constexpr uint32_t kDefaultOffscreenHeight = 1440U;
 constexpr glm::vec3 kFloorCenter { 0.0F, 0.0F, -0.125F };
-constexpr glm::vec3 kFloorScale { 20.0F, 20.0F, 0.25F };
+constexpr glm::vec3 kFloorScale { 60.0F, 60.0F, 0.25F };
 constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
 constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
 constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
-constexpr glm::vec3 kSunPosition { 0.0F, -24.0F, 8.0F };
+constexpr glm::vec3 kSunPosition { 0.0F, -16.0F, 18.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
 constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
 constexpr float kSpotlightOscillationAmplitude = 3.0F;

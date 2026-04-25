@@ -174,7 +174,8 @@ void RenderingPanel::DrawDebugModes()
   draw_debug_mode("Direct Lighting Full", ShaderDebugMode::kDirectLightingFull);
   draw_debug_mode("Direct Light Gates", ShaderDebugMode::kDirectLightGates);
   draw_debug_mode("Direct BRDF Core", ShaderDebugMode::kDirectBrdfCore);
-  draw_debug_mode("Virtual Shadow Mask", ShaderDebugMode::kVirtualShadowMask);
+  draw_debug_mode(
+    "Directional Shadow Mask", ShaderDebugMode::kDirectionalShadowMask);
   draw_debug_mode("Scene Depth Raw", ShaderDebugMode::kSceneDepthRaw);
   draw_debug_mode("Scene Depth Linear", ShaderDebugMode::kSceneDepthLinear);
   draw_debug_mode("Scene Depth Mismatch", ShaderDebugMode::kSceneDepthMismatch);

@@ -722,6 +722,7 @@ namespace {
     case ShaderDebugMode::kWorldNormals:
     case ShaderDebugMode::kRoughness:
     case ShaderDebugMode::kMetalness:
+    case ShaderDebugMode::kDirectionalShadowMask:
     case ShaderDebugMode::kSceneDepthRaw:
     case ShaderDebugMode::kSceneDepthLinear:
       return true;
@@ -742,6 +743,8 @@ namespace {
       return "Roughness";
     case ShaderDebugMode::kMetalness:
       return "Metalness";
+    case ShaderDebugMode::kDirectionalShadowMask:
+      return "DirectionalShadowMask";
     case ShaderDebugMode::kSceneDepthRaw:
       return "SceneDepthRaw";
     case ShaderDebugMode::kSceneDepthLinear:
@@ -2122,9 +2125,11 @@ auto SceneRenderer::RenderDebugVisualization(
   const auto requires_gbuffer = mode == ShaderDebugMode::kBaseColor
     || mode == ShaderDebugMode::kWorldNormals
     || mode == ShaderDebugMode::kRoughness
-    || mode == ShaderDebugMode::kMetalness;
+    || mode == ShaderDebugMode::kMetalness
+    || mode == ShaderDebugMode::kDirectionalShadowMask;
   const auto requires_scene_depth = mode == ShaderDebugMode::kSceneDepthRaw
-    || mode == ShaderDebugMode::kSceneDepthLinear;
+    || mode == ShaderDebugMode::kSceneDepthLinear
+    || mode == ShaderDebugMode::kDirectionalShadowMask;
 
   if (requires_gbuffer
     && !HasPublishedGBufferBindings(scene_texture_bindings_)) {

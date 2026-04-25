@@ -11,6 +11,7 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
+#include <glm/vec4.hpp>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 
 namespace oxygen::vortex {
@@ -30,6 +31,7 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
   std::uint32_t cascade_count { 0U };
   std::uint32_t technique_flags { 0U };
   std::uint32_t sampling_contract_flags { 0U };
+  glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
 
   std::array<ShadowCascadeBinding, kMaxCascades> cascades {};
 

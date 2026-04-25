@@ -21,6 +21,7 @@ struct VortexShadowCascadeBinding
     float split_far;
     float4 sampling_metadata0;
     float4 sampling_metadata1;
+    float2 _padding0;
 };
 
 struct VortexShadowFrameBindings
@@ -29,6 +30,7 @@ struct VortexShadowFrameBindings
     uint cascade_count;
     uint technique_flags;
     uint sampling_contract_flags;
+    float4 light_direction_to_source;
     VortexShadowCascadeBinding cascades[4];
 };
 

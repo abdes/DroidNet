@@ -1,6 +1,6 @@
 # VTX-M04D.4 Directional CSM Blocker
 
-**Status:** `in_progress`
+**Status:** `validated_for_directional_csm_projected_shadow_blocker`
 
 ## Purpose
 
@@ -60,7 +60,9 @@ scope is:
 
 ## Implementation Slice Evidence
 
-The current CSM implementation slice exists but does not close this blocker:
+The directional CSM projected-shadow blocker is now closed with implementation,
+docs/status, capture evidence, debug-layer evidence, and user visual
+confirmation. This does not close full VTX-M04D.4 volumetric-fog parity.
 
 - `FrameLightSelection` now carries authored directional CSM settings:
   shadow participation, split mode, max distance, cascade distances,
@@ -89,17 +91,28 @@ The current CSM implementation slice exists but does not close this blocker:
   pass constants are checked for a valid CBV handle instead of a generated
   `GLOBAL_SRV` domain, and the directional shadow texture is checked for a
   valid handle instead of the stale generated texture-domain range.
+- CPU and HLSL cascade packing now match exactly. `ShadowCascadeBinding` is
+  explicitly 112 bytes and carries padding matching
+  `VortexShadowCascadeBinding`, preventing Stage 12 from reading mis-strided
+  cascade metadata.
+- `ShadowFrameBindings` now carries the selected directional light vector so
+  debug-only deferred shadow-mask rendering can evaluate the same receiver
+  shadow contract without depending on Stage-12 lighting bindings.
+- VortexBasic's proof scene now uses a higher sun elevation and a larger floor
+  receiver so the projected cube shadow lands close to the caster and remains
+  easy to inspect in captures.
+- The shader debug catalog now includes the deferred `directional-shadow-mask`
+  debug view, and the capture probe records Stage-8 cascade writes, Stage-12
+  shadow-product binding, and receiver-point lit/shadowed visibility samples.
 
 Validation recorded in `IMPLEMENTATION_STATUS.md` covers focused build,
-ShaderBake/catalog, unit tests, a bounded Direct3D12 VortexBasic startup /
-frame / shutdown smoke, a debugger-backed D3D12 debug-layer audit, and a focused
-RenderDoc probe showing non-clear Stage-8 writes in cascades 2 and 3. This is
-not projected-shadow closure because receiver-pixel attenuation proof and user
-visual confirmation are not recorded.
+ShaderBake/catalog, unit tests, normal and `directional-shadow-mask` RenderDoc
+captures, receiver-pixel attenuation proof, debugger-backed D3D12 debug-layer
+audit, and user visual confirmation of projected shadows.
 
 ## Exit Gate
 
-This blocker remains `in_progress` until all of the following are recorded in
+This blocker is validated because all of the following are recorded in
 `IMPLEMENTATION_STATUS.md`:
 
 - focused build/test evidence for the changed CSM code and shader ABI
@@ -109,5 +122,7 @@ This blocker remains `in_progress` until all of the following are recorded in
   affect receiver pixels
 - user visual confirmation of projected shadows in the target scene
 
-No VTX-M04D.4 shadowed-light or volumetric-fog parity claim may rely on the
-current directional CSM path before this proof exists.
+This is a prerequisite closure only. VTX-M04D.4 remains `in_progress` for
+depth-aware froxel distribution, shadowed/local/sky light injection, local-fog
+participating-media injection, temporal history/reprojection, and artifact
+quality proof.

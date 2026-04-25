@@ -43,15 +43,17 @@ auto ResolveSafeLightDirection(const glm::vec3 direction) -> glm::vec3
 auto ExtractFrustumCornersWorld(const ResolvedView& resolved_view)
   -> std::array<glm::vec3, 8>
 {
-  constexpr std::array<glm::vec3, 8> kNdcCorners {
-    glm::vec3 { -1.0F, -1.0F, 0.0F },
-    glm::vec3 { 1.0F, -1.0F, 0.0F },
-    glm::vec3 { 1.0F, 1.0F, 0.0F },
-    glm::vec3 { -1.0F, 1.0F, 0.0F },
-    glm::vec3 { -1.0F, -1.0F, 1.0F },
-    glm::vec3 { 1.0F, -1.0F, 1.0F },
-    glm::vec3 { 1.0F, 1.0F, 1.0F },
-    glm::vec3 { -1.0F, 1.0F, 1.0F },
+  const auto near_ndc_z = resolved_view.ReverseZ() ? 1.0F : 0.0F;
+  const auto far_ndc_z = resolved_view.ReverseZ() ? 0.0F : 1.0F;
+  const std::array<glm::vec3, 8> kNdcCorners {
+    glm::vec3 { -1.0F, -1.0F, near_ndc_z },
+    glm::vec3 { 1.0F, -1.0F, near_ndc_z },
+    glm::vec3 { 1.0F, 1.0F, near_ndc_z },
+    glm::vec3 { -1.0F, 1.0F, near_ndc_z },
+    glm::vec3 { -1.0F, -1.0F, far_ndc_z },
+    glm::vec3 { 1.0F, -1.0F, far_ndc_z },
+    glm::vec3 { 1.0F, 1.0F, far_ndc_z },
+    glm::vec3 { -1.0F, 1.0F, far_ndc_z },
   };
 
   auto corners = std::array<glm::vec3, 8> {};
@@ -213,6 +215,8 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     = kShadowTechniqueDirectionalConventional;
   frame_data.bindings.sampling_contract_flags
     = kShadowSamplingContractTexture2DArray;
+  frame_data.bindings.light_direction_to_source
+    = glm::vec4(ResolveSafeLightDirection(directional_light.direction), 0.0F);
 
   const auto view_near = view_input.resolved_view->NearPlane();
   const auto view_far = view_input.resolved_view->FarPlane();
