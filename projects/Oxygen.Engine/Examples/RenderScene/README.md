@@ -7,6 +7,26 @@ hierarchy, and renders it using the standard single-view example pipeline.
 
 The ImGui overlay is intentionally focused on PAK mounting and scene loading.
 
+## Startup Scene Override
+
+`--scene <name-or-key>` loads a cooked scene from the checked-in
+`Examples/Content/.cooked/container.index.bin` source at startup. The match
+accepts a scene virtual path, filename stem, substring, or asset key; for
+example:
+
+```powershell
+.\out\build-ninja\bin\Debug\Oxygen.Examples.RenderScene.exe `
+  --frames 120 --fps 0 `
+  --scene CityEnvironmentValidation `
+  --directional-shadows conventional
+```
+
+When this override is present, RenderScene discards any restored persisted UI
+scene selection and seeds the renderer CVars required for deterministic city
+environment validation: local fog enabled, local fog injected into volumetric
+fog, volumetric directional shadows enabled, and volumetric temporal
+reprojection enabled.
+
 ## Frame Capture CLI
 
 `RenderScene` configures backend frame capture through the example capture CLI.

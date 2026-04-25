@@ -151,6 +151,9 @@ private:
   };
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
+  std::optional<std::string> startup_scene_name_;
+  bool startup_scene_load_requested_ { false };
+  bool startup_scene_missing_logged_ { false };
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_pak_write_times_;
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>

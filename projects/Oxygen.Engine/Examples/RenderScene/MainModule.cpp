@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cctype>
 #include <exception>
 #include <filesystem>
 #include <source_location>
+#include <string>
 #include <string_view>
 
 #include <glm/gtc/quaternion.hpp>
@@ -46,6 +48,14 @@ namespace {
   constexpr std::string_view kLooseCookedIndexFileName = "container.index.bin";
   constexpr size_t kSceneInitialCapacity = 10000; // FIXME hack
 
+  auto ToLowerAscii(std::string value) -> std::string
+  {
+    std::ranges::transform(value, value.begin(), [](const unsigned char ch) {
+      return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+  }
+
   auto TryGetLastWriteTime(const std::filesystem::path& path)
     -> std::optional<std::filesystem::file_time_type>
   {
@@ -81,6 +91,19 @@ namespace {
           == content::IAssetLoader::ContentSourceKind::kLooseCooked
           && runtime::NormalizePath(source.source_path) == normalized;
       });
+  }
+
+  auto SceneEntryMatchesStartupToken(
+    const ui::SceneEntry& entry, std::string_view token) -> bool
+  {
+    const auto desired = ToLowerAscii(std::string(token));
+    const auto scene_name = ToLowerAscii(entry.name);
+    const auto scene_key = ToLowerAscii(data::to_string(entry.key));
+    auto scene_stem = std::filesystem::path(entry.name).stem().string();
+    scene_stem = ToLowerAscii(std::move(scene_stem));
+
+    return scene_name == desired || scene_stem == desired
+      || scene_key == desired || scene_name.find(desired) != std::string::npos;
   }
 
   auto LooseIndexPathForRoot(const std::filesystem::path& root_path)
@@ -184,6 +207,9 @@ MainModule::MainModule(const examples::DemoAppContext& app)
   : Base(app)
   , last_viewport_({ 0, 0 })
 {
+  if (!app.startup_scene_name.empty()) {
+    startup_scene_name_ = app.startup_scene_name;
+  }
 }
 
 MainModule::~MainModule() = default;
@@ -280,6 +306,27 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
     return nullptr;
+  }
+
+  if (startup_scene_name_.has_value()) {
+    if (const auto vm = shell->GetContentVm(); vm && vm->IsSceneLoading()) {
+      vm->CancelSceneLoad();
+    }
+    pending_scene_load_.reset();
+    scene_load_cancel_requested_ = false;
+    scene_loader_.reset();
+    pending_physics_sidecar_.reset();
+    active_scene_load_key_.reset();
+
+    const auto cooked_index = demo_root.parent_path() / "Content" / ".cooked"
+      / std::filesystem::path(kLooseCookedIndexFileName);
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kMountIndex,
+      .path = cooked_index,
+    });
+    LOG_F(INFO,
+      "RenderScene: Startup scene override '{}' will mount '{}'",
+      *startup_scene_name_, cooked_index.string());
   }
 
   LOG_F(INFO, "RenderScene: Staging fallback default scene");
@@ -574,6 +621,51 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         vm->RefreshLibrary();
         vm->PersistLibraryState();
       }
+    }
+  }
+
+  if (startup_scene_name_.has_value() && !startup_scene_load_requested_
+    && pending_scene_load_) {
+    LOG_F(INFO,
+      "RenderScene: Discarding restored scene load '{}' because startup "
+      "scene override '{}' is active",
+      pending_scene_load_->scene_name, *startup_scene_name_);
+    if (const auto vm = shell.GetContentVm(); vm && vm->IsSceneLoading()) {
+      vm->CancelSceneLoad();
+    }
+    pending_scene_load_.reset();
+    scene_load_cancel_requested_ = false;
+  }
+
+  if (startup_scene_name_.has_value() && !startup_scene_load_requested_
+    && !pending_scene_load_ && !scene_loader_) {
+    if (const auto vm = shell.GetContentVm()) {
+      for (const auto& scene : vm->GetAvailableScenes()) {
+        if (!SceneEntryMatchesStartupToken(scene, *startup_scene_name_)) {
+          continue;
+        }
+        pending_scene_load_ = SceneLoadRequest {
+          .key = scene.key,
+          .source_kind = scene.source.kind,
+          .source_path = scene.source.path,
+          .scene_name = scene.name,
+        };
+        startup_scene_load_requested_ = true;
+        LOG_F(INFO,
+          "RenderScene: Resolved startup scene override '{}' to scene='{}' "
+          "key={} source='{}'",
+          *startup_scene_name_, scene.name, data::to_string(scene.key),
+          scene.source.path.string());
+        break;
+      }
+    }
+
+    if (!startup_scene_load_requested_ && !startup_scene_missing_logged_) {
+      startup_scene_missing_logged_ = true;
+      LOG_F(WARNING,
+        "RenderScene: Startup scene override '{}' did not match any mounted "
+        "scene",
+        *startup_scene_name_);
     }
   }
 
