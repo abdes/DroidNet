@@ -24,6 +24,7 @@ inline constexpr std::uint32_t
 inline constexpr std::uint32_t kDirectionalLightShadowFlagCastsShadows
   = 1U << 0U;
 inline constexpr std::uint32_t kFrameDirectionalLightMaxCascades = 4U;
+inline constexpr std::uint32_t kLocalLightFlagCastsShadows = 1U << 0U;
 
 enum class LocalLightKind : std::uint32_t {
   kPoint = 0U,
@@ -88,6 +89,11 @@ struct FrameLocalLightSelection {
   float outer_cone_cos { 0.0F };
   float source_radius { 0.0F };
   std::uint32_t flags { 0U };
+
+  float shadow_bias { 0.0F };
+  float shadow_normal_bias { 0.02F };
+  std::uint32_t shadow_resolution_hint { 1U };
+  std::uint32_t _padding0 { 0U };
 };
 
 struct FrameLightSelection {

@@ -88,7 +88,10 @@ auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection) con
   }
 
   packets.local_lights.reserve(selection.local_lights.size());
+  auto spot_shadow_index = 0U;
   for (const auto& light : selection.local_lights) {
+    const auto casts_spot_shadow = light.kind == LocalLightKind::kSpot
+      && (light.flags & kLocalLightFlagCastsShadows) != 0U;
     packets.local_lights.push_back(DeferredLightPacket {
       .kind = light.kind,
       .light_position_and_radius = glm::vec4(light.position, light.range),
@@ -98,7 +101,13 @@ auto DeferredLightPacketBuilder::Build(const FrameLightSelection& selection) con
       .spot_angles
       = glm::vec4(light.inner_cone_cos, light.outer_cone_cos, 0.0F, 0.0F),
       .light_world_matrix = BuildLightWorldMatrix(light),
+      .shadow_index = casts_spot_shadow ? spot_shadow_index
+                                        : kInvalidShaderVisibleIndex.get(),
+      .shadow_flags = light.flags,
     });
+    if (casts_spot_shadow) {
+      ++spot_shadow_index;
+    }
   }
   return packets;
 }

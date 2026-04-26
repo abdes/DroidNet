@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked",
+  "jobs": [
+    {
+      "id": "material.floor_default",
+      "type": "material-descriptor",
+      "source": "../bottle-on-box/floor_default.material.json",
+      "name": "floor_default",
+      "content_hashing": true
+    },
+    {
+      "id": "material.cube_red",
+      "type": "material-descriptor",
+      "source": "../bottle-on-box/cube_red.material.json",
+      "name": "cube_red",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.floor",
+      "type": "geometry-descriptor",
+      "source": "../bottle-on-box/floor.geometry.json",
+      "name": "floor",
+      "content_hashing": true,
+      "depends_on": [
+        "material.floor_default"
+      ]
+    },
+    {
+      "id": "geometry.cube",
+      "type": "geometry-descriptor",
+      "source": "../bottle-on-box/cube.geometry.json",
+      "name": "cube",
+      "content_hashing": true,
+      "depends_on": [
+        "material.cube_red"
+      ]
+    },
+    {
+      "id": "scene.SpotShadowValidation",
+      "type": "scene-descriptor",
+      "source": "./SpotShadowValidation.scene.json",
+      "name": "SpotShadowValidation",
+      "content_hashing": true,
+      "depends_on": [
+        "geometry.floor",
+        "geometry.cube"
+      ]
+    }
+  ]
+}

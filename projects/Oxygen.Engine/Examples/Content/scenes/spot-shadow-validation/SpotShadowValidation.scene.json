@@ -1,0 +1,152 @@
+{
+  "version": 3,
+  "name": "SpotShadowValidation",
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": true,
+        "static": true
+      }
+    },
+    {
+      "name": "FloorReceiver",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": false,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "CenterCaster",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": true,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.9, 0.9, 1.0]
+      }
+    },
+    {
+      "name": "TallCaster",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "static": true,
+        "casts_shadows": true,
+        "receives_shadows": true
+      },
+      "transform": {
+        "translation": [1.15, 0.65, 0.9],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.45, 0.45, 1.8]
+      }
+    },
+    {
+      "name": "SpotKey",
+      "parent": 0,
+      "flags": {
+        "visible": true,
+        "casts_shadows": true
+      },
+      "transform": {
+        "translation": [-2.8, -3.2, 4.2],
+        "rotation": [
+          0.6973826489605633,
+          0.0,
+          0.5486076838489765,
+          0.4611800626117842
+        ],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "flags": {
+        "visible": true
+      },
+      "transform": {
+        "translation": [-4.490468502044678, 0.40253522992134094, 1.7400051355361938],
+        "rotation": [
+          0.5069006085395813,
+          -0.4164193272590637,
+          -0.4790944755077362,
+          0.5831940174102783
+        ],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "geometry_ref": "/.cooked/Geometry/floor.ogeo",
+      "node": 1,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 2,
+      "visible": true
+    },
+    {
+      "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+      "node": 3,
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 5,
+        "fov_y": 1.0,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 1200.0
+      }
+    ]
+  },
+  "lights": {
+    "spot": [
+      {
+        "node": 4,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.92, 0.82],
+          "mobility": 0,
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.0,
+            "normal_bias": 0.02,
+            "resolution_hint": 2
+          }
+        },
+        "range": 9.0,
+        "attenuation_model": 0,
+        "decay_exponent": 2.0,
+        "inner_cone_angle_radians": 0.35,
+        "outer_cone_angle_radians": 0.68,
+        "source_radius": 0.03,
+        "luminous_flux_lm": 26000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/floor_default.omat",
+      "/.cooked/Materials/cube_red.omat"
+    ]
+  }
+}
