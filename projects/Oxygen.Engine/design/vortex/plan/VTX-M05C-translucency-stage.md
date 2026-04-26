@@ -34,6 +34,10 @@ velocity, and translucent shadow depth rendering are future work.
 - Keep diagnostics compact: one Stage 18 pass record and one draw-command fact.
 - Keep the single VTX-M05C ledger row in
   [../IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) updated in place.
+- Senior-review remediation is part of the M05C proof surface: sparse bounds,
+  invalid draw rejection, projection-kind detection, infrastructure skip
+  diagnostics, and reverse-Z PSO descriptor reuse must remain covered by
+  focused tests before the milestone can keep `validated` status.
 
 ## 3. Current State
 
@@ -111,13 +115,17 @@ Tasks:
   `PassMaskBit::kTransparent`.
 - Preserve main-view visibility filtering.
 - Sort transparent draws back-to-front for the current view with a stable
-  fallback to prepared `sort_distance2`.
+  fallback to render-item bounds and then linearized prepared distance.
+- Reject invalid material handles, invalid bindless geometry slots, and
+  zero-count geometry ranges before command creation.
 - Add focused tests for filtering and sorting.
 
 Validation:
 
 - Focused Vortex test target build.
 - Focused unit tests for transparent filtering and stable back-to-front order.
+- Senior-review regressions for sparse bounds, perspective versus orthographic
+  key calculation, and invalid draw rejection.
 
 ### Slice C - Stage 18 Module And Pipeline
 
@@ -131,12 +139,15 @@ Tasks:
   `Vortex/Stages/Translucency/ForwardMesh_VS.hlsl` and
   `ForwardMesh_PS.hlsl` with HDR scene-color output.
 - Use the same root/draw metadata contract as existing Vortex mesh passes.
+- Cache root bindings and Stage 18 pipeline descriptors by scene-color format,
+  depth format, sample count/quality, and reverse-Z state.
 - Execute after opaque lighting/environment work and before overlays/resolve.
 
 Validation:
 
 - Focused Vortex build.
 - Tests or assertions for result reporting and no-draw behavior.
+- Focused reverse-Z pipeline descriptor regression.
 - ShaderBake/catalog validation only if shader catalog or shader requests
   change.
 
@@ -151,6 +162,8 @@ Tasks:
 - Execute Stage 18 unless render mode is wireframe-only.
 - Record `Vortex.Stage18.Translucency` pass facts and a compact
   `Vortex.TranslucencyDrawCommands` product/fact.
+- Publish explicit skip reasons for no draws and infrastructure failures; log
+  infrastructure failures rather than silently returning.
 - Keep missing optional shadow/environment products nonfatal.
 
 Validation:
@@ -224,15 +237,47 @@ Internal proof evidence:
   --parallel 4` passed; focused `ctest --preset test-debug -R
   "Oxygen\.Vortex\.SceneRendererDeferredCore|Oxygen\.Graphics\.Direct3D12\.ShaderBakeCatalog"
   --output-on-failure` passed.
+- Senior-review remediation proof on 2026-04-26: `cmake --build
+  out\build-ninja --config Debug --target
+  Oxygen.Vortex.SceneRendererDeferredCore --parallel 4` passed;
+  `ctest --preset test-debug -R
+  "Oxygen\.Vortex\.SceneRendererDeferredCore" --output-on-failure` passed
+  40/40 tests; `git diff --check` passed.
 - Runtime proof: final artifacts under
   `out/build-ninja/analysis/vortex/translucency/m05c-final/` record CDB/D3D12
   `overall_verdict=pass`, `runtime_exit_code=0`, zero D3D12/DXGI errors,
   Stage 18 scope count 1, Stage 18 draw count 2, Stage 9 draw count 2,
   Stage 20 ground grid count 0, cyan pixels 2161, magenta pixels 225, and
   Stage 18 RGB delta 2682.43359.
+- Fresh post-remediation runtime proof: artifacts under
+  `out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/`
+  record CDB/D3D12 `overall_verdict=pass`, `runtime_exit_code=0`, no debugger
+  break, zero D3D12/DXGI errors, zero blocking warnings, a runtime log with
+  `Parsed with-translucency option = true` and repeated `Writing 4 draw
+  metadata` entries, and a RenderDoc translucency report with Stage 18 scope
+  count 1, Stage 18 draw count 2, Stage 9 draw count 2, ground grid count 0,
+  Stage 18 after post-opaque and before resolve, cyan pixels 2130, magenta
+  pixels 225, `stage18_scene_color_changed=true`, and Stage 18 max RGB delta
+  2684.
 - User visual confirmation: accepted after the final VortexBasic scene used
   the foreground cyan sphere and magenta cylinder, raised sphere, reduced
   alpha, and authored manual exposure.
+
+Senior-review remediation evidence:
+
+- Code changes: `TranslucencyMeshProcessor.cpp` now uses render-item world
+  bounds before linear distance fallback, rejects invalid material/geometry
+  draws, uses canonical projection-kind detection, and drops the incoherent
+  submesh-as-LOD diagnostic fallback. `TranslucencyModule.cpp/.h` now records
+  skip reasons, logs infrastructure skips, and caches root bindings plus
+  pipeline descriptors. `SceneRenderer.cpp` publishes the skip reason in the
+  Stage 18 diagnostics product.
+- Added tests: sparse bounding-sphere fallback, projection-kind sort behavior,
+  degenerate draw rejection, and reverse-Z pipeline descriptor hashes.
+- Accepted deferred work: per-material sided culling, draw-command state
+  merging/instancing, a lightweight translucency-specific pixel shader, and
+  material-controlled aerial-perspective/fog application remain future scope
+  and are documented in the LLD.
 
 ## 7. Expected Test Commands
 
@@ -258,6 +303,12 @@ out/build-ninja/analysis/vortex/translucency/m05c-final/
   vortexbasic-translucency-m05c-final.debug-layer.report.txt
   vortexbasic-translucency-m05c-final_capture.rdc
   vortexbasic-translucency-m05c-final_capture.rdc_vortex_translucency_report.txt
+
+out/build-ninja/analysis/vortex/translucency/m05c-review-remediation/
+  vortexbasic-translucency-review-remediation.debug-layer.report.txt
+  vortexbasic-translucency-review-remediation.stderr.log
+  vortexbasic-translucency-review-remediation_capture.rdc
+  vortexbasic-translucency-review-remediation_capture.rdc_vortex_translucency_report.txt
 ```
 
 ## 8. Exit Gate

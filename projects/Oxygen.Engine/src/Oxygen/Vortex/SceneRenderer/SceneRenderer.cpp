@@ -11,6 +11,7 @@
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -347,10 +348,9 @@ namespace {
       + " submitted=" + std::to_string(stats.submitted_count)
       + " visible=" + std::to_string(stats.visible_count)
       + " occluded=" + std::to_string(stats.occluded_count)
-      + " overflow_visible="
-      + std::to_string(stats.overflow_visible_count)
+      + " overflow_visible=" + std::to_string(stats.overflow_visible_count)
       + " fallback=" + std::string { to_string(stats.fallback_reason) }
-      + " hzb=" + (stats.current_furthest_hzb_available ? "1" : "0")
+    + " hzb=" + (stats.current_furthest_hzb_available ? "1" : "0")
       + " prev=" + (stats.previous_results_valid ? "1" : "0")
       + " valid=" + (stats.results_valid ? "1" : "0");
   }
@@ -359,13 +359,52 @@ namespace {
     const std::uint32_t occlusion_culled_draw_count) -> std::string
   {
     return "draws=" + std::to_string(draw_count)
-      + " occlusion_culled="
-      + std::to_string(occlusion_culled_draw_count);
+      + " occlusion_culled=" + std::to_string(occlusion_culled_draw_count);
   }
 
-  auto TranslucencyDrawDescriptor(const std::uint32_t draw_count) -> std::string
+  auto TranslucencySkipReasonName(const TranslucencySkipReason reason)
+    -> std::string_view
   {
-    return "draws=" + std::to_string(draw_count);
+    switch (reason) {
+    case TranslucencySkipReason::kNone:
+      return "none";
+    case TranslucencySkipReason::kNotRequested:
+      return "not_requested";
+    case TranslucencySkipReason::kNoDraws:
+      return "no_draws";
+    case TranslucencySkipReason::kMissingGraphics:
+      return "missing_graphics";
+    case TranslucencySkipReason::kMissingViewConstants:
+      return "missing_view_constants";
+    case TranslucencySkipReason::kRecorderUnavailable:
+      return "recorder_unavailable";
+    }
+    return "unknown";
+  }
+
+  auto TranslucencyDrawDescriptor(const TranslucencyExecutionResult& result)
+    -> std::string
+  {
+    return "draws=" + std::to_string(result.draw_count) + " skip="
+      + std::string { TranslucencySkipReasonName(result.skip_reason) };
+  }
+
+  auto TranslucencyMissingInputs(const TranslucencyExecutionResult& result,
+    const bool module_available) -> std::vector<std::string>
+  {
+    if (!module_available) {
+      return { "TranslucencyModule" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kMissingGraphics) {
+      return { "Graphics" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kMissingViewConstants) {
+      return { "ViewConstants" };
+    }
+    if (result.skip_reason == TranslucencySkipReason::kRecorderUnavailable) {
+      return { "CommandRecorder" };
+    }
+    return {};
   }
 
   auto RecordDiagnosticsPass(Renderer& renderer, DiagnosticsPassRecord record)
@@ -1941,17 +1980,17 @@ void SceneRenderer::OnRender(RenderContext& ctx)
         "Vortex.SceneDepth", "Vortex.LightingFrameBindings",
         "Vortex.ShadowFrameBindings", "Vortex.EnvironmentFrameBindings" },
       .outputs = { "Vortex.SceneColor" },
-      .missing_inputs = translucency_ == nullptr
-        ? std::vector<std::string> { "TranslucencyModule" }
-        : std::vector<std::string> {},
+      .missing_inputs = TranslucencyMissingInputs(
+        translucency_result, translucency_ != nullptr),
     });
   RecordDiagnosticsProduct(renderer_,
     DiagnosticsProductRecord {
       .name = "Vortex.TranslucencyDrawCommands",
       .producer_pass = "Vortex.Stage18.Translucency",
-      .descriptor = TranslucencyDrawDescriptor(translucency_result.draw_count),
-      .published = translucency_result.requested,
-      .valid = translucency_result.executed || translucency_result.draw_count == 0U,
+      .descriptor = TranslucencyDrawDescriptor(translucency_result),
+      .published = translucency_result.draw_count > 0U,
+      .valid = !translucency_result.requested || translucency_result.executed
+        || translucency_result.skip_reason == TranslucencySkipReason::kNoDraws,
     });
 
   // Stage 19: reserved - DistortionModule

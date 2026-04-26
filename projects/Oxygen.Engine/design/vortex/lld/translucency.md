@@ -66,6 +66,19 @@ M05C parity re-check result:
   constant-color/unlit validation material that is meant to preserve authored
   material color must be written in the same exposure domain consumed by the
   post-process path.
+- Senior-review remediation on 2026-04-26 tightened M05C correctness without
+  expanding the milestone into the full UE translucency stack: sparse prepared
+  bounds now fall back to render-item world bounds before distance fallback,
+  invalid translucent draw commands are rejected CPU-side, projection-kind
+  detection uses the canonical projection matrix element, infrastructure skips
+  carry explicit reasons, and the Stage 18 PSO descriptor/root bindings are
+  cached per framebuffer/depth/reverse-Z key.
+- Accepted M05C shader divergence: Oxygen still uses the shared
+  `ForwardMesh_PS.hlsl` PBR/aerial-perspective path for translucency. UE's
+  ordinary translucency has lighter-weight lighting paths and material fog
+  controls. A translucency-specific lightweight shader permutation and
+  per-material aerial-perspective/fog control remain deferred work, not hidden
+  Stage 18 parity claims.
 
 ## 3. Oxygen Scope
 
@@ -100,6 +113,10 @@ M05C parity re-check result:
 - Per-primitive translucent sort priority, distance offset, and sort axis.
 - Translucency lighting volume injection. Oxygen's existing forward-lighting
   payload is used directly.
+- Draw-command state merging into `DrawIndexedInstanced` buckets. Stage 18
+  still emits per-mesh draw commands for M05C.
+- Per-material sided rasterizer selection. M05C uses no culling for visual
+  validation; material-authored one-sided translucent PSOs are deferred.
 
 These are not hidden gaps in the M05C claim. They are future scope because the
 current Vortex baseline needs correct standard alpha-blended meshes before the
@@ -137,6 +154,7 @@ struct TranslucencyExecutionResult {
   bool requested = false;
   bool executed = false;
   std::uint32_t draw_count = 0;
+  TranslucencySkipReason skip_reason = TranslucencySkipReason::kNotRequested;
 };
 
 class TranslucencyModule {
@@ -191,7 +209,10 @@ Sorting policy:
 
 - Preferred path: use the resolved view camera and prepared draw bounding
   spheres to compute a conservative far-side depth/distance key.
-- Fallback path: use `RenderItemData::sort_distance2` for older prepared items.
+- Sparse-bounds fallback path: use `RenderItemData::world_bounding_sphere` and
+  the same view-space key calculation before falling back to scalar distance.
+- Last-resort fallback path: use `sqrt(RenderItemData::sort_distance2)`, not
+  squared distance, so fallback keys remain in linear units.
 - Stable ordering is required for equal keys.
 
 This deliberately matches UE's requirement that translucent work is sorted for
@@ -208,7 +229,7 @@ and distance-offset controls until Oxygen has those authoring fields.
 | Depth write | Disabled |
 | Blend | Standard straight-alpha: source alpha over destination |
 | Color space | HDR/linear scene color, before final post-process |
-| Rasterizer | No culling for the first stage implementation; material-sided policy can refine this later. |
+| Rasterizer | No culling for the first stage implementation; material-sided policy is deferred and must select separate PSOs before claiming one-sided translucent parity. |
 
 The pixel shader must emit straight alpha. It must not tonemap or output LDR
 color when writing to internal `SceneColor`.
@@ -263,7 +284,7 @@ Stage 18 must record one compact diagnostics pass entry:
   `Vortex.SceneDepth`, plus lighting/shadow/environment binding products when
   available
 - output: `Vortex.SceneColor`
-- facts: transparent draw count and skip reason
+- facts: transparent draw count, publication validity, and skip reason
 
 This is enough for the Diagnostics panel, capture manifest, RenderDoc analyzer,
 and CDB/debug-layer workflow without adding a new diagnostics subsystem.
