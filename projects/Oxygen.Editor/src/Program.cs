@@ -308,9 +308,6 @@ public static partial class Program
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
         container.Register<IDocumentService, EditorDocumentService>(Reuse.Singleton);
-
-        // Register the project instance using a delegate that will request the currently open project from the project browser service.
-        container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
     }
 
     private static void RegisterDiagnosticsServices(IContainer container)
