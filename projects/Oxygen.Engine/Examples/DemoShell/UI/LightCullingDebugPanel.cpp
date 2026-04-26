@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 
 #include "DemoShell/UI/LightCullingDebugPanel.h"
 #include "DemoShell/UI/LightCullingVm.h"
@@ -64,19 +65,14 @@ void LightingPanel::DrawVisualizationModes()
     vm_->SetVisualizationMode(ShaderDebugMode::kDisabled);
   }
 
-  if (ImGui::RadioButton(
-        "Heat Map", current_mode == ShaderDebugMode::kLightCullingHeatMap)) {
-    vm_->SetVisualizationMode(ShaderDebugMode::kLightCullingHeatMap);
-  }
-
-  if (ImGui::RadioButton(
-        "Slices", current_mode == ShaderDebugMode::kDepthSlice)) {
-    vm_->SetVisualizationMode(ShaderDebugMode::kDepthSlice);
-  }
-
-  if (ImGui::RadioButton(
-        "Clusters", current_mode == ShaderDebugMode::kClusterIndex)) {
-    vm_->SetVisualizationMode(ShaderDebugMode::kClusterIndex);
+  for (const auto& info : vortex::EnumerateShaderDebugModes()) {
+    if (info.family != vortex::ShaderDebugModeFamily::kLightCulling
+      || !info.supported) {
+      continue;
+    }
+    if (ImGui::RadioButton(info.display_name.data(), current_mode == info.mode)) {
+      vm_->SetVisualizationMode(info.mode);
+    }
   }
 }
 

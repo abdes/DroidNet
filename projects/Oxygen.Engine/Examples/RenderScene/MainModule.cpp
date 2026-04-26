@@ -257,7 +257,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
-  shell_config.panel_config.rendering = true;
+  shell_config.panel_config.diagnostics = true;
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;

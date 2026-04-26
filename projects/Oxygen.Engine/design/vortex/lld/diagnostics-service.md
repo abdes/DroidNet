@@ -581,9 +581,10 @@ Automation hardening requirements:
 
 ## 11. ImGui Panels
 
-The panel system is a consumer of snapshots. DemoShell's old Rendering panel
-should be consolidated into a Diagnostics panel for Vortex-facing runtime
-debugging, with the old name kept only as a migration alias if needed.
+The panel system is a consumer of snapshots. DemoShell's Vortex-facing runtime
+debugging surface is the Diagnostics panel. The old Rendering panel name is not
+kept as a migration alias for Vortex samples; clean UX and clear ownership are
+more valuable than preserving an ambiguous panel label.
 
 Developer workflow target:
 
@@ -601,7 +602,8 @@ Panel structure:
   state when known.
 - Debug Modes: modes grouped by `ShaderDebugModeRegistry` family. Unsupported
   modes stay visible but disabled with the missing capability/product reason.
-  Selection writes a request to `DiagnosticsService`.
+  Selection writes a requested debug mode; the UI displays both requested and
+  effective state so capability clamping is explicit.
 - Frame Facts: compact pass/product table showing executed/skipped state,
   major inputs/outputs, stale or missing products, and the issue count. This is
   for scanning, not for displaying raw logs.

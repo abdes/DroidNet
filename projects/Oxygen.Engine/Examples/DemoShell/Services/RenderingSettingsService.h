@@ -12,6 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 #include "DemoShell/Runtime/RendererUiTypes.h"
 
@@ -29,7 +30,7 @@ namespace oxygen::examples {
 
 class SettingsService;
 
-//! Settings persistence for rendering panel options.
+//! Settings persistence for Vortex diagnostics and rendering options.
 /*!
  Owns UI-facing settings for view mode (solid/wireframe) and debug mode,
  delegating persistence to `SettingsService` and exposing an epoch for cache
@@ -75,6 +76,10 @@ public:
   //! Returns the persisted debug mode.
   [[nodiscard]] virtual auto GetDebugMode() const -> engine::ShaderDebugMode;
 
+  //! Returns the debug mode that the renderer will actually execute.
+  [[nodiscard]] virtual auto GetEffectiveDebugMode() const
+    -> engine::ShaderDebugMode;
+
   //! Sets the debug mode.
   virtual auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
 
@@ -103,6 +108,8 @@ public:
   [[nodiscard]] virtual auto SupportsDebugMode(
     engine::ShaderDebugMode mode) const -> bool;
   [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
+  [[nodiscard]] virtual auto GetRendererCapabilities() const
+    -> vortex::CapabilitySet;
 
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
@@ -117,7 +124,7 @@ private:
   static constexpr auto kWireColorRKey = "rendering.wire_color.r";
   static constexpr auto kWireColorGKey = "rendering.wire_color.g";
   static constexpr auto kWireColorBKey = "rendering.wire_color.b";
-  static constexpr auto kDebugModeKey = "rendering.debug_mode";
+  static constexpr auto kDebugModeKey = "diagnostics.shader_debug_mode";
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
   static constexpr auto kAtmosphereBlueNoiseEnabledKey
     = "rendering.atmosphere_blue_noise";
