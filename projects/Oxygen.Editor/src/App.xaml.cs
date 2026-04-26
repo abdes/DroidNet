@@ -17,7 +17,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
 
 namespace Oxygen.Editor;
@@ -33,7 +32,6 @@ public partial class App
     private readonly IHostApplicationLifetime lifetime;
     private readonly HostingContext hostingContext;
     private readonly IActivationService activationService;
-    private readonly IEngineService engineService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="App"/> class.
@@ -48,7 +46,6 @@ public partial class App
     /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
     /// <param name="chromeService">The chrome service for automatic chrome application.</param>
     /// <param name="placementService">The window placement service for restoring and saving window positions.</param>
-    /// <param name="engineService">Ensures the shared engine is initialized during application startup.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service
@@ -68,8 +65,7 @@ public partial class App
         IAppThemeModeService themeModeService,
         WindowBackdropService backdropService,
         WindowChromeService chromeService,
-        WindowPlacementService placementService,
-        IEngineService engineService)
+        WindowPlacementService placementService)
     {
         _ = windowManager; // Unused; injected only for early initialization
         _ = backdropService; // Unused; injected only for early initialization
@@ -84,7 +80,6 @@ public partial class App
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
-        this.engineService = engineService;
         this.InitializeComponent();
     }
 
@@ -99,8 +94,6 @@ public partial class App
 #endif
 
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
-
-        this.EnsureEngineIsReady();
 
         this.UnhandledException += OnAppUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
@@ -316,21 +309,5 @@ public partial class App
 
         Process.GetCurrentProcess()
             .Kill();
-    }
-
-    private void EnsureEngineIsReady()
-    {
-        // FIXME(abdes): this engine initialization should be done better with UI feedback and cancellation support.
-        try
-        {
-            // Use AsTask() to convert ValueTask to Task before blocking to avoid CA2012 warning.
-            this.engineService.InitializeAsync().AsTask().GetAwaiter().GetResult();
-            this.engineService.StartAsync().AsTask().GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to initialize engine service: {ex}");
-            throw;
-        }
     }
 }
