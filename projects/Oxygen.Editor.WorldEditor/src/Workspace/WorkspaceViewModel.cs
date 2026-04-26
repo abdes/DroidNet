@@ -27,6 +27,8 @@ using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.SceneExplorer.Operations;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.Documents.Selection;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -188,6 +190,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
         childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
         childContainer.Register<ISceneOrganizer, SceneOrganizer>(Reuse.Singleton);
         childContainer.Register<ISceneExplorerService, SceneExplorerService>(Reuse.Singleton);
+        childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
+        childContainer.Register<ISceneDocumentCommandService, SceneDocumentCommandService>(Reuse.Singleton);
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);

@@ -23,6 +23,8 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer.Services;
 using Oxygen.Editor.World.Services;
+using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.WorldEditor.Documents.Selection;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -40,7 +42,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly WindowId windowId;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneExplorerService sceneExplorerService;
+    private readonly ISceneSelectionService selectionService;
     private readonly List<ITreeItem> clipboard = [];
+    private readonly Dictionary<ITreeItem, string> trackedItemLabels = [];
+    private readonly HashSet<ITreeItem> trackedTreeItems = [];
 
     private HistoryKeeper History => this.Scene != null ? UndoRedo.Default[this.Scene.AttachedObject.Id] : UndoRedo.Default[this];
 
@@ -49,6 +54,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
     private Guid loadingDocumentId = Guid.Empty;
+    private bool suppressTreeCommandHandling;
+    private bool suppressTreeItemLabelHandling;
 
     private bool isDisposed;
 
@@ -76,6 +83,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         WindowId windowId,
         ISceneEngineSync sceneEngineSync,
         ISceneExplorerService sceneExplorerService,
+        ISceneSelectionService selectionService,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -88,6 +96,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.windowId = windowId;
         this.sceneEngineSync = sceneEngineSync;
         this.sceneExplorerService = sceneExplorerService;
+        this.selectionService = selectionService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -103,6 +112,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.ItemMoved += this.OnItemMoved;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
+        messenger.Register<SceneNodeAddedMessage>(this, this.OnSceneNodeAdded);
+        messenger.Register<SceneNodeRemovedMessage>(this, this.OnSceneNodeRemoved);
 
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
@@ -166,17 +177,37 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <returns>A <see cref="Task"/> that completes when the rename has finished.</returns>
     public async Task RenameItemAsync(ITreeItem item, string newName)
     {
-        var oldName = item.Label;
-        if (string.Equals(oldName, newName, StringComparison.Ordinal))
+        ArgumentNullException.ThrowIfNull(item);
+
+        var trimmed = (newName ?? string.Empty).Trim();
+        if (!item.ValidateItemName(trimmed))
         {
             return;
         }
 
-        await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
+        var oldName = item.Label;
+        if (string.Equals(oldName, trimmed, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.suppressTreeItemLabelHandling = true;
+        try
+        {
+            item.Label = trimmed;
+            this.trackedItemLabels[item] = trimmed;
+            await this.sceneExplorerService.RenameItemAsync(item, trimmed).ConfigureAwait(false);
+        }
+        finally
+        {
+            this.suppressTreeItemLabelHandling = false;
+        }
 
         this.History.AddChange(
-            $"Rename({oldName} -> {newName})",
+            $"Rename({oldName} -> {trimmed})",
             async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
+
+        await this.MarkDirtyAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -204,42 +235,56 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <returns>A <see cref="Task"/> that completes when the item has been handled.</returns>
     protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
     {
-        // Add Undo
-        // NOTE: We add the undo change *before* any async operations to ensure that if this method
-        // is called within an Undo context (which sets the UndoRedo state to Undoing), the new change
-        // is correctly pushed to the Redo stack. If we await first, the Undo context might be disposed
-        // by the time we reach this line, causing the change to be pushed to the Undo stack instead.
-        this.History
-            .AddChange(
-                $"RemoveItem({args.TreeItem.Label})",
-                async () =>
-                {
-                    try
-                    {
-                        await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(false);
-                    }
-                    catch (Exception ex)
-                    {
-                        this.LogUndoRemoveFailed(ex, args.TreeItem.Label);
-                    }
-                });
+        if (this.suppressTreeCommandHandling)
+        {
+            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
+            {
+                this.nodeAdapterIndex[suppressedAdapter.AttachedObject.Id] = suppressedAdapter;
+            }
+
+            this.TrackTreeItem(args.TreeItem);
+            return;
+        }
 
         var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
 
-        // Sync with Backend
-        if (addedAdapter != null)
+        this.History.AddChange(
+            $"RemoveItem({args.TreeItem.Label})",
+            async () =>
+            {
+                try
+                {
+                    await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(true);
+                }
+                catch (Exception ex)
+                {
+                    this.LogUndoRemoveFailed(ex, args.TreeItem.Label);
+                }
+            });
+
+        try
         {
-            await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
+            if (addedAdapter != null)
+            {
+                await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
+            }
+            else if (args.TreeItem is FolderAdapter folderAdapter)
+            {
+                await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
+            }
+
+            await this.MarkDirtyAsync().ConfigureAwait(true);
         }
-        else if (args.TreeItem is FolderAdapter folderAdapter)
+        catch (Exception ex)
         {
-            await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
+            this.logger.LogError(ex, "Failed to apply scene explorer add for {Item}.", args.TreeItem.Label);
         }
 
         this.LogItemAdded(args.TreeItem.Label);
 
         if (addedAdapter is null)
         {
+            this.TrackTreeItem(args.TreeItem);
             return;
         }
 
@@ -247,6 +292,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         try
         {
             this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
+            this.TrackTreeItem(addedAdapter);
         }
         catch
         {
@@ -316,6 +362,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.loadSceneCts?.Dispose();
 
             this.loadSceneCts = null;
+            this.ClearTrackedTreeItems();
         }
 
         this.isDisposed = true;
@@ -694,6 +741,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.RedoStack = this.History.RedoStack;
 
             await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+            this.nodeAdapterIndex.Clear();
+            await this.IndexAdaptersForSceneAsync(this.Scene).ConfigureAwait(true);
+            this.PublishSelection(this.selectionService.Reconcile(loadedScene.Id, loadedScene));
 
             if (ct.IsCancellationRequested)
             {
@@ -739,12 +789,24 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         _ = sender; // unused
 
-        // Sync with Backend
-        _ = this.RemoveItemFromBackendAsync(args.TreeItem);
+        if (this.suppressTreeCommandHandling)
+        {
+            if (AsSceneNodeAdapter(args.TreeItem) is { } suppressedAdapter)
+            {
+                _ = this.nodeAdapterIndex.Remove(suppressedAdapter.AttachedObject.Id);
+            }
+
+            this.UntrackTreeItem(args.TreeItem);
+            this.LogItemRemoved(args.TreeItem.Label);
+            return;
+        }
 
         this.History.AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
             async () => await this.InsertItemAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
+
+        _ = this.RemoveItemFromBackendAsync(args.TreeItem);
+        _ = this.MarkDirtyAsync();
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
@@ -757,6 +819,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             _ = this.nodeAdapterIndex.Remove(adapter.AttachedObject.Id);
         }
+
+        this.UntrackTreeItem(item);
     }
 
     private void OnItemMoved(object? sender, TreeItemsMovedEventArgs args)
@@ -768,6 +832,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
+        if (this.suppressTreeCommandHandling)
+        {
+            return;
+        }
+
         if (args.IsBatch)
         {
             this.History.BeginChangeSet($"Move {args.Moves.Count} item(s)");
@@ -775,10 +844,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         try
         {
-            // Sync with Backend
-            _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
-
             this.RecordMoveUndo(args);
+            _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
+            _ = this.MarkDirtyAsync();
         }
         finally
         {
@@ -805,29 +873,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private void OnSceneNodeSelectionRequested(object recipient, SceneNodeSelectionRequestMessage message)
     {
-        switch (this.SelectionModel)
+        _ = recipient;
+
+        if (this.Scene is null)
         {
-            case SingleSelectionModel singleSelection:
-                var selectedItem = singleSelection.SelectedItem;
-                var selectedNode = AsSceneNode(selectedItem);
-                message.Reply(selectedNode is null
-                    ? Array.Empty<SceneNode>()
-                    : [selectedNode]);
-                break;
-
-            case MultipleSelectionModel<ITreeItem> multipleSelection:
-                var selection = multipleSelection.SelectedItems
-                    .Select(AsSceneNode)
-                    .Where(node => node is not null)
-                    .Select(node => node!)
-                    .ToList();
-                message.Reply(selection);
-                break;
-
-            default:
-                message.Reply(Array.Empty<SceneNode>());
-                break;
+            message.Reply(Array.Empty<SceneNode>());
+            return;
         }
+
+        message.Reply([.. this.selectionService.GetSelectedNodes(this.Scene.AttachedObject.Id, this.Scene.AttachedObject)]);
     }
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
@@ -849,7 +903,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             ? Array.Empty<SceneNode>()
             : [selectedNode];
 
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(selected));
+        this.PublishSelection(selected);
     }
 
     private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -881,7 +935,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             .Select(node => node!)
             .ToList();
 
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(selection));
+        this.PublishSelection(selection);
+    }
+
+    private void PublishSelection(IReadOnlyList<SceneNode> selected)
+    {
+        if (this.Scene is not { } sceneAdapter)
+        {
+            return;
+        }
+
+        this.selectionService.SetSelection(sceneAdapter.AttachedObject.Id, selected, "SceneExplorer");
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. selected]));
     }
 
     private List<ITreeItem> GetSelectedItems()
@@ -892,6 +957,70 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             SingleSelectionModel when this.SelectedItem is not null => [this.SelectedItem],
             _ => [],
         };
+
+    private async void OnSceneNodeAdded(object recipient, SceneNodeAddedMessage message)
+    {
+        _ = recipient;
+        if (this.Scene is null)
+        {
+            return;
+        }
+
+        foreach (var node in message.Nodes.Where(node => ReferenceEquals(node.Scene, this.Scene.AttachedObject)))
+        {
+            if (this.nodeAdapterIndex.ContainsKey(node.Id))
+            {
+                continue;
+            }
+
+            var parent = node.Parent is null
+                ? this.Scene
+                : this.nodeAdapterIndex.GetValueOrDefault(node.Parent.Id) as ITreeItem;
+            if (parent is null)
+            {
+                parent = this.Scene;
+            }
+
+            var adapter = new SceneNodeAdapter(node);
+            await this.ApplyExternalTreeChangeAsync(async () => await this.InsertItemAsync(adapter, parent, 0).ConfigureAwait(false)).ConfigureAwait(true);
+            this.nodeAdapterIndex[node.Id] = adapter;
+            this.TrackTreeItem(adapter);
+        }
+    }
+
+    private async void OnSceneNodeRemoved(object recipient, SceneNodeRemovedMessage message)
+    {
+        _ = recipient;
+        if (this.Scene is null)
+        {
+            return;
+        }
+
+        foreach (var node in message.Nodes.Where(node => ReferenceEquals(node.Scene, this.Scene.AttachedObject)))
+        {
+            if (!this.nodeAdapterIndex.TryGetValue(node.Id, out var adapter))
+            {
+                continue;
+            }
+
+            await this.ApplyExternalTreeChangeAsync(async () => await this.RemoveItemAsync(adapter).ConfigureAwait(false)).ConfigureAwait(true);
+            _ = this.nodeAdapterIndex.Remove(node.Id);
+            this.UntrackTreeItem(adapter);
+        }
+    }
+
+    private async Task ApplyExternalTreeChangeAsync(Func<Task> action)
+    {
+        this.suppressTreeCommandHandling = true;
+        try
+        {
+            await action().ConfigureAwait(true);
+        }
+        finally
+        {
+            this.suppressTreeCommandHandling = false;
+        }
+    }
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
@@ -981,6 +1110,36 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return $"New Entity {index}";
     }
 
+    private SceneDocumentCommandContext? CreateCommandContext()
+    {
+        if (this.Scene is null)
+        {
+            return null;
+        }
+
+        var scene = this.Scene.AttachedObject;
+        var metadata = this.documentService.GetOpenDocuments(this.windowId)
+            .OfType<SceneDocumentMetadata>()
+            .FirstOrDefault(document => document.DocumentId == scene.Id);
+        if (metadata is null)
+        {
+            return null;
+        }
+
+        return new SceneDocumentCommandContext(scene.Id, metadata, scene, this.History);
+    }
+
+    private async Task MarkDirtyAsync()
+    {
+        if (this.CreateCommandContext() is not { } context || context.Metadata.IsDirty)
+        {
+            return;
+        }
+
+        context.Metadata.IsDirty = true;
+        _ = await this.documentService.UpdateMetadataAsync(this.windowId, context.DocumentId, context.Metadata).ConfigureAwait(true);
+    }
+
     private async Task IndexAdaptersForSceneAsync(SceneAdapter sceneAdapter)
     {
         if (sceneAdapter is null)
@@ -988,11 +1147,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
+        this.ClearTrackedTreeItems();
+        this.TrackTreeItem(sceneAdapter);
+
         var roots = await sceneAdapter.Children.ConfigureAwait(true);
         var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)roots ?? []);
         while (stack.Count > 0)
         {
             var item = stack.Pop();
+            this.TrackTreeItem(item);
             if (item is SceneNodeAdapter lna)
             {
                 this.nodeAdapterIndex[lna.AttachedObject.Id] = lna;
@@ -1009,6 +1172,97 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                     }
                 }
             }
+        }
+    }
+
+    private void TrackTreeItem(ITreeItem item)
+    {
+        if (this.trackedTreeItems.Contains(item))
+        {
+            this.trackedItemLabels[item] = item.Label;
+            return;
+        }
+
+        this.trackedTreeItems.Add(item);
+        this.trackedItemLabels[item] = item.Label;
+        if (item is INotifyPropertyChanged notifier)
+        {
+            notifier.PropertyChanged += this.OnTrackedTreeItemPropertyChanged;
+        }
+    }
+
+    private void UntrackTreeItem(ITreeItem item)
+    {
+        if (item is TreeItemAdapter adapter && adapter.TryGetLoadedChildren(out var children))
+        {
+            foreach (var child in children)
+            {
+                this.UntrackTreeItem(child);
+            }
+        }
+
+        if (item is INotifyPropertyChanged notifier)
+        {
+            notifier.PropertyChanged -= this.OnTrackedTreeItemPropertyChanged;
+        }
+
+        _ = this.trackedTreeItems.Remove(item);
+        _ = this.trackedItemLabels.Remove(item);
+    }
+
+    private void ClearTrackedTreeItems()
+    {
+        foreach (var item in this.trackedTreeItems.ToArray())
+        {
+            if (item is INotifyPropertyChanged notifier)
+            {
+                notifier.PropertyChanged -= this.OnTrackedTreeItemPropertyChanged;
+            }
+        }
+
+        this.trackedTreeItems.Clear();
+        this.trackedItemLabels.Clear();
+    }
+
+    private async void OnTrackedTreeItemPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (!string.Equals(args.PropertyName, nameof(TreeItemAdapter.Label), StringComparison.Ordinal)
+            || sender is not ITreeItem item)
+        {
+            return;
+        }
+
+        // TODO(ED-M03-deferred): replace this label-change bridge with a DynamicTree rename commit hook.
+        var newName = item.Label;
+        if (!this.trackedItemLabels.TryGetValue(item, out var oldName))
+        {
+            this.trackedItemLabels[item] = newName;
+            return;
+        }
+
+        if (string.Equals(oldName, newName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        this.trackedItemLabels[item] = newName;
+        if (this.suppressTreeItemLabelHandling)
+        {
+            return;
+        }
+
+        this.History.AddChange(
+            $"Rename({oldName} -> {newName})",
+            async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
+
+        try
+        {
+            await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
+            await this.MarkDirtyAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to apply in-place rename for {Item}.", newName);
         }
     }
 }

@@ -184,7 +184,7 @@ LLD work:
 Exit gate:
 
 - Node create/delete/rename/reparent operations use command paths.
-- Component add/remove/edit operations for V0.1 components use command paths.
+- Quick-add primitive and directional light creation use command paths.
 - Dirty state and undo/redo work for supported mutations.
 - Scene save/reopen round-trips supported values.
 - Live-sync intent is requested after supported mutations.
@@ -414,6 +414,7 @@ Active milestone plans:
 | --- | --- |
 | [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md) | `ED-M01` |
 | [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md) | `ED-M02` |
+| [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md) | `ED-M03` |
 
 ## 8. Milestone Closure
 
