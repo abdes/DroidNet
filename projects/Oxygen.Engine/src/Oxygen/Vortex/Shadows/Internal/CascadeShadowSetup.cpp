@@ -362,16 +362,19 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
       cascade_count, view_near, view_far);
     const auto cascade_span
       = (std::max)(cascade_end - cascade_begin, kMinCascadeSpan);
+    const auto transition_width = cascade_index + 1U < cascade_count
+      ? cascade_span * transition_fraction
+      : 0.0F;
+    const auto projection_end = cascade_index + 1U < cascade_count
+      ? cascade_end + transition_width
+      : cascade_end;
     const auto cascade_matrix = BuildCascadeMatrix(*view_input.resolved_view,
-      directional_light.direction, cascade_begin, cascade_end,
+      directional_light.direction, cascade_begin, projection_end,
       allocation.resolution.x);
     auto& cascade = frame_data.bindings.cascades[cascade_index];
     cascade.light_view_projection = cascade_matrix.light_view_projection;
     cascade.split_near = cascade_begin;
-    cascade.split_far = cascade_end;
-    const auto transition_width = cascade_index + 1U < cascade_count
-      ? cascade_span * transition_fraction
-      : 0.0F;
+    cascade.split_far = projection_end;
     const auto fade_begin = cascade_index + 1U == cascade_count
       ? cascade_end - (shadow_far - view_near) * distance_fadeout_fraction
       : shadow_far;
