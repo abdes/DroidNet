@@ -184,8 +184,15 @@ void DiagnosticsPanel::DrawRuntimeStatus()
   const auto effective = vm_->GetEffectiveDebugMode();
 
   ImGui::Text("Renderer: %s", vm_->IsVortexRuntimeBound() ? "Vortex" : "None");
-  ImGui::Text("Requested: %s", DisplayNameFor(requested).data());
-  ImGui::Text("Effective: %s", DisplayNameFor(effective).data());
+  ImGui::Text("Selected debug view: %s", DisplayNameFor(requested).data());
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("The debug view selected in this panel.");
+  }
+  ImGui::Text("Active debug view: %s", DisplayNameFor(effective).data());
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "The debug view currently applied by the renderer after capability checks.");
+  }
   DrawRendererCapabilities();
 }
 

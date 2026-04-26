@@ -621,9 +621,10 @@ State ownership rules:
 - Persisted DemoShell settings store requested state only.
 - `DiagnosticsService` owns effective state, clamps it through build/runtime
   capabilities, and reports the reason for any rejected or downgraded request.
-- The panel must display requested versus effective state when they differ. This
-  prevents ambiguity between a UI bug, a persistence bug, and an engine
-  capability/configuration decision.
+- The panel must display selected versus active debug-view state when they
+  differ. This prevents ambiguity between a UI bug, a persistence bug, and an
+  engine capability/configuration decision while using language a developer can
+  understand at the point of use.
 - Domain services must not depend on DemoShell or ImGui. They report facts to
   the service/ledger; the panel reads snapshots.
 

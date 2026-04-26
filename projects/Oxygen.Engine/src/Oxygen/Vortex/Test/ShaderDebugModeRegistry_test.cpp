@@ -7,10 +7,12 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <array>
+#include <cstddef>
 #include <set>
 #include <string>
 #include <string_view>
 
+#include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaderCatalog.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 
 namespace {
@@ -26,6 +28,8 @@ using oxygen::vortex::ResolveShaderDebugMode;
 using oxygen::vortex::ShaderDebugMode;
 using oxygen::vortex::ShaderDebugModeFamily;
 using oxygen::vortex::UsesForwardMeshDebugVariant;
+
+namespace d3d12 = oxygen::graphics::d3d12;
 
 constexpr auto kAllShaderDebugModes = std::array {
   ShaderDebugMode::kDisabled,
@@ -56,6 +60,34 @@ constexpr auto kAllShaderDebugModes = std::array {
   ShaderDebugMode::kMaskedAlphaCoverage,
 };
 
+[[nodiscard]] auto CatalogContainsDefine(std::string_view define) -> bool
+{
+  for (const auto& shader : d3d12::kEngineShaders) {
+    for (std::size_t i = 0; i < shader.define_count; ++i) {
+      if (shader.defines[i] == define) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] auto CatalogContainsDefineForPath(
+  std::string_view define, std::string_view path) -> bool
+{
+  for (const auto& shader : d3d12::kEngineShaders) {
+    if (shader.path != path) {
+      continue;
+    }
+    for (std::size_t i = 0; i < shader.define_count; ++i) {
+      if (shader.defines[i] == define) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 NOLINT_TEST(ShaderDebugModeRegistryTest, HasOneEntryForEveryEnumValue)
 {
   const auto entries = EnumerateShaderDebugModes();
@@ -84,6 +116,48 @@ NOLINT_TEST(ShaderDebugModeRegistryTest, CanonicalNamesAreUniqueAndResolvable)
   }
 
   EXPECT_FALSE(ResolveShaderDebugMode("not-a-debug-mode").has_value());
+}
+
+NOLINT_TEST(ShaderDebugModeRegistryTest, SupportedShaderDefinesExistInCatalog)
+{
+  for (const auto& info : EnumerateShaderDebugModes()) {
+    if (!info.supported || info.shader_define.empty()) {
+      continue;
+    }
+
+    EXPECT_TRUE(CatalogContainsDefine(info.shader_define))
+      << info.canonical_name << " define=" << info.shader_define;
+  }
+}
+
+NOLINT_TEST(ShaderDebugModeRegistryTest, DebugPathMatchesCatalogShaderFamily)
+{
+  for (const auto& info : EnumerateShaderDebugModes()) {
+    if (!info.supported || info.shader_define.empty()) {
+      continue;
+    }
+
+    switch (info.path) {
+    case DiagnosticsDebugPath::kForwardMeshVariant:
+      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
+        "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl")
+        || CatalogContainsDefineForPath(info.shader_define,
+          "Vortex/Stages/Translucency/ForwardDebug_PS.hlsl"))
+        << info.canonical_name << " define=" << info.shader_define;
+      break;
+    case DiagnosticsDebugPath::kDeferredFullscreen:
+      EXPECT_TRUE(CatalogContainsDefineForPath(info.shader_define,
+        "Vortex/Stages/BasePass/BasePassDebugView.hlsl"))
+        << info.canonical_name << " define=" << info.shader_define;
+      break;
+    case DiagnosticsDebugPath::kNone:
+    case DiagnosticsDebugPath::kServicePass:
+    case DiagnosticsDebugPath::kExternalToolOnly:
+      ADD_FAILURE() << info.canonical_name
+                    << " has a shader define but no catalog-backed debug path";
+      break;
+    }
+  }
 }
 
 NOLINT_TEST(ShaderDebugModeRegistryTest, CanonicalToolNamesStayStable)

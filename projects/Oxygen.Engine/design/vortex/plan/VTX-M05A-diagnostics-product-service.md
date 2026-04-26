@@ -76,7 +76,7 @@ Each implementation slice must re-check the relevant UE5.7 family:
 
 ### Slice A - Architecture Hardening
 
-**Status:** `in_progress`
+**Status:** `validated`
 
 Tasks:
 
@@ -91,7 +91,7 @@ Validation requirements:
 
 ### Slice B - DiagnosticsService Shell And Ownership Boundary
 
-**Status:** `in_progress`
+**Status:** `validated`
 
 Current evidence:
 
@@ -107,10 +107,7 @@ Current evidence:
 
 Remaining gap:
 
-- `NDEBUG` default policy is implemented by compile-time branch but not proven
-  in a release build.
-- GPU timeline facade integration, capture manifest, registry, panel, and
-  automation hardening remain later slices.
+- No open Slice B gap.
 
 Tasks:
 
@@ -146,10 +143,14 @@ Validation:
   compile-time-specific tests documented separately if the test matrix cannot
   exercise both in one build.
 - Unit tests proving capability gating clamps feature enablement.
+- Release build/test proof passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Release --target Oxygen.Vortex.DiagnosticsService --parallel 4`;
+  `ctest --preset test-release -R "Oxygen\.Vortex\.DiagnosticsService" --output-on-failure`
+  with `DiagnosticsService` 1/1.
 
 ### Slice C - ShaderDebugModeRegistry
 
-**Status:** `in_progress`
+**Status:** `validated`
 
 Current evidence:
 
@@ -165,13 +166,17 @@ Current evidence:
 - Focused build and tests passed on 2026-04-26:
   `cmake --build out\build-ninja --config Debug --target oxygen-examples-vortexbasic Oxygen.Vortex.DiagnosticsService Oxygen.Vortex.ShaderDebugModeRegistry --parallel 4`;
   `ctest --preset test-debug -R "Oxygen\.Vortex\.(ShaderDebugModeRegistry|DiagnosticsService)" --output-on-failure`.
+- Direct catalog-introspection proof passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.ShaderDebugModeRegistry --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.ShaderDebugModeRegistry" --output-on-failure`
+  with `ShaderDebugModeRegistry` 9/9, including `EngineShaderCatalog.h`
+  define/path-family checks.
 
 Remaining gap:
 
 - DemoShell Diagnostics and light-culling debug-mode UI now consume the
   registry. Runtime UI smoke remains tracked in Slice G.
-- Consistency with `EngineShaderCatalog.h` is tested through current helper
-  define mapping, not yet by direct shader-catalog introspection.
+- No open Slice C registry/catalog consistency gap.
 
 Tasks:
 
@@ -334,7 +339,7 @@ Validation:
 
 ### Slice G - DemoShell Diagnostics Panel Registry
 
-**Status:** `validated`
+**Status:** `in_progress`
 
 Tasks:
 
@@ -344,8 +349,9 @@ Tasks:
   adding a second panel registry.
 - Structure the compact built-in panel around runtime status, directional
   shadow settings, and shader-debug mode selection.
-- Display requested versus effective shader debug state so developers can
-  distinguish UI persistence from renderer capability clamping.
+- Display selected versus active shader debug state so developers can
+  distinguish the panel choice from renderer capability clamping without
+  exposing service internals in the UI.
 - Use `ShaderDebugModeRegistry` for visible mode names, grouping, support state,
   and disabled reasons in Diagnostics and light-culling debug UI.
 - Keep UI state transient; persisted settings store requested values only.
@@ -359,9 +365,9 @@ Implementation evidence:
 - `RenderingSettingsService` now persists requested shader-debug mode,
   computes an effective Vortex mode from `ShaderDebugModeRegistry` plus renderer
   capabilities, and applies the effective mode to the renderer.
-- The Diagnostics panel reports Vortex binding, requested/effective debug mode,
-  a read-only renderer capability checklist, and registry-grouped debug
-  controls with disabled reasons.
+- The Diagnostics panel reports Vortex binding, selected/active debug view, a
+  read-only renderer capability checklist, and registry-grouped debug controls
+  with disabled reasons.
 - `LightCullingDebugPanel` consumes the same registry for its visualization mode
   list.
 
@@ -378,7 +384,7 @@ Validation:
 
 ### Slice H - External Tool Handshake And Automation Hardening
 
-**Status:** `planned`
+**Status:** `validated`
 
 Tasks:
 
