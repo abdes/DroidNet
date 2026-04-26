@@ -1610,6 +1610,10 @@ void SceneRenderer::OnRender(RenderContext& ctx)
     published_view_frame_bindings_.screen_hzb_frame_slot);
 
   if (occlusion_ != nullptr) {
+    occlusion_->SetConfig(OcclusionConfig {
+      .enabled = renderer_.GetOcclusionEnabled(),
+      .max_candidate_count = renderer_.GetOcclusionMaxCandidateCount(),
+    });
     occlusion_->Execute(ctx, scene_textures_);
     const auto& occlusion_stats = occlusion_->GetStats();
     RecordDiagnosticsPass(renderer_,
