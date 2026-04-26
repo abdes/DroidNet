@@ -144,6 +144,13 @@ m_gtest_program(
     "SceneRendererDeferredCore_test.cpp"
 )
 
+m_gtest_program(
+  OcclusionModule
+  SOURCES
+    "Fakes/Graphics.h"
+    "OcclusionModule_test.cpp"
+)
+
 add_custom_target(
   Oxygen.Vortex.SceneRendererShell
   DEPENDS
@@ -214,6 +221,12 @@ add_custom_target(
   Oxygen.Vortex.SceneRendererDeferredCore
   DEPENDS
     Oxygen.Vortex.SceneRendererDeferredCore.Tests
+)
+
+add_custom_target(
+  Oxygen.Vortex.OcclusionModule
+  DEPENDS
+    Oxygen.Vortex.OcclusionModule.Tests
 )
 
 m_gtest_program(

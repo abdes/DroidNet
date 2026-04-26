@@ -78,7 +78,19 @@ parity:
 
 ### Slice A - Architecture And Plan Authority
 
-**Status:** `in_progress`
+**Status:** `validated`
+
+Current evidence:
+
+- [../lld/occlusion.md](../lld/occlusion.md) now defines `OcclusionModule` as
+  the HZB consumer/visibility publisher over the existing `ScreenHzbModule`.
+- [../PLAN.md](../PLAN.md), [../ARCHITECTURE.md](../ARCHITECTURE.md), and
+  [../IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md) no longer claim
+  that `OcclusionModule` owns generic HZB generation.
+- Validation passed on 2026-04-26:
+  `rg` consistency scan for M05B/occlusion ownership references;
+  `git diff --check`.
+- Committed as `cd57ac692 docs: plan vortex occlusion consumer closeout`.
 
 Tasks:
 
@@ -95,11 +107,29 @@ Validation:
 
 Remaining gap:
 
-- Slice A is not validated until the docs pass those checks and are committed.
+- No open Slice A gap.
 
 ### Slice B - Visibility Result Substrate
 
-**Status:** `planned`
+**Status:** `validated`
+
+Current evidence:
+
+- `OcclusionConfig`, `OcclusionFallbackReason`, `OcclusionFrameResults`,
+  `OcclusionStats`, and `OcclusionModule` exist.
+- `RenderContext::ViewSpecific` exposes a per-view `occlusion_results` pointer.
+- `SceneRenderer` constructs the module when scene-prep/deferred capabilities
+  are active and records Stage 5 occlusion diagnostics facts. The default
+  module config is disabled, so this slice publishes conservative invalid
+  results without changing draw behavior.
+- Focused build/test validation passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OcclusionModule --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.OcclusionModule" --output-on-failure`
+  with 5/5 tests passing.
+- Neighboring SceneRenderer regression validation passed on 2026-04-26 after
+  rebuilding stale test executables:
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.(OcclusionModule|SceneRendererPublication|SceneRendererDeferredCore)" --output-on-failure`
+  with 54/54 tests passing across 3 test programs.
 
 Tasks:
 
@@ -113,6 +143,10 @@ Validation:
 
 - Focused Vortex build.
 - Unit tests for result substrate and fallback semantics.
+
+Remaining gap:
+
+- No open Slice B substrate gap. HZB GPU testing/readback remains Slice C.
 
 ### Slice C - HZB Occlusion Tester Pass
 
