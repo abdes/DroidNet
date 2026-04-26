@@ -24,6 +24,9 @@ geometry.
   visible, not culled.
 - Do not add a hardware-query path, Nanite-style instance culling, GPU Scene, or
   indirect-draw compaction in M05B.
+- Use fixed-capacity structured buffers for candidate bounds and visibility
+  results. This is the Oxygen divergence from UE5.7's fixed texture tables and
+  keeps the same latency/fallback behavior while reusing `GpuBufferReadback`.
 - Do not claim draw-reduction closure until a test or capture proves downstream
   consumers actually skipped draws because of occlusion.
 - Every status update must remain in the single VTX-M05B row of
@@ -150,13 +153,31 @@ Remaining gap:
 
 ### Slice C - HZB Occlusion Tester Pass
 
-**Status:** `planned`
+**Status:** `in_progress`
+
+Current evidence:
+
+- `OcclusionModule` now builds fixed-capacity structured candidate/result
+  buffers, submits `Vortex.Stage5.OcclusionTest`, and consumes a later
+  `GpuBufferReadback` when available. Missing/pending readback remains
+  conservatively visible.
+- `Vortex/Stages/Occlusion/OcclusionTest.hlsl` implements a furthest-HZB sphere
+  test aligned with the existing Screen HZB binding contract.
+- The shader is registered in `EngineShaderCatalog.h`.
+- Validation passed on 2026-04-26:
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Vortex.OcclusionModule --parallel 4`;
+  `ctest --preset test-debug -R "Oxygen\.Vortex\.OcclusionModule" --output-on-failure`
+  with 6/6 tests passing;
+  `cmake --build out\build-ninja --config Debug --target Oxygen.Graphics.Direct3D12.ShaderBake --parallel 4`;
+  `Oxygen.Graphics.Direct3D12.ShaderBake.exe rebuild --workspace-root F:\projects\DroidNet\projects\Oxygen.Engine --build-root F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\shader-bake-validation --out F:\projects\DroidNet\projects\Oxygen.Engine\out\build-ninja\shader-bake-validation\shaders.bin --mode dev`;
+  ShaderBake inspect confirmed `Vortex/Stages/Occlusion/OcclusionTest.hlsl`.
 
 Tasks:
 
 - Add the fixed-capacity HZB occlusion tester resources and pass wrapper.
 - Add `Vortex/Stages/Occlusion/OcclusionTest.hlsl`.
-- Use furthest HZB bindings from `ScreenHzbModule`.
+- Use furthest HZB bindings from `ScreenHzbModule` and structured
+  bounds/results buffers for the first implementation.
 - Implement readback latency and first-frame visible fallback.
 - Wire shader catalog and ShaderBake entries.
 
@@ -165,6 +186,11 @@ Validation:
 - ShaderBake/catalog validation.
 - Focused tests or GPU-proof harness for capacity, fallback, and result decode.
 - CDB/D3D12 debug-layer audit for the pass.
+
+Remaining gap:
+
+- Real D3D12 readback/result decode and debug-layer evidence are still required
+  before Slice C can be marked `validated`.
 
 ### Slice D - Consumer Integration
 
