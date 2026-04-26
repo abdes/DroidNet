@@ -29,7 +29,9 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Represents the ViewModel for the project layout in the content browser.
 ///     Acts as a mediator between the DynamicTree control and ContentBrowserState.
 /// </summary>
-/// <param name="projectManager">The project manager service.</param>
+/// <param name="projectManager">The project manager service for legacy project mount persistence.</param>
+/// <param name="projectContextService">The active project context service.</param>
+/// <param name="storage">The storage provider.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
 /// <param name="loggerFactory">
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
@@ -37,6 +39,8 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// </param>
 public partial class ProjectLayoutViewModel(
     IProjectManagerService projectManager,
+    IProjectContextService projectContextService,
+    IStorageProvider storage,
     ContentBrowserState contentBrowserState,
     IDialogService dialogService,
     ViewModelToView vmToView,
@@ -195,10 +199,9 @@ public partial class ProjectLayoutViewModel(
             // Temporarily suppress tree selection updates causing state churn while we rebuild
             this.suppressTreeSelectionEvents = true;
 
-            var projectInfo = this.GetCurrentProjectInfo() ??
+            var projectInfo = this.GetActiveProjectInfo() ??
                               throw new InvalidOperationException("Project Layout used with no CurrentProject");
 
-            var storage = projectManager.GetCurrentProjectStorageProvider();
             var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
 
             // Dispose previous root to release resources
@@ -408,7 +411,6 @@ public partial class ProjectLayoutViewModel(
 
         try
         {
-            var storage = projectManager.GetCurrentProjectStorageProvider();
             var mountRootLocation = storage.NormalizeRelativeTo(this.projectRoot.ProjectRootFolder.Location, projectRelativeBackingPath);
             var mountRootFolder = await storage.GetFolderFromPathAsync(mountRootLocation).ConfigureAwait(true);
 
@@ -489,7 +491,6 @@ public partial class ProjectLayoutViewModel(
                 return;
             }
 
-            var storage = projectManager.GetCurrentProjectStorageProvider();
             var mountRootFolder = await storage.GetFolderFromPathAsync(definition.AbsoluteFolderPath).ConfigureAwait(true);
 
             VirtualFolderMountTreeItemAdapter? mount = null;
@@ -714,7 +715,7 @@ public partial class ProjectLayoutViewModel(
         this.HasUnsavedChanges = false;
     }
 
-    private async Task LoadPersistedMountsAsync(IStorageProvider storage, IProjectInfo projectInfo)
+    private async Task LoadPersistedMountsAsync(IStorageProvider storage, ProjectInfo projectInfo)
     {
         if (this.projectRoot is null)
         {
@@ -776,11 +777,10 @@ public partial class ProjectLayoutViewModel(
             {
                 // The following method will do sanity checks on the current project and its info. On successful return, we have
                 // guarantee the project info is valid and has a valid location for the project root folder.
-                var projectInfo = this.GetCurrentProjectInfo() ??
+                var projectInfo = this.GetActiveProjectInfo() ??
                                   throw new InvalidOperationException("Project Layout used with no CurrentProject");
 
                 // Create the root TreeItem for the project root folder.
-                var storage = projectManager.GetCurrentProjectStorageProvider();
                 var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
                 this.projectRoot = new ProjectRootTreeItemAdapter(
                     this.logger,
@@ -839,21 +839,36 @@ public partial class ProjectLayoutViewModel(
         }
     }
 
-    private IProjectInfo? GetCurrentProjectInfo()
+    private ProjectInfo? GetActiveProjectInfo()
     {
-        var projectInfo = projectManager.CurrentProject?.ProjectInfo;
+        var context = projectContextService.ActiveProject;
 
-        if (projectInfo is null)
+        if (context is null)
         {
             this.LogNoCurrentProject();
+            return null;
         }
-#if DEBUG
-        else
+
+        var projectInfo = new ProjectInfo(
+            context.ProjectId,
+            context.Name,
+            context.Category,
+            context.ProjectRoot,
+            context.Thumbnail);
+        foreach (var mount in context.AuthoringMounts)
         {
-            Debug.Assert(
-                projectInfo.Location is not null,
-                "current project must be set, have a valid ProjectInfo and a valid Location");
+            projectInfo.AuthoringMounts.Add(mount);
         }
+
+        foreach (var mount in context.LocalFolderMounts)
+        {
+            projectInfo.LocalFolderMounts.Add(mount);
+        }
+
+#if DEBUG
+        Debug.Assert(
+            projectInfo.Location is not null,
+            "current project must be set, have a valid ProjectInfo and a valid Location");
 #endif
 
         return projectInfo;
