@@ -16,9 +16,11 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Core.Diagnostics;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using IContainer = DryIoc.IContainer;
@@ -36,8 +38,14 @@ namespace Oxygen.Editor.ContentBrowser.Shell;
 public sealed partial class ContentBrowserViewModel(
     IContainer container,
     IRouter parentRouter,
+    IProjectContextService projectContextService,
+    IProjectUsageService projectUsage,
+    IOperationResultPublisher operationResults,
+    IStatusReducer statusReducer,
     ILoggerFactory? loggerFactory = null) : AbstractOutletContainer, IRoutingAware
 {
+    private const string DefaultLocalUrl = "/(left:project//right:assets/tiles)";
+
     private static readonly Routes RoutesConfig = new(
     [
         new Route
@@ -161,8 +169,7 @@ public sealed partial class ContentBrowserViewModel(
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
-
-            var initialUrl = "/(left:project//right:" + this.currentAssetsViewPath + ")";
+            var initialUrl = await this.GetInitialContentBrowserUrlAsync().ConfigureAwait(true);
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
 
             this.isInitialized = true;
@@ -300,6 +307,181 @@ public sealed partial class ContentBrowserViewModel(
 
             // Update breadcrumbs
             this.UpdateBreadcrumbs();
+
+            _ = this.PersistContentBrowserStateAsync(currentUrl);
+        }
+    }
+
+    private async Task PersistContentBrowserStateAsync(string currentUrl)
+    {
+        var project = projectContextService.ActiveProject;
+        if (project is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await projectUsage.UpdateContentBrowserStateAsync(project.Name, project.ProjectRoot, currentUrl).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.LogContentBrowserStatePersistFailed(ex, project.Name);
+        }
+    }
+
+    private async Task<string> GetInitialContentBrowserUrlAsync()
+    {
+        var project = projectContextService.ActiveProject;
+        if (project is null)
+        {
+            return DefaultLocalUrl;
+        }
+
+        try
+        {
+            var usage = await projectUsage.GetProjectUsageAsync(project.Name, project.ProjectRoot).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(usage?.ContentBrowserState))
+            {
+                return DefaultLocalUrl;
+            }
+
+            if (this.TryNormalizeContentBrowserUrl(usage.ContentBrowserState, out var restoredUrl))
+            {
+                return restoredUrl;
+            }
+
+            this.PublishPartialRestoreResult(
+                DiagnosticCodes.WorkspacePrefix + "CONTENT_BROWSER_STATE_INVALID",
+                "The saved Content Browser state could not be restored.",
+                usage.ContentBrowserState);
+            return DefaultLocalUrl;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            this.PublishPartialRestoreResult(
+                DiagnosticCodes.WorkspacePrefix + "CONTENT_BROWSER_STATE_LOAD_FAILED",
+                "The saved Content Browser state could not be loaded.",
+                project.ProjectRoot,
+                ex);
+            return DefaultLocalUrl;
+        }
+    }
+
+    private void PublishPartialRestoreResult(
+        string code,
+        string message,
+        string? affectedPath,
+        Exception? exception = null)
+    {
+        var operationId = Guid.NewGuid();
+        var project = projectContextService.ActiveProject;
+        var diagnostics = new List<DiagnosticRecord>
+        {
+            new()
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.WorkspaceRestoration,
+                Severity = DiagnosticSeverity.Warning,
+                Code = code,
+                Message = message,
+                TechnicalMessage = exception?.Message,
+                ExceptionType = exception?.GetType().FullName,
+                AffectedPath = affectedPath,
+            },
+        };
+
+        var result = new OperationResult
+        {
+            OperationId = operationId,
+            OperationKind = "Workspace.Restore",
+            Status = statusReducer.Reduce(primaryGoalCompleted: true, wasCancelled: false, diagnostics),
+            Severity = statusReducer.ComputeSeverity(diagnostics),
+            Title = "Workspace partially restored",
+            Message = "The workspace opened, but saved Content Browser state was ignored.",
+            StartedAt = DateTimeOffset.Now,
+            CompletedAt = DateTimeOffset.Now,
+            AffectedScope = new AffectedScope
+            {
+                ProjectId = project?.ProjectId,
+                ProjectName = project?.Name,
+                ProjectPath = project?.ProjectRoot,
+            },
+            Diagnostics = diagnostics,
+            PrimaryAction = new PrimaryAction
+            {
+                ActionId = "open-details",
+                Label = "Details",
+                Kind = PrimaryActionKind.OpenDetails,
+            },
+        };
+
+        operationResults.Publish(result);
+    }
+
+    private bool TryNormalizeContentBrowserUrl(string persisted, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? url)
+    {
+        url = null;
+        var trimmed = persisted.Trim();
+        var assetsViewPath = trimmed.Contains("assets/list", StringComparison.Ordinal)
+            ? "assets/list"
+            : trimmed.Contains("assets/tiles", StringComparison.Ordinal)
+                ? "assets/tiles"
+                : null;
+
+        if (assetsViewPath is null)
+        {
+            return false;
+        }
+
+        var query = ExtractSelectedQuery(trimmed);
+        if (query is null && trimmed.Contains('?', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        url = "/(left:project//right:" + assetsViewPath + ")" + (query ?? string.Empty);
+        return true;
+        static string? ExtractSelectedQuery(string contentBrowserState)
+        {
+            var queryIndex = contentBrowserState.IndexOf('?', StringComparison.Ordinal);
+            if (queryIndex < 0 || queryIndex == contentBrowserState.Length - 1)
+            {
+                return null;
+            }
+
+            var pairs = contentBrowserState[(queryIndex + 1)..].Split('&', StringSplitOptions.RemoveEmptyEntries);
+            if (pairs.Length == 0)
+            {
+                return null;
+            }
+
+            var selected = new List<string>();
+            foreach (var pair in pairs)
+            {
+                var parts = pair.Split('=', 2);
+                if (parts.Length != 2 || !string.Equals(parts[0], RouteStateMapping.SelectedQueryKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var value = Uri.UnescapeDataString(parts[1]);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        selected.Add(value);
+                    }
+                }
+                catch (UriFormatException)
+                {
+                    return null;
+                }
+            }
+
+            return selected.Count == 0
+                ? null
+                : RouteStateMapping.BuildSelectedQuery(selected);
         }
     }
 
