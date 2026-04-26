@@ -17,11 +17,9 @@ overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
 | ID | Coverage |
 | --- | --- |
 | `REQ-025` | A live embedded viewport renders the active scene. |
-| `REQ-027` | Scene editor can create runtime views after scene load. |
-| `REQ-028` | One/two/four viewport layouts are stable. |
-| `REQ-029` | ED-M02 covers sane initial framing; explicit frame selected/all commands are ED-M09. |
-| `REQ-030` | Viewport layout changes preserve usable presentation. |
-| `REQ-035` | FPS/runtime setting controls are visible and honest. |
+| `REQ-027` | One/two/four viewport layouts are stable. |
+| `REQ-028` | Each viewport presents to the correct editor surface. |
+| `REQ-030` | Partial: ED-M02 verifies the active scene is visibly rendered in the embedded viewport; full preview parity remains ED-M08. |
 | `SUCCESS-003` | Users can see the scene in the editor viewport. |
 | `SUCCESS-005` | Live viewport is stable enough for later authoring work. |
 
@@ -60,6 +58,11 @@ Known ED-M02 gaps:
 - frame-all/frame-selected commands are not yet explicit user workflows.
 - runtime/viewport failures are logged more reliably than they are presented.
 - multi-view validation currently depends on manual visual inspection and logs.
+
+Three-pane variants are existing UI but are not ED-M02 validation targets unless
+the implementation touches them. If they remain exposed, they must not
+catastrophically regress; correctness evidence is required for one/two/four
+layouts.
 
 ## 5. Target Design
 
@@ -159,6 +162,9 @@ ED-M02 viewport-adjacent settings:
 - simple view/preset menu state where already present.
 
 Controls must not pretend a setting applied if `IEngineService` rejects it.
+Rejected writes publish `Runtime.Settings.Apply` / `Settings` diagnostics,
+appear in the output/log panel, and appear inline near the control when the
+scene editor settings surface is visible.
 
 ## 8. Commands, Services, Or Adapters
 
@@ -192,8 +198,9 @@ Failure presentation:
 - fatal runtime startup/surface/view failure should be visible near the
   workspace or viewport.
 - non-fatal resize/create warnings may be visible in the output/log panel.
-- missing cooked roots should be visible as a warning because geometry/material
-  assets may not resolve.
+- missing cooked roots should be visible as a warning when geometry/material
+  assets may not resolve. Full cooked-index and content-pipeline behavior is
+  ED-M07 scope.
 
 ## 10. Persistence And Round Trip
 
@@ -226,7 +233,7 @@ Required ordering:
 
 1. Project context is active.
 2. Workspace starts runtime.
-3. Workspace refreshes cooked roots.
+3. Workspace refreshes cooked roots using the existing runtime mount path.
 4. Scene is loaded/synchronized into runtime.
 5. Scene editor creates/restores layout.
 6. Viewport controls attach surfaces and create views.
@@ -234,7 +241,9 @@ Required ordering:
 
 If a later step fails, earlier successful state remains valid where possible.
 For example, missing cooked roots do not prevent the workspace from opening,
-but may prevent asset-backed geometry/materials from rendering.
+but may prevent asset-backed geometry/materials from rendering. ED-M02 only
+requires the warning and ordering; cook orchestration and cooked-index policy
+belong to later content-pipeline milestones.
 
 ## 12. Operation Results And Diagnostics
 
@@ -245,6 +254,7 @@ ED-M02 viewport operation kinds:
 - `Runtime.View.Create`.
 - `Runtime.View.Destroy`.
 - `Runtime.Settings.Apply`.
+- `Runtime.View.SetCameraPreset`.
 - `Viewport.Layout.Change`.
 
 Failure domains:
@@ -257,6 +267,11 @@ Failure domains:
 Diagnostics must include document ID and viewport ID when available. Runtime
 view ID should appear only in technical details/logs because it is not stable
 authoring identity.
+
+`Viewport.Layout.Change` is a user action, but ED-M02 does not require a
+success result for every successful layout switch. Layout failures publish a
+result only when the change cannot be applied, restoration fails, or runtime
+surface/view work fails.
 
 ## 13. Dependency Rules
 
@@ -284,6 +299,9 @@ ED-M02 viewport validation is complete when:
 - representative two-pane layout renders each visible viewport to the correct
   surface.
 - four-quadrant layout renders each visible viewport to the correct surface.
+- each visible viewport can be correlated to a distinct document/viewport ID in
+  logs and has visually distinguishable evidence, such as clear color, camera
+  orientation, or another accepted diagnostic cue.
 - switching between one/two/four layouts does not crash or leave blank/stale
   panels.
 - resizing the workspace or split panes keeps viewports correctly scaled and
@@ -294,13 +312,14 @@ ED-M02 viewport validation is complete when:
 - camera preset menu calls do not fault the runtime.
 - FPS/logging controls apply or produce visible diagnostics.
 
-Evidence may include manual visual validation, logs showing distinct
-document/viewport IDs, and targeted tests for pure layout/metadata helpers.
+Evidence must include manual one/two/four layout notes or screenshots, logs
+showing distinct document/viewport IDs, and targeted tests for pure
+layout/metadata helpers where practical.
 
 ## 15. Open Issues
 
 - Exact future UX for frame selected/all is deferred to ED-M09.
 - Whether selection outline and node icons are pure overlay UI or partly engine
   debug rendering is deferred to ED-M09.
-- Whether view lifecycle should move from viewport code-behind into a dedicated
-  runtime view adapter is deferred until ED-M02 review decides it is necessary.
+- View lifecycle remains coordinated by viewport code-behind in ED-M02.
+  Possible runtime adapter extraction is post-ED-M02 cleanup.

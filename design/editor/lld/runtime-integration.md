@@ -7,8 +7,8 @@ Status: `review`
 Define the managed boundary between the WinUI editor and the embedded Oxygen
 Engine runtime for ED-M02. This LLD covers runtime lifecycle, native runtime
 discovery assumptions, runtime settings, surface leases, engine view lifecycle,
-cooked-root mounts, threading, and the validation evidence needed before live
-viewport behavior can support later authoring milestones.
+cooked-root refresh ordering, threading, and the validation evidence needed
+before live viewport behavior can support later authoring milestones.
 
 This is not the LLD for scene synchronization, content cooking, standalone
 runtime validation, or viewport authoring tools. Those later milestones consume
@@ -18,13 +18,10 @@ the runtime contracts defined here.
 
 | ID | Coverage |
 | --- | --- |
-| `REQ-022` | Runtime, surface, view, and settings failures must be visible. |
-| `REQ-023` | Runtime diagnostics identify the affected project/document/viewport where known. |
-| `REQ-024` | Runtime failures are not log-only. |
 | `REQ-025` | Embedded viewport renders the active scene through the live engine. |
-| `REQ-027` | Runtime startup and viewport creation are explicit editor workflows. |
-| `REQ-028` | Surface/view lifecycle supports one/two/four viewport layouts. |
-| `REQ-035` | Runtime settings such as FPS/logging are applied or visibly rejected. |
+| `REQ-027` | Runtime surface/view lifecycle supports one/two/four viewport layouts. |
+| `REQ-028` | Runtime presentation is routed to the correct editor surface. |
+| `REQ-030` | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
 | `SUCCESS-003` | Live editor viewport presents correctly. |
 | `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation. |
 
@@ -50,9 +47,11 @@ The current codebase has the core runtime pieces needed for ED-M02:
 - Native runtime discovery is process bootstrap infrastructure, not a Project
   Browser responsibility. The editor now defers engine startup until workspace
   activation/runtime use.
-- `WorkspaceViewModel` starts the engine before cooked-root refresh and mounts
-  cooked roots from `.cooked/container.index.bin`, with legacy per-mount index
-  fallback.
+- `WorkspaceViewModel` starts the engine before cooked-root refresh. The
+  current cooked-root refresh can mount the project `.cooked` root when
+  `.cooked/container.index.bin` exists, with legacy per-mount index fallback.
+  ED-M02 documents the runtime ordering and user-visible warning behavior; the
+  full cooked-index policy remains `content-pipeline.md` / ED-M07 scope.
 - `IEngineSettings` and `EngineSettingsService` provide startup settings.
   `EngineSettingsExtensions` maps them to the interop engine configuration.
 - `IEngineService.TargetFps`, `MaxTargetFps`, and `EngineLoggingVerbosity`
@@ -88,7 +87,7 @@ flowchart LR
     Workspace[Workspace Activation]
     Runtime[IEngineService]
     Engine[Embedded Engine]
-    Cooked[Cooked Root Mount]
+    Cooked[Cooked Root Refresh]
     Viewport[Viewport Control]
     Surface[Surface Lease]
     View[Engine View]
@@ -122,9 +121,29 @@ Target invariants:
    lease.
 9. Native registration failure, cleanup failure, or orphaned viewport IDs must
    not poison future unrelated viewports.
-10. UI code must not synchronously block on native frame progress.
+10. Surface limits are enforced before native registration and report
+    `RuntimeSurface` diagnostics when exceeded.
+11. UI code must not synchronously block on native frame progress.
 
-## 6. Ownership
+## 6. Threading And Frame Ordering
+
+ED-M02 runtime calls cross the WinUI UI thread, managed async services, and the
+native engine frame loop. The ordering contract is:
+
+1. Workspace activation serializes `InitializeAsync` and `StartAsync`.
+   Cooked-root refresh is awaited only after the service reaches `Running`.
+2. `SwapChainPanel` access and the surface attach entry point originate on the
+   UI thread.
+3. Runtime services own engine state transitions and reject invalid-state calls
+   with diagnostics instead of allowing hidden asserts to be the only signal.
+4. Viewport unload cancels pending attach/create/resize work where possible and
+   still runs view-destroy and lease-dispose teardown idempotently.
+5. Resize requests may be coalesced, but the latest measured viewport size must
+   eventually be sent to the runtime while the lease remains active.
+6. ED-M02 does not expose a managed "presented frame observed" completion
+   signal. Validation therefore uses visual checks and correlated logs.
+
+## 7. Ownership
 
 | Owner | Responsibility |
 | --- | --- |
@@ -140,7 +159,11 @@ surface attachment. Later runtime cleanup may wrap view lifecycle more tightly
 inside `Oxygen.Editor.Runtime`, but the ED-M02 invariant is that all native
 calls still pass through `IEngineService`.
 
-## 7. Data Contracts
+View creation is initiated by viewport UI, but all native view operations are
+invoked through `IEngineService.CreateViewAsync` / `DestroyViewAsync`; viewport
+UI never calls `Oxygen.Editor.Interop` directly for view lifecycle.
+
+## 8. Data Contracts
 
 ### Runtime State
 
@@ -236,18 +259,18 @@ Rules:
 - Destroy failures are logged and surfaced through diagnostics where possible,
   but must not prevent control teardown.
 
-### Cooked Root Mount
+### Cooked Root Refresh
 
 ED-M02 mount contract:
 
 - Workspace activation requests cooked-root refresh after runtime is running.
-- The preferred mount is the project `.cooked` root when
-  `.cooked/container.index.bin` exists.
-- Legacy `.cooked/<MountPoint>/container.index.bin` roots are fallback only.
+- The refresh uses the existing workspace/runtime mount path. The exact
+  cooked-index layout is brownfield behavior until ED-M07 owns content-pipeline
+  parity.
 - Missing cooked roots are non-fatal for workspace entry but must be visible in
   logs/diagnostics because assets may not resolve.
 
-## 8. Commands, Services, Or Adapters
+## 9. Commands, Services, Or Adapters
 
 ED-M02 service operations:
 
@@ -261,13 +284,13 @@ ED-M02 service operations:
 | Attach surface | `AttachViewportAsync` | Native surface registration completed and lease is attached. |
 | Resize surface | `IViewportSurfaceLease.ResizeAsync` | Native resize request accepted/queued. |
 | Create/destroy view | `CreateViewAsync` / `DestroyViewAsync` | Native view operation returned success or failure. |
-| Mount cooked root | `MountProjectCookedRoot` | Engine world accepted the root. |
+| Refresh cooked roots | workspace through `IEngineService` | Existing cooked roots are mounted or a non-fatal warning is produced. |
 
 Frame-presented completion is not exposed as a managed contract in ED-M02. The
 detailed ED-M02 validation plan must therefore use visual validation and engine
 logs to prove presentation.
 
-## 9. UI Surfaces
+## 10. UI Surfaces
 
 ED-M02 runtime UI surfaces:
 
@@ -277,11 +300,16 @@ ED-M02 runtime UI surfaces:
   missing" user-visible state.
 - Viewport control: owns surface attach/resize failure presentation near the
   viewport when possible.
-- Scene editor toolbar/settings surface: owns runtime FPS/logging controls.
+- Scene editor toolbar/settings surface: invokes runtime FPS/logging changes,
+  publishes `Runtime.Settings.Apply` results, and shows rejected writes inline
+  near the control when practical.
 - Output/log panel: shows runtime diagnostic details and correlated operation
   result summaries.
 
-## 10. Persistence And Round Trip
+Settings failures always appear in the output/log panel. Inline presentation is
+required where the scene editor settings surface is visible.
+
+## 11. Persistence And Round Trip
 
 Persisted:
 
@@ -299,7 +327,7 @@ Not persisted:
 On restart, workspace/project activation recreates runtime state from project
 context, settings, document metadata, and cooked roots.
 
-## 11. Live Sync / Cook / Runtime Behavior
+## 12. Live Sync / Cook / Runtime Behavior
 
 ED-M02 covers runtime readiness and presentation only.
 
@@ -307,14 +335,14 @@ Later consumers:
 
 - `live-engine-sync.md` consumes `Running` state and frame-phase ordering for
   scene mutation sync.
-- `content-pipeline.md` consumes cooked-root mount behavior after cook.
+- `content-pipeline.md` owns full cooked-root mount behavior after cook.
 - `standalone-runtime-validation.md` consumes runtime/cooked parity evidence.
 - `viewport-and-tools.md` consumes surface/view contracts for layout and
   camera validation.
 
 ED-M02 must not add authoring-specific scene mutation semantics here.
 
-## 12. Operation Results And Diagnostics
+## 13. Operation Results And Diagnostics
 
 ED-M02 operation kinds:
 
@@ -324,14 +352,16 @@ ED-M02 operation kinds:
 - `Runtime.Surface.Resize`.
 - `Runtime.View.Create`.
 - `Runtime.View.Destroy`.
-- `Runtime.CookedRoot.Mount`.
+- `Runtime.View.SetCameraPreset`.
+- `Runtime.CookedRoot.Refresh`.
 
 Failure domains:
 
 - `RuntimeDiscovery` for native DLL/path discovery.
 - `RuntimeSurface` for surface attach/resize/release.
 - `RuntimeView` for engine view create/destroy/preset failures.
-- `AssetMount` for cooked-root mount failures.
+- `AssetMount` for missing or failed cooked-root refresh when it affects
+  runtime content availability.
 - `Settings` for global runtime settings failures.
 
 Minimum ED-M02 rule:
@@ -339,18 +369,28 @@ Minimum ED-M02 rule:
 - failures that block visible viewport presentation must produce a visible
   user-facing diagnostic, not only a debug trace.
 - non-fatal missing cooked roots may be warning diagnostics.
+- invalid-state runtime settings writes produce `Runtime.Settings.Apply` /
+  `Settings` diagnostics, with output/log panel presentation and inline
+  presentation near the setting when possible.
+- surface-limit rejection produces a `RuntimeSurface` diagnostic with reason
+  `LimitExceeded`.
+- ED-M02 only specifies that `Runtime.CookedRoot.Refresh` runs after `Running`,
+  that missing/unmountable roots produce `AssetMount` warnings, and that the
+  workspace remains usable. Cooked-index layout, validation, and refresh after
+  cook are owned by `content-pipeline.md` in ED-M07.
 - teardown failures may be log-only when the UI surface is already being
   destroyed, but must be visible in output/log diagnostics.
 
-## 13. Dependency Rules
+## 14. Dependency Rules
 
 Allowed:
 
 - `Oxygen.Editor.WorldEditor` depends on `Oxygen.Editor.Runtime`.
 - `Oxygen.Editor.Runtime` depends on `Oxygen.Editor.Interop`.
 - `Oxygen.Editor.Runtime` depends on DroidNet hosting/settings abstractions.
-- Runtime contracts may use WinUI `SwapChainPanel` while surface attachment is
-  explicitly a WinUI integration point.
+- The surface attach entry point may accept a `SwapChainPanel` passed by the
+  WinUI viewport host; runtime contracts otherwise do not depend on feature UI
+  modules.
 
 Forbidden:
 
@@ -362,7 +402,7 @@ Forbidden:
 - Engine view IDs and native handles must not be persisted.
 - UI code must not infer success by parsing engine log text.
 
-## 14. Validation Gates
+## 15. Validation Gates
 
 ED-M02 can be validated when:
 
@@ -379,6 +419,8 @@ ED-M02 can be validated when:
   surfaces without surface-limit leakage.
 - runtime FPS/logging settings apply, or the UI shows a diagnostic explaining
   why they could not apply.
+- an invalid-state or simulated rejected runtime setting write produces a
+  visible `Settings` diagnostic.
 - surface/view failure paths produce operation-result or output/log diagnostics
   with the affected document/viewport where known.
 
@@ -386,11 +428,12 @@ Tests are useful for state-machine and lease bookkeeping. Final ED-M02 closure
 also requires manual visual validation because frame-presented completion is not
 yet a managed contract.
 
-## 15. Open Issues
+## 16. Open Issues
 
 - Whether a future runtime API should expose "presented frame observed" instead
   of only accepted/staged operation completion.
-- Whether engine view lifecycle should move fully behind `Oxygen.Editor.Runtime`
-  instead of being coordinated by WorldEditor viewport UI.
+- Engine view lifecycle remains coordinated by WorldEditor viewport code in
+  ED-M02. Possible extraction behind a runtime view adapter is post-ED-M02
+  cleanup.
 - Whether runtime diagnostics should grow a compact workspace status surface in
   addition to output/log panel entries.
