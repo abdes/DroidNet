@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 using Oxygen.Storage;
 
 namespace Oxygen.Editor.ContentBrowser;
@@ -12,7 +12,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// Represents the state of the content browser, including selected folders and the project root path.
 /// This is a passive data holder that is updated by ViewModels.
 /// </summary>
-public sealed partial class ContentBrowserState(IProject currentProject) : INotifyPropertyChanged
+public sealed partial class ContentBrowserState(IProjectContextService projectContextService) : INotifyPropertyChanged
 {
     /// <summary>
     /// Occurs when a property changes.
@@ -27,7 +27,7 @@ public sealed partial class ContentBrowserState(IProject currentProject) : INoti
     /// <summary>
     /// Gets the project root path.
     /// </summary>
-    public string ProjectRootPath { get; } = currentProject.ProjectInfo.Location ?? string.Empty;
+    public string ProjectRootPath { get; } = projectContextService.ActiveProject?.ProjectRoot ?? string.Empty;
 
     /// <summary>
     /// Adds a folder to the set of selected folders.

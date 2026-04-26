@@ -10,7 +10,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Models;
-using Oxygen.Editor.World;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
@@ -19,13 +19,13 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// </summary>
 public abstract class AssetsLayoutViewModel(
     IAssetCatalog assetCatalog,
-    IProject currentProject,
+    IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly Dictionary<string, GameAsset> shownByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAssetCatalog assetCatalog = assetCatalog;
-    private readonly IProject currentProject = currentProject;
+    private readonly IProjectContextService projectContextService = projectContextService;
     private readonly ContentBrowserState contentBrowserState = contentBrowserState;
     private readonly HostingContext hostingContext = hostingContext;
 
@@ -369,6 +369,12 @@ public abstract class AssetsLayoutViewModel(
 
     private GameAsset? CreateGameAsset(Uri uri)
     {
+        var project = this.projectContextService.ActiveProject;
+        if (project is null)
+        {
+            return null;
+        }
+
         string virtualPath;
         string location;
         var name = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(uri.AbsolutePath));
@@ -377,9 +383,9 @@ public abstract class AssetsLayoutViewModel(
         if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
         {
             virtualPath = "/" + AssetUriHelper.GetRelativePath(uri);
-            if (this.currentProject.ProjectInfo.Location != null)
+            if (!string.IsNullOrWhiteSpace(project.ProjectRoot))
             {
-                location = Path.Combine(this.currentProject.ProjectInfo.Location, AssetUriHelper.GetRelativePath(uri));
+                location = Path.Combine(project.ProjectRoot, AssetUriHelper.GetRelativePath(uri));
             }
             else
             {
@@ -389,14 +395,14 @@ public abstract class AssetsLayoutViewModel(
         else
         {
             virtualPath = AssetUriHelper.GetVirtualPath(uri);
-            var mount = this.currentProject.ProjectInfo.AuthoringMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
-            if (mount != null && this.currentProject.ProjectInfo.Location != null)
+            var mount = project.AuthoringMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
+            if (mount != null && !string.IsNullOrWhiteSpace(project.ProjectRoot))
             {
-                location = Path.Combine(this.currentProject.ProjectInfo.Location, mount.RelativePath, AssetUriHelper.GetRelativePath(uri));
+                location = Path.Combine(project.ProjectRoot, mount.RelativePath, AssetUriHelper.GetRelativePath(uri));
             }
             else
             {
-                var localMount = this.currentProject.ProjectInfo.LocalFolderMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
+                var localMount = project.LocalFolderMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
                 if (localMount != null)
                 {
                     location = Path.Combine(localMount.AbsolutePath, AssetUriHelper.GetRelativePath(uri));
