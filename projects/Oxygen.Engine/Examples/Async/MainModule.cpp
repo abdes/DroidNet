@@ -495,7 +495,7 @@ auto MainModule::OnAttachedImpl(
     .camera_controls = true,
     .environment = true,
     .lighting = true,
-    .rendering = true,
+    .diagnostics = true,
     .post_process = true,
     .ground_grid = true,
   };

@@ -76,7 +76,7 @@ Each implementation slice must re-check the relevant UE5.7 family:
 
 ### Slice A - Architecture Hardening
 
-**Status:** `planned`
+**Status:** `in_progress`
 
 Tasks:
 
@@ -168,8 +168,8 @@ Current evidence:
 
 Remaining gap:
 
-- DemoShell still has hard-coded debug-mode UI/support lists. It must move to
-  registry consumption before the panel/debug-mode slice can close.
+- DemoShell Diagnostics and light-culling debug-mode UI now consume the
+  registry. Runtime UI smoke remains tracked in Slice G.
 - Consistency with `EngineShaderCatalog.h` is tested through current helper
   define mapping, not yet by direct shader-catalog introspection.
 
@@ -338,28 +338,43 @@ Validation:
 
 Tasks:
 
-- Add `DiagnosticsPanel.h` and internal panel registry.
-- Reuse `ImGuiRuntime` for draw execution.
-- Consolidate Vortex-facing controls from the old Rendering panel into a
-  Diagnostics panel or keep a migration alias while the new panel owns the
-  runtime diagnostics workflow.
-- Add a compact built-in panel only if it can be done without broad editor work.
-- Structure the panel around status, debug modes, frame facts, timeline, tools,
-  and settings.
-- Display requested versus effective state for feature flags and debug modes so
-  developers can distinguish UI persistence from engine capability clamping.
+- Replace the Vortex runtime-facing `RenderingPanel`/`RenderingVm` surface with
+  `DiagnosticsPanel`/`DiagnosticsVm`; no migration alias is required.
+- Reuse the existing `PanelRegistry` and `ImGuiRuntime` draw path instead of
+  adding a second panel registry.
+- Structure the compact built-in panel around runtime status, directional
+  shadow settings, and shader-debug mode selection.
+- Display requested versus effective shader debug state so developers can
+  distinguish UI persistence from renderer capability clamping.
 - Use `ShaderDebugModeRegistry` for visible mode names, grouping, support state,
-  and disabled reasons.
-- Keep UI state transient; persisted settings store requested values only, and
-  `DiagnosticsService` remains the source of truth for effective state.
+  and disabled reasons in Diagnostics and light-culling debug UI.
+- Keep UI state transient; persisted settings store requested values only.
+
+Implementation evidence:
+
+- `Examples/DemoShell/UI/DiagnosticsPanel.{h,cpp}` and
+  `DiagnosticsVm.{h,cpp}` replace the old rendering panel/VM files.
+- `DemoShellPanelConfig::diagnostics` replaces the former rendering panel
+  enablement field in touched examples.
+- `RenderingSettingsService` now persists requested shader-debug mode,
+  computes an effective Vortex mode from `ShaderDebugModeRegistry` plus renderer
+  capabilities, and applies the effective mode to the renderer.
+- The Diagnostics panel reports Vortex binding, renderer capabilities,
+  requested/effective debug mode, and registry-grouped debug controls with
+  disabled reasons.
+- `LightCullingDebugPanel` consumes the same registry for its visualization mode
+  list.
 
 Validation:
 
-- Panel registry ordering/lifetime tests.
-- Focused tests or inspection proof for requested/effective state mapping if
-  DemoShell persistence is touched.
-- Runtime smoke only if panel rendering is wired into the frame path.
-- If panel rendering is deferred, record the gap explicitly in status.
+- Build passed:
+  `cmake --build out\build-ninja --config Debug --target oxygen-examples-demoshell Oxygen.Examples.DemoShell.RenderingSettingsService.Tests --parallel 4`.
+- Focused tests passed:
+  `ctest --preset test-debug -R "Oxygen\.Examples\.DemoShell\.RenderingSettingsService" --output-on-failure`
+  with RenderingSettingsService 6/6.
+- Touched example binaries build and link:
+  `cmake --build out\build-ninja --config Debug --target oxygen-examples-async oxygen-examples-lightbench oxygen-examples-physics oxygen-examples-renderscene oxygen-examples-texturedcube --parallel 4`.
+- Runtime UI smoke is still required before Slice G can move to `validated`.
 
 ### Slice H - External Tool Handshake And Automation Hardening
 

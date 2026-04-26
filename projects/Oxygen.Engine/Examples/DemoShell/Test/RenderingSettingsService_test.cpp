@@ -115,6 +115,28 @@ NOLINT_TEST_F(RenderingSettingsServiceTest,
     service_.SupportsDebugMode(engine::ShaderDebugMode::kDirectLightingOnly));
   EXPECT_EQ(
     service_.GetDebugMode(), engine::ShaderDebugMode::kDirectLightingOnly);
+  EXPECT_EQ(service_.GetEffectiveDebugMode(),
+    engine::ShaderDebugMode::kDirectLightingOnly);
+}
+
+NOLINT_TEST_F(RenderingSettingsServiceTest,
+  VortexBoundUnsupportedDebugModeKeepsRequestedAndDisablesEffectiveMode)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics);
+  service_.BindVortexRenderer(observer_ptr { renderer.get() });
+
+  service_.SetDebugMode(engine::ShaderDebugMode::kDirectionalShadowMask);
+
+  EXPECT_FALSE(
+    service_.SupportsDebugMode(engine::ShaderDebugMode::kDirectionalShadowMask));
+  EXPECT_EQ(
+    service_.GetDebugMode(), engine::ShaderDebugMode::kDirectionalShadowMask);
+  EXPECT_EQ(
+    service_.GetEffectiveDebugMode(), engine::ShaderDebugMode::kDisabled);
+  EXPECT_EQ(
+    renderer->GetShaderDebugMode(), vortex::ShaderDebugMode::kDisabled);
 }
 
 NOLINT_TEST_F(RenderingSettingsServiceTest,

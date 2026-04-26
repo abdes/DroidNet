@@ -7,17 +7,17 @@
 #include <Oxygen/Base/Logging.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
-#include "DemoShell/UI/RenderingVm.h"
+#include "DemoShell/UI/DiagnosticsVm.h"
 
 namespace oxygen::examples::ui {
 
-RenderingVm::RenderingVm(observer_ptr<RenderingSettingsService> service)
+DiagnosticsVm::DiagnosticsVm(observer_ptr<RenderingSettingsService> service)
   : service_(service)
 {
   Refresh();
 }
 
-auto RenderingVm::GetRenderMode() -> renderer::RenderMode
+auto DiagnosticsVm::GetRenderMode() -> renderer::RenderMode
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -26,16 +26,34 @@ auto RenderingVm::GetRenderMode() -> renderer::RenderMode
   return render_mode_;
 }
 
-auto RenderingVm::GetDebugMode() -> engine::ShaderDebugMode
+auto DiagnosticsVm::GetRequestedDebugMode() -> engine::ShaderDebugMode
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
     Refresh();
   }
-  return debug_mode_;
+  return requested_debug_mode_;
 }
 
-auto RenderingVm::GetGpuDebugPassEnabled() -> bool
+auto DiagnosticsVm::GetEffectiveDebugMode() -> engine::ShaderDebugMode
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return effective_debug_mode_;
+}
+
+auto DiagnosticsVm::GetRendererCapabilities() -> vortex::CapabilitySet
+{
+  std::lock_guard lock(mutex_);
+  if (IsStale()) {
+    Refresh();
+  }
+  return renderer_capabilities_;
+}
+
+auto DiagnosticsVm::GetGpuDebugPassEnabled() -> bool
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -44,7 +62,7 @@ auto RenderingVm::GetGpuDebugPassEnabled() -> bool
   return gpu_debug_pass_enabled_;
 }
 
-auto RenderingVm::GetAtmosphereBlueNoiseEnabled() -> bool
+auto DiagnosticsVm::GetAtmosphereBlueNoiseEnabled() -> bool
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -53,7 +71,7 @@ auto RenderingVm::GetAtmosphereBlueNoiseEnabled() -> bool
   return atmosphere_blue_noise_enabled_;
 }
 
-auto RenderingVm::GetShadowQualityTier() -> ShadowQualityTier
+auto DiagnosticsVm::GetShadowQualityTier() -> ShadowQualityTier
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -62,38 +80,38 @@ auto RenderingVm::GetShadowQualityTier() -> ShadowQualityTier
   return shadow_quality_tier_;
 }
 
-auto RenderingVm::SupportsRenderModeControls() const -> bool
+auto DiagnosticsVm::SupportsRenderModeControls() const -> bool
 {
   return service_->SupportsRenderModeControls();
 }
 
-auto RenderingVm::SupportsWireframeColorControl() const -> bool
+auto DiagnosticsVm::SupportsWireframeColorControl() const -> bool
 {
   return service_->SupportsWireframeColorControl();
 }
 
-auto RenderingVm::SupportsGpuDebugPassControl() const -> bool
+auto DiagnosticsVm::SupportsGpuDebugPassControl() const -> bool
 {
   return service_->SupportsGpuDebugPassControl();
 }
 
-auto RenderingVm::SupportsAtmosphereBlueNoiseControl() const -> bool
+auto DiagnosticsVm::SupportsAtmosphereBlueNoiseControl() const -> bool
 {
   return service_->SupportsAtmosphereBlueNoiseControl();
 }
 
-auto RenderingVm::SupportsDebugMode(const engine::ShaderDebugMode mode) const
+auto DiagnosticsVm::SupportsDebugMode(const engine::ShaderDebugMode mode) const
   -> bool
 {
   return service_->SupportsDebugMode(mode);
 }
 
-auto RenderingVm::IsVortexRuntimeBound() const -> bool
+auto DiagnosticsVm::IsVortexRuntimeBound() const -> bool
 {
   return service_->IsVortexRuntimeBound();
 }
 
-auto RenderingVm::SetRenderMode(renderer::RenderMode mode) -> void
+auto DiagnosticsVm::SetRenderMode(renderer::RenderMode mode) -> void
 {
   std::lock_guard lock(mutex_);
   if (render_mode_ == mode) {
@@ -105,19 +123,21 @@ auto RenderingVm::SetRenderMode(renderer::RenderMode mode) -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::SetDebugMode(engine::ShaderDebugMode mode) -> void
+auto DiagnosticsVm::SetDebugMode(engine::ShaderDebugMode mode) -> void
 {
   std::lock_guard lock(mutex_);
-  if (debug_mode_ == mode) {
+  if (requested_debug_mode_ == mode) {
     return;
   }
 
-  debug_mode_ = mode;
+  requested_debug_mode_ = mode;
   service_->SetDebugMode(mode);
+  effective_debug_mode_ = service_->GetEffectiveDebugMode();
+  renderer_capabilities_ = service_->GetRendererCapabilities();
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::SetGpuDebugPassEnabled(bool enabled) -> void
+auto DiagnosticsVm::SetGpuDebugPassEnabled(bool enabled) -> void
 {
   std::lock_guard lock(mutex_);
   if (gpu_debug_pass_enabled_ == enabled) {
@@ -129,7 +149,7 @@ auto RenderingVm::SetGpuDebugPassEnabled(bool enabled) -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
+auto DiagnosticsVm::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
 {
   std::lock_guard lock(mutex_);
   if (atmosphere_blue_noise_enabled_ == enabled) {
@@ -141,7 +161,7 @@ auto RenderingVm::SetAtmosphereBlueNoiseEnabled(bool enabled) -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::SetShadowQualityTier(const ShadowQualityTier tier) -> void
+auto DiagnosticsVm::SetShadowQualityTier(const ShadowQualityTier tier) -> void
 {
   std::lock_guard lock(mutex_);
   if (shadow_quality_tier_ == tier) {
@@ -153,7 +173,7 @@ auto RenderingVm::SetShadowQualityTier(const ShadowQualityTier tier) -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::GetWireframeColor() -> graphics::Color
+auto DiagnosticsVm::GetWireframeColor() -> graphics::Color
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {
@@ -162,7 +182,7 @@ auto RenderingVm::GetWireframeColor() -> graphics::Color
   return wire_color_;
 }
 
-auto RenderingVm::SetWireframeColor(const graphics::Color& color) -> void
+auto DiagnosticsVm::SetWireframeColor(const graphics::Color& color) -> void
 {
   std::lock_guard lock(mutex_);
   if (wire_color_.r == color.r && wire_color_.g == color.g
@@ -170,19 +190,21 @@ auto RenderingVm::SetWireframeColor(const graphics::Color& color) -> void
     return;
   }
 
-  LOG_F(INFO, "RenderingVm: SetWireframeColor ({}, {}, {}, {})", color.r,
+  LOG_F(INFO, "DiagnosticsVm: SetWireframeColor ({}, {}, {}, {})", color.r,
     color.g, color.b, color.a);
   wire_color_ = color;
   service_->SetWireframeColor(color);
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::Refresh() -> void
+auto DiagnosticsVm::Refresh() -> void
 {
   // Assume mutex is already held by caller (GetRenderMode/GetDebugMode)
   // or it's called from constructor (which doesn't need it)
   render_mode_ = service_->GetRenderMode();
-  debug_mode_ = service_->GetDebugMode();
+  requested_debug_mode_ = service_->GetDebugMode();
+  effective_debug_mode_ = service_->GetEffectiveDebugMode();
+  renderer_capabilities_ = service_->GetRendererCapabilities();
   wire_color_ = service_->GetWireframeColor();
   gpu_debug_pass_enabled_ = service_->GetGpuDebugPassEnabled();
   atmosphere_blue_noise_enabled_ = service_->GetAtmosphereBlueNoiseEnabled();
@@ -190,7 +212,7 @@ auto RenderingVm::Refresh() -> void
   epoch_ = service_->GetEpoch();
 }
 
-auto RenderingVm::IsStale() const -> bool
+auto DiagnosticsVm::IsStale() const -> bool
 {
   // Assume mutex is already held
   return epoch_ != service_->GetEpoch();

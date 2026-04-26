@@ -44,7 +44,7 @@ auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool {
             .content_loader = true,
             .camera_controls = true,
             .lighting = true,
-            .rendering = true,
+            .diagnostics = true,
             .post_process = true // Enable Post-Processing controls
         },
         .get_active_pipeline = [this]() { return observer_ptr{pipeline_.get()}; }

@@ -5,10 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <exception>
 #include <optional>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
@@ -65,40 +68,24 @@ namespace {
     return static_cast<vortex::ShaderDebugMode>(mode);
   }
 
-  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode) -> bool
+  auto ParseShaderDebugModeOrDisabled(std::string_view value)
+    -> engine::ShaderDebugMode
   {
-    using engine::ShaderDebugMode;
-    switch (mode) {
-    case ShaderDebugMode::kDisabled:
-    case ShaderDebugMode::kLightCullingHeatMap:
-    case ShaderDebugMode::kDepthSlice:
-    case ShaderDebugMode::kClusterIndex:
-    case ShaderDebugMode::kIblSpecular:
-    case ShaderDebugMode::kIblRawSky:
-    case ShaderDebugMode::kIblIrradiance:
-    case ShaderDebugMode::kBaseColor:
-    case ShaderDebugMode::kUv0:
-    case ShaderDebugMode::kOpacity:
-    case ShaderDebugMode::kWorldNormals:
-    case ShaderDebugMode::kRoughness:
-    case ShaderDebugMode::kMetalness:
-    case ShaderDebugMode::kIblFaceIndex:
-    case ShaderDebugMode::kIblNoBrdfLut:
-    case ShaderDebugMode::kDirectLightingOnly:
-    case ShaderDebugMode::kIblOnly:
-    case ShaderDebugMode::kDirectPlusIbl:
-    case ShaderDebugMode::kDirectLightingFull:
-    case ShaderDebugMode::kDirectLightGates:
-    case ShaderDebugMode::kDirectBrdfCore:
-    case ShaderDebugMode::kDirectionalShadowMask:
-    case ShaderDebugMode::kSceneDepthRaw:
-    case ShaderDebugMode::kSceneDepthLinear:
-    case ShaderDebugMode::kSceneDepthMismatch:
-    case ShaderDebugMode::kMaskedAlphaCoverage:
-      return true;
-    default:
+    try {
+      return static_cast<engine::ShaderDebugMode>(std::stoi(std::string(value)));
+    } catch (const std::exception&) {
+      return engine::ShaderDebugMode::kDisabled;
+    }
+  }
+
+  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode,
+    const vortex::CapabilitySet capabilities) -> bool
+  {
+    const auto* info = vortex::FindShaderDebugModeInfo(ToVortexDebugMode(mode));
+    if (info == nullptr || !info->supported) {
       return false;
     }
+    return vortex::HasAllCapabilities(capabilities, info->required_capabilities);
   }
 
 } // namespace
@@ -184,12 +171,18 @@ auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   auto val = settings->GetString(kDebugModeKey).value_or("0");
-  const auto mode = static_cast<engine::ShaderDebugMode>(std::stoi(val));
+  return ParseShaderDebugModeOrDisabled(val);
+}
+
+auto RenderingSettingsService::GetEffectiveDebugMode() const
+  -> engine::ShaderDebugMode
+{
+  const auto requested = GetDebugMode();
   if ((pipeline_ == nullptr) && (vortex_renderer_ != nullptr)
-    && !SupportsDebugMode(mode)) {
+    && !SupportsDebugMode(requested)) {
     return engine::ShaderDebugMode::kDisabled;
   }
-  return mode;
+  return requested;
 }
 
 auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
@@ -202,11 +195,6 @@ auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
 auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
   -> void
 {
-  if ((pipeline_ == nullptr) && (vortex_renderer_ != nullptr)
-    && !SupportsDebugMode(mode)) {
-    mode = engine::ShaderDebugMode::kDisabled;
-  }
-
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
@@ -312,12 +300,22 @@ auto RenderingSettingsService::SupportsDebugMode(
   if (pipeline_ != nullptr) {
     return true;
   }
-  return (vortex_renderer_ != nullptr) && SupportsVortexDebugMode(mode);
+  return (vortex_renderer_ != nullptr)
+    && SupportsVortexDebugMode(mode, vortex_renderer_->GetCapabilityFamilies());
 }
 
 auto RenderingSettingsService::IsVortexRuntimeBound() const -> bool
 {
   return (pipeline_ == nullptr) && (vortex_renderer_ != nullptr);
+}
+
+auto RenderingSettingsService::GetRendererCapabilities() const
+  -> vortex::CapabilitySet
+{
+  if (vortex_renderer_ == nullptr) {
+    return vortex::RendererCapabilityFamily::kNone;
+  }
+  return vortex_renderer_->GetCapabilityFamilies();
 }
 
 auto RenderingSettingsService::ApplyVortexSettings() -> void
@@ -326,7 +324,7 @@ auto RenderingSettingsService::ApplyVortexSettings() -> void
     return;
   }
 
-  vortex_renderer_->SetShaderDebugMode(ToVortexDebugMode(GetDebugMode()));
+  vortex_renderer_->SetShaderDebugMode(ToVortexDebugMode(GetEffectiveDebugMode()));
 }
 
 } // namespace oxygen::examples

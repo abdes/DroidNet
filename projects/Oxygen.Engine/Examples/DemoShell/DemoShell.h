@@ -56,7 +56,7 @@ struct DemoShellPanelConfig {
   bool camera_controls { false };
   bool environment { false };
   bool lighting { false };
-  bool rendering { false };
+  bool diagnostics { false };
   bool post_process { false };
   bool ground_grid { false };
 };
