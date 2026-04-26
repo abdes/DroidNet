@@ -226,6 +226,54 @@ inline auto Load(AnyReader& reader, engine::ExposureMode& value) -> Result<void>
 
 //=== Scene: Nodes & Components (v2/v3) ===----------------------------------//
 
+inline auto Load(AnyReader& reader, data::pak::world::SceneDataTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.count));
+  CHECK_RESULT(reader.ReadInto(table.entry_size));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::SceneStringTable& table)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(table.offset));
+  CHECK_RESULT(reader.ReadInto(table.size));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(desc.header));
+  CHECK_RESULT(reader.ReadInto(desc.nodes));
+  CHECK_RESULT(reader.ReadInto(desc.scene_strings));
+  CHECK_RESULT(reader.ReadInto(desc.component_table_directory_offset));
+  CHECK_RESULT(reader.ReadInto(desc.component_table_count));
+
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::SceneComponentTableDesc& desc) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+
+  CHECK_RESULT(reader.ReadInto(desc.component_type));
+  CHECK_RESULT(reader.ReadInto(desc.table));
+
+  return {};
+}
+
 inline auto Load(AnyReader& reader, data::pak::world::NodeRecord& record)
   -> Result<void>
 {

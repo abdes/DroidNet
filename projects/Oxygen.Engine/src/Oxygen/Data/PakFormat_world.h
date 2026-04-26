@@ -6,7 +6,13 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -304,8 +310,7 @@ static_assert(sizeof(SceneEnvironmentSystemRecordHeader) == 8);
 #pragma pack(push, 1)
 struct SkyAtmosphereEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
-    .system_type
-    = static_cast<uint32_t>(EnvironmentComponentType::kSkyAtmosphere),
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkyAtmosphere),
     .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
   };
 
@@ -351,7 +356,7 @@ static_assert(sizeof(SkyAtmosphereEnvironmentRecord) == 168);
 struct VolumetricCloudsEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
     .system_type
-    = static_cast<uint32_t>(EnvironmentComponentType::kVolumetricClouds),
+    = nostd::to_underlying(EnvironmentComponentType::kVolumetricClouds),
     .record_size = sizeof(VolumetricCloudsEnvironmentRecord),
   };
 
@@ -378,7 +383,7 @@ static_assert(sizeof(VolumetricCloudsEnvironmentRecord) == 64);
 #pragma pack(push, 1)
 struct FogEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
-    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kFog),
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kFog),
     .record_size = sizeof(FogEnvironmentRecord),
   };
 
@@ -436,7 +441,7 @@ static_assert(sizeof(FogEnvironmentRecord) == 232);
 #pragma pack(push, 1)
 struct SkyLightEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
-    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kSkyLight),
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkyLight),
     .record_size = sizeof(SkyLightEnvironmentRecord),
   };
 
@@ -464,7 +469,7 @@ static_assert(sizeof(SkyLightEnvironmentRecord) == 84);
 #pragma pack(push, 1)
 struct SkySphereEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
-    .system_type = static_cast<uint32_t>(EnvironmentComponentType::kSkySphere),
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkySphere),
     .record_size = sizeof(SkySphereEnvironmentRecord),
   };
 
@@ -487,7 +492,7 @@ static_assert(sizeof(SkySphereEnvironmentRecord) == 64);
 struct PostProcessVolumeEnvironmentRecord {
   SceneEnvironmentSystemRecordHeader header = {
     .system_type
-    = static_cast<uint32_t>(EnvironmentComponentType::kPostProcessVolume),
+    = nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume),
     .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
   };
 
@@ -511,6 +516,53 @@ struct PostProcessVolumeEnvironmentRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(PostProcessVolumeEnvironmentRecord) == 60);
+
+//! Known SceneEnvironment record tags and their exact packed sizes.
+struct EnvironmentRecordSizeEntry {
+  uint32_t system_type = 0;
+  size_t record_size = 0;
+};
+
+inline constexpr std::array kKnownEnvironmentRecordSizes {
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(
+      EnvironmentComponentType::kSkyAtmosphere),
+    .record_size = sizeof(SkyAtmosphereEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(
+      EnvironmentComponentType::kVolumetricClouds),
+    .record_size = sizeof(VolumetricCloudsEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kFog),
+    .record_size = sizeof(FogEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkyLight),
+    .record_size = sizeof(SkyLightEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(EnvironmentComponentType::kSkySphere),
+    .record_size = sizeof(SkySphereEnvironmentRecord),
+  },
+  EnvironmentRecordSizeEntry {
+    .system_type = nostd::to_underlying(
+      EnvironmentComponentType::kPostProcessVolume),
+    .record_size = sizeof(PostProcessVolumeEnvironmentRecord),
+  },
+};
+
+[[nodiscard]] inline constexpr auto ExpectedEnvironmentRecordSize(
+  const uint32_t system_type) noexcept -> std::optional<size_t>
+{
+  for (const auto& entry : kKnownEnvironmentRecordSizes) {
+    if (entry.system_type == system_type) {
+      return entry.record_size;
+    }
+  }
+  return std::nullopt;
+}
 
 //! Common shadow settings packed into light component records.
 #pragma pack(push, 1)
