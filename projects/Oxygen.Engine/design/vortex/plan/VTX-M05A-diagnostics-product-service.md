@@ -359,9 +359,9 @@ Implementation evidence:
 - `RenderingSettingsService` now persists requested shader-debug mode,
   computes an effective Vortex mode from `ShaderDebugModeRegistry` plus renderer
   capabilities, and applies the effective mode to the renderer.
-- The Diagnostics panel reports Vortex binding, renderer capabilities,
-  requested/effective debug mode, and registry-grouped debug controls with
-  disabled reasons.
+- The Diagnostics panel reports Vortex binding, requested/effective debug mode,
+  a read-only renderer capability checklist, and registry-grouped debug
+  controls with disabled reasons.
 - `LightCullingDebugPanel` consumes the same registry for its visualization mode
   list.
 

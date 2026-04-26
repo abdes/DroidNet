@@ -84,6 +84,39 @@ namespace {
     vortex::ShaderDebugModeFamily::kMasked,
   });
 
+  struct CapabilityUiRow {
+    vortex::RendererCapabilityFamily family;
+    const char* label;
+    const char* tooltip;
+  };
+
+  constexpr auto kCapabilityUiRows = std::to_array<CapabilityUiRow>({
+    { vortex::RendererCapabilityFamily::kScenePreparation,
+      "Scene preparation",
+      "Scene extraction, view setup, and per-frame scene inputs." },
+    { vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding,
+      "GPU upload/binding",
+      "GPU upload and asset descriptor binding support." },
+    { vortex::RendererCapabilityFamily::kDeferredShading,
+      "Deferred shading",
+      "G-buffer, depth publication, and deferred debug views." },
+    { vortex::RendererCapabilityFamily::kLightingData,
+      "Lighting data",
+      "Analytic light data, clustered lighting, and lighting buffers." },
+    { vortex::RendererCapabilityFamily::kShadowing,
+      "Shadowing",
+      "Directional shadow map rendering and shadow-mask products." },
+    { vortex::RendererCapabilityFamily::kEnvironmentLighting,
+      "Environment lighting",
+      "Sky, atmosphere, image-based lighting, and fog passes." },
+    { vortex::RendererCapabilityFamily::kFinalOutputComposition,
+      "Final composition",
+      "Final scene composition and presentation output." },
+    { vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling,
+      "Diagnostics/profiling",
+      "Built-in diagnostics service and GPU timeline profiling support." },
+  });
+
 } // namespace
 
 DiagnosticsPanel::DiagnosticsPanel(observer_ptr<DiagnosticsVm> vm)
@@ -147,14 +180,34 @@ auto DiagnosticsPanel::GetRenderMode() const -> renderer::RenderMode
 
 void DiagnosticsPanel::DrawRuntimeStatus()
 {
-  const auto capabilities = vm_->GetRendererCapabilities();
   const auto requested = vm_->GetRequestedDebugMode();
   const auto effective = vm_->GetEffectiveDebugMode();
 
   ImGui::Text("Renderer: %s", vm_->IsVortexRuntimeBound() ? "Vortex" : "None");
-  ImGui::Text("Capabilities: %s", vortex::to_string(capabilities).c_str());
   ImGui::Text("Requested: %s", DisplayNameFor(requested).data());
   ImGui::Text("Effective: %s", DisplayNameFor(effective).data());
+  DrawRendererCapabilities();
+}
+
+void DiagnosticsPanel::DrawRendererCapabilities()
+{
+  const auto capabilities = vm_->GetRendererCapabilities();
+
+  ImGui::Spacing();
+  ImGui::TextUnformatted("Capabilities");
+  ImGui::Indent();
+  for (const auto& row : kCapabilityUiRows) {
+    bool enabled = vortex::HasAllCapabilities(capabilities, row.family);
+    ImGui::PushID(row.label);
+    ImGui::BeginDisabled();
+    ImGui::Checkbox(row.label, &enabled);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+      ImGui::SetTooltip("%s", row.tooltip);
+    }
+    ImGui::PopID();
+  }
+  ImGui::Unindent();
 }
 
 void DiagnosticsPanel::DrawShadowSettings()
